@@ -1,0 +1,11 @@
+wget
+numpy
+ujson
+Pillow
+wcwidth
+pathlib
+asyncio
+aiohttp
+pydantic
+aiofiles
+nonebot_plugin_apscheduler 
