@@ -693,6 +693,7 @@ async def create_(bot: Bot, event: GroupMessageEvent):
             await bot.send_group_msg(group_id=int(send_group_id), message=msg)
         await create.finish()
     group_boss[group_id].append(bossinfo)
+    old_boss_info.save_boss(group_boss)
     msg = f"已生成{bossinfo['jj']}Boss:{bossinfo['name']},诸位道友请击败Boss获得奖励吧!"
     if XiuConfig().img:
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
@@ -751,6 +752,7 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         else:
             await create_appoint.finish(msg, at_sender=False)
     group_boss[group_id].append(bossinfo)
+    old_boss_info.save_boss(group_boss)
     msg = f"已生成{bossinfo['jj']}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
     if XiuConfig().img:
         msg = await pic_msg_format(msg, event)
