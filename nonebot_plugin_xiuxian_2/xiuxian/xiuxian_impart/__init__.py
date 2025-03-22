@@ -85,8 +85,8 @@ __impart_help__ = f"""
 千次祈愿:传承祈愿 1000
 思恋结晶获取方式:虚神界对决【俄罗斯轮盘修仙版】
 双方共6次机会,6次中必有一次暴毙
-获胜者将获取15颗思恋结晶并不消耗虚神界对决次数
-失败者将获取5颗思恋结晶并且消耗一次虚神界对决次数
+获胜者将获取30颗思恋结晶并不消耗虚神界对决次数
+失败者将获取10颗思恋结晶并且消耗一次虚神界对决次数
 每天有五次虚神界对决次数
 """
 
@@ -247,9 +247,12 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent):
     list_tp = []
     img = None
     name = user_info["user_name"]
+    img_tp = impart_data_json.data_person_list(user_id)
+    card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
     txt_back = f"""--道友{name}的传承物资--
 思恋结晶：{impart_data_draw["stone_num"]}颗
 抽卡次数：{impart_data_draw["wish"]}/90次
+卡片数量：{card_count}/108
 累计闭关时间：{impart_data_draw["exp_day"]}分钟
 """
     txt_tp = f"""--道友{name}的传承总属性--
@@ -266,14 +269,14 @@ boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
 道友拥有的传承卡片如下:
 """
     summary = f"道友{name}的传承背包"
+    if img_tp:
+        card_list_str = "\n".join(img_tp)
+        txt_tp += card_list_str
+    else:
+        txt_tp += "暂无传承卡片"
+
     append_draw_card_node(bot, list_tp, summary, txt_back)
     append_draw_card_node(bot, list_tp, summary, txt_tp)
-
-    img_tp = impart_data_json.data_person_list(user_id)
-
-    for x in range(len(img_tp)):
-        img = get_image_representation(img_tp[x])
-        append_draw_card_node(bot, list_tp, summary, img)
 
     try:
         await send_msg_handler(bot, event, list_tp)
