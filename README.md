@@ -40,6 +40,7 @@ _✨ QQ群聊修仙文字游戏✨_
 
 <details>
 <summary>(Termux)</summary>
+
 安装napcat
 ```
 curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
@@ -107,6 +108,7 @@ nb run
 ```
 
 查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
  </details>
 
 # 💿 配置
