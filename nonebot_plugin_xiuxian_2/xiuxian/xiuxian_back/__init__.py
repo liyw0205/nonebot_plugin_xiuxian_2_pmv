@@ -51,8 +51,10 @@ sql_message = XiuxianDateManage()  # sql类
 set_auction_by_scheduler = require("nonebot_plugin_apscheduler").scheduler
 reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 
+check_item_effect = on_command("查看效果", priority=5, permission=GROUP, block=True)
 goods_re_root = on_command("炼金", priority=6, permission=GROUP, block=True)
-shop = on_command("坊市查看", aliases={"查看坊市"}, priority=8, permission=GROUP, block=True)
+# 坊市查看指令
+shop_view = on_command("坊市查看", priority=5, permission=GROUP, block=True)
 auction_view = on_command("拍卖品查看", aliases={"查看拍卖品"}, priority=8, permission=GROUP, block=True)
 shop_added = on_command("坊市上架", priority=10, permission=GROUP, block=True)
 shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SUPERUSER, block=True)
@@ -73,7 +75,7 @@ back_help = on_command("背包帮助", aliases={"坊市帮助"}, priority=8, per
 xiuxian_sone = on_fullmatch("灵石", priority=4, permission=GROUP, block=True)
 chakan_wupin = on_command("查看修仙界物品", priority=25, permission=GROUP, block=True)
 # 仙肆查看
-xian_shop = on_command("仙肆查看", aliases={"查看仙肆"}, priority=8, permission=GROUP, block=True)
+xiuxian_shop_view = on_command("仙肆查看", priority=5, permission=GROUP, block=True)
 # 仙肆上架（仅限超管）
 xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permission=SUPERUSER, block=True)
 # 仙肆上架（用户权限）
@@ -91,8 +93,8 @@ __back_help__ = f"""
 2、使用+物品名字：使用物品,可批量使用
 3、换装+装备名字：卸载目标装备
 4、坊市购买+物品编号:购买坊市内的物品，可批量购买
-5、坊市查看、查看坊市:查询坊市在售物品
-6、仙肆查看、查看仙肆:查询全服仙肆在售物品
+5、坊市查看:查询坊市在售物品
+6、仙肆查看:查询全服仙肆在售物品
 7、仙肆购买+物品编号:购买仙肆内的物品，可批量购买
 8、仙肆上架:仙肆上架 物品 金额 [数量]，上架背包内的物品到全服仙肆，最低金额50w，可批量上架
 9、查看拍卖品、拍卖品查看:查询将在拍卖品拍卖的玩家物品
@@ -108,6 +110,7 @@ __back_help__ = f"""
 19、背包帮助:获取背包帮助指令
 20、查看修仙界物品:支持类型【功法|神通|丹药|合成丹药|法器|防具】
 21、清空坊市:清空本群坊市,管理员权限
+22、查看效果:查看效果 渡厄丹
 非指令：
 1、定时生成拍卖会,每天{auction_time_config['hours']}点生成一场拍卖会
 """.strip()
@@ -322,6 +325,73 @@ async def set_auction_by_scheduler_():
     return
 
 
+@check_item_effect.handle(parameterless=[Cooldown(at_sender=False)])
+async def check_item_effect_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """查看物品效果，支持物品名或ID"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    # 检查用户是否已注册修仙
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await check_item_effect.finish()
+
+    # 获取用户输入的物品名或ID
+    input_str = args.extract_plain_text().strip()
+    if not input_str:
+        msg = "请输入物品名称或ID！例如：查看效果 渡厄丹 或 查看效果 1999"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await check_item_effect.finish()
+
+    # 判断输入是ID还是名称
+    goods_id = None
+    if input_str.isdigit():  # 如果是纯数字，视为ID
+        goods_id = int(input_str)
+        item_info = items.get_data_by_item_id(goods_id)
+        if not item_info:
+            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
+            if XiuConfig().img:
+                pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            else:
+                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await check_item_effect.finish()
+    else:  # 视为物品名称
+        for k, v in items.items.items():
+            if input_str == v['name']:
+                goods_id = k
+                break
+        if goods_id is None:
+            msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
+            if XiuConfig().img:
+                pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            else:
+                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await check_item_effect.finish()
+
+    # 获取物品详细信息
+    from .back_util import get_item_msg
+    item_msg = get_item_msg(goods_id)
+
+    # 构造返回消息
+    msg = f"{item_msg}"
+    if XiuConfig().img:
+        pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+    else:
+        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+
+    await check_item_effect.finish()
+    
 @back_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def back_help_(bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()):
     """背包帮助"""
@@ -366,42 +436,142 @@ async def xiuxian_sone_(bot: Bot, event: GroupMessageEvent):
 
 buy_lock = asyncio.Lock()
 
-@my_xian_shop.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP)])
-async def my_xian_shop_(bot: Bot, event: GroupMessageEvent):
-    """查看用户在全服仙肆上架的物品"""
-    send_group_id = event.group_id  # 获取当前群号
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+@shop_view.handle(parameterless=[Cooldown(at_sender=False)])
+async def shop_view_(bot: Bot, event: GroupMessageEvent, args=CommandArg()):
+    """坊市查看 [类型]"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    # 检查用户是否注册修仙
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await shop_view.finish()
+
+    # 获取用户输入的类型
+    input_type = args.extract_plain_text().strip()
+    if not input_type:
+        msg = "请输入要查看的类型，例如：坊市查看 技能|装备|丹药|药材"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await shop_view.finish()
+
+    # 读取坊市数据
+    data_list = []
+    group_id = str(event.group_id)
+    shop_data = get_shop_data(group_id)
+    if shop_data[group_id] == {}:
+        msg = "坊市目前空空如也！"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=send_group_id, message=MessageSegment.image(pic))
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
         else:
-            await bot.send_group_msg(group_id=send_group_id, message=msg)
-        await my_xian_shop.finish()
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await shop_view.finish()
 
-    user_id = user_info["user_id"]
-    shop_data = get_shop_data("000000")  # 使用全服仙肆 group_id
-    user_items = []
+    # 筛选指定类型的物品
+    filtered_items = [item for item in shop_data[group_id].values() if item['goods_type'] == input_type]
+    if not filtered_items:
+        msg = f"坊市中没有 {input_type} 类型的物品！"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await shop_view.finish()
 
-    for item_id, item_info in shop_data.get("000000", {}).items():
-        if str(item_info["user_id"]) == str(user_id):
-            msg = f"编号：{item_id}\n"
-            msg += f"{item_info['desc']}\n"
-            msg += f"价格：{item_info['price']} 灵石\n"
-            msg += f"数量：{item_info['stock']}\n"
-            user_items.append(msg)
+    # 生成展示信息
+    msg = f"坊市 {input_type} 物品列表：\n"
+    for item in filtered_items:
+        item_info = items.get_data_by_item_id(item['goods_id'])
+        msg += f"编号：{item['goods_id']}\n"
+        msg += f"名称：{item_info['name']}\n"
+        msg += f"价格：{item['price']}枚灵石\n"
+        msg += f"效果：{item_info['desc']}\n"
+        if item['user_id'] != 0:
+            msg += f"拥有人：{item['user_name']}道友\n"
+            msg += f"数量：{item['stock']}\n"
+        else:
+            msg += "系统出售\n"
+            msg += "数量：无限\n"
+        data_list.append(msg)
+    await send_msg_handler(bot, event, '坊市', bot.self_id, data_list)
+    await shop_view.finish()
+    
 
-    if not user_items:
-        msg = "你在仙肆暂未上架任何物品！"
-    else:
-        msg = "你在仙肆上架的物品如下：\n" + "\n".join(user_items)
+@xiuxian_shop_view.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent, args=CommandArg()):
+    """仙肆查看 [类型]"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=send_group_id, message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=send_group_id, message=msg)
-    await my_xian_shop.finish()
+    # 检查用户是否注册修仙
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await xiuxian_shop_view.finish()
+
+    # 获取用户输入的类型
+    input_type = args.extract_plain_text().strip()
+    if not input_type:
+        msg = "请输入要查看的类型，例如：仙肆查看 技能|装备|丹药|药材"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await xiuxian_shop_view.finish()
+
+    # 读取仙肆数据
+    data_list = []
+    xiuxian_shop_data = get_shop_data("000000")
+    if xiuxian_shop_data["000000"] == {}:
+        msg = "仙肆目前空空如也！"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await xiuxian_shop_view.finish()
+
+    # 筛选指定类型的物品
+    filtered_items = [item for item in xiuxian_shop_data["000000"].values() if item['goods_type'] == input_type]
+    if not filtered_items:
+        msg = f"仙肆中没有 {input_type} 类型的物品！"
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await xiuxian_shop_view.finish()
+
+    # 生成展示信息
+    msg = f"仙肆 {input_type} 物品列表：\n"
+    for item in filtered_items:
+        item_info = items.get_data_by_item_id(item['goods_id'])
+        msg += f"编号：{item['goods_id']}\n"
+        msg += f"名称：{item_info['name']}\n"
+        msg += f"价格：{item['price']}枚灵石\n"
+        msg += f"效果：{item_info['desc']}\n"
+        if item['user_id'] != 0:
+            msg += f"拥有人：{item['user_name']}道友\n"
+            msg += f"数量：{item['stock']}\n"
+        else:
+            msg += "系统出售\n"
+            msg += "数量：无限\n"
+        data_list.append(msg)
+    await send_msg_handler(bot, event, '仙肆', bot.self_id, data_list)
+    await xiuxian_shop_view.finish()
+    
         
 @xian_shop_add.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])
 async def xian_shop_add_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
@@ -590,43 +760,6 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent, args: Message = 
 
     await xian_shop_remove.finish()
         
-@xian_shop.handle(parameterless=[Cooldown(at_sender=False)])
-async def xian_shop_(bot: Bot, event: GroupMessageEvent):
-    """仙肆查看"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-        await xian_shop.finish()
-
-    shop_data = get_shop_data("000000")  # 使用全服 group_id
-    data_list = []
-    if shop_data["000000"] == {}:
-        msg = "仙肆目前空空如也！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-        await xian_shop.finish()
-
-    for k, v in shop_data["000000"].items():
-        msg = f"编号：{k}\n"
-        msg += f"{v['desc']}"
-        msg += f"\n价格：{v['price']}枚灵石\n"
-        if v['user_id'] != 0:
-            msg += f"拥有人：{v['user_name']}道友\n"
-            msg += f"数量：{v['stock']}\n"
-        else:
-            msg += f"系统出售\n"
-            msg += f"数量：无限\n"
-        data_list.append(msg)
-    await send_msg_handler(bot, event, '仙肆', bot.self_id, data_list)
-    await xian_shop.finish()
 
 @xian_shop_added_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])
 async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
@@ -900,46 +1033,6 @@ async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg())
             else:
                 await bot.send_group_msg(group_id=int(send_group_id), message=msg)
             await buy.finish()
-
-
-@shop.handle(parameterless=[Cooldown(at_sender=False)])
-async def shop_(bot: Bot, event: GroupMessageEvent):
-    """坊市查看"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-        await shop.finish()
-
-    group_id = str(event.group_id)
-    shop_data = get_shop_data(group_id)
-    data_list = []
-    if shop_data[group_id] == {}:
-        msg = "坊市目前空空如也！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-        await shop.finish()
-
-    for k, v in shop_data[group_id].items():
-        msg = f"编号：{k}\n"
-        msg += f"{v['desc']}"
-        msg += f"\n价格：{v['price']}枚灵石\n"
-        if v['user_id'] != 0:
-            msg += f"拥有人：{v['user_name']}道友\n"
-            msg += f"数量：{v['stock']}\n"
-        else:
-            msg += f"系统出售\n"
-            msg += f"数量：无限\n"
-        data_list.append(msg)
-    await send_msg_handler(bot, event, '坊市', bot.self_id, data_list)
-    await shop.finish()
 
 
 @shop_added_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])
