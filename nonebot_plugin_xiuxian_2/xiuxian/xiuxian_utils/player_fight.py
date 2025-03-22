@@ -1169,7 +1169,14 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     user1_battle_buff_date = UserBattleBuffDate(player1['user_id'])  # 1号的战斗buff信息 辅修功法14
 
+    max_turns = 20  # 设置最大回合数
+    turn_count = 0
     while True:
+        turn_count += 1
+        if turn_count > max_turns:
+            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "战斗回合超限，结束！"}})
+            suc = "Boss赢了"
+            break
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
 
@@ -1399,7 +1406,17 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             player1_turn_cost += 1
 
             # 没有技能的derB
-        if boss_turn_skip:
+        if boss.get('is_scarecrow', False): # 检查是否为稻草人 
+            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
+            isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
+            if isCrit: 
+                msg2 = "{}发起会心一击，你在给我拍灰吗\n" 
+            else: 
+                msg2 = "{}发起攻击，你瞅啥\n" 
+            play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
+            player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
+            play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{player1['气血']}", bot_id)) 
+        elif boss_turn_skip:
             boss_sub = random.randint(0, 100)
             if boss_sub <= 8:
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))

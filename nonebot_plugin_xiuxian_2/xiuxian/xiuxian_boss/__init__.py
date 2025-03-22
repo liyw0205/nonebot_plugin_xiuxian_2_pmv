@@ -95,6 +95,7 @@ boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界bos
                              rule=check_rule_bot_boss(), block=True)
 boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询"} ,priority=10, permission=GROUP, block=True)
 boss_integral_use = on_command("世界积分兑换", priority=6, permission=GROUP, block=True)
+challenge_scarecrow = on_command("挑战稻草人", priority=6, permission=GROUP, block=True)
 
 boss_time = config["Boss生成时间参数"]
 __boss_help__ = f"""
@@ -107,9 +108,11 @@ __boss_help__ = f"""
 5、讨伐boss、讨伐世界boss:讨伐世界Boss,必须加Boss编号
 6、世界boss帮助、世界boss:获取世界Boss帮助信息
 7、天罚boss、天罚世界boss:删除世界Boss,必须加Boss编号,管理员权限
-8、天罚所有世界boss:删除所有世界Boss,,管理员权限
+8、天罚所有世界boss:删除所有世界Boss,管理员权限
 9、世界积分查看:查看自己的世界积分,和世界积分兑换商品
 10、世界积分兑换+编号：兑换对应的商品，可以批量购买
+独立功能：
+- 挑战稻草人
 """.strip()
 
 
@@ -573,6 +576,95 @@ async def battle_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg
             await bot.send_group_msg(group_id=int(send_group_id), message=msg)
         await battle.finish()
 
+
+@challenge_scarecrow.handle(parameterless=[Cooldown(stamina_cost=20, at_sender=False)])
+async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent):
+    """挑战稻草人"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    group_id = str(event.group_id)
+    isUser, user_info, msg = check_user(event)
+    sql_message = XiuxianDateManage()
+
+    if not isUser:
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await challenge_scarecrow.finish()
+
+    user_id = user_info['user_id']
+    sql_message.update_last_check_info_time(user_id)
+
+    # 检查用户状态
+    if user_info['hp'] is None or user_info['hp'] == 0:
+        sql_message.update_user_hp(user_id)
+    if user_info['hp'] <= user_info['exp'] / 10:
+        time = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        sql_message.update_user_stamina(user_id, 20, 1)
+        if XiuConfig().img:
+            pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
+            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+        else:
+            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await challenge_scarecrow.finish()
+
+    # 获取玩家信息
+    player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
+    userinfo = sql_message.get_user_real_info(user_id)
+    user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
+    user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
+    user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
+
+    player['user_id'] = userinfo['user_id']
+    player['道号'] = userinfo['user_name']
+    player['气血'] = userinfo['hp']
+    player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
+    player['真元'] = userinfo['mp']
+    player['exp'] = userinfo['exp']
+    player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
+
+    # 定义稻草人属性（固定）
+    scarecrow_info = {
+            "气血": 1000000000000000,
+            "总血量": 1000000000000000,
+            "真元": 100,
+            "攻击": 0,
+            "name": "稻草人",
+            "jj": "搬血境",
+            "stone": 1
+        }
+
+    # 战斗逻辑
+    battle_flag[group_id] = True
+    result, victor, bossinfo_new, get_stone = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)
+    # 计算总伤害
+    boss_now_hp = bossinfo_new['气血']  # 打之后的血量
+    boss_all_hp = scarecrow_info['总血量']  # 总血量
+    total_damage = boss_all_hp - boss_now_hp
+
+    # 输出结果并处理奖励
+    if victor == "群友赢了":
+        sql_message.update_ls(user_id, get_stone, 1)  # 增加 1 灵石
+        msg = f"奇迹！道友击败了稻草人，共造成 {number_to(total_damage)} 伤害，获得灵石 {get_stone}！不过它又站起来了，继续等待挑战者！"
+    elif victor == "Boss赢了":
+        msg = f"道友挑战稻草人，奋力攻击后共造成 {number_to(total_damage)} 伤害，稻草人岿然不动，继续等待挑战者！"
+
+    battle_flag[group_id] = False
+    try:
+        await send_msg_handler(bot, event, result)
+    except ActionFailed:
+            msg += f"Boss战消息发送错误,可能被风控!"
+    if XiuConfig().img:
+        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
+        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+    else:
+        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await challenge_scarecrow.finish()
 
 @boss_info.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_info_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
