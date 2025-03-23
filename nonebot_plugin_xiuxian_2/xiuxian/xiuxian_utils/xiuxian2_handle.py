@@ -1970,7 +1970,7 @@ def leave_harm_time(user_id):
     
     try:
        time = int(((user_mes['exp'] / 1.5) - user_mes['hp']) / ((XiuConfig().closing_exp * level_rate * realm_rate * (
-                    1 + main_buff_rate_buff)) * hp_speed))
+                    300 + main_buff_rate_buff)) * hp_speed))
     except ZeroDivisionError:
         time = "无穷大"
     except OverflowError:
