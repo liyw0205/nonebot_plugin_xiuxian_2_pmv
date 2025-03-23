@@ -377,13 +377,10 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent, args: Message =
             else:
                 await bot.send_group_msg(group_id=int(send_group_id), message=msg)
             await check_item_effect.finish()
-
-    # 获取物品详细信息
-    from .back_util import get_item_msg
     item_msg = get_item_msg(goods_id)
 
     # 构造返回消息
-    msg = f"{item_msg}"
+    msg = f"物品ID：{goods_id}\n{item_msg}"
     if XiuConfig().img:
         pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
         await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))

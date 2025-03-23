@@ -101,7 +101,7 @@ class XiuConfig:
         self.max_stamina = 2400 # 体力上限
         self.stamina_recovery_points = 100 # 体力恢复点数/分钟
         self.lunhui_min_level = "仙王境初期" # 千世轮回最低境界
-        self.twolun_min_level = "准帝境初期" # 万世轮回最低境界
+        self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
         self.merge_forward_send = True # 使用消息合并转发,True是合并转发，False是合并转发的内容转换成长图发送

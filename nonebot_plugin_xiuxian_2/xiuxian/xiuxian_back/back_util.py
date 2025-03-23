@@ -237,6 +237,7 @@ def get_libao_msg(l_msg, goods_id, goods_num, bind_num):
     """
     item_info = items.get_data_by_item_id(goods_id)
     msg = f"名字：{item_info['name']}\n"
+    msg += f"包含：{item_info['desc']}\n"    
     msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
     l_msg.append(msg)
     return l_msg
@@ -417,6 +418,9 @@ def get_item_msg(goods_id):
     elif item_info['item_type'] == "炼丹炉":
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
+    elif item_info['item_type'] == "礼包":
+        msg = f"名字：{item_info['name']}\n"
+        msg += f"包含：{item_info['desc']}"
     else:
         msg = '不支持的物品'
 
