@@ -61,13 +61,13 @@ STORY = {
             "type_rate": 50,
         },
         "法器": {
-            "type_rate": 25,
+            "type_rate": 35,
         },
         "防具": {
-            "type_rate": 30,
+            "type_rate": 40,
         },
         "灵石": {
-            "type_rate": 100,
+            "type_rate": 70,
             "stone": 500000
         }
     },
