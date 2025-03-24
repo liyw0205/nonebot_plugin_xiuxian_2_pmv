@@ -71,7 +71,7 @@ class XiuConfig:
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
         self.level_up_cd = 0  # 突破CD(分钟)
-        self.closing_exp = 60  # 闭关每分钟获取的修为
+        self.closing_exp = 300  # 闭关每分钟获取的修为
         self.put_bot = []  # 接收消息qq,主qq，框架将只处理此qq的消息
         self.main_bo = []  # 负责发送消息的qq
         self.shield_group = []  # 屏蔽的群聊
