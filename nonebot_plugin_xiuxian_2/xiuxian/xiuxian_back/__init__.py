@@ -451,7 +451,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args=CommandArg()):
     # 获取用户输入的类型
     input_type = args.extract_plain_text().strip()
     if not input_type:
-        msg = "请输入要查看的类型，例如：仙肆查看 技能|装备|丹药|药材"
+        msg = "请输入要查看的类型，例如：坊市查看 技能|装备|丹药|药材"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}" + msg)
             await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
