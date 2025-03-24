@@ -171,7 +171,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent):
             if impart_data_json.data_person_add(user_id, reap_img):
                 # 重复卡片
                 duplicate_cards.append(reap_img)
-                total_seclusion_time += 3540
+                total_seclusion_time += 2100
                 if reap_img not in sent_images:
                     img = get_image_representation(reap_img)
                     append_draw_card_node(bot, list_tp, summary, img)
