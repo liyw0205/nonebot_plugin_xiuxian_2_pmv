@@ -1,25 +1,31 @@
 
-name: Create Release
+name: Compress 和 Release on Push
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main  # 您可以指定需要触发的分支
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.8'  # 指定Python版本，根据您的项目需求调整
-
-    - name: Create release tarball
+    - name: Generate tag name
+      id: tag
       run: |
-        tar -czvf release.tar.gz ./*
+        # 获取最新的commit hash
+        COMMIT_HASH=$(git rev-parse --short HEAD)
+        # 设置tag名，例如v1，v2，v3...
+        TAG_NAME="v$(date +%s)"
+        echo "Tag name is $TAG_NAME"
+        echo "::set-output name=tag::$TAG_NAME"
+
+    - name: Compress project
+      run: |
+        tar -czvf project.tar.gz ./
 
     - name: Create Release
       id: create_release
@@ -27,8 +33,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        tag_name: ${{ steps.tag.outputs.tag }}
+        release_name: Release ${{ steps.tag.outputs.tag }}
         draft: false
         prerelease: false
 
@@ -38,6 +44,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release.tar.gz
-        asset_name: release.tar.gz
+        asset_path: ./project.tar.gz
+        asset_name: project.tar.gz
         asset_content_type: application/gzip
