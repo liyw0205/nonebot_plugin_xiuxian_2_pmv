@@ -1,10 +1,16 @@
 
-name: Compress 和 Release on Push
+name: Compress 和 Release
 
 on:
   push:
     branches:
-      - main  # 您可以指定需要触发的分支
+      - main  # Set this to your default branch
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (optional)'
+        required: false
+        default: 'latest'
 
 jobs:
   build-and-release:
@@ -16,16 +22,19 @@ jobs:
     - name: Generate tag name
       id: tag
       run: |
-        # 获取最新的commit hash
-        COMMIT_HASH=$(git rev-parse --short HEAD)
-        # 设置tag名，例如v1，v2，v3...
-        TAG_NAME="v$(date +%s)"
-        echo "Tag name is $TAG_NAME"
-        echo "::set-output name=tag::$TAG_NAME"
+        # If a tag name is provided via workflow_dispatch, use it; otherwise, generate one
+        if [ -z "${{ github.event.inputs.tag_name }}" ]; then
+          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
+          TAGNAME="v$TIMESTAMP"
+        else
+          TAGNAME="${{ github.event.inputs.tag_name }}"
+        fi
+        echo "Tag name is $TAGNAME"
+        echo "::set-output name=TAGNAME::$TAGNAME"
 
-    - name: Compress project
+    - name: Compress project files
       run: |
-        tar -czvf project.tar.gz ./
+        tar -czvf project.tar.gz ./*  # Adjust the path to match your project structure
 
     - name: Create Release
       id: create_release
@@ -33,8 +42,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ steps.tag.outputs.tag }}
-        release_name: Release ${{ steps.tag.outputs.tag }}
+        tag_name: ${{ steps.tag.outputs.TAGNAME }}
+        release_name: Release ${{ steps.tag.outputs.TAGNAME }}
         draft: false
         prerelease: false
 
