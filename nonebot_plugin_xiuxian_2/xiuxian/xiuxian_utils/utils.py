@@ -605,11 +605,17 @@ async def pic_msg_format(msg, event):
 
 async def handle_send(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""    
-    if XiuConfig().img:        
+    if XiuConfig().img:
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send(event=event, message=MessageSegment.image(pic))
+        if isinstance(event, GroupMessageEvent):
+            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(pic))
     else:
-        await bot.send(event=event, message=msg)
+        if isinstance(event, GroupMessageEvent):
+            await bot.send_group_msg(group_id=event.group_id, message=msg)
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=msg)
 
 
 def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
