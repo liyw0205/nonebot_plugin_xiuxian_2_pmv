@@ -603,16 +603,13 @@ async def pic_msg_format(msg, event):
     return result
 
 
-async def handle_send(bot, event, send_group_id, msg: str):
-    """处理文本，根据配置发送文本或者图片消息"""
-    if XiuConfig().img:
+async def handle_send(bot, event, msg: str):
+    """处理文本，根据配置发送文本或者图片消息"""    
+    if XiuConfig().img:        
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(
-            group_id=int(send_group_id),
-            message=MessageSegment.image(pic),
-        )
+        await bot.send(event=event, message=MessageSegment.image(pic))
     else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await bot.send(event=event, message=msg)
 
 
 def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):

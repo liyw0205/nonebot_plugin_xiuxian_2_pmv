@@ -61,6 +61,7 @@ cz = on_command('创造力量', permission=SUPERUSER, priority=15,block=True)
 rob_stone = on_command("抢劫", aliases={"拿来吧你"}, priority=5, permission=GROUP, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
+set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
 user_leveluprate = on_command('我的突破概率', aliases={'突破概率'}, priority=5, permission=GROUP, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, permission=GROUP, block=True)
 xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, permission=GROUP, block=True)
@@ -1664,8 +1665,37 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent):
         else:
             await bot.send_group_msg(group_id=int(send_group_id), message=msg)
         await set_xiuxian.finish()
+        
 
+@set_private_chat.handle()
+async def set_private_chat_(bot: Bot, event: GroupMessageEvent):
+    """私聊功能开关配置（管理员专用）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg = str(event.message)
+    conf_data = JsonConfig().read_data()
 
+    if "启用" in msg:
+        if conf_data["private_enabled"]:
+            response = "私聊修仙功能已启用，请勿重复操作！"
+        else:
+            JsonConfig().write_data(3)
+            response = "私聊修仙功能已启用，所有用户现在可以在私聊中使用修仙命令！"
+    elif "禁用" in msg:
+        if not conf_data["private_enabled"]:
+            response = "私聊修仙功能已禁用，请勿重复操作！"
+        else:
+            JsonConfig().write_data(4)
+            response = "私聊修仙功能已禁用，所有用户的私聊修仙功能已关闭！"
+    else:
+        response = "指令错误，请输入：启用私聊功能/禁用私聊功能"
+
+    if XiuConfig().img:
+        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + response)
+        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+    else:
+        await bot.send_group_msg(group_id=int(send_group_id), message=response)
+    await set_private_chat.finish()
+    
 @xiuxian_updata_level.handle(parameterless=[Cooldown(at_sender=False)])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
     """将修仙1的境界适配到修仙2"""

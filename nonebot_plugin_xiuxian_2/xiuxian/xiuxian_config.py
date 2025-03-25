@@ -70,6 +70,7 @@ class XiuConfig:
         self.level = convert_rank('江湖好手')[1] # 境界列表，别动
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
+        self.private_chat_enabled = False # 私聊功能开关，默认关闭
         self.level_up_cd = 0  # 突破CD(分钟)
         self.closing_exp = 180  # 闭关每分钟获取的修为
         self.put_bot = []  # 接收消息qq,主qq，框架将只处理此qq的消息
@@ -117,55 +118,53 @@ class JsonConfig:
         self.config_jsonpath = DATABASE / "config.json"
         self.create_default_config()
     
+    def create_default_config(self):
+        """创建默认配置文件"""
+        if not self.config_jsonpath.exists():
+            default_data = {
+                "group": [],  # 群聊启用列表
+                "private_enabled": False  # 私聊功能开关
+            }
+            with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
+                json.dump(default_data, f)
+
     def read_data(self):
         """读取配置数据"""
         with open(self.config_jsonpath, 'r', encoding='utf-8') as f:
             data = json.load(f)
             if "group" not in data:
-                data["group"] = [] 
-                with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
-                    json.dump(data, f)
-        return data
-        
-    def create_default_config(self):
-        """创建默认配置文件"""
-        if not self.config_jsonpath.exists():
-            default_data = {"group": []}
-            with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
-                json.dump(default_data, f)
+                data["group"] = []
+            if "private_enabled" not in data:
+                data["private_enabled"] = False
+            return data
 
-    def write_data(self, key, group_id=None):
+    def write_data(self, key, id=None):
         """
-        说明：设置修仙开启或关闭
-        参数：
-        key: 群聊 1 为开启， 2为关闭,默认关闭
+        设置修仙功能或私聊功能的开启/关闭
+        key: 1 为开启群聊，2 为关闭群聊，3 为开启私聊，4 为关闭私聊
+        id: 群聊ID（仅群聊使用）
         """
         json_data = self.read_data()
-        group_list = json_data.get('group', [])
-        if key == 1:
-            if group_id not in group_list:
-                try:
-                    group_list.append(group_id)
-                    json_data['group'] = group_list
-                except Exception as e:
-                    logger.opt(colors=True).info(f"<red>错误:{e}</red>")
-                    return False
-        elif key == 2:
-            if group_id in group_list:
-                try:
-                    group_list.remove(group_id)
-                    json_data['group'] = group_list
-                except Exception as e:
-                    logger.opt(colors=True).info(f"<red>错误:{e}</ewd>")
-                    return False
-        else:
-            logger.opt(colors=True).info("<red>未知key</red>")
-            return False
-
-        json_data['group'] = list(set(json_data['group']))
+        if key in [1, 2]:  # 群聊相关
+            group_list = json_data.get('group', [])
+            if key == 1 and id and id not in group_list:
+                group_list.append(id)
+            elif key == 2 and id and id in group_list:
+                group_list.remove(id)
+            json_data['group'] = list(set(group_list))
+        elif key == 3:  # 开启私聊
+            json_data["private_enabled"] = True
+        elif key == 4:  # 关闭私聊
+            json_data["private_enabled"] = False
 
         with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=4)
+        return True
+
+    def is_private_enabled(self):
+        """检查私聊功能是否启用"""
+        data = self.read_data()
+        return data.get("private_enabled", False)
 
             
     def get_enabled_groups(self):

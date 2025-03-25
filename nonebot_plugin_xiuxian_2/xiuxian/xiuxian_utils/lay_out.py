@@ -8,7 +8,7 @@ from asyncio import get_running_loop
 from typing import DefaultDict, Dict, Any
 from nonebot.matcher import Matcher
 from nonebot.params import Depends
-from nonebot.adapters.onebot.v11.event import MessageEvent, GroupMessageEvent
+from nonebot.adapters.onebot.v11.event import MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from nonebot.adapters.onebot.v11 import Bot, MessageSegment
 from ..xiuxian_config import XiuConfig, JsonConfig
 from .xiuxian2_handle import XiuxianDateManage
@@ -141,8 +141,9 @@ def Cooldown(
         return
 
     async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent):
+        is_private = isinstance(event, PrivateMessageEvent)
         user_id = str(event.get_user_id())
-        group_id = str(event.group_id)
+        group_id = str(event.group_id) if not is_private else None
         conf_data = JsonConfig().read_data()
 
         limit_type = limit_all_run(str(event.get_user_id()))
@@ -173,7 +174,7 @@ def Cooldown(
             )
         else:
             key = CooldownIsolateLevel.GLOBAL.name
-        if group_id not in conf_data["group"]:
+        if not is_private and group_id not in conf_data["group"]:
             if (
                     event.sender.role == "admin" or
                     event.sender.role == "owner" or
@@ -187,8 +188,11 @@ def Cooldown(
                 await matcher.finish()
             else:
                 await matcher.finish()
-        else:
-            pass
+        
+        if is_private:        
+            if is_private and not conf_data.get("private_enabled", False):
+                await bot.send(event=event, message="私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！")
+                await matcher.finish()
         
         if XiuConfig().admin_debug:
             if event.get_user_id() not in bot.config.superusers:
@@ -258,7 +262,8 @@ def check_rule_bot() -> Rule:  # 对传入的消息检测，是主qq传入的消
 
 
 async def range_bot(bot: Bot, event: GroupMessageEvent):  # 随机一个qq发送消息
-    group_id = str(event.group_id)
+    is_private = isinstance(event, PrivateMessageEvent)
+    group_id = str(event.group_id) if not is_private else None
     bot_list = list(get_bots().keys())
     try:
         bot = get_bots()[random.choice(bot_list)]
@@ -268,7 +273,8 @@ async def range_bot(bot: Bot, event: GroupMessageEvent):  # 随机一个qq发送
 
 
 async def assign_bot(bot=None, event=None):  # 按字典分配对应qq发送消息
-    group_id = str(event.group_id)
+    is_private = isinstance(event, PrivateMessageEvent)
+    group_id = str(event.group_id) if not is_private else None
     try:
         bot_id = layout_bot_dict[group_id]
         if type(bot_id) is str:
