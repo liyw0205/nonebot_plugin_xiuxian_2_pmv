@@ -687,7 +687,7 @@
                 "7098": 1,
                 "7099": 1
             },
-            "need_rank": "祭道境圆满",
+            "need_rank": "真仙境圆满",
             "need_exp": "0",
             "need_stone": "0",
             "limit": 1
@@ -882,6 +882,28 @@
             "need_rank": "祭道境圆满",
             "need_exp": "10000000000",
             "need_stone": "10000000000",
+            "limit": 1
+        }
+    },
+    "15467": {
+        "name": "无上青龙偃月刀",
+        "atk_buff": 1,
+        "crit_buff": 0.3,
+        "def_buff": 0,
+        "critatk": 1,
+        "zw": 0,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "7097": 1,
+                "20002": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
             "limit": 1
         }
     }

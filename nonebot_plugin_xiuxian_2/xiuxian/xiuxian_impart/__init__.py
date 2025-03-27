@@ -7,6 +7,7 @@ from nonebot.adapters.onebot.v11 import (
     ActionFailed,
     Bot,
     GroupMessageEvent,
+    PrivateMessageEvent,
     Message,
     MessageSegment,
 )
@@ -21,7 +22,7 @@ from ..xiuxian_utils.utils import (
     check_user,
     get_msg_pic,
     handle_send,
-    send_msg_handler,
+    send_msg_handler
 )
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -52,23 +53,21 @@ time_img = [
     "画屏春-邀舞",
 ]
 
-impart_draw = on_command("传承抽卡", aliases={"传承祈愿"}, priority=16, permission=GROUP, block=True)
+impart_draw = on_command("传承抽卡", aliases={"传承祈愿"}, priority=16, block=True)
 impart_back = on_command(
-    "传承背包", aliases={"我的传承背包"}, priority=15, permission=GROUP, block=True
+    "传承背包", priority=15, block=True
 )
 impart_info = on_command(
-    "传承信息",
-    aliases={"我的传承信息", "我的传承"},
-    priority=10,
-    permission=GROUP,
+    "传承信息",    
+    priority=10,    
     block=True,
 )
 impart_help = on_command(
-    "传承帮助", aliases={"虚神界帮助"}, priority=8, permission=GROUP, block=True
+    "传承帮助", aliases={"虚神界帮助"}, priority=8, block=True
 )
-re_impart_load = on_fullmatch("加载传承数据", priority=45, permission=GROUP, block=True)
+re_impart_load = on_fullmatch("加载传承数据", priority=45, block=True)
 impart_img = on_command(
-    "传承卡图", aliases={"传承卡片"}, priority=50, permission=GROUP, block=True
+    "传承卡图", aliases={"传承卡片"}, priority=50, block=True
 )
 __impart_help__ = f"""
 传承帮助信息:
@@ -93,36 +92,26 @@ __impart_help__ = f"""
 
 @impart_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_help_(
-    bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()
+    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
 ):
     """传承帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_help:
-        await bot.send_group_msg(
-            group_id=int(send_group_id),
-            message=MessageSegment.image(cache_help[session_id]),
-        )
-        await impart_help.finish()
+        msg = cache_help[session_id]        
+        await handle_send(bot, event, msg)
     else:
         msg = __impart_help__
-        if XiuConfig().img:
-            pic = await get_msg_pic(msg)
-            cache_help[session_id] = pic
-            await bot.send_group_msg(
-                group_id=int(send_group_id), message=MessageSegment.image(pic)
-            )
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await impart_help.finish()
 
 
 @impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
-async def impart_draw_(bot: Bot, event: GroupMessageEvent):
+async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, send_group_id, msg)
+        await handle_send(bot, event, msg)
         return
 
     user_id = user_info["user_id"]
@@ -228,12 +217,12 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent):
 
 
 @impart_back.handle(parameterless=[Cooldown(at_sender=False)])
-async def impart_back_(bot: Bot, event: GroupMessageEvent):
+async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, send_group_id, msg)
+        await handle_send(bot, event, msg)
         return
 
     user_id = user_info["user_id"]
@@ -285,12 +274,12 @@ boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
 
 
 @re_impart_load.handle(parameterless=[Cooldown(at_sender=False)])
-async def re_impart_load_(bot: Bot, event: GroupMessageEvent):
+async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """加载传承数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, send_group_id, msg)
+        await handle_send(bot, event, msg)
         return
 
     user_id = user_info["user_id"]
@@ -306,16 +295,16 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent):
         msg = "传承数据加载完成！"
     else:
         msg = "传承数据加载失败！"
-    await handle_send(bot, event, send_group_id, msg)
+    await handle_send(bot, event, msg)
 
 
 @impart_info.handle(parameterless=[Cooldown(at_sender=False)])
-async def impart_info_(bot: Bot, event: GroupMessageEvent):
+async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, send_group_id, msg)
+        await handle_send(bot, event, msg)
         return
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
@@ -330,4 +319,4 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent):
 抽卡次数：{impart_data_draw["wish"]}/90次
 累计闭关时间：{impart_data_draw["exp_day"]}分钟
     """
-    await handle_send(bot, event, send_group_id, msg)
+    await handle_send(bot, event, msg)

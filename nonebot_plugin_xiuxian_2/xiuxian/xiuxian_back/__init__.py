@@ -2198,9 +2198,12 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             fq_data = items.get_data_by_item_type(['法器'])
             for x in fq_data:
                 name = fq_data[x]['name']
-                rank = fq_data[x]['level']
-                desc = fq_data[x]['desc']
-                msg = f"※{rank}:{name}\n效果：{desc}"
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2208,9 +2211,12 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             fj_data = items.get_data_by_item_type(['防具'])
             for x in fj_data:
                 name = fj_data[x]['name']
-                rank = fj_data[x]['level']
-                desc = fj_data[x]['desc']
-                msg = f"※{rank}:{name}\n效果：{desc}"
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})

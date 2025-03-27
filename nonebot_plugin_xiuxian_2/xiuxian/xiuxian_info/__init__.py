@@ -3,20 +3,21 @@ from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
     GroupMessageEvent,
+    PrivateMessageEvent,
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img
-from ..xiuxian_utils.utils import check_user, get_msg_pic, number_to
+from ..xiuxian_utils.utils import check_user, get_msg_pic, number_to, handle_send
 from ..xiuxian_config import XiuConfig
 
-xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "我的修仙信息图片版", "我的存档图片版"}, priority=23, permission=GROUP, block=True)
+xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "我的修仙信息图片版", "我的存档图片版"}, priority=23, block=True)
 sql_message = XiuxianDateManage()  # sql类
 
 @xiuxian_message.handle(parameterless=[Cooldown(at_sender=False)])
-async def xiuxian_message_(bot: Bot, event: GroupMessageEvent):
+async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的修仙信息"""
     # 判断是否启用图片版信息展示
     user_info_image = "图片版" in event.get_plaintext()
@@ -24,11 +25,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await xiuxian_message.finish()
     user_id = user_info['user_id']
     user_info = sql_message.get_user_real_info(user_id)
@@ -120,7 +117,10 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent):
     
     if user_info_image:
         img_res = await draw_user_info_img(user_id, DETAIL_MAP)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(img_res))
+        if isinstance(event, GroupMessageEvent):
+           await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
         await xiuxian_message.finish()
     else:
         msg = f"""道号: {user_name}
@@ -142,4 +142,4 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent):
 注册位数: 道友是踏入修仙世界的第{int(user_num)}人
 修为排行: 道友的修为排在第{int(user_rank)}位
 灵石排行: 道友的灵石排在第{int(user_stone)}位"""
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)

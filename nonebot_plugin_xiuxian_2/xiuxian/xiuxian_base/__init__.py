@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     GROUP_ADMIN,
     GROUP_OWNER,
     GroupMessageEvent,
+    PrivateMessageEvent,
     MessageSegment,
     ActionFailed
 )
@@ -28,7 +29,7 @@ from ..xiuxian_utils.utils import (
     check_user,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler
+    Txt2Img, send_msg_handler, handle_send
 )
 from ..xiuxian_utils.item_json import Items
 items = Items()
@@ -42,17 +43,17 @@ cache_level2_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
-run_xiuxian = on_fullmatch("我要修仙", priority=8, permission=GROUP, block=True)
-restart = on_fullmatch("重入仙途", permission=GROUP, priority=7, block=True)
-sign_in = on_fullmatch("修仙签到", priority=13, permission=GROUP, block=True)
-help_in = on_fullmatch("修仙帮助", priority=12, permission=GROUP, block=True)
+run_xiuxian = on_fullmatch("我要修仙", priority=8, block=True)
+restart = on_fullmatch("重入仙途", priority=7, block=True)
+sign_in = on_fullmatch("修仙签到", priority=13, block=True)
+help_in = on_fullmatch("修仙帮助", priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜"},
-                  priority=7, permission=GROUP, block=True)
-remaname = on_command("改名", priority=5, permission=GROUP, block=True)
-level_up = on_fullmatch("突破", priority=6, permission=GROUP, block=True)
-level_up_dr = on_fullmatch("渡厄突破", priority=7, permission=GROUP, block=True)
-level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, permission=GROUP, block=True)
-level_up_zj = on_command("直接突破", aliases={"破"}, priority=7, permission=GROUP, block=True)
+                  priority=7, block=True)
+remaname = on_command("改名", priority=5, block=True)
+level_up = on_fullmatch("突破", priority=6, block=True)
+level_up_dr = on_fullmatch("渡厄突破", priority=7, block=True)
+level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, block=True)
+level_up_zj = on_command("直接突破", aliases={"破"}, priority=7, block=True)
 give_stone = on_command("送灵石", priority=5, permission=GROUP, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, permission=GROUP, block=True)
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
@@ -62,13 +63,13 @@ rob_stone = on_command("抢劫", aliases={"拿来吧你"}, priority=5, permissio
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
 set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
-user_leveluprate = on_command('我的突破概率', aliases={'突破概率'}, priority=5, permission=GROUP, block=True)
-user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, permission=GROUP, block=True)
+user_leveluprate = on_command('我的突破概率', aliases={'突破概率'}, priority=5, block=True)
+user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)
 xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, permission=GROUP, block=True)
 xiuxian_uodata_data = on_fullmatch('更新记录', priority=15, permission=GROUP, block=True)
-level_help = on_fullmatch("灵根帮助", priority=15, permission=GROUP,block=True)
-level1_help = on_fullmatch("品阶帮助", priority=15, permission=GROUP,block=True)
-level2_help = on_fullmatch("境界帮助", priority=15, permission=GROUP,block=True)
+level_help = on_fullmatch("灵根帮助", priority=15, block=True)
+level1_help = on_fullmatch("品阶帮助", priority=15, block=True)
+level2_help = on_fullmatch("境界帮助", priority=15, block=True)
 
 __xiuxian_notes__ = f"""
 【修仙指令】✨
@@ -204,16 +205,12 @@ async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent):
     """更新记录"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __xiuxian_updata_data__
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await handle_send(bot, event, msg)
     await xiuxian_uodata_data.finish() 
 
 
 @run_xiuxian.handle(parameterless=[Cooldown(at_sender=False)])
-async def run_xiuxian_(bot: Bot, event: GroupMessageEvent):
+async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """加入修仙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     user_id = event.get_user_id()
@@ -229,56 +226,41 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent):
     )
     try:
         if is_new_user:
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             isUser, user_msg, msg = check_user(event)
             if user_msg['hp'] is None or user_msg['hp'] == 0 or user_msg['hp'] == 0:
                 sql_message.update_user_hp(user_id)
             await asyncio.sleep(1)
             msg = "耳边响起一个神秘人的声音：不要忘记仙途奇缘！!\n不知道怎么玩的话可以发送 修仙帮助 喔！！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
     except ActionFailed:
         await run_xiuxian.finish("修仙界网络堵塞，发送失败!", reply_message=True)
     
 @sign_in.handle(parameterless=[Cooldown(at_sender=False)])
-async def sign_in_(bot: Bot, event: GroupMessageEvent):
+async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙签到"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await sign_in.finish()
     user_id = user_info['user_id']
     result = sql_message.get_sign(user_id)
     msg = result
     try:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await sign_in.finish()
     except ActionFailed:
         await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
 
 @help_in.handle(parameterless=[Cooldown(at_sender=False)])
-async def help_in_(bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()):
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_help:
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(cache_help[session_id]))
+        msg = cache_help[session_id]
+        await handle_send(bot, event, msg)
         await help_in.finish()
     else:
         font_size = 32
@@ -286,20 +268,19 @@ async def help_in_(bot: Bot, event: GroupMessageEvent, session_id: int = Command
         msg = __xiuxian_notes__
         img = Txt2Img(font_size)
         if XiuConfig().img:
-            pic = await img.save(title,msg)
-            cache_help[session_id] = pic
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            await handle_send(bot, event, msg)
         else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
         await help_in.finish()
 
 
 @level_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level_help_(bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()):
+async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """灵根帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_level_help:
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(cache_level_help[session_id]))
+        msg = cache_level_help[session_id]
+        await handle_send(bot, event, msg)
         await level_help.finish()
     else:
         font_size = 32
@@ -307,20 +288,19 @@ async def level_help_(bot: Bot, event: GroupMessageEvent, session_id: int = Comm
         msg = __level_help__
         img = Txt2Img(font_size)
         if XiuConfig().img:
-            pic = await img.save(title,msg)
-            cache_level_help[session_id] = pic
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            await handle_send(bot, event, msg)
         else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
         await level_help.finish()
 
         
 @level1_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level1_help_(bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()):
+async def level1_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """品阶帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_level1_help:
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(cache_level1_help[session_id]))
+        msg = cache_level1_help[session_id]
+        await handle_send(bot, event, msg)
         await level1_help.finish()
     else:
         font_size = 32
@@ -328,19 +308,18 @@ async def level1_help_(bot: Bot, event: GroupMessageEvent, session_id: int = Com
         msg = __level1_help__
         img = Txt2Img(font_size)
         if XiuConfig().img:
-            pic = await img.save(title,msg)
-            cache_level1_help[session_id] = pic
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            await handle_send(bot, event, msg)
         else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
         await level1_help.finish()
         
 @level2_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level2_help_(bot: Bot, event: GroupMessageEvent, session_id: int = CommandObjectID()):
+async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """境界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_level2_help:
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(cache_level2_help[session_id]))
+        msg = cache_level2_help[session_id]
+        await handle_send(bot, event, msg)
         await level2_help.finish()
     else:
         font_size = 32
@@ -348,34 +327,24 @@ async def level2_help_(bot: Bot, event: GroupMessageEvent, session_id: int = Com
         msg = __level2_help__
         img = Txt2Img(font_size)
         if XiuConfig().img:
-            pic = await img.save(title,msg)
-            cache_level2_help[session_id] = pic
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
+            await handle_send(bot, event, msg)
         else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
         await level2_help.finish()
 
 
 @restart.handle(parameterless=[Cooldown(at_sender=False)])
-async def restart_(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """刷新灵根信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await restart.finish()
 
     if user_info['stone'] < XiuConfig().remake:
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await restart.finish()
 
     state["user_id"] = user_info['user_id']  # 将用户信息存储在状态中
@@ -389,15 +358,11 @@ async def restart_(bot: Bot, event: GroupMessageEvent, state: T_State):
     msg = f"请从以下灵根中选择一个:\n{linggen_list_msg}\n请输入对应的数字选择 (1-10):"
     state["linggen_options"] = linggen_options
 
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await handle_send(bot, event, msg)
 
 
 @restart.receive()
-async def handle_user_choice(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     user_choice = event.get_plaintext().strip()
     linggen_options = state["linggen_options"]
     user_id = state["user_id"]  # 从状态中获取用户ID
@@ -414,18 +379,14 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent, state: T_State)
     msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
 
     try:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=event.group_id, message=msg)
+        await handle_send(bot, event, msg)
     except ActionFailed:
         await bot.send_group_msg(group_id=event.group_id, message="修仙界网络堵塞，发送失败!")
     await restart.finish()
 
 
 @rank.handle(parameterless=[Cooldown(at_sender=False)])
-async def rank_(bot: Bot, event: GroupMessageEvent):
+async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     message = str(event.message)
@@ -435,109 +396,77 @@ async def rank_(bot: Bot, event: GroupMessageEvent):
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
         p_rank = sql_message.realm_top()
-        msg = f"✨位面境界排行榜TOP50✨\n"
+        msg = f"✨位面境界排行榜TOP100✨\n"
         num = 0
         for i in p_rank:
             num += 1
             msg += f"第{num}位 {i[0]} {i[1]},修为{number_to(i[2])}\n"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "灵石排行榜":
         a_rank = sql_message.stone_top()
-        msg = f"✨位面灵石排行榜TOP50✨\n"
+        msg = f"✨位面灵石排行榜TOP100✨\n"
         num = 0
         for i in a_rank:
             num += 1
             msg += f"第{num}位  {i[0]}  灵石：{number_to(i[1])}枚\n"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "战力排行榜":
         c_rank = sql_message.power_top()
-        msg = f"✨位面战力排行榜TOP50✨\n"
+        msg = f"✨位面战力排行榜TOP100✨\n"
         num = 0
         for i in c_rank:
             num += 1
             msg += f"第{num}位  {i[0]}  战力：{number_to(i[1])}\n"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
         s_rank = sql_message.scale_top()
-        msg = f"✨位面宗门建设排行榜TOP50✨\n"
+        msg = f"✨位面宗门建设排行榜TOP100✨\n"
         num = 0
         for i in s_rank:
             num += 1
             msg += f"第{num}位  {i[1]}  建设度：{number_to(i[2])}\n"
-            if num == 50:
+            if num == 100:
                 break
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rank.finish()
 
 
 @remaname.handle(parameterless=[Cooldown(at_sender=False)])
-async def remaname_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修改道号"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await remaname.finish()
     user_id = user_info['user_id']
     user_name = args.extract_plain_text().strip()
     len_username = len(user_name.encode('gbk'))
     if len_username > 20:
         msg = "道号长度过长，请修改后重试！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await remaname.finish()
     elif len_username < 1:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + "道友确定要改名无名？还请三思。")
-            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
+        if XiuConfig().img:            
+            msg = "道友确定要改名无名？还请三思。"
+        await handle_send(bot, event, msg)            
         await remaname.finish()
     else:
         msg = sql_message.update_user_name(user_id, user_name)
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await remaname.finish()
 
 
 @level_up.handle(parameterless=[Cooldown(stamina_cost=12, at_sender=False)])
-async def level_up_(bot: Bot, event: GroupMessageEvent):
+async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -554,11 +483,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent):
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 12, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await level_up.finish()
     else:
         pass
@@ -581,33 +506,21 @@ async def level_up_(bot: Bot, event: GroupMessageEvent):
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     if pause_flag:
         msg = f"由于检测到背包有丹药：{elixir_name}，效果：{elixir_desc}，突破已经准备就绪\n请发送 ，【渡厄突破】 或 【直接突破】来选择是否使用丹药突破！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up.finish()
     else:
         msg = f"由于检测到背包没有【渡厄丹】，突破已经准备就绪\n请发送，【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up.finish()
 
 
 @level_up_zj.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
-async def level_up_zj_(bot: Bot, event: GroupMessageEvent):
+async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """直接突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_zj.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -623,11 +536,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent):
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 6, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await level_up_zj.finish()
     else:
         pass
@@ -656,11 +565,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent):
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
         sql_message.update_levelrate(user_id, leveluprate + update_rate)
         msg = f"道友突破失败,境界受损,修为减少{now_exp}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_zj.finish()
 
     elif type(le) == list:
@@ -671,34 +576,22 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent):
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_zj.finish()
     else:
         # 最高境界
         msg = le
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_zj.finish()
 
 
 @level_up_drjd.handle(parameterless=[Cooldown(stamina_cost=4, at_sender=False)])
-async def level_up_drjd_(bot: Bot, event: GroupMessageEvent):
+async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡厄 金丹 突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_drjd.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -714,11 +607,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent):
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 4, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await level_up_drjd.finish()
     else:
         pass
@@ -742,11 +631,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent):
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
         sql_message.update_user_stamina(user_id, 4, 1)
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_drjd.finish()
 
     if le == "失败":
@@ -777,11 +662,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent):
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{now_exp}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_drjd.finish()
 
     elif type(le) == list:
@@ -794,34 +675,22 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent):
         now_exp = int(int(exp) * 0.1)
         sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
         msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_drjd.finish()
     else:
         # 最高境界
         msg = le
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_drjd.finish()
 
 
 @level_up_dr.handle(parameterless=[Cooldown(stamina_cost=8, at_sender=False)])
-async def level_up_dr_(bot: Bot, event: GroupMessageEvent):
+async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡厄 突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_dr.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -837,11 +706,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent):
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 8, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await level_up_dr.finish()
     else:
         pass
@@ -865,11 +730,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent):
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
         sql_message.update_user_stamina(user_id, 8, 1)
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_dr.finish()
 
     if le == "失败":
@@ -898,11 +759,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent):
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{now_exp}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_dr.finish()
 
     elif type(le) == list:
@@ -913,34 +770,22 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent):
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_dr.finish()
     else:
         # 最高境界
         msg = le
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await level_up_dr.finish()
         
 
 @user_leveluprate.handle(parameterless=[Cooldown(at_sender=False)])
-async def user_leveluprate_(bot: Bot, event: GroupMessageEvent):
+async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的突破概率"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await user_leveluprate.finish()
     user_id = user_info['user_id']
     user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
@@ -950,32 +795,20 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent):
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number =  main_rate_buff['number'] if main_rate_buff is not None else 0
     msg = f"道友下一次突破成功概率为{level_rate + leveluprate + number}%"
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await handle_send(bot, event, msg)
     await user_leveluprate.finish()
 
 
 @user_stamina.handle(parameterless=[Cooldown(at_sender=False)])
-async def user_stamina_(bot: Bot, event: GroupMessageEvent):
+async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的体力信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await user_stamina.finish()
     msg = f"当前体力：{user_info['user_stamina']}"
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await handle_send(bot, event, msg)
     await user_stamina.finish()
 
 
@@ -985,11 +818,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await give_stone.finish()
     user_id = user_info['user_id']
     user_stone_num = user_info['stone']
@@ -1001,20 +830,12 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         pass
     else:
         msg = f"请输入正确的灵石数量！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await give_stone.finish()
     give_stone_num = stone_num[0]
     if int(give_stone_num) > int(user_stone_num):
         msg = f"道友的灵石不够，请重新输入！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await give_stone.finish()
     for arg in args:
         if arg.type == "at":
@@ -1022,11 +843,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     if give_qq:
         if str(give_qq) == str(user_id):
             msg = f"请不要送灵石给自己！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await give_stone.finish()
         else:
             give_user = sql_message.get_user_info_with_id(give_qq)
@@ -1036,19 +853,11 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 num = int(give_stone_num) - int(give_stone_num2)
                 sql_message.update_ls(give_qq, num, 1)  # 增加用户灵石
                 msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_user['user_name']}道友！收取手续费{int(give_stone_num2)}枚"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await give_stone.finish()
             else:
                 msg = f"对方未踏入修仙界，不可赠送！"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await give_stone.finish()
 
     if nick_name:
@@ -1056,11 +865,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         if give_message:
             if give_message['user_name'] == user_info['user_name']:
                 msg = f"请不要送灵石给自己！"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await give_stone.finish()
             else:
                 sql_message.update_ls(user_id, give_stone_num, 2)  # 减少用户灵石
@@ -1068,28 +873,16 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 num = int(give_stone_num) - int(give_stone_num2)
                 sql_message.update_ls(give_message['user_id'], num, 1)  # 增加用户灵石
                 msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_message['user_name']}道友！收取手续费{int(give_stone_num2)}枚"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await give_stone.finish()
         else:
             msg = f"对方未踏入修仙界，不可赠送！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await give_stone.finish()
 
     else:
         msg = f"未获到对方信息，请输入正确的道号！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await give_stone.finish()
 
 
@@ -1099,11 +892,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await steal_stone.finish()
     user_id = user_info['user_id']
     steal_user = None
@@ -1114,11 +903,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     if int(coststone_num) > int(user_stone_num):
         msg = f"道友的偷窃准备(灵石)不足，请打工之后再切格瓦拉！"
         sql_message.update_user_stamina(user_id, 10, 1)
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await steal_stone.finish()
     for arg in args:
         if arg.type == "at":
@@ -1127,11 +912,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         if steal_qq == user_id:
             msg = f"请不要偷自己刷成就！"
             sql_message.update_user_stamina(user_id, 10, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await steal_stone.finish()
         else:
             steal_user = sql_message.get_user_info_with_id(steal_qq)
@@ -1147,11 +928,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
                 sql_message.update_ls(user_id, coststone_num, 2)  # 减少手续费
                 sql_message.update_ls(steal_qq, coststone_num, 1)  # 增加被偷的人的灵石
                 msg = f"道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！赔款{coststone_num}灵石"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await steal_stone.finish()
             get_stone = random.randint(int(XiuConfig().tou_lower_limit * steal_user_stone),
                                        int(XiuConfig().tou_upper_limit * steal_user_stone))
@@ -1159,37 +936,21 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
                 sql_message.update_ls(user_id, steal_user_stone, 1)  # 增加偷到的灵石
                 sql_message.update_ls(steal_qq, steal_user_stone, 2)  # 减少被偷的人的灵石
                 msg = f"{steal_user['user_name']}道友已经被榨干了~"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await steal_stone.finish()
             else:
                 sql_message.update_ls(user_id, get_stone, 1)  # 增加偷到的灵石
                 sql_message.update_ls(steal_qq, get_stone, 2)  # 减少被偷的人的灵石
                 msg = f"共偷取{steal_user['user_name']}道友{number_to(get_stone)}枚灵石！"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await steal_stone.finish()
         else:
             msg = result
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await steal_stone.finish()
     else:
         msg = f"对方未踏入修仙界，不要对杂修出手！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await steal_stone.finish()
 
 
@@ -1214,38 +975,22 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         if give_user:
             sql_message.update_ls(give_qq, give_stone_num, 1)  # 增加用户灵石
             msg = f"共赠送{number_to(give_stone_num)}枚灵石给{give_user['user_name']}道友！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await gm_command.finish()
         else:
             msg = f"对方未踏入修仙界，不可赠送！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await gm_command.finish()
     elif nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name[0])
         if give_message:
             sql_message.update_ls(give_message['user_id'], give_stone_num, 1)  # 增加用户灵石
             msg = f"共赠送{number_to(give_stone_num)}枚灵石给{give_message['user_name']}道友！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await gm_command.finish()
         else:
             msg = f"对方未踏入修仙界，不可赠送！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await gm_command.finish()
     else:
         sql_message.update_ls_all(give_stone_num)
@@ -1255,11 +1000,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         for group_id in enabled_groups:
             bot = await assign_bot_group(group_id=group_id)
             try:
-                if XiuConfig().img:
-                    pic = await get_msg_pic(msg)
-                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(group_id), message=msg)
+                await handle_send(bot, event, msg)
             except ActionFailed:  # 发送群消息失败
                 continue
     await gm_command.finish()
@@ -1272,11 +1013,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     msg = args.extract_plain_text().split()
     if not args:
         msg = f"请输入正确指令！例如：创造力量 物品 数量"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await cz.finish()
     goods_name = msg[0]
     goods_id = -1
@@ -1301,19 +1038,11 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         if give_user:
             sql_message.send_back(give_qq, goods_id, goods_name, goods_type, goods_num, 1)
             msg = f"{give_user['user_name']}道友获得了系统赠送的{goods_num}个{goods_name}！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await cz.finish()
         else:
             msg = f"对方未踏入修仙界，不可赠送！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await cz.finish()
     else:
         all_users = sql_message.get_all_user_id()
@@ -1324,11 +1053,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         for group_id in enabled_groups:
             bot = await assign_bot_group(group_id=group_id)
             try:
-                if XiuConfig().img:
-                    pic = await get_msg_pic(msg)
-                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(group_id), message=msg)
+                await handle_send(bot, event, msg)
             except ActionFailed:  # 发送群消息失败
                 continue
         await cz.finish()
@@ -1341,12 +1066,8 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     give_qq = None  # 艾特的时候存到这里
     msg = args.extract_plain_text().strip()
     if not args:
-        msg = f"请输入正确指令！例如：轮回力量 x(1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世)"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        msg = f"请输入正确指令！例如：轮回力量 x(1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒)"
+        await handle_send(bot, event, msg)
         await gmm_command.finish()
 
     for arg in args:
@@ -1358,20 +1079,12 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         root_name = sql_message.update_root(give_qq, msg)
         sql_message.update_power2(give_qq)
         msg = f"{give_user['user_name']}道友的灵根已变更为{root_name}！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-            await gmm_command.finish(MessageSegment.image(pic))
+        await handle_send(bot, event, msg)
+        await gmm_command.finish()
     else:
         msg = f"对方未踏入修仙界，不可修改！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-            await gmm_command.finish(MessageSegment.image(pic))
+        await handle_send(bot, event, msg)
+        await gmm_command.finish()
 
 
 @rob_stone.handle(parameterless=[Cooldown(stamina_cost = 15, at_sender=False)])
@@ -1386,11 +1099,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rob_stone.finish()
     user_id = user_info["user_id"]
     user_mes = sql_message.get_user_info_with_id(user_id)
@@ -1405,32 +1114,20 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         if user_info['root'] == "器师":
             msg = f"目前职业无法抢劫！"
             sql_message.update_user_stamina(user_id, 15, 1)
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await rob_stone.finish()
        
         if give_qq:
             if str(give_qq) == str(user_id):
                 msg = f"请不要抢自己刷成就！"
                 sql_message.update_user_stamina(user_id, 15, 1)
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await rob_stone.finish()
 
             if user_2['root'] == "器师":
                 msg = f"对方职业无法被抢劫！"
                 sql_message.update_user_stamina(user_id, 15, 1)
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await rob_stone.finish()
 
             if user_2:
@@ -1446,11 +1143,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                     time_2 = leave_harm_time(give_qq)
                     msg = f"对方重伤藏匿了，无法抢劫！距离对方脱离生命危险还需要{time_2}分钟！"
                     sql_message.update_user_stamina(user_id, 15, 1)
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await rob_stone.finish()
 
                 if user_info['hp'] <= user_info['exp'] / 10:
@@ -1458,11 +1151,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                     msg = f"重伤未愈，动弹不得！距离脱离生命危险还需要{time_msg}分钟！"
                     msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
                     sql_message.update_user_stamina(user_id, 15, 1)
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await rob_stone.finish()
                     
                 impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_id)
@@ -1512,22 +1201,14 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         sql_message.update_exp(user_id, exps)
                         sql_message.update_j_exp(give_qq, exps / 2)
                         msg = f"大战一番，战胜对手，获取灵石{number_to(foe_stone * 0.1)}枚，修为增加{number_to(exps)}，对手修为减少{number_to(exps / 2)}"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await rob_stone.finish()
                     else:
                         exps = int(user_2['exp'] * 0.005)
                         sql_message.update_exp(user_id, exps)
                         sql_message.update_j_exp(give_qq, exps / 2)
                         msg = f"大战一番，战胜对手，结果对方是个穷光蛋，修为增加{number_to(exps)}，对手修为减少{number_to(exps / 2)}"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await rob_stone.finish()
 
                 elif victor == player2['道号']:
@@ -1539,40 +1220,24 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         sql_message.update_j_exp(user_id, exps)
                         sql_message.update_exp(give_qq, exps / 2)
                         msg = f"大战一番，被对手反杀，损失灵石{number_to(mind_stone * 0.1)}枚，修为减少{number_to(exps)}，对手获取灵石{number_to(mind_stone * 0.1)}枚，修为增加{number_to(exps / 2)}"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await rob_stone.finish()
                     else:
                         exps = int(user_info['exp'] * 0.005)
                         sql_message.update_j_exp(user_id, exps)
                         sql_message.update_exp(give_qq, exps / 2)
                         msg = f"大战一番，被对手反杀，修为减少{number_to(exps)}，对手修为增加{number_to(exps / 2)}"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await rob_stone.finish()
 
                 else:
                     msg = f"发生错误，请检查后台！"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await rob_stone.finish()
 
     else:
         msg = f"对方未踏入修仙界，不可抢劫！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await rob_stone.finish()
 
 
@@ -1584,11 +1249,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await restate.finish()
     give_qq = None  # 艾特的时候存到这里
     for arg in args:
@@ -1597,20 +1258,12 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     if give_qq:
         sql_message.restate(give_qq)
         msg = f"{give_qq}用户信息重置成功！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await restate.finish()
     else:
         sql_message.restate()
         msg = f"所有用户信息重置成功！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await restate.finish()
 
 
@@ -1625,50 +1278,30 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent):
     if "启用" in group_msg:
         if group_id in conf_data["group"]:
             msg = "当前群聊修仙模组已启用，请勿重复操作！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await set_xiuxian.finish()
         JsonConfig().write_data(1, group_id)
         msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await set_xiuxian.finish()
 
     elif "禁用" in group_msg:
         if group_id not in conf_data["group"]:
             msg = "当前群聊修仙模组已禁用，请勿重复操作！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await set_xiuxian.finish()
         JsonConfig().write_data(2, group_id)
         msg = "当前群聊修仙基础模组已禁用！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await set_xiuxian.finish()
     else:
         msg = "指令错误，请输入：启用修仙功能/禁用修仙功能"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await set_xiuxian.finish()
         
 
 @set_private_chat.handle()
-async def set_private_chat_(bot: Bot, event: GroupMessageEvent):
+async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """私聊功能开关配置（管理员专用）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = str(event.message)
@@ -1676,24 +1309,20 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent):
 
     if "启用" in msg:
         if conf_data["private_enabled"]:
-            response = "私聊修仙功能已启用，请勿重复操作！"
+            msg = "私聊修仙功能已启用，请勿重复操作！"
         else:
             JsonConfig().write_data(3)
-            response = "私聊修仙功能已启用，所有用户现在可以在私聊中使用修仙命令！"
+            msg = "私聊修仙功能已启用，所有用户现在可以在私聊中使用修仙命令！"
     elif "禁用" in msg:
         if not conf_data["private_enabled"]:
-            response = "私聊修仙功能已禁用，请勿重复操作！"
+            msg = "私聊修仙功能已禁用，请勿重复操作！"
         else:
             JsonConfig().write_data(4)
-            response = "私聊修仙功能已禁用，所有用户的私聊修仙功能已关闭！"
+            msg = "私聊修仙功能已禁用，所有用户的私聊修仙功能已关闭！"
     else:
-        response = "指令错误，请输入：启用私聊功能/禁用私聊功能"
+        msg = "指令错误，请输入：启用私聊功能/禁用私聊功能"
 
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + response)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=response)
+    await handle_send(bot, event, msg)
     await set_private_chat.finish()
     
 @xiuxian_updata_level.handle(parameterless=[Cooldown(at_sender=False)])
@@ -1702,11 +1331,7 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await xiuxian_updata_level.finish()
     level_dict={
         "练气境":"搬血境",
@@ -1734,9 +1359,5 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
             level = level
     sql_message.updata_level(user_id=user_id,level_name=level)
     msg = '境界适配成功成功！'
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-    else:
-        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()

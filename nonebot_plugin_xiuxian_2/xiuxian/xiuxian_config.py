@@ -91,7 +91,7 @@ class XiuConfig:
         self.sign_in_lingshi_lower_limit = 100000  # 每日签到灵石下限
         self.sign_in_lingshi_upper_limit = 500000  # 每日签到灵石上限
         self.beg_max_level = "铭纹境圆满" # 仙途奇缘能领灵石最高境界
-        self.beg_max_days = 3 # 仙途奇缘能领灵石最多天数
+        self.beg_max_days = 7 # 仙途奇缘能领灵石最多天数
         self.beg_lingshi_lower_limit = 2000000  # 仙途奇缘灵石下限
         self.beg_lingshi_upper_limit = 5000000  # 仙途奇缘灵石上限
         self.tou = 100000  # 偷灵石惩罚
@@ -103,6 +103,7 @@ class XiuConfig:
         self.stamina_recovery_points = 100 # 体力恢复点数/分钟
         self.lunhui_min_level = "仙王境初期" # 千世轮回最低境界
         self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
+        self.threelun_min_level = "无界境初期" # 永恒轮回最低境界
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
         self.merge_forward_send = True # 使用消息合并转发,True是合并转发，False是合并转发的内容转换成长图发送
