@@ -194,7 +194,7 @@ async def send_bot(group_id: str):
     remaining_slots = max_boss_count - current_boss_count
     
     # 如果剩余槽位不足5个，则只生成剩余数量
-    generate_count = min(5, remaining_slots)
+    generate_count = min(10, remaining_slots)
     
     if generate_count <= 0:
         logger.opt(colors=True).info(f"<green>群{group_id}Boss个数已到达上限{max_boss_count}</green>")
@@ -406,7 +406,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     else:
         boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
     user_rank = convert_rank(userinfo['level'])[0]
-    if boss_rank - user_rank >= 12:
+    if boss_rank - user_rank >= 6:
         msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
