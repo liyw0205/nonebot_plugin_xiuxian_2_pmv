@@ -157,6 +157,7 @@ async def punish_all_bosses():
                     )
                 except Exception as e:
                     logger.opt(colors=True).warning(f"<red>群{group_id}天罚消息发送失败,{e}</red>")
+    old_boss_info.save_boss(group_boss)
                     
                     
 @DRIVER.on_startup
@@ -176,9 +177,13 @@ async def set_boss_():
             logger.opt(colors=True).success(f"<green>开启群{group_id}boss,每{groups[str(group_id)]['hours']}小时{groups[str(group_id)]['minutes']}分钟刷新！</green>")
     except Exception as e:
         logger.opt(colors=True).warning(f"<red>警告,定时群boss加载失败!,{e}!</red>")
+    global group_boss
+    old_boss_info.save_boss(group_boss)
 
 async def send_bot(group_id: str):
     # 初始化
+    global group_boss 
+    group_boss = old_boss_info.read_boss_info()
     if not group_id in group_boss:
         group_boss[group_id] = []
 
@@ -203,7 +208,8 @@ async def send_bot(group_id: str):
     # 生成指定数量的BOSS
     for _ in range(generate_count):
         bossinfo = createboss()
-        group_boss[group_id].append(bossinfo)
+        group_boss[group_id].append(bossinfo)    
+    old_boss_info.save_boss(group_boss)
     
     logger.opt(colors=True).info(f"<green>群{group_id}已生成{generate_count}个世界boss</green>")
 
@@ -233,6 +239,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     """天罚世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
+    global group_boss
     group_id = "000000"
     boss_num = re.findall(r"\d+", msg)  # boss编号
     isInGroup = isInGroups(event)
@@ -268,6 +275,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await boss_delete.finish()
 
     group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
+    old_boss_info.save_boss(group_boss)
     msg = f"该世界Boss被突然从天而降的神雷劈中,烟消云散了"
     await handle_send(bot, event, msg)
     await boss_delete.finish()
@@ -278,7 +286,8 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     """天罚全部世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
-    group_id = "000000"
+    global group_boss
+    group_id = "000000"    
     isInGroup = isInGroups(event)
     if not isInGroup:  # 不在配置表内
         msg = f"尚未开启世界Boss,请联系管理员开启!"
@@ -297,7 +306,8 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         await boss_delete_all.finish()
 
-    group_boss[group_id] = []
+    group_boss[group_id] = []    
+    old_boss_info.save_boss(group_boss)
     msg = f"所有的世界Boss都烟消云散了~~"
     await handle_send(bot, event, msg)
     await boss_delete_all.finish()
@@ -307,6 +317,8 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    global group_boss 
+    group_boss = old_boss_info.read_boss_info()
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
@@ -501,6 +513,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             await send_msg_handler(bot, event, result)
         except ActionFailed:
             msg += f"Boss战消息发送错,可能被风控!"
+        old_boss_info.save_boss(group_boss)
         await handle_send(bot, event, msg)
         await battle.finish()
 
@@ -587,6 +600,8 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     """查询世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"
+    global group_boss 
+    group_boss = old_boss_info.read_boss_info()
     isInGroup = isInGroups(event)
     if not isInGroup:  # 不在配置表内
         msg = f"尚未开启世界Boss,请联系管理员开启!"
