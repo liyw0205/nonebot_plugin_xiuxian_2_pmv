@@ -193,25 +193,30 @@ async def send_bot(group_id: str):
     if group_id not in conf_data["group"]:
         return
 
-    # 计算剩余可生成数量（上限 - 当前数量）
+    generate_count = int(num_match[0]) if num_match else 1  # 默认生成1个
+
+    try:
+        group_boss[group_id]
+    except:
+        group_boss[group_id] = []
+
     current_boss_count = len(group_boss[group_id])
     max_boss_count = config['Boss个数上限']
     remaining_slots = max_boss_count - current_boss_count
     
-    # 如果剩余槽位不足5个，则只生成剩余数量
-    generate_count = min(10, remaining_slots)
+    # 调整生成数量不超过上限
+    actual_count = min(generate_count, remaining_slots)
     
-    if generate_count <= 0:
-        logger.opt(colors=True).info(f"<green>群{group_id}Boss个数已到达上限{max_boss_count}</green>")
-        return
+    if actual_count <= 0:        
+        logger.opt(colors=True).info(f"<green>世界Boss已达到上限{max_boss_count}个，无法继续生成</green>")
 
     # 生成指定数量的BOSS
-    for _ in range(generate_count):
+    for _ in range(actual_count):
         bossinfo = createboss()
-        group_boss[group_id].append(bossinfo)    
-    old_boss_info.save_boss(group_boss)
+        group_boss[group_id].append(bossinfo)
     
-    logger.opt(colors=True).info(f"<green>群{group_id}已生成{generate_count}个世界boss</green>")
+    old_boss_info.save_boss(group_boss)
+    logger.opt(colors=True).info(f"<green>已生成{generate_count}个世界boss</green>")
 
 
 @DRIVER.on_shutdown
