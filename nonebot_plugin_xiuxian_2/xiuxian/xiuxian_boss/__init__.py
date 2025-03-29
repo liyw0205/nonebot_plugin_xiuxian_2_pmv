@@ -428,7 +428,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     result, victor, bossinfo_new, get_stone = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
    # 计算总伤害
     boss_now_hp = bossinfo_new['气血']  # 打之后的血量
-    boss_all_hp = scarecrow_info['总血量']  # 总血量
+    boss_all_hp = bossinfo['总血量']  # 总血量
     total_damage = boss_all_hp - boss_now_hp
     if victor == "Boss赢了":
         group_boss[group_id][boss_num - 1] = bossinfo_new
