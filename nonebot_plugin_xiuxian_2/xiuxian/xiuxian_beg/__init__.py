@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment
 )
 from nonebot.log import logger
+from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
@@ -32,6 +33,7 @@ sql_message = XiuxianDateManage()  # sql类
 async def xiuxian_beg_():
     sql_message.beg_remake()
     logger.opt(colors=True).info(f"<green>仙途奇缘重置成功！</green>")
+    
 
 __beg_help__ = f"""
 详情:
@@ -43,7 +45,19 @@ __beg_help__ = f"""
 
 beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
+compensation = on_command("补偿", priority=7, block=True)
+xiuxian_compensation = on_command("重置补偿", priority=7, block=True)
 
+# 重置补偿
+@xiuxian_compensation.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiuxian_compensation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    sql_message.compensation_remake()
+    msg = "补偿重置成功"
+    await handle_send(bot, event, msg)
+    await xiuxian_compensation.finish()
+    
+    
 @beg_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -131,6 +145,65 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     ]
 )
         await handle_send(bot, event, msg)
+        await beg_help.finish()
 
     
+@compensation.handle(parameterless=[Cooldown(at_sender=False)])
+async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    user_id = event.get_user_id()
+    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_root = user_msg['root_type']
+    sect = user_info['sect_id']    
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await compensation.finish()
+        
+    if sect is not None:        
+        compensation = sql_message.get_compensation(user_id)
+        if compensation is None:
+            msg = '贪心的人是不会有好运的！'
+        else:
+            num = 1
+            goods_id = "15052"
+            goods_info = items.get_data_by_item_id(goods_id)
+            package_name = goods_info['name']
+            msg_parts = []
+            i = 1
+            while True:
+                buff_key = f'buff_{i}'
+                name_key = f'name_{i}'
+                type_key = f'type_{i}'
+                amount_key = f'amount_{i}'
 
+                if name_key not in goods_info:
+                    break
+
+                item_name = goods_info[name_key]
+                item_amount = goods_info.get(amount_key, 1) * num
+                item_type = goods_info.get(type_key)
+                buff_id = goods_info.get(buff_key)
+
+                if item_name == "灵石":
+                    key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
+                    sql_message.update_ls(user_id, abs(item_amount), key)
+                    msg_parts.append(f"获得灵石 {item_amount} 枚\n")
+                else:
+                    if item_type in ["辅修功法", "神通", "功法"]:
+                        goods_type_item = "技能"
+                    elif item_type in ["法器", "防具"]:
+                        goods_type_item = "装备"
+                    else:
+                        goods_type_item = item_type
+                    if buff_id is not None:
+                        sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+                        msg_parts.append(f"获得 {item_name} x{item_amount}\n")
+            
+                i += 1            
+            sql_message.update_ls(user_id, abs(item_amount), key if item_amount > 0 else 2)
+            if buff_id is not None:
+                sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+            msg = f"道友的补偿:\n" + "".join(msg_parts)
+        sql_message.save_compensation(user_id)
+        await handle_send(bot, event, msg)

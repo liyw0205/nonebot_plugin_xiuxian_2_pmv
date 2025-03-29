@@ -7,13 +7,14 @@ from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
     GroupMessageEvent,
+    PrivateMessageEvent,
     MessageSegment,
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from .work_handle import workhandle
 from datetime import datetime
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA
 from ..xiuxian_utils.item_json import Items
@@ -40,7 +41,6 @@ last_work = on_command("最后的悬赏令", priority=15, block=True)
 do_work = on_regex(
     r"^悬赏令(刷新|终止|结算|接取|帮助)?(\d+)?",
     priority=10,
-    permission=GROUP,
     block=True
 )
 __work_help__ = f"""
@@ -57,15 +57,11 @@ __work_help__ = f"""
 
 
 @last_work.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
-async def last_work_(bot: Bot, event: GroupMessageEvent):
+async def last_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await last_work.finish()
     user_id = user_info['user_id']
     user_level = user_info['level']
@@ -87,11 +83,7 @@ async def last_work_(bot: Bot, event: GroupMessageEvent):
         )
         if exp_time < time2:
             msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await last_work.finish()
         else:
             msg, give_stone, s_o_f, item_id, big_suc = workhandle().do_work(
@@ -118,11 +110,7 @@ async def last_work_(bot: Bot, event: GroupMessageEvent):
                     msg += f"，额外获得奖励：{item_msg}!"
                 else:
                     msg += "!"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await last_work.finish()
 
             else:
@@ -135,42 +123,26 @@ async def last_work_(bot: Bot, event: GroupMessageEvent):
                         msg += f"，额外获得奖励：{item_msg}!"
                     else:
                         msg += "!"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await last_work.finish()
 
                 else:  # 失败
                     msg += "!"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await last_work.finish()
     else:
         msg = "不满足使用条件！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await last_work.finish()
 
 
 @do_work.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
-async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
+async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_level = "仙王境初期"
+    user_level = "至高"
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
     user_level_sx = user_info['level']
     user_id = user_info['user_id']
@@ -180,46 +152,26 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
     if not os.path.exists(PLAYERSDATA / str(user_id) / "workinfo.json") and user_cd_message['type'] == 2:
         sql_message.do_work(user_id, 0)
         msg = "悬赏令已更新，已重置道友的状态！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
     mode = args[0]  # 刷新、终止、结算、接取
-    if user_rank <= convert_rank('仙王境初期')[0] or user_info['exp'] >= sql_message.get_level_power(user_level):
+    if user_rank <= convert_rank('至高')[0] or user_info['exp'] >= sql_message.get_level_power(user_level):
         msg = "道友的境界已过创业初期，悬赏令已经不能满足道友了！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
     user_level = user_info['level']
     if int(user_info['exp']) >= int(OtherSet().set_closing_type(user_level)) * XiuConfig().closing_exp_upper_limit:
         # 获取下个境界需要的修为 * 1.5为闭关上限
         msg = "道友的修为已经到达上限，悬赏令已无法再获得经验！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
     if user_cd_message['type'] == 1:
         msg = "已经在闭关中，请输入【出关】结束后才能获取悬赏令！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
     if user_cd_message['type'] == 3:
         msg = "道友在秘境中，请等待结束后才能获取悬赏令！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
 
     if mode is None:  # 接取逻辑
@@ -240,11 +192,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，已结束，请输入【悬赏令结算】结算任务信息！"
         else:
             msg = "状态未知错误！"
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
 
     if mode == "刷新":  # 刷新逻辑
@@ -259,33 +207,21 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
             else:
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，已结束，请输入【悬赏令结算】结算任务信息！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await do_work.finish()
         usernums = sql_message.get_work_num(user_id)
 
         isUser, user_info, msg = check_user(event)
         if not isUser:
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
-                await do_work.finish()
+            await handle_send(bot, event, msg)
+            await do_work.finish()
 
         freenum = count - usernums - 1
         if freenum < 0:
             freenum = 0
             if int(user_info['stone']) < int(lscost / convert_rank(user_level_sx)[0]):
                 msg = f"道友的灵石不足以刷新，下次刷新消耗灵石：{int(lscost / convert_rank(user_level_sx)[0])}枚"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await do_work.finish()
             else:
                 sql_message.update_ls(user_id, int(lscost / convert_rank(user_level_sx)[0]) , 2)
@@ -307,11 +243,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
         work[user_id].world = work_list
         sql_message.update_work_num(user_id, usernums + 1)
         msg = work[user_id].msg
-        if XiuConfig().img:
-            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
 
     elif mode == "终止":
@@ -321,19 +253,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
             sql_message.update_ls(user_id, stone, 2)
             sql_message.do_work(user_id, 0)
             msg = f"道友不讲诚信，被打了一顿灵石减少{stone},悬赏令已终止！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await do_work.finish()
         else:
             msg = "没有查到你的悬赏令信息呢，请刷新！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await do_work.finish()
 
     elif mode == "结算":
@@ -350,11 +274,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
             )
             if exp_time < time2:
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await do_work.finish()
             else:
                 msg, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(2,
@@ -379,11 +299,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
                         msg += f"，额外获得奖励：{item_msg}!"
                     else:
                         msg += "!"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await do_work.finish()
 
                 else:
@@ -396,28 +312,16 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
                             msg += f"，额外获得奖励：{item_msg}!"
                         else:
                             msg += "!"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await do_work.finish()
 
                     else:  # 失败
                         msg += "!"
-                        if XiuConfig().img:
-                            pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                        else:
-                            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                        await handle_send(bot, event, msg)
                         await do_work.finish()
         else:
             msg = "没有查到你的悬赏令信息呢，请刷新！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await do_work.finish()
 
     elif mode == "接取":
@@ -426,11 +330,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
         if is_type:  # 接取逻辑
             if num is None or str(num) not in ['1', '2', '3']:
                 msg = '请输入正确的任务序号'
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await do_work.finish()
             work_num = 1
             try:
@@ -441,46 +341,26 @@ async def do_work_(bot: Bot, event: GroupMessageEvent, args: Tuple[Any, ...] = R
                     sql_message.do_work(user_id, 2, get_work[0])
                     del work[user_id]
                     msg = f"接取任务【{get_work[0]}】成功"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await do_work.finish()
 
                 except IndexError:
                     msg = "没有这样的任务"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await do_work.finish()
 
             except KeyError:
                 msg = "没有查到你的悬赏令信息呢，请刷新！"
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                    await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+                await handle_send(bot, event, msg)
                 await do_work.finish()
         else:
             msg = "没有查到你的悬赏令信息呢，请刷新！"
-            if XiuConfig().img:
-                pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+            await handle_send(bot, event, msg)
             await do_work.finish()
 
     elif mode == "帮助":
         msg = __work_help__
-        if XiuConfig().img:
-            pic = await get_msg_pic(msg, scale=False)
-            await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(pic))
-        else:
-            await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+        await handle_send(bot, event, msg)
         await do_work.finish()
 
 

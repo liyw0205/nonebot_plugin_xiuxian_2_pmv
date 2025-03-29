@@ -617,7 +617,7 @@ async def handle_send(bot, event, msg: str):
         else:
             await bot.send_private_msg(user_id=event.user_id, message=msg)
 
-
+            
 def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
     """添加节点进转发消息
 

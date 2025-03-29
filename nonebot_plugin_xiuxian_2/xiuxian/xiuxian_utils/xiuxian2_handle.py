@@ -76,6 +76,7 @@ class XiuxianDateManage:
       "create_time" integer,
       "is_sign" integer DEFAULT 0,
       "is_beg" integer DEFAULT 0,
+      "is_compensation" integer DEFAULT 0,      
       "is_ban" integer DEFAULT 0,
       "exp" integer DEFAULT 0,
       "user_name" TEXT DEFAULT NULL,
@@ -343,6 +344,17 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         elif result[0] == 1:
             return None
 
+    def get_compensation(self, user_id):
+        """获取补偿信息"""
+        cur = self.conn.cursor()
+        sql = f"select is_compensation from user_xiuxian WHERE user_id=?"
+        cur.execute(sql, (user_id,))
+        result = cur.fetchone()
+        if result[0] == 0:            
+            return True
+        elif result[0] == 1:
+            return None
+            
     def ramaker(self, lg, type, user_id):
         """洗灵根"""
         cur = self.conn.cursor()
@@ -392,7 +404,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             self.conn.commit()
 
     def update_root(self, user_id, key):
-        """更新灵根  1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世"""
+        """更新灵根  1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒"""
         cur = self.conn.cursor()
         if int(key) == 1:
             sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
@@ -435,6 +447,12 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             cur.execute(sql, ("轮回万次不灭，只为超越巅峰", "真·轮回道果", user_id))
             root_name = "真·轮回道果"
             self.conn.commit()
+            
+        elif int(key) == 8:
+            sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+            cur.execute(sql, ("轮回无尽不灭，只为触及永恒之境。", "永恒道果", user_id))
+            root_name = "永恒道果"
+            self.conn.commit()            
 
         return root_name  # 返回灵根名称
 
@@ -482,6 +500,21 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur = self.conn.cursor()
         cur.execute(sql, )
         self.conn.commit()
+        
+    def compensation_remake(self):
+        """重置补偿"""
+        sql = f"UPDATE user_xiuxian SET is_compensation=0"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
+        self.conn.commit()      
+        
+    def save_compensation(self, user_id):
+        """更新补偿"""
+        sql = f"UPDATE user_xiuxian SET is_compensation=1 WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (user_id,))
+        self.conn.commit()
+
 
     def ban_user(self, user_id):
         """小黑屋"""
