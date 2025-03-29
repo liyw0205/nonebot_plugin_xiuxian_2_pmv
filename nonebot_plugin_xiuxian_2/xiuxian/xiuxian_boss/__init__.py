@@ -426,6 +426,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     more_msg = ''
     battle_flag[group_id] = True
     result, victor, bossinfo_new, get_stone = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
+   # 计算总伤害
+    boss_now_hp = bossinfo_new['气血']  # 打之后的血量
+    boss_all_hp = scarecrow_info['总血量']  # 总血量
+    total_damage = boss_all_hp - boss_now_hp
     if victor == "Boss赢了":
         group_boss[group_id][boss_num - 1] = bossinfo_new
         sql_message.update_ls(user_id, get_stone, 1)
@@ -455,7 +459,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         else:
             exp_msg = f" "
             
-        msg = f"道友不敌{bossinfo['name']}，重伤逃遁，临逃前收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点{exp_msg} "
+        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点{exp_msg} "
         if user_info['root'] == "器师" and boss_integral < 0:
             msg += f"\n如果出现负积分，说明你境界太高了，玩器师就不要那么高境界了！！！"
         battle_flag[group_id] = False
@@ -506,7 +510,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         user_boss_fight_info['boss_integral'] += boss_integral
         save_user_boss_fight_info(user_id, user_boss_fight_info)
-        msg = f"恭喜道友击败{bossinfo['name']}，收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点!{exp_msg} {drops_msg}"
+        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点!{exp_msg} {drops_msg}"
         if user_info['root'] == "器师" and boss_integral < 0:
            msg += f"\n如果出现负积分，说明你这器师境界太高了(如果总世界积分为负数，会帮你重置成0)，玩器师就不要那么高境界了！！！"
         try:

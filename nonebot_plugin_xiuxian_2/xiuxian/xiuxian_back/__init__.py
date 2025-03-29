@@ -69,7 +69,7 @@ no_use_zb = on_command("换装", priority=5, block=True)
 buy = on_command("坊市购买", priority=5, permission=GROUP, block=True)
 auction_added = on_command("提交拍卖品", aliases={"拍卖品提交"}, priority=10, permission=GROUP, block=True)
 auction_withdraw = on_command("撤回拍卖品", aliases={"拍卖品撤回"}, priority=10, permission=GROUP, block=True)
-set_auction = on_command("群拍卖会", priority=4, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), block=True)
+set_auction = on_command("拍卖会", priority=4, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), block=True)
 creat_auction = on_fullmatch("举行拍卖会", priority=5, permission=GROUP and SUPERUSER, block=True)
 offer_auction = on_command("拍卖", priority=5, permission=GROUP, block=True)
 back_help = on_command("背包帮助", aliases={"坊市帮助"}, priority=8, block=True)
@@ -107,12 +107,12 @@ __back_help__ = f"""
 13、系统仙肆上架:系统仙肆上架 物品 金额，上架任意存在的物品至全服仙肆，超管权限
 14、坊市下架+物品编号：下架坊市内的物品，管理员和群主可以下架任意编号的物品！
 15、仙肆下架+物品编号：下架仙肆内的物品，用户可下架自己上架的物品，超管可下架任意物品
-16、群交流会开启、关闭:开启/关闭拍卖行功能，管理员指令，注意：会在机器人所在的全部已开启此功能的群内通报拍卖消息
+16、拍卖会开启、关闭:开启/关闭拍卖会功能，管理员指令，注意：会在机器人所在的全部已开启此功能的群内通报拍卖消息
 17、拍卖+金额：对本次拍卖会的物品进行拍卖
 18、炼金+物品名字：将物品炼化为灵石,支持批量炼金和绑定丹药炼金
 19、背包帮助:获取背包帮助指令
 20、查看修仙界物品:支持类型【功法|神通|丹药|合成丹药|法器|防具】
-21、清空坊市:清空本群坊市,管理员权限
+21、清空坊市:清空坊市,管理员权限
 22、查看效果:查看效果 渡厄丹
 非指令：
 1、定时生成拍卖会,每天{auction_time_config['hours']}点生成一场拍卖会
@@ -131,7 +131,7 @@ async def set_auction_by_scheduler_():
     global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
     if groups:
         if auction:
-            logger.opt(colors=True).info(f"<green>本群已存在一场拍卖会，已清除！</green>")
+            logger.opt(colors=True).info(f"<green>已存在一场拍卖会，已清除！</green>")
             auction = {}
 
     auction_items = []
@@ -1111,7 +1111,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
 async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """炼金"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = str(event.group_id)
+    group_id = "000000"
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
@@ -1249,15 +1249,15 @@ async def shop_off_(bot: Bot, event: GroupMessageEvent, args: Message = CommandA
 async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """用户撤回拍卖品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = str(event.group_id)
+    group_id = "000000"
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await auction_withdraw.finish()
 
-    group_id = str(event.group_id)
+    group_id = "000000"
     if group_id not in groups:
-        msg = '本群尚未开启拍卖会功能，请联系管理员开启！'
+        msg = '尚未开启拍卖会功能，请联系管理员开启！'
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1620,13 +1620,13 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
     """查看拍卖会物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    group_id = str(event.group_id)
+    group_id = "000000"
     if not isUser:
         await handle_send(bot, event, msg)
         await auction_view.finish()
     
     if group_id not in groups:
-        msg = '本群尚未开启拍卖会功能，请联系管理员开启！'
+        msg = '尚未开启拍卖会功能，请联系管理员开启！'
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1663,7 +1663,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
 @creat_auction.handle(parameterless=[Cooldown(at_sender=False)])
 async def creat_auction_(bot: Bot, event: GroupMessageEvent):
     global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
-    group_id = str(event.group_id)
+    group_id = "000000"
     bot = await assign_bot_group(group_id=group_id)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1675,7 +1675,7 @@ async def creat_auction_(bot: Bot, event: GroupMessageEvent):
         await creat_auction.finish()
         
     if group_id not in groups:
-        msg = '本群尚未开启拍卖会功能，请联系管理员开启！'
+        msg = '尚未开启拍卖会功能，请联系管理员开启！'
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1684,7 +1684,7 @@ async def creat_auction_(bot: Bot, event: GroupMessageEvent):
         await creat_auction.finish()
 
     if auction:
-        msg = "本群已存在一场拍卖会，请等待拍卖会结束！"
+        msg = "已存在一场拍卖会，请等待拍卖会结束！"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1885,7 +1885,7 @@ async def creat_auction_(bot: Bot, event: GroupMessageEvent):
 @offer_auction.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GLOBAL)])
 async def offer_auction_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """拍卖"""
-    group_id = str(event.group_id)
+    group_id = "000000"
     bot = await assign_bot_group(group_id=group_id)
     isUser, user_info, msg = check_user(event)
     global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
@@ -1898,7 +1898,7 @@ async def offer_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Com
         await offer_auction.finish()
 
     if group_id not in groups:
-        msg = f"本群尚未开启拍卖会功能，请联系管理员开启！"
+        msg = f"尚未开启拍卖会功能，请联系管理员开启！"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1907,7 +1907,7 @@ async def offer_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Com
         await offer_auction.finish()
 
     if not auction:
-        msg = f"本群不存在拍卖会，请等待拍卖会开启！"
+        msg = f"不存在拍卖会，请等待拍卖会开启！"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -1993,13 +1993,13 @@ async def auction_added_(bot: Bot, event: GroupMessageEvent, args: Message = Com
     """用户提交拍卖品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    group_id = str(event.group_id)
+    group_id = "000000"
     if not isUser:
         await handle_send(bot, event, msg)
         await auction_added.finish()
 
     if group_id not in groups:
-        msg = f"本群尚未开启拍卖会功能，请联系管理员开启！"
+        msg = f"尚未开启拍卖会功能，请联系管理员开启！"
         if XiuConfig().img:
             pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
             await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
@@ -2097,21 +2097,21 @@ async def auction_added_(bot: Bot, event: GroupMessageEvent, args: Message = Com
 
 @set_auction.handle(parameterless=[Cooldown(at_sender=False)])
 async def set_auction_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """群拍卖会开关"""
+    """拍卖会开关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     mode = args.extract_plain_text().strip()
-    group_id = str(event.group_id)
+    group_id = "000000"
     is_in_group = is_in_groups(event)  # True在，False不在
 
     if mode == '开启':
         if is_in_group:
-            msg = "本群已开启群拍卖会，请勿重复开启!"
+            msg = "已开启拍卖会，请勿重复开启!"
             await handle_send(bot, event, msg)
             await set_auction.finish()
         else:
             config['open'].append(group_id)
             savef_auction(config)
-            msg = "已开启群拍卖会"
+            msg = "已开启拍卖会"
             await handle_send(bot, event, msg)
             await set_auction.finish()
 
@@ -2119,11 +2119,11 @@ async def set_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         if is_in_group:
             config['open'].remove(group_id)
             savef_auction(config)
-            msg = "已关闭本群拍卖会!"
+            msg = "已关闭拍卖会!"
             await handle_send(bot, event, msg)
             await set_auction.finish()
         else:
-            msg = "本群未开启群拍卖会!"
+            msg = "未开启拍卖会!"
             await handle_send(bot, event, msg)
             await set_auction.finish()
 

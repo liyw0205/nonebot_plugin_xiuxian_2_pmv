@@ -1,7 +1,7 @@
 from nonebot import on_command, on_fullmatch
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_config import XiuConfig
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -14,6 +14,13 @@ from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     CommandObjectID, handle_send
 )
+from ..xiuxian_impart.impart_uitls import (
+    impart_check,
+    update_user_impart_data
+)
+
+xiuxian_impart = XIUXIAN_IMPART_BUFF()
+
 
 __warring_help__ = """
 详情：
@@ -62,6 +69,9 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     user_root = user_msg['root_type']
     list_level_all = list(jsondata.level_data().keys())
     level = user_info['level']
+    impart_data_draw = await impart_check(user_id) 
+    impaer_exp_time = impart_data_draw["exp_day"] if impart_data_draw is not None else 0
+    
     
     if user_root == '轮回道果' :
         msg = "道友已是千世轮回之身！"
@@ -85,6 +95,10 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
         sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
+        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+        #重置用户虚神界修炼时间
+        sql_message.update_ls(user_id, user_info['stone'], 2)
+        #重置用户灵石
         sql_message.update_root(user_id, 6) #更换轮回灵根
         msg = f"千世轮回磨不灭，重回绝颠谁能敌，恭喜大能{user_name}轮回成功！"
         await handle_send(bot, event, msg)
@@ -108,6 +122,8 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     user_root = user_msg['root_type']
     list_level_all = list(jsondata.level_data().keys())
     level = user_info['level']
+    impart_data_draw = await impart_check(user_id) 
+    impaer_exp_time = impart_data_draw["exp_day"] if impart_data_draw is not None else 0
     
     if user_root == '真·轮回道果':
         msg = "道友已是万世轮回之身！"
@@ -127,6 +143,14 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_j_exp(user_id, now_exp) #重置用户修为
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
+        sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
+        sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
+        sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
+        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+        #重置用户虚神界修炼时间
+        sql_message.update_ls(user_id, user_info['stone'], 2)
+        #重置用户灵石
         sql_message.update_root(user_id, 7) #更换轮回灵根
         msg = f"万世道果集一身，脱出凡道入仙道，恭喜大能{user_name}万世轮回成功！"
         await handle_send(bot, event, msg)
@@ -163,6 +187,8 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
     user_root = user_msg['root_type']
     list_level_all = list(jsondata.level_data().keys())
     level = user_info['level']
+    impart_data_draw = await impart_check(user_id) 
+    impaer_exp_time = impart_data_draw["exp_day"] if impart_data_draw is not None else 0
     
     if user_root == '永恒道果':
         msg = "道友已是永恒轮回之身！"
@@ -188,7 +214,15 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         sql_message.update_j_exp(user_id, now_exp) #重置用户修为
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
-        sql_message.update_root(user_id, 7) #更换轮回灵根
+        sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
+        sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
+        sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
+        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+        #重置用户虚神界修炼时间
+        sql_message.update_ls(user_id, user_info['stone'], 2)
+        #重置用户灵石
+        sql_message.update_root(user_id, 8) #更换轮回灵根
         msg = f"穿越千劫万难，证得不朽之身，恭喜大能{user_name}步入永恒之道，成就无上永恒！"
         await handle_send(bot, event, msg)
         await threelun.finish()
