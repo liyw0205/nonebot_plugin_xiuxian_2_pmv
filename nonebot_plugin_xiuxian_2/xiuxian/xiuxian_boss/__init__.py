@@ -113,7 +113,7 @@ __boss_help__ = f"""
 独立功能：
 - 挑战稻草人
 非指令: 
-1、全服每{config['Boss生成时间参数']['hours']}小时{config['Boss生成时间参数']['minutes']}分钟自动生成5只随机大境界的世界Boss
+1、全服每{config['Boss生成时间参数']['hours']}小时{config['Boss生成时间参数']['minutes']}分钟自动生成10只随机大境界的世界Boss
 2、每日0、6、12、18点天罚全部世界Boss
 """.strip()
 
@@ -187,7 +187,7 @@ async def create_boss_task():
         logger.opt(colors=True).info(f"<yellow>{msg}</yellow>")  
         return
 
-    generate_count = 5
+    generate_count = 10
 
     try:
         group_boss[group_id]
@@ -420,7 +420,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     else:
         boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
     user_rank = convert_rank(userinfo['level'])[0]
-    if boss_rank - user_rank >= 6:
+    if boss_rank - user_rank >= 4:
         msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
