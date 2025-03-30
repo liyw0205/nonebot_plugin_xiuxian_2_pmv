@@ -104,9 +104,12 @@ Create virtual environment? (Y/n) y
 Install dependencies now? (Y/n) y
 ```
 选择 echo（默认安装插件）
-- 移动 requirements.txt 文件 data 文件夹 到nb插件目录，如上面设置的项目名xiu2
-
-- 移动 nonebot_plugin_xiuxian_2 文件夹 到nb插件目录的src文件夹里的插件文件夹里，src/plugins/nonebot_plugin_xiuxian_2
+- 移动项目
+```
+mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
+mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
+mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
+```
 安装修仙2依赖
 ```
 cd ~/xiu2
@@ -174,9 +177,12 @@ Create virtual environment? (Y/n) y
 Install dependencies now? (Y/n) y
 ```
 选择 echo（默认安装插件）
-- 移动 requirements.txt 文件 data 文件夹 到nb插件目录，如上面设置的项目名xiu2
-
-- 移动 nonebot_plugin_xiuxian_2 文件夹 到nb插件目录的src文件夹里的插件文件夹里，src/plugins/nonebot_plugin_xiuxian_2
+- 移动项目
+```
+mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
+mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
+mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
+```
 安装修仙2依赖
 ```
 cd ~/xiu2
@@ -283,6 +289,14 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ```
 screen -dmS napcat bash -c 'xvfb-run -a qq --no-sandbox'
 ```
+进入QQ
+```
+screen -r napcat
+```
+退出screen
+```
+ctrl + a + d
+```
 关闭QQ
 ```
 screen -x napcat
@@ -307,20 +321,27 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ```
 - 保存
 
-启动修仙2（Termux）
+- - -
+
+- Termux 进入器器
 ```
 proot-distro login napcat
 ```
+启动修仙2
 ```
-source ~/myenv/bin/activate
-cd ~/xiu2
-nb run
+screen -dmS xiu2 bash -c 'source ~/myenv/bin/activate && cd ~/xiu2 && nb run'
 ```
-启动修仙2（Linux）
+进入修仙2
 ```
-source ~/myenv/bin/activate
-cd ~/xiu2
-nb run
+screen -r xiu2
+```
+退出screen
+```
+ctrl + a + d
+```
+关闭修仙2
+```
+screen -x xiu2
 ```
 
 # 💿 使用
