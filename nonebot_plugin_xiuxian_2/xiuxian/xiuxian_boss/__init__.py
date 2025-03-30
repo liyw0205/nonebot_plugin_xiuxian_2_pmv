@@ -146,8 +146,7 @@ async def punish_all_bosses():
     for group_id in group_boss.keys():
         if group_boss[group_id]:  # 如果该群有BOSS
             group_boss[group_id] = []  # 清空BOSS列表
-            logger.opt(colors=True).info(f"<green>群{group_id}的世界BOSS已被天罚清空</green>")
-            # 获取群对应的Bot实例并发送消息
+            logger.opt(colors=True).info(f"<green>世界BOSS已被天罚清空</green>")            
             bot = await layout_bot_dict(group_id)
             if bot:
                 try:
@@ -156,59 +155,54 @@ async def punish_all_bosses():
                         message="天雷降临，所有世界BOSS烟消云散了！"
                     )
                 except Exception as e:
-                    logger.opt(colors=True).warning(f"<red>群{group_id}天罚消息发送失败,{e}</red>")
+                    logger.opt(colors=True).warning(f"<red>天罚消息发送失败,{e}</red>")
     old_boss_info.save_boss(group_boss)
                     
                     
 @DRIVER.on_startup
 async def set_boss_():
-    groups_list = list(groups.keys())
     try:
-        for group_id in groups_list:
-            scheduler.add_job(
-                func=send_bot,
-                trigger='interval',
-                hours=groups['000000']["hours"],
-                minutes=groups['000000']['minutes'],
-                id=f"set_boss_{group_id}",
-                args=[group_id],
-                misfire_grace_time=10
-            )
-            logger.opt(colors=True).success(f"<green>开启世界boss,每{groups['000000']['hours']}小时{groups['000000']['minutes']}分钟刷新！</green>")
+        scheduler.add_job(
+            func=create_boss_task,
+            trigger='interval',
+            hours=groups['000000']["hours"],
+            minutes=groups['000000']['minutes'],
+            id="create_boss_task",
+            seconds=0,
+            misfire_grace_time=10
+        )
+        logger.opt(colors=True).success(f"<green>开启世界boss,每{groups['000000']['hours']}小时{groups['000000']['minutes']}分钟刷新！</green>")
     except Exception as e:
-        logger.opt(colors=True).warning(f"<red>警告,定时群boss加载失败!,{e}!</red>")
+        logger.opt(colors=True).warning(f"<red>警告,定时boss加载失败!,{e}!</red>")
     global group_boss
     old_boss_info.save_boss(group_boss)
 
-async def send_bot(group_id: str):
-    # 初始化
-    global group_boss 
-    group_boss = old_boss_info.read_boss_info()
-    if not group_id in group_boss:
-        group_boss[group_id] = []
 
+async def create_boss_task():
+    global group_boss
+    group_boss = old_boss_info.read_boss_info()
+    group_id = "000000"
     if group_id not in groups:
-        return     
-    
-    if group_id not in conf_data["group"]:
+        msg = f"尚未开启世界Boss,请联系管理员开启!"
+        logger.opt(colors=True).info(f"<yellow>{msg}</yellow>")  
         return
 
-    generate_count = int(num_match[0]) if num_match else 1  # 默认生成1个
+    generate_count = 5
 
     try:
         group_boss[group_id]
     except:
         group_boss[group_id] = []
-
     current_boss_count = len(group_boss[group_id])
     max_boss_count = config['Boss个数上限']
     remaining_slots = max_boss_count - current_boss_count
     
-    # 调整生成数量不超过上限
     actual_count = min(generate_count, remaining_slots)
     
-    if actual_count <= 0:        
-        logger.opt(colors=True).info(f"<green>世界Boss已达到上限{max_boss_count}个，无法继续生成</green>")
+    if actual_count <= 0:
+        msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
+        logger.opt(colors=True).warning(f"<red>{msg}</red>") 
+        return  # 提前返回，避免多余操作
 
     # 生成指定数量的BOSS
     for _ in range(actual_count):
@@ -216,7 +210,10 @@ async def send_bot(group_id: str):
         group_boss[group_id].append(bossinfo)
     
     old_boss_info.save_boss(group_boss)
-    logger.opt(colors=True).info(f"<green>已生成{generate_count}个世界boss</green>")
+    msg = f"已生成{actual_count}个随机境界Boss,诸位道友请击败Boss获得奖励吧!"
+    if actual_count < generate_count:
+        msg += f"\n(原计划生成{generate_count}个，因上限{max_boss_count}限制，实际生成{actual_count}个)"
+    logger.opt(colors=True).success(f"<green>{msg}</green>")
 
 
 @DRIVER.on_shutdown
@@ -751,7 +748,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     actual_count = min(generate_count, remaining_slots)
     
     if actual_count <= 0:
-        msg = f"本群世界Boss已达到上限{max_boss_count}个，无法继续生成"
+        msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
         await handle_send(bot, event, msg)
         await create_appoint.finish()
 

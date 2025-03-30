@@ -75,23 +75,33 @@ async def save_rift_():
 
 # 定时任务生成秘境
 @set_rift.scheduled_job("cron", hour=8, minute=0)
-async def set_rift_():
+async def scheduled_rift_generation():
+    """
+    定时任务：每天8点触发秘境生成
+    """
     global group_rift
-    if groups:
-        group_rift = {}
-        for group_id in groups:
-            bot = await assign_bot_group(group_id=group_id)
-            rift = Rift()
-            rift.name = get_rift_type()
-            rift.rank = config['rift'][rift.name]['rank']
-            rift.count = config['rift'][rift.name]['count']
-            rift.time = config['rift'][rift.name]['time']
-            group_rift[group_id] = rift
-            msg = f"秘境已刷新，野生的{rift.name}已开启！可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
-            old_rift_info.save_rift(group_rift)
+    if not groups:
+        logger.warning("秘境未开启，定时任务终止")
+        return
+    
+    await generate_rift_for_group()   
+    
+    logger.info("秘境定时生成完成")
+
             
+async def generate_rift_for_group():
+    group_id = "000000"
+    rift = Rift()
+    rift.name = get_rift_type()
+    rift.rank = config['rift'][rift.name]['rank']
+    rift.count = config['rift'][rift.name]['count']
+    rift.time = config['rift'][rift.name]['time']
+    group_rift[group_id] = rift
+    msg = f"野生的{rift.name}出现了！秘境可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
+    logger.info(msg)
+    old_rift_info.save_rift(group_rift)
 
-
+    
 @rift_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """秘境帮助"""
