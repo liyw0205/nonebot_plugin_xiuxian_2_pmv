@@ -989,7 +989,7 @@
         "level": "29"
     },
     "9900": {
-        "name": "玄清天衍录",
+        "name": "玄清录",
         "hpbuff": 0.1,
         "mpbuff": 0.2,
         "atkbuff": 0.8,
@@ -1216,7 +1216,7 @@
         "ew": 0,
         "desc": "",
         "rank": "仙阶下品",
-        "level": "1"
+        "level": "16"
     },
     "9912": {
         "name": "吞天魔功",
@@ -1354,7 +1354,7 @@
         "ew": 0,
         "desc": "",
         "rank": "仙阶上品",
-        "level": "1"
+        "level": "16"
     },
     "9920": {
         "name": "三丰丹经",
@@ -1469,7 +1469,7 @@
         "ew": 0,
         "desc": "",
         "rank": "仙阶极品",
-        "level": "1"
+        "level": "19"
     },
     "9925": {
         "name": "两仪心经",
@@ -1515,7 +1515,7 @@
         "ew": 0,
         "desc": "",
         "rank": "仙阶极品",
-        "level": "1"
+        "level": "19"
     },
     "9930": {
         "name": "神合大法",
@@ -1528,7 +1528,7 @@
         "dan_exp": 0,
         "dan_buff": 3,
         "reap_buff": 0,
-        "exp_buff": 0.5,
+        "exp_buff": 0.3,
         "critatk": 0.2,
         "two_buff": 13,
         "number": 0,
@@ -1538,7 +1538,19 @@
         "ew": 0,
         "desc": "",
         "rank": "无上仙法",
-        "level": "1"
+        "level": "1",
+        "fusion": {
+            "need_item": {
+                "9925": 1,
+                "20002": 1,
+                "20003": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "10000000",
+            "limit": 1
+        }
     },
     "9931": {
         "name": "渡劫天功",
@@ -1747,7 +1759,7 @@
         "rank": "无上仙法",
         "level": "1"
     },
-    "9938": {
+    "9936": {
         "name": "轮回诀",
         "hpbuff": 5,
         "mpbuff": 2.5,
@@ -1770,7 +1782,7 @@
         "rank": "无上仙法",
         "level": "1"
     },
-    "9936": {
+    "9937": {
         "name": "弑仙魔典",
         "hpbuff": 4,
         "mpbuff": 3.0,
@@ -1793,7 +1805,7 @@
         "rank": "无上仙法",
         "level": "1"
     },
-    "9937": {
+    "9938": {
         "name": "一气化三清",
         "hpbuff": 6,
         "mpbuff": 6,
@@ -1815,5 +1827,40 @@
         "desc": "",
         "rank": "无上仙法",
         "level": "1"
-    }
+    },
+    "9939": {
+        "name": "长生仙经",
+        "hpbuff": 10,
+        "mpbuff": 2.7,
+        "atkbuff": 2,
+        "ratebuff": 2.7,
+        "crit_buff": 0.15,
+        "def_buff": -0.2,
+        "dan_exp": 5,
+        "dan_buff": 1,
+        "reap_buff": 3,
+        "exp_buff": 0.5,
+        "critatk": 0,
+        "two_buff": 6,
+        "number": 7,
+        "clo_exp": 0,
+        "clo_rs": 0,
+        "random_buff": 0,
+        "ew": 0,
+        "desc": "",
+        "rank": "无上仙法",
+        "level": "1",
+        "fusion": {
+            "need_item": {
+                "9902": 1,
+                "20002": 1,
+                "20003": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "10000000",
+            "limit": 1
+        }
+    }    
 }

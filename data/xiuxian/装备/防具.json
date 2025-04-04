@@ -104,7 +104,7 @@
         "def_buff": 0.28,
         "atk_buff": 0.12,
         "crit_buff": 0,
-        "rank": -5,
+        "rank": 15,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -131,7 +131,7 @@
         "def_buff": 0.4,
         "atk_buff": 0,
         "crit_buff": 0,
-        "rank": -5,
+        "rank": 10,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -341,5 +341,49 @@
         "rank": -5,
         "level": "无上仙器",
         "type": "装备"
+    },
+    "15510": {
+        "name": "天蚕织梦战甲",
+        "atk_buff": 0.3,
+        "crit_buff": 0.2,
+        "def_buff": 0.35,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "6093": 1,
+                "20002": 1,
+                "20003": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",            
+            "limit": 1
+        }
+    },
+    "15511": {
+        "name": "玄冥黑太岁",
+        "atk_buff": 0.2,
+        "crit_buff": 0.2,
+        "def_buff": 0.4,
+        "mp_buff": 1,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "11052": 1,
+                "20002": 1,
+                "20003": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",            
+            "limit": 1
+        }
     }
 }

@@ -121,16 +121,16 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         return
 
     # 解析抽卡次数
-    input_arg = event.get_plaintext().split(maxsplit=1)
-    times = 10  # 默认单次十连
-    if len(input_arg) > 1:
-        try:
-            times = int(input_arg[1])
-            if times % 10 != 0 or times < 10:
-                raise ValueError
-        except ValueError:
-            await handle_send(bot, event, send_group_id, "请输入合法次数（如：传承抽卡 20）")
-            return
+    msg = event.get_plaintext().strip()          # 获取原始输入
+    matches = re.findall(r"\b\d+\b", msg)       # 匹配所有独立数字
+    if not matches:
+        await handle_send(bot, event, send_group_id, "请输入有效次数（如：传承抽卡 10）")
+        return
+
+    times = int(matches[0])                     # 取第一个匹配数字
+    if times % 10 != 0 or times < 10:
+        await handle_send(bot, event, send_group_id, "次数需为10的倍数且≥10")
+        return
 
     # 检查思恋结晶是否足够
     required_crystals = times  # 每抽一次消耗1颗

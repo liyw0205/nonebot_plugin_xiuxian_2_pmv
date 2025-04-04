@@ -415,7 +415,7 @@
         "critatk": 0.45,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 13,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -888,8 +888,8 @@
     "15467": {
         "name": "无上青龙偃月刀",
         "atk_buff": 1,
-        "crit_buff": 0.3,
-        "def_buff": 0,
+        "crit_buff": 0.25,
+        "def_buff": -0.25,
         "critatk": 1,
         "zw": 0,
         "mp_buff": 0,
@@ -899,7 +899,81 @@
         "fusion": {
             "need_item": {
                 "7097": 1,
-                "20002": 1
+                "20002": 1,
+                "20003": 1,
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
+    },
+    "15468": {
+        "name": "龙渊绝影剑",
+        "atk_buff": 0.3,
+        "crit_buff": 0.8,
+        "def_buff": 0,
+        "critatk": 1.25,
+        "zw": 0,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "7096": 1,
+                "7091": 1,
+                "20002": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
+    },
+    "15469": {
+        "name": "十拳破碎剑",
+        "atk_buff": 1,
+        "crit_buff": 0,
+        "def_buff": -0.5,
+        "critatk": 1.5,
+        "zw": 0,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "11002": 1,
+                "20002": 1,
+                "20003": 1,                
+                "20004": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
+    },
+    "15468": {
+        "name": "鸿钧破虚棍",
+        "atk_buff": 0.8,
+        "crit_buff": 0.5,
+        "def_buff": 0.2,
+        "critatk": 0.8,
+        "zw": 0,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "7095": 1,
+                "11002": 1,
+                "20003": 1,                
+                "20004": 1
             },
             "need_rank": "真仙境圆满",
             "need_exp": "0",

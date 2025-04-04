@@ -210,7 +210,7 @@
         "hpcost": 0.1,
         "mpcost": 0.3,
         "turncost": 0,
-        "desc": "吔屎啦！",
+        "desc": "五毒摄魂阵！",
         "rate": 100,
         "rank": "黄阶上品",
         "level": "44"
@@ -639,7 +639,7 @@
         "hpcost": 0,
         "mpcost": 0.5,
         "turncost": 3,
-        "desc": "吔屎啦！",
+        "desc": "凤灵妖火！",
         "rate": 100,
         "rank": "天阶上品",
         "level": "26"
@@ -687,7 +687,7 @@
         "hpcost": 0.2,
         "mpcost": 0.4,
         "turncost": 0,
-        "desc": "吔屎啦！",
+        "desc": "电闪雷鸣！天崩地裂！",
         "rate": 70,
         "rank": "天阶上品",
         "level": "26"
@@ -714,7 +714,7 @@
         "hpcost": 0.5,
         "mpcost": 0.5,
         "turncost": 5,
-        "desc": "吔屎啦！",
+        "desc": "寿与天齐！不朽不灭！",
         "rate": 20,
         "rank": "仙阶下品",
         "level": "26"
@@ -730,7 +730,7 @@
         "hpcost": 0.1,
         "mpcost": 0.7,
         "turncost": 0,
-        "desc": "吔屎啦！",
+        "desc": "印镇九天！仙威浩荡！",
         "rate": 80,
         "rank": "仙阶下品",
         "level": "26"
@@ -781,7 +781,7 @@
         "hpcost": 0,
         "mpcost": 1.50,
         "turncost": 4,
-        "desc": "万剑归宗！！！",
+        "desc": "万剑齐发，归于一宗，势不可挡！万剑归宗！！！",
         "rate": 99,
         "rank": "仙阶极品",
         "level": "13"
@@ -807,8 +807,8 @@
         "hpcost": 0.03,
         "mpcost": 0.65,
         "turncost": 0,
-        "desc": "灭！！！！",
-        "rate": 75,
+        "desc": "剑出血胧，灭敌无形，血雾弥漫！灭！！！！",
+        "rate": 80,
         "rank": "仙阶极品",
         "level": "13"
     },
@@ -827,7 +827,7 @@
         "hpcost": 0.03,
         "mpcost": 0.8,
         "turncost": 1,
-        "desc": "千慄鬼噬！！！",
+        "desc": "鬼神皆惧，千慄吞噬，暗影降临！千慄鬼噬！！！",
         "rate": 100,
         "rank": "仙阶极品",
         "level": "13"

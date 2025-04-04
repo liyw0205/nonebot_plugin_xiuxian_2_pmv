@@ -183,13 +183,19 @@ __level1_help__ = f"""
 __level2_help__ = f"""
 详情:
             --境界帮助--            
-           江湖人
+          江湖人
+            ↓
 搬血境 → 洞天境 → 化灵境
-铭纹境 → 列阵境 → 尊者境 → 神火境
-真一境 → 圣祭境 → 天神境 → 虚道境
-斩我境 → 遁一境 → 至尊境 → 真仙境
-仙王境 → 准帝境 → 仙帝境 → 祭道境
-自在境 → 破虚境 → 无界境 
+铭纹境 → 列阵境 → 尊者境 
+神火境 → 真一境 → 圣祭境
+天神境 → 虚道境 → 斩我境 
+遁一境 → 至尊境 → 真仙境
+仙王境 → 准帝境 → 仙帝境
+祭道境 → 自在境 → 破虚境 
+无界境 → 混元境 → 造化境
+            ↓
+          永恒境
+            ↓          
            至高
 """.strip()
 
@@ -1000,7 +1006,11 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         for group_id in enabled_groups:
             bot = await assign_bot_group(group_id=group_id)
             try:
-                await handle_send(bot, event, msg)
+                if XiuConfig().img:
+                    pic = await get_msg_pic(msg)
+                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
+                else:
+                    await bot.send_group_msg(group_id=int(group_id), message=msg)
             except ActionFailed:  # 发送群消息失败
                 continue
     await gm_command.finish()
@@ -1053,7 +1063,11 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         for group_id in enabled_groups:
             bot = await assign_bot_group(group_id=group_id)
             try:
-                await handle_send(bot, event, msg)
+                if XiuConfig().img:
+                    pic = await get_msg_pic(msg)
+                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
+                else:
+                    await bot.send_group_msg(group_id=int(group_id), message=msg)
             except ActionFailed:  # 发送群消息失败
                 continue
         await cz.finish()

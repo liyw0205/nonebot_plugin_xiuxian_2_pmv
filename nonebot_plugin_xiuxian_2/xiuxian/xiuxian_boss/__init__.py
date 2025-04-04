@@ -110,6 +110,7 @@ __boss_help__ = f"""
 7、天罚所有世界boss:删除所有世界Boss,管理员权限
 8、世界积分查看:查看自己的世界积分,和世界积分兑换商品
 9、世界积分兑换+编号：兑换对应的商品，可以批量购买
+10、世界BOSS开启、关闭:世界BOSS生成的通知，管理员权限
 独立功能：
 - 挑战稻草人
 非指令: 
@@ -791,18 +792,6 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg = f"已为本群关闭世界Boss通知!"
         else:
             msg = f"本群未开启世界Boss通知!"
-        await handle_send(bot, event, msg)
-        await set_group_boss.finish()
-
-    elif mode == '':
-        if isInGroup:
-            msg = __boss_help__ + f"\n本群已开启世界Boss通知，将接收BOSS生成和天罚消息。"
-        else:
-            msg = __boss_help__ + f"\n本群未开启世界Boss通知，可使用 '世界boss 开启' 启用。"
-        await handle_send(bot, event, msg)
-        await set_group_boss.finish()
-    else:
-        msg = f"请输入正确的指令: 世界boss 开启 或 世界boss 关闭!"
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
 
