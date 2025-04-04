@@ -796,7 +796,7 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     elif mode == '':
         if isInGroup:
-            msg = __boss_help__ + f"\n本群已开启世界Boss通知，将接收全局BOSS生成和天罚消息。"
+            msg = __boss_help__ + f"\n本群已开启世界Boss通知，将接收BOSS生成和天罚消息。"
         else:
             msg = __boss_help__ + f"\n本群未开启世界Boss通知，可使用 '世界boss 开启' 启用。"
         await handle_send(bot, event, msg)

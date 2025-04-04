@@ -7,7 +7,9 @@ from pathlib import Path
 
 configkey = ["open", "rift"]
 CONFIG = {
-    "open": [],
+    "open": [
+        "000000",
+            ],
     "rift": {
         "东玄域": {
             "type_rate": 200,  # 概率
@@ -67,6 +69,11 @@ CONFIG = {
 }
 
 
+
+CONFIGJSONPATH = Path(__file__).parent
+FILEPATH = CONFIGJSONPATH / 'config.json'
+
+
 def get_rift_config():
     try:
         config = readf()
@@ -78,10 +85,6 @@ def get_rift_config():
         config = CONFIG
         savef_rift(config)
     return config
-
-
-CONFIGJSONPATH = Path(__file__).parent
-FILEPATH = CONFIGJSONPATH / 'config.json'
 
 
 def readf():

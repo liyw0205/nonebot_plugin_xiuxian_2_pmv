@@ -57,7 +57,7 @@ __rift_help__ = f"""
 6、使用秘境钥匙:使用秘境钥匙立即结算当前秘境
 7、秘境帮助:获取秘境帮助信息
 非指令：
-1、每天早八生成一个随机等级的秘境
+1、每天0点和12点生成一个随机等级的秘境
 """.strip()
 
 
@@ -74,10 +74,10 @@ async def save_rift_():
     logger.opt(colors=True).info(f"<green>rift数据已保存</green>")
 
 # 定时任务生成秘境
-@set_rift.scheduled_job("cron", hour=8, minute=0)
+@set_rift.scheduled_job("cron", hour='0,12', minute=0)
 async def scheduled_rift_generation():
     """
-    定时任务：每天8点触发秘境生成
+    定时任务：每天0,12点触发秘境生成
     """
     global group_rift
     if not groups:
@@ -100,6 +100,10 @@ async def generate_rift_for_group():
     msg = f"野生的{rift.name}出现了！秘境可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
     logger.info(msg)
     old_rift_info.save_rift(group_rift)
+    for notify_group_id in config['open']:
+        bot = await layout_bot_dict(notify_group_id)
+        if bot:
+            await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
     
 @rift_help.handle(parameterless=[Cooldown(at_sender=False)])
@@ -157,11 +161,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await explore_rift.finish()
     else:
-        group_id = "000000"
-        if group_id not in groups:
-            msg = '尚未开启秘境，请联系管理员开启秘境'
-            await handle_send(bot, event, msg)
-            await explore_rift.finish()
+        group_id = "000000"        
         try:
             group_rift[group_id]
         except:
@@ -211,11 +211,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     user_id = user_info['user_id']
 
-    group_id = "000000"
-    if group_id not in groups:
-        msg = '尚未开启秘境，请联系管理员开启秘境'
-        await handle_send(bot, event, msg)
-        await complete_rift.finish()
+    group_id = "000000"   
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -275,11 +271,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await break_rift.finish()
     user_id = user_info['user_id']
-    group_id = "000000"
-    if group_id not in groups:
-        msg = '尚未开启秘境，请联系管理员开启秘境'
-        await handle_send(bot, event, msg)
-        await break_rift.finish()
+    group_id = "000000"        
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -301,40 +293,47 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await break_rift.finish()
 
-
+        
 @set_group_rift.handle(parameterless=[Cooldown(at_sender=False)])
 async def set_group_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """秘境开启、关闭"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     mode = args.extract_plain_text().strip()
-    group_id = "000000"
-    is_in_group = is_in_groups(event)  # True在，False不在
+    group_id = str(send_group_id)  # 使用实际群号
+    isInGroup = group_id in config['open']  # 检查群号是否在通知列表中
 
     if mode == '开启':
-        if is_in_group:
-            msg = f"已开启秘境，请勿重复开启!"
+        if isInGroup:
+            msg = f"本群已开启秘境通知，请勿重复开启!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
 
         else:
             config['open'].append(group_id)
             savef_rift(config)
-            msg = f"已开启秘境!"
+            msg = f"已开启本群秘境通知!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
 
     elif mode == '关闭':
-        if is_in_group:
+        if isInGroup:
             config['open'].remove(group_id)
             savef_rift(config)
-            msg = f"已关闭秘境!"
+            msg = f"已关闭本群秘境通知!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
         else:
-            msg = f"未开启秘境!"
+            msg = f"未开启本群秘境通知!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
-
+            
+    elif mode == '':
+        if isInGroup:
+            msg = __rift_help__ + f"\n本群已开启秘境通知，将接收秘境生成消息。"
+        else:
+            msg = __rift_help__ + f"\n本群未开启秘境通知，可使用 '秘境 开启' 启用。"
+        await handle_send(bot, event, msg)
+        await set_group_rift.finish()
     else:
         msg = __rift_help__
         await handle_send(bot, event, msg)
@@ -351,11 +350,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await use_rift_key.finish()
 
     user_id = user_info['user_id']
-    group_id = "000000"
-    if group_id not in groups:
-        msg = '尚未开启秘境，请联系管理员开启秘境'
-        await handle_send(bot, event, msg)
-        await use_rift_key.finish()
+    group_id = "000000"    
 
     # 检查是否在秘境中
     is_type, _ = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
