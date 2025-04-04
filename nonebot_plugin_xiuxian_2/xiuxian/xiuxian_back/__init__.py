@@ -2148,9 +2148,12 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             gf_data = items.get_data_by_item_type(['功法'])
             for x in gf_data:
                 name = gf_data[x]['name']
-                rank = gf_data[x]['level']
-                desc = gf_data[x]['desc']
-                msg = f"※{rank}:{name}\n效果：{desc}"
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2158,9 +2161,12 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             gf_data = items.get_data_by_item_type(['辅修功法'])
             for x in gf_data:
                 name = gf_data[x]['name']
-                rank = gf_data[x]['level']
-                desc = gf_data[x]['desc']
-                msg = f"※{rank}:{name}\n效果：{desc}"
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2168,9 +2174,12 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             st_data = items.get_data_by_item_type(['神通'])
             for x in st_data:
                 name = st_data[x]['name']
-                rank = st_data[x]['level']
-                desc = st_data[x]['desc']
-                msg = f"※{rank}:{name}\n效果：{desc}"
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2220,12 +2229,27 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
+
+    # 处理消息发送
+    if len(list_tp) <= 70:
+        # 物品数量少于等于70时，直接发送
         try:
             await send_msg_handler(bot, event, list_tp)
         except ActionFailed:
             msg = "未知原因，查看失败!"
             await handle_send(bot, event, msg)
-        await chakan_wupin.finish()
+    else:
+        # 物品数量大于70时，按每70条分割发送
+        chunk_size = 70
+        for i in range(0, len(list_tp), chunk_size):
+            msg_chunk = list_tp[i:i + chunk_size]  # 每70条一个块
+            try:
+                await send_msg_handler(bot, event, msg_chunk)
+            except ActionFailed:
+                msg = "未知原因，查看失败!"
+                await handle_send(bot, event, msg)
+    
+    await chakan_wupin.finish()
 
 
 @shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])

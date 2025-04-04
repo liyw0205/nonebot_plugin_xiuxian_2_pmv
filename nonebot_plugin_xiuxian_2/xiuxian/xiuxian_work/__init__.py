@@ -37,134 +37,41 @@ async def resetrefreshnum_():
     logger.opt(colors=True).info(f"<green>用户悬赏令刷新次数重置成功</green>")
 
 
-last_work = on_command("最后的悬赏令", priority=15, block=True)
 do_work = on_regex(
-    r"^悬赏令(刷新|终止|结算|接取|帮助)?(\d+)?",
+    r"^悬赏令(查看|刷新|终止|结算|接取|帮助)?(\d+)?",
     priority=10,
     block=True
 )
 __work_help__ = f"""
 悬赏令帮助信息:
 指令：
-1、悬赏令:获取对应实力的悬赏令
+1、悬赏令查看:获取当前悬赏令
 2、悬赏令刷新:刷新当前悬赏令,每日免费{count}次
-实力支持：江湖好手|搬血境|洞天境|化灵境|铭纹境|列阵境|尊者境|神火境|真一境|圣祭境|天神境|虚道境|斩我境|遁一境|至尊境|真仙境
 3、悬赏令终止:终止当前悬赏令任务
 4、悬赏令结算:结算悬赏奖励
 5、悬赏令接取+编号：接取对应的悬赏令
-6、最后的悬赏令:用于接了悬赏令但是境界突破导致卡住的道友使用
 """.strip()
-
-
-@last_work.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
-async def last_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await last_work.finish()
-    user_id = user_info['user_id']
-    user_level = user_info['level']
-    user_rank = convert_rank(user_level)[0]
-    is_type, msg = check_user_type(user_id, 2)  # 需要在悬赏令中的用户
-    if (is_type and user_rank <= 11) or (
-        is_type and user_info['exp'] >= sql_message.get_level_power('真仙境圆满')) or (
-        is_type and int(user_info['exp']) >= int(OtherSet().set_closing_type(user_level)) * XiuConfig().closing_exp_upper_limit    
-        ):
-        user_cd_message = sql_message.get_user_cd(user_id)
-        work_time = datetime.strptime(
-            user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
-        )
-        exp_time = (datetime.now() - work_time).seconds // 60  # 时长计算
-        time2 = workhandle().do_work(
-            # key=1, name=user_cd_message.scheduled_time  修改点
-            key=1, name=user_cd_message['scheduled_time'], level=user_level, exp=user_info['exp'],
-            user_id=user_info['user_id']
-        )
-        if exp_time < time2:
-            msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
-            await handle_send(bot, event, msg)
-            await last_work.finish()
-        else:
-            msg, give_stone, s_o_f, item_id, big_suc = workhandle().do_work(
-                2,
-                work_list=user_cd_message['scheduled_time'],
-                level=user_level,
-                exp=user_info['exp'],
-                user_id=user_info['user_id']
-            )
-            item_flag = False
-            item_msg = None
-            item_info = None
-            if item_id != 0:
-                item_flag = True
-                item_info = items.get_data_by_item_id(item_id)
-                item_msg = f"{item_info['level']}:{item_info['name']}"
-            if big_suc:  # 大成功
-                sql_message.update_ls(user_id, give_stone * 2, 1)
-                sql_message.do_work(user_id, 0)
-                msg = f"悬赏令结算，{msg}获得报酬{give_stone * 2}枚灵石"
-                # todo 战利品结算sql
-                if item_flag:
-                    sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
-                    msg += f"，额外获得奖励：{item_msg}!"
-                else:
-                    msg += "!"
-                await handle_send(bot, event, msg)
-                await last_work.finish()
-
-            else:
-                sql_message.update_ls(user_id, give_stone, 1)
-                sql_message.do_work(user_id, 0)
-                msg = f"悬赏令结算，{msg}获得报酬{give_stone}枚灵石"
-                if s_o_f:  # 普通成功
-                    if item_flag:
-                        sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
-                        msg += f"，额外获得奖励：{item_msg}!"
-                    else:
-                        msg += "!"
-                    await handle_send(bot, event, msg)
-                    await last_work.finish()
-
-                else:  # 失败
-                    msg += "!"
-                    await handle_send(bot, event, msg)
-                    await last_work.finish()
-    else:
-        msg = "不满足使用条件！"
-        await handle_send(bot, event, msg)
-        await last_work.finish()
 
 
 @do_work.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
 async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_level = "至高"
+    bot, send_group_id = await assign_bot(bot=bot, event=event)    
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await do_work.finish()
+    user_level = user_info['level']
     user_level_sx = user_info['level']
     user_id = user_info['user_id']
     user_rank = convert_rank(user_info['level'])[0]
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_cd_message = sql_message.get_user_cd(user_id)    
     if not os.path.exists(PLAYERSDATA / str(user_id) / "workinfo.json") and user_cd_message['type'] == 2:
         sql_message.do_work(user_id, 0)
         msg = "悬赏令已更新，已重置道友的状态！"
         await handle_send(bot, event, msg)
         await do_work.finish()
-    mode = args[0]  # 刷新、终止、结算、接取
-    if user_rank <= convert_rank('至高')[0] or user_info['exp'] >= sql_message.get_level_power(user_level):
-        msg = "道友的境界已过创业初期，悬赏令已经不能满足道友了！"
-        await handle_send(bot, event, msg)
-        await do_work.finish()
-    user_level = user_info['level']
-    if int(user_info['exp']) >= int(OtherSet().set_closing_type(user_level)) * XiuConfig().closing_exp_upper_limit:
-        # 获取下个境界需要的修为 * 1.5为闭关上限
-        msg = "道友的修为已经到达上限，悬赏令已无法再获得经验！"
-        await handle_send(bot, event, msg)
-        await do_work.finish()
+    mode = args[0]  # 刷新、终止、结算、接取    
     if user_cd_message['type'] == 1:
         msg = "已经在闭关中，请输入【出关】结束后才能获取悬赏令！"
         await handle_send(bot, event, msg)
@@ -174,7 +81,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await do_work.finish()
 
-    if mode is None:  # 接取逻辑
+    if mode == "查看":  # 刷新逻辑
         if (user_cd_message['scheduled_time'] is None) or (user_cd_message['type'] == 0):
             try:
                 msg = work[user_id].msg
@@ -289,11 +196,23 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     item_flag = True
                     item_info = items.get_data_by_item_id(item_id)
                     item_msg = f"{item_info['level']}:{item_info['name']}"
+                current_exp = user_info['exp']
+                max_exp = int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit
+                
                 if big_suc:  # 大成功
-                    sql_message.update_exp(user_id, give_exp * 2)
+                    gain_exp = give_exp * 2
+                else:
+                    gain_exp = give_exp
+                gain_exp2 = gain_exp
+
+                if current_exp + gain_exp >= max_exp:
+                    remaining_exp = max_exp - current_exp
+                    gain_exp = remaining_exp
+                await handle_send(bot, event, msg666)
+                if big_suc or s_o_f:  # 大成功 or 普通成功
+                    sql_message.update_exp(user_id, gain_exp)
                     sql_message.do_work(user_id, 0)
-                    msg = f"悬赏令结算，{msg}增加修为{give_exp * 2}"
-                    # todo 战利品结算sql
+                    msg = f"悬赏令结算，{msg}增加修为{gain_exp}"
                     if item_flag:
                         sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
                         msg += f"，额外获得奖励：{item_msg}!"
@@ -302,23 +221,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     await handle_send(bot, event, msg)
                     await do_work.finish()
 
-                else:
-                    sql_message.update_exp(user_id, give_exp)
-                    sql_message.do_work(user_id, 0)
-                    msg = f"悬赏令结算，{msg}增加修为{give_exp}"
-                    if s_o_f:  # 普通成功
-                        if item_flag:
-                            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
-                            msg += f"，额外获得奖励：{item_msg}!"
-                        else:
-                            msg += "!"
-                        await handle_send(bot, event, msg)
-                        await do_work.finish()
-
-                    else:  # 失败
-                        msg += "!"
-                        await handle_send(bot, event, msg)
-                        await do_work.finish()
+                else:  # 失败
+                    msg += "!"
+                    await handle_send(bot, event, msg)
+                    await do_work.finish()
         else:
             msg = "没有查到你的悬赏令信息呢，请刷新！"
             await handle_send(bot, event, msg)

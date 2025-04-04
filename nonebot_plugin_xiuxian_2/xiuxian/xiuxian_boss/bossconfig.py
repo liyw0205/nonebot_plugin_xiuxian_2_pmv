@@ -7,7 +7,12 @@ from pathlib import Path
 
 configkey = ["Boss灵石", "Boss名字", "Boss倍率", "Boss个数上限", "Boss生成时间参数", 'open', "世界积分商品"]
 CONFIG = {
-    "open": {},
+    "open": {
+        "000000": {
+            "hours": 0,
+            "minutes": 30
+                   }
+            },
     "Boss灵石": {
         '搬血境': [10000000, 15000000, 20000000],
         '洞天境': [10000000, 15000000, 20000000],
@@ -65,7 +70,7 @@ CONFIG = {
     },
     "Boss生成时间参数": {  # Boss生成的时间，2个不可全为0
         "hours": 0,
-        "minutes": 55
+        "minutes": 30
     },
     "世界积分商品": {
         "1": {
@@ -172,7 +177,11 @@ FILEPATH = CONFIGJSONPATH / 'config.json'
 
 def get_boss_config():
     """加载配置，失败时返回默认配置但不覆盖文件"""
-    config = readf() if os.path.exists(FILEPATH) else CONFIG
+    if not os.path.exists(FILEPATH):
+        # 如果文件不存在，保存默认配置
+        savef_boss(CONFIG)
+        return CONFIG
+    config = readf()
     # 确保所有键存在
     for key in configkey:
         if key not in config:
@@ -191,6 +200,8 @@ def readf():
 def savef_boss(data):
     """保存配置"""
     try:
+        # 确保目录存在
+        os.makedirs(CONFIGJSONPATH, exist_ok=True)
         with open(FILEPATH, "w", encoding="UTF-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=3)
         return True

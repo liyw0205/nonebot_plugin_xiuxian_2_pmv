@@ -114,7 +114,7 @@ __boss_help__ = f"""
 - 挑战稻草人
 非指令: 
 1、全服每{config['Boss生成时间参数']['hours']}小时{config['Boss生成时间参数']['minutes']}分钟自动生成10只随机大境界的世界Boss
-2、每日0、6、12、18点天罚全部世界Boss
+2、每小时执行天罚世界Boss
 """.strip()
 
 
@@ -128,35 +128,58 @@ async def read_boss_():
 @DRIVER.on_startup
 async def set_boss_punishment():
     try:
-        # 每天0、6、12、18点执行天罚
+        # 每小时执行天罚
         scheduler.add_job(
             func=punish_all_bosses,
-            trigger='cron',
-            hour='0,6,12,18',
-            minute=0,
+            trigger='interval',
+            hours=1,
             id="punish_all_bosses",
             misfire_grace_time=60
         )
-        logger.opt(colors=True).success(f"<green>已开启每6小时天罚全部世界BOSS定时任务！</green>")
+        logger.opt(colors=True).success(f"<green>已开启每小时执行天罚世界BOSS定时任务！</green>")
     except Exception as e:
         logger.opt(colors=True).warning(f"<red>警告,天罚定时任务加载失败!,{e}!</red>")
 
+import random
+
 async def punish_all_bosses():
     global group_boss
-    for group_id in group_boss.keys():
-        if group_boss[group_id]:  # 如果该群有BOSS
-            group_boss[group_id] = []  # 清空BOSS列表
-            logger.opt(colors=True).info(f"<green>世界BOSS已被天罚清空</green>")            
-            bot = await layout_bot_dict(group_id)
-            if bot:
-                try:
-                    await bot.send_group_msg(
-                        group_id=int(group_id),
-                        message="天雷降临，所有世界BOSS烟消云散了！"
-                    )
-                except Exception as e:
-                    logger.opt(colors=True).warning(f"<red>天罚消息发送失败,{e}</red>")
+    group_id = "000000"  # 全局BOSS存储键
+
+    # 获取当前BOSS列表
+    bosss = group_boss.get(group_id, [])
+    if not bosss:
+        logger.opt(colors=True).info(f"<yellow>当前没有世界BOSS，无需天罚</yellow>")
+        return
+
+    # 确定要删除的BOSS数量（3到5个）
+    current_boss_count = len(bosss)
+    delete_count = min(random.randint(3, 5), current_boss_count)  # 不超过当前BOSS数量
+
+    # 随机选择要删除的BOSS
+    bosses_to_punish = random.sample(bosss, delete_count)
+    punished_names = [boss['name'] for boss in bosses_to_punish]
+
+    # 从列表中移除被天罚的BOSS
+    for boss in bosses_to_punish:
+        group_boss[group_id].remove(boss)
+
+    # 保存更新后的BOSS数据
     old_boss_info.save_boss(group_boss)
+    logger.opt(colors=True).info(f"<green>天罚已随机清除了 {delete_count} 个世界BOSS: {', '.join(punished_names)}</green>")
+
+    # 只向已开启通知的群发送消息
+    msg = f"天雷降临，随机天罚了 {delete_count} 个世界BOSS：{', '.join(punished_names)}！"
+    for notify_group_id in config['open'].keys():
+        bot = await layout_bot_dict(notify_group_id)
+        if bot:
+            try:
+                await bot.send_group_msg(
+                    group_id=int(notify_group_id),
+                    message=msg
+                )
+            except Exception as e:
+                logger.opt(colors=True).warning(f"<red>群 {notify_group_id} 天罚消息发送失败: {e}</red>")
                     
                     
 @DRIVER.on_startup
@@ -181,18 +204,12 @@ async def set_boss_():
 async def create_boss_task():
     global group_boss
     group_boss = old_boss_info.read_boss_info()
-    group_id = "000000"
-    if group_id not in groups:
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        logger.opt(colors=True).info(f"<yellow>{msg}</yellow>")  
-        return
+    group_id = "000000"  # 全局BOSS存储键
+
+    if group_id not in group_boss:
+        group_boss[group_id] = []
 
     generate_count = 10
-
-    try:
-        group_boss[group_id]
-    except:
-        group_boss[group_id] = []
     current_boss_count = len(group_boss[group_id])
     max_boss_count = config['Boss个数上限']
     remaining_slots = max_boss_count - current_boss_count
@@ -202,7 +219,7 @@ async def create_boss_task():
     if actual_count <= 0:
         msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
         logger.opt(colors=True).warning(f"<red>{msg}</red>") 
-        return  # 提前返回，避免多余操作
+        return
 
     # 生成指定数量的BOSS
     for _ in range(actual_count):
@@ -214,6 +231,18 @@ async def create_boss_task():
     if actual_count < generate_count:
         msg += f"\n(原计划生成{generate_count}个，因上限{max_boss_count}限制，实际生成{actual_count}个)"
     logger.opt(colors=True).success(f"<green>{msg}</green>")
+
+    # 只向已开启通知的群发送消息
+    for notify_group_id in config['open'].keys():
+        bot = await layout_bot_dict(notify_group_id)
+        if bot:
+            try:
+                await bot.send_group_msg(
+                    group_id=int(notify_group_id),
+                    message=msg
+                )
+            except Exception as e:
+                logger.opt(colors=True).warning(f"<red>群 {notify_group_id} 通知发送失败: {e}</red>")
 
 
 @DRIVER.on_shutdown
@@ -243,12 +272,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     msg = args.extract_plain_text().strip()
     global group_boss
     group_id = "000000"
-    boss_num = re.findall(r"\d+", msg)  # boss编号
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await boss_delete.finish()
+    boss_num = re.findall(r"\d+", msg)  # boss编号    
 
     if boss_num:
         boss_num = int(boss_num[0])
@@ -258,7 +282,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await boss_delete.finish()
     bosss = None
     try:
-        bosss = group_boss[group_id]
+        bosss = group_boss.get(group_id, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -289,15 +313,10 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
     global group_boss
-    group_id = "000000"    
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await boss_delete_all.finish()
+    group_id = "000000"        
     bosss = None
     try:
-        bosss = group_boss[group_id]
+        bosss = group_boss.get(group_id, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -331,13 +350,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     msg = args.extract_plain_text().strip()
     group_id = "000000"
     boss_num = re.findall(r"\d+", msg)  # boss编号
-
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
-        await battle.finish()
+    
 
     if boss_num:
         boss_num = int(boss_num[0])
@@ -348,7 +361,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
     bosss = None
     try:
-        bosss = group_boss[group_id]
+        bosss = group_boss.get(group_id, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         sql_message.update_user_stamina(user_id, 20, 1)
@@ -428,16 +441,13 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     more_msg = ''
     battle_flag[group_id] = True
     result, victor, bossinfo_new, get_stone = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
-   # 计算总伤害
-    boss_now_hp = bossinfo_new['气血']  # 打之后的血量
-    boss_all_hp = bossinfo['总血量']  # 总血量
-    total_damage = boss_all_hp - boss_now_hp
     if victor == "Boss赢了":
         group_boss[group_id][boss_num - 1] = bossinfo_new
         sql_message.update_ls(user_id, get_stone, 1)
         # 新增boss战斗积分点数
-        boss_now_hp = bossinfo_new['气血']  # 打之后的血量
-        boss_all_hp = bossinfo['总血量']  # 总血量
+        boss_now_hp = bossinfo_new['气血']  # 打之后的血量        
+        boss_all_hp = bossinfo['总血量']  # 总血量   
+        total_damage = boss_old_hp - boss_now_hp # 计算总伤害
         boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 240)
         if boss_integral < 5:  # 摸一下不给
             boss_integral = 0
@@ -607,15 +617,10 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"
     global group_boss 
-    group_boss = old_boss_info.read_boss_info()
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await boss_info.finish()
+    group_boss = old_boss_info.read_boss_info()    
     bosss = None
     try:
-        bosss = group_boss[group_id]
+        bosss = group_boss.get(group_id, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -672,12 +677,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await create.finish()
+    group_id = "000000"    
 
     # 解析数量
     msg = args.extract_plain_text().strip()
@@ -717,12 +717,7 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss，请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await create_appoint.finish()
+    group_id = "000000"    
 
     try:
         group_boss[group_id]
@@ -772,55 +767,42 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
 @set_group_boss.handle(parameterless=[Cooldown(at_sender=False)])
 async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """设置群世界boss开关"""
+    """设置群世界boss通知开关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     mode = args.extract_plain_text().strip()
-    group_id = "000000"
-    send_group_id = "000000"
-    isInGroup = isInGroups(event)  # True在，False不在
+    group_id = str(send_group_id)  # 使用实际群号
+    isInGroup = group_id in config['open']  # 检查群号是否在通知列表中
 
     if mode == '开启':
         if isInGroup:
-            msg = f"已开启世界Boss,请勿重复开启!"
-            await handle_send(bot, event, msg)
-            await set_group_boss.finish()
-        else:    
-            info = {
-                "000000":{
-                                "hours":config['Boss生成时间参数']["hours"],
-                                "minutes":config['Boss生成时间参数']["minutes"]
-                                }
-                            }
-            config['open'].update(info)
+            msg = f"本群已开启世界Boss通知，请勿重复开启!"
+        else:
+            # 添加群号到通知列表
+            config['open'][group_id] = {}
             savef_boss(config)
-            msg = f"已开启世界Boss!"
-            await handle_send(bot, event, msg)
-            await set_group_boss.finish()
+            msg = f"已为本群开启世界Boss通知!"
+        await handle_send(bot, event, msg)
+        await set_group_boss.finish()
 
     elif mode == '关闭':
         if isInGroup:
-            try:
-                del config['open']["000000"]
-            except:
-                pass
+            del config['open'][group_id]
             savef_boss(config)
-            msg = f"已关闭世界Boss!"
-            await handle_send(bot, event, msg)
-            await set_group_boss.finish()
+            msg = f"已为本群关闭世界Boss通知!"
         else:
-            msg = f"未开启世界Boss!"
-            await handle_send(bot, event, msg)
-            await set_group_boss.finish()
+            msg = f"本群未开启世界Boss通知!"
+        await handle_send(bot, event, msg)
+        await set_group_boss.finish()
 
     elif mode == '':
-        if str(send_group_id) in groups:
-            msg = __boss_help__ + f"非指令:1、拥有定时任务:每{groups[str(send_group_id)]['hours']}小时{groups[str(send_group_id)]['minutes']}分钟生成一只随机大境界的世界Boss"
+        if isInGroup:
+            msg = __boss_help__ + f"\n本群已开启世界Boss通知，将接收全局BOSS生成和天罚消息。"
         else:
-            msg = __boss_help__ 
+            msg = __boss_help__ + f"\n本群未开启世界Boss通知，可使用 '世界boss 开启' 启用。"
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
     else:
-        msg = f"请输入正确的指令:世界boss开启或关闭!"
+        msg = f"请输入正确的指令: 世界boss 开启 或 世界boss 关闭!"
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
 
@@ -834,13 +816,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg)
         await boss_integral_info.finish()
 
-    user_id = user_info['user_id']
-    isInGroup = isInGroups(event)
-    if not isInGroup:  # 不在配置表内
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await boss_integral_info.finish()
-
+    user_id = user_info['user_id']    
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     boss_integral_shop = config['世界积分商品']
     l_msg = [f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"]
@@ -868,12 +844,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     user_id = user_info['user_id']
     msg = args.extract_plain_text().strip()
     shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
-
-    isInGroup = isInGroups(event)
-    if not isInGroup: 
-        msg = f"尚未开启世界Boss,请联系管理员开启!"
-        await handle_send(bot, event, msg)
-        await boss_integral_use.finish()
+    
 
     if shop_info:
         shop_id = int(shop_info[0][0])
@@ -919,18 +890,17 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await boss_integral_use.finish()
 
 
-def isInGroups(event: GroupMessageEvent | PrivateMessageEvent):
-    return "000000" in groups
-
-
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 
 def get_user_boss_fight_info(user_id):
     try:
         user_boss_fight_info = read_user_boss_fight_info(user_id)
-    except:
+    except Exception as e:
+        # 如果读取失败，初始化默认值并保存
+        user_boss_fight_info = {"boss_integral": 0}
         save_user_boss_fight_info(user_id, user_boss_fight_info)
+        logger.opt(colors=True).warning(f"<yellow>用户 {user_id} 的BOSS战斗信息读取失败，已初始化默认值: {e}</yellow>")
     return user_boss_fight_info
 
 
