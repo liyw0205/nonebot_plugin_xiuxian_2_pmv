@@ -1435,10 +1435,54 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
             # 没有技能的derB
             # 检查是否为稻草人 
-        if boss.get('is_scarecrow', False):
+        boss_is_scarecrow = boss.get('is_scarecrow', False)
+        if boss_is_scarecrow:
             play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
             play_list.append(get_boss_dict(boss, qx, "稻草人一动不动，无法攻击！", bot_id))
             continue
+            
+        if boss_is_scarecrow is False or boss_is_scarecrow is None:
+            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
+            isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
+            if isCrit:
+                msg2 = "{}发起会心一击，造成了{}伤害\n"
+            else:
+                msg2 = "{}发起攻击，造成了{}伤害\n"
+            play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
+            player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
+            player1['气血'] = int(round(player1['气血']))
+            play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{player1['气血']}", bot_id))
+        elif boss_turn_skip:
+            boss_sub = random.randint(0, 100)
+            if boss_sub <= 8:
+                play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
+                isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)  # 判定是否暴击 辅修功法14
+                if isCrit:
+                    msg2 = "{}：紫玄掌！！紫星河！！！并且发生了会心一击，造成了{}伤害\n"
+                else:
+                    msg2 = "{}：紫玄掌！！紫星河！！！造成了{}伤害\n"
+                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'],
+                                                                     boss_sh * (1 + boss_buff.boss_zs) * 5 + (
+                                                                                 player1['气血'] * 0.3)), bot_id))
+                player1['气血'] = player1['气血'] - ((
+                            (boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def) * 5) + (
+                                player1['气血'] * 0.3)))
+                player1['气血'] = int(round(player1['气血']))
+                play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{player1['气血']}", bot_id))
+
+            elif 8 <= boss_sub <= 16:
+                play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
+                isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)  # 判定是否暴击 辅修功法14
+                if isCrit:
+                    msg2 = "{}：子龙朱雀！！！穿透了对方的护甲！并且发生了会心一击，造成了{}伤害\n"
+                else:
+                    msg2 = "{}：子龙朱雀！！！穿透了对方的护甲！造成了{}伤害\n"
+                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh * (1 + boss_buff.boss_zs) * (
+                            player1_js - random_buff.random_def + 0.5) * 3), bot_id))
+                player1['气血'] = player1['气血'] - (
+                ((boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + 0.5) * 3)))
+                player1['气血'] = int(round(player1['气血']))
+                play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{player1['气血']}", bot_id))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append(
