@@ -22,13 +22,20 @@ from ..xiuxian_impart.impart_uitls import (
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
 
-__warring_help__ = """
+__warring_help__ = f"""
 详情：
 散尽修为，轮回重修，将万世的道果凝聚为极致天赋，开启永恒不灭之路
 修为、功法、神通将被清空！！
+
 进入千世轮回：获得轮回灵根
+最低境界：{XiuConfig().lunhui_min_level}
+
 进入万世轮回：获得真轮回灵根
+最低境界：{XiuConfig().twolun_min_level}
+
 进入永恒轮回：获得永恒灵根
+最低境界：{XiuConfig().threelun_min_level}
+
 自废修为：字面意思，仅搬血境可用
 """.strip()
 
