@@ -271,6 +271,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"发生未知错误，多次尝试无果请找晓楠！"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
+
     level = user_info['level']
     hp_speed = 25
     mp_speed = 50
@@ -280,35 +281,49 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"输入解析异常，应全为数字!"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
+
+    # 获取闭关上限（与出关逻辑统一）
+    closing_type = OtherSet().set_closing_type(user_info['level'])
+    max_exp = closing_type * XiuConfig().closing_exp_upper_limit
+    current_exp = user_info['exp']
+
     if int(impaer_exp_time) > int(impart_data_draw['exp_day']):
         msg = f"累计时间不足，修炼失败!"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
-    
+
     if user_info['root_type'] == '伪灵根':
         msg = f"器师无法进行修炼!"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
-    # 闭关时长计算(分钟)
-    level_rate = sql_message.get_root_rate(user_info['root_type'])  # 灵根倍率
-    realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
-    user_buff_data = UserBuffDate(user_id)
-    mainbuffdata = user_buff_data.get_user_main_buff_data()
-    mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
-    mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
-    mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
-    exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))  # 本次闭关获取的修为
-    max_exp = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
-    if 0 < int(user_info['exp'] + exp) < max_exp:
-        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
-        sql_message.update_exp(user_id, exp)
-        sql_message.update_power2(user_id)  # 更新战力
-        result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * hp_speed * (1 + mainbuffclors)), int(exp * mp_speed))
-        sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次闭关增加修为：{exp}{result_msg[0]}{result_msg[1]}"
+
+    # 计算本次修炼经验
+    exp = int(impaer_exp_time) * XiuConfig().closing_exp
+
+    # 校验是否超出上限
+    if current_exp + exp > max_exp:
+        allowed_time = (max_exp - current_exp) // XiuConfig().closing_exp
+        allowed_time = int(allowed_time)
+        msg = f"修炼时长超出上限，最多可修炼{allowed_time}分钟"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
     else:
-        msg = f"修炼时长过长导致超出上限，此次修炼失败，最多可修炼{max(0, max_exp - int(user_info['exp'] + exp))}分钟"
+        # 更新经验并返回成功
+        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+        sql_message.update_exp(user_id, exp)
+        sql_message.update_power2(user_id)  # 更新战力
+        result_msg, result_hp_mp = OtherSet().send_hp_mp(
+            user_id, 
+            int(exp * hp_speed), 
+            int(exp * mp_speed)
+        )
+        sql_message.update_user_attribute(
+            user_id, 
+            result_hp_mp[0], 
+            result_hp_mp[1], 
+            int(result_hp_mp[2] / 10)
+        )
+        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次闭关增加修为：{exp}{result_msg[0]}{result_msg[1]}"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
+
