@@ -316,7 +316,7 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         player1, boss, msg = after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data,
                                                        user1_sub_buff_date, player2_health_temp - player2['气血'],
                                                        player2)
-        if player1_sub_open:
+        if player1_sub_open and msg is not None:
             play_list.append(get_msg_dict(player1, player1_init_hp, msg))
 
         if player2['气血'] <= 0:  # 玩家2气血小于0，结算
@@ -550,7 +550,7 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         player2, player1, msg = after_atk_sub_buff_handle(player2_sub_open, player2, user2_main_buff_data,
                                                           user2_sub_buff_date,
                                                           player1_health_temp - player1['气血'], player1)
-        if player2_sub_open:
+        if player2_sub_open and msg is not None:
             play_list.append(get_msg_dict(player1, player1_init_hp, msg))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
@@ -1406,7 +1406,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                                        user1_sub_buff_date,
                                                        player2_health_temp - boss['气血'], boss,
                                                        boss_buff, random_buff)
-        if player1_sub_open:
+        if player1_sub_open and msg is not None:
             play_list.append(get_msg_dict(player1, player_init_hp, msg))
         sh += player2_health_temp - boss['气血']
         
@@ -1705,7 +1705,7 @@ def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date
 def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, subbuffdata1, damage1, player2,
                               boss_buff: BossBuff = empty_boss_buff,
                               random_buff: UserRandomBuff = empty_ussr_random_buff):
-    msg = ""
+    msg = None
 
     if not player1_sub_open:
         return player1, player2, msg
@@ -1749,20 +1749,26 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         player1['气血'] += health_stolen
         player1['气血'] = min(player1['气血'], player1['max_hp'])
         player1['气血'] = int(round(player1['气血']))
-        msg = "吸取气血:" + str(health_stolen) + "血量"
+        msg = None
+        if health_stolen > 0:
+            msg = "吸取气血:" + str(health_stolen) + "血量"
     elif buff_type == '7':
         mana_stolen = (damage1 * buff_value // 100) * (1 - boss_buff.boss_xl) // 10
         mana_stolen = max(mana_stolen, 0)
         player1['真元'] += mana_stolen
         player1['真元'] = min(player1['真元'], player1['max_mp'])
-        msg = "吸取真元:" + str(mana_stolen)
+        msg = None
+        if mana_stolen > 0:
+            msg = "吸取真元:" + str(mana_stolen)
     elif buff_type == '8':
         poison_damage = player2['气血'] // 100 * buff_value
         poison_damage = max(poison_damage, 0)
         player2['气血'] -= poison_damage
         player2['气血'] = max(player2['气血'], 0)
         player2['气血'] = int(round(player2['气血']))
-        msg = "对手中毒消耗血量:" + str(poison_damage)
+        msg = None
+        if poison_damage > 0:
+            msg = "对手中毒消耗血量:" + str(poison_damage)
     elif buff_type == '9':
         health_stolen = (damage1 * (buff_value + random_buff.random_xx) // 100) * (1 - boss_buff.boss_xx) // 10
         health_stolen = max(health_stolen, 0)
@@ -1773,7 +1779,9 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         player1['气血'] = int(round(player1['气血']))
         player1['真元'] += mana_stolen
         player1['真元'] = min(player1['真元'], player1['max_mp'])
-        msg = f"吸取气血: {str(health_stolen)}, 吸取真元: {str(mana_stolen)}"
+        msg = None
+        if health_stolen > 0 or mana_stolen > 0:
+            msg = f"吸取气血: {str(health_stolen)}, 吸取真元: {str(mana_stolen)}"
 
     return player1, player2, msg
 
