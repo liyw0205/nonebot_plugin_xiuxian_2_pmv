@@ -1765,9 +1765,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         health_stolen = (damage1 // 100 * (buff_value + random_buff.random_xx)) * (1 - boss_buff.boss_xx)        
         player1['气血'] += health_stolen
         player1['气血'] = min(player1['气血'], player1['max_hp'])
-        max_hp = str(player1['max_hp'])
-        max_mp = str(player1['max_mp'])
-        msg = "吸取气血:" + str(health_stolen) + "血量" + max_hp + "mp" + max_mp
+        msg = "吸取气血:" + str(health_stolen) + "血量"
     elif buff_type == '7':
         mana_stolen = (damage1 * buff_value // 100) * (1 - boss_buff.boss_xl)
         player1['真元'] += mana_stolen

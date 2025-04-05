@@ -46,7 +46,7 @@ __beg_help__ = f"""
 beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
 compensation = on_command("补偿", priority=7, block=True)
-xiuxian_compensation = on_command("重置补偿", priority=7, block=True)
+xiuxian_compensation = on_command("重置补偿", permission=SUPERUSER, priority=7, block=True)
 
 # 重置补偿
 @xiuxian_compensation.handle(parameterless=[Cooldown(at_sender=False)])
