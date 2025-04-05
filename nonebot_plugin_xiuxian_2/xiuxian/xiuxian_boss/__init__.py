@@ -588,7 +588,8 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "攻击": 0,
             "name": "稻草人",
             "jj": "搬血境",
-            "stone": 1
+            "stone": 1,
+            "is_scarecrow": True
         }
 
     # 战斗逻辑

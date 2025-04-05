@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11.event import MessageEvent, GroupMessageEvent, P
 from nonebot.adapters.onebot.v11 import Bot, MessageSegment
 from ..xiuxian_config import XiuConfig, JsonConfig
 from .xiuxian2_handle import XiuxianDateManage
-from .utils import get_msg_pic, check_user
+from .utils import get_msg_pic, check_user, handle_send
 
 
 sql_message = XiuxianDateManage()
@@ -216,15 +216,8 @@ def Cooldown(
                 if time <= 1:
                     time = 1
                 formatted_time = format_time(time)
-                if XiuConfig().img:
-                    pic = await get_msg_pic(f"@{event.sender.nickname}\n" + get_random_chat_notice().format(formatted_time))
-                    bot = await assign_bot_group(group_id=group_id)
-                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-                    await matcher.finish()
-                else:
-                    bot = await assign_bot_group(group_id=group_id)
-                    await bot.send_group_msg(group_id=int(group_id), message=get_random_chat_notice().format(formatted_time))
-                    await matcher.finish()
+                msg = get_random_chat_notice().format(formatted_time)
+                await handle_send(bot, event, msg)
             else:
                 await matcher.finish()
         else:

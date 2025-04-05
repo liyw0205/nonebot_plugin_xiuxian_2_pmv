@@ -1434,11 +1434,11 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             player1_turn_cost += 1
 
             # 没有技能的derB
-        if boss.get('is_scarecrow', False):  # 检查是否为稻草人
-            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
+            # 检查是否为稻草人 
+        if boss.get('is_scarecrow', False):
+            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
             play_list.append(get_boss_dict(boss, qx, "稻草人一动不动，无法攻击！", bot_id))
-        else:
-            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}动弹不得！------☆", bot_id))
+            continue
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append(
