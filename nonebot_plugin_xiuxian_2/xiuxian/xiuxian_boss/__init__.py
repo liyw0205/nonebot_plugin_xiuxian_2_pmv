@@ -438,17 +438,19 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
-    boss_old_hp = bossinfo['气血']  # 打之前的血量
     more_msg = ''
     battle_flag[group_id] = True
+    boss_all_hp = bossinfo['总血量']
+    # 打之前的血量
+    boss_old_hp = bossinfo['气血']
     result, victor, bossinfo_new, get_stone = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
+    # 打之后的血量
+    boss_now_hp = bossinfo_new['气血']
+    # 计算总伤害
+    total_damage = boss_old_hp - boss_now_hp
     if victor == "Boss赢了":
         group_boss[group_id][boss_num - 1] = bossinfo_new
         sql_message.update_ls(user_id, get_stone, 1)
-        # 新增boss战斗积分点数
-        boss_now_hp = bossinfo_new['气血']  # 打之后的血量        
-        boss_all_hp = bossinfo['总血量']  # 总血量   
-        total_damage = boss_old_hp - boss_now_hp # 计算总伤害
         boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 240)
         if boss_integral < 5:  # 摸一下不给
             boss_integral = 0
@@ -591,12 +593,14 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     # 战斗逻辑
     battle_flag[group_id] = True
-    result, victor, bossinfo_new, get_stone = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)
+    boss_all_hp = scarecrow_info['总血量']
+    # 打之前的血量
+    boss_old_hp = scarecrow_info['气血']
+    result, victor, bossinfo_new, get_stone = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
+    # 打之后的血量
+    boss_now_hp = bossinfo_new['气血']
     # 计算总伤害
-    boss_now_hp = bossinfo_new['气血']  # 打之后的血量
-    boss_all_hp = scarecrow_info['总血量']  # 总血量
-    total_damage = boss_all_hp - boss_now_hp
-
+    total_damage = boss_old_hp - boss_now_hp
     # 输出结果并处理奖励
     if victor == "群友赢了":
         sql_message.update_ls(user_id, get_stone, 1)  # 增加 1 灵石

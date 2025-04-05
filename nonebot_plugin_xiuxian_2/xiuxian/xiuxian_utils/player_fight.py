@@ -16,7 +16,7 @@ class BossBuff:
         self.boss_jg = 0
         self.boss_jh = 0
         self.boss_jb = 0
-        self.boss_xl = 0
+        self.boss_xl = 0        
 
 
 class UserRandomBuff:
@@ -1383,24 +1383,6 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         play_list.append(get_msg_dict(player1, player_init_hp, msg))
         sh += player2_health_temp - boss['气血']
 
-        if boss['气血'] <= 0:  # boss气血小于0，结算
-            play_list.append(
-                {"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"{player1['道号']}胜利"}})
-            suc = "群友赢了"
-            get_stone = boss_now_stone * (1 + stone_buff)
-            if isSql:
-                #
-                if player1['气血'] <= 0:
-                    player1['气血'] = 1
-                #
-                sql_message.update_user_hp_mp(
-                    player1['user_id'],
-                    int(player1['气血'] / (1 + user1_hp_buff)),
-                    int(player1['真元'] / (1 + user1_mp_buff))
-                )
-
-            break
-
         if player1_turn_cost < 0:  # 休息为负数，如果休息，则跳过回合，正常是0
             user1_turn_skip = False
             player1_turn_cost += 1
@@ -1462,6 +1444,25 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         else:
             play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}动弹不得！------☆", bot_id))
 
+        if boss['气血'] <= 0:  # boss气血小于0，结算
+            play_list.append(
+                {"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"{player1['道号']}胜利"}})
+            suc = "群友赢了"
+            boss['气血'] = max(boss['气血'], 0)
+            get_stone = boss_now_stone * (1 + stone_buff)
+            if isSql:
+                #
+                if player1['气血'] <= 0:
+                    player1['气血'] = 1
+                #
+                sql_message.update_user_hp_mp(
+                    player1['user_id'],
+                    int(player1['气血'] / (1 + user1_hp_buff)),
+                    int(player1['真元'] / (1 + user1_mp_buff))
+                )
+
+            break
+            
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append(
                 {"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"{boss['name']}胜利"}})
@@ -1722,15 +1723,18 @@ def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date
 # 处理攻击后辅修功法效果
 def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, subbuffdata1, damage1, player2,
                               boss_buff: BossBuff = empty_boss_buff,
-                              random_buff: UserRandomBuff = empty_boss_buff):
+                              random_buff: UserRandomBuff = empty_ussr_random_buff):
     msg = ""
 
     if not player1_sub_open:
         return player1, player2, msg
-
-    impart_player1_data = xiuxian_impart.get_user_impart_info_with_id(player1['user_id'])
+    try:
+        impart_player1_data = xiuxian_impart.get_user_impart_info_with_id(player1['user_id'])
+    except:
+        impart_player1_data = None
     impart_hp_per_1 = impart_player1_data['impart_hp_per'] if impart_player1_data is not None else 0
     impart_mp_per_1 = impart_player1_data['impart_mp_per'] if impart_player1_data is not None else 0
+
 
     if 'max_hp' not in player1:
         exp = int(player1['exp'])
@@ -1738,6 +1742,9 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             1 + user1_main_buff_data.get('hpbuff', 0) + impart_hp_per_1 if user1_main_buff_data is not None else 0)
         player1['max_mp'] = exp * (
             1 + user1_main_buff_data.get('mpbuff', 0) + impart_mp_per_1 if user1_main_buff_data is not None else 0)
+    if 'max_hp' not in player2:
+        player2['max_hp'] = player2['气血']
+    
 
     buff_value = int(subbuffdata1['buff'])
     buff_tow = int(subbuffdata1['buff2'])
@@ -1755,19 +1762,23 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         player1['真元'] = min(player1['真元'], player1['max_mp'])
         msg = "回复真元:" + str(restore_mana)
     elif buff_type == '6':
-        health_stolen = (damage1 * (buff_value + random_buff.random_xx) // 100) * (1 - boss_buff.boss_xx)
+        health_stolen = (damage1 // 100 * (buff_value + random_buff.random_xx)) * (1 - boss_buff.boss_xx)        
         player1['气血'] += health_stolen
         player1['气血'] = min(player1['气血'], player1['max_hp'])
-        msg = "吸取气血:" + str(health_stolen)
+        max_hp = str(player1['max_hp'])
+        max_mp = str(player1['max_mp'])
+        msg = "吸取气血:" + str(health_stolen) + "血量" + max_hp + "mp" + max_mp
     elif buff_type == '7':
         mana_stolen = (damage1 * buff_value // 100) * (1 - boss_buff.boss_xl)
         player1['真元'] += mana_stolen
         player1['真元'] = min(player1['真元'], player1['max_mp'])
         msg = "吸取真元:" + str(mana_stolen)
     elif buff_type == '8':
-        poison_damage = player2['气血'] * buff_value // 100
+        poison_damage = player2['气血'] // 100 * buff_value
+        poison_damage = max(poison_damage, 0)
         player2['气血'] -= poison_damage
-        player2['气血'] = max(player2['气血'], player2['max_hp'])
+        player2['气血'] = min(player2['气血'], player2['max_hp'])
+        player2['气血'] = max(player2['气血'], 0)
         msg = "对手中毒消耗血量:" + str(poison_damage)
     elif buff_type == '9':
         health_stolen = (damage1 * (buff_value + random_buff.random_xx) // 100) * (1 - boss_buff.boss_xx)

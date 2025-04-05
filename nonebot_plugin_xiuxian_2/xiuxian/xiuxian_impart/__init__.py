@@ -1,6 +1,5 @@
 import os
 import random
-
 from nonebot import on_command, on_fullmatch
 from nonebot.adapters.onebot.v11 import (
     GROUP,
@@ -106,7 +105,7 @@ async def impart_help_(
 
 
 @impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
-async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -117,32 +116,38 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
-        await handle_send(bot, event, send_group_id, "发生未知错误，多次尝试无果请找晓楠！")
+        await handle_send(bot, event, "发生未知错误，多次尝试无果请找晓楠！")
         return
 
     # 解析抽卡次数
-    msg = event.get_plaintext().strip()          # 获取原始输入
-    matches = re.findall(r"\b\d+\b", msg)       # 匹配所有独立数字
-    if not matches:
-        await handle_send(bot, event, send_group_id, "请输入有效次数（如：传承抽卡 10）")
+    msg = args.extract_plain_text().strip()          # 获取原始输入    
+    if not msg:
+        await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
         return
 
-    times = int(matches[0])                     # 取第一个匹配数字
-    if times % 10 != 0 or times < 10:
-        await handle_send(bot, event, send_group_id, "次数需为10的倍数且≥10")
+    try:
+        times_str = msg.split()[-1]  
+        times = int(times_str)  
+    except (IndexError, ValueError):
+        await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
         return
+
+
+    if times % 10 != 0 or times < 10:
+        await handle_send(bot, event, "次数需为10的倍数且≥10")
+        return    
 
     # 检查思恋结晶是否足够
     required_crystals = times  # 每抽一次消耗1颗
     if impart_data_draw["stone_num"] < required_crystals:
-        await handle_send(bot, event, send_group_id, f"思恋结晶数量不足，需要{required_crystals}颗!")
+        await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
         return
 
     # 初始化变量
     summary = f"道友{user_info['user_name']}的传承祈愿"
     img_list = impart_data_json.data_all_keys()
     if not img_list:
-        await handle_send(bot, event, send_group_id, "请检查卡图数据完整！")
+        await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
     total_seclusion_time = 0
@@ -208,7 +213,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await update_user_impart_data(user_id, total_seclusion_time)
         await re_impart_data(user_id)
     except ActionFailed:
-        await handle_send(bot, event, send_group_id, "抽卡结果发送失败！数据未更新，请重试！")
+        await handle_send(bot, event, "抽卡结果发送失败！数据未更新，请重试！")
         # 回滚资源更改
         xiuxian_impart.update_stone_num(times, user_id, 2)  # 2表示增加，恢复扣除的结晶
         xiuxian_impart.update_impart_wish(impart_data_draw["wish"], user_id)  # 恢复抽卡次数
@@ -270,7 +275,7 @@ boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
     try:
         await send_msg_handler(bot, event, list_tp)
     except ActionFailed:
-        await handle_send(bot, event, send_group_id, "获取传承背包数据失败！")
+        await handle_send(bot, event, "获取传承背包数据失败！")
 
 
 @re_impart_load.handle(parameterless=[Cooldown(at_sender=False)])

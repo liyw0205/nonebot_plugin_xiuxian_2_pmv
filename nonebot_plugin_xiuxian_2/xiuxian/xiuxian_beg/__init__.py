@@ -155,55 +155,54 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = event.get_user_id()
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
-    sect = user_info['sect_id']    
+    
     if not isUser:
         await handle_send(bot, event, msg)
         await compensation.finish()
-        
-    if sect is not None:        
-        compensation = sql_message.get_compensation(user_id)
-        if compensation is None:
-            msg = '贪心的人是不会有好运的！'
-        else:
-            num = 1
-            goods_id = "15052"
-            goods_info = items.get_data_by_item_id(goods_id)
-            package_name = goods_info['name']
-            msg_parts = []
-            i = 1
-            while True:
-                buff_key = f'buff_{i}'
-                name_key = f'name_{i}'
-                type_key = f'type_{i}'
-                amount_key = f'amount_{i}'
+    
+    compensation = sql_message.get_compensation(user_id)
+    if compensation is None:
+        msg = '贪心的人是不会有好运的！'
+    else:
+        num = 1
+        goods_id = "15053"
+        goods_info = items.get_data_by_item_id(goods_id)
+        package_name = goods_info['name']
+        msg_parts = []
+        i = 1
+        while True:
+            buff_key = f'buff_{i}'
+            name_key = f'name_{i}'
+            type_key = f'type_{i}'
+            amount_key = f'amount_{i}'
 
-                if name_key not in goods_info:
-                    break
+            if name_key not in goods_info:
+                break
 
-                item_name = goods_info[name_key]
-                item_amount = goods_info.get(amount_key, 1) * num
-                item_type = goods_info.get(type_key)
-                buff_id = goods_info.get(buff_key)
+            item_name = goods_info[name_key]
+            item_amount = goods_info.get(amount_key, 1) * num
+            item_type = goods_info.get(type_key)
+            buff_id = goods_info.get(buff_key)
 
-                if item_name == "灵石":
-                    key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
-                    sql_message.update_ls(user_id, abs(item_amount), key)
-                    msg_parts.append(f"获得灵石 {item_amount} 枚\n")
+            if item_name == "灵石":
+                key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
+                sql_message.update_ls(user_id, abs(item_amount), key)
+                msg_parts.append(f"获得灵石 {item_amount} 枚\n")
+            else:
+                if item_type in ["辅修功法", "神通", "功法"]:
+                    goods_type_item = "技能"
+                elif item_type in ["法器", "防具"]:
+                    goods_type_item = "装备"
                 else:
-                    if item_type in ["辅修功法", "神通", "功法"]:
-                        goods_type_item = "技能"
-                    elif item_type in ["法器", "防具"]:
-                        goods_type_item = "装备"
-                    else:
-                        goods_type_item = item_type
-                    if buff_id is not None:
-                        sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-                        msg_parts.append(f"获得 {item_name} x{item_amount}\n")
+                    goods_type_item = item_type
+                if buff_id is not None:
+                    sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+                    msg_parts.append(f"获得 {item_name} x{item_amount}\n")
             
-                i += 1            
-            sql_message.update_ls(user_id, abs(item_amount), key if item_amount > 0 else 2)
-            if buff_id is not None:
-                sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-            msg = f"道友的补偿:\n" + "".join(msg_parts)
-        sql_message.save_compensation(user_id)
-        await handle_send(bot, event, msg)
+            i += 1            
+        sql_message.update_ls(user_id, abs(item_amount), key if item_amount > 0 else 2)
+        if buff_id is not None:
+            sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+        msg = f"道友的补偿:\n" + "".join(msg_parts)
+    sql_message.save_compensation(user_id)
+    await handle_send(bot, event, msg)

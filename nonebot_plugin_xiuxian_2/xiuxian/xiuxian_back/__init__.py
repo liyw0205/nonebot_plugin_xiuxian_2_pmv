@@ -1272,8 +1272,8 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     msg = get_user_main_back_msg(user_id)
     # 处理消息发送
-    if len(msg) <= 70:
-        # 物品数量少于等于70时，直接发送
+    if len(msg) <= 50:
+        # 物品数量少于等于50时，直接发送
         try:
             msg1 = [f"{user_info['user_name']}的背包，持有灵石：{number_to(user_info['stone'])}枚"] + msg
             await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
@@ -1281,10 +1281,10 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = "未知原因，查看失败!"
             await handle_send(bot, event, msg)
     else:
-        # 物品数量大于70时，按每70条分割发送
-        chunk_size = 70
+        # 物品数量大于50时，按每50条分割发送
+        chunk_size = 50
         for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每70条一个块
+            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
             try:
                 msg1 = [f"{user_info['user_name']}的背包，持有灵石：{number_to(user_info['stone'])}枚"] + msg_chunk
                 await send_msg_handler(bot, event, msg1)
@@ -1306,8 +1306,8 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg = get_user_yaocai_back_msg(user_id)
 
     # 处理消息发送
-    if len(msg) <= 70:
-        # 物品数量少于等于70时，直接发送
+    if len(msg) <= 50:
+        # 物品数量少于等于50时，直接发送
         try:
             msg1 = [f"{user_info['user_name']}的药材背包"] + msg
             await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
@@ -1315,10 +1315,10 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             msg = "未知原因，查看失败!"
             await handle_send(bot, event, msg)
     else:
-        # 物品数量大于70时，按每70条分割发送
-        chunk_size = 70
+        # 物品数量大于50时，按每50条分割发送
+        chunk_size = 50
         for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每70条一个块
+            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
             try:
                 msg1 = [f"{user_info['user_name']}的药材背包"] + msg_chunk
                 await send_msg_handler(bot, event, msg1)
@@ -1338,8 +1338,8 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg = get_user_danyao_back_msg(user_id)
 
     # 处理消息发送
-    if len(msg) <= 70:
-        # 物品数量少于等于70时，直接发送
+    if len(msg) <= 50:
+        # 物品数量少于等于50时，直接发送
         try:
             msg1 = [f"{user_info['user_name']}的丹药背包"] + msg
             await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
@@ -1347,10 +1347,10 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             msg = "未知原因，查看失败!"
             await handle_send(bot, event, msg)
     else:
-        # 物品数量大于70时，按每70条分割发送
-        chunk_size = 70
+        # 物品数量大于50时，按每50条分割发送
+        chunk_size = 50
         for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每70条一个块
+            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
             try:
                 msg1 = [f"{user_info['user_name']}的丹药背包"] + msg_chunk
                 await send_msg_handler(bot, event, msg1)
@@ -2116,18 +2116,18 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                                                 "content": msg}})
 
     # 处理消息发送
-    if len(list_tp) <= 70:
-        # 物品数量少于等于70时，直接发送
+    if len(list_tp) <= 50:
+        # 物品数量少于等于50时，直接发送
         try:
             await send_msg_handler(bot, event, list_tp)
         except ActionFailed:
             msg = "未知原因，查看失败!"
             await handle_send(bot, event, msg)
     else:
-        # 物品数量大于70时，按每70条分割发送
-        chunk_size = 70
+        # 物品数量大于50时，按每50条分割发送
+        chunk_size = 50
         for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每70条一个块
+            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
             try:
                 await send_msg_handler(bot, event, msg_chunk)
             except ActionFailed:
