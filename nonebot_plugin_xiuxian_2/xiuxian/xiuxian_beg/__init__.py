@@ -9,6 +9,7 @@ from nonebot.adapters.onebot.v11 import (
     PrivateMessageEvent,
     MessageSegment
 )
+from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
