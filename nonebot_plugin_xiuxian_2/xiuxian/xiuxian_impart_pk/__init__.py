@@ -282,7 +282,6 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
-    # 获取闭关上限（与出关逻辑统一）
     closing_type = OtherSet().set_closing_type(user_info['level'])
     max_exp = closing_type * XiuConfig().closing_exp_upper_limit
     current_exp = user_info['exp']
@@ -298,11 +297,18 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     # 计算本次修炼经验
-    exp = int(impaer_exp_time) * XiuConfig().closing_exp
+    level_rate = sql_message.get_root_rate(user_info['root_type'])  # 灵根倍率
+    realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
+    user_buff_data = UserBuffDate(user_id)
+    mainbuffdata = user_buff_data.get_user_main_buff_data()
+    mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
+    mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
+    mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
+    exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))  # 本次闭关获取的修为
 
     # 校验是否超出上限
     if current_exp + exp > max_exp:
-        allowed_time = (max_exp - current_exp) // XiuConfig().closing_exp
+        allowed_time = (max_exp - current_exp) // (XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))
         allowed_time = int(allowed_time)
         msg = f"修炼时长超出上限，最多可修炼{allowed_time}分钟"
         await handle_send(bot, event, msg)

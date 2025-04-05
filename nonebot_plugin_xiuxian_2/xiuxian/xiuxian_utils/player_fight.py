@@ -121,7 +121,8 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                                                                                     player2_sub_open,
                                                                                     user2_sub_buff_date,
                                                                                     user2_battle_buff_date)
-        play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
+        if player1_sub_open:
+            play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
 
         player2_health_temp = player2['气血']
         if player1_skil_open:  # 是否开启技能
@@ -305,7 +306,8 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         player1, boss, msg = after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data,
                                                        user1_sub_buff_date, player2_health_temp - player2['气血'],
                                                        player2)
-        play_list.append(get_msg_dict(player1, player1_init_hp, msg))
+        if player1_sub_open:
+            play_list.append(get_msg_dict(player1, player1_init_hp, msg))
 
         if player2['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append(
@@ -528,7 +530,8 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         player2, player1, msg = after_atk_sub_buff_handle(player2_sub_open, player2, user2_main_buff_data,
                                                           user2_sub_buff_date,
                                                           player1_health_temp - player1['气血'], player1)
-        play_list.append(get_msg_dict(player1, player1_init_hp, msg))
+        if player2_sub_open:
+            play_list.append(get_msg_dict(player1, player1_init_hp, msg))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append({"type": "node",
@@ -1184,7 +1187,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                                                                     user1_sub_buff_date,
                                                                                     user1_battle_buff_date, False, {},
                                                                                     {})
-        play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
+        if player1_sub_open:
+            play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
 
         player2_health_temp = boss['气血']
         if player1_skil_open:  # 是否开启技能
@@ -1380,7 +1384,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                                        user1_sub_buff_date,
                                                        player2_health_temp - boss['气血'], boss,
                                                        boss_buff, random_buff)
-        play_list.append(get_msg_dict(player1, player_init_hp, msg))
+        if player1_sub_open:
+            play_list.append(get_msg_dict(player1, player_init_hp, msg))
         sh += player2_health_temp - boss['气血']
 
         if player1_turn_cost < 0:  # 休息为负数，如果休息，则跳过回合，正常是0
@@ -1685,7 +1690,9 @@ def get_skill_sh_data(player, secbuffdata):
 
 
 # 处理开局的辅修功法效果
-def apply_buff(user_battle_buff, subbuffdata, is_opponent=False):
+def apply_buff(user_battle_buff, subbuffdata, player_sub_open, is_opponent=False):
+    if not player_sub_open:
+        return ""
     buff_type_to_attr = {
         '1': ('atk_buff', "攻击力"),
         '2': ('crit_buff', "暴击率"),
@@ -1714,8 +1721,8 @@ def apply_buff(user_battle_buff, subbuffdata, is_opponent=False):
 
 def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date,
                           player2_sub_open, subbuffdata2, user2_battle_buff_date):
-    msg1 = apply_buff(user1_battle_buff_date, subbuffdata1) if player1_sub_open else ""
-    msg2 = apply_buff(user2_battle_buff_date, subbuffdata2, is_opponent=True) if player2_sub_open else ""
+    msg1 = apply_buff(user1_battle_buff_date, subbuffdata1, player1_sub_open) if player1_sub_open else ""
+    msg2 = apply_buff(user2_battle_buff_date, subbuffdata2, player2_sub_open, is_opponent=True) if player2_sub_open else ""
 
     return user1_battle_buff_date, user2_battle_buff_date, msg1 + msg2
 

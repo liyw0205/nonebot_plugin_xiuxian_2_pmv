@@ -49,7 +49,7 @@ sign_in = on_fullmatch("修仙签到", priority=13, block=True)
 help_in = on_fullmatch("修仙帮助", priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜"},
                   priority=7, block=True)
-remaname = on_command("改名", priority=5, block=True)
+remaname = on_command("修仙改名", priority=5, block=True)
 level_up = on_fullmatch("突破", priority=6, block=True)
 level_up_dr = on_fullmatch("渡厄突破", priority=7, block=True)
 level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, block=True)
@@ -102,7 +102,7 @@ __xiuxian_notes__ = f"""
 → 批量祈愿:发送"传承祈愿 1000"🙏
 ===========
 ⚙️ 系统设置
-→ 修改道号:发送"改名+道号"✏️
+→ 修改道号:发送"修仙改名+道号"✏️
 → 灵根优化:发送"开启/关闭自动选择灵根"🤖
 → 悬赏任务:发送"悬赏令帮助"📜
 → 状态查看:发送"我的状态"📝
