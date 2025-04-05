@@ -301,7 +301,18 @@
         "exp": 0,
         "desc": "",
         "rank": "仙阶上品",
-        "level": "12"
+        "level": "-5",
+        "fusion": {
+            "need_item": {
+                "10406": 1,
+                "20002": 1,         
+                "20003": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
     },
     "10408": {
         "name": "血毒经",
@@ -317,19 +328,46 @@
         "exp": 0,
         "desc": "",
         "rank": "仙阶极品",
-        "level": "12",
+        "level": "-5",
         "fusion": {
             "need_item": {
                 "10406": 1,
                 "10407": 1,         
-                "20002": 2
+                "20002": 1
             },
             "need_rank": "真仙境圆满",
             "need_exp": "0",
             "need_stone": "0",
             "limit": 1
         }
-    },        
+    },
+    "10409": {
+        "name": "玄门太乙真诀",
+        "buff_type": "4",
+        "buff": "8",
+        "buff2": "0",
+        "stone": 0,
+        "integral": 0,
+        "jin": 0,
+        "drop": 0,
+        "fan": 0,
+        "break": 0,
+        "exp": 0,
+        "desc": "",
+        "rank": "仙阶极品",
+        "level": "-5",
+        "fusion": {
+            "need_item": {
+                "10313": 1,
+                "10401": 1,         
+                "20003": 1
+            },
+            "need_rank": "真仙境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
+    },
     "10411": {
         "name": "真龙九变",
         "buff_type": "1",

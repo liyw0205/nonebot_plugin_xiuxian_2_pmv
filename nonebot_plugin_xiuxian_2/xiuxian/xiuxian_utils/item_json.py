@@ -121,7 +121,7 @@ class Items:
         fusion_items = []
         for item_id, item_data in self.items.items():
             if 'fusion' in item_data:
-                fusion_items.append(f"{item_data['name']} ({item_data['type']})")
+                fusion_items.append(f"{item_data['name']} ({item_data['item_type']})")
         return fusion_items
 
     def set_item_data(self, dict_data, item_type):
