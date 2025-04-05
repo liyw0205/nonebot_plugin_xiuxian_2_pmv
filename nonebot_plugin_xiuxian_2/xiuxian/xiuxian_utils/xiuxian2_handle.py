@@ -1369,10 +1369,18 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             day_num = back['day_num'] + num
             all_num = back['all_num'] + num
         else:
-            bind_num = back['bind_num']
+            if back['bind_num'] >= 1:
+                bind_num = back['bind_num'] - num
+            else:
+                bind_num = back['bind_num']
             day_num = back['day_num']
             all_num = back['all_num']
         goods_num = back['goods_num'] - num
+        if int(goods_num) is 0:
+            bind_num = 0
+        bind_num = min(bind_num, goods_num)
+        bind_num = max(bind_num, 0)
+        
         now_time = datetime.now()
         sql_str = f"UPDATE back set update_time='{now_time}',action_time='{now_time}',goods_num={goods_num},day_num={day_num},all_num={all_num},bind_num={bind_num} WHERE user_id={user_id} and goods_id={goods_id}"
         cur = self.conn.cursor()
