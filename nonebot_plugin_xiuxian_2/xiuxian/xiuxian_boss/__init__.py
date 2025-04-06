@@ -7,7 +7,7 @@ from pathlib import Path
 import random
 import os
 from nonebot.rule import Rule
-from nonebot import get_bots, get_bot ,on_command, require
+from nonebot import get_bots, get_bot, on_command, require
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -56,43 +56,14 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
 
-def check_rule_bot_boss() -> Rule:  # 消息检测，是超管，群主或者指定的qq号传入的消息就响应，其他的不响应
-    async def _check_bot_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> bool:
-        if (event.sender.role == "admin" or
-                event.sender.role == "owner" or
-                event.get_user_id() in bot.config.superusers or
-                event.get_user_id() in del_boss_id):
-            return True
-        else:
-            return False
-
-    return Rule(_check_bot_)
-
-def check_rule_bot_boss_s() -> Rule:  # 消息检测，是超管或者指定的qq号传入的消息就响应，其他的不响应
-    async def _check_bot_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> bool:
-        if (event.get_user_id() in bot.config.superusers or
-                event.get_user_id() in gen_boss_id):
-            return True
-        else:
-            return False
-
-    return Rule(_check_bot_)
-
-
-create = on_command("生成世界boss", aliases={"生成世界Boss", "生成世界BOSS"}, priority=5,
-                    rule=check_rule_bot_boss_s(), block=True)
-create_appoint = on_command("生成指定世界boss", aliases={"生成指定世界boss", "生成指定世界BOSS", "生成指定BOSS", "生成指定boss"}, priority=5,
-                            rule=check_rule_bot_boss_s())
+create = on_command("生成世界boss", aliases={"生成世界Boss", "生成世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
+create_appoint = on_command("生成指定世界boss", aliases={"生成指定世界boss", "生成指定世界BOSS", "生成指定BOSS", "生成指定boss"}, permission=SUPERUSER, priority=5,)
 boss_info = on_command("查询世界boss", aliases={"查询世界Boss", "查询世界BOSS", "查询boss", "世界Boss查询", "世界BOSS查询", "boss查询"}, priority=6, block=True)
-set_group_boss = on_command("世界boss", aliases={"世界Boss", "世界BOSS"}, priority=13,
-                            permission=SUPERUSER, block=True)
+set_group_boss = on_command("世界boss", aliases={"世界Boss", "世界BOSS"}, priority=13, permission=SUPERUSER, block=True)
 battle = on_command("讨伐boss", aliases={"讨伐世界boss", "讨伐Boss", "讨伐BOSS", "讨伐世界Boss", "讨伐世界BOSS"}, priority=6, block=True)
 boss_help = on_command("世界boss帮助", aliases={"世界Boss帮助", "世界BOSS帮助"}, priority=5, block=True)
-boss_delete = on_command("天罚boss", aliases={"天罚世界boss", "天罚Boss", "天罚BOSS", "天罚世界Boss", "天罚世界BOSS"}, priority=7,
-                         rule=check_rule_bot_boss(), block=True)
-boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界boss", "天罚所有Boss", "天罚所有BOSS", "天罚所有世界Boss","天罚所有世界BOSS",
-                                                  "天罚全部boss", "天罚全部世界boss"}, priority=5,
-                             rule=check_rule_bot_boss(), block=True)
+boss_delete = on_command("天罚boss", aliases={"天罚世界boss", "天罚Boss", "天罚BOSS", "天罚世界Boss", "天罚世界BOSS"}, permission=SUPERUSER, priority=7, block=True)
+boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界boss", "天罚所有Boss", "天罚所有BOSS", "天罚所有世界Boss","天罚所有世界BOSS", "天罚全部boss", "天罚全部世界boss"}, permission=SUPERUSER, priority=5, block=True)
 boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询"} ,priority=10, block=True)
 boss_integral_use = on_command("世界积分兑换", priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", priority=6, block=True)
@@ -153,9 +124,9 @@ async def punish_all_bosses():
         logger.opt(colors=True).info(f"<yellow>当前没有世界BOSS，无需天罚</yellow>")
         return
 
-    # 确定要删除的BOSS数量（3到5个）
+    # 确定要删除的BOSS数量（10到20个）
     current_boss_count = len(bosss)
-    delete_count = min(random.randint(3, 5), current_boss_count)  # 不超过当前BOSS数量
+    delete_count = min(random.randint(10, 20), current_boss_count)  # 不超过当前BOSS数量
 
     # 随机选择要删除的BOSS
     bosses_to_punish = random.sample(bosss, delete_count)
@@ -171,16 +142,11 @@ async def punish_all_bosses():
 
     # 只向已开启通知的群发送消息
     msg = f"天雷降临，随机天罚了 {delete_count} 个世界BOSS：{', '.join(punished_names)}！"
-    for notify_group_id in config['open'].keys():
-        bot = await layout_bot_dict(notify_group_id)
-        if bot:
-            try:
-                await bot.send_group_msg(
-                    group_id=int(notify_group_id),
-                    message=msg
-                )
-            except Exception as e:
-                logger.opt(colors=True).warning(f"<red>群 {notify_group_id} 天罚消息发送失败: {e}</red>")
+    for notify_group_id in groups:
+        if notify_group_id == "000000":
+            continue
+        bot = get_bot()
+        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
                     
                     
 @DRIVER.on_startup
@@ -234,16 +200,11 @@ async def create_boss_task():
     logger.opt(colors=True).success(f"<green>{msg}</green>")
 
     # 只向已开启通知的群发送消息
-    for notify_group_id in config['open'].keys():
-        bot = await layout_bot_dict(notify_group_id)
-        if bot:
-            try:
-                await bot.send_group_msg(
-                    group_id=int(notify_group_id),
-                    message=msg
-                )
-            except Exception as e:
-                logger.opt(colors=True).warning(f"<red>群 {notify_group_id} 通知发送失败: {e}</red>")
+    for notify_group_id in groups:
+        if notify_group_id == "000000":
+            continue
+        bot = get_bot()
+        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
 
 @DRIVER.on_shutdown

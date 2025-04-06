@@ -1,6 +1,6 @@
 import random
 from datetime import datetime
-from nonebot import get_bots, on_command, require, on_fullmatch
+from nonebot import get_bots, get_bot, on_command, require, on_fullmatch
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -30,6 +30,7 @@ from .riftmake import (
     get_dxsj_info, get_boss_battle_info, get_treasure_info
 )
 
+
 config = get_rift_config()
 sql_message = XiuxianDateManage()  # sql类
 cache_help = {}
@@ -40,7 +41,7 @@ set_rift = require("nonebot_plugin_apscheduler").scheduler
 
 set_group_rift = on_command("秘境", priority=4, permission=SUPERUSER, block=True)
 explore_rift = on_fullmatch("探索秘境", priority=5, block=True)
-rift_help = on_fullmatch("秘境帮助", priority=6, permission=GROUP, block=True)
+rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
@@ -88,7 +89,7 @@ async def scheduled_rift_generation():
     
     logger.info("秘境定时生成完成")
 
-            
+      
 async def generate_rift_for_group():
     group_id = "000000"
     rift = Rift()
@@ -100,12 +101,14 @@ async def generate_rift_for_group():
     msg = f"野生的{rift.name}出现了！秘境可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
     logger.info(msg)
     old_rift_info.save_rift(group_rift)
-    for notify_group_id in config['open']:
-        bot = await layout_bot_dict(notify_group_id)
-        if bot:
-            await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
+    for notify_group_id in groups:
+        if notify_group_id == "000000":
+            continue
+        bot = get_bot()
+        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
-    
+        
+
 @rift_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """秘境帮助"""
