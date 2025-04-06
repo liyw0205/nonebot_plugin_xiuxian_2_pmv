@@ -1,40 +1,61 @@
-name: Create Release on Push to Master
+
+name: Compress 和 Release
 
 on:
   push:
     branches:
-      - master
+      - main  # Set this to your default branch
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (optional)'
+        required: false
+        default: 'latest'
 
 jobs:
-  create_release:
+  build-and-release:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-    - name: Get Current Version
-      id: get_version
-      run: echo "version=$(git describe --tags --abbrev=0 || echo 'V2.2.0')" >> $GITHUB_ENV
-
-    - name: Increment Patch Version
-      id: increment_version
+    - name: Generate tag name
+      id: tag
       run: |
-        current_version=${{ env.version }}
-        major=$(echo $current_version | cut -d. -f1 | cut -d'V' -f2)
-        minor=$(echo $current_version | cut -d. -f2)
-        patch=$(echo $current_version | cut -d. -f3 | cut -d'_' -f1)
-        patch=$((patch + 1))
-        new_version="V${major}.${minor}.${patch}"
-        echo "new_version=$new_version" >> $GITHUB_ENV
+        # If a tag name is provided via workflow_dispatch, use it; otherwise, generate one
+        if [ -z "${{ github.event.inputs.tag_name }}" ]; then
+          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
+          TAGNAME="v$TIMESTAMP"
+        else
+          TAGNAME="${{ github.event.inputs.tag_name }}"
+        fi
+        echo "Tag name is $TAGNAME"
+        echo "::set-output name=TAGNAME::$TAGNAME"
 
-    - name: Get Current Date (UTC+8)
-      id: get_date
+    - name: Compress project files
       run: |
-        current_date=$(TZ=Asia/Shanghai date +'%m%d%y')
-        echo "date=$current_date" >> $GITHUB_ENV
+        tar -czvf project.tar.gz ./*  # Adjust the path to match your project structure
 
-    - name: Get Current Time
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.TAGNAME }}
+        release_name: Release ${{ steps.tag.outputs.TAGNAME }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./project.tar.gz
+        asset_name: project.tar.gz
+        asset_content_type: application/gzip    - name: Get Current Time
       id: get_time
       run: echo "time=$(date +'%H%M%S')" >> $GITHUB_ENV
 
