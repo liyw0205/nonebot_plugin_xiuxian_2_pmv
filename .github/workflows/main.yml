@@ -1,4 +1,4 @@
-name: Compress 和 Release
+name: Compress and Release
 
 on:
   push:
@@ -31,6 +31,14 @@ jobs:
         echo "Tag name is $TAGNAME"
         echo "::set-output name=TAGNAME::$TAGNAME"
 
+    - name: Get latest commit message
+      id: commit_message
+      run: |
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        echo "Latest commit message is:"
+        echo "$COMMIT_MSG"
+        echo "::set-output name=COMMIT_MSG::$COMMIT_MSG"
+
     - name: Compress project files
       run: |
         tar -czvf project.tar.gz ./*  # Adjust the path to match your project structure
@@ -43,6 +51,14 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.TAGNAME }}
         release_name: Release ${{ steps.tag.outputs.TAGNAME }}
+        body: |
+          ## Release Notes
+
+          This release includes the following changes:
+
+          - ${{ steps.commit_message.outputs.COMMIT_MSG }}
+
+          For more details, please check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.tag.outputs.TAGNAME }}).
         draft: false
         prerelease: false
 
