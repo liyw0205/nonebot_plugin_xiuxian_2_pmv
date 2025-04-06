@@ -66,6 +66,7 @@ proot-distro login napcat
 剩下看Linux安装，不需要安装napcat
 
 > 下次启动要先进入容器: proot-distro login napcat
+
 查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
 
  </details>
