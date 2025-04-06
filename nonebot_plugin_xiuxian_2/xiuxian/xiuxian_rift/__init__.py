@@ -107,7 +107,7 @@ async def generate_rift_for_group():
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
-        
+
 
 @rift_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -329,6 +329,11 @@ async def set_group_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg = f"未开启本群秘境通知!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
+    
+    elif mode == '帮助':
+        msg = __rift_help__
+        await handle_send(bot, event, msg)
+        await set_group_rift.finish()
 
 
 @use_rift_key.handle(parameterless=[Cooldown(at_sender=False)])

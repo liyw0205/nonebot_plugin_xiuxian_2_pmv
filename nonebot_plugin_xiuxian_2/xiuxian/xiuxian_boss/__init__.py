@@ -760,6 +760,11 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg = f"本群未开启世界Boss通知!"
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
+        
+    elif mode == '帮助':
+        msg = __boss_help__
+        await handle_send(bot, event, msg)
+        await set_group_boss.finish()
 
 
 @boss_integral_info.handle(parameterless=[Cooldown(at_sender=False)])
