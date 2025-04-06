@@ -1,4 +1,3 @@
-
 name: Compress 和 Release
 
 on:
@@ -40,7 +39,7 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.TAGNAME }}
         release_name: Release ${{ steps.tag.outputs.TAGNAME }}
@@ -50,36 +49,9 @@ jobs:
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./project.tar.gz
         asset_name: project.tar.gz
-        asset_content_type: application/gzip    - name: Get Current Time
-      id: get_time
-      run: echo "time=$(date +'%H%M%S')" >> $GITHUB_ENV
-
-    - name: Create tar.gz Archive
-      run: tar -czvf release_data.tar.gz data nonebot_plugin_xiuxian_2
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
-      with:
-        tag_name: ${{ env.new_version }}.${{ env.date }}${{ env.time }}_release
-        release_name: Release ${{ env.new_version }}.${{ env.date }}${{ env.time }}
-        body: "Automated release for commit ${{ github.sha }} on branch master"
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: release_data.tar.gz
-        asset_name: release_data.tar.gz
         asset_content_type: application/gzip
