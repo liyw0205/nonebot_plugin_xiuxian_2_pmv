@@ -44,6 +44,8 @@ _✨ QQ群聊修仙文字游戏✨_
 
 12、坊市/仙肆查看区分类别
 
+13、大部分功能支持私聊
+
 # 💿 安装
 
 <details>
@@ -61,67 +63,8 @@ curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main
 ```
 proot-distro login napcat
 ```
-安装Python
-```
-apt update && apt upgrade -y && \
-apt install screen curl git python3 python3-pip python3-venv -y
-```
-安装nb-cli
-```
-cd ~
-python3 -m venv myenv
-source ~/myenv/bin/activate
-pip install nb-cli
-```
-克隆项目
-```
-git clone --depth=1 -b main https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
-```
-nb安装插件
-```
-cd ~
-source ~/myenv/bin/activate #进入虚拟环境
-nb #打开nb命令行
-```
-- 选择 Create a NoneBot project.（创建项目）
-- 选择 simple
-- 输入项目名 xiu2
-选择适配器
-```
-OneBot V11 (OneBot V11 协议)
-```
-选择驱动器
-```
-FastAPI (FastAPI 驱动器)
-HTTPX (HTTPX 驱动器)
-websockets (websockets 驱动器)
-AIOHTTP (AIOHTTP 驱动器)
-```
-- 选择 In a "src" folder（在src文件夹里）
-确定安装虚拟环境和依赖
-```
-Create virtual environment? (Y/n) y
-Install dependencies now? (Y/n) y
-```
-选择 echo（默认安装插件）
-- 移动项目
-```
-mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
-mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
-mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
-```
-安装修仙2依赖
-```
-cd ~/xiu2
-source ~/xiu2/.venv/bin/activate
-pip install -r requirements.txt
-```
-启动修仙2
-```
-source ~/myenv/bin/activate
-cd ~/xiu2
-nb run --reload
-```
+剩下看Linux安装，不需要安装napcat
+
 > 下次启动要先进入容器: proot-distro login napcat
 查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
 
@@ -189,6 +132,19 @@ cd ~/xiu2
 source ~/xiu2/.venv/bin/activate
 pip install -r requirements.txt
 ```
+修改nb配置
+```
+echo 'LOG_LEVEL=INFO # 日志等级INFO就行
+
+SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
+
+COMMAND_START = [""] # 指令前缀，默认空
+NICKNAME = [""] # 机器人昵称
+
+DEBUG = False
+HOST = 127.0.0.1
+PORT = 8080 # 反代的8080端口，有需要自己改' > ~/xiu2/.env.dev
+```
 启动修仙2
 ```
 source ~/myenv/bin/activate
@@ -201,6 +157,9 @@ nb run --reload
  </details>
  
 # 💿 配置
+
+<details>
+<summary>(env相关)</summary>
 
 - 在.env.dev文件中设置超管与机器人昵称
 
@@ -223,6 +182,11 @@ PORT = 8080 # 反代的8080端口，有需要自己改
 ENVIRONMENT=dev
 DRIVER=~fastapi+~websockets+~httpx # 这里用的是反代+http正向调试
 ```
+
+ </details>
+ 
+<details>
+<summary>(修仙2相关)</summary>
 
 - 在xiuxian_config.py中配置好各种选项,官方bot仅试过使用 [Gensokyo](https://github.com/Hoshinonyaruko/Gensokyo) 正常运行，野生机器人推荐使用[NapCat](https://github.com/NapNeko/NapCatQQ)，[LLOneBot](https://github.com/LLOneBot/LLOneBot) ,[Lagrange](https://github.com/LagrangeDev/Lagrange.Core) 等
 
@@ -278,12 +242,18 @@ self.layout_bot_dict = {{}}
     }}
 
 ```
+
+ </details>
+ 
 - websockets客户端Url：
 ```
 ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
 # 💿 连接QQ
+
+<details>
+<summary>(napcat)</summary>
 
 后台启动QQ
 ```
@@ -299,7 +269,7 @@ ctrl + a + d
 ```
 关闭QQ
 ```
-screen -x napcat
+screen -S napcat -X quit
 ```
 - napcat WEBUI
 ```
@@ -321,9 +291,12 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ```
 - 保存
 
-- - -
+ </details>
 
-- Termux 进入器器
+<details>
+<summary>(修仙2)</summary>
+
+- Termux 进入容器
 ```
 proot-distro login napcat
 ```
@@ -341,12 +314,17 @@ ctrl + a + d
 ```
 关闭修仙2
 ```
-screen -x xiu2
+screen -S xiu2 -X quit
 ```
 
+ </details>
+ 
 # 💿 使用
 
 群聊发送 `启用修仙功能` 后根据引导来即可，不支持私聊
+
+发送 `修仙帮助` 查看功能
+
 如果你使用的是官方机器人记得改配置
 
 # 🎉 特别感谢
