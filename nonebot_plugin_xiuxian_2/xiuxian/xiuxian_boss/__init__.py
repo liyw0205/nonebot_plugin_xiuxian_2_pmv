@@ -395,8 +395,14 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     else:
         boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
     user_rank = convert_rank(userinfo['level'])[0]
+    rank_name_list = convert_rank(user_info["level"])[1]
     if boss_rank - user_rank >= 4:
         msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
+        await handle_send(bot, event, msg)
+        await battle.finish()
+    if user_rank - boss_rank >= 4:
+        required_rank_name = rank_name_list[len(rank_name_list) - (boss_rank + 4)]
+        msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{userinfo['level']}，不宜过早挑战Boss，还请三思。"
         await handle_send(bot, event, msg)
         await battle.finish()
     more_msg = ''
