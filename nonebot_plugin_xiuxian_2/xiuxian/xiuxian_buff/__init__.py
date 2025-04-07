@@ -15,7 +15,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
     save_player_info,UserBuffDate, get_main_info_msg, 
     get_user_buff, get_sec_msg, get_sub_info_msg,
-    XIUXIAN_IMPART_BUFF
+    XIUXIAN_IMPART_BUFF, leave_harm_time
 )
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.data_source import jsondata
@@ -246,20 +246,24 @@ async def qc_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
-    user2 = sql_message.get_user_real_info(give_qq)
     if give_qq:
         if give_qq == str(user_id):
             msg = "道友不会左右互搏之术！"
             await handle_send(bot, event, msg)
             await qc.finish()
+    else:
+        arg = args.extract_plain_text().strip()
+        give_qq = sql_message.get_user_info_with_name(str(arg))['user_id']
+    
+    user2 = sql_message.get_user_real_info(give_qq)
     
     if user_info['hp'] is None or user_info['hp'] == 0:
     # 判断用户气血是否为空
         sql_message.update_user_hp(user_id)
-
+    
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
-        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n({((user_msg['hp'] / ((user_msg['exp'] / 2) * (1 + main_hp_buff + impart_hp_per)))) * 100:.2f}%)"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
         await handle_send(bot, event, msg)
@@ -350,8 +354,11 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     for arg in args:
         if arg.type == "at":
             two_qq = arg.data.get("qq", "")
+        else:
+            arg = args.extract_plain_text().strip()
+            two_qq = sql_message.get_user_info_with_name(str(arg))['user_id']
     
-    user_2 = sql_message.get_user_info_with_id(two_qq)
+    user_2 = sql_message.get_user_real_info(two_qq)
     
     if user_1 and user_2:
         if two_qq is None:
