@@ -253,6 +253,18 @@ async def qc_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
             await handle_send(bot, event, msg)
             await qc.finish()
     
+    if user_info['hp'] is None or user_info['hp'] == 0:
+    # 判断用户气血是否为空
+        sql_message.update_user_hp(user_id)
+
+    if user_info['hp'] <= user_info['exp'] / 10:
+        time = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        sql_message.update_user_stamina(user_id, 20, 1)
+        await handle_send(bot, event, msg)
+        await qc.finish()
+        
     if user1 and user2:
         player1 = {"user_id": None, "道号": None, "气血": None,
                    "攻击": None, "真元": None, '会心': None, '防御': 0, 'exp': 0}

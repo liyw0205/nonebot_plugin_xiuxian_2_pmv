@@ -31,7 +31,7 @@ def workmake(work_level, exp, user_level):
         success_msg = work_info['succeed']
         fail_msg = work_info['fail']
         item_type = get_random_item_type()
-        item_id = item_s.get_random_id_list_by_rank_and_item_type(convert_rank(user_level)[0], item_type)
+        item_id = item_s.get_random_id_list_by_rank_and_item_type((convert_rank(user_level)[0] - 18), item_type)
         if not item_id:
             item_id = 0
         else:

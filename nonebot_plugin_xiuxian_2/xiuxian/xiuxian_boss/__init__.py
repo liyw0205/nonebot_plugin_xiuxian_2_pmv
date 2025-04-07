@@ -948,7 +948,7 @@ def boss_drops(user_rank, boss_rank, boss, user_info):
     boss_dice = random.randint(0,100)
     drops_id = None
     drops_info = None
-    if boss_rank - user_rank >= 6:
+    if boss_rank - user_rank >= 4:
         drops_id = None
         drops_info = None
     
@@ -972,7 +972,7 @@ def get_drops(user_info):
 def get_id(dict_data, user_level):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
     l_temp = []
-    final_rank = convert_rank(user_level)[0]  # 秘境等级，会提高用户的等级
+    final_rank = convert_rank(user_level)[0] - 18  # 秘境等级，会提高用户的等级
     pass_rank = convert_rank('搬血境初期')[0]  # 最终等级超过此等级会抛弃
     for k, v in dict_data.items():
         if v["rank"] >= final_rank and (v["rank"] - final_rank) <= pass_rank:

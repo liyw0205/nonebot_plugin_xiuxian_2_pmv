@@ -33,7 +33,8 @@ from .impart_uitls import (
     re_impart_data,
     update_user_impart_data,
 )
-
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
 
@@ -68,6 +69,8 @@ re_impart_load = on_fullmatch("加载传承数据", priority=45, block=True)
 impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
 )
+use_wishing_stone = on_command("使用祈愿石", priority=5, block=True)
+
 __impart_help__ = f"""
 传承帮助信息:
 指令:
@@ -116,22 +119,20 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误，多次尝试无果请找晓楠！")
+        await handle_send(bot, event, "发生未知错误！")
         return
 
     # 解析抽卡次数
-    msg = args.extract_plain_text().strip()          # 获取原始输入    
-    if not msg:
-        await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
-        return
-
-    try:
-        times_str = msg.split()[-1]  
-        times = int(times_str)  
-    except (IndexError, ValueError):
-        await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
-        return
-
+    msg = args.extract_plain_text().strip()
+    if msg:
+        try:
+            times_str = msg.split()[-1]
+            times = int(times_str)
+        except (IndexError, ValueError):
+            await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
+            return
+    else:
+        times = 10
 
     if times % 10 != 0 or times < 10:
         await handle_send(bot, event, "次数需为10的倍数且≥10")
@@ -165,7 +166,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             if impart_data_json.data_person_add(user_id, reap_img):
                 # 重复卡片
                 duplicate_cards.append(reap_img)
-                total_seclusion_time += 2100
+                total_seclusion_time += 1200
                 if reap_img not in sent_images:
                     img = get_image_representation(reap_img)
                     append_draw_card_node(bot, list_tp, summary, img)
@@ -214,13 +215,83 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await re_impart_data(user_id)
     except ActionFailed:
         await handle_send(bot, event, "抽卡结果发送失败！数据未更新，请重试！")
-        # 回滚资源更改
-        xiuxian_impart.update_stone_num(times, user_id, 2)  # 2表示增加，恢复扣除的结晶
-        xiuxian_impart.update_impart_wish(impart_data_draw["wish"], user_id)  # 恢复抽卡次数
-
     await impart_draw.finish()
 
 
+@use_wishing_stone.handle(parameterless=[Cooldown(at_sender=False)])
+async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """使用祈愿石"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    user_id = user_info["user_id"]
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await use_wishing_stone.finish()
+        
+    # 解析祈愿石数量
+    msg_text = args.extract_plain_text().strip()
+    try:
+        stone_num = int(msg_text.split()[0]) if msg_text else 1  # 默认使用1个祈愿石
+    except (IndexError, ValueError):
+        await handle_send(bot, event, "请输入有效的祈愿石数量（如：使用祈愿石 5）")
+        await use_wishing_stone.finish()
+
+    # 检查背包中的祈愿石数量
+    back_msg = sql_message.get_back_msg(user_id)
+    wishing_stone_id = 20005  
+    wishing_stone_total = 0
+    for item in back_msg:
+        if item['goods_id'] == wishing_stone_id:
+            wishing_stone_total = item['goods_num']
+            break
+
+    if wishing_stone_total < stone_num:
+        msg = f"道友背包中没有足够的祈愿石，无法使用！你当前有 {wishing_stone_total} 个祈愿石，但需要 {stone_num} 个。"
+        await handle_send(bot, event, msg)
+        await use_wishing_stone.finish()
+        
+    impart_data_draw = await impart_check(user_id)
+    if impart_data_draw is None:
+        await handle_send(bot, event, "发生未知错误！")
+        await use_wishing_stone.finish()
+    img_list = impart_data_json.data_all_keys()
+    if not img_list:
+        await handle_send(bot, event, "请检查卡图数据完整！")
+        await use_wishing_stone.finish()
+
+    summary = f"道友{user_info['user_name']}使用祈愿石的结果"
+    list_tp = []
+    img_msg = ""
+    sent_images = set()  # 记录已发送的图片
+
+    for _ in range(stone_num):
+        reap_img = random.choice(img_list)
+        if impart_data_json.data_person_add(user_id, reap_img):
+            # 重复卡片
+            msg = f"重复卡片：{reap_img}"
+        else:
+            # 新卡片
+            msg = f"新卡片：{reap_img}"
+        img = get_image_representation(reap_img)
+        append_draw_card_node(bot, list_tp, summary, img)
+        append_draw_card_node(bot, list_tp, summary, msg)
+        img_msg += f"\n{msg}"
+        # 消耗祈愿石
+        sql_message.update_back_j(user_id, wishing_stone_id)
+
+    # 更新用户的抽卡数据
+    await re_impart_data(user_id)
+    final_msg = f"""道友{user_info['user_name']}使用了 {stone_num} 个祈愿石，结果如下：
+{img_msg}
+    """
+    try:
+        await send_msg_handler(bot, event, list_tp)
+        await handle_send(bot, event, final_msg)
+    except ActionFailed:
+        await handle_send(bot, event, "获取祈愿石结果失败！")
+    await use_wishing_stone.finish()
+
+    
 @impart_back.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承背包"""
@@ -234,7 +305,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
         await handle_send(
-            bot, event, send_group_id, "发生未知错误，多次尝试无果请找晓楠！"
+            bot, event, send_group_id, "发生未知错误！"
         )
         return
 
@@ -291,7 +362,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
         await handle_send(
-            bot, event, send_group_id, "发生未知错误，多次尝试无果请找晓楠！"
+            bot, event, send_group_id, "发生未知错误！"
         )
         return
     # 更新传承数据
@@ -315,7 +386,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
         await handle_send(
-            bot, event, send_group_id, "发生未知错误，多次尝试无果请找晓楠！"
+            bot, event, send_group_id, "发生未知错误！"
         )
         return
 
