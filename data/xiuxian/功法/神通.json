@@ -545,7 +545,7 @@
         "hpcost": 0.1,
         "mpcost": 0.3,
         "turncost": 1,
-        "desc": "吔屎啦！",
+        "desc": "天星如雨般洒落，每一击都蕴含着无尽的力量！",
         "rate": 100,
         "rank": "天阶下品",
         "level": "29"
@@ -559,7 +559,7 @@
         "hpcost": 0,
         "mpcost": 0.3,
         "turncost": 0,
-        "desc": "吔屎啦！",
+        "desc": "金色的虹光穿透太阳，带来毁灭性的力量！",
         "rate": 50,
         "rank": "天阶下品",
         "level": "29"
@@ -571,7 +571,7 @@
         "hpcost": 0,
         "mpcost": 0.3,
         "turncost": 3,
-        "desc": "吔屎啦！",
+        "desc": "烈火环绕，仙阵发动，焚尽一切敌人！",
         "rate": 100,
         "rank": "天阶下品",
         "level": "29"
@@ -584,7 +584,7 @@
         "hpcost": 0,
         "mpcost": 0.3,
         "turncost": 3,
-        "desc": "你被强化了，快去送!",
+        "desc": "星辰之力汇聚，神灭之诀，无人能挡!",
         "rate": 100,
         "rank": "天阶下品",
         "level": "29"
@@ -613,7 +613,7 @@
         "hpcost": 0.1,
         "mpcost": 0.5,
         "turncost": 1,
-        "desc": "吔屎啦！",
+        "desc": "以排山倒海之势，横扫一切敌人，无人能挡！",
         "rate": 100,
         "rank": "天阶上品",
         "level": "26"
@@ -627,7 +627,7 @@
         "hpcost": 0,
         "mpcost": 0.3,
         "turncost": 0,
-        "desc": "吔屎啦！",
+        "desc": "寒冰之力凝结骨骼，使敌人陷入无尽的寒冷之中！",
         "rate": 50,
         "rank": "天阶上品",
         "level": "26"
@@ -639,7 +639,7 @@
         "hpcost": 0,
         "mpcost": 0.5,
         "turncost": 3,
-        "desc": "凤灵妖火！",
+        "desc": "凤凰之火，焚烧万物，妖艳而致命！凤灵妖火！",
         "rate": 100,
         "rank": "天阶上品",
         "level": "26"
@@ -663,7 +663,7 @@
         "hpcost": 0,
         "mpcost": 0.3,
         "turncost": 3,
-        "desc": "吔屎啦!",
+        "desc": "逆转日月，掌控乾坤，威力无穷！",
         "rate": 50,
         "success": 100,
         "rank": "天阶上品",
@@ -700,7 +700,7 @@
         "hpcost": 0,
         "mpcost": 0.6,
         "turncost": 4,
-        "desc": "你被强化了，快去送!",
+        "desc": "吞噬一切火焰之力，化为己用，燃烧敌人的灵魂！",
         "rate": 60,
         "rank": "仙阶下品",
         "level": "26"
@@ -741,7 +741,7 @@
         "hpcost": 0.1,
         "mpcost": 1.0,
         "turncost": 5,
-        "desc": "你，已经死了",
+        "desc": "一剑封神！你，已经死了，无法逃脱！",
         "rate": 80,
         "success": 100,
         "rank": "仙阶上品",

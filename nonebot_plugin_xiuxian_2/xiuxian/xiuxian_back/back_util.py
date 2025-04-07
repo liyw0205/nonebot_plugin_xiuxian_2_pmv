@@ -393,7 +393,7 @@ def get_item_msg(goods_id):
     elif item_info['item_type'] == '神通':
         msg = f"名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sec_msg(item_info)}"
+        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}"
     elif item_info['item_type'] == '功法':
         msg = f"名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
@@ -478,7 +478,7 @@ def get_yaocai_info_msg(goods_id, item_info):
 
 def check_use_elixir(user_id, goods_id, num):
     user_info = sql_message.get_user_info_with_id(user_id)
-    user_rank = convert_rank(user_info['level'])[0]
+    user_rank = convert_rank(user_info['level'])[0] - 18
     goods_info = items.get_data_by_item_id(goods_id)
     goods_rank = goods_info['rank']
     goods_name = goods_info['name']
