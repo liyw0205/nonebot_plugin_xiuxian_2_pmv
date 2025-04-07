@@ -970,12 +970,12 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     give_qq = None  # 艾特的时候存到这里
     arg_list = args.extract_plain_text().split()
-        if not args:
+    if not args:
         msg = f"请输入正确指令！例如：神秘力量 灵石数量\n：神秘力量 道号 灵石数量"
         await handle_send(bot, event, msg)
         await gm_command.finish()
         
-        if len(arg_list) < 2:
+    if len(arg_list) < 2:
         stone_num = str(arg_list[0])  # 灵石数
         nick_name = None
     else:

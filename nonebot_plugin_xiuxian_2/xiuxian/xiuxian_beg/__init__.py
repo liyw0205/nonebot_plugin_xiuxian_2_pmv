@@ -201,7 +201,7 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     msg_parts.append(f"获得 {item_name} x{item_amount}\n")
             
             i += 1            
-        sql_message.update_ls(user_id, abs(item_amount), key if item_amount > 0 else 2)
+
         if buff_id is not None:
             sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
         msg = f"道友的补偿:\n" + "".join(msg_parts)
