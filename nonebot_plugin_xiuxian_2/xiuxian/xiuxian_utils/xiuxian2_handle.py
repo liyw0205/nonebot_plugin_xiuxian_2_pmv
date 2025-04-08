@@ -1376,7 +1376,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             day_num = back['day_num']
             all_num = back['all_num']
         goods_num = back['goods_num'] - num
-        if int(goods_num) is 0:
+        if int(goods_num) == 0:
             bind_num = 0
         bind_num = min(bind_num, goods_num)
         bind_num = max(bind_num, 0)
