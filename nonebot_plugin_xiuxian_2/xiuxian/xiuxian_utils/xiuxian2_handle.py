@@ -2010,12 +2010,13 @@ def leave_harm_time(user_id):
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data else 0 # 主功法修炼倍率
     
     try:
-       time = int(((user_mes['exp'] / 1.5) - user_mes['hp']) / ((XiuConfig().closing_exp * level_rate * realm_rate * (
-                    100 + main_buff_rate_buff)) * hp_speed))
+        time = int(((user_mes['exp'] / 1.5) - user_mes['hp']) / ((XiuConfig().closing_exp * level_rate * realm_rate * (
+                    1 + main_buff_rate_buff)) * (10 * hp_speed)))
     except ZeroDivisionError:
         time = "无穷大"
     except OverflowError:
         time = "溢出"
+    time = max(time, 1)
     return time
 
 

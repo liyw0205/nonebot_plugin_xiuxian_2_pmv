@@ -648,7 +648,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             sql_message.update_exp(user_id, user_get_exp_max)
             sql_message.update_power2(user_id)  # 更新战力
 
-            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * hp_speed * (100 + mainbuffclors)), int(exp * mp_speed * 100))
+            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * (10 * hp_speed) * (1 + mainbuffclors)), int(exp * mp_speed * 100))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"闭关结束，本次闭关到达上限，共增加修为：{user_get_exp_max}{result_msg[0]}{result_msg[1]}"
             await handle_send(bot, event, msg)
@@ -666,7 +666,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     sql_message.update_ls(user_id, int(exp / 2), 2)
                     sql_message.update_power2(user_id)  # 更新战力
 
-                    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * hp_speed * (100 + mainbuffclors)), int(exp * mp_speed * 100))
+                    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * (10 * hp_speed) * (1 + mainbuffclors)), int(exp * mp_speed * 100))
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{exp}，消耗灵石{int(exp / 2)}枚{result_msg[0]}{result_msg[1]}"
@@ -678,7 +678,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     sql_message.update_exp(user_id, exp)
                     sql_message.update_ls(user_id, user_stone, 2)
                     sql_message.update_power2(user_id)  # 更新战力
-                    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * hp_speed * (100 + mainbuffclors)), int(exp * mp_speed * 100))
+                    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * (10 * hp_speed) * (1 + mainbuffclors)), int(exp * mp_speed * 100))
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{exp}，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}"
@@ -688,7 +688,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 sql_message.in_closing(user_id, user_type)
                 sql_message.update_exp(user_id, exp)
                 sql_message.update_power2(user_id)  # 更新战力
-                result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * hp_speed * (100 + mainbuffclors)), int(exp * mp_speed * 100))
+                result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(exp * (10 * hp_speed) * (1 + mainbuffclors)), int(exp * mp_speed * 100))
                 sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
                 msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{exp}{result_msg[0]}{result_msg[1]}"
                 await handle_send(bot, event, msg)
