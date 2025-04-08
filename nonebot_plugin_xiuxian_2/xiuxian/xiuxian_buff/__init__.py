@@ -41,9 +41,9 @@ buffinfo = on_fullmatch("我的功法", priority=25, block=True)
 out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=True)
 in_closing = on_fullmatch("闭关", priority=5, block=True)
 stone_exp = on_command("灵石修仙", aliases={"灵石修炼"}, priority=5, block=True)
-two_exp = on_command("双修", priority=5, permission=GROUP, block=True)
+two_exp = on_command("双修", priority=5, block=True)
 mind_state = on_fullmatch("我的状态", priority=7, block=True)
-qc = on_command("切磋", priority=6, permission=GROUP, block=True)
+qc = on_command("切磋", priority=6, block=True)
 buff_help = on_command("功法帮助", aliases={"灵田帮助"}, priority=5, block=True)
 blessed_spot_creat = on_fullmatch("洞天福地购买", priority=10, block=True)
 blessed_spot_info = on_fullmatch("洞天福地查看", priority=11, block=True)
@@ -232,7 +232,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
 
 @qc.handle(parameterless=[Cooldown(stamina_cost = 5, at_sender=False)])
-async def qc_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """切磋，不会掉血"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -341,7 +341,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
 
 
 @two_exp.handle(parameterless=[Cooldown(stamina_cost = 10, at_sender=False)])
-async def two_exp_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     global two_exp_limit

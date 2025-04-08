@@ -31,7 +31,8 @@ def workmake(work_level, exp, user_level):
         success_msg = work_info['succeed']
         fail_msg = work_info['fail']
         item_type = get_random_item_type()
-        item_id = item_s.get_random_id_list_by_rank_and_item_type((convert_rank(user_level)[0] - 12), item_type)
+        zx_rank = max(convert_rank(user_level)[0] - 12, 16)
+        item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)
         if not item_id:
             item_id = 0
         else:
@@ -45,13 +46,13 @@ def workmake(work_level, exp, user_level):
 def get_random_item_type():
     type_rate = {
         "功法": {
-            "type_rate": 50,
+            "type_rate": 500,
         },
         "神通": {
-            "type_rate": 50,
+            "type_rate": 250,
         },
         "药材": {
-            "type_rate": 50,
+            "type_rate": 250,
         }
     }
     temp_dict = {}
