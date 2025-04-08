@@ -478,7 +478,7 @@ def get_yaocai_info_msg(goods_id, item_info):
 
 def check_use_elixir(user_id, goods_id, num):
     user_info = sql_message.get_user_info_with_id(user_id)
-    user_rank = convert_rank(user_info['level'])[0] - 18
+    user_rank = convert_rank(user_info['level'])[0] - 17
     goods_info = items.get_data_by_item_id(goods_id)
     goods_rank = goods_info['rank']
     goods_name = goods_info['name']
@@ -489,7 +489,7 @@ def check_use_elixir(user_id, goods_id, num):
     if goods_info['buff_type'] == "level_up_rate":  # 增加突破概率的丹药
         if goods_rank < user_rank:  # 最低使用限制
             msg = f"丹药：{goods_name}的最低使用境界为{goods_info['境界']}，道友不满足使用条件"
-        elif goods_rank - user_rank > 18:  # 最高使用限制
+        elif goods_rank - user_rank > 17:  # 最高使用限制
             msg = f"道友当前境界为：{user_info['level']}，丹药：{goods_name}已不能满足道友，请寻找适合道友的丹药吧！"    
         else:  # 检查完毕
             sql_message.update_back_j(user_id, goods_id, num, 1)

@@ -263,7 +263,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
-        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n({((user_msg['hp'] / ((user_msg['exp'] / 2) * (1 + main_hp_buff + impart_hp_per)))) * 100:.2f}%)"
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
         await handle_send(bot, event, msg)
