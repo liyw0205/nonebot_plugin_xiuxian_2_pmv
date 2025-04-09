@@ -19,7 +19,7 @@ from .impart_pk import impart_pk
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from .. import NICKNAME
-
+from nonebot.log import logger
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
@@ -278,9 +278,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     impaer_exp_time = args.extract_plain_text().strip()
     if not impaer_exp_time.isdigit():
-        msg = f"输入解析异常，应全为数字!"
-        await handle_send(bot, event, msg)
-        await impart_pk_exp.finish()
+        impaer_exp_time = 1
 
     closing_type = OtherSet().set_closing_type(user_info['level'])
     max_exp = closing_type * XiuConfig().closing_exp_upper_limit
@@ -305,11 +303,19 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
     mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
     exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))  # 本次闭关获取的修为
+    
+    if int(impaer_exp_time) == 1:
+        if current_exp + exp > max_exp:
+            exp = max((max_exp - current_exp), 1)
 
+    exp = int(round(exp))
     # 校验是否超出上限
     if current_exp + exp > max_exp:
         allowed_time = (max_exp - current_exp) // (XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))
-        allowed_time = int(allowed_time)
+        allowed_time = max(int(allowed_time), 1)
+        exp2 = max((max_exp - current_exp), 1)
+        if current_exp + exp2 > max_exp:
+            allowed_time = 0
         msg = f"修炼时长超出上限，最多可修炼{allowed_time}分钟"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()

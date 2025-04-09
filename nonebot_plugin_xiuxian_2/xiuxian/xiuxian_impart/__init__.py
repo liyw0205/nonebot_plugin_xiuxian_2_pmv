@@ -155,7 +155,6 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     new_cards = []
     duplicate_cards = []
     list_tp = []
-    sent_images = set()  # 记录已发送的图片
     current_wish = impart_data_draw["wish"]  # 初始化抽卡次数
 
     # 执行抽卡
@@ -167,28 +166,16 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 # 重复卡片
                 duplicate_cards.append(reap_img)
                 total_seclusion_time += 1200
-                if reap_img not in sent_images:
-                    img = get_image_representation(reap_img)
-                    append_draw_card_node(bot, list_tp, summary, img)
-                    sent_images.add(reap_img)
             else:
                 # 新卡片
                 new_cards.append(reap_img)
                 total_seclusion_time += 660
-                img = get_image_representation(reap_img)
-                append_draw_card_node(bot, list_tp, summary, img)
-                sent_images.add(reap_img)
             # 中奖（新卡或重复卡）后重置抽卡次数为0
             current_wish = 0
         else:
             # 未中奖情况
             total_seclusion_time += 660
             random.shuffle(time_img)
-            for x in time_img:
-                if x not in sent_images:
-                    img = get_image_representation(x)
-                    append_draw_card_node(bot, list_tp, summary, img)
-                    sent_images.add(x)
             # 未中奖时增加10次抽卡计数
             current_wish += 10
 
@@ -206,15 +193,14 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"剩余思恋结晶：{impart_data_draw['stone_num'] - times}颗\n"
     )
     append_draw_card_node(bot, list_tp, summary, summary_msg)
+    await update_user_impart_data(user_id, total_seclusion_time)
+    await re_impart_data(user_id)
 
     # 发送结果，只有成功后才更新数据
     try:
         await send_msg_handler(bot, event, list_tp)
-        # 发送成功后更新用户数据
-        await update_user_impart_data(user_id, total_seclusion_time)
-        await re_impart_data(user_id)
     except ActionFailed:
-        await handle_send(bot, event, "抽卡结果发送失败！数据未更新，请重试！")
+        await handle_send(bot, event, "抽卡结果发送失败！")
     await impart_draw.finish()
 
 
@@ -272,7 +258,6 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         else:
             # 新卡片
             msg = f"新卡片：{reap_img}"
-        img = get_image_representation(reap_img)
         append_draw_card_node(bot, list_tp, summary, img)
         append_draw_card_node(bot, list_tp, summary, msg)
         img_msg += f"\n{msg}"
@@ -396,3 +381,21 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 累计闭关时间：{impart_data_draw["exp_day"]}分钟
     """
     await handle_send(bot, event, msg)
+
+@impart_img.handle(parameterless=[Cooldown(at_sender=False)])
+async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """传承卡图"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    img_list = impart_data_json.data_all_keys()
+    img_name = str(args.extract_plain_text().strip())
+    if img_name in img_list:
+        img = get_image_representation(img_name)
+        if isinstance(event, GroupMessageEvent):
+           await bot.send_group_msg(group_id=event.group_id, message=img)
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=img)
+        await impart_img.finish()
+    else:
+        msg = "没有找到此卡图！"
+        await handle_send(bot, event, msg)
+        await impart_img.finish()

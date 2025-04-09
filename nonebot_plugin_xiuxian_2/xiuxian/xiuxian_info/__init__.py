@@ -95,6 +95,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     leveluprate = int(user_info['level_up_rate'])  # 用户失败次数加成
     number =  main_rate_buff["number"] if main_rate_buff is not None else 0
     DETAIL_MAP = {
+        "ID": f"{user_id}",
         "道号": f"{user_name}",
         "境界": f"{user_info['level']}",
         "修为": f"{number_to(user_info['exp'])}",
@@ -123,7 +124,8 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
         await xiuxian_message.finish()
     else:
-        msg = f"""道号: {user_name}
+        msg = f"""ID：{user_id}
+道号: {user_name}
 境界: {user_info['level']}
 修为: {number_to(user_info['exp'])}
 灵石: {number_to(user_info['stone'])}
