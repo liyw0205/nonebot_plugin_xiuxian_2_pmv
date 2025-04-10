@@ -16,7 +16,8 @@ class BossBuff:
         self.boss_jg = 0
         self.boss_jh = 0
         self.boss_jb = 0
-        self.boss_xl = 0        
+        self.boss_xl = 0
+
 
 
 class UserRandomBuff:
@@ -100,7 +101,9 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
     player1_turn_cost = 0  # 先设定为初始值 0
     player2_turn_cost = 0
     player1_f_js = get_user_def_buff(player1['user_id'])  # 玩家1减伤
+    player1_f_js = max(player1_f_js, 0)
     player2_f_js = get_user_def_buff(player2['user_id'])  # 玩家2减伤
+    player2_f_js = max(player2_f_js, 0)
     player1_js = player1_f_js
     player2_js = player2_f_js
     user1_skill_sh = 0
@@ -111,7 +114,26 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
     user1_battle_buff_date = UserBattleBuffDate(player1['user_id'])  # 1号的战斗buff信息
     user2_battle_buff_date = UserBattleBuffDate(player2['user_id'])  # 2号的战斗buff信息
 
+    max_turns = 20  # 设置最大回合数
+    turn_count = 0
     while True:
+        turn_count += 1
+        if turn_count > max_turns:
+            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
+            suc = "Boss赢了"
+            if isSql:
+                #
+                if player1['气血'] <= 0:
+                    player1['气血'] = 1
+                #
+                sql_message.update_user_hp_mp(
+                    player1['user_id'],
+                    int(player1['气血'] / (1 + user1_hp_buff)),
+                    int(player1['真元'] / (1 + user1_mp_buff))
+                )     
+            break
+        
+        play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
 
@@ -716,11 +738,14 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     boss_turn_skip = True
     player1_turn_cost = 0  # 先设定为初始值 0
     player1_f_js = get_user_def_buff(player1['user_id'])
+    player1_f_js = max(player1_f_js, 0)
     player1_js = player1_f_js  # 减伤率
     boss_buff = BossBuff()
+    
     if boss["jj"] == "祭道境":
         # boss["减伤"] = random.randint(40,90)/100 # boss减伤率
         boss["减伤"] = 0.05  # boss减伤率
+        boss_cj = random.randint(25, 50) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 1  # boss攻击
@@ -767,6 +792,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('遁一境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('江湖好手')[0]:  # 遁一以下
         boss["减伤"] = 1  # boss减伤率
+        boss_cj = random.randint(5, 30) / 100
         boss_buff.boss_zs = 0
         boss_buff.boss_hx = 0
         boss_buff.boss_bs = 0
@@ -777,6 +803,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         boss_buff.boss_xl = 0
     if convert_rank('至尊境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('斩我境圆满')[0]:  # 遁一境
         boss["减伤"] = random.randint(50, 55) / 100  # boss减伤率
+        boss_cj = random.randint(15, 30) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.3  # boss攻击
@@ -823,6 +850,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('微光境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('遁一境圆满')[0]:  # 至尊境
         boss["减伤"] = random.randint(40, 45) / 100  # boss减伤率
+        boss_cj = random.randint(20, 40) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.4  # boss攻击
@@ -869,6 +897,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('星芒境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('至尊境圆满')[0]:  # 微光境
         boss["减伤"] = random.randint(30, 35) / 100  # boss减伤率
+        boss_cj = random.randint(20, 40) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.6  # boss攻击
@@ -915,6 +944,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('月华境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('微光境圆满')[0]:  # 星芒境
         boss["减伤"] = random.randint(20, 25) / 100  # boss减伤率
+        boss_cj = random.randint(20, 40) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.7  # boss攻击
@@ -961,6 +991,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('耀阳境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('星芒境圆满')[0]:  # 月华境
         boss["减伤"] = random.randint(10, 15) / 100  # boss减伤率
+        boss_cj = random.randint(25, 45) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.85  # boss攻击
@@ -1007,6 +1038,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     if convert_rank('祭道境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('月华境圆满')[0]:  # 耀阳境
         boss["减伤"] = 0.1  # boss减伤率
+        boss_cj = random.randint(25, 45) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
         if 0 <= boss_st1 <= 25:
             boss_buff.boss_zs = 0.9  # boss攻击
@@ -1051,6 +1083,9 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             boss_buff.boss_jb = 0
             boss_buff.boss_xl = random.randint(60, 100) / 100  # boss禁血
 
+    if boss["jj"] == "搬血境":
+        boss_cj = 0
+        
     if fan_buff == 1:
         boss_buff.boss_jg = 0
         boss_buff.boss_jh = 0
@@ -1070,7 +1105,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     get_stone = 0
     sh = 0
     qx = boss['气血']
-    boss_now_stone = boss['stone']
+    boss_now_stone = boss.get('stone', 0)
     boss_js = boss['减伤']
 
     if boss_js <= 0.6 and boss['name'] in BOSSDEF:
@@ -1088,6 +1123,13 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
         play_list.append(boss_zs_data)
 
+    if boss_cj > 0:
+        boss_cj_data = {"type": "node", "data": {"name": f"{boss['name']}",
+                                                 "uin": int(bot_id),
+                                                 "content": f"{boss['name']}使用了钉头七箭书,提升了{int(boss_cj * 100)}%穿甲！"}}
+
+        play_list.append(boss_cj_data)
+        
     if boss_buff.boss_hx > 0:
         boss_hx_data = {"type": "node", "data": {"name": f"{boss['name']}",
                                                  "uin": int(bot_id),
@@ -1177,8 +1219,17 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     while True:
         turn_count += 1
         if turn_count > max_turns:
-            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "战斗回合超限，结束！"}})
+            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
             suc = "Boss赢了"
+            if isSql:
+                #
+                if player1['气血'] <= 0:
+                    player1['气血'] = 1
+                #
+                sql_message.update_user_hp_mp(
+                    player1['user_id'],
+                    int(player1['真元'] / (1 + user1_mp_buff))
+                )     
             break
         
         play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
@@ -1429,7 +1480,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             else:
                 msg2 = "{}发起攻击，造成了{}伤害\n"
             play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
-            player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
+            player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def + boss_cj)) 
             play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
         elif boss_turn_skip:
             boss_sub = random.randint(0, 100)
@@ -1444,7 +1495,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                                                      boss_sh * (1 + boss_buff.boss_zs) * 5 + (
                                                                                  player1['气血'] * 0.3)), bot_id))
                 player1['气血'] = player1['气血'] - ((
-                            (boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def) * 5) + (
+                            (boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + boss_cj) * 5) + (
                                 player1['气血'] * 0.3)))
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
 
@@ -1456,9 +1507,9 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                 else:
                     msg2 = "{}：子龙朱雀！！！穿透了对方的护甲！造成了{}伤害\n"
                 play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh * (1 + boss_buff.boss_zs) * (
-                            player1_js - random_buff.random_def + 0.5) * 3), bot_id))
+                            player1_js - random_buff.random_def + boss_cj + 0.5) * 3), bot_id))
                 player1['气血'] = player1['气血'] - (
-                ((boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + 0.5) * 3)))
+                ((boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + boss_cj + 0.5) * 3)))
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
@@ -1618,7 +1669,7 @@ def get_skill_hp_mp_data(player, secbuffdata):
     user_id = player['user_id']
     weapon_data = UserBuffDate(user_id).get_user_weapon_data()
     if weapon_data is not None and "mp_buff" in weapon_data:
-        weapon_mp = weapon_data["mp_buff"]
+        weapon_mp = max(weapon_data["mp_buff"], 0)
     else:
         weapon_mp = 0
 

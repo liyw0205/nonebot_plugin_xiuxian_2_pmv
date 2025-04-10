@@ -86,6 +86,7 @@ __boss_help__ = f"""
 独立功能：
 - 挑战稻草人
 - 挑战训练傀儡
+> 支持境界和名字 挑战训练傀儡 祭道境 少姜
 非指令: 
 1、全服每{config['Boss生成时间参数']['hours']}小时{config['Boss生成时间参数']['minutes']}分钟自动生成10只随机大境界的世界Boss
 2、每小时执行天罚世界Boss
@@ -298,7 +299,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await boss_delete_all.finish()
 
 
-@battle.handle(parameterless=[Cooldown(stamina_cost = 20, at_sender=False)])
+@battle.handle(parameterless=[Cooldown(cd_time=config['讨伐世界Boss冷却'], at_sender=False)])
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -413,7 +414,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 打之前的血量
     boss_old_hp = bossinfo['气血']
     boss_old_stone = bossinfo['stone']
-    boss_now_stone = int(round(bossinfo['stone'] // 3))
+    boss_now_stone = int(round(bossinfo['max_stone'] // 3))
     result, victor, bossinfo_new, get_stone = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
     # 打之后的血量
     boss_now_hp = bossinfo_new['气血']
@@ -424,9 +425,16 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         if get_stone == 0:
             stone_buff = user1_sub_buff_data['stone']
             get_stone = int(boss_old_stone * ((boss_old_hp - boss_now_hp) / boss_all_hp) * (1 + stone_buff))
-            if get_stone > boss_now_stone:
-                get_stone = boss_now_stone
-            bossinfo['stone'] = boss_old_stone - get_stone
+        if get_stone > bossinfo['stone']:
+            get_stone = bossinfo['stone']
+            get_stone = boss_now_stone
+        if get_stone > boss_now_stone:
+            get_stone = boss_now_stone
+        
+        if boss_old_stone == 0:
+            get_stone = 1
+            
+        bossinfo['stone'] = boss_old_stone - get_stone
         sql_message.update_ls(user_id, get_stone, 1)
         boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 240)
         if boss_integral < 5:  # 摸一下不给
@@ -498,6 +506,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             
         group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
         battle_flag[group_id] = False
+        if boss_old_stone == 0:
+            get_stone = 1
         sql_message.update_ls(user_id, get_stone, 1)
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         user_boss_fight_info['boss_integral'] += boss_integral
@@ -565,7 +575,6 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "攻击": 0,
             "name": "稻草人",
             "jj": "搬血境",
-            "stone": 1,
             "is_scarecrow": True
         }
 
@@ -595,7 +604,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
 
 @challenge_training_puppet.handle(parameterless=[Cooldown(stamina_cost=20, at_sender=False)])
-async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """挑战训练傀儡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"
@@ -637,23 +646,38 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     player['exp'] = userinfo['exp']
     player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
     
-    # 根据玩家的大境界确定训练傀儡的境界
-    player_jj = (userinfo['level'])
-    if len(player_jj) == 5:
+    arg_list = args.extract_plain_text().split()
+    if len(arg_list) < 1:
+        # 根据玩家的大境界确定训练傀儡的境界
+        player_jj = (userinfo['level'])
         scarecrow_jj = player_jj[:3]
+        boss_name = "散发着威压的尸体"
+    else:
+        player_jj = arg_list[0]  # 用户指定的境界
+        scarecrow_jj = player_jj
+        boss_name = arg_list[1] if len(arg_list) > 1 else None
 
-    # 计算训练傀儡的攻击力为玩家的一半
+    
+    
+    bossinfo = createboss_jj(scarecrow_jj, boss_name)
+    if bossinfo is None:
+        msg = f"请输入正确的指令，例如：挑战训练傀儡 祭道境 少姜"
+        await handle_send(bot, event, msg)
+        await challenge_training_puppet.finish()
+
+    # 计算训练傀儡的属性
     scarecrow_atk = (player['攻击'] // 2)
+    scarecrow_mp = (player['真元'] // 2)
+    scarecrow_hp = (player['气血'] * 444)
 
     # 定义训练傀儡属性
     scarecrow_info = {
-        "气血": 1000000000000000,
-        "总血量": 1000000000000000,
-        "真元": 100,
+        "气血": scarecrow_hp,
+        "总血量": scarecrow_hp,
+        "真元": scarecrow_mp,
         "攻击": scarecrow_atk,
-        "name": "散发着威压的尸体",
-        "jj": scarecrow_jj,
-        "stone": 1
+        "name": boss_name,
+        "jj": scarecrow_jj
     }
 
     # 战斗逻辑

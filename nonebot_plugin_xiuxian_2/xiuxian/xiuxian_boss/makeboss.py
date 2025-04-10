@@ -73,7 +73,8 @@ def createboss():
     bossinfo = get_boss_exp(boss_jj)
     bossinfo['name'] = random.choice(config["Boss名字"])
     bossinfo['jj'] = boss_jj
-    bossinfo['stone'] = random.choice(config["Boss灵石"][boss_jj])
+    bossinfo['max_stone'] = random.choice(config["Boss灵石"][boss_jj])
+    bossinfo['stone'] = bossinfo['max_stone']
     return bossinfo
 
 
@@ -82,7 +83,8 @@ def createboss_jj(boss_jj, boss_name=None):
     if bossinfo:
         bossinfo['name'] = boss_name if boss_name else random.choice(config["Boss名字"])
         bossinfo['jj'] = boss_jj
-        bossinfo['stone'] = random.choice(config["Boss灵石"][boss_jj])
+        bossinfo['max_stone'] = random.choice(config["Boss灵石"][boss_jj])
+        bossinfo['stone'] = bossinfo['max_stone']
         return bossinfo
     else:
         return None
