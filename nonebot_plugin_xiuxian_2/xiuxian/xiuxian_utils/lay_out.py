@@ -140,7 +140,7 @@ def Cooldown(
             del time_sy[key]
         return
 
-    async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent):
+    async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent | PrivateMessageEvent):
         is_private = isinstance(event, PrivateMessageEvent)
         user_id = str(event.get_user_id())
         group_id = str(event.group_id) if not is_private else None
@@ -188,6 +188,8 @@ def Cooldown(
                 await matcher.finish()
             else:
                 await matcher.finish()
+        else:
+            pass
         
         if is_private:        
             if is_private and not conf_data.get("private_enabled", False):
@@ -203,11 +205,7 @@ def Cooldown(
             if user_data:
                 if user_data['user_stamina'] < stamina_cost:
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
-                    if XiuConfig().img:
-                        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-                        await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-                    else:
-                        await bot.send_group_msg(group_id=int(group_id), message=msg)
+                    await handle_send(bot, event, msg)
                     await matcher.finish()
                 sql_message.update_user_stamina(user_id, stamina_cost, 2)  # 减少体力
         if running[key] <= 0:
@@ -218,6 +216,7 @@ def Cooldown(
                 formatted_time = format_time(time)
                 msg = get_random_chat_notice().format(formatted_time)
                 await handle_send(bot, event, msg)
+                await matcher.finish()
             else:
                 await matcher.finish()
         else:
@@ -255,8 +254,7 @@ def check_rule_bot() -> Rule:  # 对传入的消息检测，是主qq传入的消
 
 
 async def range_bot(bot: Bot, event: GroupMessageEvent):  # 随机一个qq发送消息
-    is_private = isinstance(event, PrivateMessageEvent)
-    group_id = str(event.group_id) if not is_private else None
+    group_id = str(event.group_id)
     bot_list = list(get_bots().keys())
     try:
         bot = get_bots()[random.choice(bot_list)]
@@ -267,7 +265,7 @@ async def range_bot(bot: Bot, event: GroupMessageEvent):  # 随机一个qq发送
 
 async def assign_bot(bot=None, event=None):  # 按字典分配对应qq发送消息
     is_private = isinstance(event, PrivateMessageEvent)
-    send_group_id = str(event.group_id) if not is_private else None
+    group_id = str(event.group_id) if not is_private else None
     try:
         bot_id = layout_bot_dict[group_id]
         if type(bot_id) is str:
@@ -278,7 +276,7 @@ async def assign_bot(bot=None, event=None):  # 按字典分配对应qq发送消�
             bot = bot
     except:
         bot = bot
-    return bot, send_group_id
+    return bot, group_id
 
 
 async def assign_bot_group(group_id):  # 只导入群号，按字典分配对应qq发送消息

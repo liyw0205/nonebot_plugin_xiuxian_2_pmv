@@ -642,7 +642,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await sect_secbuff_learn.finish()
 
 
-@upatkpractice.handle(parameterless=[Cooldown(at_sender=False)])
+@upatkpractice.handle(parameterless=[Cooldown(at_sender=False, cd_time=10)])
 async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """升级攻击修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

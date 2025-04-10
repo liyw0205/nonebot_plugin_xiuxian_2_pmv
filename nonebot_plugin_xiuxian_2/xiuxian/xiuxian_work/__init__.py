@@ -27,7 +27,7 @@ refreshnum: Dict[str, int] = {}  # 用户悬赏令刷新次数记录
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 lscost = 1000000000 # 刷新灵石消耗
-count = 3  # 免费次数
+count = 5  # 免费次数
 
 
 # 重置悬赏令刷新次数

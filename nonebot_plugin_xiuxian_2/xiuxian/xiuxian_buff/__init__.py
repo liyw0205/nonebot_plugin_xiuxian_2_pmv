@@ -231,7 +231,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await blessed_spot_rename.finish()
 
 
-@qc.handle(parameterless=[Cooldown(stamina_cost = 5, at_sender=False)])
+@qc.handle(parameterless=[Cooldown(cd_time=60)])
 async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """切磋，不会掉血"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -778,6 +778,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0 #我的状态武器会心伤害
     user_main_critatk = UserBuffDate(user_id).get_user_main_buff_data() #我的状态功法会心伤害
     main_critatk =  user_main_critatk['critatk'] if  user_main_critatk is not None else 0 #我的状态功法会心伤害
+    user_js = def_buff + weapon_def + main_def
     leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     number =  user_main_critatk["number"] if user_main_critatk is not None else 0
     
@@ -790,7 +791,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 攻击修炼:{user_msg['atkpractice']}级(提升攻击力{user_msg['atkpractice'] * 4}%)
 修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
 会心:{crit_buff + int(impart_know_per * 100) + armor_crit_buff + main_crit_buff}%
-减伤率:{def_buff + weapon_def + main_def}%
+减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%
 会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
 """
