@@ -422,21 +422,18 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     total_damage = boss_old_hp - boss_now_hp
     if victor == "Boss赢了":
         group_boss[group_id][boss_num - 1] = bossinfo_new
+        if boss_old_stone == 0:
+            get_stone = 1
+        if get_stone > boss_old_stone:
+            get_stone = boss_old_stone
         if get_stone == 0:
             stone_buff = user1_sub_buff_data['stone']
             get_stone = int(boss_old_stone * ((boss_old_hp - boss_now_hp) / boss_all_hp) * (1 + stone_buff))
-        if get_stone > bossinfo['stone']:
-            get_stone = bossinfo['stone']
-            get_stone = boss_now_stone
         if get_stone > boss_now_stone:
             get_stone = boss_now_stone
-        
-        if boss_old_stone == 0:
-            get_stone = 1
-            
         bossinfo['stone'] = boss_old_stone - get_stone
         sql_message.update_ls(user_id, get_stone, 1)
-        boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 240)
+        boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 500)
         if boss_integral < 5:  # 摸一下不给
             boss_integral = 0
         if user_info['root'] == "器师":
@@ -473,7 +470,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     elif victor == "群友赢了":
         # 新增boss战斗积分点数
         boss_all_hp = bossinfo['总血量']  # 总血量
-        boss_integral = 240
+        boss_integral = 500
         if user_info['root'] == "器师":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))

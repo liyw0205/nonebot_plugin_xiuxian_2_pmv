@@ -2001,7 +2001,7 @@ class XIUXIAN_IMPART_BUFF:
 
 def leave_harm_time(user_id):
     """重伤恢复时间"""
-    hp_speed = 25
+    hp_speed = 250
     user_mes = sql_message.get_user_info_with_id(user_id)
     level = user_mes['level']
     level_rate = sql_message.get_root_rate(user_mes['root_type']) # 灵根倍率

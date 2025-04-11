@@ -599,7 +599,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
     level = user_mes['level']
     use_exp = user_mes['exp']
-    hp_speed = 25
+    hp_speed = 250
     mp_speed = 50
 
     max_exp = (

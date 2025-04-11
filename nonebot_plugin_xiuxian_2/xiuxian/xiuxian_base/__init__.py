@@ -1035,29 +1035,46 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     give_qq = None  # 艾特的时候存到这里
     arg_list = args.extract_plain_text().split()
-    if not args:
+    if len(arg_list) < 2:
         msg = f"请输入正确指令！例如：创造力量 物品 数量\n创造力量 道号 物品 数量"
         await handle_send(bot, event, msg)
         await cz.finish()
         
     if len(arg_list) < 3:
-        goods_num = int(arg_list[1])
-        goods_name = arg_list[0]
-        nick_name = None
+        
+        goods_num = arg_list[1]
+        if goods_num.isdigit():
+            goods_num = int(arg_list[1])
+            goods_name = arg_list[0]
+            nick_name = None
+        else:
+            goods_num = 1
+            goods_name = arg_list[1]
+            nick_name = arg_list[0]
     else:
         goods_num = int(arg_list[2])
         goods_name = arg_list[1]
-        nick_name = arg_list[0]        
-    
+        nick_name = arg_list[0]
     goods_id = None
     goods_type = None
-    for k, v in items.items.items():
-        if goods_name == v['name']:
-            goods_id = k
-            goods_type = v['type']
-            break
-        else:
-            continue
+
+    if goods_name.isdigit():  # 如果是纯数字，视为ID
+        goods_id = int(goods_name)
+        item_info = items.get_data_by_item_id(goods_id)
+        if not item_info:
+            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
+            await handle_send(bot, event, msg)
+            await cz.finish()
+    else:  # 视为物品名称
+        for k, v in items.items.items():
+            if goods_name == v['name']:
+                goods_id = k
+                break
+        if goods_id is None:
+            msg = f"物品 {goods_name} 不存在，请检查名称是否正确！"
+            await handle_send(bot, event, msg)
+            await cz.finish()
+            
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
