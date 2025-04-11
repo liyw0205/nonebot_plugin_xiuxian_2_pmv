@@ -115,24 +115,8 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
     user2_battle_buff_date = UserBattleBuffDate(player2['user_id'])  # 2号的战斗buff信息
 
     max_turns = 20  # 设置最大回合数
-    turn_count = 0
+    turn_count = 1
     while True:
-        turn_count += 1
-        if turn_count > max_turns:
-            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
-            suc = "Boss赢了"
-            if isSql:
-                #
-                if player1['气血'] <= 0:
-                    player1['气血'] = 1
-                #
-                sql_message.update_user_hp_mp(
-                    player1['user_id'],
-                    int(player1['气血'] / (1 + user1_hp_buff)),
-                    int(player1['真元'] / (1 + user1_mp_buff))
-                )     
-            break
-        
         play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
@@ -577,6 +561,12 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
 
         if player1['气血'] <= 0 or player2['气血'] <= 0:
             play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "逻辑错误！"}})
+            break
+            
+        turn_count += 1
+        if turn_count > max_turns:
+            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
+            suc = "没有人"
             break
 
     return play_list, suc
@@ -1215,23 +1205,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     user1_battle_buff_date = UserBattleBuffDate(player1['user_id'])  # 1号的战斗buff信息 辅修功法14
 
     max_turns = 20  # 设置最大回合数
-    turn_count = 0
+    turn_count = 1
     while True:
-        turn_count += 1
-        if turn_count > max_turns:
-            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
-            suc = "Boss赢了"
-            if isSql:
-                #
-                if player1['气血'] <= 0:
-                    player1['气血'] = 1
-                #
-                sql_message.update_user_hp_mp(
-                    player1['user_id'],
-                    int(player1['真元'] / (1 + user1_mp_buff))
-                )     
-            break
-        
         play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
@@ -1448,12 +1423,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             boss['气血'] = max(boss['气血'], 0)
             get_stone = boss_now_stone * (1 + stone_buff)
             if isSql:
-                #
-                if player1['气血'] <= 0:
-                    player1['气血'] = 1
-                #
                 sql_message.update_user_hp_mp(
-                    player1['user_id'],
+                    player1['user_id'], 
                     int(player1['气血'] / (1 + user1_hp_buff)),
                     int(player1['真元'] / (1 + user1_mp_buff))
                 )
@@ -1536,6 +1507,17 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
         if player1['气血'] <= 0 or boss['气血'] <= 0:
             play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "逻辑错误！"}})
+            break
+        turn_count += 1
+        if turn_count > max_turns:
+            play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": "你们打到了天昏地暗，被大能叫停！"}})
+            suc = "Boss赢了"
+            if isSql:
+                sql_message.update_user_hp_mp(
+                    player1['user_id'], 
+                    int(player1['气血'] / (1 + user1_hp_buff)),
+                    int(player1['真元'] / (1 + user1_mp_buff))
+                )
             break
 
     return play_list, suc, boss, get_stone
