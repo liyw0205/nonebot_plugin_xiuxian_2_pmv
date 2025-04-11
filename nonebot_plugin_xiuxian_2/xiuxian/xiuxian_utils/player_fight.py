@@ -113,22 +113,27 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
 
     user1_battle_buff_date = UserBattleBuffDate(player1['user_id'])  # 1号的战斗buff信息
     user2_battle_buff_date = UserBattleBuffDate(player2['user_id'])  # 2号的战斗buff信息
+    user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(player1_sub_open,
+                                                                                    user1_sub_buff_date,
+                                                                                    user1_battle_buff_date,
+                                                                                    player2_sub_open,
+                                                                                    user2_sub_buff_date,
+                                                                                    user2_battle_buff_date)
+                                                                                    
+    msg = f"{player1['道号']}" + msg
+    play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
 
     max_turns = 20  # 设置最大回合数
     turn_count = 1
     while True:
-        play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
-
         user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(player1_sub_open,
                                                                                     user1_sub_buff_date,
                                                                                     user1_battle_buff_date,
                                                                                     player2_sub_open,
                                                                                     user2_sub_buff_date,
                                                                                     user2_battle_buff_date)
-        if player1_sub_open:
-            play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
 
         player2_health_temp = player2['气血']
         if player1_skil_open:  # 是否开启技能
@@ -1204,19 +1209,23 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     user1_battle_buff_date = UserBattleBuffDate(player1['user_id'])  # 1号的战斗buff信息 辅修功法14
 
+    user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(player1_sub_open,
+                                                                                    user1_sub_buff_date,
+                                                                                    user1_battle_buff_date, False, {},
+                                                                                    {})
+    
+    msg = f"{player1['道号']}" + msg
+    play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
+    
     max_turns = 20  # 设置最大回合数
     turn_count = 1
     while True:
-        play_list.append({"type": "node", "data": {"name": "Bot", "uin": int(bot_id), "content": f"☆------战斗第{turn_count}回合------☆"}})
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
-
         user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(player1_sub_open,
                                                                                     user1_sub_buff_date,
                                                                                     user1_battle_buff_date, False, {},
                                                                                     {})
-        if player1_sub_open:
-            play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
 
         player2_health_temp = boss['气血']
         if player1_skil_open:  # 是否开启技能
@@ -1436,24 +1445,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             player1_turn_cost += 1
 
             # 没有技能的derB
-            # 检查是否为稻草人 
-        boss_is_scarecrow = boss.get('is_scarecrow', False)
-        if boss_is_scarecrow:
-            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
-            play_list.append(get_boss_dict(boss, qx, "稻草人一动不动，无法攻击！", bot_id))
-            continue
-            
-        if boss_is_scarecrow is False or boss_is_scarecrow is None:
-            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
-            isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
-            if isCrit:
-                msg2 = "{}发起会心一击，造成了{}伤害\n"
-            else:
-                msg2 = "{}发起攻击，造成了{}伤害\n"
-            play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
-            player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def + boss_cj)) 
-            play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
-        elif boss_turn_skip:
+              
+        if boss_turn_skip:
             boss_sub = random.randint(0, 100)
             if boss_sub <= 8:
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
@@ -1463,8 +1456,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                 else:
                     msg2 = "{}：紫玄掌！！紫星河！！！造成了{}伤害\n"
                 play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'],
-                                                                     boss_sh * (1 + boss_buff.boss_zs) * 5 + (
-                                                                                 player1['气血'] * 0.3)), bot_id))
+                                                                     int(round(boss_sh * (1 + boss_buff.boss_zs) * 5 + (
+                                                                                 player1['气血'] * 0.3)))), bot_id))
                 player1['气血'] = player1['气血'] - ((
                             (boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + boss_cj) * 5) + (
                                 player1['气血'] * 0.3)))
@@ -1477,11 +1470,23 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                     msg2 = "{}：子龙朱雀！！！穿透了对方的护甲！并且发生了会心一击，造成了{}伤害\n"
                 else:
                     msg2 = "{}：子龙朱雀！！！穿透了对方的护甲！造成了{}伤害\n"
-                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh * (1 + boss_buff.boss_zs) * (
-                            player1_js - random_buff.random_def + boss_cj + 0.5) * 3), bot_id))
+                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], int(round(boss_sh * (1 + boss_buff.boss_zs) * (
+                            player1_js - random_buff.random_def + boss_cj + 0.5) * 3))), bot_id))
                 player1['气血'] = player1['气血'] - (
                 ((boss_sh * (1 + boss_buff.boss_zs) * (player1_js - random_buff.random_def + boss_cj + 0.5) * 3)))
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
+            else:
+                play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
+                isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
+                if isCrit:
+                      msg2 = "{}发起会心一击，造成了{}伤害\n"
+                else:
+                    msg2 = "{}发起攻击，造成了{}伤害\n"
+                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
+                player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
+                play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
+        else:
+            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}动弹不得！------☆", bot_id))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
             play_list.append(
@@ -1790,6 +1795,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     player1['气血'] = int(round(player1['气血']))
     player2['气血'] = int(round(player2['气血']))
     player1['真元'] = int(round(player1['真元']))
+    damage1 = int(round(damage1))
     
     if 'max_hp' not in player1:
         exp = int(player1['exp'])
