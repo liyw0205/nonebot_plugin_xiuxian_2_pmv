@@ -434,7 +434,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     msg_list = data_list
     try:
         # 直接从消息中提取数字作为页码
-        current_page = int(arg_list[1]) 
+        current_page = int(arg_list[1]) if arg_list[1] is not None else 1
     except (ValueError, TypeError):
         current_page = 1  # 默认第一页
     
@@ -514,7 +514,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg_list = data_list
     try:
         # 直接从消息中提取数字作为页码
-        current_page = int(arg_list[1]) 
+        current_page = int(arg_list[1]) if arg_list[1] is not None else 1
     except (ValueError, TypeError):
         current_page = 1  # 默认第一页
     
