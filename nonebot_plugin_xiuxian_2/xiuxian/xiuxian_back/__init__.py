@@ -435,7 +435,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     try:
         # 直接从消息中提取数字作为页码
         current_page = int(arg_list[1]) if arg_list[1] is not None else 1
-    except (ValueError, TypeError):
+    except (IndexError, ValueError, TypeError):
         current_page = 1  # 默认第一页
     
     per_page = 11  # 每页10个物品
@@ -515,7 +515,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     try:
         # 直接从消息中提取数字作为页码
         current_page = int(arg_list[1]) if arg_list[1] is not None else 1
-    except (ValueError, TypeError):
+    except (IndexError, ValueError, TypeError):
         current_page = 1  # 默认第一页
     
     per_page = 11  # 每页10个物品
