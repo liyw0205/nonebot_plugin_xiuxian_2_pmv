@@ -4,7 +4,7 @@
         "type_list": [
             "全属性灵根"
         ],
-        "type_speeds": 2.0,
+        "type_speeds": 1.9,
         "type_flag": []
     },
     "融合灵根": {
@@ -136,7 +136,7 @@
  "XXXG-00W0 零式飞翼高达",
  "GAT-X131 灾厄高达"
         ],
-        "type_speeds": 3,
+        "type_speeds": 2.1,
         "type_flag": []
     },
     "异世界之力": {
@@ -192,7 +192,7 @@
     "神之断罪剑",
     "魔法禁典之盾"
         ],
-        "type_speeds": 4.5,
+        "type_speeds": 2.5,
         "type_flag": []
     },
     "轮回道果": {
@@ -200,7 +200,7 @@
         "type_list": [
             "轮回千次不灭，只为臻至巅峰"
         ],
-        "type_speeds": 7,
+        "type_speeds": 4,
         "type_flag": []
     },
     "真·轮回道果": {
@@ -208,7 +208,7 @@
         "type_list": [
             "轮回万次不灭，只为超越巅峰"
         ],
-        "type_speeds": 12,
+        "type_speeds": 5,
         "type_flag": []
     },
     "永恒道果": {
@@ -216,7 +216,7 @@
         "type_list": [
             "轮回无尽不灭，只为触及永恒之境"
         ],
-        "type_speeds": 20,
+        "type_speeds": 7,
         "type_flag": []
     }
 }
