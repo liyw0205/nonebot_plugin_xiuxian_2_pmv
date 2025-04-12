@@ -120,8 +120,9 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                                                                                     user2_sub_buff_date,
                                                                                     user2_battle_buff_date)
                                                                                     
-    msg = f"{player1['道号']}" + msg
-    play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
+    if msg is not None:
+        msg = f"{player1['道号']}" + msg
+        play_list.append(get_msg_dict(player1, player1_init_hp, msg))  # 辅修功法14
 
     max_turns = 20  # 设置最大回合数
     turn_count = 1
@@ -1214,8 +1215,10 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                                                                     user1_battle_buff_date, False, {},
                                                                                     {})
     
-    msg = f"{player1['道号']}" + msg
-    play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
+
+    if player1_sub_open and msg is not None:
+        msg = f"{player1['道号']}" + msg
+        play_list.append(get_msg_dict(player1, player_init_hp, msg))  # 辅修功法14
     
     max_turns = 20  # 设置最大回合数
     turn_count = 1

@@ -54,6 +54,12 @@ def get_random_item_type():
         },
         "药材": {
             "type_rate": 250,
+        },
+        "法器": {
+            "type_rate": 5,
+        },
+        "防具": {
+            "type_rate": 10,
         }
     }
     temp_dict = {}
