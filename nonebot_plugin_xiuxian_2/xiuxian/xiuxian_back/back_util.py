@@ -132,7 +132,6 @@ def check_equipment_use_msg(user_id, goods_id):
     return is_use
 
 
-# 文档1修改部分
 def get_user_main_back_msg(user_id):
     """
     获取背包内的所有物品信息（优化版）

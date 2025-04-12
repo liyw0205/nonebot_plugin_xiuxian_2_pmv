@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from datetime import datetime
 from nonebot import on_command, require, on_fullmatch
 from nonebot.adapters.onebot.v11 import (
@@ -396,22 +397,23 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await shop_view.finish()
 
     # 获取用户输入的类型
-    input_type = args.extract_plain_text().strip()
+    arg_list = args.extract_plain_text().split()
+    input_type = arg_list[0]
     if not input_type:
         msg = "请输入要查看的类型，例如：坊市查看 技能|装备|丹药|药材"
         await handle_send(bot, event, msg)
-        await shop_view.finish()
+        await xiuxian_shop_view.finish()
 
     # 获取商店数据
     shop_data = get_shop_data(group_id) 
     if not shop_data or shop_data.get(group_id) == {}:
         msg = "坊市目前空空如也！"
         await handle_send(bot, event, msg)
-        await shop_view.finish()
+        await xiuxian_shop_view.finish()
 
     # 根据类型过滤商店数据
     data_list = []
-    for k, v in shop_data[group_id].items():
+    for k, v in shop_data["000000"].items():
         if v["goods_type"] == input_type:  # 使用 goods_type 进行精确匹配
             msg = f"编号：{k}\n"
             msg += f"{v['desc']}\n"
@@ -427,10 +429,38 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if not data_list:
         msg = f"坊市中暂无 {input_type} 类型的物品！"
         await handle_send(bot, event, msg)
-        await shop_view.finish()
+        await xiuxian_shop_view.finish()
 
-    # 发送过滤后的结果
-    await send_msg_handler(bot, event, f'坊市 - {input_type}', bot.self_id, data_list)
+    msg_list = data_list
+    try:
+        # 直接从消息中提取数字作为页码
+        current_page = int(arg_list[1]) 
+    except (ValueError, TypeError):
+        current_page = 1  # 默认第一页
+    
+    per_page = 11  # 每页10个物品
+    total_items = len(msg_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = msg_list[start_index:end_index]
+    # 构建消息内容
+    msgs = f"坊市 - {input_type}"
+    header = f"{msgs}（第{current_page}/{total_pages}页）"
+    footer = f"提示：发送 坊市查看{input_type}+页码 查看其他页（共{total_pages}页）"
+    final_msg = [header, *paged_items, footer]
+    msg = final_msg
+    
+    # 发送消息处理
+    await send_msg_handler(bot, event, f'坊市 - {input_type}', bot.self_id, msg)
     await shop_view.finish()
    
 
@@ -447,7 +477,8 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await xiuxian_shop_view.finish()
 
     # 获取用户输入的类型
-    input_type = args.extract_plain_text().strip()
+    arg_list = args.extract_plain_text().split()
+    input_type = arg_list[0]
     if not input_type:
         msg = "请输入要查看的类型，例如：仙肆查看 技能|装备|丹药|药材"
         await handle_send(bot, event, msg)
@@ -480,8 +511,36 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg)
         await xiuxian_shop_view.finish()
 
-    # 发送过滤后的结果
-    await send_msg_handler(bot, event, f'仙肆 - {input_type}', bot.self_id, data_list)
+    msg_list = data_list
+    try:
+        # 直接从消息中提取数字作为页码
+        current_page = int(arg_list[1]) 
+    except (ValueError, TypeError):
+        current_page = 1  # 默认第一页
+    
+    per_page = 11  # 每页10个物品
+    total_items = len(msg_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = msg_list[start_index:end_index]
+    # 构建消息内容
+    msgs = f"仙肆 - {input_type}"
+    header = f"{msgs}（第{current_page}/{total_pages}页）"
+    footer = f"提示：发送 仙肆查看{input_type}+页码 查看其他页（共{total_pages}页）"
+    final_msg = [header, *paged_items, footer]
+    msg = final_msg
+    
+    # 发送消息处理
+    await send_msg_handler(bot, event, f'仙肆 - {input_type}', bot.self_id, msg)
     await xiuxian_shop_view.finish()
     
         
@@ -1260,10 +1319,8 @@ async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = 
 
 
 @main_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """我的背包
-    ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
-    "remake", "day_num", "all_num", "action_time", "state"]
+async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """我的背包 分页版
     """
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -1271,93 +1328,118 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await main_back.finish()
     user_id = user_info['user_id']
-    msg = get_user_main_back_msg(user_id)
-    # 处理消息发送
-    if len(msg) <= 50:
-        # 物品数量少于等于50时，直接发送
-        try:
-            msg1 = [f"{user_info['user_name']}的背包，持有灵石：{number_to(user_info['stone'])}枚"] + msg
-            await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
-        except ActionFailed:
-            msg = "未知原因，查看失败!"
-            await handle_send(bot, event, msg)
-    else:
-        # 物品数量大于50时，按每50条分割发送
-        chunk_size = 50
-        for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
-            try:
-                msg1 = [f"{user_info['user_name']}的背包，持有灵石：{number_to(user_info['stone'])}枚"] + msg_chunk
-                await send_msg_handler(bot, event, msg1)
-            except ActionFailed:
-                msg = "未知原因，查看失败!"
-                await handle_send(bot, event, msg)
+    msg_list = get_user_main_back_msg(user_id)
+    try:
+        # 直接从消息中提取数字作为页码
+        current_page = int(args.extract_plain_text().strip()) 
+    except (ValueError, TypeError):
+        current_page = 1  # 默认第一页
+    
+    per_page = 11  # 每页10个物品
+    total_items = len(msg_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = msg_list[start_index:end_index]
+    # 构建消息内容
+    msgs = f"{user_info['user_name']}"
+    header = f"{msgs}的背包（第{current_page}/{total_pages}页）\n持有灵石：{number_to(user_info['stone'])}枚"
+    footer = f"提示：发送 我的背包+页码 查看其他页（共{total_pages}页）"
+    final_msg = [header, *paged_items, footer]
+    msg = final_msg
+    
+    # 发送消息处理
+    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
     
     await main_back.finish()
     
 
 @yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await yaocai_back.finish()
     user_id = user_info['user_id']
-    msg = get_user_yaocai_back_msg(user_id)
-
-    # 处理消息发送
-    if len(msg) <= 50:
-        # 物品数量少于等于50时，直接发送
-        try:
-            msg1 = [f"{user_info['user_name']}的药材背包"] + msg
-            await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
-        except ActionFailed:
-            msg = "未知原因，查看失败!"
-            await handle_send(bot, event, msg)
-    else:
-        # 物品数量大于50时，按每50条分割发送
-        chunk_size = 50
-        for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
-            try:
-                msg1 = [f"{user_info['user_name']}的药材背包"] + msg_chunk
-                await send_msg_handler(bot, event, msg1)
-            except ActionFailed:
-                msg = "未知原因，查看失败!"
-                await handle_send(bot, event, msg)
+    msg_list = get_user_yaocai_back_msg(user_id)
+    try:
+        # 直接从消息中提取数字作为页码
+        current_page = int(args.extract_plain_text().strip()) 
+    except (ValueError, TypeError):
+        current_page = 1  # 默认第一页
+    
+    per_page = 11  # 每页10个物品
+    total_items = len(msg_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = msg_list[start_index:end_index]
+    # 构建消息内容
+    msgs = f"{user_info['user_name']}"
+    header = f"{msgs}的背包（第{current_page}/{total_pages}页）"
+    footer = f"提示：发送 药材背包+页码 查看其他页（共{total_pages}页）"
+    final_msg = [header, *paged_items, footer]
+    msg = final_msg
+    
+    # 发送消息处理
+    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
     await yaocai_back.finish()
     
 @danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await danyao_back.finish()
     user_id = user_info['user_id']
-    msg = get_user_danyao_back_msg(user_id)
-
-    # 处理消息发送
-    if len(msg) <= 50:
-        # 物品数量少于等于50时，直接发送
-        try:
-            msg1 = [f"{user_info['user_name']}的丹药背包"] + msg
-            await send_msg_handler(bot, event, '背包', bot.self_id, msg1)
-        except ActionFailed:
-            msg = "未知原因，查看失败!"
-            await handle_send(bot, event, msg)
-    else:
-        # 物品数量大于50时，按每50条分割发送
-        chunk_size = 50
-        for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
-            try:
-                msg1 = [f"{user_info['user_name']}的丹药背包"] + msg_chunk
-                await send_msg_handler(bot, event, msg1)
-            except ActionFailed:
-                msg = "未知原因，查看失败!"
-                await handle_send(bot, event, msg)
+    msg_list = get_user_danyao_back_msg(user_id)
+    try:
+        # 直接从消息中提取数字作为页码
+        current_page = int(args.extract_plain_text().strip()) 
+    except (ValueError, TypeError):
+        current_page = 1  # 默认第一页
+    
+    per_page = 11  # 每页10个物品
+    total_items = len(msg_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = msg_list[start_index:end_index]
+    # 构建消息内容
+    msgs = f"{user_info['user_name']}"
+    header = f"{msgs}的背包（第{current_page}/{total_pages}页）"
+    footer = f"提示：发送 丹药背包+页码 查看其他页（共{total_pages}页）"
+    final_msg = [header, *paged_items, footer]
+    msg = final_msg
+    
+    # 发送消息处理
+    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
     await danyao_back.finish()
         
 @no_use_zb.handle(parameterless=[Cooldown(at_sender=False)])
