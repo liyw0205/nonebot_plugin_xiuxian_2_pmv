@@ -652,7 +652,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     else:
         player_jj = arg_list[0]  # 用户指定的境界
         scarecrow_jj = player_jj
-        boss_name = arg_list[1] if len(arg_list) > 1 else None
+        boss_name = arg_list[1] if len(arg_list) > 1 else "散发着威压的尸体"
 
     
     
