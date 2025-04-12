@@ -1069,6 +1069,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         for k, v in items.items.items():
             if goods_name == v['name']:
                 goods_id = k
+                goods_type = v['type']
                 break
         if goods_id is None:
             msg = f"物品 {goods_name} 不存在，请检查名称是否正确！"
