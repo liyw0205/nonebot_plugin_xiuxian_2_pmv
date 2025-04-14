@@ -211,6 +211,22 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                             player2['气血'] = player2['气血'] - int(user1_skill_sh * player2_js)  # 玩家1的伤害 * 玩家2的减伤
                             play_list.append(
                                 get_msg_dict(player1, player1_init_hp, f"{player2['道号']}剩余血量{int(round(player2['气血']))}"))
+                                
+                        elif user1_skill_type == 6:  # 叠加类技能
+                            isCrit, player1_sh = get_turnatk(player1, user1_skill_sh,
+                                                                 user1_battle_buff_date)  # 判定是否暴击 辅修功法14
+                            if isCrit:
+                                msg1 = "{}发起会心一击，造成了{}伤害\n"
+                            else:
+                                msg1 = "{}发起攻击，造成了{}伤害\n"
+                            player1 = calculate_skill_cost(player1, user1_hp_cost, user1_mp_cost)
+                            play_list.append(get_msg_dict(player1, player1_init_hp, skill_msg))
+                            play_list.append(
+                                get_msg_dict(player1, player1_init_hp, msg1.format(player1['道号'], player1_sh)))
+                            player2['气血'] = player2['气血'] - int(player1_sh * player2_js)  # 玩家1的伤害 * 玩家2的减伤
+                            play_list.append(
+                                get_msg_dict(player1, player1_init_hp,
+                                             f"{player2['道号']}剩余血量{int(round(player2['气血']))}"))
 
                     else:  # 没放技能，打一拳
                         isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date)  # 判定是否暴击 辅修功法14
@@ -298,6 +314,25 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                         if player1_turn_cost == 0:  # 封印时间到
                             user2_turn_skip = True
                             user2_buff_turn = True
+                            
+                    elif user1skill_type == 6:  # 叠加类技能
+                        isCrit, player1_sh = get_turnatk(player1, user1_skill_sh,
+                                                             user1_battle_buff_date)  # 判定是否暴击 辅修功法14
+
+                        if isCrit:
+                            msg1 = "{}发起会心一击，造成了{}伤害\n"
+                        else:
+                            msg1 = "{}发起攻击，造成了{}伤害\n"
+                        
+                        player1_turn_cost = player1_turn_cost - 1
+                        player1_sh = player1_sh * (user1_skill_date['turncost'] - player1_turn_cost)
+                        play_list.append(get_msg_dict(player1, player1_init_hp,
+                                                      f"{user1_skill_data['name']}叠伤剩余:{player1_turn_cost}回合"))
+                        play_list.append(
+                            get_msg_dict(player1, player1_init_hp, msg1.format(player1['道号'], player1_sh)))
+                        player2['气血'] = player2['气血'] - int(player1_sh * player2_js)  # 玩家1的伤害 * 玩家2的减伤
+                        play_list.append(
+                            get_msg_dict(player1, player1_init_hp, f"{player2['道号']}剩余血量{int(round(player2['气血']))}"))
 
             else:  # 休息回合-1
                 play_list.append(get_msg_dict(player1, player1_init_hp, f"☆------{player1['道号']}动弹不得！------☆"))
@@ -417,6 +452,22 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                             if user2_skill_sh:  # 命中
                                 user1_turn_skip = False
                                 user1_buff_turn = False
+                                
+                        elif user2_skill_type == 6:  # 叠加类技能
+                            isCrit, player2_sh = get_turnatk(player2, user2_skill_sh,
+                                                                 user2_battle_buff_date)  # 判定是否暴击 辅修功法14
+                            if isCrit:
+                                msg2 = "{}发起会心一击，造成了{}伤害\n"
+                            else:
+                                msg2 = "{}发起攻击，造成了{}伤害\n"
+                            player2 = calculate_skill_cost(player2, user2_hp_cost, user2_mp_cost)
+                            play_list.append(get_msg_dict(player2, player2_init_hp, skill_msg))
+                            play_list.append(
+                                get_msg_dict(player2, player2_init_hp, msg2.format(player2['道号'], player2_sh)))
+                            player1['气血'] = player1['气血'] - int(player2_sh * player1_js)  # 玩家2的伤害 * 玩家1的减伤
+                            play_list.append(
+                                get_msg_dict(player2, player2_init_hp,
+                                             f"{player1['道号']}剩余血量{int(round(player1['气血']))}"))
 
                     else:  # 没放技能
                         isCrit, player2_sh = get_turnatk(player2, 0, user2_battle_buff_date)  # 判定是否暴击 辅修功法14
@@ -506,6 +557,25 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                         if player2_turn_cost == 0:  # 封印时间到
                             user1_turn_skip = True
                             user1_buff_turn = True
+                    
+                    elif user2skill_type == 6:  # 叠加类技能
+                        isCrit, player2_sh = get_turnatk(player2, user2_skill_sh,
+                                                             user2_battle_buff_date)  # 判定是否暴击 辅修功法14
+
+                        if isCrit:
+                            msg2 = "{}发起会心一击，造成了{}伤害\n"
+                        else:
+                            msg2 = "{}发起攻击，造成了{}伤害\n"
+                        
+                        player2_turn_cost = player2_turn_cost - 1
+                        player2_sh = player2_sh * (user2_skill_date['turncost'] - player2_turn_cost)
+                        play_list.append(get_msg_dict(player2, player2_init_hp,
+                                                      f"{user2_skill_data['name']}叠伤剩余:{player2_turn_cost}回合"))
+                        play_list.append(
+                            get_msg_dict(player2, player2_init_hp, msg2.format(player2['道号'], player2_sh)))
+                        player1['气血'] = player1['气血'] - int(player2_sh * player1_js)  # 玩家2的伤害 * 玩家1的减伤
+                        play_list.append(
+                            get_msg_dict(player2, player2_init_hp, f"{player1['道号']}剩余血量{int(round(player1['气血']))}"))
 
             else:  # 休息回合-1
                 play_list.append(get_msg_dict(player2, player2_init_hp, f"☆------{player2['道号']}动弹不得！------☆"))
