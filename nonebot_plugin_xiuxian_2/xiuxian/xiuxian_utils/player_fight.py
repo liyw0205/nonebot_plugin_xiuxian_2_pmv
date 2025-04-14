@@ -204,6 +204,13 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                             if user1_skill_sh:  # 命中
                                 user2_turn_skip = False
                                 user2_buff_turn = False
+                                
+                        elif user1_skill_type == 5:  # 随机伤害类型技能
+                            play_list.append(get_msg_dict(player1, player1_init_hp, skill_msg))
+                            player1 = calculate_skill_cost(player1, user1_hp_cost, user1_mp_cost)
+                            player2['气血'] = player2['气血'] - int(user1_skill_sh * player2_js)  # 玩家1的伤害 * 玩家2的减伤
+                            play_list.append(
+                                get_msg_dict(player1, player1_init_hp, f"{player2['道号']}剩余血量{int(round(player2['气血']))}"))
 
                     else:  # 没放技能，打一拳
                         isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date)  # 判定是否暴击 辅修功法14
@@ -1457,7 +1464,9 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             player1_turn_cost += 1
 
             # 没有技能的derB
-              
+        if boss['name'] == "稻草人":
+            boss_turn_skip = False
+                          
         if boss_turn_skip:
             boss_sub = random.randint(0, 100)
             if boss_sub <= 8:
@@ -1490,14 +1499,18 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             else:
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
                 isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
+                effect_name = boss['name']
+                if boss['name'] in BOSSATK:
+                    effect_name = BOSSATK[boss['name']]
                 if isCrit:
                       msg2 = "{}发起会心一击，造成了{}伤害\n"
                 else:
                     msg2 = "{}发起攻击，造成了{}伤害\n"
-                play_list.append(get_boss_dict(boss, qx, msg2.format(boss['name'], boss_sh), bot_id)) 
+                play_list.append(get_boss_dict(boss, qx, msg2.format(effect_name, boss_sh), bot_id)) 
                 player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{int(round(player1['气血']))}", bot_id))
         else:
+            play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
             play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}动弹不得！------☆", bot_id))
 
         if player1['气血'] <= 0:  # 玩家2气血小于0，结算
