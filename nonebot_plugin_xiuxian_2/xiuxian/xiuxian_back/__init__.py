@@ -438,7 +438,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     except (IndexError, ValueError, TypeError):
         current_page = 1  # 默认第一页
     
-    per_page = 11  # 每页10个物品
+    per_page = 31  # 每页10个物品
     total_items = len(msg_list)
     total_pages = (total_items + per_page - 1) // per_page
     
@@ -518,7 +518,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     except (IndexError, ValueError, TypeError):
         current_page = 1  # 默认第一页
     
-    per_page = 11  # 每页10个物品
+    per_page = 31  # 每页10个物品
     total_items = len(msg_list)
     total_pages = (total_items + per_page - 1) // per_page
     
@@ -1335,7 +1335,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     except (ValueError, TypeError):
         current_page = 1  # 默认第一页
     
-    per_page = 11  # 每页10个物品
+    per_page = 31  # 每页10个物品
     total_items = len(msg_list)
     total_pages = (total_items + per_page - 1) // per_page
     
@@ -1377,7 +1377,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except (ValueError, TypeError):
         current_page = 1  # 默认第一页
     
-    per_page = 11  # 每页10个物品
+    per_page = 31  # 每页10个物品
     total_items = len(msg_list)
     total_pages = (total_items + per_page - 1) // per_page
     
@@ -1417,7 +1417,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except (ValueError, TypeError):
         current_page = 1  # 默认第一页
     
-    per_page = 11  # 每页10个物品
+    per_page = 31  # 每页10个物品
     total_items = len(msg_list)
     total_pages = (total_items + per_page - 1) // per_page
     

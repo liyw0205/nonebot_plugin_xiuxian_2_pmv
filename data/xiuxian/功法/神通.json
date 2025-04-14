@@ -66,6 +66,19 @@
         "rank": "人阶下品",
         "level": "55"
     },
+    "8006": {
+        "name": "沙砾迷眼弹",
+        "skill_type": 5,
+        "atkvalue": 0.1,
+        "atkvalue2": 4,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "凝聚沙砾之力，形成迷眼弹，随机攻击敌人！",
+        "rate": 100,
+        "rank": "人阶下品",
+        "level": "55"
+    },
     "8101": {
         "name": "化尘剑法",
         "skill_type": 1,
@@ -129,6 +142,19 @@
         "mpcost": 0.3,
         "turncost": 2,
         "desc": "不说了，开鳖!",
+        "rate": 100,
+        "rank": "人阶上品",
+        "level": "50"
+    },
+    "8106": {
+        "name": "石弹碎石击",
+        "skill_type": 5,
+        "atkvalue": 0.2,
+        "atkvalue2": 4,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "召唤石块之力，凝聚成碎石击，随机攻击敌人！",
         "rate": 100,
         "rank": "人阶上品",
         "level": "50"
@@ -200,6 +226,19 @@
         "rank": "黄阶下品",
         "level": "47"
     },
+    "8206": {
+        "name": "木刺穿心箭",
+        "skill_type": 5,
+        "atkvalue": 0.3,
+        "atkvalue2": 4.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "凝聚木刺之力，形成穿心之箭，随机射向敌人！",
+        "rate": 100,
+        "rank": "黄阶下品",
+        "level": "47"
+    },
     "8301": {
         "name": "五毒摄魂阵",
         "skill_type": 1,
@@ -263,6 +302,19 @@
         "mpcost": 0.3,
         "turncost": 2,
         "desc": "不说了，开鳖!",
+        "rate": 100,
+        "rank": "黄阶上品",
+        "level": "44"
+    },
+    "8306": {
+        "name": "土刺破甲钉",
+        "skill_type": 5,
+        "atkvalue": 0.4,
+        "atkvalue2": 4.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "召唤石块之力，凝聚成碎石击，随机攻击敌人！",
         "rate": 100,
         "rank": "黄阶上品",
         "level": "44"
@@ -334,6 +386,19 @@
         "rank": "玄阶下品",
         "level": "41"
     },
+    "8406": {
+        "name": "邪风乱影刃",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "凝聚邪风之力，形成乱影之刃，随机攻击敌人！",
+        "rate": 100,
+        "rank": "玄阶下品",
+        "level": "41"
+    },
     "8501": {
         "name": "苍云荫月",
         "skill_type": 1,
@@ -398,6 +463,19 @@
         "turncost": 2,
         "desc": "不说了，开鳖!",
         "rate": 50,
+        "rank": "玄阶上品",
+        "level": "38"
+    },
+    "8506": {
+        "name": "幽影缠魂索",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 6,
+        "hpcost": 0.1,
+        "mpcost": 0.4,
+        "turncost": 1,
+        "desc": "召唤幽影之力，形成缠魂索，随机缠绕敌人！",
+        "rate": 100,
         "rank": "玄阶上品",
         "level": "38"
     },
@@ -468,6 +546,19 @@
         "rank": "地阶下品",
         "level": "35"
     },
+    "8606": {
+        "name": "毒雾迷魂弹",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 6,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "释放毒雾之力，凝聚成迷魂弹，随机攻击敌人！",
+        "rate": 100,
+        "rank": "地阶下品",
+        "level": "35"
+    },
     "8701": {
         "name": "怒水天殇",
         "skill_type": 1,
@@ -535,6 +626,19 @@
         "rank": "地阶上品",
         "level": "32"
     },
+    "8607": {
+        "name": "冰棱碎空刺",
+        "skill_type": 5,
+        "atkvalue": 0.6,
+        "atkvalue2": 6,
+        "hpcost": 0.1,
+        "mpcost": 0.4,
+        "turncost": 1,
+        "desc": "召唤蕴含着极寒之力的冰棱造成伤害！",
+        "rate": 100,
+        "rank": "地阶上品",
+        "level": "32"
+    },
     "8801": {
         "name": "天星若雨",
         "skill_type": 1,
@@ -599,6 +703,19 @@
         "turncost": 2,
         "desc": "不说了，开鳖!",
         "rate": 50,
+        "rank": "天阶下品",
+        "level": "29"
+    },
+    "8706": {
+        "name": "雷影破空拳",
+        "skill_type": 5,
+        "atkvalue": 0.7,
+        "atkvalue2": 6,
+        "hpcost": 0.1,
+        "mpcost": 0.4,
+        "turncost": 1,
+        "desc": "凝聚雷影之力，双拳爆发出破空之势！",
+        "rate": 100,
         "rank": "天阶下品",
         "level": "29"
     },
@@ -692,6 +809,19 @@
         "rank": "天阶上品",
         "level": "26"
     },
+    "8806": {
+        "name": "炎波碎星掌",
+        "skill_type": 5,
+        "atkvalue": 0.4,
+        "atkvalue2": 7,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "双掌汇聚炎波之力，爆发碎星光芒，对大范围敌人进行攻击！",
+        "rate": 100,
+        "rank": "天阶上品",
+        "level": "26"
+    },
     "8904": {
         "name": "大吞焰术",
         "skill_type": 3,
@@ -735,6 +865,19 @@
         "rank": "仙阶下品",
         "level": "26"
     },
+    "8807": {
+        "name": "玄光破影针",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 7,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "召唤玄光之力，凝聚成破影神针，随机射向敌人！",
+        "rate": 100,
+        "rank": "仙阶下品",
+        "level": "26"
+    },
     "8912": {
         "name": "封神剑",
         "skill_type": 4,
@@ -769,6 +912,19 @@
         "mpcost": 0.8,
         "turncost": 4,
         "desc": "桀桀桀桀桀桀桀桀桀桀桀桀桀桀",
+        "rate": 100,
+        "rank": "仙阶上品",
+        "level": "16"
+    },
+    "8808": {
+        "name": "灵风碎空刃",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 7.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "凝聚灵风之力，形成碎空利刃，对敌人造成巨大伤害！",
         "rate": 100,
         "rank": "仙阶上品",
         "level": "16"
@@ -888,6 +1044,19 @@
             "limit": 1
         }
     },
+    "8809": {
+        "name": "混沌星陨劫",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 10,
+        "hpcost": 0.1,
+        "mpcost": 0.5,
+        "turncost": 2,
+        "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "-5"
+    },
     "8924": {
         "name": "自爆",
         "skill_type": 1,
@@ -954,6 +1123,32 @@
             "need_stone": "0",
             "limit": 1
         }
+    },
+    "8926": {
+        "name": "炎狱焚天掌",
+        "skill_type": 5,
+        "atkvalue": 0.1,
+        "atkvalue2": 20,
+        "hpcost": 0.1,
+        "mpcost": 0.8,
+        "turncost": 1,
+        "desc": "双掌汇聚炽热火焰，对大范围敌人造成毁灭性打击！",
+        "rate": 100,
+        "rank": "无上神通",
+        "level": "-5"
+    },
+    "8927": {
+        "name": "混沌破穹拳",
+        "skill_type": 6,
+        "atkvalue": 8,
+        "atkvalue2": 30,
+        "hpcost": 0.1,
+        "mpcost": 0.8,
+        "turncost": 4,
+        "desc": "凝聚混沌之力，蕴含破碎苍穹的恐怖力量，对敌人造成重创！",
+        "rate": 100,
+        "rank": "无上神通",
+        "level": "-5"
     },
     "15600": {
         "name": "紫玄掌",
