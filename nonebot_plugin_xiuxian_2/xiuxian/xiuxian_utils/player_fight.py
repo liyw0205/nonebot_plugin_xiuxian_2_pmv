@@ -1321,6 +1321,23 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
                             sh += user1_skill_sh
 
+                        elif user1skill_type == 6:  # 叠加类技能
+                            isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date,
+                                                                 boss_buff, random_buff)  # 判定是否暴击 辅修功法14
+                            if isCrit:
+                                msg1 = "{}发起会心一击，造成了{}伤害\n"
+                            else:
+                                msg1 = "{}发起攻击，造成了{}伤害\n"
+                            player1 = calculate_skill_cost(player1, user1hpconst, user1mpcost)
+                            play_list.append(get_msg_dict(player1, player_init_hp, skillmsg))
+                            player1_atk_msg = msg1.format(player1['道号'], player1_sh)
+                            play_list.append(get_msg_dict(player1, player_init_hp, player1_atk_msg))
+                            boss['气血'] = boss['气血'] - int(
+                                player1_sh * (boss_js + user1_break))  # 玩家1的伤害 * 玩家2的减伤
+                            boss_hp_msg = f"{boss['name']}剩余血量{int(round(boss['气血']))}"
+                            play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
+                            sh += player1_sh
+                                
                     else:  # 没放技能，打一拳
                         isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date,
                                                          boss_buff, random_buff)  # 判定是否暴击 辅修功法14
@@ -1412,6 +1429,25 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                         if player1_turn_cost == 0:  # 封印时间到
                             boss_turn_skip = True
                             bossbuffturn = True
+                            
+                    elif user1skill_type == 6:  # 叠加类技能
+                        isCrit, player1_sh = get_turnatk(player1, user1_skill_sh, user1_battle_buff_date,
+                                                             boss_buff, random_buff)  # 判定是否暴击 辅修功法14
+
+                        if isCrit:
+                            msg1 = "{}发起会心一击，造成了{}伤害\n"
+                        else:
+                            msg1 = "{}发起攻击，造成了{}伤害\n"
+                        player1_turn_cost = player1_turn_cost - 1
+                        player1_sh = player1_sh * (user1_skill_date['turncost'] - player1_turn_cost)
+                        play_list.append(get_msg_dict(player1, player_init_hp,
+                                                          f"{user1_skill_date['name']}叠伤剩余:{player1_turn_cost}回合"))
+                        player1_atk_msg = msg1.format(player1['道号'], player1_sh)
+                        play_list.append(get_msg_dict(player1, player_init_hp, player1_atk_msg))
+                        boss['气血'] = boss['气血'] - int(player1_sh * (boss_js + user1_break))  # 玩家1的伤害 * 玩家2的减伤
+                        boss_hp_msg = f"{boss['name']}剩余血量{int(round(boss['气血']))}"
+                        play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
+                        sh += player1_sh
 
             else:  # 休息回合-1
                 play_list.append(get_msg_dict(player1, player_init_hp, f"☆------{player1['道号']}动弹不得！------☆"))
@@ -1782,7 +1818,14 @@ def get_skill_sh_data(player, secbuffdata):
 
         return skillmsg, skillsh, turncost
 
+    elif secbuffdata['skill_type'] == 6:  # 叠加类型技能
+        turncost = secbuffdata['turncost']
+        skillsh = secbuffdata['buffvalue']
+        skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，消耗气血{int(secbuffdata['hpcost'] * player['气血']) if secbuffdata['hpcost'] != 0 else 0}点、真元{int(secbuffdata['mpcost'] * player['exp']) if secbuffdata['mpcost'] != 0 else 0}点，{secbuffdata['desc']}攻击力叠加{skillsh}倍，持续{turncost}回合！"
 
+        return skillmsg, skillsh, turncost
+        
+        
 # 处理开局的辅修功法效果
 def apply_buff(user_battle_buff, subbuffdata, player_sub_open, is_opponent=False):
     if not player_sub_open:

@@ -79,6 +79,19 @@
         "rank": "人阶下品",
         "level": "55"
     },
+    "8007": {
+        "name": "破风碎空刃",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "风刃呼啸，层层碎空，切割万物，风刃之力逐步增强，撕裂敌人防御！",
+        "rate": 100,
+        "rank": "人阶下品",
+        "level": "55"
+    },
     "8101": {
         "name": "化尘剑法",
         "skill_type": 1,
@@ -155,6 +168,19 @@
         "mpcost": 0.3,
         "turncost": 1,
         "desc": "召唤石块之力，凝聚成碎石击，随机攻击敌人！",
+        "rate": 100,
+        "rank": "人阶上品",
+        "level": "50"
+    },
+    "8107": {
+        "name": "炎波灼烧术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.1,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "炎波荡漾，火焰层层叠加，炙烤敌人体魄，伤痛逐步加剧，敌人难以抵挡！",
         "rate": 100,
         "rank": "人阶上品",
         "level": "50"
@@ -239,6 +265,19 @@
         "rank": "黄阶下品",
         "level": "47"
     },
+    "8207": {
+        "name": "破石裂地拳",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.2,
+        "hpcost": 0.1,
+        "mpcost": 0.4,
+        "turncost": 2,
+        "desc": "拳锋如石，层层裂地，打击敌人，力量逐步增强，虽威力有限，却能稳扎稳打！",
+        "rate": 100,
+        "rank": "黄阶下品",
+        "level": "47"
+    },
     "8301": {
         "name": "五毒摄魂阵",
         "skill_type": 1,
@@ -315,6 +354,19 @@
         "mpcost": 0.3,
         "turncost": 1,
         "desc": "召唤石块之力，凝聚成碎石击，随机攻击敌人！",
+        "rate": 100,
+        "rank": "黄阶上品",
+        "level": "44"
+    },
+    "8307": {
+        "name": "烈焰焚心拳",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.2,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "烈焰升腾，拳锋所至，火焰层层叠加，炙烤敌人体魄，伤痛逐步加剧！",
         "rate": 100,
         "rank": "黄阶上品",
         "level": "44"
@@ -399,6 +451,19 @@
         "rank": "玄阶下品",
         "level": "41"
     },
+    "8407": {
+        "name": "暗影噬魂术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.3,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "暗影之力层层叠加，侵蚀敌人灵魂，黑暗吞噬光明，伤痛逐步加深！",
+        "rate": 100,
+        "rank": "玄阶下品",
+        "level": "41"
+    },
     "8501": {
         "name": "苍云荫月",
         "skill_type": 1,
@@ -475,6 +540,19 @@
         "mpcost": 0.4,
         "turncost": 1,
         "desc": "召唤幽影之力，形成缠魂索，随机缠绕敌人！",
+        "rate": 100,
+        "rank": "玄阶上品",
+        "level": "38"
+    },
+    "8507": {
+        "name": "雷电链锁击",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.4,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "雷电如链，层层缠绕，每一击都引发连锁反应，电光炸裂，敌人无处可逃！",
         "rate": 100,
         "rank": "玄阶上品",
         "level": "38"
@@ -559,6 +637,19 @@
         "rank": "地阶下品",
         "level": "35"
     },
+    "8607": {
+        "name": "毒雾蚀骨术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 2,
+        "desc": "毒雾弥漫，侵蚀敌人体魄，毒素层层叠加，伤痛逐步加剧，最终化为脓血！",
+        "rate": 100,
+        "rank": "地阶下品",
+        "level": "35"
+    },
     "8701": {
         "name": "怒水天殇",
         "skill_type": 1,
@@ -639,6 +730,19 @@
         "rank": "地阶上品",
         "level": "32"
     },
+    "8707": {
+        "name": "风刃连环斩",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "风刃呼啸，层层连环，切割万物，风刃之力不断叠加，撕裂敌人防御！",
+        "rate": 100,
+        "rank": "地阶上品",
+        "level": "32"
+    },
     "8801": {
         "name": "天星若雨",
         "skill_type": 1,
@@ -715,6 +819,19 @@
         "mpcost": 0.4,
         "turncost": 1,
         "desc": "凝聚雷影之力，双拳爆发出破空之势！",
+        "rate": 100,
+        "rank": "天阶下品",
+        "level": "29"
+    },
+    "8810": {
+        "name": "玄冰封天术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.1,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "玄冰之力层层叠加，冻结万物，寒气入骨，伤痛逐步加深，敌人体魄逐渐被冰封！",
         "rate": 100,
         "rank": "天阶下品",
         "level": "29"
@@ -822,6 +939,19 @@
         "rank": "天阶上品",
         "level": "26"
     },
+    "8811": {
+        "name": "雷鸣万重击",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.2,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "雷鸣震天，电光层层叠加，每一击都引发连锁反应，摧毁敌人防线！",
+        "rate": 100,
+        "rank": "天阶上品",
+        "level": "26"
+    },
     "8904": {
         "name": "大吞焰术",
         "skill_type": 3,
@@ -878,6 +1008,19 @@
         "rank": "仙阶下品",
         "level": "26"
     },
+    "8812": {
+        "name": "赤焰焚天术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.3,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "赤焰升腾，火焰之力层层叠加，焚烧万物，炙烤敌人体魄，伤痛不断加剧！",
+        "rate": 100,
+        "rank": "仙阶下品",
+        "level": "26"
+    },
     "8912": {
         "name": "封神剑",
         "skill_type": 4,
@@ -928,6 +1071,19 @@
         "rate": 100,
         "rank": "仙阶上品",
         "level": "16"
+    },
+    "8813": {
+        "name": "星河陨灭拳",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.4,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "拳锋引动星河之力，星辰陨落，层层递进，摧毁一切，粉碎虚空！",
+        "rate": 100,
+        "rank": "仙阶上品",
+        "level": "26"
     },
     "8920": {
         "name": "万剑归宗",
@@ -1057,6 +1213,19 @@
         "rank": "仙阶极品",
         "level": "-5"
     },
+    "8814": {
+        "name": "九幽炼狱火",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 3,
+        "desc": "九幽炼狱之火，层层燃烧，吞噬万物，火焰之力不断攀升，毁灭一切生机！",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
     "8924": {
         "name": "自爆",
         "skill_type": 1,
@@ -1075,7 +1244,7 @@
         "mpcost": 2,
         "turncost": 20,
         "desc": "以生命为代价，释放出毁灭性的自爆，敌人将遭受重创！",
-        "rate": 15,
+        "rate": 10,
         "rank": "仙阶极品",
         "level": "-5",
         "fusion": {
@@ -1108,7 +1277,7 @@
         "mpcost": 2,
         "turncost": 20,
         "desc": "凝聚毕生修为，引爆灵魂深处最神秘的归墟之力，形成毁灭性爆炸！",
-        "rate": 10,
+        "rate": 5,
         "rank": "无上神通",
         "level": "-5",
         "fusion": {
@@ -1127,10 +1296,10 @@
     "8926": {
         "name": "炎狱焚天掌",
         "skill_type": 5,
-        "atkvalue": 0.1,
+        "atkvalue": 0.5,
         "atkvalue2": 15,
         "hpcost": 0.1,
-        "mpcost": 0.8,
+        "mpcost": 0.5,
         "turncost": 1,
         "desc": "双掌汇聚炽热火焰，对大范围敌人造成毁灭性打击！",
         "rate": 100,
@@ -1140,8 +1309,8 @@
     "8927": {
         "name": "混沌破穹拳",
         "skill_type": 6,
-        "atkvalue": 5,
-        "atkvalue2": 15,
+        "bufftype": 1,
+        "buffvalue": 1.8,
         "hpcost": 0.1,
         "mpcost": 0.8,
         "turncost": 4,
@@ -1260,6 +1429,65 @@
         "turncost": 0,
         "desc": "星宿劫！万星破灭！！",
         "rate": 90,
+        "rank": "无上神通",
+        "level": "-5"
+    },
+    "8933": {
+        "name": "冥河鬼镰·千慄葬世",
+        "skill_type": 1,
+        "atkvalue": [
+            1.5,
+            2.5,
+            1.2,
+            1.6,
+            2.3,
+            4.9,
+            1.5
+        ],
+        "hpcost": 0.03,
+        "mpcost": 0.8,
+        "turncost": 1,
+        "desc": "冥河之水化作鬼镰，千慄葬世，收割万物生机！鬼镰划破天际，冥气弥漫，敌人灵魂被生生撕裂，坠入无尽深渊！此乃鬼噬之终章，天地同寂！",
+        "rate": 100,
+        "rank": "无上神通",
+        "level": "-5"
+    },
+    "8934": {
+        "name": "血影碎空·胧剑劫",
+        "skill_type": 1,
+        "atkvalue": [
+            12.5
+        ],
+        "hpcost": 0.15,
+        "mpcost": 0.85,
+        "turncost": 0,
+        "desc": "血影碎空，胧剑出鞘，剑气化血雾，弥漫战场！敌人陷入血胧之中，剑气纵横，劫难降临，万物皆灭！",
+        "rate": 80,
+        "rank": "无上神通",
+        "level": "-5"
+    },
+    "8935": {
+        "name": "剑御九天·万剑归墟",
+        "skill_type": 3,
+        "bufftype": 1,
+        "buffvalue": 5.55,
+        "hpcost": 0,
+        "mpcost": 1.50,
+        "turncost": 4,
+        "desc": "剑御九天，万剑归墟，剑气化九天，剑网笼罩天地！敌人被剑气撕裂，万物归于虚无，此乃剑道极致！",
+        "rate": 99,
+        "rank": "无上神通",
+        "level": "-5"
+    },
+    "8936": {
+        "name": "华光·万影噬空",
+        "skill_type": 2,
+        "atkvalue": 5.9,
+        "hpcost": 0.15,
+        "mpcost": 0.6,
+        "turncost": 4,
+        "desc": "刹诀！华光·万影噬空！华光化万影，噬空夺命！敌人被无尽的光影吞噬，灵魂化为灰烬，天地皆为空影，唯我独尊！",
+        "rate": 100,
         "rank": "无上神通",
         "level": "-5"
     }
