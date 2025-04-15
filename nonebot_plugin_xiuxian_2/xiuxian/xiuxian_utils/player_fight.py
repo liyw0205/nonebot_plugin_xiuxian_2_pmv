@@ -1312,7 +1312,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         player2_health_temp = boss['气血']
         if player1_skil_open:  # 是否开启技能
             if user1_turn_skip:  # 无需跳过回合
-                turn_start_msg = f"☆------{player1['道号']}的{player1_f_js}回合------☆"
+                turn_start_msg = f"☆------{player1['道号']}的回合------☆"
                 play_list.append(get_msg_dict(player1, player_init_hp, turn_start_msg))
                 user1hpconst, user1mpcost, user1skill_type, skillrate = get_skill_hp_mp_data(player1, user1_skill_date)
                 if player1_turn_cost == 0:  # 没有持续性技能生效
@@ -1984,7 +1984,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         msg = "回复真元:" + str(restore_mana)
     elif buff_type == '6':
         health_stolen = (damage1 * (buff_value + random_buff.random_xx) // 100) * (1 - boss_buff.boss_xx) // 10
-        health_stolen = max(health_stolen, 0)
+        health_stolen = int(round(max(health_stolen, 0)))
         player1['气血'] += health_stolen
         player1['气血'] = min(player1['气血'], player1['max_hp'])
         msg = None
@@ -1992,7 +1992,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             msg = "吸取气血:" + str(health_stolen) + "血量"
     elif buff_type == '7':
         mana_stolen = (damage1 * buff_value // 100) * (1 - boss_buff.boss_xl) // 10
-        mana_stolen = max(mana_stolen, 0)
+        mana_stolen = int(round(max(mana_stolen, 0)))
         player1['真元'] += mana_stolen
         player1['真元'] = min(player1['真元'], player1['max_mp'])
         msg = None
@@ -2000,7 +2000,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             msg = "吸取真元:" + str(mana_stolen)
     elif buff_type == '8':
         poison_damage = player2['气血'] // 100 * buff_value
-        poison_damage = max(poison_damage, 0)
+        poison_damage = int(round(max(poison_damage, 0)))
         player2['气血'] -= poison_damage
         player2['气血'] = max(player2['气血'], 0)
         msg = None
@@ -2008,9 +2008,9 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             msg = "对手中毒消耗血量:" + str(poison_damage)
     elif buff_type == '9':
         health_stolen = (damage1 * (buff_value + random_buff.random_xx) // 100) * (1 - boss_buff.boss_xx) // 10
-        health_stolen = max(health_stolen, 0)
+        health_stolen = int(round(max(health_stolen, 0)))
         mana_stolen = (damage1 * buff_tow // 100) * (1 - boss_buff.boss_xl) // 10
-        mana_stolen = max(mana_stolen, 0)
+        mana_stolen = int(round(max(mana_stolen, 0)))
         player1['气血'] += health_stolen
         player1['气血'] = min(player1['气血'], player1['max_hp'])
         player1['真元'] += mana_stolen
