@@ -101,9 +101,9 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
     player1_turn_cost = 0  # 先设定为初始值 0
     player2_turn_cost = 0
     player1_f_js = get_user_def_buff(player1['user_id'])  # 玩家1减伤
-    player1_f_js = max(player1_f_js, 0)
+    player1_f_js = max(player1_f_js, 0.1)
     player2_f_js = get_user_def_buff(player2['user_id'])  # 玩家2减伤
-    player2_f_js = max(player2_f_js, 0)
+    player2_f_js = max(player2_f_js, 0.1)
     player1_js = player1_f_js
     player2_js = player2_f_js
     user1_skill_sh = 0
@@ -811,7 +811,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     boss_turn_skip = True
     player1_turn_cost = 0  # 先设定为初始值 0
     player1_f_js = get_user_def_buff(player1['user_id'])
-    player1_f_js = max(player1_f_js, 0)
+    player1_f_js = max(player1_f_js, 0.1)
     player1_js = player1_f_js  # 减伤率
     boss_buff = BossBuff()
     
@@ -1180,6 +1180,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     qx = boss['气血']
     boss_now_stone = boss.get('stone', 0)
     boss_js = boss['减伤']
+    if player1_f_js > 1:
+        boss_cj = 0
 
     if boss_js <= 0.6 and boss['name'] in BOSSDEF:
         effect_name = BOSSDEF[boss['name']]
@@ -1310,7 +1312,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         player2_health_temp = boss['气血']
         if player1_skil_open:  # 是否开启技能
             if user1_turn_skip:  # 无需跳过回合
-                turn_start_msg = f"☆------{player1['道号']}的回合------☆"
+                turn_start_msg = f"☆------{player1['道号']}的{player1_f_js}回合------☆"
                 play_list.append(get_msg_dict(player1, player_init_hp, turn_start_msg))
                 user1hpconst, user1mpcost, user1skill_type, skillrate = get_skill_hp_mp_data(player1, user1_skill_date)
                 if player1_turn_cost == 0:  # 没有持续性技能生效
