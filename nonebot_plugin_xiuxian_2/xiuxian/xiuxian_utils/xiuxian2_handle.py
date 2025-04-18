@@ -1111,6 +1111,14 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, (user_id,))
         self.conn.commit()
 
+    def update_user_hppractice(self, user_id, hppractice):
+        """更新用户攻击修炼等级"""
+        sql = f"UPDATE user_xiuxian SET hppractice={hppractice} WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (user_id,))
+        self.conn.commit()
+        
+        
     def update_user_sect_task(self, user_id, sect_task):
         """更新用户宗门任务次数"""
         sql = f"UPDATE user_xiuxian SET sect_task=sect_task+? WHERE user_id=?"
@@ -1652,7 +1660,7 @@ def final_user_data(user_data, columns):
     main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
     
     # 改成字段名称来获取相应的值
-    user_dict['hp'] = int(user_dict['hp'] * (1 + main_hp_buff + impart_hp_per))
+    user_dict['hp'] = int(user_dict['hp'] * (user_dict['hppractice'] * 0.1 + 1) * (1 + main_hp_buff + impart_hp_per))
     user_dict['mp'] = int(user_dict['mp'] * (1 + main_mp_buff + impart_mp_per))
     user_dict['atk'] = int((user_dict['atk'] * (user_dict['atkpractice'] * 0.04 + 1) * (1 + main_atk_buff) * (
             1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])

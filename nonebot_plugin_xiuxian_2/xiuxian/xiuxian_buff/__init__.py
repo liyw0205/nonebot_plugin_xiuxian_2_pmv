@@ -784,11 +784,12 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     msg = f"""
 道号：{user_msg['user_name']}
-气血:{number_to(user_msg['hp'])}/{number_to(int((user_msg['exp'] / 2) * (1 + main_hp_buff + impart_hp_per)))}({((user_msg['hp'] / ((user_msg['exp'] / 2) * (1 + main_hp_buff + impart_hp_per)))) * 100:.2f}%)
+气血:{number_to(user_msg['hp'])}/{number_to(int((user_msg['exp'] / 2) * (user_msg['hppractice'] * 0.1 + 1) * (1 + main_hp_buff + impart_hp_per)))}({((user_msg['hp'] / ((user_msg['exp'] / 2) * (user_msg['hppractice'] * 0.1 + 1) * (1 + main_hp_buff + impart_hp_per)))) * 100:.2f}%)
 真元:{number_to(user_msg['mp'])}/{number_to(user_msg['exp'])}({((user_msg['mp'] / user_msg['exp']) * 100):.2f}%)
 攻击:{number_to(user_msg['atk'])}
 突破状态: {exp_meg}(概率：{jsondata.level_rate_data()[user_msg['level']] + leveluprate + number}%)
 攻击修炼:{user_msg['atkpractice']}级(提升攻击力{user_msg['atkpractice'] * 4}%)
+元血修炼:{user_msg['hppractice']}级(提升气血{user_msg['hppractice'] * 10}%)
 修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
 会心:{crit_buff + int(impart_know_per * 100) + armor_crit_buff + main_crit_buff}%
 减伤率:{user_js}%

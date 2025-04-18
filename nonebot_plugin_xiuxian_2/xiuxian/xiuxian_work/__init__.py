@@ -31,7 +31,7 @@ count = 5  # 免费次数
 
 
 # 重置悬赏令刷新次数
-@resetrefreshnum.scheduled_job("cron", hour=0, minute=0)
+@resetrefreshnum.scheduled_job("cron", hour=8, minute=0)
 async def resetrefreshnum_():
     sql_message.reset_work_num()
     logger.opt(colors=True).info(f"<green>用户悬赏令刷新次数重置成功</green>")

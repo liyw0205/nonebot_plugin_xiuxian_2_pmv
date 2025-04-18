@@ -103,7 +103,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         "战力": f"{number_to(int(user_info['exp'] * level_rate * realm_rate))}",
         "灵根": f"{user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)",
         "突破状态": f"{exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%",
-        "攻击力": f"{number_to(user_info['atk'])}，攻修等级{user_info['atkpractice']}级",
+        "攻击力": f"{number_to(user_info['atk'])}，攻修等级{user_info['atkpractice']}级，元血等级{user_info['hppractice']}级",
         "所在宗门": sectmsg,
         "宗门职位": sectzw,
         "主修功法": main_buff_name,
@@ -134,6 +134,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 突破状态: {exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%
 攻击力: {number_to(user_info['atk'])}
 攻修等级: {user_info['atkpractice']}级
+元血等级: {user_info['hppractice']}级
 所在宗门: {sectmsg}
 宗门职位: {sectzw}
 主修功法: {main_buff_name}

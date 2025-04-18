@@ -52,6 +52,7 @@ materialsupdate = require("nonebot_plugin_apscheduler").scheduler
 resetusertask = require("nonebot_plugin_apscheduler").scheduler
 auto_sect_owner_change = require("nonebot_plugin_apscheduler").scheduler
 upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
+uphppractice = on_command("升级元血修炼", priority=5, block=True)
 my_sect = on_command("我的宗门", aliases={"宗门信息"}, priority=5, block=True)
 create_sect = on_command("创建宗门", priority=5, block=True)
 join_sect = on_command("加入宗门", priority=5, block=True)
@@ -80,12 +81,12 @@ __sect_help__ = f"""
 2、创建宗门:创建宗门，需求：{XiuConfig().sect_create_cost}灵石，需求境界{XiuConfig().sect_min_level}
 3、加入宗门:加入一个宗门,需要带上宗门id
 4、宗门职位变更:宗主可以改变宗门成员的职位等级【0 1 2 3 4】分别对应【宗主 长老 亲传 内门 外门】(外门弟子无法获得宗门修炼资源)
-5、宗门捐献:建设宗门，提高宗门建设度，每{config["等级建设度"]}建设度会提高1级攻击修炼等级上限
+5、宗门捐献:建设宗门，提高宗门建设度，每{config["等级建设度"]}建设度会提高1级攻击/元血修炼等级上限
 6、宗门改名:宗主可以改变宗门名称
 7、退出宗门:退出当前宗门
 8、踢出宗门:踢出对应宗门成员,需要输入正确的qq号或at对方
 9、宗主传位:宗主可以传位宗门成员
-10、升级攻击修炼:升级道友的攻击修炼等级,每级修炼等级提升4%攻击力,后可以接升级等级
+10、升级攻击/元血修炼:升级道友的攻击/元血修炼等级,每级修炼等级提升4%攻击力/气血,后可以接升级等级
 11、宗门列表:查看所有宗门列表
 12、宗门任务接取、我的宗门任务:接取宗门任务，可以增加宗门建设度和资材，每日上限：{config["每日宗门任务次上限"]}次
 13、宗门任务完成:完成所接取的宗门任务，完成间隔时间：{config["宗门任务完成cd"]}秒
@@ -112,8 +113,8 @@ async def materialsupdate_():
     logger.opt(colors=True).info(f"<green>已更新所有宗门的资材</green>")
 
 
-# 每日0点重置用户宗门任务次数、宗门丹药领取次数
-@resetusertask.scheduled_job("cron", hour=0, minute=0)
+# 每日8点重置用户宗门任务次数、宗门丹药领取次数
+@resetusertask.scheduled_job("cron", hour=8, minute=0)
 async def resetusertask_():
     sql_message.sect_task_reset()
     sql_message.sect_elixir_get_num_reset()
@@ -708,7 +709,73 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await upatkpractice.finish()
 
+@uphppractice.handle(parameterless=[Cooldown(at_sender=False, cd_time=10)])
+async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """升级元血修炼"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await uphppractice.finish()
+    user_id = user_info['user_id']
+    sect_id = user_info['sect_id']
+    level_up_count = 1
+    config_max_level = max(int(key) for key in LEVLECOST.keys())
+    raw_args = args.extract_plain_text().strip()
+    try:
+        level_up_count = int(raw_args)
+        level_up_count = min(max(1, level_up_count), config_max_level)
+    except ValueError:
+        level_up_count = 1
+    if sect_id:
+        sect_materials = int(sql_message.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        userhppractice = int(user_info['hppractice'])  # 当前等级
+        if userhppractice == 100:
+            msg = f"道友的元血修炼等级已达到最高等级!"
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
 
+        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[
+                                                       0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限25级
+
+        sect_position = user_info['sect_position']
+        # 确保用户不会尝试升级超过宗门等级的上限
+        level_up_count = min(level_up_count, sect_level - userhppractice)
+        if sect_position == 4:
+            msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
+
+        if userhppractice >= sect_level:
+            msg = f"道友的元血修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
+
+        total_stone_cost = sum(LEVLECOST[str(userhppractice + i)] for i in range(level_up_count))
+        total_materials_cost = int(total_stone_cost * 10)
+
+        if int(user_info['stone']) < total_stone_cost:
+            msg = f"道友的灵石不够，升级到元血修炼等级 {userhppractice + level_up_count} 还需 {total_stone_cost - int(user_info['stone'])} 灵石!"
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
+
+        if sect_materials < total_materials_cost:
+            msg = f"道友的所处的宗门资材不足，还需 {total_materials_cost - sect_materials} 资材来升级到元血修炼等级 {userhppractice + level_up_count}!"
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
+
+        sql_message.update_ls(user_id, total_stone_cost, 2)
+        sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
+        sql_message.update_user_hppractice(user_id, userhppractice + level_up_count)
+        msg = f"升级成功，道友当前元血修炼等级：{userhppractice + level_up_count}，消耗灵石：{total_stone_cost}枚，消耗宗门资材{total_materials_cost}!"
+        await handle_send(bot, event, msg)
+        await uphppractice.finish()
+    else:
+        msg = f"修炼逆天而行消耗巨大，请加入宗门再进行修炼！"
+        await handle_send(bot, event, msg)
+        await uphppractice.finish()
+        
+        
 @sect_task_refresh.handle(parameterless=[Cooldown(cd_time=config['宗门任务刷新cd'], at_sender=False)])
 async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """刷新宗门任务"""
