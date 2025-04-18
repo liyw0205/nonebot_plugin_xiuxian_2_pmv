@@ -2217,7 +2217,7 @@ def get_sub_info_msg(id): #辅修功法8
     jin_msg = "禁止对手吸取" if subbuff['jin'] != 0 else ''
     drop_msg = "，提升boss掉落率" if subbuff['drop'] != 0 else ''
     fan_msg = "使对手发出的debuff失效" if subbuff['fan'] != 0 else ''
-    break_msg = "获得战斗破甲" if subbuff['break'] != 0 else ''
+    break_msg = "获得{}%穿甲".format(round(subbuff['break'] * 100, 0)) if subbuff['break'] != 0 else ''
     exp_msg = "，增加战斗获得的修为" if subbuff['exp'] != 0 else ''
     
 

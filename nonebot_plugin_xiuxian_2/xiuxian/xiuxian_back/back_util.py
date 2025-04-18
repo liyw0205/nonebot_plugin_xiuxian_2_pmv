@@ -302,9 +302,11 @@ def get_equipment_msg(l_msg, user_id, goods_id, goods_num, bind_num):
     item_info = items.get_data_by_item_id(goods_id)
     msg = ""
     if item_info['item_type'] == '防具':
-        msg = get_armor_info_msg(goods_id, item_info)
+    #    msg = get_armor_info_msg(goods_id, item_info)
+        msg = f"{item_info['level']}防具-{item_info['name']}:"
     elif item_info['item_type'] == '法器':
-        msg = get_weapon_info_msg(goods_id, item_info)
+    #    msg = get_weapon_info_msg(goods_id, item_info)
+        msg = f"{item_info['level']}法器-{item_info['name']}:"
     msg += f"\n拥有数量:{goods_num}，绑定数量:{bind_num}"
     is_use = check_equipment_use_msg(user_id, goods_id)
     if is_use:
@@ -323,13 +325,15 @@ def get_skill_msg(l_msg, goods_id, goods_num, bind_num):
     msg = ""
     if item_info['item_type'] == '神通':
         msg = f"{item_info['level']}神通-{item_info['name']}:"
-        msg += get_sec_msg(item_info)
+    #    msg += get_sec_msg(item_info)
     elif item_info['item_type'] == '功法':
         msg = f"{item_info['level']}功法-"
-        msg += get_main_info_msg(goods_id)[1]
+    #    msg += get_main_info_msg(goods_id)[1]
+        msg += f"{item_info['name']}"
     elif item_info['item_type'] == '辅修功法':#辅修功法12
         msg = f"{item_info['level']}辅修功法-"
-        msg += get_sub_info_msg(goods_id)[1]
+    #    msg += get_sub_info_msg(goods_id)[1]
+        msg += f"{item_info['name']}"
     msg += f"\n拥有数量:{goods_num}，绑定数量:{bind_num}"
     l_msg.append(msg)
     return l_msg
@@ -383,6 +387,7 @@ def get_item_msg(goods_id):
     获取单个物品的消息
     """
     item_info = items.get_data_by_item_id(goods_id)
+    msg = ''
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
@@ -390,17 +395,14 @@ def get_item_msg(goods_id):
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
     elif item_info['item_type'] == '神通':
-        msg = f"名字：{item_info['name']}\n"
-        msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}"
+        msg += f"名字：{get_sec_msg(item_info)}\n{item_info['desc']}\n"
+        msg += f"品阶：{item_info['level']}"
     elif item_info['item_type'] == '功法':
-        msg = f"名字：{item_info['name']}\n"
-        msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_main_info_msg(goods_id)[1]}"
+        msg += f"名字：{get_main_info_msg(goods_id)[1]}\n"
+        msg += f"品阶：{item_info['level']}"
     elif item_info['item_type'] == '辅修功法':  # 辅修功法
-        msg = f"名字：{item_info['name']}\n"
-        msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sub_info_msg(goods_id)[1]}"
+        msg += f"名字：{get_sub_info_msg(goods_id)[1]}\n"
+        msg += f"品阶：{item_info['level']}"
     elif item_info['item_type'] == '防具':
         msg = get_armor_info_msg(goods_id, item_info)
     elif item_info['item_type'] == '法器':

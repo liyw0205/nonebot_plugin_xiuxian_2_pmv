@@ -350,7 +350,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if goods_id == 15053 or input_str == "补偿":
         await check_item_effect.finish()
     # 构造返回消息
-    msg = f"物品ID：{goods_id}\n{item_msg}"
+    msg = f"ID：{goods_id}\n{item_msg}"
     await handle_send(bot, event, msg)
     await check_item_effect.finish()
     
@@ -2156,7 +2156,7 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                         goods_id = k
                         break                
                 desc = get_item_msg(goods_id)
-                msg = f"物品ID：{goods_id}\n{desc}"
+                msg = f"ID：{goods_id}\n{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2169,7 +2169,7 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                         goods_id = k
                         break                
                 desc = get_item_msg(goods_id)
-                msg = f"物品ID：{goods_id}\n{desc}"
+                msg = f"ID：{goods_id}\n{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2182,7 +2182,7 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                         goods_id = k
                         break                
                 desc = get_item_msg(goods_id)
-                msg = f"物品ID：{goods_id}\n{desc}"
+                msg = f"ID：{goods_id}\n{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2215,7 +2215,7 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                         goods_id = k
                         break                
                 desc = get_item_msg(goods_id)
-                msg = f"物品ID：{goods_id}\n{desc}"
+                msg = f"ID：{goods_id}\n{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})
@@ -2228,7 +2228,7 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                         goods_id = k
                         break                
                 desc = get_item_msg(goods_id)
-                msg = f"物品ID：{goods_id}\n{desc}"
+                msg = f"ID：{goods_id}\n{desc}"
                 list_tp.append(
                     {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
                                                 "content": msg}})

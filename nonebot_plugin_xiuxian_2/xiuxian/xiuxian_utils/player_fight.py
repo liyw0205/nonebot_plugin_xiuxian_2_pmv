@@ -1916,12 +1916,16 @@ def apply_buff(user_battle_buff, subbuffdata, player_sub_open, is_opponent=False
         '11': ('fan_buff', "抵消效果"),
         '12': ('stone_buff', "聚宝效果"),
         '13': ('break_buff', "斗战效果"),
+        '14': ('break_buff', "穿甲效果"),
     }
 
     attr, desc = buff_type_to_attr[subbuffdata['buff_type']]
+    break_buff_desc = int(round(subbuffdata['break'] * 100))
     setattr(user_battle_buff, attr, subbuffdata['buff'])
     if int(subbuffdata['buff_type']) >= 0 and int(subbuffdata['buff_type']) <= 10:
         sub_msg = f"提升{subbuffdata['buff']}%{desc}"
+    elif int(subbuffdata['buff_type']) >= 14:
+        sub_msg = f"提升{break_buff_desc}%{desc}"
     else:
         sub_msg = "获得了特殊效果！！"
     prefix = "。对手" if is_opponent else ""
