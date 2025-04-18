@@ -35,7 +35,7 @@ from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
 items = Items()
 from ..xiuxian_utils.utils import (
-    number_to, check_user,
+    number_to, check_user, check_user_type,
     get_msg_pic, CommandObjectID,
     pic_msg_format, send_msg_handler, handle_send
 )
@@ -311,6 +311,11 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     user_id = user_info['user_id']
+    is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await battle.finish()
+    
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
     msg = args.extract_plain_text().strip()
     group_id = "000000"

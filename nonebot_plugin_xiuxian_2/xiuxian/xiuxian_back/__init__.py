@@ -117,6 +117,7 @@ __back_help__ = f"""
 22、查看效果:查看效果 渡厄丹
 非指令：
 1、定时生成拍卖会,每天{auction_time_config['hours']}点生成一场拍卖会
+2、用户上架手续费:500w 10% 1000w 15% 2000w 20% 2000w以上 30%
 """.strip()
 
 # 重置丹药每日使用次数
@@ -554,6 +555,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await shop_added.finish()
     user_id = user_info['user_id']
+    user_stone_num = user_info['stone']
     args = args.extract_plain_text().split()
     goods_name = args[0] if len(args) > 0 else None
     price_str = args[1] if len(args) > 1 else "500000"  # 默认为500000
@@ -625,6 +627,21 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await shop_added.finish()
 
+    if price <= 5000000:
+        rate = 0.1
+    elif price <= 10000000:
+        rate = 0.15
+    elif price <= 20000000:
+        rate = 0.2
+    else:
+        rate = 0.3
+
+    give_stone_num = max(int(price * rate), 5000)
+    if int(give_stone_num) > int(user_stone_num):
+        msg = f"道友的手续费不够，请重新输入！"
+        await handle_send(bot, event, msg)
+        await shop_added.finish()
+                
     if int(goods_num) <= int(goods_bind_num):
         msg = "该物品是绑定物品，无法上架！"
         await handle_send(bot, event, msg)
@@ -663,8 +680,9 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         'stock': quantity,  # 物品数量
     }
     sql_message.update_back_j(user_id, goods_id, num = quantity)
+    sql_message.update_ls(user_id, give_stone_num, 1)
     save_shop(shop_data)
-    msg = f"物品：{goods_name}成功上架仙肆，金额：{price}枚灵石，数量{quantity}！"
+    msg = f"物品：{goods_name}成功上架仙肆，金额：{price}枚灵石，手续费：{give_stone_num}，数量{quantity}！"
     await handle_send(bot, event, msg)
     await shop_added.finish()
     
@@ -1018,6 +1036,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     user_id = user_info['user_id']
+    user_stone_num = user_info['stone']
     args = args.extract_plain_text().split()
     goods_name = args[0] if len(args) > 0 else None
     price_str = args[1] if len(args) > 1 else "500000"  # 默认为500000
@@ -1088,7 +1107,22 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         msg = f"装备：{goods_name}已经被道友装备在身，无法上架！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
+        
+    if price <= 5000000:
+        rate = 0.1
+    elif price <= 10000000:
+        rate = 0.15
+    elif price <= 20000000:
+        rate = 0.2
+    else:
+        rate = 0.3
 
+    give_stone_num = max(int(price * rate), 5000)
+    if int(give_stone_num) > int(user_stone_num):
+        msg = f"道友的手续费不够，请重新输入！"
+        await handle_send(bot, event, msg)
+        await shop_added.finish()
+    
     if int(goods_num) <= int(goods_bind_num):
         msg = "该物品是绑定物品，无法上架！"
         await handle_send(bot, event, msg)
@@ -1129,8 +1163,9 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         'stock': quantity,  # 物品数量
     }
     sql_message.update_back_j(user_id, goods_id, num = quantity)
+    sql_message.update_ls(user_id, give_stone_num, 1)
     save_shop(shop_data)
-    msg = f"物品：{goods_name}成功上架坊市，金额：{price}枚灵石，数量{quantity}！"
+    msg = f"物品：{goods_name}成功上架坊市，金额：{price}枚灵石，手续费：{give_stone_num}，数量{quantity}！"
     await handle_send(bot, event, msg)
     await shop_added.finish()
 
