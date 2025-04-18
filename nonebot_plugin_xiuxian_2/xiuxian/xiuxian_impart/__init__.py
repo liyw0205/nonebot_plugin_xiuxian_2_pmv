@@ -53,7 +53,8 @@ time_img = [
     "画屏春-邀舞",
 ]
 
-impart_draw = on_command("传承抽卡", aliases={"传承祈愿"}, priority=16, block=True)
+impart_draw = on_command("传承祈愿", priority=16, block=True)
+impart_draw2 = on_command("传承抽卡", priority=16, block=True)
 impart_back = on_command(
     "传承背包", priority=15, block=True
 )
@@ -109,7 +110,7 @@ async def impart_help_(
 
 @impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """传承抽卡"""
+    """传承祈愿"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -129,7 +130,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             times_str = msg.split()[-1]
             times = int(times_str)
         except (IndexError, ValueError):
-            await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
+            await handle_send(bot, event, "请输入有效次数（如：传承祈愿 10）")
             return
     else:
         times = 10
@@ -139,7 +140,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return    
 
     # 检查思恋结晶是否足够
-    required_crystals = times  # 每抽一次消耗1颗
+    required_crystals = times  # 每抽一次消耗10颗
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
         return
@@ -180,8 +181,9 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             current_wish += 10
 
         # 每组十连扣除10颗结晶并更新抽卡次数
-        xiuxian_impart.update_stone_num(-10, user_id, 1)  # 1表示减少
+        xiuxian_impart.update_stone_num(10, user_id, 2)
         xiuxian_impart.update_impart_wish(current_wish, user_id)
+    impart_data_draw = await impart_check(user_id)
 
     # 生成统计消息并放在图片前
     summary_msg = (
@@ -190,20 +192,108 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
         f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
         f"抽卡次数：{current_wish}/90次\n"
-        f"剩余思恋结晶：{impart_data_draw['stone_num'] - times}颗\n"
+        f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
     )
-    append_draw_card_node(bot, list_tp, summary, summary_msg)
     await update_user_impart_data(user_id, total_seclusion_time)
     await re_impart_data(user_id)
 
-    # 发送结果，只有成功后才更新数据
     try:
-        await send_msg_handler(bot, event, list_tp)
+        await handle_send(bot, event, summary_msg)
     except ActionFailed:
-        await handle_send(bot, event, "抽卡结果发送失败！")
+        await handle_send(bot, event, "祈愿结果发送失败！")
     await impart_draw.finish()
 
 
+@impart_draw2.handle(parameterless=[Cooldown(at_sender=False)])
+async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """传承抽卡"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+
+    user_id = user_info["user_id"]
+    user_stone_num = user_info['stone']
+    impart_data_draw = await impart_check(user_id)
+    if impart_data_draw is None:
+        await handle_send(bot, event, "发生未知错误！")
+        return
+
+    # 解析抽卡次数
+    msg = args.extract_plain_text().strip()
+    if msg:
+        try:
+            times_str = msg.split()[-1]
+            times = int(times_str)
+        except (IndexError, ValueError):
+            await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
+            return
+    else:
+        times = 10
+
+    if times % 10 != 0 or times < 10:
+        await handle_send(bot, event, "次数需为10的倍数且≥10")
+        return    
+
+    # 检查思恋结晶是否足够
+    required_crystals = times * 1000000 # 每抽一次消耗1000w
+    if user_stone_num < required_crystals:
+        await handle_send(bot, event, f"灵石不足，需要{required_crystals}!")
+        return
+
+    # 初始化变量
+    summary = f"道友{user_info['user_name']}的传承抽卡"
+    img_list = impart_data_json.data_all_keys()
+    if not img_list:
+        await handle_send(bot, event, "请检查卡图数据完整！")
+        return
+
+    new_cards = []
+    duplicate_cards = []
+    current_wish = impart_data_draw["wish"]  # 初始化抽卡次数
+
+    # 执行抽卡
+    for _ in range(times // 10):
+        if get_rank(user_id):
+            # 中奖情况
+            reap_img = random.choice(img_list)
+            if impart_data_json.data_person_add(user_id, reap_img):
+                # 重复卡片
+                duplicate_cards.append(reap_img)
+                xiuxian_impart.update_stone_num(10, user_id, 1)
+            else:
+                # 新卡片
+                new_cards.append(reap_img)
+                xiuxian_impart.update_stone_num(5, user_id, 1)
+            # 中奖（新卡或重复卡）后重置抽卡次数为0
+            current_wish = 0
+        else:
+            # 未中奖情况
+            random.shuffle(time_img)
+            # 未中奖时增加10次抽卡计数
+            current_wish += 10
+
+        xiuxian_impart.update_impart_wish(current_wish, user_id)
+    sql_message.update_ls(user_id, required_crystals, 2)  # 2表示减少
+    impart_data_draw = await impart_check(user_id)
+
+    # 生成统计消息并放在图片前
+    summary_msg = (
+        f"{summary}\n"
+        f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
+        f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
+        f"抽卡次数：{current_wish}/90次\n"
+        f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
+    )
+    await re_impart_data(user_id)
+
+    try:
+        await handle_send(bot, event, summary_msg)
+    except ActionFailed:
+        await handle_send(bot, event, "抽卡结果发送失败！")
+    await impart_draw2.finish()
+    
 @use_wishing_stone.handle(parameterless=[Cooldown(at_sender=False)])
 async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用祈愿石"""
@@ -258,8 +348,6 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         else:
             # 新卡片
             msg = f"新卡片：{reap_img}"
-        append_draw_card_node(bot, list_tp, summary, img)
-        append_draw_card_node(bot, list_tp, summary, msg)
         img_msg += f"\n{msg}"
         # 消耗祈愿石
         sql_message.update_back_j(user_id, wishing_stone_id)
@@ -270,8 +358,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 {img_msg}
     """
     try:
-        await send_msg_handler(bot, event, list_tp)
-        await handle_send(bot, event, final_msg)
+        await handle_send(bot, event, summary_msg)
     except ActionFailed:
         await handle_send(bot, event, "获取祈愿石结果失败！")
     await use_wishing_stone.finish()

@@ -680,9 +680,9 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         'stock': quantity,  # 物品数量
     }
     sql_message.update_back_j(user_id, goods_id, num = quantity)
-    sql_message.update_ls(user_id, give_stone_num, 1)
+    sql_message.update_ls(user_id, give_stone_num, 2)
     save_shop(shop_data)
-    msg = f"物品：{goods_name}成功上架仙肆，金额：{price}枚灵石，手续费：{give_stone_num}，数量{quantity}！"
+    msg = f"物品：{goods_name}成功上架仙肆，金额：{price}枚灵石，仙肆收取手续费：{give_stone_num}，数量{quantity}！"
     await handle_send(bot, event, msg)
     await shop_added.finish()
     
@@ -863,9 +863,9 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
                     del shop_data["000000"][str(arg)]
                 else:
                     shop_data["000000"][str(arg)] = goods_info
-                service_charge = int(goods_price * 0.1)  # 手续费10%
-                give_stone = goods_price - service_charge
-                msg = f"道友成功购买{purchase_quantity}个{shop_user_name}道友寄售的{shop_goods_name}，消耗灵石{goods_price}枚,仙肆收取手续费：{service_charge}枚灵石！"
+                
+                give_stone = goods_price
+                msg = f"道友成功购买{purchase_quantity}个{shop_user_name}道友寄售的{shop_goods_name}，消耗灵石{goods_price}枚！"
                 sql_message.update_ls(shop_user_id, give_stone, 1)
             shop_data["000000"] = reset_dict_num(shop_data["000000"])
             save_shop(shop_data)
@@ -949,7 +949,7 @@ async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg())
                     shop_data[group_id][str(arg)] = goods_info
                 service_charge = int(goods_price * 0.1)  # 手续费10%
                 give_stone = goods_price - service_charge
-                msg = f"道友成功购买{purchase_quantity}个{shop_user_name}道友寄售的{shop_goods_name}，消耗灵石{goods_price}枚,坊市收取手续费：{service_charge}枚灵石！"
+                msg = f"道友成功购买{purchase_quantity}个{shop_user_name}道友寄售的{shop_goods_name}，消耗灵石{goods_price}枚！"
                 sql_message.update_ls(shop_user_id, give_stone, 1)
             shop_data[group_id] = reset_dict_num(shop_data[group_id])
             save_shop(shop_data)
@@ -1163,9 +1163,9 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         'stock': quantity,  # 物品数量
     }
     sql_message.update_back_j(user_id, goods_id, num = quantity)
-    sql_message.update_ls(user_id, give_stone_num, 1)
+    sql_message.update_ls(user_id, give_stone_num, 2)
     save_shop(shop_data)
-    msg = f"物品：{goods_name}成功上架坊市，金额：{price}枚灵石，手续费：{give_stone_num}，数量{quantity}！"
+    msg = f"物品：{goods_name}成功上架坊市，金额：{price}枚灵石，坊市收取手续费：{give_stone_num}，数量{quantity}！"
     await handle_send(bot, event, msg)
     await shop_added.finish()
 

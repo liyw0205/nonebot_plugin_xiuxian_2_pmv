@@ -58,6 +58,7 @@ give_stone = on_command("送灵石", priority=5, permission=GROUP, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, permission=GROUP, block=True)
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
 gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, block=True)
+ccll_command = on_command("传承力量", permission=SUPERUSER, priority=10, block=True)
 cz = on_command('创造力量', permission=SUPERUSER, priority=15,block=True)
 rob_stone = on_command("抢劫", aliases={"拿来吧你"}, priority=5, permission=GROUP, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
@@ -1029,6 +1030,71 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 continue
     await gm_command.finish()
 
+# GM加灵石
+@ccll_command.handle(parameterless=[Cooldown(at_sender=False)])
+async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    give_qq = None  # 艾特的时候存到这里
+    arg_list = args.extract_plain_text().split()
+    if not args:
+        msg = f"请输入正确指令！例如：传承力量 思恋结晶数量\n：传承力量 道号 思恋结晶数量"
+        await handle_send(bot, event, msg)
+        await ccll_command.finish()
+        
+    if len(arg_list) < 2:
+        stone_num = str(arg_list[0])  # 思恋结晶数
+        nick_name = None
+    else:
+        stone_num = arg_list[1]  # 思恋结晶数
+        nick_name = arg_list[0]  # 道号
+
+    give_stone_num = stone_num
+    # 遍历Message对象，寻找艾特信息
+    for arg in args:
+        if arg.type == "at":
+            give_qq = arg.data["qq"]
+    for arg in args:
+        if arg.type == "at":
+            give_qq = arg.data.get("qq", "")
+    if give_qq:
+        give_user = sql_message.get_user_info_with_id(give_qq)
+        if give_user:
+            xiuxian_impart.update_stone_num(give_stone_num, give_qq, 1)  # 增加用户思恋结晶
+            msg = f"共赠送{number_to(int(give_stone_num))}枚思恋结晶给{give_user['user_name']}道友！"
+            await handle_send(bot, event, msg)
+            await ccll_command.finish()
+        else:
+            msg = f"对方未踏入修仙界，不可赠送！"
+            await handle_send(bot, event, msg)
+            await ccll_command.finish()
+    elif nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            xiuxian_impart.update_stone_num(give_stone_num, give_message['user_id'], 1)  # 增加用户思恋结晶
+            msg = f"共赠送{number_to(int(give_stone_num))}枚思恋结晶给{give_message['user_name']}道友！"
+            await handle_send(bot, event, msg)
+            await ccll_command.finish()
+        else:
+            msg = f"对方未踏入修仙界，不可赠送！"
+            await handle_send(bot, event, msg)
+            await ccll_command.finish()
+    else:
+        xiuxian_impart.update_impart_stone_all(give_stone_num)
+        msg = f"全服通告：赠送所有用户{give_stone_num}思恋结晶,请注意查收！"
+        enabled_groups = JsonConfig().get_enabled_groups()
+        
+        for group_id in enabled_groups:
+            bot = await assign_bot_group(group_id=group_id)
+            try:
+                if XiuConfig().img:
+                    pic = await get_msg_pic(msg)
+                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
+                else:
+                    await bot.send_group_msg(group_id=int(group_id), message=msg)
+            except ActionFailed:  # 发送群消息失败
+                continue
+    await ccll_command.finish()
+    
 @cz.handle(parameterless=[Cooldown(at_sender=False)])
 async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """创造力量"""
