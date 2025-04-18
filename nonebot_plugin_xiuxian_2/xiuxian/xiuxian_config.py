@@ -102,8 +102,8 @@ class XiuConfig:
         self.tou_lower_limit = 0.01  # 偷灵石下限(百分比)
         self.tou_upper_limit = 0.50  # 偷灵石上限(百分比)
         self.remake = 100000  # 重入仙途的消费
-        self.max_stamina = 2400 # 体力上限
-        self.stamina_recovery_points = 100 # 体力恢复点数/分钟
+        self.max_stamina = 240 # 体力上限
+        self.stamina_recovery_points = 1 # 体力恢复点数/分钟
         self.lunhui_min_level = "星芒境初期" # 千世轮回最低境界
         self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
         self.threelun_min_level = "无界境初期" # 永恒轮回最低境界

@@ -231,7 +231,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await blessed_spot_rename.finish()
 
 
-@qc.handle(parameterless=[Cooldown(cd_time=60)])
+@qc.handle(parameterless=[Cooldown(cd_time=60, stamina_cost=1)])
 async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """切磋，不会掉血"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -299,7 +299,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await boss_delete_all.finish()
 
 
-@battle.handle(parameterless=[Cooldown(cd_time=config['讨伐世界Boss冷却'], at_sender=False)])
+@battle.handle(parameterless=[Cooldown(stamina_cost=config['讨伐世界Boss体力消耗'], at_sender=False)])
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -526,7 +526,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
 
-@challenge_scarecrow.handle(parameterless=[Cooldown(stamina_cost=20, at_sender=False)])
+@challenge_scarecrow.handle(parameterless=[Cooldown(stamina_cost=1, cd_time=30, at_sender=False)])
 async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """挑战稻草人"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -605,7 +605,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await challenge_scarecrow.finish()
 
 
-@challenge_training_puppet.handle(parameterless=[Cooldown(stamina_cost=20, at_sender=False)])
+@challenge_training_puppet.handle(parameterless=[Cooldown(stamina_cost=1, cd_time=30, at_sender=False)])
 async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """挑战训练傀儡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

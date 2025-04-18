@@ -17,6 +17,7 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import (
     CommandObjectID,
+    number_to,
     append_draw_card_node,
     check_user,
     get_msg_pic,
@@ -192,7 +193,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
         f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
         f"抽卡次数：{current_wish}/90次\n"
-        f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
+        f"剩余思恋结晶：{impart_data_draw['stone_num']}颗"
     )
     await update_user_impart_data(user_id, total_seclusion_time)
     await re_impart_data(user_id)
@@ -285,6 +286,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
         f"抽卡次数：{current_wish}/90次\n"
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
+        f"消耗灵石：{number_to(required_crystals)}\n"
     )
     await re_impart_data(user_id)
 
