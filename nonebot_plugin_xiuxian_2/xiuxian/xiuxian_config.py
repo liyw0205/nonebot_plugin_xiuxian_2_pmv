@@ -59,7 +59,7 @@ class XiuConfig:
                                  "exp", "work_num", "level_up_cd",
                                  "level_up_rate", "sect_id",
                                  "sect_position", "hp", "mp", "atk",
-                                 "atkpractice", "sect_task", "sect_contribution",
+                                 "atkpractice", "hppractice", "sect_task", "sect_contribution",
                                  "sect_elixir_get", "blessed_spot_flag", "blessed_spot_name", "user_stamina"]
         self.sql_user_cd = ["user_id", "type", "create_time", "scheduled_time", "last_check_info_time"]
         self.sql_sects = ["sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "sect_fairyland",

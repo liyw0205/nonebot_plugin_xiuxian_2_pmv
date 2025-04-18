@@ -99,7 +99,7 @@ __sect_help__ = f"""
 20、宗门丹药领取、领取宗门丹药领取:领取宗门丹药
 非指令：
 1、拥有定时任务:每日{config["发放宗门资材"]["时间"]}点发放{config["发放宗门资材"]["倍率"]}倍对应宗门建设度的资材
-2、道统传承: 宗主|长老|亲传弟子|内门弟子|外门弟子|散修 单次稳定获得百分比修为上限分别为：{jsondata.sect_config_data()[str(0)]["max_exp"]}，{jsondata.sect_config_data()[str(1)]["max_exp"]}，{jsondata.sect_config_data()[str(2)]["max_exp"]}，{jsondata.sect_config_data()[str(3)]["max_exp"]}，{jsondata.sect_config_data()[str(4)]["max_exp"]}，{jsondata.sect_config_data()[str(4)]["max_exp"]}
+2、道统传承: 宗主|长老|亲传弟子|内门弟子|外门弟子|散修 单次稳定获得百分比修为
 """.strip()
 
 
