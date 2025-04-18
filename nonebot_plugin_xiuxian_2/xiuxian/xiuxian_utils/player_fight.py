@@ -1062,7 +1062,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             boss_buff.boss_jb = 0
             boss_buff.boss_xl = random.randint(40, 100) / 100  # boss禁血
 
-    if convert_rank('耀阳境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('星芒境圆满')[0]:  # 月华境
+    if convert_rank('耀日境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('星芒境圆满')[0]:  # 月华境
         boss["减伤"] = random.randint(10, 15) / 100  # boss减伤率
         boss_cj = random.randint(25, 45) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
@@ -1109,7 +1109,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             boss_buff.boss_jb = 0
             boss_buff.boss_xl = random.randint(50, 100) / 100  # boss禁血
 
-    if convert_rank('祭道境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('月华境圆满')[0]:  # 耀阳境
+    if convert_rank('祭道境初期')[0] < convert_rank((boss["jj"] + '中期'))[0] < convert_rank('月华境圆满')[0]:  # 耀日境
         boss["减伤"] = 0.1  # boss减伤率
         boss_cj = random.randint(25, 45) / 100
         boss_st1 = random.randint(0, 100)  # boss神通1
