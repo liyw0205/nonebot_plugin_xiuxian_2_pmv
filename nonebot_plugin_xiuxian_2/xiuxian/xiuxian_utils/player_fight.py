@@ -742,8 +742,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     user_info_1 = sql_message.get_user_info_with_id(player1['user_id'])
     hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info_1['hppractice'] is not None else 0
     mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info_1['mppractice'] is not None else 0
-    user1_hp_buff = user1_hp_buff + user_1_impart_hp + hppractice_1
-    user1_mp_buff = user1_mp_buff + user_1_impart_mp + mppractice_1
+    user1_hp_buff = user1_hp_buff + impart_hp_per + hppractice_1
+    user1_mp_buff = user1_mp_buff + impart_mp_per + mppractice_1
 
     random_buff = UserRandomBuff()
     if user1_random_buff == 1:
@@ -1974,8 +1974,8 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     impart_mp_per_1 = impart_player1_data['impart_mp_per'] if impart_player1_data is not None else 0
     
     user_info_1 = sql_message.get_user_info_with_id(player1['user_id'])
-    hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info['hppractice'] is not None else 0
-    mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info['mppractice'] is not None else 0
+    hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info_1['hppractice'] is not None else 0
+    mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info_1['mppractice'] is not None else 0
     
     player1['气血'] = int(round(player1['气血']))
     player2['气血'] = int(round(player2['气血']))
