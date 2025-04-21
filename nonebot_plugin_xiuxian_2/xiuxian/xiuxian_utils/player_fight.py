@@ -50,8 +50,11 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         user_1_impart_data = None
     user_1_impart_hp = user_1_impart_data['impart_hp_per'] if user_1_impart_data is not None else 0
     user_1_impart_mp = user_1_impart_data['impart_mp_per'] if user_1_impart_data is not None else 0
-    user1_hp_buff = user1_hp_buff + user_1_impart_hp
-    user1_mp_buff = user1_mp_buff + user_1_impart_mp
+    user_info_1 = sql_message.get_user_info_with_id(player1['user_id'])
+    hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info_1['hppractice'] is not None else 0
+    mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info_1['mppractice'] is not None else 0
+    user1_hp_buff = user1_hp_buff + user_1_impart_hp + hppractice_1
+    user1_mp_buff = user1_mp_buff + user_1_impart_mp + mppractice_1
 
     user2_buff_data = UserBuffDate(player2['user_id'])  # 2号的buff信息
     user2_main_buff_data = user2_buff_data.get_user_main_buff_data()
@@ -63,8 +66,11 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         user_2_impart_data = None
     user_2_impart_hp = user_2_impart_data['impart_hp_per'] if user_2_impart_data is not None else 0
     user_2_impart_mp = user_2_impart_data['impart_mp_per'] if user_2_impart_data is not None else 0
-    user2_hp_buff = user2_hp_buff + user_2_impart_hp
-    user2_mp_buff = user2_mp_buff + user_2_impart_mp
+    user_info_2 = sql_message.get_user_info_with_id(player2['user_id'])
+    hppractice_2 = user_info_2['hppractice'] * 0.08 if user_info_2['hppractice'] is not None else 0
+    mppractice_2 = user_info_2['mppractice'] * 0.05 if user_info_2['mppractice'] is not None else 0
+    user2_hp_buff = user2_hp_buff + user_2_impart_hp + hppractice_2
+    user2_mp_buff = user2_mp_buff + user_2_impart_mp + mppractice_2
 
     player1_skil_open = False
     player2_skil_open = False
@@ -733,8 +739,11 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     impart_data = xiuxian_impart.get_user_impart_info_with_id(player1['user_id'])
     impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
     impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
-    user1_hp_buff = user1_hp_buff + impart_hp_per
-    user1_mp_buff = user1_mp_buff + impart_mp_per
+    user_info_1 = sql_message.get_user_info_with_id(player1['user_id'])
+    hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info_1['hppractice'] is not None else 0
+    mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info_1['mppractice'] is not None else 0
+    user1_hp_buff = user1_hp_buff + user_1_impart_hp + hppractice_1
+    user1_mp_buff = user1_mp_buff + user_1_impart_mp + mppractice_1
 
     random_buff = UserRandomBuff()
     if user1_random_buff == 1:
@@ -1963,7 +1972,11 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         impart_player1_data = None
     impart_hp_per_1 = impart_player1_data['impart_hp_per'] if impart_player1_data is not None else 0
     impart_mp_per_1 = impart_player1_data['impart_mp_per'] if impart_player1_data is not None else 0
-
+    
+    user_info_1 = sql_message.get_user_info_with_id(player1['user_id'])
+    hppractice_1 = user_info_1['hppractice'] * 0.08 if user_info['hppractice'] is not None else 0
+    mppractice_1 = user_info_1['mppractice'] * 0.05 if user_info['mppractice'] is not None else 0
+    
     player1['气血'] = int(round(player1['气血']))
     player2['气血'] = int(round(player2['气血']))
     player1['真元'] = int(round(player1['真元']))
@@ -1971,8 +1984,8 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     
     if 'max_hp' not in player1:
         exp = int(player1['exp'])
-        player1['max_hp'] = int(exp / 2) * (1 + user1_main_buff_data.get('hpbuff', 0) + impart_hp_per_1 if user1_main_buff_data is not None else 0)
-        player1['max_mp'] = exp * (1 + user1_main_buff_data.get('mpbuff', 0) + impart_mp_per_1 if user1_main_buff_data is not None else 0)
+        player1['max_hp'] = int(exp / 2) * (1 + user1_main_buff_data.get('hpbuff', 0) + impart_hp_per_1 + hppractice_1 if user1_main_buff_data is not None else 0)
+        player1['max_mp'] = exp * (1 + user1_main_buff_data.get('mpbuff', 0) + impart_mp_per_1 + mppractice_1 if user1_main_buff_data is not None else 0)
     if 'max_hp' not in player2:
         player2['max_hp'] = player2['气血']
     
@@ -1982,13 +1995,13 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     buff_type = subbuffdata1['buff_type']
 
     if buff_type == '4':
-        restore_health = int(player1['exp'] / 2) * (1 + user1_hp_buff + impart_hp_per_1) * buff_value // 100
+        restore_health = int(player1['exp'] / 2) * (1 + user1_hp_buff + impart_hp_per_1 + hppractice_1) * buff_value // 100
         restore_health = int(round(restore_health))
         player1['气血'] += restore_health
         player1['气血'] = min(player1['气血'], player1['max_hp'])
         msg = "回复气血:" + str(restore_health)
     elif buff_type == '5':
-        restore_mana = player1['exp'] * (1 + user1_mp_buff + impart_mp_per_1) * buff_value // 100
+        restore_mana = player1['exp'] * (1 + user1_mp_buff + impart_mp_per_1 + mppractice_1) * buff_value // 100
         restore_mana = int(round(restore_mana))
         player1['真元'] += restore_mana
         player1['真元'] = min(player1['真元'], player1['max_mp'])
