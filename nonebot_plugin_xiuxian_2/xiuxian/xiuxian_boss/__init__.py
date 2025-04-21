@@ -4,6 +4,7 @@ except ImportError:
     import json
 import re
 from pathlib import Path
+from datetime import datetime
 import random
 import os
 from nonebot.rule import Rule
@@ -128,12 +129,19 @@ async def punish_all_bosses():
     if not bosss:
         logger.opt(colors=True).info(f"<yellow>当前没有世界BOSS，无需天罚</yellow>")
         return
+        
+    now = datetime.now()
+    current_hour = now.hour   
+    severe_punishment_hours = {8, 12, 20, 0}
+    
+    if current_hour in severe_punishment_hours:
+        delete_count = max(1, len(bosss) // 2)
+        logger.opt(colors=True).warning(f"<yellow>现在是 {current_hour}:00，执行严重天罚！</yellow>")
+    else:
+        delete_count = min(random.randint(10, 20), len(bosss))
+        
+    delete_count = min(delete_count, len(bosss))
 
-    # 确定要删除的BOSS数量（10到20个）
-    current_boss_count = len(bosss)
-    delete_count = min(random.randint(10, 20), current_boss_count)  # 不超过当前BOSS数量
-
-    # 随机选择要删除的BOSS
     bosses_to_punish = random.sample(bosss, delete_count)
     punished_names = [boss['name'] for boss in bosses_to_punish]
 
