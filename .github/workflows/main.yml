@@ -1,0 +1,73 @@
+name: Compress 和 Release
+
+on:
+  push:
+    branches:
+      - main  # Set this to your default branch
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (optional)'
+        required: false
+        default: 'latest'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Generate tag name
+      id: tag
+      run: |
+        # If a tag name is provided via workflow_dispatch, use it; otherwise, generate one
+        if [ -z "${{ github.event.inputs.tag_name }}" ]; then
+          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
+          TAGNAME="v$TIMESTAMP"
+        else
+          TAGNAME="${{ github.event.inputs.tag_name }}"
+        fi
+        echo "Tag name is $TAGNAME"
+        echo "::set-output name=TAGNAME::$TAGNAME"
+
+    - name: Get latest commit message
+      id: commit_message
+      run: |
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        echo "Latest commit message is:"
+        echo "$COMMIT_MSG"
+        echo "::set-output name=COMMIT_MSG::$COMMIT_MSG"
+
+    - name: Compress project files
+      run: |
+        tar -czvf project.tar.gz ./*  # Adjust the path to match your project structure
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.TAGNAME }}
+        release_name: Release ${{ steps.tag.outputs.TAGNAME }}
+        body: |
+          ## Release Notes
+
+          This release includes the following changes:
+
+          - ${{ steps.commit_message.outputs.COMMIT_MSG }}
+
+          For more details, please check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.tag.outputs.TAGNAME }}).
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.ORGANIZATION_ACCESS_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./project.tar.gz
+        asset_name: project.tar.gz
+        asset_content_type: application/gzip
