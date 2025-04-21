@@ -1667,9 +1667,12 @@ def final_user_data(user_data, columns):
     main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
     main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
     
+    hppractice = user_dict['hppractice'] * 0.08 if user_dict['hppractice'] is not None else 0
+    mppractice = user_dict['mppractice'] * 0.05 if user_dict['mppractice'] is not None else 0
+    
     # 改成字段名称来获取相应的值
-    user_dict['hp'] = int(user_dict['hp'] * (user_dict['hppractice'] * 0.08 + 1) * (1 + main_hp_buff + impart_hp_per))
-    user_dict['mp'] = int(user_dict['mp'] * (user_dict['mppractice'] * 0.05 + 1) * (1 + main_mp_buff + impart_mp_per))
+    user_dict['hp'] = int(user_dict['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
+    user_dict['mp'] = int(user_dict['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
     user_dict['atk'] = int((user_dict['atk'] * (user_dict['atkpractice'] * 0.04 + 1) * (1 + main_atk_buff) * (
             1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])
     
