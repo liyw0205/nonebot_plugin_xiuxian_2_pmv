@@ -666,7 +666,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         scarecrow_jj = player_jj[:3]
         if player_jj == "江湖好手":
             scarecrow_jj = "搬血境"
-    if len(arg_list) == 1:
+    if len(arg_list) >= 1:
         scarecrow_jj = arg_list[0]  # 用户指定的境界
         if len(arg_list) == 2:
             boss_name = arg_list[1]
