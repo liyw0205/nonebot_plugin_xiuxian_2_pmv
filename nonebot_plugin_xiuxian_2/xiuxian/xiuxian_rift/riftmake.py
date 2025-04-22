@@ -397,10 +397,12 @@ def get_sub_info(user_level, rift_rank):
 
 def get_skill_by_rank(user_level, rift_rank):
     """根据用户等级、秘境等级随机获取一个技能"""
-    user_rank = convert_rank(user_level)[0] - 12  # type=int，用户等级
+    zx_rank = max(convert_rank(user_level)[0] - 17 - rift_rank, 16)
+    # 秘境等级会增幅用户等级
+    zx_rank = min(random.randint(zx_rank, zx_rank + 10), 55)
     temp_dict = []
     for k, v in skill_data.items():
-        if user_rank - rift_rank <= v['rank']:  # 秘境等级会增幅用户等级
+        if zx_rank <= v['rank']:
             temp_dict.append(k)
     return random.choice(temp_dict)
 

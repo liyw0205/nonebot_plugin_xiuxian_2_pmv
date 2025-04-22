@@ -125,7 +125,8 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
         await xiuxian_message.finish()
     else:
-        msg = f"""ID：{user_id}
+        msg = f"""
+ID：{user_id}
 道号: {user_name}
 境界: {user_info['level']}
 修为: {number_to(user_info['exp'])}

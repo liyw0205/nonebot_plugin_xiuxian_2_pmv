@@ -680,7 +680,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     # 计算训练傀儡的属性
     scarecrow_atk = (player['攻击'] // 2)
     scarecrow_mp = (player['真元'] // 2)
-    scarecrow_hp = (player['气血'] * 1500)
+    scarecrow_hp = (player['气血'] * 10)
 
     # 定义训练傀儡属性
     scarecrow_info = {
@@ -802,7 +802,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
         await boss_info2.finish()
 
-    per_page = 50
+    per_page = 25
     total_items = len(bosss)  # 总BOSS数量
     total_pages = (total_items + per_page - 1) // per_page
     
