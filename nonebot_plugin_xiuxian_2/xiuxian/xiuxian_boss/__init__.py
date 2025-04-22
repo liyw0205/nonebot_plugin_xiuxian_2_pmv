@@ -659,17 +659,18 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
     
     arg_list = args.extract_plain_text().split()
-    if len(arg_list) < 1:
+    boss_name = "散发着威压的尸体"
+    if len(arg_list) == 0:
         # 根据玩家的大境界确定训练傀儡的境界
         player_jj = (userinfo['level'])
         scarecrow_jj = player_jj[:3]
-        boss_name = "散发着威压的尸体"
-    else:
-        player_jj = arg_list[0]  # 用户指定的境界
-        scarecrow_jj = player_jj
-        boss_name = arg_list[1] if len(arg_list) > 1 else "散发着威压的尸体"
+        if player_jj == "江湖好手":
+            scarecrow_jj = "搬血境"
+    if len(arg_list) == 1:
+        scarecrow_jj = arg_list[0]  # 用户指定的境界
+        if len(arg_list) == 2:
+            boss_name = arg_list[1]
 
-    
     
     bossinfo = createboss_jj(scarecrow_jj, boss_name)
     if bossinfo is None:
@@ -802,7 +803,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
         await boss_info2.finish()
 
-    per_page = 25
+    per_page = 50
     total_items = len(bosss)  # 总BOSS数量
     total_pages = (total_items + per_page - 1) // per_page
     
