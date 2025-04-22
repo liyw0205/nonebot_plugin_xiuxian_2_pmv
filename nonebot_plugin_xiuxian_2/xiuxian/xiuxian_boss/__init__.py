@@ -581,8 +581,8 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     # 定义稻草人属性（固定）
     scarecrow_info = {
-            "气血": 1000000000000000,
-            "总血量": 1000000000000000,
+            "气血": 1000000000000000000000000,
+            "总血量": 1000000000000000000000000,
             "真元": 100,
             "攻击": 0,
             "name": "稻草人",
@@ -680,7 +680,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     # 计算训练傀儡的属性
     scarecrow_atk = (player['攻击'] // 2)
     scarecrow_mp = (player['真元'] // 2)
-    scarecrow_hp = (player['气血'] * 444)
+    scarecrow_hp = (player['气血'] * 1500)
 
     # 定义训练傀儡属性
     scarecrow_info = {

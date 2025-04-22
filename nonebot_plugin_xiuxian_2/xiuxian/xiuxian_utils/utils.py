@@ -596,7 +596,49 @@ def number_to(num):
         level = len(units) - 1
     return f"{round(num, 1)}{units[level]}"
 
+def number_to2(num):
+    """
+    递归实现，精确为最大单位值 + 小数点后一位
+    处理科学计数法表示的数值
+    不到亿就显示实际数，否则按万/亿/兆/京单位显示
+    """
+    units = ["", "万", "亿", "兆", "京"]
+    base = 10000  # 每个单位的基数（万=10^4）
 
+    # 处理科学计数法
+    if isinstance(num, str) and "e" in num:
+        num = float(f"{float(num):.1f}")
+    elif hasattr(num, 'e') and num.e != 0:  # 处理科学计数法（如Decimal）
+        num = float(f"{float(num):.1f}")
+
+    # 处理负数
+    sign = "-" if num < 0 else ""
+    num = abs(num)
+
+    # 如果数字小于1万，直接返回
+    if num < base:
+        return f"{sign}{round(num, 1)}" if not num.is_integer() else f"{sign}{int(round(num, 0))}"
+
+    # 递归计算单位和数值
+    def convert(n, level):
+        if level >= len(units) - 1 or n < base:  # 到达最大单位或小于基数
+            return n, level
+        n /= base
+        level += 1
+        return convert(n, level)
+
+    num, level = convert(num, 0)
+
+    # 如果数字在1亿到1京之间，按万/亿/兆显示
+    if level <= 3:  # 万、亿、兆
+        return f"{sign}{round(num, 1)}{units[level]}"
+    # 如果数字大于等于1京，统一用京显示
+    else:  # 京
+        # 重新计算，确保京单位正确（避免10000兆=1京的情况）
+        num = num * (base ** (level - 3))  # 转换为京单位
+        return f"{sign}{round(num, 1)}{units[4]}"
+        
+        
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
     result = "@" + user_name + "\n" + msg
@@ -608,37 +650,22 @@ async def handle_send(bot, event, msg: str):
     if XiuConfig().img:
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
         if isinstance(event, GroupMessageEvent):
-            await bot.call_api(
-                    "send_private_forward_msg", group_id=event.group_id, messages=MessageSegment.image(pic)
+            await bot.send_group_msg(
+                group_id=event.group_id, message=MessageSegment.image(pic)
             )
         else:
-            await bot.call_api(
-                    "send_group_forward_msg", user_id=event.user_id, messages=MessageSegment.image(pic)
+            await bot.send_private_msg(
+                user_id=event.user_id, message=MessageSegment.image(pic)
             )
     else:
         if isinstance(event, GroupMessageEvent):
-            await bot.call_api(
-                    "send_private_forward_msg", group_id=event.group_id, messages=msg
+            await bot.send_group_msg(
+                group_id=event.group_id, message=msg
             )
         else:
-            await bot.call_api(
-                    "send_group_forward_msg", user_id=event.user_id, messages=msg
+            await bot.send_private_msg(
+                user_id=event.user_id, message=msg
             )
-            
-            
-async def handle_send2(bot, event, msg: str):
-    """处理文本，根据配置发送文本或者图片消息"""    
-    if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        if isinstance(event, GroupMessageEvent):
-            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(pic))
-    else:
-        if isinstance(event, GroupMessageEvent):
-            await bot.send_group_msg(group_id=event.group_id, message=msg)
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=msg)
 
             
 def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
