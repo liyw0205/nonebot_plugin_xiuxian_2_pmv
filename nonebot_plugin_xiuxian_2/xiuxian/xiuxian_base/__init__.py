@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from nonebot.typing import T_State
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
-from nonebot import require, on_command, on_fullmatch
+from nonebot import require, on_command, on_fullmatch, get_bot
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
@@ -1016,10 +1016,12 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     else:
         sql_message.update_ls_all(give_stone_num)
         msg = f"全服通告：赠送所有用户{give_stone_num}灵石,请注意查收！"
+        await handle_send(bot, event, msg)
         enabled_groups = JsonConfig().get_enabled_groups()
-        
         for group_id in enabled_groups:
-            bot = await assign_bot_group(group_id=group_id)
+            bot = get_bot()
+            if int(group_id) == event.group_id:
+                continue
             try:
                 if XiuConfig().img:
                     pic = await get_msg_pic(msg)
@@ -1081,10 +1083,12 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
     else:
         xiuxian_impart.update_impart_stone_all(give_stone_num)
         msg = f"全服通告：赠送所有用户{give_stone_num}思恋结晶,请注意查收！"
+        await handle_send(bot, event, msg)
         enabled_groups = JsonConfig().get_enabled_groups()
-        
         for group_id in enabled_groups:
-            bot = await assign_bot_group(group_id=group_id)
+            bot = get_bot()
+            if int(group_id) == event.group_id:
+                continue
             try:
                 if XiuConfig().img:
                     pic = await get_msg_pic(msg)
@@ -1173,9 +1177,12 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     for user_id in all_users:
         sql_message.send_back(user_id, goods_id, goods_name, goods_type, goods_num, 1)  # 给每个用户发送物品
     msg = f"全服通告：赠送所有用户{goods_num}个{goods_name},请注意查收！"
+    await handle_send(bot, event, msg)
     enabled_groups = JsonConfig().get_enabled_groups()
     for group_id in enabled_groups:
-        bot = await assign_bot_group(group_id=group_id)
+        bot = get_bot()
+        if int(group_id) == event.group_id:
+                continue
         try:
             if XiuConfig().img:
                 pic = await get_msg_pic(msg)

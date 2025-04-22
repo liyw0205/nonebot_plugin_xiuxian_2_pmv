@@ -610,6 +610,7 @@ def number_to2(num):
         num = float(f"{float(num):.1f}")
     elif hasattr(num, 'e') and num.e != 0:  # 处理科学计数法（如Decimal）
         num = float(f"{float(num):.1f}")
+    num = float(num)
 
     # 处理负数
     sign = "-" if num < 0 else ""
