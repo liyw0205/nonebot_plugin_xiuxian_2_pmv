@@ -1586,7 +1586,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                           
         if boss_turn_skip:
             boss_sub = random.randint(0, 100)
-            if boss_sub <= 8:
+            if boss_sub <= 6:
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
                 isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)  # 判定是否暴击 辅修功法14
                 if isCrit:
@@ -1601,7 +1601,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                 player1['气血'] * 0.3)))
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{number_to2(round(player1['气血']))}", bot_id))
 
-            elif 8 <= boss_sub <= 16:
+            elif 6 <= boss_sub <= 12:
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
                 isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)  # 判定是否暴击 辅修功法14
                 if isCrit:
@@ -1624,7 +1624,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                 else:
                     msg2 = "{}发起攻击，造成了{}伤害"
                 play_list.append(get_boss_dict(boss, qx, msg2.format(effect_name, number_to2(boss_sh)), bot_id)) 
-                player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def)) 
+                player1['气血'] = player1['气血'] - (boss_sh * (player1_js - random_buff.random_def + boss_cj)) 
                 play_list.append(get_boss_dict(boss, qx, f"{player1['道号']}剩余血量{number_to2(round(player1['气血']))}", bot_id))
         else:
             play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id))
