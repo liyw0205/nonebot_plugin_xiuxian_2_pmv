@@ -138,7 +138,7 @@ async def punish_all_bosses():
         delete_count = max(1, len(bosss) // 2)
         logger.opt(colors=True).warning(f"<yellow>现在是 {current_hour}:00，执行严重天罚！</yellow>")
     else:
-        delete_count = min(random.randint(10, 20), len(bosss))
+        delete_count = min(random.randint(5, 20), len(bosss))
         
     delete_count = min(delete_count, len(bosss))
 
@@ -769,7 +769,11 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             boss_name = boss["name"] + "_c"
         else:
             boss_name = boss["name"]
-        await handle_send(bot, event, msg)
+        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg, boss_name=boss_name)
+        if isinstance(event, GroupMessageEvent):
+           await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(pic))
         await boss_info.finish()
     else:
         i = 1
@@ -1156,10 +1160,10 @@ def get_drops(user_info):
 def get_id(dict_data, user_level):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
     l_temp = []
-    final_rank = convert_rank(user_level)[0] - 12  # 秘境等级，会提高用户的等级
-    pass_rank = convert_rank('搬血境初期')[0]  # 最终等级超过此等级会抛弃
+    zx_rank = max(convert_rank(user_level)[0] - 17, 8)
+    zx_rank = min(random.randint(zx_rank, zx_rank + 30), 55)
     for k, v in dict_data.items():
-        if v["rank"] >= final_rank and (v["rank"] - final_rank) <= pass_rank:
+        if zx_rank <= v['rank']:
             l_temp.append(k)
 
     if len(l_temp) == 0:

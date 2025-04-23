@@ -32,7 +32,7 @@ def workmake(work_level, exp, user_level):
         fail_msg = work_info['fail']
         item_type = get_random_item_type()
         zx_rank = max(convert_rank(user_level)[0] - 17, 16)
-        zx_rank = min(random.randint(zx_rank, zx_rank + 10), 55)
+        zx_rank = min(random.randint(zx_rank, zx_rank + 20), 55)
         item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)
         if not item_id:
             item_id = 0

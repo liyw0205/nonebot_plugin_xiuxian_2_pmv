@@ -312,10 +312,11 @@ def get_goods_type():
 def get_id_by_rank(dict_data, user_level, rift_rank=0):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
     l_temp = []
-    final_rank = convert_rank(user_level)[0] - 12 - rift_rank  # 秘境等级，会提高用户的等级
-    pass_rank = 30  # 最终等级超过次等级会抛弃
+    zx_rank = max(convert_rank(user_level)[0] - 17 - rift_rank, 16)
+    # 秘境等级会增幅用户等级
+    zx_rank = min(random.randint(zx_rank, zx_rank + 20), 55)
     for k, v in dict_data.items():
-        if v["rank"] >= final_rank and (v["rank"] - final_rank) <= pass_rank:
+        if zx_rank <= v['rank']:
             l_temp.append(k)
 
     return random.choice(l_temp)
@@ -399,7 +400,7 @@ def get_skill_by_rank(user_level, rift_rank):
     """根据用户等级、秘境等级随机获取一个技能"""
     zx_rank = max(convert_rank(user_level)[0] - 17 - rift_rank, 16)
     # 秘境等级会增幅用户等级
-    zx_rank = min(random.randint(zx_rank, zx_rank + 10), 55)
+    zx_rank = min(random.randint(zx_rank, zx_rank + 20), 55)
     temp_dict = []
     for k, v in skill_data.items():
         if zx_rank <= v['rank']:

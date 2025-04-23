@@ -186,7 +186,6 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         xiuxian_impart.update_impart_wish(current_wish, user_id)
     impart_data_draw = await impart_check(user_id)
 
-    # 生成统计消息并放在图片前
     summary_msg = (
         f"{summary}\n"
         f"累计获得{total_seclusion_time}分钟闭关时间！\n"
@@ -279,7 +278,6 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     sql_message.update_ls(user_id, required_crystals, 2)  # 2表示减少
     impart_data_draw = await impart_check(user_id)
 
-    # 生成统计消息并放在图片前
     summary_msg = (
         f"{summary}\n"
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
@@ -407,18 +405,16 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
 道友拥有的传承卡片如下:
 """
-    summary = f"道友{name}的传承背包"
     if img_tp:
         card_list_str = "\n".join(img_tp)
         txt_tp += card_list_str
     else:
         txt_tp += "暂无传承卡片"
 
-    append_draw_card_node(bot, list_tp, summary, txt_back)
-    append_draw_card_node(bot, list_tp, summary, txt_tp)
-
+    msg = f"""
+{txt_back}\n{txt_tp}"""
     try:
-        await send_msg_handler(bot, event, list_tp)
+        await handle_send(bot, event, msg)
     except ActionFailed:
         await handle_send(bot, event, "获取传承背包数据失败！")
 
