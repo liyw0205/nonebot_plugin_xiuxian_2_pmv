@@ -26,8 +26,7 @@ work = {}  # 悬赏令信息记录
 refreshnum: Dict[str, int] = {}  # 用户悬赏令刷新次数记录
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
-lscost = 1000000000 # 刷新灵石消耗
-count = 5  # 免费次数
+count = 5  # 刷新次数
 
 
 # 重置悬赏令刷新次数
@@ -46,7 +45,7 @@ __work_help__ = f"""
 悬赏令帮助信息:
 指令：
 1、悬赏令查看:获取当前悬赏令
-2、悬赏令刷新:刷新当前悬赏令,每日免费{count}次
+2、悬赏令刷新:刷新当前悬赏令,每日{count}次
 3、悬赏令终止:终止当前悬赏令任务
 4、悬赏令结算:结算悬赏奖励
 5、悬赏令接取+编号：接取对应的悬赏令
@@ -103,7 +102,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     if mode == "刷新":  # 刷新逻辑
-        stone_use = 0 #悬赏令刷新提示是否扣灵石
         if user_cd_message['type'] == 2:
             work_time = datetime.strptime(
                 user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
@@ -126,13 +124,9 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         freenum = count - usernums - 1
         if freenum < 0:
             freenum = 0
-            if int(user_info['stone']) < int(lscost / convert_rank(user_level_sx)[0]):
-                msg = f"道友的灵石不足以刷新，下次刷新消耗灵石：{int(lscost / convert_rank(user_level_sx)[0])}枚"
-                await handle_send(bot, event, msg)
-                await do_work.finish()
-            else:
-                sql_message.update_ls(user_id, int(lscost / convert_rank(user_level_sx)[0]) , 2)
-                stone_use = 1
+            msg = "道友今日的悬赏令刷新次数已用尽"
+            await handle_send(bot, event, msg)
+            await do_work.finish()
 
         work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
         n = 1
@@ -142,9 +136,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             work_list.append([i[0], i[3]])
             work_msg_f += f"{n}、{get_work_msg(i)}"
             n += 1
-        work_msg_f += f"(悬赏令每日免费刷新次数：{count}，超过{count}次后，下次刷新消耗灵石{int(lscost / convert_rank(user_level_sx)[0])},今日可免费刷新次数：{freenum}次)"
-        if int(stone_use) == 1:
-            work_msg_f += f"\n道友消耗灵石{int(lscost / convert_rank(user_level_sx)[0])}枚，成功刷新悬赏令"
+        work_msg_f += f"(悬赏令每日刷新次数：{count}，今日可刷新次数：{freenum}次)"
         work[user_id] = do_is_work(user_id)
         work[user_id].msg = work_msg_f
         work[user_id].world = work_list

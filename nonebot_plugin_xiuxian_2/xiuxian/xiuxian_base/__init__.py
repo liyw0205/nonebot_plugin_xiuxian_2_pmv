@@ -1032,7 +1032,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 continue
     await gm_command.finish()
 
-# GM加灵石
+# GM加思恋结晶
 @ccll_command.handle(parameterless=[Cooldown(at_sender=False)])
 async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1162,8 +1162,8 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
             await cz.finish()
     elif nick_name:
         give_user = sql_message.get_user_info_with_name(nick_name)
-        give_qq = give_user['user_id']
         if give_user:
+            give_qq = give_user['user_id']
             sql_message.send_back(give_qq, goods_id, goods_name, goods_type, goods_num, 1)
             msg = f"{give_user['user_name']}道友获得了系统赠送的{goods_num}个{goods_name}！"
             await handle_send(bot, event, msg)
