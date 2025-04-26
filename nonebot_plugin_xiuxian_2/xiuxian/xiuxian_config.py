@@ -109,7 +109,7 @@ class XiuConfig:
         self.threelun_min_level = "无界境初期" # 永恒轮回最低境界
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
-        self.merge_forward_send = True # 使用消息合并转发,True是合并转发，False是合并转发的内容转换成长图发送
+        self.merge_forward_send = 2 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
         self.img_compression_limit = 90 # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
         self.img_type = "webp" # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
         self.img_send_type = "io" # 图片发送类型，官方bot建议base64

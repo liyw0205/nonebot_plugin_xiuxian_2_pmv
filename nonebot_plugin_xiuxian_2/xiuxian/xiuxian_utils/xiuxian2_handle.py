@@ -2206,7 +2206,7 @@ def get_main_info_msg(id):
     random_buff_msg = f"，战斗时随机获得一个战斗属性" if mainbuff['random_buff'] != 0 else ''
     ew_name = items.get_data_by_item_id(mainbuff['ew']) if mainbuff['ew'] != 0 else ''
     ew_msg =  f"，使用{ew_name['name']}时伤害增加50%！" if mainbuff['ew'] != 0 else ''
-    msg = f"{mainbuff['name']}: {hpmsg}{mpmsg}{atkmsg}{ratemsg}{cri_tmsg}{def_msg}{dan_msg}{dan_exp_msg}{reap_msg}{exp_msg}{critatk_msg}{two_msg}{number_msg}{clo_exp_msg}{clo_rs_msg}{random_buff_msg}{ew_msg}！"
+    msg = f"{hpmsg}{mpmsg}{atkmsg}{ratemsg}{cri_tmsg}{def_msg}{dan_msg}{dan_exp_msg}{reap_msg}{exp_msg}{critatk_msg}{two_msg}{number_msg}{clo_exp_msg}{clo_rs_msg}{random_buff_msg}{ew_msg}！"
     return mainbuff, msg
 
 def get_sub_info_msg(id): #辅修功法8
@@ -2241,7 +2241,7 @@ def get_sub_info_msg(id): #辅修功法8
     exp_msg = "，增加战斗获得的修为" if subbuff['exp'] != 0 else ''
     
 
-    msg = f"{subbuff['name']}：{submsg}{stone_msg}{integral_msg}{jin_msg}{drop_msg}{fan_msg}{break_msg}{exp_msg}"
+    msg = f"{submsg}{stone_msg}{integral_msg}{jin_msg}{drop_msg}{fan_msg}{break_msg}{exp_msg}"
     return subbuff, msg
 
 def get_user_buff(user_id):
@@ -2292,6 +2292,9 @@ def get_sec_msg(secbuffdata):
         
     elif secbuffdata['skill_type'] == 6:
         msg = f"叠加伤害，每回合叠加{secbuffdata['buffvalue']}倍攻击力{hpmsg}{mpmsg}，持续{secbuffdata['turncost']}回合，释放概率：{secbuffdata['rate']}%"
+
+    elif secbuffdata['skill_type'] == 7:
+        msg = "变化神通，战斗时随机获得一个神通"
             
     return msg
 

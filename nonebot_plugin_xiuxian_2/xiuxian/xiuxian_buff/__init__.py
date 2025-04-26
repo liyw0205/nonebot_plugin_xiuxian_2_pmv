@@ -829,11 +829,13 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     secbuffdata = UserBuffDate(user_id).get_user_sec_buff_data()
     secbuffmsg = get_sec_msg(secbuffdata) if get_sec_msg(secbuffdata) != '无' else ''
     msg = f"""
-道友的主功法：{mainbuffdata["name"] if mainbuffdata != None else '无'}
+主功法：{mainbuffdata["name"] if mainbuffdata != None else '无'}
 {mainbuffmsg}
-道友的辅修功法：{subbuffdata["name"] if subbuffdata != None else '无'}
+
+辅修功法：{subbuffdata["name"] if subbuffdata != None else '无'}
 {subbuffmsg}
-道友的神通：{secbuffdata["name"] if secbuffdata != None else '无'}
+
+神通：{secbuffdata["name"] if secbuffdata != None else '无'}
 {secbuffmsg}
 """
 

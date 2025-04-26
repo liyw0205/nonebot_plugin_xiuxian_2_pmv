@@ -456,7 +456,42 @@ async def send_msg_handler(bot, event, *args):
     :param msg_type: 关键字参数，可用于传递特定命名参数
     """
 
-    if XiuConfig().merge_forward_send:
+    if XiuConfig().merge_forward_send == 1:
+        if len(args) == 3:
+            name, uin, msgs = args
+            msg = "\n".join(msgs)
+            messages = [
+                {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
+            ]
+            if isinstance(event, GroupMessageEvent):
+                await bot.call_api(
+                    "send_group_forward_msg", group_id=event.group_id, messages=messages
+                )
+            else:
+                await bot.call_api(
+                    "send_private_forward_msg", user_id=event.user_id, messages=messages
+                )
+        elif len(args) == 1 and isinstance(args[0], list):
+            merged_contents = [msg["data"]["content"] for msg in args[0]]
+            merged_content = "\n\n".join(merged_contents)
+            first_msg = args[0][0] if args[0] else None
+            name = first_msg["data"]["name"] if first_msg else "系统"
+            uin = first_msg["data"]["uin"] if first_msg else int(bot_id)
+            messages = [
+                {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
+            ]
+            if isinstance(event, GroupMessageEvent):
+                await bot.call_api(
+                    "send_group_forward_msg", group_id=event.group_id, messages=messages
+                )
+            else:
+                await bot.call_api(
+                    "send_private_forward_msg", user_id=event.user_id, messages=messages
+                )
+        else:
+            raise ValueError("参数数量或类型不匹配")
+            
+    elif XiuConfig().merge_forward_send == 2:
         if len(args) == 3:
             name, uin, msgs = args
             messages = [
@@ -483,7 +518,7 @@ async def send_msg_handler(bot, event, *args):
                 )
         else:
             raise ValueError("参数数量或类型不匹配")
-    else:
+    elif XiuConfig().merge_forward_send == 3:
         if len(args) == 3:
             name, uin, msgs = args
             img = Txt2Img()
