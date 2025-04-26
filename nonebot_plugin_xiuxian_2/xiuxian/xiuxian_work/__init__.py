@@ -179,7 +179,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 key=1, name=user_cd_message['scheduled_time'], level=user_level, exp=user_info['exp'],
                 user_id=user_info['user_id']
             )
-            if exp_time < time2:
+            if exp_time =< time2:
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
                 await handle_send(bot, event, msg)
                 await do_work.finish()
@@ -203,8 +203,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     gain_exp = give_exp * 2
                 else:
                     gain_exp = give_exp
-                gain_exp2 = gain_exp
-
                 if current_exp + gain_exp >= max_exp:
                     remaining_exp = max_exp - current_exp
                     gain_exp = remaining_exp                
@@ -221,7 +219,14 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     await do_work.finish()
 
                 else:  # 失败
-                    msg += "!"
+                gain_exp = give_exp // 2
+
+                    if current_exp + gain_exp >= max_exp:
+                        remaining_exp = max_exp - current_exp
+                        gain_exp = remaining_exp                
+                    sql_message.update_exp(user_id, gain_exp)
+                    sql_message.do_work(user_id, 0)
+                    msg = f"悬赏令结算，{msg}增加修为{gain_exp}!"
                     await handle_send(bot, event, msg)
                     await do_work.finish()
         else:
