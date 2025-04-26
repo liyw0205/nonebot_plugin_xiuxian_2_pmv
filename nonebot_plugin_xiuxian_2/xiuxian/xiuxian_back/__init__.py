@@ -350,7 +350,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if goods_id == 15053 or input_str == "补偿":
         await check_item_effect.finish()
     # 构造返回消息
-    msg = f"ID：{goods_id}\n{item_msg}"
+    msg = f"\nID：{goods_id}\n{item_msg}"
     await handle_send(bot, event, msg)
     await check_item_effect.finish()
     

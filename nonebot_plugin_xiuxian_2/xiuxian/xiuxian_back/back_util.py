@@ -398,11 +398,11 @@ def get_item_msg(goods_id):
     elif item_info['item_type'] == '神通':
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}\n"
+        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}"
     elif item_info['item_type'] == '功法':
         msg += f"功法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_main_info_msg(goods_id)[1]}\n"
+        msg += f"效果：{get_main_info_msg(goods_id)[1]}"
     elif item_info['item_type'] == '辅修功法':  # 辅修功法
         msg += f"辅修名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
