@@ -1208,6 +1208,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     qx = boss['气血']
     boss_now_stone = boss.get('stone', 0)
     boss_js = boss['减伤']
+    if boss_js > 1:
+        user1_break = 0
     if player1_f_js > 1:
         boss_cj = 0
 
@@ -1642,10 +1644,10 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                 play_list.append(get_boss_dict(boss, qx, f"☆------{boss['name']}的回合------☆", bot_id)) 
                 isCrit, boss_sh = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff) 
                 effect_name = boss['name']
-                if boss['name'] in BOSSATK:
-                    effect_name = BOSSATK[boss['name']]
                 if isCrit:
-                      msg2 = "{}发起会心一击，造成了{}伤害"
+                    if boss['name'] in BOSSATK:
+                        effect_name = BOSSATK[boss['name']]
+                    msg2 = "{}发起会心一击，造成了{}伤害"
                 else:
                     msg2 = "{}发起攻击，造成了{}伤害"
                 play_list.append(get_boss_dict(boss, qx, msg2.format(effect_name, number_to2(boss_sh)), bot_id)) 

@@ -717,7 +717,7 @@
         "rank": "地阶上品",
         "level": "32"
     },
-    "8607": {
+    "8706": {
         "name": "冰棱碎空刺",
         "skill_type": 5,
         "atkvalue": 0.6,
@@ -810,7 +810,7 @@
         "rank": "天阶下品",
         "level": "29"
     },
-    "8706": {
+    "8806": {
         "name": "雷影破空拳",
         "skill_type": 5,
         "atkvalue": 0.7,
@@ -823,7 +823,7 @@
         "rank": "天阶下品",
         "level": "29"
     },
-    "8810": {
+    "8708": {
         "name": "玄冰封天术",
         "skill_type": 6,
         "bufftype": 1,
@@ -926,7 +926,7 @@
         "rank": "天阶上品",
         "level": "26"
     },
-    "8806": {
+    "8909": {
         "name": "炎波碎星掌",
         "skill_type": 5,
         "atkvalue": 0.4,
@@ -979,7 +979,59 @@
         "rank": "仙阶下品",
         "level": "26"
     },
-    "8911": {
+    "8807": {
+        "name": "玄光破影针",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 7,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "召唤玄光之力，凝聚成破影神针，随机射向敌人！",
+        "rate": 100,
+        "rank": "仙阶下品",
+        "level": "26"
+    },
+    "8808": {
+        "name": "赤焰焚天术",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.3,
+        "hpcost": 0.1,
+        "mpcost": 0.9,
+        "turncost": 3,
+        "desc": "赤焰升腾，火焰之力层层叠加，焚烧万物，炙烤敌人体魄，伤痛不断加剧！",
+        "rate": 100,
+        "rank": "仙阶下品",
+        "level": "26"
+    },
+    "8809": {
+        "name": "灵风碎空刃",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 7.5,
+        "hpcost": 0.1,
+        "mpcost": 0.3,
+        "turncost": 1,
+        "desc": "凝聚灵风之力，形成碎空利刃，对敌人造成巨大伤害！",
+        "rate": 100,
+        "rank": "仙阶上品",
+        "level": "16"
+    },
+    "8810": {
+        "name": "星河陨灭拳",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 1.4,
+        "hpcost": 0.1,
+        "mpcost": 0.9,
+        "turncost": 3,
+        "desc": "拳锋引动星河之力，星辰陨落，层层递进，摧毁一切，粉碎虚空！",
+        "rate": 100,
+        "rank": "仙阶上品",
+        "level": "26"
+    },
+    "8811": {
         "name": "大罗仙印",
         "skill_type": 1,
         "atkvalue": [
@@ -995,33 +1047,7 @@
         "rank": "仙阶下品",
         "level": "26"
     },
-    "8807": {
-        "name": "玄光破影针",
-        "skill_type": 5,
-        "atkvalue": 0.5,
-        "atkvalue2": 7,
-        "hpcost": 0.1,
-        "mpcost": 0.3,
-        "turncost": 1,
-        "desc": "召唤玄光之力，凝聚成破影神针，随机射向敌人！",
-        "rate": 100,
-        "rank": "仙阶下品",
-        "level": "26"
-    },
     "8812": {
-        "name": "赤焰焚天术",
-        "skill_type": 6,
-        "bufftype": 1,
-        "buffvalue": 1.3,
-        "hpcost": 0.1,
-        "mpcost": 0.9,
-        "turncost": 3,
-        "desc": "赤焰升腾，火焰之力层层叠加，焚烧万物，炙烤敌人体魄，伤痛不断加剧！",
-        "rate": 100,
-        "rank": "仙阶下品",
-        "level": "26"
-    },
-    "8912": {
         "name": "封神剑",
         "skill_type": 4,
         "hpcost": 0.1,
@@ -1033,7 +1059,7 @@
         "rank": "仙阶上品",
         "level": "16"
     },
-    "8913": {
+    "8813": {
         "name": "大荒星陨指",
         "skill_type": 1,
         "atkvalue": [
@@ -1047,7 +1073,7 @@
         "rank": "仙阶上品",
         "level": "16"
     },
-    "8914": {
+    "8814": {
         "name": "死灭之咒",
         "skill_type": 2,
         "atkvalue": 3.5,
@@ -1059,31 +1085,70 @@
         "rank": "仙阶上品",
         "level": "16"
     },
-    "8808": {
-        "name": "灵风碎空刃",
+    "8913": {
+        "name": "混沌星陨劫",
         "skill_type": 5,
         "atkvalue": 0.5,
-        "atkvalue2": 7.5,
+        "atkvalue2": 10,
         "hpcost": 0.1,
-        "mpcost": 0.3,
-        "turncost": 1,
-        "desc": "凝聚灵风之力，形成碎空利刃，对敌人造成巨大伤害！",
+        "mpcost": 0.5,
+        "turncost": 2,
+        "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
         "rate": 100,
-        "rank": "仙阶上品",
-        "level": "16"
+        "rank": "仙阶极品",
+        "level": "-5"
     },
-    "8813": {
-        "name": "星河陨灭拳",
+    "8914": {
+        "name": "九幽炼狱火",
         "skill_type": 6,
         "bufftype": 1,
-        "buffvalue": 1.4,
+        "buffvalue": 1.5,
         "hpcost": 0.1,
         "mpcost": 0.9,
         "turncost": 3,
-        "desc": "拳锋引动星河之力，星辰陨落，层层递进，摧毁一切，粉碎虚空！",
+        "desc": "九幽炼狱之火，层层燃烧，吞噬万物，火焰之力不断攀升，毁灭一切生机！",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "-5"
+    },
+    "8915": {
+        "name": "地煞七十二术",
+        "skill_type": 7,
+        "skill_content": [
+            8808,
+            8809,
+            8811,
+            8812,
+            8813,
+            8814,
+        ],
+        "hpcost": 0,
+        "mpcost": 0,
+        "turncost": 1,
+        "desc": "地煞七十二术，启！吞噬这漫天法则，万象都成我的养料！",
         "rate": 100,
         "rank": "仙阶上品",
-        "level": "26"
+        "level": "-5"
+    },
+    "8916": {
+        "name": "天罡三十六法",
+        "skill_type": 7,
+        "skill_content": [
+            8913,
+            8914,
+            8920,
+            8921,
+            8922,
+            8923,
+            8924
+        ],
+        "hpcost": 0,
+        "mpcost": 0,
+        "turncost": 1,
+        "desc": "天罡三十六法，现！以法则为刃，斩破眼前虚妄，乾坤皆在我手！",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "-5"
     },
     "8920": {
         "name": "万剑归宗",
@@ -1199,32 +1264,6 @@
             "need_stone": "0",
             "limit": 1
         }
-    },
-    "8809": {
-        "name": "混沌星陨劫",
-        "skill_type": 5,
-        "atkvalue": 0.5,
-        "atkvalue2": 10,
-        "hpcost": 0.1,
-        "mpcost": 0.5,
-        "turncost": 2,
-        "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
-        "rate": 100,
-        "rank": "仙阶极品",
-        "level": "-5"
-    },
-    "8814": {
-        "name": "九幽炼狱火",
-        "skill_type": 6,
-        "bufftype": 1,
-        "buffvalue": 1.5,
-        "hpcost": 0.1,
-        "mpcost": 0.9,
-        "turncost": 3,
-        "desc": "九幽炼狱之火，层层燃烧，吞噬万物，火焰之力不断攀升，毁灭一切生机！",
-        "rate": 100,
-        "rank": "仙阶极品",
-        "level": "-5"
     },
     "8924": {
         "name": "自爆",
@@ -1508,7 +1547,7 @@
         "hpcost": 0,
         "mpcost": 0,
         "turncost": 1,
-        "desc": "天罡三十六变塑法则，地煞七十二变吞万象，神通交织成劫，天地万物皆归虚无，此乃极致杀伐之术！",
+        "desc": "天罡三十六法塑规则，地煞七十二术吞万象，神通交织成劫，天地万物，皆归虚无，此乃极致杀伐之术！",
         "rate": 100,
         "rank": "无上神通",
         "level": "-5"
