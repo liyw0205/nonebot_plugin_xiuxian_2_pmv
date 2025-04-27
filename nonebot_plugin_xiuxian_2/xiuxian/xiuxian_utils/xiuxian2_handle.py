@@ -2020,7 +2020,6 @@ class XIUXIAN_IMPART_BUFF:
 
 def leave_harm_time(user_id):
     """重伤恢复时间"""
-    hp_speed = 250
     user_mes = sql_message.get_user_info_with_id(user_id)
     level = user_mes['level']
     level_rate = sql_message.get_root_rate(user_mes['root_type']) # 灵根倍率
@@ -2029,8 +2028,7 @@ def leave_harm_time(user_id):
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data else 0 # 主功法修炼倍率
     
     try:
-        time = int(((user_mes['exp'] / 1.5) - user_mes['hp']) / ((XiuConfig().closing_exp * level_rate * realm_rate * (
-                    1 + main_buff_rate_buff)) * (10 * hp_speed)))
+        time = int(((user_mes['exp'] / 2) + (user_mes['exp'] / 10) - user_mes['hp']) / (user_mes['exp'] / 10))
     except ZeroDivisionError:
         time = "无穷大"
     except OverflowError:

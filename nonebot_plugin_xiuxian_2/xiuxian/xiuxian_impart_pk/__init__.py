@@ -326,8 +326,8 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         sql_message.update_power2(user_id)  # 更新战力
         result_msg, result_hp_mp = OtherSet().send_hp_mp(
             user_id, 
-            int(exp * hp_speed), 
-            int(exp * mp_speed)
+            int((exp * hp_speed) * int(impaer_exp_time)), 
+            int((exp * mp_speed) * int(impaer_exp_time))
         )
         sql_message.update_user_attribute(
             user_id, 
