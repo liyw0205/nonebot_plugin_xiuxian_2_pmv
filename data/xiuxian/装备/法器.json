@@ -677,7 +677,7 @@
         "crit_buff": 0.6,
         "def_buff": -0.25,
         "critatk": 1.25,
-        "zw": 0,
+        "zw": 7084,
         "mp_buff": 0,
         "rank": -5,
         "level": "无上仙器",
@@ -685,7 +685,8 @@
         "fusion": {
             "need_item": {
                 "7098": 1,
-                "7099": 1
+                "7099": 1,
+                "20002": 1
             },
             "need_rank": "微光境圆满",
             "need_exp": "0",
@@ -891,7 +892,7 @@
         "crit_buff": 0.25,
         "def_buff": -0.25,
         "critatk": 1,
-        "zw": 0,
+        "zw": 15467,
         "mp_buff": 0,
         "rank": -5,
         "level": "无上仙器",
@@ -911,10 +912,10 @@
     },
     "15468": {
         "name": "龙渊绝影剑",
-        "atk_buff": 0.3,
+        "atk_buff": 0.35,
         "crit_buff": 0.8,
         "def_buff": 0,
-        "critatk": 1.25,
+        "critatk": 1.35,
         "zw": 15468,
         "mp_buff": 0,
         "rank": -5,
@@ -934,7 +935,7 @@
         }
     },
     "15469": {
-        "name": "十拳破碎剑",
+        "name": "十拳无极剑",
         "atk_buff": 1,
         "crit_buff": 0,
         "def_buff": -0.5,
@@ -959,10 +960,10 @@
     },
     "15470": {
         "name": "鸿钧破虚棍",
-        "atk_buff": 0.8,
+        "atk_buff": 0.7,
         "crit_buff": 0.5,
-        "def_buff": 0.2,
-        "critatk": 0.8,
+        "def_buff": 0.15,
+        "critatk": 0.7,
         "zw": 15470,
         "mp_buff": 0,
         "rank": -5,
@@ -974,6 +975,28 @@
                 "20002": 1,
                 "20003": 1,                
                 "20004": 1
+            },
+            "need_rank": "微光境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
+    },
+    "15471": {
+        "name": "太一混沌钟",
+        "atk_buff": 0.5,
+        "crit_buff": 0.3,
+        "def_buff": 0.5,
+        "critatk": 0,
+        "zw": 15471,
+        "mp_buff": 0,
+        "rank": -5,
+        "level": "无上仙器",
+        "type": "装备",
+        "fusion": {
+            "need_item": {
+                "7090": 1,
+                "20002": 1
             },
             "need_rank": "微光境圆满",
             "need_exp": "0",

@@ -1920,7 +1920,7 @@
         "clo_exp": 0,
         "clo_rs": 0,
         "random_buff": 0,
-        "ew": 7084,
+        "ew": 15467,
         "desc": "",
         "rank": "无上仙法",
         "level": "1",
@@ -1959,5 +1959,73 @@
         "desc": "",
         "rank": "无上仙法",
         "level": "1"
+    },
+    "9940": {
+        "name": "赎罪",
+        "hpbuff": 1,
+        "mpbuff": 1,
+        "atkbuff": 1,
+        "ratebuff": 2.3,
+        "crit_buff": 0,
+        "def_buff": 0.5,
+        "dan_exp": 0,
+        "dan_buff": 0,
+        "reap_buff": 0,
+        "exp_buff": 0.3,
+        "critatk": 3,
+        "two_buff": 3,
+        "number": 5,
+        "clo_exp": 0,
+        "clo_rs": 0,
+        "random_buff": 0,
+        "ew": 7084,
+        "desc": "",
+        "rank": "无上仙法",
+        "level": "1",
+        "fusion": {
+            "need_item": {
+                "20002": 1,
+                "20003": 1,                
+                "20004": 2
+            },
+            "need_rank": "微光境圆满",
+            "need_exp": "0",
+            "need_stone": "10000000",
+            "limit": 1
+        }
+    },
+    "9941": {
+        "name": "太一诀",
+        "hpbuff": 4.5,
+        "mpbuff": 3.5,
+        "atkbuff": 2,
+        "ratebuff": 2.3,
+        "crit_buff": 0.2,
+        "def_buff": 0.1,
+        "dan_exp": 0,
+        "dan_buff": 0,
+        "reap_buff": 0,
+        "exp_buff": 0.3,
+        "critatk": 0.5,
+        "two_buff": 3,
+        "number": 5,
+        "clo_exp": 0,
+        "clo_rs": 0,
+        "random_buff": 0,
+        "ew": 15471,
+        "desc": "",
+        "rank": "无上仙法",
+        "level": "1",
+        "fusion": {
+            "need_item": {
+                "20002": 1,
+                "20003": 1,                
+                "20004": 2
+            },
+            "need_rank": "微光境圆满",
+            "need_exp": "0",
+            "need_stone": "10000000",
+            "limit": 1
+        }
     }
 }
