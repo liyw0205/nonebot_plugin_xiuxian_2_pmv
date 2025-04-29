@@ -81,8 +81,6 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         user1_skill_data = user1_buff_data.get_user_sec_buff_data()
         player1_skil_open = True
         if user1_skill_data['skill_type'] == 7:
-            player1_random_sec = 1
-            player1_sec_name = user1_skill_data['name']
             goods_id = random.choice(user1_skill_data['skill_content'])
             user1_skill_data = items.get_data_by_item_id(goods_id)
             
@@ -91,8 +89,6 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
         user2_skill_data = user2_buff_data.get_user_sec_buff_data()
         player2_skil_open = True
         if user2_skill_data['skill_type'] == 7:
-            player1_random_sec = 1
-            player1_sec_name = user2_skill_data['name']
             goods_id = random.choice(user2_skill_data['skill_content'])
             user2_skill_data = items.get_data_by_item_id(goods_id)
 
@@ -820,6 +816,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
         if user1_skill_data['skill_type'] == 7:
             player1_random_sec = 1
             player1_sec_name = user1_skill_data['name']
+            player1_sec_desc = user1_skill_data['desc']
             goods_id = random.choice(user1_skill_data['skill_content'])
             user1_skill_data = items.get_data_by_item_id(goods_id)
 
@@ -1312,7 +1309,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     if player1_random_sec > 0:
         random_sec_data = {"type": "node", "data": {"name": f"{player1['道号']}",
                                                     "uin": int(bot_id),
-                                                    "content": f"{player1['道号']}发动了{player1_sec_name},获得了{user1_skill_data['name']}！"}}
+                                                    "content": f"{player1['道号']}发动了{player1_sec_name},{player1_sec_desc}获得了{user1_skill_data['name']}！"}}
         play_list.append(random_sec_data)
 
     boss['会心'] = 30

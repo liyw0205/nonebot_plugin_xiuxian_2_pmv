@@ -899,7 +899,7 @@
         "turncost": 3,
         "desc": "逆转日月，掌控乾坤，威力无穷！",
         "rate": 50,
-        "success": 100,
+        "success": 80,
         "rank": "天阶上品",
         "level": "26"
     },
@@ -1055,7 +1055,7 @@
         "turncost": 5,
         "desc": "一剑封神！你，已经死了，无法逃脱！",
         "rate": 80,
-        "success": 100,
+        "success": 80,
         "rank": "仙阶上品",
         "level": "16"
     },
@@ -1088,11 +1088,11 @@
     "8913": {
         "name": "混沌星陨劫",
         "skill_type": 5,
-        "atkvalue": 0.5,
+        "atkvalue": 1.5,
         "atkvalue2": 10,
         "hpcost": 0.1,
         "mpcost": 0.5,
-        "turncost": 2,
+        "turncost": 1,
         "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
         "rate": 100,
         "rank": "仙阶极品",
@@ -1101,7 +1101,7 @@
     "8914": {
         "name": "九幽炼狱火",
         "skill_type": 6,
-        "bufftype": 1,
+        "bufftype": 1.5,
         "buffvalue": 1.5,
         "hpcost": 0.1,
         "mpcost": 0.9,
@@ -1210,10 +1210,10 @@
             7.5
         ],
         "hpcost": 0.03,
-        "mpcost": 0.85,
+        "mpcost": 0.75,
         "turncost": 0,
         "desc": "剑出血胧，灭敌无形，血雾弥漫！灭！！！！",
-        "rate": 80,
+        "rate": 75,
         "rank": "仙阶极品",
         "level": "-5",
         "fusion": {
@@ -1280,8 +1280,8 @@
             1
         ],
         "hpcost": 0.99,
-        "mpcost": 2,
-        "turncost": 20,
+        "mpcost": 5,
+        "turncost": 5,
         "desc": "以生命为代价，释放出毁灭性的自爆，敌人将遭受重创！",
         "rate": 10,
         "rank": "仙阶极品",
@@ -1313,8 +1313,8 @@
             11
         ],
         "hpcost": 0.99,
-        "mpcost": 2,
-        "turncost": 20,
+        "mpcost": 5,
+        "turncost": 5,
         "desc": "凝聚毕生修为，引爆灵魂深处最神秘的归墟之力，形成毁灭性爆炸！",
         "rate": 5,
         "rank": "无上神通",
@@ -1335,10 +1335,10 @@
     "8926": {
         "name": "炎狱焚天掌",
         "skill_type": 5,
-        "atkvalue": 0.5,
+        "atkvalue": 2.5,
         "atkvalue2": 15,
         "hpcost": 0.1,
-        "mpcost": 0.5,
+        "mpcost": 0.7,
         "turncost": 1,
         "desc": "双掌汇聚炽热火焰，对大范围敌人造成毁灭性打击！",
         "rate": 100,
@@ -1349,9 +1349,9 @@
         "name": "混沌破穹拳",
         "skill_type": 6,
         "bufftype": 1,
-        "buffvalue": 2,
+        "buffvalue": 2.5,
         "hpcost": 0.1,
-        "mpcost": 0.8,
+        "mpcost": 1.8,
         "turncost": 4,
         "desc": "凝聚混沌之力，蕴含破碎苍穹的恐怖力量，对敌人造成重创！",
         "rate": 100,
@@ -1451,7 +1451,7 @@
         ],
         "hpcost": 0,
         "mpcost": 0.7,
-        "turncost": 1,
+        "turncost": 2,
         "desc": "苍寰变！逆乱阴阳！！",
         "rate": 100,
         "rank": "无上神通",
@@ -1467,7 +1467,7 @@
         "mpcost": 0.8,
         "turncost": 0,
         "desc": "星宿劫！万星破灭！！",
-        "rate": 90,
+        "rate": 50,
         "rank": "无上神通",
         "level": "-5"
     },
@@ -1475,16 +1475,16 @@
         "name": "冥河鬼镰·千慄葬世",
         "skill_type": 1,
         "atkvalue": [
+            2,
             1.5,
-            2.5,
-            1.2,
             1.6,
-            2.3,
-            4.9,
-            1.5
+            1.7,
+            1.3,
+            1.4,
+            2.5
         ],
         "hpcost": 0.03,
-        "mpcost": 0.8,
+        "mpcost": 1.5,
         "turncost": 1,
         "desc": "冥河之水化作鬼镰，千慄葬世，收割万物生机！鬼镰划破天际，冥气弥漫，敌人灵魂被生生撕裂，坠入无尽深渊！此乃鬼噬之终章，天地同寂！",
         "rate": 100,
@@ -1495,13 +1495,13 @@
         "name": "血影碎空·胧剑劫",
         "skill_type": 1,
         "atkvalue": [
-            12.5
+            11.5
         ],
-        "hpcost": 0.15,
-        "mpcost": 0.85,
+        "hpcost": 0.03,
+        "mpcost": 1.75,
         "turncost": 0,
         "desc": "血影碎空，胧剑出鞘，剑气化血雾，弥漫战场！敌人陷入血胧之中，剑气纵横，劫难降临，万物皆灭！",
-        "rate": 60,
+        "rate": 75,
         "rank": "无上神通",
         "level": "-5"
     },
@@ -1511,7 +1511,7 @@
         "bufftype": 1,
         "buffvalue": 5.55,
         "hpcost": 0,
-        "mpcost": 1.50,
+        "mpcost": 2.50,
         "turncost": 4,
         "desc": "剑御九天，万剑归墟，剑气化九天，剑网笼罩天地！敌人被剑气撕裂，万物归于虚无，此乃剑道极致！",
         "rate": 99,
@@ -1521,9 +1521,9 @@
     "8936": {
         "name": "华光·万影噬空",
         "skill_type": 2,
-        "atkvalue": 5.9,
+        "atkvalue": 5.5,
         "hpcost": 0.15,
-        "mpcost": 0.6,
+        "mpcost": 1.6,
         "turncost": 4,
         "desc": "刹诀！华光·万影噬空！华光化万影，噬空夺命！敌人被无尽的光影吞噬，灵魂化为灰烬，天地皆为空影，唯我独尊！",
         "rate": 100,
@@ -1551,5 +1551,29 @@
         "rate": 100,
         "rank": "无上神通",
         "level": "-5"
+    },
+    "8938": {
+        "name": "砸瓦鲁多",
+        "skill_type": 4,
+        "hpcost": 0.1,
+        "mpcost": 1.0,
+        "turncost": 1,
+        "desc": "时间停止！在这一瞬，万物静止，唯有你能掌控命运！",
+        "rate": 90,
+        "success": 100,
+        "rank": "无上神通",
+        "level": "-5",
+        "fusion": {
+            "need_item": {
+                "8906": 1,
+                "8812": 1,
+                "20002": 1,
+                "20003": 1
+            },
+            "need_rank": "微光境圆满",
+            "need_exp": "0",
+            "need_stone": "0",
+            "limit": 1
+        }
     }
 }
