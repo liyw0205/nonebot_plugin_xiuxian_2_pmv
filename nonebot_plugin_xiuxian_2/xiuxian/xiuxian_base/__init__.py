@@ -521,7 +521,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await level_up.finish()
 
 
-@level_up_zj.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
+@level_up_zj.handle(parameterless=[Cooldown(stamina_cost=3, at_sender=False)])
 async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """直接突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -592,7 +592,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await level_up_zj.finish()
 
 
-@level_up_drjd.handle(parameterless=[Cooldown(stamina_cost=4, at_sender=False)])
+@level_up_drjd.handle(parameterless=[Cooldown(stamina_cost=1, at_sender=False)])
 async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡厄 金丹 突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -691,7 +691,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await level_up_drjd.finish()
 
 
-@level_up_dr.handle(parameterless=[Cooldown(stamina_cost=8, at_sender=False)])
+@level_up_dr.handle(parameterless=[Cooldown(stamina_cost=2, at_sender=False)])
 async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡厄 突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
