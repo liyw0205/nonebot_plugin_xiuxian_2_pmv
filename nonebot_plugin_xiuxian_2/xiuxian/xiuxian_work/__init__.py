@@ -79,6 +79,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         msg = "道友在秘境中，请等待结束后才能获取悬赏令！"
         await handle_send(bot, event, msg)
         await do_work.finish()
+    if user_cd_message['type'] == 4:
+        msg = "已经在虚神界闭关中，请输入【虚神界出关】结束后才能获取悬赏令！"
+        await handle_send(bot, event, msg)
+        await do_work.finish()
 
     if mode == "查看":  # 刷新逻辑
         if (user_cd_message['scheduled_time'] is None) or (user_cd_message['type'] == 0):
