@@ -491,9 +491,12 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             points_bonus = int(80 * (user_rank - boss_rank))
             more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
         else:
-            if boss_rank - user_rank >= 9:  # 超过太多不给
-                boss_integral = 0
+            if boss_rank - user_rank > 2:  # 超过太多不给
+                boss_integral = int(boss_integral // 2)
                 more_msg = f"道友的境界超过boss太多了,不齿！"
+                
+            if boss_rank - user_rank > 3:
+                boss_integral = 0
                 
         top_user_info = sql_message.get_top1_user()
         top_user_exp = top_user_info['exp']
