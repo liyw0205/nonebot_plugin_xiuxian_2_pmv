@@ -16,7 +16,7 @@ from ..xiuxian_config import XiuConfig
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "我的修仙信息图片版", "我的存档图片版"}, priority=23, block=True)
 sql_message = XiuxianDateManage()  # sql类
 
-@xiuxian_message.handle(parameterless=[Cooldown(at_sender=False, stamina_cost=1)])
+@xiuxian_message.handle(parameterless=[Cooldown(at_sender=False, cd_time=10)])
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的修仙信息"""
     # 判断是否启用图片版信息展示
