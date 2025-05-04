@@ -427,7 +427,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     base_exp_rate = XiuConfig().closing_exp * (
         level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)
     ) * (1 + impart_exp_up)
-    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
+    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 2 * 100)}%"
 
     # 计算可用双倍经验时间
     available_exp_day = int(impart_data_draw['exp_day'])  # 可用修炼时间
