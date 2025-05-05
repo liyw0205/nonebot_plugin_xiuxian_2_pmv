@@ -578,10 +578,23 @@ def CommandObjectID() -> int:
     return Depends(_event_id)
 
 
+def format_number(num):
+    """格式化数字，满足特殊显示要求"""
+    num = round(num, 3)  # 先四舍五入到3位小数
+    if num >= 10:
+        # 显示小数部分（自动去除末尾的0）
+        return f"{num:.3f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
+    else:
+        # 只显示个位数
+        return f"{int(num)}" if num.is_integer() else f"{num:.3f}".rstrip('0').rstrip('.')
+
 def number_to(num):
     """
-    递归实现，精确为最大单位值 + 小数点后一位
-    处理科学计数法表示的数值
+    递归实现，精确为最大单位值
+    满足特殊显示要求：
+    - 只显示个位数
+    - 大于单位的才会有小数
+    - 小数位0则不显示
     """
 
     def strofsize(num, level):
@@ -595,88 +608,58 @@ def number_to(num):
             return num, level
 
     units = [
-        "",
-        "万",
-        "亿",
-        "兆",
-        "京",
-        "垓",
-        "秭",
-        "穰",
-        "沟",
-        "涧",
-        "正",
-        "载",
-        "极",
-        "恒河沙",
-        "阿僧祗",
-        "那由他",
-        "不思议",
-        "无量大",
-        "万无量大",
-        "亿无量大",
-        "兆无量大",
-        "京无量大",
-        "垓无量大",
-        "秭无量大",
-        "穰无量大",
-        "沟无量大",
-        "涧无量大",
-        "正无量大",
-        "载无量大",
-        "极无量大",
+        "", "万", "亿", "兆", "京", "垓", "秭", "穰", "沟", "涧",
+        "正", "载", "极", "恒河沙", "阿僧祗", "那由他", "不思议", "无量大"
     ]
+    
     # 处理科学计数法
     if "e" in str(num):
-        num = float(f"{num:.1f}")
-    num, level = strofsize(num, 0)
+        num = float(num)
+    
+    num, level = strofsize(float(num), 0)
     if level >= len(units):
         level = len(units) - 1
-    return f"{round(num, 1)}{units[level]}"
+    
+    formatted_num = format_number(num)
+    return f"{formatted_num}{units[level]}"
 
 def number_to2(num):
     """
-    递归实现，精确为最大单位值 + 小数点后一位
-    处理科学计数法表示的数值
-    不到亿就显示实际数，否则按万/亿/兆/京单位显示
+    递归实现，但限制单位到"京"
+    满足特殊显示要求：
+    - 只显示个位数
+    - 大于单位的才会有小数
+    - 小数位0则不显示
     """
     units = ["", "万", "亿", "兆", "京"]
-    base = 10000  # 每个单位的基数（万=10^4）
+    base = 10000
 
     # 处理科学计数法
-    if isinstance(num, str) and "e" in num:
-        num = float(f"{float(num):.1f}")
-    elif hasattr(num, 'e') and num.e != 0:  # 处理科学计数法（如Decimal）
-        num = float(f"{float(num):.1f}")
-    num = float(num)
+    try:
+        num = float(num)
+    except (TypeError, ValueError):
+        raise ValueError("输入必须是数字或科学计数法字符串")
 
     # 处理负数
     sign = "-" if num < 0 else ""
     num = abs(num)
 
-    # 如果数字小于1万，直接返回
+    # 如果数字 < 1万，直接返回
     if num < base:
-        return f"{sign}{round(num, 1)}" if not num.is_integer() else f"{sign}{int(round(num, 0))}"
+        return f"{sign}{int(num)}" if num.is_integer() else f"{sign}{num:.3f}".rstrip('0').rstrip('.')
 
     # 递归计算单位和数值
     def convert(n, level):
-        if level >= len(units) - 1 or n < base:  # 到达最大单位或小于基数
+        if level >= len(units) - 1 or n < base:
             return n, level
         n /= base
         level += 1
         return convert(n, level)
 
     num, level = convert(num, 0)
+    formatted_num = format_number(num)
+    return f"{sign}{formatted_num}{units[level]}"
 
-    # 如果数字在1亿到1京之间，按万/亿/兆显示
-    if level <= 3:  # 万、亿、兆
-        return f"{sign}{round(num, 1)}{units[level]}"
-    # 如果数字大于等于1京，统一用京显示
-    else:  # 京
-        # 重新计算，确保京单位正确（避免10000兆=1京的情况）
-        num = num * (base ** (level - 3))  # 转换为京单位
-        return f"{sign}{round(num, 1)}{units[4]}"
-        
         
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
