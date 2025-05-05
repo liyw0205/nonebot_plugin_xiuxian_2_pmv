@@ -20,6 +20,8 @@ class Items:
         self.mainbuff_jsonpath = SKILLPATH / "主功法.json"
         self.subbuff_jsonpath = SKILLPATH / "辅修功法.json" 
         self.secbuff_jsonpath = SKILLPATH / "神通.json"
+        self.effect1buff_jsonpath = SKILLPATH / "身法.json"
+        self.effect2buff_jsonpath = SKILLPATH / "瞳术.json"
         self.weapon_jsonpath = WEAPONPATH / "法器.json"
         self.armor_jsonpath = WEAPONPATH / "防具.json"
         self.elixir_jsonpath = ELIXIRPATH / "丹药.json"
@@ -37,6 +39,8 @@ class Items:
         self.set_item_data(self.get_main_buff_data(), "功法")
         self.set_item_data(self.get_sub_buff_data(), "辅修功法") 
         self.set_item_data(self.get_sec_buff_data(), "神通")
+        self.set_item_data(self.get_effect1_buff_data(), "身法")
+        self.set_item_data(self.get_effect2_buff_data(), "瞳术")
         self.set_item_data(self.get_elixir_data(), "丹药")
         self.set_item_data(self.get_lb_data(), "礼包")
         self.set_item_data(self.get_yaocai_data(), "药材")
@@ -76,6 +80,12 @@ class Items:
     def get_sec_buff_data(self):
         return self.readf(self.secbuff_jsonpath)
 
+    def get_effect1_buff_data(self):
+        return self.readf(self.effect1buff_jsonpath)
+        
+    def get_effect2_buff_data(self):
+        return self.readf(self.effect2buff_jsonpath)
+        
     def get_elixir_data(self):
         return self.readf(self.elixir_jsonpath)
     
@@ -126,7 +136,7 @@ class Items:
 
     def set_item_data(self, dict_data, item_type):
         for k, v in dict_data.items():
-            if item_type in ['功法', '神通', '辅修功法']:
+            if item_type in ['功法', '神通', '辅修功法', '身法', '瞳术']:
                 v['rank'], v['level'] = v['level'], v['rank']
                 v['type'] = '技能'
             self.items[k] = v
@@ -149,7 +159,7 @@ class Items:
         """
         获取随机一个物品ID,可以指定物品类型,物品等级和用户等级相差40级以上会被抛弃
         :param fanil_rank:用户的最终rank,最终rank由用户rank和rank增幅事件构成
-        :param item_type:type:list,物品类型，可以为空，枚举值：法器、防具、神通、功法、丹药
+        :param item_type:type:list,物品类型，可以为空，枚举值：法器、防具、神通、身法、功法、丹药
         :return 获得的ID列表,type:list
         """
         l_id = []

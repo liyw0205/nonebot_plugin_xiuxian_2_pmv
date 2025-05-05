@@ -14,7 +14,7 @@ from nonebot import on_command, on_fullmatch, require
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
     save_player_info,UserBuffDate, get_main_info_msg, 
-    get_user_buff, get_sec_msg, get_sub_info_msg,
+    get_user_buff, get_sec_msg, get_sub_info_msg, get_effect_info_msg,
     XIUXIAN_IMPART_BUFF, leave_harm_time
 )
 from ..xiuxian_config import XiuConfig
@@ -825,6 +825,18 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         subbuffmsg = ''
         
+    effect1buffdata = UserBuffDate(user_id).get_user_effect1_buff_data()
+    if effect1buffdata != None:
+        effect1, effect1buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect1_buff']))
+    else:
+        effect1buffmsg = ''
+        
+    effect2buffdata = UserBuffDate(user_id).get_user_effect2_buff_data()
+    if effect2buffdata != None:
+        effect2, effect2buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect2_buff']))
+    else:
+        effect2buffmsg = ''
+        
     secbuffdata = UserBuffDate(user_id).get_user_sec_buff_data()
     secbuffmsg = get_sec_msg(secbuffdata) if get_sec_msg(secbuffdata) != '无' else ''
     msg = f"""
@@ -836,6 +848,12 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 神通：{secbuffdata["name"] if secbuffdata != None else '无'}
 {secbuffmsg}
+
+身法：{effect1buffdata["name"] if effect1buffdata != None else '无'}
+{effect1buffmsg}
+
+瞳术：{effect2buffdata["name"] if effect2buffdata != None else '无'}
+{effect2buffmsg}
 """
 
     await handle_send(bot, event, msg)

@@ -134,6 +134,8 @@ class XiuxianDateManage:
   "user_id" integer DEFAULT 0,
   "main_buff" integer DEFAULT 0,
   "sec_buff" integer DEFAULT 0,
+  "effect1_buff" integer DEFAULT 0,
+  "effect2_buff" integer DEFAULT 0,
   "faqi_buff" integer DEFAULT 0,
   "fabao_weapon" integer DEFAULT 0,
   "sub_buff" integer DEFAULT 0
@@ -1189,7 +1191,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def initialize_user_buff_info(self, user_id):
         """初始化用户buff信息"""
-        sql = f"INSERT INTO BuffInfo (user_id,main_buff,sec_buff,faqi_buff,fabao_weapon) VALUES (?,0,0,0,0)"
+        sql = f"INSERT INTO BuffInfo (user_id,main_buff,sec_buff,effect1_buff,effect2_buff,faqi_buff,fabao_weapon) VALUES (?,0,0,0,0,0,0)"
         cur = self.conn.cursor()
         cur.execute(sql, (user_id,))
         self.conn.commit()
@@ -1228,6 +1230,20 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, (id, user_id,))
         self.conn.commit()
 
+    def updata_user_effect1_buff(self, user_id, id):
+        """更新用户身法信息"""
+        sql = f"UPDATE BuffInfo SET effect1_buff = ? WHERE user_id = ?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (id, user_id,))
+        self.conn.commit()
+
+    def updata_user_effect2_buff(self, user_id, id):
+        """更新用户瞳术信息"""
+        sql = f"UPDATE BuffInfo SET effect2_buff = ? WHERE user_id = ?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (id, user_id,))
+        self.conn.commit()
+        
     def updata_user_faqi_buff(self, user_id, id):
         """更新用户法器信息"""
         sql = f"UPDATE BuffInfo SET faqi_buff = ? WHERE user_id = ?"
@@ -2062,6 +2078,8 @@ class BuffJsonDate:
         """json文件路径"""
         self.mainbuff_jsonpath = SKILLPATHH / "主功法.json"
         self.secbuff_jsonpath = SKILLPATHH / "神通.json"
+        self.effect1buff_jsonpath = SKILLPATHH / "身法.json"
+        self.effect2buff_jsonpath = SKILLPATHH / "瞳术.json"
         self.gfpeizhi_jsonpath = SKILLPATHH / "功法概率设置.json"
         self.weapon_jsonpath = WEAPONPATH / "法器.json"
         self.armor_jsonpath = WEAPONPATH / "防具.json"
@@ -2071,7 +2089,13 @@ class BuffJsonDate:
 
     def get_sec_buff(self, id):
         return readf(self.secbuff_jsonpath)[str(id)]
+        
+    def get_effect1_buff(self, id):
+        return readf(self.effect1buff_jsonpath)[str(id)]
 
+    def get_effect2_buff(self, id):
+        return readf(self.effect2buff_jsonpath)[str(id)]
+        
     def get_gfpeizhi(self):
         return readf(self.gfpeizhi_jsonpath)
 
@@ -2125,6 +2149,24 @@ class UserBuffDate:
             sec_buff_data = items.get_data_by_item_id(sec_buff_id)
         return sec_buff_data
 
+    def get_user_effect1_buff_data(self):
+        """获取用户身法数据"""
+        effect1_buff_data = None
+        buff_info = self.BuffInfo
+        effect1_buff_id = buff_info.get('effect1_buff', 0)
+        if effect1_buff_id != 0:
+            effect1_buff_data = items.get_data_by_item_id(effect1_buff_id)
+        return effect1_buff_data
+
+    def get_user_effect2_buff_data(self):
+        """获取用户瞳术数据"""
+        effect2_buff_data = None
+        buff_info = self.BuffInfo
+        effect2_buff_id = buff_info.get('effect2_buff', 0)
+        if effect2_buff_id != 0:
+            effect2_buff_data = items.get_data_by_item_id(effect2_buff_id)
+        return effect2_buff_data
+        
     def get_user_weapon_data(self):
         """获取用户法器数据"""
         weapon_data = None
@@ -2300,7 +2342,20 @@ def get_sec_msg(secbuffdata):
             
     return msg
 
+def get_effect_info_msg(id): #身法、瞳术
+    """获取秘术信息msg"""
+    effectbuff = items.get_data_by_item_id(id)
+    effectmsg = ""
+    if effectbuff['buff_type'] == '1':
+        effectmsg = f"提升{effectbuff['buff2']}%～{effectbuff['buff']}%闪避率"
+    if effectbuff['buff_type'] == '2':
+        effectmsg = f"提升{effectbuff['buff2']}%～{effectbuff['buff']}%命中率"
+    
 
+    msg = f"{effectmsg}"
+    return effectbuff, msg
+    
+    
 def get_player_info(user_id, info_name):
     player_info = None
     if info_name == "mix_elixir_info":  # 灵田信息

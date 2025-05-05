@@ -8,7 +8,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, UserBuffDate, 
     get_weapon_info_msg, get_armor_info_msg,
     get_player_info, save_player_info, 
-    get_sec_msg, get_main_info_msg, get_sub_info_msg
+    get_sec_msg, get_main_info_msg, get_sub_info_msg, get_effect_info_msg
 )
 from datetime import datetime
 import os
@@ -326,14 +326,17 @@ def get_skill_msg(l_msg, goods_id, goods_num, bind_num):
     msg = ""
     if item_info['item_type'] == '神通':
         msg = f"{item_info['level']}神通-{item_info['name']}:"
-    #    msg += get_sec_msg(item_info)
     elif item_info['item_type'] == '功法':
         msg = f"{item_info['level']}功法-"
-    #    msg += get_main_info_msg(goods_id)[1]
         msg += f"{item_info['name']}"
     elif item_info['item_type'] == '辅修功法':#辅修功法12
         msg = f"{item_info['level']}辅修功法-"
-    #    msg += get_sub_info_msg(goods_id)[1]
+        msg += f"{item_info['name']}"
+    elif item_info['item_type'] == '身法':
+        msg = f"{item_info['level']}身法-"
+        msg += f"{item_info['name']}"
+    elif item_info['item_type'] == '瞳术':
+        msg = f"{item_info['level']}瞳术-"
         msg += f"{item_info['name']}"
     msg += f"\n拥有数量:{goods_num}，绑定数量:{bind_num}"
     l_msg.append(msg)
@@ -399,6 +402,14 @@ def get_item_msg(goods_id):
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
         msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}"
+    elif item_info['item_type'] == '身法':
+        msg += f"身法名字：{item_info['name']}\n"
+        msg += f"品阶：{item_info['level']}\n"
+        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}"
+    elif item_info['item_type'] == '瞳术':
+        msg += f"瞳术名字：{item_info['name']}\n"
+        msg += f"品阶：{item_info['level']}\n"
+        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}"
     elif item_info['item_type'] == '功法':
         msg += f"功法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"

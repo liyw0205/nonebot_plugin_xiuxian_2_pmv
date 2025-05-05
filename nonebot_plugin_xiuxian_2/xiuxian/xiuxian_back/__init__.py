@@ -1662,6 +1662,20 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 sql_message.update_back_j(user_id, goods_id)
                 sql_message.updata_user_sec_buff(user_id, goods_id)
                 msg = f"恭喜道友学会神通：{skill_info['name']}！"
+        elif skill_type == "身法":
+            if int(user_buff_info['effect1_buff']) == int(goods_id):
+                msg = f"道友已学会该身法：{skill_info['name']}，请勿重复学习！"
+            else:
+                sql_message.update_back_j(user_id, goods_id)
+                sql_message.updata_user_effect1_buff(user_id, goods_id)
+                msg = f"恭喜道友学会身法：{skill_info['name']}！"
+        elif skill_type == "瞳术":
+            if int(user_buff_info['effect2_buff']) == int(goods_id):
+                msg = f"道友已学会该瞳术：{skill_info['name']}，请勿重复学习！"
+            else:
+                sql_message.update_back_j(user_id, goods_id)
+                sql_message.updata_user_effect2_buff(user_id, goods_id)
+                msg = f"恭喜道友学会瞳术：{skill_info['name']}！"
         elif skill_type == "功法":
             if int(user_buff_info['main_buff']) == int(goods_id):
                 msg = f"道友已学会该功法：{skill_info['name']}，请勿重复学习！"
@@ -1677,7 +1691,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 sql_message.updata_user_sub_buff(user_id, goods_id)
                 msg = f"恭喜道友学会辅修功法：{skill_info['name']}！"
         else:
-            msg = "发生未知错误！"
+            msg = f"发生未知错误！"
 
     elif goods_type == "丹药":
         msg = check_use_elixir(user_id, goods_id, num)
@@ -2154,8 +2168,8 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     args = args.extract_plain_text().strip()
     list_tp = []
-    if args not in ["功法", "辅修功法", "神通", "丹药", "合成丹药", "法器", "防具"]:
-        msg = "请输入正确类型【功法|辅修功法|神通|丹药|合成丹药|法器|防具】！！！"
+    if args not in ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具"]:
+        msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具】！！！"
         await handle_send(bot, event, msg)
         await chakan_wupin.finish()
     else:
@@ -2189,6 +2203,32 @@ async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             st_data = items.get_data_by_item_type(['神通'])
             for x in st_data:
                 name = st_data[x]['name']
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"ID：{goods_id}\n{desc}"
+                list_tp.append(
+                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
+                                                "content": msg}})
+        elif args == "身法":
+            sf_data = items.get_data_by_item_type(['身法'])
+            for x in sf_data:
+                name = sf_data[x]['name']
+                for k, v in items.items.items():
+                    if name == v['name']:
+                        goods_id = k
+                        break                
+                desc = get_item_msg(goods_id)
+                msg = f"ID：{goods_id}\n{desc}"
+                list_tp.append(
+                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
+                                                "content": msg}})
+        elif args == "瞳术":
+            ts_data = items.get_data_by_item_type(['瞳术'])
+            for x in ts_data:
+                name = ts_data[x]['name']
                 for k, v in items.items.items():
                     if name == v['name']:
                         goods_id = k

@@ -73,11 +73,15 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
     user_sec_buff_date = user_buff_data.get_user_sec_buff_data()
+    user_effect1_buff_date = user_buff_data.get_user_effect1_buff_data()
+    user_effect2_buff_date = user_buff_data.get_user_effect2_buff_data()
     user_weapon_data = user_buff_data.get_user_weapon_data()
     user_armor_data = user_buff_data.get_user_armor_buff_data()
     main_buff_name = f"无"
     sub_buff_name = f"无"
     sec_buff_name = f"无"
+    effect1_buff_buff_name = f"无"
+    effect2_buff_buff_name = f"无"
     weapon_name = f"无"
     armor_name = f"无"
     if user_main_buff_date is not None:
@@ -86,6 +90,10 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         sub_buff_name = f"{user_sub_buff_date['name']}({user_sub_buff_date['level']})"   
     if user_sec_buff_date is not None:
         sec_buff_name = f"{user_sec_buff_date['name']}({user_sec_buff_date['level']})"
+    if user_effect1_buff_date is not None:
+        effect1_buff_buff_name = f"{user_effect1_buff_date['name']}({user_effect1_buff_date['level']})"
+    if user_effect2_buff_date is not None:
+        effect2_buff_buff_name = f"{user_effect2_buff_date['name']}({user_effect2_buff_date['level']})"
     if user_weapon_data is not None:
         weapon_name = f"{user_weapon_data['name']}({user_weapon_data['level']})"
     if user_armor_data is not None:
@@ -143,6 +151,8 @@ ID：{user_id}
 主修功法: {main_buff_name}
 辅修功法: {sub_buff_name}
 副修神通: {sec_buff_name}
+身法: {effect1_buff_buff_name}
+瞳术: {effect2_buff_buff_name}
 法器: {weapon_name}
 防具: {armor_name}
 注册位数: 道友是踏入修仙世界的第{int(user_num)}人
