@@ -358,7 +358,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 {img_msg}
     """
     try:
-        await handle_send(bot, event, summary_msg)
+        await handle_send(bot, event, final_msg)
     except ActionFailed:
         await handle_send(bot, event, "获取祈愿石结果失败！")
     await use_wishing_stone.finish()
