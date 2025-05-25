@@ -413,7 +413,6 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
-    user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot']
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata is not None else 0  # 功法闭关经验
@@ -425,9 +424,9 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     # 计算基础经验倍率
     base_exp_rate = XiuConfig().closing_exp * (
-        level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)
+        level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp)
     ) * (1 + impart_exp_up)
-    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 2 * 100)}%"
+    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up) * 2 * 100)}%"
 
     # 计算可用双倍经验时间
     available_exp_day = int(impart_data_draw['exp_day'])  # 可用修炼时间

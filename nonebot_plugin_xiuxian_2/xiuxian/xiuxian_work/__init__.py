@@ -201,7 +201,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     gain_exp = give_exp
                 if current_exp + gain_exp >= max_exp:
                     remaining_exp = max_exp - current_exp
-                    gain_exp = remaining_exp                
+                    gain_exp = remaining_exp
+                gain_exp = max(gain_exp, 0)
                 if big_suc or s_o_f:  # 大成功 or 普通成功
                     sql_message.update_exp(user_id, gain_exp)
                     sql_message.do_work(user_id, 0)
@@ -219,7 +220,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
                     if current_exp + gain_exp >= max_exp:
                         remaining_exp = max_exp - current_exp
-                        gain_exp = remaining_exp                
+                        gain_exp = remaining_exp
+                    gain_exp = max(gain_exp, 0)
                     sql_message.update_exp(user_id, gain_exp)
                     sql_message.do_work(user_id, 0)
                     msg = f"悬赏令结算，{msg}增加修为{gain_exp}!"

@@ -59,6 +59,7 @@ steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, p
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
 gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, block=True)
 ccll_command = on_command("传承力量", permission=SUPERUSER, priority=10, block=True)
+zaohua_xiuxian = on_command('造化力量', permission=SUPERUSER, priority=15,block=True)
 cz = on_command('创造力量', permission=SUPERUSER, priority=15,block=True)
 rob_stone = on_command("抢劫", aliases={"拿来吧你"}, priority=5, permission=GROUP, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
@@ -1099,6 +1100,55 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
                 continue
     await ccll_command.finish()
     
+@zaohua_xiuxian.handle(parameterless=[Cooldown(at_sender=False)])
+async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    give_qq = None  # 艾特的时候存到这里
+    arg_list = args.extract_plain_text().split()
+    if not args:
+        msg = f"请输入正确指令！例如：造化力量 道号 境界名"
+        await handle_send(bot, event, msg)
+        await zaohua_xiuxian.finish()
+    if len(arg_list) < 2:
+        jj_name = arg_list[0]
+    else:
+        jj_name = arg_list[1]
+        
+    for arg in args:
+        if arg.type == "at":
+            give_qq = arg.data.get("qq", "")
+    if give_qq:
+        give_user = sql_message.get_user_info_with_id(give_qq)
+    else:
+        give_user = sql_message.get_user_info_with_name(arg_list[0])
+        give_qq = give_user['user_id']
+    if give_user:
+        level = jj_name
+        if len(jj_name) == 5:
+            level = jj_name
+        elif len(jj_name) == 3:
+            level = (jj_name + '圆满')
+        if convert_rank(level)[0] is None:
+            msg = f"境界错误，请输入正确境界名！"
+            await handle_send(bot, event, msg)
+            await zaohua_xiuxian.finish()
+        max_exp = int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
+        exp = give_user['exp']
+        now_exp = exp - 100
+        sql_message.update_j_exp(give_qq, now_exp) #重置用户修为
+        sql_message.update_exp(give_qq, max_exp)  # 更新修为
+        sql_message.updata_level(give_qq, level)  # 更新境界
+        sql_message.update_user_hp(give_qq)  # 重置用户状态
+        sql_message.update_power2(give_qq)  # 更新战力
+        msg = f"{give_user['user_name']}道友的境界已变更为{level}！"
+        await handle_send(bot, event, msg)
+        await zaohua_xiuxian.finish()
+    else:
+        msg = f"对方未踏入修仙界，不可修改！"
+        await handle_send(bot, event, msg)
+        await zaohua_xiuxian.finish()
+        
+        
 @cz.handle(parameterless=[Cooldown(at_sender=False)])
 async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """创造力量"""

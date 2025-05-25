@@ -69,6 +69,8 @@ def createboss():
         level = top_user_level[:3] 
     elif len(top_user_level) == 4: # 对江湖好手判断
         level = "搬血境"
+    elif len(top_user_level) == 2: # 对至高判断
+        level = "永恒境"
 
     boss_jj = random.choice(jinjie_list[:jinjie_list.index(level) + 1])
     bossinfo = get_boss_exp(boss_jj)
