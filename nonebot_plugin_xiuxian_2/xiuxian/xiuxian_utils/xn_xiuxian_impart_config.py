@@ -12,6 +12,6 @@ class IMPART_BUFF_CONFIG:
                                       "impart_exp_up", "boss_atk",
                                       "impart_know_per", "impart_burst_per",
                                       "impart_mix_per", "impart_reap_per",
-                                      "impart_two_exp", "stone_num"]
+                                      "impart_two_exp", "stone_num", "impart_lv"]
 
 config_impart = IMPART_BUFF_CONFIG()

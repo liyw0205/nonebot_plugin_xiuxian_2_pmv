@@ -809,10 +809,10 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
 
     player1_skil_open = False
     user1_skill_data = None
+    player1_random_sec = 0
     if user1_buff_date.get_user_sec_buff_data() is not None:
         user1_skill_data = user1_buff_date.get_user_sec_buff_data()
         player1_skil_open = True
-        player1_random_sec = 0
         if user1_skill_data['skill_type'] == 7:
             player1_random_sec = 1
             player1_sec_name = user1_skill_data['name']

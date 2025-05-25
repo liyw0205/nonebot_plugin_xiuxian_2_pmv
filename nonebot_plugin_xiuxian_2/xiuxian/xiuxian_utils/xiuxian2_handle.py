@@ -1776,6 +1776,7 @@ class XIUXIAN_IMPART_BUFF:
     "impart_reap_per" integer DEFAULT 0,
     "impart_two_exp" integer DEFAULT 0,
     "stone_num" integer DEFAULT 0,
+    "impart_lv" integer DEFAULT 0,
     "exp_day" integer DEFAULT 0,
     "wish" integer DEFAULT 0
     );""")
@@ -1812,7 +1813,7 @@ class XIUXIAN_IMPART_BUFF:
             pass
         else:
             c = self.conn.cursor()
-            sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,exp_day,wish) VALUES(?, 0, 0, 0, 0 ,0, 0, 0, 0, 0 ,0 ,0 ,0, 0)"
+            sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,exp_day,wish) VALUES(?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
             c.execute(sql, (user_id,))
             self.conn.commit()
 
@@ -2026,6 +2027,20 @@ class XIUXIAN_IMPART_BUFF:
         cur = self.conn.cursor()
         sql = "UPDATE xiuxian_impart SET stone_num=stone_num+?"
         cur.execute(sql, (impart_stone,))
+        self.conn.commit()
+        
+    def update_impart_lv(self, impart_lv):
+        """更新虚神界等级"""
+        cur = self.conn.cursor()
+        sql = "UPDATE xiuxian_impart SET impart_lv=?"
+        cur.execute(sql, (impart_lv,))
+        self.conn.commit()
+
+    def update_impart_lv_reset(self):
+        """重置虚神界等级"""
+        sql = f"UPDATE xiuxian_impart SET impart_lv=0"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
         self.conn.commit()
 
     def add_impart_exp_day(self, impart_num, user_id):
