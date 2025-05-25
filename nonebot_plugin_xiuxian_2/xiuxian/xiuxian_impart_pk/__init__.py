@@ -369,7 +369,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg = f"深入虚神界{impart_name}区域成功！"
     else:
         msg = "道友迷失方向，晕头转向😵‍💫，深入虚神界失败！"
-        impart_pk.update_user_level(user_id)
+    impart_pk.update_user_level(user_id)
     impart_exp_up = impart_lv * 0.5
     msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
     await handle_send(bot, event, msg)
