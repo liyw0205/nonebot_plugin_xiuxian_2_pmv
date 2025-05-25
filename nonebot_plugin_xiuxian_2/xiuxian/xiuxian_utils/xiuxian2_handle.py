@@ -773,6 +773,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, (int(exp), user_id))
         self.conn.commit()
 
+    def update_exp2(self, user_id, exp):
+        """修改修为"""
+        sql = "UPDATE user_xiuxian SET exp=? WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (exp, user_id))
+        self.conn.commit()
+        
     def update_j_exp(self, user_id, exp):
         """减少修为"""
         sql = "UPDATE user_xiuxian SET exp=exp-? WHERE user_id=?"
@@ -1687,7 +1694,7 @@ def final_user_data(user_data, columns):
     main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
     main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
     
-    hppractice = user_dict['hppractice'] * 0.08 if user_dict['hppractice'] is not None else 0
+    hppractice = user_dict['hppractice'] * 0.05 if user_dict['hppractice'] is not None else 0
     mppractice = user_dict['mppractice'] * 0.05 if user_dict['mppractice'] is not None else 0
     
     # 改成字段名称来获取相应的值

@@ -660,7 +660,21 @@ def number_to2(num):
     formatted_num = format_number(num)
     return f"{sign}{formatted_num}{units[level]}"
 
-        
+def number_to3(num):
+    """
+    根据数值大小返回原始值或科学计数法
+    规则：大于等于1e+21时返回科学计数法，否则直接返回原数值
+    """
+    try:
+        num_val = float(num)
+    except (TypeError, ValueError):
+        raise ValueError("输入必须是数字或科学计数法字符串")
+    
+    if abs(num_val) >= 1e21:  # 阈值改为大于等于
+        return f"{num_val:.2e}"  # 保留2位小数的科学计数法
+    else:
+        return num_val  # 返回浮点数
+
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
     result = "@" + user_name + "\n" + msg

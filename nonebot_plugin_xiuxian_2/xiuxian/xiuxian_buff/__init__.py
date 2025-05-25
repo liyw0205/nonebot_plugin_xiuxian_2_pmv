@@ -773,7 +773,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
     impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
     boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
-    hppractice = user_msg['hppractice'] * 0.08 if user_msg['hppractice'] is not None else 0
+    hppractice = user_msg['hppractice'] * 0.05 if user_msg['hppractice'] is not None else 0
     mppractice = user_msg['mppractice'] * 0.05 if user_msg['mppractice'] is not None else 0  
     weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data() #我的状态武器会心伤害
     weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0 #我的状态武器会心伤害
