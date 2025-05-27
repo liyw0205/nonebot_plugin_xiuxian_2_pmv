@@ -748,17 +748,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         """
         更新用户操作CD
         :param user_id: qq
-        :param the_type: 0:无状态  1:闭关中  2:历练中  4:虚神界闭关中
+        :param the_type: 0:无状态  1:闭关中  2:历练中  4:虚神界闭关中  5:修炼中
         :return:
         """
         now_time = None
-        if the_type == 1:
-            now_time = datetime.now()
-        elif the_type == 0:
+        if the_type == 0:
             now_time = 0
-        elif the_type == 2:
-            now_time = datetime.now()
-        elif the_type == 4:
+        else:
             now_time = datetime.now()
         sql = "UPDATE user_cd SET type=?,create_time=? WHERE user_id=?"
         cur = self.conn.cursor()

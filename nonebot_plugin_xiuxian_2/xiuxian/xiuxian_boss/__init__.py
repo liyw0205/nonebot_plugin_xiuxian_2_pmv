@@ -448,7 +448,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             get_stone = boss_now_stone
         bossinfo['stone'] = boss_old_stone - get_stone
         sql_message.update_ls(user_id, get_stone, 1)
-        boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 777)
+        boss_integral = int(((boss_old_hp - boss_now_hp) / boss_all_hp) * 100)
+        boss_integral = min(boss_integral, 1500)
         if boss_integral < 5:  # 摸一下不给
             boss_integral = 0
         if user_info['root'] == "器师":
@@ -485,7 +486,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     elif victor == "群友赢了":
         # 新增boss战斗积分点数
         boss_all_hp = bossinfo['总血量']  # 总血量
-        boss_integral = 777
+        boss_integral = 1000
         if user_info['root'] == "器师":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
