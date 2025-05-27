@@ -132,7 +132,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_data = impart_pk.find_user_data(user_info['user_id'])
 
     if user_data["pk_num"] <= 0:
-        msg = f"道友今日次数耗尽，每天再来吧！"
+        msg = f"道友今日次数耗尽，明天再来吧！"
         await handle_send(bot, event, msg)
         await impart_pk_now.finish()
 
@@ -345,11 +345,16 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     user_id = user_info['user_id']
+    user_data = impart_pk.find_user_data(user_info['user_id'])
+    if user_data["impart_lv"] <= 0:
+        msg = f"道友今日次数耗尽，明天再来吧！"
+        await handle_send(bot, event, msg)
+        await impart_pk_go.finish()
     impart_data_draw = await impart_pk_check(user_id)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
-    impart_level = {0:"边缘",1:"外层",2:"中层",3:"里层",4:"深层",5:"核心",6:"核心 10%",7:"核心 30%",8:"核心 60 %",9:"核心 99%"}
-    impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
-    if impart_lv == 9:
+    impart_level = {0:"边缘",1:"外层",2:"中层",3:"里层",4:"深层",5:"核心",6:"核心10%",7:"核心30%",8:"核心60%",9:"核心99%",10:"核心100%"}
+    impart_name = impart_level.get(impart_lv, "未知")
+    if impart_lv == 10:
         msg = f"已进入虚神界{impart_name}区域！"
         impart_exp_up = impart_lv * 0.3
         msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
@@ -364,22 +369,36 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await impart_pk_go.finish()
     impart_suc = random.randint(1, 100)
     impart_time = random.randint(10, 100)
-    if 30 <= impart_suc <= 60:
+    impart_rate = random.randint(1, 3)
+    if impart_suc <= 50:
+        msg = f"道友迷失方向，晕头转向😵‍💫，回到了虚神界{impart_name}区域！\n消耗虚神界时间：{impart_time}分钟"
+        xiuxian_impart.use_impart_exp_day(impart_time, user_id)
+        impart_pk.update_user_impart_lv(user_info['user_id'])
+        await handle_send(bot, event, msg)
+        await impart_pk_go.finish()
+    impart_suc = random.randint(1, 100)
+    if 1 <= impart_suc <= 40:
         impart_lv = impart_lv - 1
         impart_lv = max(impart_lv, 0)
-        xiuxian_impart.update_impart_lv(impart_lv)
-        impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
-        msg = f"道友迷失方向，晕头转向😵‍💫，回到了虚神界{impart_name}区域！"
-    elif 61 <= impart_suc <= 100:
-        msg = f"道友偶遇时空乱流，无奈原路返回虚神界{impart_name}区域！"
-    else:
+        msg = "偶遇时空乱流"
+    elif 41 <= impart_suc <= 80:
         impart_lv = impart_lv + 1
-        xiuxian_impart.update_impart_lv(impart_lv)
-        impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
-        msg = f"深入虚神界{impart_name}区域成功！"
+        impart_lv = min(impart_lv, 10)
+        msg = "机缘巧合"
+    elif 81 <= impart_suc <= 90:
+        impart_lv = impart_lv - impart_rate
+        impart_lv = max(impart_lv, 0)
+        msg = "通过随机传送阵"
+    else:
+        impart_lv = impart_lv + impart_rate
+        impart_lv = min(impart_lv, 10)
+        msg = "通过随机传送阵"
     xiuxian_impart.use_impart_exp_day(impart_time, user_id)
+    xiuxian_impart.update_impart_lv(impart_lv)
+    impart_pk.update_user_impart_lv(user_info['user_id'])
     impart_exp_up = impart_lv * 0.3
-    msg += f"\n消耗虚神界时间：{impart_time}分钟\n虚神界祝福：{int(impart_exp_up * 100)}%"
+    impart_name = impart_level.get(impart_lv, "未知")
+    msg += f"，道友来到虚神界{impart_name}区域！\n消耗虚神界时间：{impart_time}分钟\n虚神界祝福：{int(impart_exp_up * 100)}%"
     await handle_send(bot, event, msg)
     await impart_pk_go.finish()
         
@@ -454,7 +473,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
-    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 2
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata is not None else 0  # 功法闭关经验

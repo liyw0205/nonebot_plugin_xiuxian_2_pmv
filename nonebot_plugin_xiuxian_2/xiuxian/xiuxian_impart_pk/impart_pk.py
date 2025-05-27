@@ -40,7 +40,7 @@ class IMPART_PK(object):
                 return True
         except KeyError:
             user_number = len(self.data) + 1
-            self.data[user_id] = {"number": user_number, "pk_num": 5, "win_num": 0, "impart_level": 5}
+            self.data[user_id] = {"number": user_number, "pk_num": 5, "win_num": 0, "impart_lv": 10}
             self.__save()
             return False
 
@@ -74,16 +74,15 @@ class IMPART_PK(object):
             self.__save()
             return True
             
-    def update_user_level(self, user_id):
+    def update_user_impart_lv(self, user_id):
         """
-        更新深入虚神界数据
+        更新用户数据
         :param user_id:
         """
         user_id = str(user_id)
         self.check_user_impart(user_id)
-        self.data[user_id]["impart_level"] -= 1
+        self.data[user_id]["impart_lv"] -= 1
         self.__save()
-        return True
 
     def all_user_data(self):
         """
