@@ -1,4 +1,5 @@
 import random
+import asyncio
 import re
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -40,6 +41,8 @@ two_exp_cd_up = require("nonebot_plugin_apscheduler").scheduler
 buffinfo = on_fullmatch("我的功法", priority=25, block=True)
 out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=True)
 in_closing = on_fullmatch("闭关", priority=5, block=True)
+up_exp = on_command("修炼", priority=5, block=True)
+reset_exp = on_command("重置修炼状态", priority=5, block=True)
 stone_exp = on_command("灵石修仙", aliases={"灵石修炼"}, priority=5, block=True)
 two_exp = on_command("双修", priority=5, block=True)
 mind_state = on_fullmatch("我的状态", priority=7, block=True)
@@ -507,6 +510,111 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await two_exp.finish()
 
 
+@reset_exp.handle(parameterless=[Cooldown(at_sender=False)])
+async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置修炼状态"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    user_type = 5  # 状态5为修炼
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await reset_exp.finish()
+    user_id = user_info['user_id']
+    msg = "请等待60s即可！"
+    await handle_send(bot, event, msg)
+    await asyncio.sleep(60)
+    sql_message.in_closing(user_id, 0)
+    msg = "已重置修炼状态！"
+    await handle_send(bot, event, msg)
+    await reset_exp.finish()
+    
+@up_exp.handle(parameterless=[Cooldown(at_sender=False)])
+async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """修炼"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    user_type = 5  # 状态5为修炼
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await up_exp.finish()
+    user_id = user_info['user_id']
+    user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
+    level = user_mes['level']
+    use_exp = user_mes['exp']
+
+    max_exp = (
+            int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
+    )  # 获取下个境界需要的修为 * 1.5为闭关上限
+    user_get_exp_max = int(max_exp) - use_exp
+
+    if user_get_exp_max < 0:
+        # 校验当当前修为超出上限的问题，不可为负数
+        user_get_exp_max = 0
+
+    now_time = datetime.now()
+    user_cd_message = sql_message.get_user_cd(user_id)
+    is_type, msg = check_user_type(user_id, 0)
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await up_exp.finish()
+    else:
+        level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
+        realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
+        user_buff_data = UserBuffDate(user_id)
+        user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
+        mainbuffdata = user_buff_data.get_user_main_buff_data()
+        mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
+        mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
+        mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
+        exp_rate = 3 #修炼效率加成
+        
+        exp = int(
+            XiuConfig().closing_exp * ((level_rate * realm_rate * exp_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
+            # 洞天福地为加法
+        )  # 本次闭关获取的修为
+        # 计算传承增益
+        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+        impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
+        exp = int(exp * (1 + impart_exp_up))
+        base_exp_rate = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
+        sql_message.in_closing(user_id, user_type)
+        if user_info['root_type'] == '伪灵根':
+            msg = "开始挖矿⛏️‍！"
+            await handle_send(bot, event, msg)
+            await asyncio.sleep(60)
+            give_stone_num = random.randint(10000, 300000)
+            sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
+            msg = f"挖矿结束，增加灵石：{give_stone_num}"
+            await handle_send(bot, event, msg)
+            await up_exp.finish()
+        else:
+            msg = "开始修炼🧘‍！"
+        await handle_send(bot, event, msg)
+        await asyncio.sleep(60)
+        user_type = 0  # 状态0为无事件
+        if exp >= user_get_exp_max:
+            # 用户获取的修为到达上限
+            sql_message.in_closing(user_id, user_type)
+            sql_message.update_exp(user_id, user_get_exp_max)
+            sql_message.update_power2(user_id)  # 更新战力
+
+            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
+            sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
+            msg = f"修炼结束，本次修炼到达上限，共增加修为：{user_get_exp_max}{result_msg[0]}{result_msg[1]}"
+            await handle_send(bot, event, msg)
+            await up_exp.finish()
+        else:
+            # 用户获取的修为没有到达上限
+            sql_message.in_closing(user_id, user_type)
+            sql_message.update_exp(user_id, exp)
+            sql_message.update_power2(user_id)  # 更新战力
+            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
+            sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
+            msg = f"修炼结束，增加修为：{exp}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
+            await handle_send(bot, event, msg)
+            await up_exp.finish()
+
+ 
 @stone_exp.handle(parameterless=[Cooldown(at_sender=False)])
 async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """灵石修炼"""

@@ -71,18 +71,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await do_work.finish()
     mode = args[0]  # 刷新、终止、结算、接取    
-    if user_cd_message['type'] == 1:
-        msg = "已经在闭关中，请输入【出关】结束后才能获取悬赏令！"
-        await handle_send(bot, event, msg)
-        await do_work.finish()
-    if user_cd_message['type'] == 3:
-        msg = "道友在秘境中，请等待结束后才能获取悬赏令！"
-        await handle_send(bot, event, msg)
-        await do_work.finish()
-    if user_cd_message['type'] == 4:
-        msg = "已经在虚神界闭关中，请输入【虚神界出关】结束后才能获取悬赏令！"
-        await handle_send(bot, event, msg)
-        await do_work.finish()
 
     if mode == "查看":  # 刷新逻辑
         if (user_cd_message['scheduled_time'] is None) or (user_cd_message['type'] == 0):
@@ -124,7 +112,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if not isUser:
             await handle_send(bot, event, msg)
             await do_work.finish()
-
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
         freenum = count - usernums - 1
         if freenum < 0:
             freenum = 0
@@ -262,7 +253,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 await handle_send(bot, event, msg)
                 await do_work.finish()
         else:
-            msg = "没有查到你的悬赏令信息呢，请刷新！"
             await handle_send(bot, event, msg)
             await do_work.finish()
 
