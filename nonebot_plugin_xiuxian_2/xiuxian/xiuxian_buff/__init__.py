@@ -138,7 +138,8 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         blessed_spot_name = user_info['blessed_spot_name']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     msg += f"名字：{blessed_spot_name}\n"
-    msg += f"修炼速度：增加{int(user_buff_data['blessed_spot']) * 100}%\n"
+    msg += f"修炼速度：增加{int(user_buff_data['blessed_spot'] * 0.5) * 100}%\n"
+    msg += f"药材速度：增加{mix_elixir_info['药材速度'] * 100}%\n"
     msg += f"灵田数量：{mix_elixir_info['灵田数量']}"
     await handle_send(bot, event, msg)
     await blessed_spot_info.finish()
@@ -626,7 +627,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
-        user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot']
+        user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
         mainbuffdata = user_buff_data.get_user_main_buff_data()
         mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
         mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
@@ -711,7 +712,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     level_rate = sql_message.get_root_rate(user_msg['root_type'])  # 灵根倍率
     realm_rate = jsondata.level_data()[user_msg['level']]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
-    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot']
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
     main_buff_data = user_buff_data.get_user_main_buff_data()
     user_armor_crit_data = user_buff_data.get_user_armor_buff_data() #我的状态防具会心
     user_weapon_data = UserBuffDate(user_id).get_user_weapon_data() #我的状态武器减伤

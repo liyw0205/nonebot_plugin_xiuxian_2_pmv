@@ -426,7 +426,7 @@ def get_item_msg(goods_id):
         msg = get_yaocai_info_msg(goods_id, item_info)
     elif item_info['item_type'] == "聚灵旗":
         msg = f"名字：{item_info['name']}\n"
-        msg += f"效果：{item_info['desc']}"
+        msg += f"效果：{item_info['desc']}\n修炼速度：{item_info['修炼速度'] * 100}%\n药材速度：{item_info['药材速度'] * 100}%"
     elif item_info['type'] == '特殊道具':
         msg = f"名字：{item_info['name']}\n"
         msg += f"描述：{item_info['desc']}\n"
@@ -647,7 +647,7 @@ def get_use_jlq_msg(user_id, goods_id):
             mix_elixir_info['药材速度'] = item_info['药材速度']
             save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
             sql_message.update_back_j(user_id, goods_id)
-            sql_message.updata_user_blessed_spot(user_id, item_info['修炼速度'])
+            sql_message.updata_user_blessed_spot(user_id, item_info['level'])
             msg = f"道友洞天福地的聚灵旗已经替换为：{item_info['name']}"
     return msg
 

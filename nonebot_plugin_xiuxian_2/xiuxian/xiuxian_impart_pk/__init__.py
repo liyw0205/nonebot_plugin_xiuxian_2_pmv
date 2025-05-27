@@ -347,31 +347,39 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     impart_data_draw = await impart_pk_check(user_id)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
-    impart_level = {0:"边缘",1:"外层",2:"中层",3:"里层",4:"深层",5:"核心"}
+    impart_level = {0:"边缘",1:"外层",2:"中层",3:"里层",4:"深层",5:"核心",6:"核心 10%",7:"核心 30%",8:"核心 60 %",9:"核心 99%"}
     impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
-    if impart_lv == 5:
+    if impart_lv == 9:
         msg = f"已进入虚神界{impart_name}区域！"
-        impart_exp_up = impart_lv * 0.5
+        impart_exp_up = impart_lv * 0.3
         msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     else:
-        if impart_pk.find_user_data(user_id)["impart_level"] <= 0:
-            msg = f"道友今日次数已用尽，无法在深入虚神界！"
-            impart_exp_up = impart_lv * 0.5
+        if impart_data_draw['exp_day'] < 100:
+            msg = f"道友累计时间不足，无法在深入虚神界！"
+            impart_exp_up = impart_lv * 0.3
             msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
             await handle_send(bot, event, msg)
             await impart_pk_go.finish()
     impart_suc = random.randint(1, 100)
-    if impart_suc >= 50:
+    impart_time = random.randint(10, 100)
+    if 30 <= impart_suc <= 60:
+        impart_lv = impart_lv - 1
+        impart_lv = max(impart_lv, 0)
+        xiuxian_impart.update_impart_lv(impart_lv)
+        impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
+        msg = f"道友迷失方向，晕头转向😵‍💫，回到了虚神界{impart_name}区域！"
+    elif 61 <= impart_suc <= 100:
+        msg = f"道友偶遇时空乱流，无奈原路返回虚神界{impart_name}区域！"
+    else:
         impart_lv = impart_lv + 1
         xiuxian_impart.update_impart_lv(impart_lv)
+        impart_name = impart_level.get(impart_data_draw['impart_lv'], "未知")
         msg = f"深入虚神界{impart_name}区域成功！"
-    else:
-        msg = "道友迷失方向，晕头转向😵‍💫，深入虚神界失败！"
-    impart_pk.update_user_level(user_id)
-    impart_exp_up = impart_lv * 0.5
-    msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
+    xiuxian_impart.use_impart_exp_day(impart_time, user_id)
+    impart_exp_up = impart_lv * 0.3
+    msg += f"\n消耗虚神界时间：{impart_time}分钟\n虚神界祝福：{int(impart_exp_up * 100)}%"
     await handle_send(bot, event, msg)
     await impart_pk_go.finish()
         
@@ -446,6 +454,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 2
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata is not None else 0  # 功法闭关经验
@@ -455,14 +464,14 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
     impart_lv = impart_data_draw['impart_lv'] if impart_data is not None else 0
-    impart_exp_up2 = impart_lv * 0.5
+    impart_exp_up2 = impart_lv * 0.3
     
 
     # 计算基础经验倍率
     base_exp_rate = XiuConfig().closing_exp * (
-        level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp)
-    ) * (1 + impart_exp_up)
-    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)}%"
+        level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data) * (1 + impart_exp_up)
+    ) 
+    base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up + impart_exp_up2) * 100)}%"
 
     # 计算可用虚神界修炼时间
     available_exp_day = int(impart_data_draw['exp_day'])  # 可用修炼时间
