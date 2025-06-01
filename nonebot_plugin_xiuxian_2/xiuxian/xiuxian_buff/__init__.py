@@ -576,7 +576,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
         exp = int(exp * (1 + impart_exp_up))
-        exp_rate = random.randint(0.8, 1.2)
+        exp_rate = random.uniform(0.8, 1.2)
         exp = int(exp * exp_rate)
         base_exp_rate = f"{int((level_rate + exp_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
         sql_message.in_closing(user_id, user_type)
