@@ -566,25 +566,24 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
         mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
         mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
-        exp_rate = 2 #修炼效率加成
         
         exp = int(
-            XiuConfig().closing_exp * ((level_rate * realm_rate * exp_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
+            XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
             # 洞天福地为加法
         )  # 本次闭关获取的修为
         # 计算传承增益
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
         exp = int(exp * (1 + impart_exp_up))
-        exp_rate = random.uniform(0.8, 1.2)
+        exp_rate = random.uniform(1.1, 1.9)
         exp = int(exp * exp_rate)
-        base_exp_rate = f"{int((level_rate + exp_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
         sql_message.in_closing(user_id, user_type)
         if user_info['root_type'] == '伪灵根':
             msg = f"开始挖矿⛏️‍！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\j预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
-            give_stone_num = random.randint(10000, 300000)
+            give_stone = random.randint(10000, 300000)
+            give_stone_num = int(give_stone * exp_rate)
             sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
             msg = f"挖矿结束，增加灵石：{give_stone_num}"
             await handle_send(bot, event, msg)
@@ -612,7 +611,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             sql_message.update_power2(user_id)  # 更新战力
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"修炼结束，增加修为：{exp}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
+            msg = f"修炼结束，增加修为：{exp}{result_msg[0]}{result_msg[1]}"
             await handle_send(bot, event, msg)
             await up_exp.finish()
 
