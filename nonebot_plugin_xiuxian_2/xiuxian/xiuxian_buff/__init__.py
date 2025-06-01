@@ -510,7 +510,7 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await two_exp.finish()
 
 
-@reset_exp.handle(parameterless=[Cooldown(at_sender=False)])
+@reset_exp.handle(parameterless=[Cooldown(at_sender=False, cd_time=60)])
 async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置修炼状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -520,7 +520,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await reset_exp.finish()
     user_id = user_info['user_id']
-    msg = "请等待60s即可！"
+    msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
     await asyncio.sleep(60)
     sql_message.in_closing(user_id, 0)
@@ -528,7 +528,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await reset_exp.finish()
     
-@up_exp.handle(parameterless=[Cooldown(at_sender=False)])
+@up_exp.handle(parameterless=[Cooldown(at_sender=False, cd_time=60)])
 async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -566,7 +566,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
         mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
         mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
-        exp_rate = 3 #修炼效率加成
+        exp_rate = 2 #修炼效率加成
         
         exp = int(
             XiuConfig().closing_exp * ((level_rate * realm_rate * exp_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
@@ -576,10 +576,12 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
         exp = int(exp * (1 + impart_exp_up))
-        base_exp_rate = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
+        exp_rate = random.randint(0.8, 1.2)
+        exp = int(exp * exp_rate)
+        base_exp_rate = f"{int((level_rate + exp_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
         sql_message.in_closing(user_id, user_type)
         if user_info['root_type'] == '伪灵根':
-            msg = "开始挖矿⛏️‍！"
+            msg = f"开始挖矿⛏️‍！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\j预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
             give_stone_num = random.randint(10000, 300000)
@@ -588,7 +590,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await up_exp.finish()
         else:
-            msg = "开始修炼🧘‍！"
+            msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
         user_type = 0  # 状态0为无事件
