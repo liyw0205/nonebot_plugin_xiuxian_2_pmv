@@ -26,6 +26,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
 impart_re = require("nonebot_plugin_apscheduler").scheduler
+impart_relv = require("nonebot_plugin_apscheduler").scheduler
 
 impart_pk_project = on_fullmatch("投影虚神界", priority=6, block=True)
 impart_pk_go = on_fullmatch("深入虚神界", priority=6, block=True)
@@ -35,14 +36,18 @@ impart_pk_exp = on_command("虚神界修炼", priority=8, block=True)
 impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
 
-# 每日0点重置用虚神界次数和等级
+# 每日0点重置用虚神界次数
 @impart_re.scheduled_job("cron", hour=0, minute=0)
 async def impart_re_():
     impart_pk.re_data()
     xu_world.re_data()
-    xiuxian_impart.update_impart_lv_reset
-    logger.opt(colors=True).info(f"<green>已重置虚神界次数和等级</green>")
-
+    logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
+    
+# 每周星期一0点重置虚神界等级
+@impart_relv.scheduled_job("cron", hour=0, minute=0, day_of_week=1)
+async def impart_relv_():
+    xiuxian_impart.impart_lv_reset()
+    logger.opt(colors=True).info(f"<green>已重置虚神界等级</green>")
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

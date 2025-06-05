@@ -2032,7 +2032,7 @@ class XIUXIAN_IMPART_BUFF:
         cur.execute(sql, (impart_lv,))
         self.conn.commit()
 
-    def update_impart_lv_reset(self):
+    def impart_lv_reset(self):
         """重置虚神界等级"""
         sql = f"UPDATE xiuxian_impart SET impart_lv=0"
         cur = self.conn.cursor()
