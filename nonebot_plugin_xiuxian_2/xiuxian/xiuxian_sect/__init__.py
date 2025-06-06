@@ -46,6 +46,8 @@ buffrankkey = {
     "地阶上品": 8,
     "天阶下品": 9,
     "天阶上品": 10,
+    "仙阶下品": 20,
+    "仙阶上品": 30,
 }
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
@@ -343,7 +345,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                                           "content": main_msg}})
             for main in mainbufflist:
                 mainbuff, mainbuffmsg = get_main_info_msg(str(main))
-                mainmsg = f"{mainbuff['level']}:{mainbuffmsg}\n"
+                mainmsg = f"{mainbuff['level']}{mainbuff['name']}:{mainbuffmsg}\n"
                 msg += mainmsg
                 list_tp.append(
                     {"type": "node", "data": {"name": f"道友{user_info['user_name']}的宗门秘籍信息", "uin": bot.self_id,
@@ -476,7 +478,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                             mainbuffidlist.append(mainbuffid)
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
                             success_count += 1
-                            results.append(f"第{i + 1}次获取到{mainbufftype}功法：{mainbuff['name']}\n")
+                            results.append(f"第{i + 1}次获取到{mainbufftype}功法：{mainbuff['name']}")
                     else:
                         fail_count += 1
 
@@ -1558,11 +1560,10 @@ def get_sectbufftxt(sect_scale, config_):
     参数:sect_scale=宗门建设度
     config=宗门主功法参数
     """
-    bufftxt = {1: '人阶下品', 2: '人阶上品', 3: '黄阶下品', 4: '黄阶上品', 5: '玄阶下品', 6: '玄阶上品', 7: '地阶下品', 8: '地阶上品', 9: '天阶下品',
-               10: '天阶上品'}
+    bufftxt = {1: '人阶下品', 2: '人阶上品', 3: '黄阶下品', 4: '黄阶上品', 5: '玄阶下品', 6: '玄阶上品', 7: '地阶下品', 8: '地阶上品', 9: '天阶下品', 10: '仙阶上品', 20: '天阶下品', 30: '仙阶上品'}
     buffgear = divmod(sect_scale, config_['建设度'])[0]
-    if buffgear >= 10:
-        buffgear = 10
+    if buffgear >= 30:
+        buffgear = 30
     elif buffgear <= 1:
         buffgear = 1
     else:
