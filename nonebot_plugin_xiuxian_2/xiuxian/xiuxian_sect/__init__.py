@@ -46,8 +46,8 @@ buffrankkey = {
     "地阶上品": 8,
     "天阶下品": 9,
     "天阶上品": 10,
-    "仙阶下品": 20,
-    "仙阶上品": 30,
+    "仙阶下品": 50,
+    "仙阶上品": 100,
 }
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
@@ -1560,10 +1560,10 @@ def get_sectbufftxt(sect_scale, config_):
     参数:sect_scale=宗门建设度
     config=宗门主功法参数
     """
-    bufftxt = {1: '人阶下品', 2: '人阶上品', 3: '黄阶下品', 4: '黄阶上品', 5: '玄阶下品', 6: '玄阶上品', 7: '地阶下品', 8: '地阶上品', 9: '天阶下品', 10: '仙阶上品', 20: '天阶下品', 30: '仙阶上品'}
+    bufftxt = {1: '人阶下品', 2: '人阶上品', 3: '黄阶下品', 4: '黄阶上品', 5: '玄阶下品', 6: '玄阶上品', 7: '地阶下品', 8: '地阶上品', 9: '天阶下品', 10: '天阶上品', 50: '仙阶下品', 100: '仙阶上品'}
     buffgear = divmod(sect_scale, config_['建设度'])[0]
-    if buffgear >= 30:
-        buffgear = 30
+    if buffgear >= 100:
+        buffgear = 100
     elif buffgear <= 1:
         buffgear = 1
     else:
