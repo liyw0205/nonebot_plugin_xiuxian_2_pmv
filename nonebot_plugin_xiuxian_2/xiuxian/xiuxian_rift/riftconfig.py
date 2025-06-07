@@ -14,55 +14,46 @@ CONFIG = {
         "东玄域": {
             "type_rate": 200,  # 概率
             "rank": 1,  # 增幅等级
-            "count": 30,  # 次数
             "time": 10,  # 时间，单位分
         },
         "西玄域": {
             "type_rate": 200,
             "rank": 1,
-            "count": 30,
             "time": 10,
         },
         "妖域": {
             "type_rate": 100,
             "rank": 2,
-            "count": 50,
             "time": 20,
         },
         "乱魔海": {
             "type_rate": 100,
             "rank": 2,
-            "count": 50,
             "time": 20,
         },
         "幻雾林": {
             "type_rate": 50,
             "rank": 3,
-            "count": 50,
             "time": 30,
         },
         "狐鸣山": {
             "type_rate": 50,
             "rank": 3,
-            "count": 50,
             "time": 30,
         },
         "云梦泽": {
             "type_rate": 25,
             "rank": 4,
-            "count": 50,
             "time": 40,
         },
         "乱星原": {
             "type_rate": 12,
             "rank": 4,
-            "count": 50,
             "time": 40,
         },
         "黑水湖": {
             "type_rate": 6,
             "rank": 5,
-            "count": 50,
             "time": 50,
         }
     }

@@ -412,6 +412,5 @@ class Rift:
     def __init__(self) -> None:
         self.name = ''
         self.rank = 0
-        self.count = 0
         self.l_user_id = []
         self.time = 0

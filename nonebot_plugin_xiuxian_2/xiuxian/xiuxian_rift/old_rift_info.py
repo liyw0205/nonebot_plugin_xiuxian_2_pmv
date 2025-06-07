@@ -37,7 +37,6 @@ class OLD_RIFT_INFO(object):
         for x in group_rift:
             rift_data = {str(x): {"name": group_rift[x].name,
                                   "rank": group_rift[x].rank,
-                                  "count": group_rift[x].count,
                                   "l_user_id": group_rift[x].l_user_id,
                                   "time": group_rift[x].time
                                   }
@@ -55,11 +54,10 @@ class OLD_RIFT_INFO(object):
             rift = Rift()
             rift.name = self.data[x]["name"]
             rift.rank = self.data[x]["rank"]
-            rift.count = self.data[x]["count"]
+            rift.l_user_id = self.data[x]["l_user_id"]
             rift.time = self.data[x]["time"]
             group_rift[x] = rift
         self.data = {}
-        self.__save()
         return group_rift
 
 

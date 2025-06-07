@@ -95,10 +95,9 @@ async def generate_rift_for_group():
     rift = Rift()
     rift.name = get_rift_type()
     rift.rank = config['rift'][rift.name]['rank']
-    rift.count = config['rift'][rift.name]['count']
     rift.time = config['rift'][rift.name]['time']
     group_rift[group_id] = rift
-    msg = f"野生的{rift.name}出现了！秘境可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
+    msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
     logger.info(msg)
     old_rift_info.save_rift(group_rift)
     for notify_group_id in groups:
@@ -133,17 +132,16 @@ async def create_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await create_rift.finish()
 
     try:
-        msg = f"当前已存在{group_rift[group_id].name}，秘境可探索次数：{group_rift[group_id].count}次，请诸位道友发送 探索秘境 来加入吧！"
+        msg = f"当前已存在{group_rift[group_id].name}，请诸位道友发送 探索秘境 来加入吧！"
         await handle_send(bot, event, msg)
         await create_rift.finish()
     except KeyError:
         rift = Rift()
         rift.name = get_rift_type()
         rift.rank = config['rift'][rift.name]['rank']
-        rift.count = config['rift'][rift.name]['count']
         rift.time = config['rift'][rift.name]['time']
         group_rift[group_id] = rift
-        msg = f"野生的{rift.name}出现了！秘境可探索次数：{rift.count}次，请诸位道友发送 探索秘境 来加入吧！"
+        msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
         await create_rift.finish()
@@ -152,12 +150,12 @@ async def create_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 @explore_rift.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索秘境"""
+    group_rift.update(old_rift_info.read_rift_info())
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await explore_rift.finish()
-
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
@@ -188,7 +186,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await explore_rift.finish()
 
         group_rift[group_id].l_user_id.append(user_id)
-        group_rift[group_id].count -= 1
         msg = f"道友进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
         rift_data = {
             "name": group_rift[group_id].name,
@@ -198,12 +195,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
-        if group_rift[group_id].count == 0:
-            del group_rift[group_id]
-            logger.opt(colors=True).info(f"<green>{group_id}秘境已到上限次数！</green>")
-            msg += "秘境随着道友的进入，已无法再维持更多的人，而关闭了！"
-            await handle_send(bot, event, msg)
-            await explore_rift.finish()
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
         await explore_rift.finish()
