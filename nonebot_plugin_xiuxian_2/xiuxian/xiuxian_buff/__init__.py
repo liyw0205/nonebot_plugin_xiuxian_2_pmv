@@ -683,7 +683,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, 0)
     if user_info['root_type'] == '伪灵根':
-        msg = "器师无法闭关！"
+        msg = "凡人无法闭关！"
         await handle_send(bot, event, msg)
         await in_closing.finish()
     if is_type:  # 符合

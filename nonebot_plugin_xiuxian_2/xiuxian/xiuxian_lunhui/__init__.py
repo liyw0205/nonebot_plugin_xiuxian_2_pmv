@@ -36,7 +36,7 @@ __warring_help__ = f"""
 进入永恒轮回：获得永恒灵根
 最低境界：{XiuConfig().threelun_min_level}
 
-自废修为：字面意思，仅搬血境可用
+自废修为：字面意思，仅感气境可用
 """.strip()
 
 cache_help_fk = {}
@@ -257,7 +257,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
     user_name = user_msg['user_name']
     
                     
-    if user_msg['level'] in ['搬血境初期', '搬血境中期', '搬血境圆满']:
+    if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
         now_exp = exp
         sql_message.updata_level(user_id, '江湖好手') #重置用户境界
@@ -268,7 +268,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
         await handle_send(bot, event, msg)
         await resetting.finish()
     else:
-        msg = f"道友境界未达要求，自废修为的最低境界为搬血境！"
+        msg = f"道友境界未达要求，自废修为的最低境界为感气境！"
         await handle_send(bot, event, msg)
         await resetting.finish()
         

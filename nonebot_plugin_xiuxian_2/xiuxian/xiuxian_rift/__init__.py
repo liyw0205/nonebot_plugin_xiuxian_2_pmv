@@ -176,7 +176,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         
         user_rank = convert_rank(user_info["level"])[0]
          # 搬血中期 - 秘境rank
-        required_rank = convert_rank("搬血境中期")[0] - group_rift[group_id].rank
+        required_rank = convert_rank("感气境中期")[0] - group_rift[group_id].rank
          
         if user_rank > required_rank:
             rank_name_list = convert_rank(user_info["level"])[1]

@@ -292,7 +292,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     if user_info['root_type'] == '伪灵根':
-        msg = f"器师无法进行修炼!"
+        msg = f"凡人无法进行修炼!"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
@@ -408,7 +408,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, 0)
     if user_info['root_type'] == '伪灵根':
-        msg = "器师无法闭关！"
+        msg = "凡人无法闭关！"
         await handle_send(bot, event, msg)
         await impart_pk_in_closing.finish()
     if is_type:  # 符合

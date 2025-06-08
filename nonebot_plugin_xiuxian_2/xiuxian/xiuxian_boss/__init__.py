@@ -452,7 +452,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         boss_integral = min(boss_integral, 1500)
         if boss_integral < 5:  # 摸一下不给
             boss_integral = 0
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
             more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
@@ -463,7 +463,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         top_user_exp = top_user_info['exp']
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         
-        if exp_buff > 0 and user_info['root'] != "器师":
+        if exp_buff > 0 and user_info['root'] != "凡人":
             now_exp = int(((top_user_exp * 0.1) / user_info['exp']) / (exp_buff * (1 / (convert_rank(user_info['level'])[0] + 1))))
             if now_exp > 1000000:
                 now_exp = int(1000000 / random.randint(5, 10))
@@ -473,8 +473,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             exp_msg = f" "
             
         msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点{exp_msg} "
-        if user_info['root'] == "器师" and boss_integral < 0:
-            msg += f"\n如果出现负积分，说明你境界太高了，玩器师就不要那么高境界了！！！"
+        if user_info['root'] == "凡人" and boss_integral < 0:
+            msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
         battle_flag[group_id] = False
         try:
             await send_msg_handler(bot, event, result)
@@ -487,7 +487,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         # 新增boss战斗积分点数
         boss_all_hp = bossinfo['总血量']  # 总血量
         boss_integral = 1000
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
             more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
@@ -504,7 +504,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         top_user_info = sql_message.get_top1_user()
         top_user_exp = top_user_info['exp']
         
-        if exp_buff > 0 and user_info['root'] != "器师":
+        if exp_buff > 0 and user_info['root'] != "凡人":
             now_exp = int(((top_user_exp * 0.1) / user_info['exp']) / (exp_buff * (1 / (convert_rank(user_info['level'])[0] + 1))))
             if now_exp > 1000000:
                 now_exp = int(1000000 / random.randint(5, 10))
@@ -531,8 +531,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         user_boss_fight_info['boss_integral'] += boss_integral
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点!{exp_msg} {drops_msg}"
-        if user_info['root'] == "器师" and boss_integral < 0:
-           msg += f"\n如果出现负积分，说明你这器师境界太高了(如果总世界积分为负数，会帮你重置成0)，玩器师就不要那么高境界了！！！"
+        if user_info['root'] == "凡人" and boss_integral < 0:
+           msg += f"\n如果出现负积分，说明你这凡人境界太高了(如果总世界积分为负数，会帮你重置成0)，玩凡人就不要那么高境界了！！！"
         try:
             await send_msg_handler(bot, event, result)
         except ActionFailed:
@@ -592,7 +592,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "真元": 100,
             "攻击": 0,
             "name": "稻草人",
-            "jj": "搬血境",
+            "jj": "感气境",
             "is_scarecrow": True
         }
 
@@ -671,7 +671,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         player_jj = (userinfo['level'])
         scarecrow_jj = player_jj[:3]
         if player_jj == "江湖好手":
-            scarecrow_jj = "搬血境"
+            scarecrow_jj = "感气境"
     if len(arg_list) >= 1:
         scarecrow_jj = arg_list[0]  # 用户指定的境界
         if len(arg_list) == 2:

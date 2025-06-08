@@ -188,10 +188,10 @@ __level2_help__ = f"""
             --境界帮助--            
                 江湖人
                   ↓
-搬血境 → 洞天境 → 化灵境
-铭纹境 → 列阵境 → 尊者境 
-神火境 → 真一境 → 圣祭境
-天神境 → 虚道境 → 斩我境 
+感气境 → 练气境 → 筑基境
+结丹境 → 金丹境 → 元神境 
+化神境 → 炼神境 → 返虚境
+大乘境 → 虚道境 → 斩我境 
 遁一境 → 至尊境 → 微光境
 星芒境 → 月华境 → 耀日境
 祭道境 → 自在境 → 破虚境 
@@ -1301,7 +1301,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     player2 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
     user_2 = sql_message.get_user_info_with_id(give_qq)
     if user_mes and user_2:
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             msg = f"目前职业无法抢劫！"
             sql_message.update_user_stamina(user_id, 15, 1)
             await handle_send(bot, event, msg)
@@ -1314,7 +1314,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                 await handle_send(bot, event, msg)
                 await rob_stone.finish()
 
-            if user_2['root'] == "器师":
+            if user_2['root'] == "凡人":
                 msg = f"对方职业无法被抢劫！"
                 sql_message.update_user_stamina(user_id, 15, 1)
                 await handle_send(bot, event, msg)
@@ -1524,24 +1524,21 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
         await handle_send(bot, event, msg)
         await xiuxian_updata_level.finish()
     level_dict={
-        "练气境":"搬血境",
-        "筑基境":"洞天境",
-        "结丹境":"化灵境",
-        "元婴境":"铭纹境",
-        "化神境":"列阵境",
-        "炼虚境":"尊者境",
-        "合体境":"神火境",
-        "大乘境":"真一境",
-        "渡劫境":"圣祭境",
-        "半步真仙":"天神境中期",
-        "真仙境":"虚道境",
-        "金仙境":"斩我境",
-        "太乙境":"遁一境"
+        "搬血境":"感气境",
+        "洞天境":"练气境",
+        "化灵境":"筑基境",
+        "铭纹境":"结丹境",
+        "列阵境":"金丹境",
+        "尊者境":"元神境",
+        "神火境":"化神境",
+        "真一境":"炼神境",
+        "圣祭境":"返虚境",
+        "天神境":"大乘境",
     }
     level = user_info['level']
     user_id = user_info['user_id']
-    if level == "半步真仙":
-        level = "天神境中期"
+    if level == "至高":
+        level = "至高"
     else:
         try:
             level = level_dict.get(level[:3]) + level[-2:]

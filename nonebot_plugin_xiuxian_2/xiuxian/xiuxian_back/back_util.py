@@ -531,7 +531,7 @@ def check_use_elixir(user_id, goods_id, num):
                 sql_message.update_levelrate(user_id, user_info['level_up_rate'] + goods_info['buff'] * num)
 
     elif goods_info['buff_type'] == "hp":  # 回复状态的丹药
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             user_max_hp = int(user_info['exp'] / 2)
             user_max_mp = int(user_info['exp'])
             if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
@@ -578,7 +578,7 @@ def check_use_elixir(user_id, goods_id, num):
                     sql_message.update_user_hp_mp(user_id, new_hp, new_mp)
 
     elif goods_info['buff_type'] == "all":  # 回满状态的丹药
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             user_max_hp = int(user_info['exp'] / 2)
             user_max_mp = int(user_info['exp'])
             if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
@@ -601,7 +601,7 @@ def check_use_elixir(user_id, goods_id, num):
                     msg = f"道友成功使用丹药：{goods_name}1颗,状态已全部恢复!"
 
     elif goods_info['buff_type'] == "atk_buff":  # 永久加攻击buff的丹药
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             buff = goods_info['buff'] * num
             sql_message.updata_user_atk_buff(user_id, buff)
             sql_message.update_back_j(user_id, goods_id,num=num, use_key=1)

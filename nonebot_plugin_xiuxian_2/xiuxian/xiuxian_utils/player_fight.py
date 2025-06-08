@@ -1181,7 +1181,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             boss_buff.boss_jb = 0
             boss_buff.boss_xl = random.randint(60, 100) / 100  # boss禁血
 
-    if boss["jj"] == "搬血境":
+    if boss["jj"] == "感气境":
         boss_cj = 0
         
     if fan_buff == 1:

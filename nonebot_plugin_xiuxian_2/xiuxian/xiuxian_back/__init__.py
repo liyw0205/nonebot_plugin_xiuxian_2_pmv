@@ -647,7 +647,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await shop_added.finish()
     if goods_type == "聚灵旗" or goods_type == "炼丹炉":
-        if user_info['root'] == "器师" :
+        if user_info['root'] == "凡人" :
             pass
         else:
             msg = "道友职业无法上架！"
@@ -1128,7 +1128,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     if goods_type == "聚灵旗" or goods_type == "炼丹炉":
-        if user_info['root'] == "器师" :
+        if user_info['root'] == "凡人" :
             pass
         else:
             msg = "道友职业无法上架！"
@@ -2095,7 +2095,7 @@ async def auction_added_(bot: Bot, event: GroupMessageEvent, args: Message = Com
         await handle_send(bot, event, msg)
         await auction_added.finish()
     if goods_type == "聚灵旗" or goods_type == "炼丹炉":
-        if user_info['root'] == "器师":
+        if user_info['root'] == "凡人":
             pass
         else:
             msg = f"道友职业无法上架！"
