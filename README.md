@@ -96,6 +96,12 @@ Install dependencies now? (Y/n) y
 选择 echo（默认安装插件）
 
 
+- 移动项目
+```
+mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
+mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
+mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
+```
 - 下载字体和卡图包
 ```
 curl -L -o ~/xiuxian.zip https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip
@@ -103,12 +109,6 @@ curl -L -o ~/xiuxian.zip https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pm
 - 解压字体和卡图包
 ```
 unzip ~/xiuxian.zip -d /root/xiu2/data/xiuxian
-```
-- 移动项目
-```
-mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
-mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
-mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
 ```
 安装修仙2依赖
 ```
