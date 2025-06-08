@@ -520,13 +520,20 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await reset_exp.finish()
     user_id = user_info['user_id']
+    is_type, msg = check_user_type(user_id, user_type)
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await up_exp.finish()
     msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
     await asyncio.sleep(60)
-    sql_message.in_closing(user_id, 0)
-    msg = "已重置修炼状态！"
-    await handle_send(bot, event, msg)
+    is_type, msg = check_user_type(user_id, user_type)
+    if is_type:
+        sql_message.in_closing(user_id, 0)
+        msg = "已重置修炼状态！"
+        await handle_send(bot, event, msg)
     await reset_exp.finish()
+        
     
 @up_exp.handle(parameterless=[Cooldown(at_sender=False, cd_time=60)])
 async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
