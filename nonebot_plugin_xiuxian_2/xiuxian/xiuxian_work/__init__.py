@@ -1,4 +1,5 @@
 import os
+import random
 from typing import Any, Tuple, Dict
 from nonebot import on_regex, require, on_command
 from nonebot.params import RegexGroup
@@ -166,7 +167,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 key=1, name=user_cd_message['scheduled_time'], level=user_level, exp=user_info['exp'],
                 user_id=user_info['user_id']
             )
-            if exp_time <= time2:
+            if exp_time <= time2 and (time2 - exp_time) != 0:
                 msg = f"进行中的悬赏令【{user_cd_message['scheduled_time']}】，预计{time2 - exp_time}分钟后可结束"
                 await handle_send(bot, event, msg)
                 await do_work.finish()
@@ -187,7 +188,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 max_exp = int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit
                 
                 if big_suc:  # 大成功
-                    gain_exp = give_exp * 2
+                    exp_rate = random.uniform(1.1, 1.5)
+                    gain_exp = int(give_exp * exp_rate)
                 else:
                     gain_exp = give_exp
                 if current_exp + gain_exp >= max_exp:
