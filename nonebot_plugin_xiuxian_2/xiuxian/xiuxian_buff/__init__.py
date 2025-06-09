@@ -582,11 +582,11 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
         exp = int(exp * (1 + impart_exp_up))
-        exp_rate = random.uniform(1.1, 1.9)
+        exp_rate = random.uniform(0.9, 1.3)
         exp = int(exp * exp_rate)
         sql_message.in_closing(user_id, user_type)
         if user_info['root_type'] == '伪灵根':
-            msg = f"开始挖矿⛏️‍！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\j预计时间：60秒"
+            msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\j预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
             give_stone = random.randint(10000, 300000)

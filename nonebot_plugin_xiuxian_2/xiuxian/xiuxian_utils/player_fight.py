@@ -840,7 +840,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     player1_js = player1_f_js  # 减伤率
     boss_buff = BossBuff()
     
-    if boss["jj"] == "祭道境":
+    if boss["jj"] == "祭道境" or convert_rank((boss["jj"] + '中期'))[0] < convert_rank('祭道境初期')[0]:
         # boss["减伤"] = random.randint(40,90)/100 # boss减伤率
         boss["减伤"] = 0.05  # boss减伤率
         boss_cj = random.randint(25, 50) / 100
