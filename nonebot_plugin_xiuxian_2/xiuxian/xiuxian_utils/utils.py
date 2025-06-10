@@ -583,13 +583,13 @@ def CommandObjectID() -> int:
 
 def format_number(num):
     """格式化数字，满足特殊显示要求"""
-    num = round(num, 3)  # 先四舍五入到3位小数
+    num = round(num, 1)  # 先四舍五入到1位小数
     if num >= 10:
         # 显示小数部分（自动去除末尾的0）
-        return f"{num:.3f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
+        return f"{num:.1f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
     else:
         # 只显示个位数
-        return f"{int(num)}" if num.is_integer() else f"{num:.3f}".rstrip('0').rstrip('.')
+        return f"{int(num)}" if num.is_integer() else f"{num:.1f}".rstrip('0').rstrip('.')
 
 def number_to(num):
     """

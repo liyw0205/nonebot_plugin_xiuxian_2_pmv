@@ -15,7 +15,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from .work_handle import workhandle
 from datetime import datetime
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA
 from ..xiuxian_utils.item_json import Items
@@ -199,10 +199,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 if big_suc or s_o_f:  # 大成功 or 普通成功
                     sql_message.update_exp(user_id, gain_exp)
                     sql_message.do_work(user_id, 0)
-                    msg = f"悬赏令结算，{msg}增加修为{gain_exp}"
+                    msg = f"悬赏令结算，{msg}\n增加修为：{number_to(gain_exp)}"
                     if item_flag:
                         sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
-                        msg += f"，额外获得奖励：{item_msg}!"
+                        msg += f"\n额外获得奖励：{item_msg}!"
                     else:
                         msg += "!"
                     await handle_send(bot, event, msg)
@@ -217,7 +217,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     gain_exp = max(gain_exp, 0)
                     sql_message.update_exp(user_id, gain_exp)
                     sql_message.do_work(user_id, 0)
-                    msg = f"悬赏令结算，{msg}增加修为{gain_exp}!"
+                    msg = f"悬赏令结算，{msg}\n增加修为：{number_to(gain_exp)}!"
                     await handle_send(bot, event, msg)
                     await do_work.finish()
         else:
@@ -265,5 +265,5 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
 
 def get_work_msg(work_):
-    msg = f"{work_[0]},完成机率{work_[1]},基础报酬{work_[2]}修为,预计需{work_[3]}分钟{work_[4]}\n"
+    msg = f"{work_[0]},完成机率{work_[1]},基础报酬{number_to(work_[2])}修为,预计需{work_[3]}分钟{work_[4]}\n"
     return msg

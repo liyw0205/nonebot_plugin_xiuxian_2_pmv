@@ -62,7 +62,7 @@ gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, bloc
 ccll_command = on_command("传承力量", permission=SUPERUSER, priority=10, block=True)
 zaohua_xiuxian = on_command('造化力量', permission=SUPERUSER, priority=15,block=True)
 cz = on_command('创造力量', permission=SUPERUSER, priority=15,block=True)
-rob_stone = on_command("抢劫", aliases={"拿来吧你"}, priority=5, permission=GROUP, block=True)
+rob_stone = on_command("抢灵石", aliases={"抢劫"}, priority=5, permission=GROUP, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
 set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
@@ -83,7 +83,7 @@ __xiuxian_notes__ = f"""
 → 每日签到:发送"修仙签到"📅
 → 突破境界:发送"突破"🚀
 *支持"连续突破"五次
-→ 灵石交互:送/偷/抢灵石+数量+道号💰
+→ 灵石交互:送/偷/抢灵石+道号+数量💰
 ===========
 🌈 角色养成
 → 修炼方式:闭关/出关/灵石出关/灵石修炼/双修🧘
@@ -931,6 +931,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
             steal_user = sql_message.get_user_info_with_id(steal_qq)
             if steal_user:
                 steal_user_stone = steal_user['stone']
+                steal_user_stone = min(steal_user_stone, 10000000)
             else:
                 steal_user is None
     if steal_user:
@@ -1384,6 +1385,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                 await send_msg_handler(bot, event, '决斗场', bot.self_id, result)
                 if victor == player1['道号']:
                     foe_stone = user_2['stone']
+                    foe_stone = min(foe_stone, 10000000)
                     if foe_stone > 0:
                         sql_message.update_ls(user_id, int(foe_stone * 0.1), 1)
                         sql_message.update_ls(give_qq, int(foe_stone * 0.1), 2)
@@ -1403,6 +1405,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
 
                 elif victor == player2['道号']:
                     mind_stone = user_info['stone']
+                    mind_stone = min(mind_stone, 10000000)
                     if mind_stone > 0:
                         sql_message.update_ls(user_id, int(mind_stone * 0.1), 2)
                         sql_message.update_ls(give_qq, int(mind_stone * 0.1), 1)

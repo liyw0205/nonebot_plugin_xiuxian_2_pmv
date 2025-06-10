@@ -14,7 +14,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
 from datetime import datetime
-from ..xiuxian_utils.utils import check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type
+from ..xiuxian_utils.utils import check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to
 from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
@@ -326,7 +326,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         sql_message.update_exp(user_id, exp)
         sql_message.update_power2(user_id)  # 更新战力
-        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次闭关增加修为：{exp}"
+        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次闭关增加修为：{number_to(exp)}"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
@@ -537,21 +537,21 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 构造返回消息
     if total_exp >= user_get_exp_max:
         msg = (
-            f"虚神界闭关结束，本次虚神界闭关到达上限，共增加修为：{total_exp}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
+            f"虚神界闭关结束，本次虚神界闭关到达上限，共增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
         )
     else:
         if effective_single_exp_time == 0:
             msg = (
                 f"虚神界闭关结束，共闭关{exp_time}分钟，"
                 f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
-                f"本次闭关增加修为：{total_exp}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
+                f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
             )
         else:
             msg = (
                 f"虚神界闭关结束，共闭关{exp_time}分钟，"
                 f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
                 f"{int(effective_single_exp_time)}没有获得祝福，"
-                f"本次闭关增加修为：{total_exp}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
+                f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
             )
     await handle_send(bot, event, msg)
     await impart_pk_out_closing.finish()
