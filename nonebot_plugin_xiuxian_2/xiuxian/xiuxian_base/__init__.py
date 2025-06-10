@@ -1469,21 +1469,21 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent):
     conf_data = JsonConfig().read_data()
 
     if "启用" in group_msg:
-        if group_id in conf_data["group"]:
+        if group_id not in conf_data["group"]:
             msg = "当前群聊修仙模组已启用，请勿重复操作！"
             await handle_send(bot, event, msg)
             await set_xiuxian.finish()
-        JsonConfig().write_data(1, group_id)
+        JsonConfig().write_data(2, group_id)
         msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()
 
     elif "禁用" in group_msg:
-        if group_id not in conf_data["group"]:
+        if group_id in conf_data["group"]:
             msg = "当前群聊修仙模组已禁用，请勿重复操作！"
             await handle_send(bot, event, msg)
             await set_xiuxian.finish()
-        JsonConfig().write_data(2, group_id)
+        JsonConfig().write_data(1, group_id)
         msg = "当前群聊修仙基础模组已禁用！"
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()

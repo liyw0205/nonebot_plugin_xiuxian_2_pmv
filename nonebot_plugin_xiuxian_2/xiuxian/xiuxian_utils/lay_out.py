@@ -174,7 +174,7 @@ def Cooldown(
             )
         else:
             key = CooldownIsolateLevel.GLOBAL.name
-        if not is_private and group_id not in conf_data["group"]:
+        if not is_private and group_id in conf_data["group"]:
             if (
                     event.sender.role == "admin" or
                     event.sender.role == "owner" or

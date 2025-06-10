@@ -126,7 +126,7 @@ class JsonConfig:
         """创建默认配置文件"""
         if not self.config_jsonpath.exists():
             default_data = {
-                "group": [],  # 群聊启用列表
+                "group": [],  # 群聊禁用列表
                 "private_enabled": False  # 私聊功能开关
             }
             with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
