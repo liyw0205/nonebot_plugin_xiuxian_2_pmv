@@ -26,7 +26,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user,
+    check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
     Txt2Img, send_msg_handler, handle_send,
@@ -921,6 +921,13 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     for arg in args:
         if arg.type == "at":
             steal_qq = arg.data.get('qq', '')
+        nick_name = args.extract_plain_text().split()[0]
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            steal_qq = give_message['user_id']
+        else:
+            steal_qq = "000000"
     if steal_qq:
         if steal_qq == user_id:
             msg = f"请不要偷自己刷成就！"
@@ -941,7 +948,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
             if int(steal_success) > result:
                 sql_message.update_ls(user_id, coststone_num, 2)  # 减少手续费
                 sql_message.update_ls(steal_qq, coststone_num, 1)  # 增加被偷的人的灵石
-                msg = f"道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！赔款{coststone_num}灵石"
+                msg = f"道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！赔款{number_to(coststone_num)}灵石"
                 await handle_send(bot, event, msg)
                 await steal_stone.finish()
             get_stone = random.randint(int(XiuConfig().tou_lower_limit * steal_user_stone),
@@ -991,9 +998,12 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data["qq"]
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
@@ -1005,20 +1015,9 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
             msg = f"对方未踏入修仙界，不可赠送！"
             await handle_send(bot, event, msg)
             await gm_command.finish()
-    elif nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
-        if give_message:
-            sql_message.update_ls(give_message['user_id'], give_stone_num, 1)  # 增加用户灵石
-            msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_message['user_name']}道友！"
-            await handle_send(bot, event, msg)
-            await gm_command.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await gm_command.finish()
     else:
         sql_message.update_ls_all(give_stone_num)
-        msg = f"全服通告：赠送所有用户{give_stone_num}灵石,请注意查收！"
+        msg = f"全服通告：赠送所有用户{number_to(int(give_stone_num))}灵石,请注意查收！"
         await handle_send(bot, event, msg)
         enabled_groups = JsonConfig().get_enabled_groups()
         for group_id in enabled_groups:
@@ -1058,9 +1057,12 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data["qq"]
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
@@ -1072,20 +1074,9 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comm
             msg = f"对方未踏入修仙界，不可赠送！"
             await handle_send(bot, event, msg)
             await ccll_command.finish()
-    elif nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
-        if give_message:
-            xiuxian_impart.update_stone_num(give_stone_num, give_message['user_id'], 1)  # 增加用户思恋结晶
-            msg = f"共赠送{number_to(int(give_stone_num))}枚思恋结晶给{give_message['user_name']}道友！"
-            await handle_send(bot, event, msg)
-            await ccll_command.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await ccll_command.finish()
     else:
         xiuxian_impart.update_impart_stone_all(give_stone_num)
-        msg = f"全服通告：赠送所有用户{give_stone_num}思恋结晶,请注意查收！"
+        msg = f"全服通告：赠送所有用户{number_to(int(give_stone_num))}思恋结晶,请注意查收！"
         await handle_send(bot, event, msg)
         enabled_groups = JsonConfig().get_enabled_groups()
         for group_id in enabled_groups:
@@ -1198,21 +1189,15 @@ async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
-            sql_message.send_back(give_qq, goods_id, goods_name, goods_type, goods_num, 1)
-            msg = f"{give_user['user_name']}道友获得了系统赠送的{goods_num}个{goods_name}！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-    elif nick_name:
-        give_user = sql_message.get_user_info_with_name(nick_name)
-        if give_user:
-            give_qq = give_user['user_id']
             sql_message.send_back(give_qq, goods_id, goods_name, goods_type, goods_num, 1)
             msg = f"{give_user['user_name']}道友获得了系统赠送的{goods_num}个{goods_name}！"
             await handle_send(bot, event, msg)
@@ -1298,6 +1283,13 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
+    nick_name = args.extract_plain_text().split()[0]
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
     player1 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
     player2 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
     user_2 = sql_message.get_user_info_with_id(give_qq)
@@ -1321,6 +1313,15 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                 await handle_send(bot, event, msg)
                 await rob_stone.finish()
 
+            is_type, msg = check_user_type(user_id, 0)  # 需要在无状态的用户
+            if not is_type:
+                await handle_send(bot, event, msg)
+                await rob_stone.finish()
+            is_type, msg = check_user_type(give_qq, 0)  # 需要在无状态的用户
+            if not is_type:
+                msg = "对方现在在闭关呢，无法抢劫！"
+                await handle_send(bot, event, msg)
+                await rob_stone.finish()
             if user_2:
                 if user_info['hp'] is None:
                     # 判断用户气血是否为None
@@ -1448,14 +1449,26 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
+    if not args:
+        sql_message.restate()
+        msg = f"所有用户信息重置成功！"
+        await handle_send(bot, event, msg)
+        await restate.finish()
+    else:
+        nick_name = args.extract_plain_text().split()[0]
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
     if give_qq:
         sql_message.restate(give_qq)
         msg = f"{give_qq}用户信息重置成功！"
         await handle_send(bot, event, msg)
         await restate.finish()
     else:
-        sql_message.restate()
-        msg = f"所有用户信息重置成功！"
+        msg = f"对方未踏入修仙界，不可抢劫！"
         await handle_send(bot, event, msg)
         await restate.finish()
 
