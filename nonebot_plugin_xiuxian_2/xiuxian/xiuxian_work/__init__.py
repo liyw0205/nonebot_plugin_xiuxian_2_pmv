@@ -61,11 +61,14 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await do_work.finish()
     user_level = user_info['level']
-    user_level_sx = user_info['level']
     user_id = user_info['user_id']
     user_rank = convert_rank(user_info['level'])[0]
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
-    user_cd_message = sql_message.get_user_cd(user_id)    
+    user_cd_message = sql_message.get_user_cd(user_id)
+    if user_rank == 0:
+        msg = "道友实力通天彻地，悬赏令已经不能满足道友了！！"
+        await handle_send(bot, event, msg)
+        await do_work.finish()
     if not os.path.exists(PLAYERSDATA / str(user_id) / "workinfo.json") and user_cd_message['type'] == 2:
         sql_message.do_work(user_id, 0)
         msg = "悬赏令已更新，已重置道友的状态！"
