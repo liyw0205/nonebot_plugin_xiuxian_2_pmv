@@ -29,8 +29,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler, handle_send,
-    number_to3
+    Txt2Img, send_msg_handler, handle_send
 )
 from ..xiuxian_utils.item_json import Items
 items = Items()
@@ -1125,8 +1124,11 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent, args: Message = Co
             msg = f"境界错误，请输入正确境界名！"
             await handle_send(bot, event, msg)
             await zaohua_xiuxian.finish()
-        max_exp = number_to3(int(jsondata.level_data()[level]["power"]))
-        sql_message.update_exp2(give_qq, max_exp)  # 更新修为
+        max_exp = int(jsondata.level_data()[level]["power"])
+        exp = give_user['exp']
+        now_exp = exp - 100
+        sql_message.update_j_exp(give_qq, now_exp) #重置用户修为
+        sql_message.update_exp(give_qq, max_exp)  # 更新修为
         sql_message.updata_level(give_qq, level)  # 更新境界
         sql_message.update_user_hp(give_qq)  # 重置用户状态
         sql_message.update_power2(give_qq)  # 更新战力

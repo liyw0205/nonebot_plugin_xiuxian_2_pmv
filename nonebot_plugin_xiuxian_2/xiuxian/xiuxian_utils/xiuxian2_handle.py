@@ -11,7 +11,6 @@ from nonebot.log import logger
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
 from .. import DRIVER
-from .utils import number_to
 from .item_json import Items
 from .xn_xiuxian_impart_config import config_impart
 
@@ -765,23 +764,18 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def update_exp(self, user_id, exp):
         """增加修为"""
+        exp = number_count(exp)
         sql = "UPDATE user_xiuxian SET exp=exp+? WHERE user_id=?"
-        cur = self.conn.cursor()
-        cur.execute(sql, (int(exp), user_id))
-        self.conn.commit()
-
-    def update_exp2(self, user_id, exp):
-        """修改修为"""
-        sql = "UPDATE user_xiuxian SET exp=? WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (exp, user_id))
         self.conn.commit()
         
     def update_j_exp(self, user_id, exp):
         """减少修为"""
+        exp = number_count(exp)
         sql = "UPDATE user_xiuxian SET exp=exp-? WHERE user_id=?"
         cur = self.conn.cursor()
-        cur.execute(sql, (int(exp), user_id))
+        cur.execute(sql, (exp, user_id))
         self.conn.commit()
 
     def del_exp_decimal(self, user_id, exp):
@@ -1021,6 +1015,9 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def update_user_attribute(self, user_id, hp, mp, atk):
         """更新用户HP,MP,ATK信息"""
+        hp = number_count(hp)
+        mp = number_count(mp)
+        atk = number_count(atk)
         sql = f"UPDATE user_xiuxian SET hp=?,mp=?,atk=? WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (hp, mp, atk, user_id))
@@ -1028,6 +1025,8 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def update_user_hp_mp(self, user_id, hp, mp):
         """更新用户HP,MP信息"""
+        hp = number_count(hp)
+        mp = number_count(mp)
         sql = f"UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (hp, mp, user_id))
@@ -1629,7 +1628,7 @@ class OtherSet(XiuConfig):
         if user_msg['hp'] < max_hp:
             if user_msg['hp'] + hp < max_hp:
                 new_hp = user_msg['hp'] + hp
-                msg.append(f',回复气血：{number_to(hp)}')
+                msg.append(f',回复气血：{hp}')
             else:
                 new_hp = max_hp
                 msg.append(',气血已回满！')
@@ -1640,7 +1639,7 @@ class OtherSet(XiuConfig):
         if user_msg['mp'] < max_mp:
             if user_msg['mp'] + mp < max_mp:
                 new_mp = user_msg['mp'] + mp
-                msg.append(f',回复真元：{number_to(mp)}')
+                msg.append(f',回复真元：{mp}')
             else:
                 new_mp = max_mp
                 msg.append(',真元已回满！')
@@ -2423,3 +2422,18 @@ def save_player_info(user_id, data, info_name):
     with open(FILEPATH, mode=save_mode, encoding="UTF-8") as f:
         f.write(data)
         f.close()
+
+def number_count(num):
+    """
+    根据数值大小返回原始值或科学计数法
+    规则：大于等于1e+21时返回科学计数法，否则直接返回原数值
+    """
+    try:
+        num_val = float(num)
+    except (TypeError, ValueError):
+        raise ValueError("输入必须是数字或科学计数法字符串")
+    
+    if abs(num_val) >= 1e21:  # 阈值改为大于等于
+        return f"{num_val:.2e}"  # 保留2位小数的科学计数法
+    else:
+        return num_val  # 返回浮点数
