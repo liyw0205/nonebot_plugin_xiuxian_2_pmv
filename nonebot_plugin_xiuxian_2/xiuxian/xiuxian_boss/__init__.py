@@ -22,6 +22,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldown
+from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -67,6 +68,7 @@ boss_help = on_command("世界boss帮助", aliases={"世界Boss帮助", "世界B
 boss_delete = on_command("天罚boss", aliases={"天罚世界boss", "天罚Boss", "天罚BOSS", "天罚世界Boss", "天罚世界BOSS"}, permission=SUPERUSER, priority=7, block=True)
 boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界boss", "天罚所有Boss", "天罚所有BOSS", "天罚所有世界Boss","天罚所有世界BOSS", "天罚全部boss", "天罚全部世界boss"}, permission=SUPERUSER, priority=5, block=True)
 boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询"} ,priority=10, block=True)
+boss_integral_store = on_command("世界积分商店",aliases={"查看世界商店", "查询世界商店", "世界商店查询"} ,priority=10, block=True)
 boss_integral_use = on_command("世界积分兑换", priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", priority=6, block=True)
 challenge_training_puppet = on_command("挑战训练傀儡", priority=6, block=True)
@@ -83,7 +85,7 @@ __boss_help__ = f"""
 6、世界boss帮助:获取世界Boss帮助信息
 7、天罚boss、天罚世界boss:删除世界Boss,必须加Boss编号,管理员权限
 8、天罚所有世界boss:删除所有世界Boss,管理员权限
-9、世界积分查看:查看自己的世界积分,和世界积分兑换商品
+9、世界积分商店/查看:查看自己的世界积分,和世界积分兑换商品
 10、世界积分兑换+编号：兑换对应的商品，可以批量购买
 11、世界BOSS开启、关闭:世界BOSS生成的通知，管理员权限
 独立功能：
@@ -584,11 +586,12 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     player['真元'] = userinfo['mp']
     player['exp'] = userinfo['exp']
     player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
+    scarecrow_hp = int(jsondata.level_data()["至高"]["power"]) * 10000
 
     # 定义稻草人属性（固定）
     scarecrow_info = {
-            "气血": 1000000000000000000000000,
-            "总血量": 1000000000000000000000000,
+            "气血": scarecrow_hp,
+            "总血量": scarecrow_hp,
             "真元": 100,
             "攻击": 0,
             "name": "稻草人",
@@ -613,6 +616,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         msg = f"道友挑战稻草人，奋力攻击后共造成 {number_to(total_damage)} 伤害，稻草人岿然不动，继续等待挑战者！"
 
     battle_flag[group_id] = False
+
     try:
         await send_msg_handler(bot, event, result)
     except ActionFailed:
@@ -680,14 +684,14 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     
     bossinfo = createboss_jj(scarecrow_jj, boss_name)
     if bossinfo is None:
-        msg = f"请输入正确的指令，例如：挑战训练傀儡 祭道境 少姜"
-        await handle_send(bot, event, msg)
-        await challenge_training_puppet.finish()
+        boss_name = "散发着威压的尸体"
+        scarecrow_jj = "祭道境"
+        bossinfo = createboss_jj(scarecrow_jj, boss_name)
 
     # 计算训练傀儡的属性
     scarecrow_atk = (player['攻击'] // 2)
     scarecrow_mp = (player['真元'] // 2)
-    scarecrow_hp = (player['气血'] * 10)
+    scarecrow_hp = (player['气血'] * 100)
 
     # 定义训练傀儡属性
     scarecrow_info = {
@@ -967,14 +971,14 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await set_group_boss.finish()
 
 
-@boss_integral_info.handle(parameterless=[Cooldown(at_sender=False)])
-async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@boss_integral_store.handle(parameterless=[Cooldown(at_sender=False)])
+async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """世界积分商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await boss_integral_info.finish()
+        await boss_integral_store.finish()
 
     user_id = user_info['user_id']    
     user_boss_fight_info = get_user_boss_fight_info(user_id)
@@ -989,8 +993,22 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     else:
         l_msg.append(f"世界积分商店内空空如也！")
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
-    await boss_integral_info.finish()
+    await boss_integral_store.finish()
 
+
+@boss_integral_info.handle(parameterless=[Cooldown(at_sender=False)])
+async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """世界积分"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await boss_integral_info.finish()
+    user_id = user_info['user_id']    
+    user_boss_fight_info = get_user_boss_fight_info(user_id)
+    msg = f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"
+    await handle_send(bot, event, msg)
+    await boss_integral_info.finish()
 
 @boss_integral_use.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
