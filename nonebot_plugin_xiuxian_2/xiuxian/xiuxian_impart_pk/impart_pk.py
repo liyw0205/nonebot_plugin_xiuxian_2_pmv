@@ -40,7 +40,7 @@ class IMPART_PK(object):
                 return True
         except KeyError:
             user_number = len(self.data) + 1
-            self.data[user_id] = {"number": user_number, "pk_num": 5, "win_num": 0, "impart_lv": 10}
+            self.data[user_id] = {"number": user_number, "pk_num": 5, "win_num": 0, "impart_num": 10}
             self.__save()
             return False
 
@@ -81,7 +81,7 @@ class IMPART_PK(object):
         """
         user_id = str(user_id)
         self.check_user_impart(user_id)
-        self.data[user_id]["impart_lv"] -= 1
+        self.data[user_id]["impart_num"] -= 1
         self.__save()
 
     def all_user_data(self):

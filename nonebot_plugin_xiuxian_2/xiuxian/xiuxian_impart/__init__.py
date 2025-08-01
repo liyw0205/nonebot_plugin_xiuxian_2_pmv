@@ -86,6 +86,7 @@ __impart_help__ = f"""
 8、虚神界对决:输入虚神界人物编号即可与对方对决,不输入编号将会与{NICKNAME}进行对决
 9、虚神界修炼:加入对应的修炼时间,即可在虚神界修炼
 10、深入虚神界:获得虚神界祝福
+11、虚神界信息:查看道友的虚神界
 千次祈愿:传承祈愿 1000
 思恋结晶获取方式:虚神界对决【俄罗斯轮盘修仙版】
 双方共6次机会,6次中必有一次暴毙
@@ -148,7 +149,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     # 初始化变量
-    summary = f"道友{user_info['user_name']}的传承祈愿"
+    summary = f"道友的传承祈愿"
     img_list = impart_data_json.data_all_keys()
     if not img_list:
         await handle_send(bot, event, "请检查卡图数据完整！")
@@ -244,7 +245,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         return
 
     # 初始化变量
-    summary = f"道友{user_info['user_name']}的传承抽卡"
+    summary = f"道友的传承抽卡"
     img_list = impart_data_json.data_all_keys()
     if not img_list:
         await handle_send(bot, event, "请检查卡图数据完整！")
@@ -336,7 +337,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, "请检查卡图数据完整！")
         await use_wishing_stone.finish()
 
-    summary = f"道友{user_info['user_name']}使用祈愿石的结果"
+    summary = f"道友使用祈愿石的结果"
     list_tp = []
     img_msg = ""
     sent_images = set()  # 记录已发送的图片
@@ -355,7 +356,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     # 更新用户的抽卡数据
     await re_impart_data(user_id)
-    final_msg = f"""道友{user_info['user_name']}使用了 {stone_num} 个祈愿石，结果如下：
+    final_msg = f"""道友使用了 {stone_num} 个祈愿石，结果如下：
 {img_msg}
     """
     try:
@@ -384,16 +385,14 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     list_tp = []
     img = None
-    name = user_info["user_name"]
     img_tp = impart_data_json.data_person_list(user_id)
     card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
-    txt_back = f"""--道友{name}的传承物资--
+    txt_back = f"""道友的传承物资
 思恋结晶：{impart_data_draw["stone_num"]}颗
 抽卡次数：{impart_data_draw["wish"]}/90次
 卡片数量：{card_count}/108
-累计闭关时间：{impart_data_draw["exp_day"]}分钟
 """
-    txt_tp = f"""--道友{name}的传承总属性--
+    txt_tp = f"""道友{name}的传承总属性
 攻击提升:{int(impart_data_draw["impart_atk_per"] * 100)}%
 气血提升:{int(impart_data_draw["impart_hp_per"] * 100)}%
 真元提升:{int(impart_data_draw["impart_mp_per"] * 100)}%
@@ -455,16 +454,18 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         return
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
+    img_tp = impart_data_json.data_person_list(user_id)
+    card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
     if impart_data_draw is None:
         await handle_send(
             bot, event, send_group_id, "发生未知错误！"
         )
         return
 
-    msg = f"""--道友{user_info["user_name"]}的传承物资--
+    msg = f"""道友的传承物资
 思恋结晶：{impart_data_draw["stone_num"]}颗
 抽卡次数：{impart_data_draw["wish"]}/90次
-累计闭关时间：{impart_data_draw["exp_day"]}分钟
+卡片数量：{card_count}/108
     """
     await handle_send(bot, event, msg)
 

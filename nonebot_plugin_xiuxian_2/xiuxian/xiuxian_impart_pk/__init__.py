@@ -29,7 +29,8 @@ impart_re = require("nonebot_plugin_apscheduler").scheduler
 impart_relv = require("nonebot_plugin_apscheduler").scheduler
 
 impart_pk_project = on_fullmatch("投影虚神界", priority=6, block=True)
-impart_pk_go = on_fullmatch("深入虚神界", priority=6, block=True)
+impart_pk_go = on_fullmatch("探索虚神界", priority=6, block=True)
+impart_pk_info = on_fullmatch("虚神界信息", priority=6, block=True)
 impart_pk_now = on_command("虚神界对决", priority=15, block=True)
 impart_pk_list = on_fullmatch("虚神界列表", priority=7, block=True)
 impart_pk_exp = on_command("虚神界修炼", priority=8, block=True)
@@ -330,9 +331,52 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
+@impart_pk_info.handle(parameterless=[Cooldown(at_sender=False)])
+async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """虚神界信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await impart_pk_info.finish()
+    user_id = user_info['user_id']
+    user_data = impart_pk.find_user_data(user_info['user_id'])
+    pk_num = user_data["pk_num"]
+    impart_num = user_data["impart_num"]
+    impart_data_draw = await impart_pk_check(user_id)
+    impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
+    stone_num = impart_data_draw["stone_num"] if impart_data_draw is not None else 0
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5
+    
+    impart_level = {
+        0:"凡尘迷雾", 1:"灵气初现", 2:"感气之渊",
+        3:"练气云海", 4:"筑基灵台", 5:"金丹道场",
+        6:"元神幻境", 7:"化神星域", 8:"炼神火宅",
+        9:"返虚古路", 10:"大乘天阶", 11:"虚道玄门",
+        12:"斩我剑冢", 13:"遁一星河", 14:"至尊王座",
+        15:"微光圣境", 16:"星芒神域", 17:"月华仙宫",
+        18:"耀日天穹", 19:"祭道荒原", 20:"自在净土",
+        21:"破虚之隙", 22:"无界瀚海", 23:"混元道源",
+        24:"造化玉池", 25:"永恒神庭", 26:"至高天阙",
+        27:"大道尽头", 28:"法则本源", 29:"混沌核心",
+        30:"虚神本源"
+    }
+    
+    impart_time = impart_data_draw['exp_day']
+    impart_exp_up = impart_lv * 0.1
+    impart_name_new = impart_level.get(impart_lv, "未知秘境")
+    msg += f"\n现位于：{impart_name_new}（LV {impart_lv}）"
+    msg += f"\n虚神界修炼时间：{impart_time} 分钟"
+    msg += f"\n修炼效率：{int((impart_exp_up + user_blessed_spot_data) * 100)}%"
+    msg += f"\n今日可探索次数：{impart_num}"
+    msg += f"\n今日可对决次数：{pk_num}"
+    msg += f"\n思恋结晶：{stone_num}"
+    await handle_send(bot, event, msg)
+    await impart_pk_info.finish()
+
 @impart_pk_go.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """深入虚神界"""
+    """探索虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -340,62 +384,115 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await impart_pk_go.finish()
     user_id = user_info['user_id']
     user_data = impart_pk.find_user_data(user_info['user_id'])
-    if user_data["impart_lv"] <= 0:
-        msg = f"道友今日次数耗尽，明天再来吧！"
+    if user_data["impart_num"] <= 0:
+        msg = f"\n道友今日探索次数耗尽，需打坐调息，明日方可再探虚神界！"
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     impart_data_draw = await impart_pk_check(user_id)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
-    impart_level = {0:"边缘",1:"外层",2:"中层",3:"里层",4:"深层",5:"核心",6:"核心10%",7:"核心30%",8:"核心60%",9:"核心99%",10:"核心100%"}
-    impart_name = impart_level.get(impart_lv, "未知")
-    if impart_lv == 10:
-        msg = f"已进入虚神界{impart_name}区域！"
-        impart_exp_up = impart_lv * 0.3
-        msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
+    
+    impart_level = {
+        0:"凡尘迷雾", 1:"灵气初现", 2:"感气之渊",
+        3:"练气云海", 4:"筑基灵台", 5:"金丹道场",
+        6:"元神幻境", 7:"化神星域", 8:"炼神火宅",
+        9:"返虚古路", 10:"大乘天阶", 11:"虚道玄门",
+        12:"斩我剑冢", 13:"遁一星河", 14:"至尊王座",
+        15:"微光圣境", 16:"星芒神域", 17:"月华仙宫",
+        18:"耀日天穹", 19:"祭道荒原", 20:"自在净土",
+        21:"破虚之隙", 22:"无界瀚海", 23:"混元道源",
+        24:"造化玉池", 25:"永恒神庭", 26:"至高天阙",
+        27:"大道尽头", 28:"法则本源", 29:"混沌核心",
+        30:"虚神本源"
+    }
+    
+    impart_name = impart_level.get(impart_lv, "未知秘境")
+    if impart_lv == 30:
+        msg = f"\n已登临{impart_name}！"
+        impart_exp_up = impart_lv * 0.15
+        msg += f"\n获得虚神界终极加持：修为增益{int(impart_exp_up * 100)}%"
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     else:
-        if impart_data_draw['exp_day'] < 100:
-            msg = f"道友累计时间不足，无法在深入虚神界！"
-            impart_exp_up = impart_lv * 0.3
-            msg += f"\n虚神界祝福：{int(impart_exp_up * 100)}%"
+        if impart_data_draw['exp_day'] < 1000:
+            msg = f"\n道友深入虚神界时间不足，难以突破{impart_name}的禁制！"
+            impart_exp_up = impart_lv * 0.15
+            msg += f"\n当前区域加持：修为增益{int(impart_exp_up * 100)}%"
             await handle_send(bot, event, msg)
             await impart_pk_go.finish()
+    
     impart_suc = random.randint(1, 100)
-    impart_time = random.randint(10, 100)
+    impart_time = random.randint(300, 1000)
     impart_rate = random.randint(1, 3)
-    if impart_suc <= 50:
-        msg = f"道友迷失方向，晕头转向😵‍💫，回到了虚神界{impart_name}区域！\n消耗虚神界时间：{impart_time}分钟"
+
+    if impart_suc <= 40:
+        fail_msgs = [
+            f"遭遇{impart_name}守护大阵反噬，道友元神受创退回！",
+            f"虚空突现《{random.choice(['太虚','九幽','混元'])}禁制》，将道友逼退！",
+            f"心魔劫显化{random.choice(['天魔','域外邪神','上古怨灵'])}虚影，道友不得不暂避锋芒！",
+            f"{random.choice(['青冥','玄黄','混沌'])}道则显化，阻断道友前进之路！",
+            f"道友本命法宝「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」震颤示警，被迫撤退！"
+        ]
+        msg = random.choice(fail_msgs)
+        msg += f"\n消耗虚神界时间：{impart_time} 分钟"
         xiuxian_impart.use_impart_exp_day(impart_time, user_id)
         impart_pk.update_user_impart_lv(user_info['user_id'])
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
+    
     impart_suc = random.randint(1, 100)
-    if 1 <= impart_suc <= 40:
-        impart_lv = impart_lv - 1
-        impart_lv = max(impart_lv, 0)
-        msg = "偶遇时空乱流"
-    elif 41 <= impart_suc <= 80:
-        impart_lv = impart_lv + 1
-        impart_lv = min(impart_lv, 10)
-        msg = "机缘巧合"
+    if 41 <= impart_suc <= 60:
+        impart_lv = max(impart_lv - 1, 0)
+        down_msgs = [
+            f"道友误触{random.choice(['周天','洪荒','太古'])}禁制，境界暂时跌落",
+            f"遭遇{random.choice(['虚空风暴','法则乱流','混沌潮汐'])}，被迫退守",
+            f"{random.choice(['诛仙','戮神','陷仙'])}剑气纵横，斩落道友一缕元神",
+            f"神秘存在「{random.choice(['荒天帝','叶天帝','楚天尊'])}」虚影显现，威压逼退道友",
+            f"《{random.choice(['道藏','佛经','魔典'])}》显化天碑，道友参悟有误反受其害"
+        ]
+        msg = random.choice(down_msgs)
+    elif 61 <= impart_suc <= 80:
+        impart_lv = min(impart_lv + 1, 30)
+        up_msgs = [
+            f"道友顿悟{random.choice(['太初','鸿蒙','混沌'])}真意，境界突破！",
+            f"得「{random.choice(['菩提树','悟道石','混沌青莲'])}」相助，勘破一层玄机",
+            f"以《{random.choice(['大衍诀','神象镇狱劲','他化自在法'])}》破开禁制",
+            f"献祭{random.choice(['千年修为','本命精血','先天灵宝'])}，强行突破桎梏",
+            f"引动{random.choice(['周天星辰','地脉龙气','混沌雷劫'])}之力，开辟前路"
+        ]
+        msg = random.choice(up_msgs)
     elif 81 <= impart_suc <= 90:
-        impart_lv = impart_lv - impart_rate
-        impart_lv = max(impart_lv, 0)
-        msg = "通过随机传送阵"
+        impart_lv = max(impart_lv - impart_rate, 0)
+        down_rate_msgs = [
+            f"遭逢{random.choice(['量劫','天人五衰','纪元更迭'])}天象，道基受损！",
+            f"{random.choice(['天道','大道','混沌'])}反噬，境界连跌！",
+            f"被「{random.choice(['时间长河','命运长河','因果长河'])}」冲刷，丢失部分道果",
+            f"{random.choice(['上苍之上','界海彼岸','黑暗源头'])}传来诡异低语，道友道心几近崩溃",
+            f"《{random.choice(['葬经','度人经','灭世书'])}》显化，强行削去道友修为"
+        ]
+        msg = random.choice(down_rate_msgs)
     else:
-        impart_lv = impart_lv + impart_rate
-        impart_lv = min(impart_lv, 10)
-        msg = "通过随机传送阵"
+        impart_lv = min(impart_lv + impart_rate, 30)
+        up_rate_msgs = [
+            f"触发{random.choice(['混沌青莲','世界树','玄黄母气'])}异象，连破数关！",
+            f"得「{random.choice(['盘古斧','造化玉碟','东皇钟'])}」道韵洗礼，修为暴涨",
+            f"参透《{random.choice(['道经','佛经','魔典'])}》终极奥义，直指大道本源",
+            f"{random.choice(['鸿钧','陆压','扬眉'])}老祖显圣点化，醍醐灌顶",
+            f"吞噬{random.choice(['先天灵宝','混沌至宝','大道碎片'])}，实力飙升"
+        ]
+        msg = random.choice(up_rate_msgs)
+    
     xiuxian_impart.use_impart_exp_day(impart_time, user_id)
-    xiuxian_impart.update_impart_lv(impart_lv)
+    xiuxian_impart.update_impart_lv(impart_lv, user_id)
     impart_pk.update_user_impart_lv(user_info['user_id'])
-    impart_exp_up = impart_lv * 0.3
-    impart_name = impart_level.get(impart_lv, "未知")
-    msg += f"，道友来到虚神界{impart_name}区域！\n消耗虚神界时间：{impart_time}分钟\n虚神界祝福：{int(impart_exp_up * 100)}%"
+    
+    impart_exp_up = impart_lv * 0.15
+    impart_name_new = impart_level.get(impart_lv, "未知秘境")
+    msg += f"\n现位于：{impart_name_new}"
+    msg += f"\n消耗虚神界时间：{impart_time} 分钟"
+    msg += f"\n获得区域道则加持：修为增益{int(impart_exp_up * 100)}%"
     await handle_send(bot, event, msg)
     await impart_pk_go.finish()
-        
+
 @impart_pk_in_closing.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界闭关"""
@@ -477,7 +574,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
     impart_lv = impart_data_draw['impart_lv'] if impart_data is not None else 0
-    impart_exp_up2 = impart_lv * 0.3
+    impart_exp_up2 = impart_lv * 0.15
     
 
     # 计算基础经验倍率

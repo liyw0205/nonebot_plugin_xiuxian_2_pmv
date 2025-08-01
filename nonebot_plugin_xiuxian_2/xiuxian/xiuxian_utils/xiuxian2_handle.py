@@ -2025,15 +2025,15 @@ class XIUXIAN_IMPART_BUFF:
         cur.execute(sql, (impart_stone,))
         self.conn.commit()
         
-    def update_impart_lv(self, impart_lv):
+    def update_impart_lv(self, impart_lv, user_id):
         """更新虚神界等级"""
         cur = self.conn.cursor()
-        sql = "UPDATE xiuxian_impart SET impart_lv=?"
-        cur.execute(sql, (impart_lv,))
+        sql = "UPDATE xiuxian_impart SET impart_lv=? WHERE user_id=?"
+        cur.execute(sql, (impart_lv, user_id))
         self.conn.commit()
 
     def impart_lv_reset(self):
-        """重置虚神界等级"""
+        """重置所有用户虚神界等级"""
         sql = f"UPDATE xiuxian_impart SET impart_lv=0"
         cur = self.conn.cursor()
         cur.execute(sql, )
