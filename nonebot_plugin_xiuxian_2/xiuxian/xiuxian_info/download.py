@@ -35,7 +35,10 @@ async def get_avatar_by_user_id_and_save(user_id):
     PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     USER_AVATAR_PATH = PLAYERSDATA / user_id / 'AVATAR.png'
     INIT_PATH = Path() / "data" / "xiuxian" / "info_img" / "init.png"
-
+    # 直接返回默认头像不下载
+    im = Image.open(INIT_PATH).resize((280, 280)).convert("RGBA")
+    return im
+    
     try:
         if USER_AVATAR_PATH.exists():
             logger.opt(colors=True).info(f"<green>用户头像已存在，跳过下载！</green>")

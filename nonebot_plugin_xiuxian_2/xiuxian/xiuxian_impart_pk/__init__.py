@@ -347,6 +347,10 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
     stone_num = impart_data_draw["stone_num"] if impart_data_draw is not None else 0
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5
+    if user_blessed_spot_data == 0 or user_blessed_spot_data is None:
+        user_blessed_spot_msg = ""
+    else:
+        user_blessed_spot_msg = f"（聚灵旗加成：{int((user_blessed_spot_data) * 100)}%）"
     
     impart_level = {
         0:"凡尘迷雾", 1:"灵气初现", 2:"感气之渊",
@@ -367,7 +371,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     impart_name_new = impart_level.get(impart_lv, "未知秘境")
     msg += f"\n现位于：{impart_name_new}（LV {impart_lv}）"
     msg += f"\n虚神界修炼时间：{impart_time} 分钟"
-    msg += f"\n修炼效率：{int((impart_exp_up + user_blessed_spot_data) * 100)}%"
+    msg += f"\n修炼效率：{int((impart_exp_up + user_blessed_spot_data) * 100)}% {user_blessed_spot_msg}"
     msg += f"\n今日可探索次数：{impart_num}"
     msg += f"\n今日可对决次数：{pk_num}"
     msg += f"\n思恋结晶：{stone_num}"

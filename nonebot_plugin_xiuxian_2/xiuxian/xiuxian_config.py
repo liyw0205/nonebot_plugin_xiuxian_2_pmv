@@ -107,6 +107,7 @@ class XiuConfig:
         self.lunhui_min_level = "星芒境初期" # 千世轮回最低境界
         self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
         self.threelun_min_level = "无界境初期" # 永恒轮回最低境界
+        self.xiuxian_info_img = False # 开启则使用网络背景图
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
         self.merge_forward_send = 2 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送

@@ -45,18 +45,17 @@ rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
-use_rift_key = on_command("使用秘境钥匙", priority=5, block=True)  # 新增命令
+use_rift_key = on_command("使用秘境钥匙", priority=5, block=True)
 
 __rift_help__ = f"""
 秘境帮助信息:
 指令：
-1、秘境开启、关闭:秘境生成的通知，管理员权限
-2、生成秘境:生成一个随机秘境，管理员权限
-3、探索秘境:探索秘境获取随机奖励
-4、秘境结算、结算秘境:结算秘境奖励
-5、秘境探索终止、终止探索秘境:终止秘境事件
-6、使用秘境钥匙:使用秘境钥匙立即结算当前秘境
-7、秘境帮助:获取秘境帮助信息
+秘境开启、关闭:秘境生成的通知，管理员权限
+生成秘境:生成一个随机秘境，管理员权限
+探索秘境:探索秘境获取随机奖励
+秘境结算、结算秘境:结算秘境奖励
+秘境探索终止、终止探索秘境:终止秘境事件
+使用秘境钥匙:使用秘境钥匙立即结算当前秘境
 非指令：
 1、每天0点和12点生成一个随机等级的秘境
 """.strip()

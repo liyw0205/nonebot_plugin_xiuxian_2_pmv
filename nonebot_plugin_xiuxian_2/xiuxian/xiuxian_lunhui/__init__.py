@@ -42,7 +42,7 @@ __warring_help__ = f"""
 cache_help_fk = {}
 sql_message = XiuxianDateManage()  # sql类
 
-warring_help = on_fullmatch("轮回重修帮助", priority=12, block=True)
+warring_help = on_fullmatch("轮回重修帮助", aliases={"轮回帮助"}, priority=12, block=True)
 lunhui = on_command('进入千世轮回', priority=15,  block=True)
 twolun = on_command('进入万世轮回', priority=15,  block=True)
 threelun = on_command('进入永恒轮回', priority=15,  block=True)

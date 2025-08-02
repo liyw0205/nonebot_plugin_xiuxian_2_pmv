@@ -9,28 +9,18 @@ from nonebot.adapters.onebot.v11 import (
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
-from .draw_user_info import draw_user_info_img
-from ..xiuxian_utils.utils import check_user, get_msg_pic, number_to, handle_send
+from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to
 from ..xiuxian_config import XiuConfig
 
-xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "我的修仙信息图片版", "我的存档图片版"}, priority=23, block=True)
+xiuxian_message = on_command("我的修仙信息", aliases={"我的存档"}, priority=23, block=True)
+xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版"}, priority=23, block=True)
 sql_message = XiuxianDateManage()  # sql类
 
-@xiuxian_message.handle(parameterless=[Cooldown(at_sender=False, cd_time=10)])
-async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """我的修仙信息"""
-    # 判断是否启用图片版信息展示
-    user_info_image = "图片版" in event.get_plaintext()
-
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await xiuxian_message.finish()
-    user_id = user_info['user_id']
+async def get_user_xiuxian_info(user_id):
+    """获取用户修仙信息的公共函数"""
     user_info = sql_message.get_user_real_info(user_id)
     user_name = user_info['user_name']
-    
     
     user_num = user_info['id']
     rank = sql_message.get_exp_rank(user_id)
@@ -38,9 +28,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     stone = sql_message.get_stone_rank(user_id)
     user_stone = int(stone[0])
 
-    if user_name:
-        pass
-    else:
+    if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
     level_rate = sql_message.get_root_rate(user_info['root_type'])  # 灵根倍率
@@ -54,7 +42,6 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         sectmsg = f"无宗门"
         sectzw = f"无"
 
-    
     # 判断突破的修为
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
@@ -77,6 +64,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_effect2_buff_date = user_buff_data.get_user_effect2_buff_data()
     user_weapon_data = user_buff_data.get_user_weapon_data()
     user_armor_data = user_buff_data.get_user_armor_buff_data()
+    
     main_buff_name = f"无"
     sub_buff_name = f"无"
     sec_buff_name = f"无"
@@ -84,6 +72,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     effect2_buff_buff_name = f"无"
     weapon_name = f"无"
     armor_name = f"无"
+    
     if user_main_buff_date is not None:
         main_buff_name = f"{user_main_buff_date['name']}({user_main_buff_date['level']})"
     if user_sub_buff_date != None:
@@ -98,10 +87,12 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         weapon_name = f"{user_weapon_data['name']}({user_weapon_data['level']})"
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
+        
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data() # 功法突破概率提升
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
     leveluprate = int(user_info['level_up_rate'])  # 用户失败次数加成
     number =  main_rate_buff["number"] if main_rate_buff is not None else 0
+    
     DETAIL_MAP = {
         "ID": f"{user_id}",
         "道号": f"{user_name}",
@@ -120,20 +111,12 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         "副修神通": sec_buff_name,
         "法器": weapon_name,
         "防具": armor_name,
-        "注册位数": f"道友是踏入修仙世界的第{int(user_num)}人",
-        "修为排行": f"道友的修为排在第{int(user_rank)}位",
-        "灵石排行": f"道友的灵石排在第{int(user_stone)}位",
+        "注册位数": f"第{int(user_num)}人",
+        "修为排行": f"第{int(user_rank)}位",
+        "灵石排行": f"第{int(user_stone)}位",
     }
     
-    if user_info_image:
-        img_res = await draw_user_info_img(user_id, DETAIL_MAP)
-        if isinstance(event, GroupMessageEvent):
-           await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
-        await xiuxian_message.finish()
-    else:
-        msg = f"""
+    text_msg = f"""
 ID：{user_id}
 道号: {user_name}
 境界: {user_info['level']}
@@ -155,7 +138,41 @@ ID：{user_id}
 瞳术: {effect2_buff_buff_name}
 法器: {weapon_name}
 防具: {armor_name}
-注册位数: 道友是踏入修仙世界的第{int(user_num)}人
-修为排行: 道友的修为排在第{int(user_rank)}位
-灵石排行: 道友的灵石排在第{int(user_stone)}位"""
+注册位数: 第{int(user_num)}人
+修为排行: 第{int(user_rank)}位
+灵石排行: 第{int(user_stone)}位"""
+    
+    return DETAIL_MAP, text_msg
+
+@xiuxian_message.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """普通文本版修仙信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
         await handle_send(bot, event, msg)
+        await xiuxian_message.finish()
+    
+    _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
+    await handle_send(bot, event, text_msg)
+
+@xiuxian_message_img.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
+async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """图片版修仙信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await xiuxian_message_img.finish()
+    
+    detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])
+    
+    if XiuConfig().xiuxian_info_img:
+        img_res = await draw_user_info_img(user_info['user_id'], detail_map)
+    else:
+        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
+    
+    if isinstance(event, GroupMessageEvent):
+        await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
+    else:
+        await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
