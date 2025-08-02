@@ -126,21 +126,19 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    # 解析抽卡次数
+    # 解析抽卡概率
     msg = args.extract_plain_text().strip()
     if msg:
         try:
             times_str = msg.split()[-1]
             times = int(times_str)
+            times = (times // 10) * 10
+            times = max(10, min(times, 1000))
         except (IndexError, ValueError):
             await handle_send(bot, event, "请输入有效次数（如：传承祈愿 10）")
             return
     else:
         times = 10
-
-    if times % 10 != 0 or times < 10:
-        await handle_send(bot, event, "次数需为10的倍数且≥10")
-        return    
 
     # 检查思恋结晶是否足够
     required_crystals = times  # 每抽一次消耗10颗
@@ -159,7 +157,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     new_cards = []
     duplicate_cards = []
     list_tp = []
-    current_wish = impart_data_draw["wish"]  # 初始化抽卡次数
+    current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
 
     # 执行抽卡
     for _ in range(times // 10):
@@ -174,7 +172,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 # 新卡片
                 new_cards.append(reap_img)
                 total_seclusion_time += 660
-            # 中奖（新卡或重复卡）后重置抽卡次数为0
+            # 中奖（新卡或重复卡）后重置抽卡概率为0
             current_wish = 0
         else:
             # 未中奖情况
@@ -183,7 +181,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             # 未中奖时增加10次抽卡计数
             current_wish += 10
 
-        # 每组十连扣除10颗结晶并更新抽卡次数
+        # 每组十连扣除10颗结晶并更新抽卡概率
         xiuxian_impart.update_stone_num(10, user_id, 2)
         xiuxian_impart.update_impart_wish(current_wish, user_id)
     impart_data_draw = await impart_check(user_id)
@@ -193,7 +191,8 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"累计获得{total_seclusion_time}分钟闭关时间！\n"
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
         f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
-        f"抽卡次数：{current_wish}/90次\n"
+        f"抽卡概率：{current_wish}/90次\n"
+        f"消耗思恋结晶：{times}颗"        
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗"
     )
     await update_user_impart_data(user_id, total_seclusion_time)
@@ -222,21 +221,19 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    # 解析抽卡次数
+    # 解析抽卡概率
     msg = args.extract_plain_text().strip()
     if msg:
         try:
             times_str = msg.split()[-1]
             times = int(times_str)
+            times = (times // 10) * 10
+            times = max(10, min(times, 1000))
         except (IndexError, ValueError):
             await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
             return
     else:
         times = 10
-
-    if times % 10 != 0 or times < 10:
-        await handle_send(bot, event, "次数需为10的倍数且≥10")
-        return    
 
     # 检查灵石是否足够
     required_crystals = times * 1000000 # 每抽一次消耗1000w
@@ -253,7 +250,8 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     new_cards = []
     duplicate_cards = []
-    current_wish = impart_data_draw["wish"]  # 初始化抽卡次数
+    current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
+    reward_stone = 0
 
     # 执行抽卡
     for _ in range(times // 10):
@@ -264,11 +262,11 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 # 重复卡片
                 duplicate_cards.append(reap_img)
                 xiuxian_impart.update_stone_num(10, user_id, 1)
+                reward_stone += 10
             else:
                 # 新卡片
                 new_cards.append(reap_img)
-                xiuxian_impart.update_stone_num(5, user_id, 1)
-            # 中奖（新卡或重复卡）后重置抽卡次数为0
+            # 中奖（新卡或重复卡）后重置抽卡概率为0
             current_wish = 0
         else:
             # 未中奖情况
@@ -284,7 +282,8 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"{summary}\n"
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
         f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
-        f"抽卡次数：{current_wish}/90次\n"
+        f"抽卡概率：{current_wish}/90次\n"
+        f"转换思恋结晶：{reward_stone}颗\n"
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
         f"消耗灵石：{number_to(required_crystals)}"
     )
@@ -387,24 +386,8 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     img = None
     img_tp = impart_data_json.data_person_list(user_id)
     card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
-    txt_back = f"""道友的传承物资
-思恋结晶：{impart_data_draw["stone_num"]}颗
-抽卡次数：{impart_data_draw["wish"]}/90次
-卡片数量：{card_count}/108
-"""
-    txt_tp = f"""道友{name}的传承总属性
-攻击提升:{int(impart_data_draw["impart_atk_per"] * 100)}%
-气血提升:{int(impart_data_draw["impart_hp_per"] * 100)}%
-真元提升:{int(impart_data_draw["impart_mp_per"] * 100)}%
-会心提升：{int(impart_data_draw["impart_know_per"] * 100)}%
-会心伤害提升：{int(impart_data_draw["impart_burst_per"] * 100)}%
-闭关经验提升：{int(impart_data_draw["impart_exp_up"] * 100)}%
-炼丹收获数量提升：{impart_data_draw["impart_mix_per"]}颗
-灵田收取数量提升：{impart_data_draw["impart_reap_per"]}颗
-每日双修次数提升：{impart_data_draw["impart_two_exp"]}次
-boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
-道友拥有的传承卡片如下:
-"""
+    txt_back = f"卡片数量：{card_count}/108"
+    txt_tp = f"道友拥有的传承卡片如下:\n"
     if img_tp:
         card_list_str = "\n".join(img_tp)
         txt_tp += card_list_str
@@ -412,7 +395,7 @@ boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
         txt_tp += "暂无传承卡片"
 
     msg = f"""
-{txt_back}\n{txt_tp}"""
+{txt_tp}\n\n{txt_back}"""
     try:
         await handle_send(bot, event, msg)
     except ActionFailed:
@@ -454,19 +437,26 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         return
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
-    img_tp = impart_data_json.data_person_list(user_id)
-    card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
     if impart_data_draw is None:
         await handle_send(
             bot, event, send_group_id, "发生未知错误！"
         )
         return
 
-    msg = f"""道友的传承物资
-思恋结晶：{impart_data_draw["stone_num"]}颗
-抽卡次数：{impart_data_draw["wish"]}/90次
-卡片数量：{card_count}/108
-    """
+    msg = f"""
+道友的传承总属性
+攻击提升:{int(impart_data_draw["impart_atk_per"] * 100)}%
+气血提升:{int(impart_data_draw["impart_hp_per"] * 100)}%
+真元提升:{int(impart_data_draw["impart_mp_per"] * 100)}%
+会心提升：{int(impart_data_draw["impart_know_per"] * 100)}%
+会心伤害提升：{int(impart_data_draw["impart_burst_per"] * 100)}%
+闭关经验提升：{int(impart_data_draw["impart_exp_up"] * 100)}%
+炼丹收获数量提升：{impart_data_draw["impart_mix_per"]}颗
+灵田收取数量提升：{impart_data_draw["impart_reap_per"]}颗
+每日双修次数提升：{impart_data_draw["impart_two_exp"]}次
+boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
+
+思恋结晶：{impart_data_draw["stone_num"]}颗"""
     await handle_send(bot, event, msg)
 
 @impart_img.handle(parameterless=[Cooldown(at_sender=False)])

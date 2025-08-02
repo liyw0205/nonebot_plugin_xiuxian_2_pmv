@@ -54,6 +54,7 @@ level_up = on_fullmatch("突破", priority=6, block=True)
 level_up_dr = on_fullmatch("渡厄突破", priority=7, block=True)
 level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, block=True)
 level_up_zj = on_command("直接突破", aliases={"破"}, priority=7, block=True)
+level_up_lx = on_command("连续突破", aliases={"破"}, priority=7, block=True)
 give_stone = on_command("送灵石", priority=5, permission=GROUP, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, permission=GROUP, block=True)
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
@@ -592,7 +593,90 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg)
         await level_up_zj.finish()
 
-
+@level_up_lx.handle(parameterless=[Cooldown(stamina_cost=15, at_sender=False)])  # 连续突破消耗15体力
+async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """连续突破5次"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await level_up_lx.finish()
+    
+    user_id = user_info['user_id']
+    if user_info['hp'] is None:
+        sql_message.update_user_hp(user_id)
+    
+    user_msg = sql_message.get_user_info_with_id(user_id)
+    level_cd = user_msg['level_up_cd']
+    
+    # 检查突破CD
+    if level_cd:
+        time_now = datetime.now()
+        cd = OtherSet().date_diff(time_now, level_cd)
+        if cd < XiuConfig().level_up_cd * 60:
+            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            sql_message.update_user_stamina(user_id, 6, 1)
+            await handle_send(bot, event, msg)
+            await level_up_lx.finish()
+    
+    level_name = user_msg['level']
+    exp = user_msg['exp']
+    level_rate = jsondata.level_rate_data()[level_name]
+    leveluprate = int(user_msg['level_up_rate'])
+    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    main_exp_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    exp_buff = main_exp_buff['exp_buff'] if main_exp_buff is not None else 0
+    number = main_rate_buff['number'] if main_rate_buff is not None else 0
+    
+    success = False
+    result_msg = ""
+    attempts = 0
+    
+    for i in range(5):
+        attempts += 1
+        le = OtherSet().get_type(exp, level_rate + leveluprate + number, level_name)
+        
+        if isinstance(le, str):
+            if le == "失败":
+                # 突破失败
+                percentage = random.randint(
+                    XiuConfig().level_punishment_floor, XiuConfig().level_punishment_limit
+                )
+                now_exp = int(int(exp) * ((percentage / 100) * (1 - exp_buff)))
+                sql_message.update_j_exp(user_id, now_exp)
+                exp -= now_exp
+                
+                nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
+                nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
+                sql_message.update_user_hp_mp(user_id, nowhp, nowmp)
+                
+                update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
+                    level_rate * XiuConfig().level_up_probability)
+                leveluprate += update_rate
+                sql_message.update_levelrate(user_id, leveluprate)
+                
+                result_msg += f"第{attempts}次突破失败，修为减少{now_exp}，下次突破成功率增加{update_rate}%\n"
+            else:
+                # 修为不足或已是最高境界
+                result_msg += le
+                break
+        elif isinstance(le, list):
+            # 突破成功
+            sql_message.updata_level(user_id, le[0])
+            sql_message.update_power2(user_id)
+            sql_message.update_levelrate(user_id, 0)
+            sql_message.update_user_hp(user_id)
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！"
+            success = True
+            break
+    
+    if not success and attempts == 5 and "修为不足以突破" not in result_msg:
+        result_msg += "连续5次突破尝试结束，未能突破成功。"
+    
+    sql_message.updata_level_cd(user_id)  # 更新突破CD
+    await handle_send(bot, event, result_msg)
+    await level_up_lx.finish()
+    
 @level_up_drjd.handle(parameterless=[Cooldown(stamina_cost=1, at_sender=False)])
 async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡厄 金丹 突破"""
