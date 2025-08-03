@@ -1803,7 +1803,10 @@ def generate_daohao():
     prefix = random.choice(lexicon['prefix'][prefix_type])
     # 30%概率双前缀
     if random.random() < 0.3 and prefix_type in ['复姓', '自然']:
-        prefix += random.choice(lexicon['prefix'][prefix_type])
+        second_prefix = random.choice(lexicon['prefix'][prefix_type])
+        while second_prefix == prefix:  # 确保不重复
+            second_prefix = random.choice(lexicon['prefix'][prefix_type])
+        prefix += second_prefix
     
     # 生成名字
     if name_struct == '单字':
@@ -1815,6 +1818,8 @@ def generate_daohao():
         else:
             w1 = random.choice(lexicon['name_words'][style])
             w2 = random.choice(lexicon['name_words'][style])
+            while w2 == w1:  # 确保两个字不重复
+                w2 = random.choice(lexicon['name_words'][style])
             name = w1 + w2
     elif name_struct == '数字':
         num = random.choice([random.randint(0,9), random.randint(10,99)])
@@ -1829,9 +1834,16 @@ def generate_daohao():
         for _ in range(3):
             # 每个字可以是名字字或风格字
             if random.random() < 0.7:
-                parts.append(random.choice(lexicon['name_words'][style]))
+                word = random.choice(lexicon['name_words'][style])
             else:
-                parts.append(random.choice(lexicon['style_words'][style]))
+                word = random.choice(lexicon['style_words'][style])
+            # 确保不重复
+            while parts and word == parts[-1]:
+                if random.random() < 0.7:
+                    word = random.choice(lexicon['name_words'][style])
+                else:
+                    word = random.choice(lexicon['style_words'][style])
+            parts.append(word)
         name = ''.join(parts)
     
     # 生成修饰
@@ -1845,10 +1857,15 @@ def generate_daohao():
             levels = 3
         else:
             levels = 0
+        modifiers_used = []
         for _ in range(levels):
             # 每级修饰有70%概率加词
             if random.random() < 0.7:
                 mod = random.choice(lexicon['modifiers'][style])
+                # 确保修饰词不重复
+                while mod in modifiers_used:
+                    mod = random.choice(lexicon['modifiers'][style])
+                modifiers_used.append(mod)
                 # 修饰词可能包含数字
                 if '{num}' in mod:
                     num = random.randint(1,9)
@@ -1868,6 +1885,13 @@ def generate_daohao():
     
     # 10%概率倒装
     if random.random() < 0.1:
-        return f"{modifier}{connector}{prefix}{name}"
+        daohao = f"{modifier}{connector}{prefix}{name}"
     else:
-        return f"{prefix}{name}{connector}{modifier}"
+        daohao = f"{prefix}{name}{connector}{modifier}"
+    
+    # 最终检查是否有连续重复
+    while any(daohao[i] == daohao[i+1] for i in range(len(daohao)-1)):
+        # 如果有连续重复字符，重新生成
+        return generate_daohao()
+    
+    return daohao

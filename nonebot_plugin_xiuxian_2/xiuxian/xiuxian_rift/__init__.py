@@ -45,7 +45,8 @@ rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
-use_rift_key = on_command("使用秘境钥匙", priority=5, block=True)
+use_rift_key = on_command("道具使用秘境钥匙", priority=5, block=True)
+use_rift_explore = on_command("道具使用秘藏令", priority=5, block=True)
 
 __rift_help__ = f"""
 秘境帮助信息:
@@ -55,7 +56,8 @@ __rift_help__ = f"""
 探索秘境:探索秘境获取随机奖励
 秘境结算、结算秘境:结算秘境奖励
 秘境探索终止、终止探索秘境:终止秘境事件
-使用秘境钥匙:使用秘境钥匙立即结算当前秘境
+道具使用秘境钥匙:立即结算当前秘境
+道具使用秘藏令:再次探索秘境
 非指令：
 1、每天0点和12点生成一个随机等级的秘境
 """.strip()
@@ -199,6 +201,67 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await explore_rift.finish()
 
 
+@use_rift_explore.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """使用秘藏令"""
+    group_rift.update(old_rift_info.read_rift_info())
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await use_rift_explore.finish()
+    user_id = user_info['user_id']
+    is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await use_rift_explore.finish()
+    else:
+        group_id = "000000"        
+        try:
+            group_rift[group_id]
+        except:
+            msg = '野外秘境尚未生成，请道友耐心等待!'
+            await handle_send(bot, event, msg)
+            await explore_rift.finish()
+        back_msg = sql_message.get_back_msg(user_id)
+        rift_explore_id = 20007
+        rift_explore_num = 0
+        for item in back_msg:
+            if item['goods_id'] == rift_explore_id:
+                rift_explore_num = item['goods_num']
+                break
+
+        if rift_explore_num < 1:
+            msg = "道友背包中没有秘藏令，无法使用！"
+            await handle_send(bot, event, msg)
+            await use_rift_explore.finish()
+        
+        user_rank = convert_rank(user_info["level"])[0]
+         # 搬血中期 - 秘境rank
+        required_rank = convert_rank("感气境中期")[0] - group_rift[group_id].rank
+         
+        if user_rank > required_rank:
+            rank_name_list = convert_rank(user_info["level"])[1]
+            required_rank_name = rank_name_list[len(rank_name_list) - required_rank - 1]
+            msg = f"秘境凶险万分，道友的境界不足，无法进入秘境：{group_rift[group_id].name}，请道友提升到{required_rank_name}以上再来！"
+            await handle_send(bot, event, msg)
+            await use_rift_explore.finish()
+
+        group_rift[group_id].l_user_id.append(user_id)
+        msg = f"道友使用秘藏令进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
+        rift_data = {
+            "name": group_rift[group_id].name,
+            "time": group_rift[group_id].time,
+            "rank": group_rift[group_id].rank
+        }
+
+        save_rift_data(user_id, rift_data)
+        sql_message.do_work(user_id, 3, rift_data["time"])
+        sql_message.update_back_j(user_id, rift_explore_id)
+        old_rift_info.save_rift(group_rift)
+        await handle_send(bot, event, msg)
+        await use_rift_explore.finish()
+        
 @complete_rift.handle(parameterless=[Cooldown(at_sender=False)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境结算"""
