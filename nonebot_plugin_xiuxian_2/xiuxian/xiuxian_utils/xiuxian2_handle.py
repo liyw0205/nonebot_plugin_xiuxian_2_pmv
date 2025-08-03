@@ -452,7 +452,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             
         elif int(key) == 8:
             sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
-            cur.execute(sql, ("轮回无尽不灭，只为触及永恒之境。", "永恒道果", user_id))
+            cur.execute(sql, ("轮回无尽不灭，只为触及永恒之境", "永恒道果", user_id))
             root_name = "永恒道果"
             self.conn.commit()            
 
