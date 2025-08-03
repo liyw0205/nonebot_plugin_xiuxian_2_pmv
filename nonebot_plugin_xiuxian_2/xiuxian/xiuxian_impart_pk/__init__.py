@@ -276,8 +276,6 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     level = user_info['level']
-    hp_speed = 25
-    mp_speed = 50
 
     impaer_exp_time = args.extract_plain_text().strip()
     if not impaer_exp_time.isdigit():
@@ -305,7 +303,12 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
     mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
-    exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))  # 本次闭关获取的修为
+    impart_data_draw = await impart_pk_check(user_id)
+    impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
+    impart_exp_up2 = impart_lv * 0.15
+    exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up) * (1 + impart_exp_up2))))  # 本次闭关获取的修为
     
     if int(impaer_exp_time) == 1:
         if current_exp + exp > max_exp:
@@ -314,7 +317,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     exp = int(round(exp))
     # 校验是否超出上限
     if current_exp + exp > max_exp:
-        allowed_time = (max_exp - current_exp) // (XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp))))
+        allowed_time = (max_exp - current_exp) // (XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up2))))
         allowed_time = max(int(allowed_time), 1)
         exp2 = max((max_exp - current_exp), 1)
         if current_exp + exp2 > max_exp:
@@ -418,7 +421,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await impart_pk_go.finish()
     else:
         if impart_data_draw['exp_day'] < 1000:
-            msg = f"\n道友深入虚神界时间不足，难以突破{impart_name}的禁制！"
+            msg = f"\n道友探索虚神界时间不足，难以突破{impart_name}的禁制！"
             impart_exp_up = impart_lv * 0.15
             msg += f"\n当前区域加持：修为增益{int(impart_exp_up * 100)}%"
             await handle_send(bot, event, msg)
