@@ -56,7 +56,7 @@ groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-
+BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
 create = on_command("生成世界boss", aliases={"生成世界Boss", "生成世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
 create_appoint = on_command("生成指定世界boss", aliases={"生成指定世界boss", "生成指定世界BOSS", "生成指定BOSS", "生成指定boss"}, permission=SUPERUSER, priority=5,)
@@ -514,7 +514,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         else:
             exp_msg = f" "
                 
-        drops_id, drops_info =  boss_drops(user_rank, boss_rank, bossinfo, userinfo)
+        drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, userinfo)
         if drops_id == None:
             drops_msg = " "
         elif boss_rank < convert_rank('遁一境中期')[0]:           
@@ -1155,41 +1155,76 @@ BOSSDLW ={"衣以候": "衣以侯布下了禁制镜花水月，",
     }
 
 
-def boss_drops(user_rank, boss_rank, boss, user_info):
-    boss_dice = random.randint(0,100)
-    drops_id = None
-    drops_info = None
-    if boss_rank - user_rank >= 4:
-        drops_id = None
-        drops_info = None
-    
-    elif  boss_dice >= 90:
-        drops_id,drops_info = get_drops(user_info)
-       
-    return drops_id, drops_info    
+BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
+
+import random
+import json
+from pathlib import Path
+
+BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物" / "boss掉落物.json"
+
+class BossDrops:
+    def __init__(self):
+        self.drops_data = self.load_drops_data()
         
-def get_drops(user_info):
-    """
-    随机获取一个boss掉落物
-    :param user_info:用户信息类
-    :param rift_rank:秘境等级
-    :return 法器ID, 法器信息json
-    """
-    drops_data = items.get_data_by_item_type(['掉落物'])
-    drops_id = get_id(drops_data, user_info['level'])
-    drops_info = items.get_data_by_item_id(drops_id)
-    return drops_id, drops_info
+    def load_drops_data(self):
+        """加载掉落物数据"""
+        try:
+            with open(BOSSDROPSPATH, "r", encoding="UTF-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载BOSS掉落物数据失败: {e}")
+            return {}
+    
+    def get_drop_by_id(self, drop_id):
+        """通过ID获取掉落物"""
+        return self.drops_data.get(str(drop_id))
+    
+    def get_random_drop(self, user_level):
+        """
+        根据用户等级随机获取一个掉落物
+        :param user_level: 用户境界等级
+        :return: (掉落物ID, 掉落物信息)
+        """
+        if not self.drops_data:
+            return None, None
+            
+        # 计算适合用户等级的掉落物范围
+        user_rank = convert_rank(user_level)[0]
+        min_rank = max(convert_rank(user_level)[0] - 17, 8)
+        max_rank = min(random.randint(min_rank, min_rank + 30), 55)
+        
+        # 筛选符合条件的掉落物
+        eligible_drops = []
+        for drop_id, drop_info in self.drops_data.items():
+            if min_rank <= drop_info.get('rank', 0) <= max_rank:
+                eligible_drops.append((drop_id, drop_info))
+                
+        if not eligible_drops:
+            return None, None
+            
+        return random.choice(eligible_drops)
 
-def get_id(dict_data, user_level):
-    """根据字典的rank、用户等级、秘境等级随机获取key"""
-    l_temp = []
-    zx_rank = max(convert_rank(user_level)[0] - 17, 8)
-    zx_rank = min(random.randint(zx_rank, zx_rank + 30), 55)
-    for k, v in dict_data.items():
-        if zx_rank <= v['rank']:
-            l_temp.append(k)
-
-    if len(l_temp) == 0:
-        return None
-    else:
-        return random.choice(l_temp)
+def boss_drops(user_rank, boss_rank, boss, user_info):
+    """
+    改进后的BOSS掉落函数
+    :param user_rank: 用户境界等级
+    :param boss_rank: BOSS境界等级
+    :param boss: BOSS信息
+    :param user_info: 用户信息
+    :return: (掉落物ID, 掉落物信息) 或 (None, None)
+    """
+    drops_system = BossDrops()
+    
+    # 基础掉落概率检查(30%)
+    if random.random() > 0.3:
+        return None, None
+        
+    # 境界差距过大时极低概率掉落(5%)
+    if user_rank - boss_rank >= 4 and random.random() > 0.05:
+        return None, None
+        
+    # 获取随机掉落物
+    drop_id, drop_info = drops_system.get_random_drop(user_info['level'])
+    
+    return drop_id, drop_info

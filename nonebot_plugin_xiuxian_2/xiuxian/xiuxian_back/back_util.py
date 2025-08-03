@@ -429,8 +429,7 @@ def get_item_msg(goods_id):
         msg += f"效果：{item_info['desc']}\n修炼速度：{item_info['修炼速度'] * 100}%\n药材速度：{item_info['药材速度'] * 100}%"
     elif item_info['type'] == '特殊道具':
         msg = f"名字：{item_info['name']}\n"
-        msg += f"描述：{item_info['desc']}\n"
-        msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
+        msg += f"描述：{item_info['desc']}"
     elif item_info['item_type'] == "炼丹炉":
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
