@@ -73,12 +73,7 @@ def createboss():
         level = "永恒境"
 
     boss_jj = random.choice(jinjie_list[:jinjie_list.index(level) + 1])
-    bossinfo = get_boss_exp(boss_jj)
-    bossinfo['name'] = random.choice(config["Boss名字"])
-    bossinfo['jj'] = boss_jj
-    bossinfo['max_stone'] = random.choice(config["Boss灵石"][boss_jj])
-    bossinfo['stone'] = bossinfo['max_stone']
-    return bossinfo
+    return boss_jj
 
 
 def createboss_jj(boss_jj, boss_name=None):
@@ -92,4 +87,40 @@ def createboss_jj(boss_jj, boss_name=None):
     else:
         return None
 
-
+def create_all_bosses(max_jj: str = None) -> list:
+    """
+    生成所有可生成境界的 BOSS（每个境界一个）
+    
+    Args:
+        max_jj (str, optional): 最高可生成的境界（如 "祭道境"）。如果为 None，则自动计算当前最高境界。
+    
+    Returns:
+        list: 生成的 BOSS 列表，每个境界一个 BOSS
+    """
+    
+    # 如果没有指定最高境界，则根据当前最高玩家境界计算
+    if max_jj is None:
+        top_user_info = sql_message.get_realm_top1_user()
+        top_user_level = top_user_info['level']
+        
+        if len(top_user_level) == 5:
+            max_jj = top_user_level[:3]  # 例如 "祭道境"
+        elif len(top_user_level) == 4:   # 江湖好手
+            max_jj = "感气境"
+        elif len(top_user_level) == 2:   # 至高
+            max_jj = "永恒境"
+    
+    # 获取所有不超过 max_jj 的境界
+    all_jj = [
+        jj for jj in JINGJIEEXP.keys() 
+        if jinjie_list.index(jj) <= jinjie_list.index(max_jj)
+    ]
+    
+    # 生成每个境界的 BOSS
+    bosses = []
+    for jj in all_jj:
+        boss = createboss_jj(jj)
+        if boss:
+            bosses.append(boss)
+    
+    return bosses

@@ -30,7 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XIUXIAN_IMPART_BUFF, leave_harm_time
 )
 from ..xiuxian_config import convert_rank, XiuConfig, JsonConfig
-from .makeboss import createboss, createboss_jj
+from .makeboss import createboss, createboss_jj, create_all_bosses
 from .bossconfig import get_boss_config, savef_boss
 from .old_boss_info import old_boss_info
 from ..xiuxian_utils.player_fight import Boss_fight
@@ -59,6 +59,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
 create = on_command("生成世界boss", aliases={"生成世界Boss", "生成世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
+generate_all = on_command("生成全部世界boss", aliases={"生成全部世界Boss", "生成全部世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
 create_appoint = on_command("生成指定世界boss", aliases={"生成指定世界boss", "生成指定世界BOSS", "生成指定BOSS", "生成指定boss"}, permission=SUPERUSER, priority=5,)
 boss_info = on_command("查询世界boss", aliases={"查询世界Boss", "查询世界BOSS", "查询boss", "世界Boss查询", "世界BOSS查询", "boss查询"}, priority=6, block=True)
 boss_info2 = on_command("查询世界boss列表", aliases={"查询世界Boss列表", "查询世界BOSS列表", "查询boss列表", "世界Boss列表查询", "世界BOSS列表查询", "boss列表查询"}, priority=6, block=True)
@@ -73,29 +74,44 @@ boss_integral_use = on_command("世界积分兑换", priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", priority=6, block=True)
 challenge_training_puppet = on_command("挑战训练傀儡", priority=6, block=True)
 
-boss_time = config["Boss生成时间参数"]
 __boss_help__ = f"""
-世界Boss帮助信息:
-指令：
-生成世界boss [数量]:生成指定数量的随机大境界世界Boss,超管权限，默认1个
-生成指定世界boss 境界 名称 [数量]:生成指定大境界与名称的世界Boss,超管权限，默认1个
-查询世界boss:查询全服全部世界Boss,可加Boss编号查询对应Boss信息
-查询世界boss列表:查询全服全部世界Boss
-讨伐boss、讨伐世界boss:讨伐世界Boss,必须加Boss编号
-天罚boss、天罚世界boss:删除世界Boss,必须加Boss编号,管理员权限
-天罚所有世界boss:删除所有世界Boss,管理员权限
-世界积分商店/查看:查看自己的世界积分,和世界积分兑换商品
-世界积分兑换+编号：兑换对应的商品，可以批量购买
-世界BOSS开启、关闭:世界BOSS生成的通知，管理员权限
-独立功能：
-- 挑战稻草人
-- 挑战训练傀儡
-> 支持境界和名字 挑战训练傀儡 祭道境 少姜
-非指令: 
-1、全服每{config['Boss生成时间参数']['hours']}小时{config['Boss生成时间参数']['minutes']}分钟自动生成10只随机大境界的世界Boss
-2、每小时执行天罚世界Boss
-""".strip()
+世界BOSS系统帮助          
 
+【指令大全】
+🔹 生成指令：
+  ▶ 生成世界boss [数量] - 生成随机境界BOSS（超管权限）
+  ▶ 生成指定世界boss [境界] [名称] - 生成指定BOSS（超管权限）
+  ▶ 生成全部世界boss - 一键生成所有境界BOSS（超管权限）
+
+🔹 查询指令：
+  ▶ 查询世界boss - 查看全服BOSS列表
+  ▶ 查询世界boss列表 [页码] - 分页查看BOSS详情
+  ▶ 世界积分查看 - 查看个人积分
+  ▶ 世界积分商店 - 查看可兑换物品
+
+🔹 战斗指令：
+  ▶ 讨伐boss [编号] - 挑战指定BOSS
+  ▶ 挑战稻草人 - 练习战斗技巧（无消耗）
+  ▶ 挑战训练傀儡 [境界] [名称] - 自定义训练对手
+
+🔹 管理指令：
+  ▶ 天罚boss [编号] - 删除指定BOSS（超管权限）
+  ▶ 天罚所有boss - 清空所有BOSS（超管权限）
+  ▶ 世界boss 开启/关闭 - 管理群通知（管理员权限）
+
+【特色功能】
+🌟 境界压制系统：高境界打低境界BOSS收益降低
+🌟 积分兑换商店：用战斗积分兑换珍稀道具
+🌟 随机掉落系统：击败BOSS有机会获得特殊物品
+🌟 自动刷新机制：每小时自动清理部分BOSS
+
+【注意事项】
+⚠ 全服每{config['Boss生成时间参数']['hours']}小时自动生成BOSS
+⚠ 重伤状态下无法挑战BOSS
+⚠ 世界积分可永久保存，请合理使用
+
+输入具体指令查看详细用法，祝道友斩妖除魔，早日得道！
+""".strip()
 
 @DRIVER.on_startup
 async def read_boss_():
@@ -119,8 +135,6 @@ async def set_boss_punishment():
     except Exception as e:
         logger.opt(colors=True).warning(f"<red>警告,天罚定时任务加载失败!,{e}!</red>")
 
-import random
-
 async def punish_all_bosses():
     global group_boss
     group_id = "000000"  # 全局BOSS存储键
@@ -139,80 +153,45 @@ async def punish_all_bosses():
         delete_count = max(1, len(bosss) // 2)
         logger.opt(colors=True).warning(f"<yellow>现在是 {current_hour}:00，执行严重天罚！</yellow>")
     else:
-        delete_count = min(random.randint(5, 20), len(bosss))
+        delete_count = min(random.randint(5, 20), len(bosses))
         
     delete_count = min(delete_count, len(bosss))
 
-    bosses_to_punish = random.sample(bosss, delete_count)
-    punished_names = [boss['name'] for boss in bosses_to_punish]
+    # 记录被天罚BOSS的境界
+    punished_bosses = random.sample(bosss, delete_count)
+    punished_jj_list = [boss['jj'] for boss in punished_bosses]
+    punished_names = [boss['name'] for boss in punished_bosses]
 
     # 从列表中移除被天罚的BOSS
-    for boss in bosses_to_punish:
+    for boss in punished_bosses:
         group_boss[group_id].remove(boss)
 
     # 保存更新后的BOSS数据
     old_boss_info.save_boss(group_boss)
     logger.opt(colors=True).info(f"<green>天罚已随机清除了 {delete_count} 个世界BOSS: {', '.join(punished_names)}</green>")
 
-    # 只向已开启通知的群发送消息
-    msg = f"天雷降临，随机天罚了 {delete_count} 个世界BOSS：{', '.join(punished_names)}！"
-    for notify_group_id in groups:
-        if notify_group_id == "000000":
-            continue
-        bot = get_bot()
-        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
-                    
-                    
-@DRIVER.on_startup
-async def set_boss_():
-    try:
-        scheduler.add_job(
-            func=create_boss_task,
-            trigger='interval',
-            hours=groups['000000']["hours"],
-            minutes=groups['000000']['minutes'],
-            id="create_boss_task",
-            seconds=0,
-            misfire_grace_time=10
-        )
-        logger.opt(colors=True).success(f"<green>开启世界boss,每{groups['000000']['hours']}小时{groups['000000']['minutes']}分钟刷新！</green>")
-    except Exception as e:
-        logger.opt(colors=True).warning(f"<red>警告,定时boss加载失败!,{e}!</red>")
-    global group_boss
-    old_boss_info.save_boss(group_boss)
-
-
-async def create_boss_task():
-    global group_boss
-    group_boss = old_boss_info.read_boss_info()
-    group_id = "000000"  # 全局BOSS存储键
-
-    if group_id not in group_boss:
-        group_boss[group_id] = []
-
-    generate_count = 10
+    # 生成与被天罚BOSS相同境界的新BOSS
     current_boss_count = len(group_boss[group_id])
-    max_boss_count = config['Boss个数上限']
-    remaining_slots = max_boss_count - current_boss_count
     
-    actual_count = min(generate_count, remaining_slots)
-    
-    if actual_count <= 0:
-        msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
-        logger.opt(colors=True).warning(f"<red>{msg}</red>") 
-        return
+    generated_bosses = []
+    for jj in punished_jj_list:
+        if current_boss_count <= 0:
+            break
+        bossinfo = createboss_jj(jj, None)  # 生成指定境界的随机BOSS
+        if bossinfo:
+            group_boss[group_id].append(bossinfo)
+            generated_bosses.append(bossinfo['name'])
+            current_boss_count -= 1
 
-    # 生成指定数量的BOSS
-    for _ in range(actual_count):
-        bossinfo = createboss()
-        group_boss[group_id].append(bossinfo)
-    
-    old_boss_info.save_boss(group_boss)
-    msg = f"已生成{actual_count}个随机境界Boss,诸位道友请击败Boss获得奖励吧!"
-    if actual_count < generate_count:
-        msg += f"\n(原计划生成{generate_count}个，因上限{max_boss_count}限制，实际生成{actual_count}个)"
-    logger.opt(colors=True).success(f"<green>{msg}</green>")
+    if generated_bosses:
+        old_boss_info.save_boss(group_boss)
+        logger.opt(colors=True).info(f"<green>已生成{len(generated_bosses)}个新BOSS: {', '.join(generated_bosses)}</green>")
 
+    # 发送通知
+    msg = f"天雷降临，随机天罚了 {delete_count} 个世界BOSS：{', '.join(punished_names)}！"
+    if generated_bosses:
+        msg += f"\n天道循环，又孕育出了新的BOSS：{', '.join(generated_bosses)}"
+    
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
         if notify_group_id == "000000":
@@ -488,6 +467,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         # 新增boss战斗积分点数
         boss_all_hp = bossinfo['总血量']  # 总血量
         boss_integral = 1000
+        killed_jj = bossinfo['jj']
         if user_info['root'] == "凡人":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
@@ -523,8 +503,16 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         else :
             drops_msg = " "
             
-        group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
-        battle_flag[group_id] = False
+        boss_jj = createboss()
+        for boss in group_boss[group_id][:]:
+            if boss['jj'] == boss_jj:
+                group_boss[group_id].remove(boss)
+                break
+    
+        bossinfo = createboss_jj(boss_jj)    
+        group_boss[group_id].append(bossinfo)
+        old_boss_info.save_boss(group_boss)
+            
         if boss_old_stone == 0:
             get_stone = 1
         sql_message.update_ls(user_id, get_stone, 1)
@@ -842,50 +830,42 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await send_msg_handler(bot, event, f'世界BOSS列表 - 第{current_page}页', bot.self_id, paged_msgs)
     await boss_info2.finish()
 
+@generate_all.handle()
+async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bosses = create_all_bosses()  # 自动计算最高境界
+    group_boss["000000"] = bosses  # 替换当前 BOSS 列表
+    old_boss_info.save_boss(group_boss)
+    await bot.send(event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
+
 
 @create.handle(parameterless=[Cooldown(at_sender=False)])
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """生成世界boss"""
+    """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"    
-
-    # 解析数量
-    msg = args.extract_plain_text().strip()
-    num_match = re.findall(r"\d+$", msg)  # 提取末尾的数字
-    generate_count = int(num_match[0]) if num_match else 1  # 默认生成1个
 
     try:
         group_boss[group_id]
     except:
         group_boss[group_id] = []
 
-    current_boss_count = len(group_boss[group_id])
-    max_boss_count = config['Boss个数上限']
-    remaining_slots = max_boss_count - current_boss_count
+    boss_jj = createboss()
+    for boss in group_boss[group_id][:]:
+        if boss['jj'] == boss_jj:
+            group_boss[group_id].remove(boss)
+            break
     
-    # 调整生成数量不超过上限
-    actual_count = min(generate_count, remaining_slots)
+    bossinfo = createboss_jj(boss_jj)
     
-    if actual_count <= 0:
-        msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
-        await handle_send(bot, event, msg)
-        await create.finish()
-
-    # 生成指定数量的BOSS
-    for _ in range(actual_count):
-        bossinfo = createboss()
-        group_boss[group_id].append(bossinfo)
-    
+    group_boss[group_id].append(bossinfo)
     old_boss_info.save_boss(group_boss)
-    msg = f"已生成{actual_count}个随机境界Boss,诸位道友请击败Boss获得奖励吧!"
-    if actual_count < generate_count:
-        msg += f"\n(原计划生成{generate_count}个，因上限{max_boss_count}限制，实际生成{actual_count}个)"
+    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
     await handle_send(bot, event, msg)
     await create.finish()
 
 @create_appoint.handle()
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """生成指定世界boss"""
+    """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"    
 
@@ -903,35 +883,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     boss_jj = arg_list[0]  # 用户指定的境界
     boss_name = arg_list[1] if len(arg_list) > 1 else None  # 用户指定的Boss名称
-    generate_count = int(arg_list[-1]) if len(arg_list) >= 3 and arg_list[-1].isdigit() else 1  # 默认生成1个
 
-    current_boss_count = len(group_boss[group_id])
-    max_boss_count = config['Boss个数上限']
-    remaining_slots = max_boss_count - current_boss_count
-    
-    # 调整生成数量不超过上限
-    actual_count = min(generate_count, remaining_slots)
-    
-    if actual_count <= 0:
-        msg = f"世界Boss已达到上限{max_boss_count}个，无法继续生成"
+    # 检查是否已有同境界BOSS，有则删除
+    for boss in group_boss[group_id][:]:
+        if boss['jj'] == boss_jj:
+            group_boss[group_id].remove(boss)
+            break
+
+    # 生成指定BOSS
+    bossinfo = createboss_jj(boss_jj, boss_name)
+    if bossinfo is None:
+        msg = f"请输入正确的境界，例如：生成指定世界boss 祭道境"
         await handle_send(bot, event, msg)
         await create_appoint.finish()
 
-    # 使用提供的境界和名称生成指定数量的boss
-    generated_names = []
-    for _ in range(actual_count):
-        bossinfo = createboss_jj(boss_jj, boss_name)
-        if bossinfo is None:
-            msg = f"请输入正确的境界，例如：生成指定世界boss 祭道境"
-            await handle_send(bot, event, msg)
-            await create_appoint.finish()
-        group_boss[group_id].append(bossinfo)
-        generated_names.append(bossinfo['name'])
-
+    group_boss[group_id].append(bossinfo)
     old_boss_info.save_boss(group_boss)
-    msg = f"已生成{actual_count}个{boss_jj}Boss:{'、'.join(generated_names)}，诸位道友请击败Boss获得奖励吧！"
-    if actual_count < generate_count:
-        msg += f"\n(原计划生成{generate_count}个，因上限{max_boss_count}限制，实际生成{actual_count}个)"
+    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
     await handle_send(bot, event, msg)
     await create_appoint.finish()
     
@@ -1153,13 +1121,6 @@ BOSSDLW ={"衣以候": "衣以侯布下了禁制镜花水月，",
     "元磁道人": "元磁道人使用了法宝：元磁神山！",
     "散发着威压的尸体": "尸体周围爆发了出强烈的罡气！"
     }
-
-
-BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
-
-import random
-import json
-from pathlib import Path
 
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物" / "boss掉落物.json"
 
