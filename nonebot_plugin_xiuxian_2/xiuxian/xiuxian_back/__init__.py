@@ -29,7 +29,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, 
     send_msg_handler, CommandObjectID,
-    Txt2Img, number_to, handle_send
+    Txt2Img, number_to, handle_send, handle_pagination
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_weapon_info_msg, get_armor_info_msg,
@@ -1363,130 +1363,6 @@ async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = 
 
     await auction_withdraw.finish()
 
-
-@main_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """我的背包 分页版
-    """
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await main_back.finish()
-    user_id = user_info['user_id']
-    msg_list = get_user_main_back_msg(user_id)
-    try:
-        # 直接从消息中提取数字作为页码
-        current_page = int(args.extract_plain_text().strip()) 
-    except (ValueError, TypeError):
-        current_page = 1  # 默认第一页
-    
-    per_page = 31  # 每页10个物品
-    total_items = len(msg_list)
-    total_pages = (total_items + per_page - 1) // per_page
-    
-    # 页码有效性检查
-    if current_page < 1 or current_page > total_pages:
-        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
-        await handle_send(bot, event, msg)
-        await main_back.finish()
-    
-    # 计算当前页数据范围
-    start_index = (current_page - 1) * per_page
-    end_index = start_index + per_page
-    paged_items = msg_list[start_index:end_index]
-    # 构建消息内容
-    msgs = f"{user_info['user_name']}"
-    header = f"{msgs}的背包（第{current_page}/{total_pages}页）\n持有灵石：{number_to(user_info['stone'])}枚"
-    footer = f"提示：发送 我的背包+页码 查看其他页（共{total_pages}页）"
-    final_msg = [header, *paged_items, footer]
-    msg = final_msg
-    
-    # 发送消息处理
-    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
-    
-    await main_back.finish()
-    
-
-@yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await yaocai_back.finish()
-    user_id = user_info['user_id']
-    msg_list = get_user_yaocai_back_msg(user_id)
-    try:
-        # 直接从消息中提取数字作为页码
-        current_page = int(args.extract_plain_text().strip()) 
-    except (ValueError, TypeError):
-        current_page = 1  # 默认第一页
-    
-    per_page = 31  # 每页10个物品
-    total_items = len(msg_list)
-    total_pages = (total_items + per_page - 1) // per_page
-    
-    # 页码有效性检查
-    if current_page < 1 or current_page > total_pages:
-        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
-        await handle_send(bot, event, msg)
-        await main_back.finish()
-    
-    # 计算当前页数据范围
-    start_index = (current_page - 1) * per_page
-    end_index = start_index + per_page
-    paged_items = msg_list[start_index:end_index]
-    # 构建消息内容
-    msgs = f"{user_info['user_name']}"
-    header = f"{msgs}的背包（第{current_page}/{total_pages}页）"
-    footer = f"提示：发送 药材背包+页码 查看其他页（共{total_pages}页）"
-    final_msg = [header, *paged_items, footer]
-    msg = final_msg
-    
-    # 发送消息处理
-    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
-    await yaocai_back.finish()
-    
-@danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await danyao_back.finish()
-    user_id = user_info['user_id']
-    msg_list = get_user_danyao_back_msg(user_id)
-    try:
-        # 直接从消息中提取数字作为页码
-        current_page = int(args.extract_plain_text().strip()) 
-    except (ValueError, TypeError):
-        current_page = 1  # 默认第一页
-    
-    per_page = 31  # 每页10个物品
-    total_items = len(msg_list)
-    total_pages = (total_items + per_page - 1) // per_page
-    
-    # 页码有效性检查
-    if current_page < 1 or current_page > total_pages:
-        msg = f"@{event.sender.nickname}\n页码错误，有效范围为1~{total_pages}页！"
-        await handle_send(bot, event, msg)
-        await main_back.finish()
-    
-    # 计算当前页数据范围
-    start_index = (current_page - 1) * per_page
-    end_index = start_index + per_page
-    paged_items = msg_list[start_index:end_index]
-    # 构建消息内容
-    msgs = f"{user_info['user_name']}"
-    header = f"{msgs}的背包（第{current_page}/{total_pages}页）"
-    footer = f"提示：发送 丹药背包+页码 查看其他页（共{total_pages}页）"
-    final_msg = [header, *paged_items, footer]
-    msg = final_msg
-    
-    # 发送消息处理
-    await send_msg_handler(bot, event, '背包', bot.self_id, msg)
-    await danyao_back.finish()
         
 @no_use_zb.handle(parameterless=[Cooldown(at_sender=False)])
 async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -2162,148 +2038,170 @@ async def set_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
 
 
 @chakan_wupin.handle(parameterless=[Cooldown(at_sender=False)])
-async def chakan_wupin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """查看修仙界所有物品列表"""
+async def chakan_wupin_(
+    bot: Bot, 
+    event: GroupMessageEvent | PrivateMessageEvent, 
+    args: Message = CommandArg()
+):
+    """查看修仙界物品（支持 类型+页码 或 类型 + 空格 + 页码）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    args = args.extract_plain_text().strip()
-    list_tp = []
-    if args not in ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具"]:
-        msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具】！！！"
-        await handle_send(bot, event, msg)
-        await chakan_wupin.finish()
-    else:
-        if args == "功法":
-            gf_data = items.get_data_by_item_type(['功法'])
-            for x in gf_data:
-                name = gf_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "辅修功法":
-            gf_data = items.get_data_by_item_type(['辅修功法'])
-            for x in gf_data:
-                name = gf_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "神通":
-            st_data = items.get_data_by_item_type(['神通'])
-            for x in st_data:
-                name = st_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "身法":
-            sf_data = items.get_data_by_item_type(['身法'])
-            for x in sf_data:
-                name = sf_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "瞳术":
-            ts_data = items.get_data_by_item_type(['瞳术'])
-            for x in ts_data:
-                name = ts_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "丹药":
-            dy_data = items.get_data_by_item_type(['丹药'])
-            for x in dy_data:
-                name = dy_data[x]['name']
-                rank = dy_data[x]['境界']
-                desc = dy_data[x]['desc']
-                msg = f"※{rank}丹药:{name}，效果：{desc}\n"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "合成丹药":
-            hcdy_data = items.get_data_by_item_type(['合成丹药'])
-            for x in hcdy_data:
-                name = hcdy_data[x]['name']
-                rank = hcdy_data[x]['境界']
-                desc = hcdy_data[x]['desc']
-                msg = f"※{rank}丹药:{name}，效果：{desc}\n\n"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "法器":
-            fq_data = items.get_data_by_item_type(['法器'])
-            for x in fq_data:
-                name = fq_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-        elif args == "防具":
-            fj_data = items.get_data_by_item_type(['防具'])
-            for x in fj_data:
-                name = fj_data[x]['name']
-                for k, v in items.items.items():
-                    if name == v['name']:
-                        goods_id = k
-                        break                
-                desc = get_item_msg(goods_id)
-                msg = f"ID：{goods_id}\n{desc}"
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"修仙界物品列表{args}", "uin": bot.self_id,
-                                                "content": msg}})
-
-    # 处理消息发送
-    if len(list_tp) <= 50:
-        # 物品数量少于等于50时，直接发送
-        try:
-            await send_msg_handler(bot, event, list_tp)
-        except ActionFailed:
-            msg = "未知原因，查看失败!"
+    args_str = args.extract_plain_text().strip()
+    
+    # 支持的类型列表
+    valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具"]
+    
+    # 解析类型和页码
+    item_type = None
+    current_page = 1  # 默认第一页
+    
+    # 情况1：用户输入类似 "神通2"（无空格）
+    for t in valid_types:
+        if args_str.startswith(t) and len(args_str) > len(t):
+            remaining = args_str[len(t):].strip()
+            if remaining.isdigit():  # 检查剩余部分是否是数字
+                item_type = t
+                current_page = int(remaining)
+                break
+    
+    if item_type is None:
+        parts = args_str.split(maxsplit=1)  # 只分割第一个空格
+        if len(parts) == 2 and parts[0] in valid_types and parts[1].isdigit():
+            item_type = parts[0]
+            current_page = int(parts[1])
+        elif args_str in valid_types:  # 仅类型，无页码
+            item_type = args_str
+        else:
+            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具】！！！"
             await handle_send(bot, event, msg)
-    else:
-        # 物品数量大于50时，按每50条分割发送
-        chunk_size = 50
-        for i in range(0, len(list_tp), chunk_size):
-            msg_chunk = list_tp[i:i + chunk_size]  # 每50条一个块
-            try:
-                await send_msg_handler(bot, event, msg_chunk)
-            except ActionFailed:
-                msg = "未知原因，查看失败!"
-                await handle_send(bot, event, msg)
+            await chakan_wupin.finish()
+    
+    # 获取物品数据
+    item_data = items.get_data_by_item_type([item_type])
+    msg_list = []
+    
+    for item_id, item_info in item_data.items():
+        name = item_info['name']
+        if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具"]:
+            desc = get_item_msg(item_id)
+            msg = f"ID：{item_id}\n{desc}"
+        else:  # 丹药、合成丹药
+            rank = item_info.get('境界', '')
+            desc = item_info.get('desc', '')
+            msg = f"※{rank}丹药:{name}，效果：{desc}\n"
+        msg_list.append(msg)
+    
+    # 分页处理
+    title = f"修仙界物品列表-{item_type}"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page, 
+        title=title, 
+        empty_msg=f"修仙界暂无{item_type}类物品"
+    )
+    
+    if isinstance(msgs, str):  # 空提示消息
+        await handle_send(bot, event, msgs)
+    else:  # 分页消息列表
+        await send_msg_handler(bot, event, title, bot.self_id, msgs)
     
     await chakan_wupin.finish()
+
+
+@main_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """我的背包"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await main_back.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_main_back_msg(user_id)
+    title = f"{user_info['user_name']}的背包"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page,
+        title=title,
+        empty_msg="道友的背包空空如也！"
+    )
+    
+    if isinstance(msgs, str):
+        await handle_send(bot, event, msgs)
+    else:
+        await send_msg_handler(bot, event, '背包', bot.self_id, msgs)
+    
+    await main_back.finish()
+
+@yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """药材背包"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await yaocai_back.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_yaocai_back_msg(user_id)
+    title = f"{user_info['user_name']}的药材背包"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page,
+        title=title,
+        empty_msg="道友的药材背包空空如也！"
+    )
+    
+    if isinstance(msgs, str):
+        await handle_send(bot, event, msgs)
+    else:
+        await send_msg_handler(bot, event, '药材背包', bot.self_id, msgs)
+    
+    await yaocai_back.finish()
+
+@danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """丹药背包"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await danyao_back.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_danyao_back_msg(user_id)
+    title = f"{user_info['user_name']}的丹药背包"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page,
+        title=title,
+        empty_msg="道友的丹药背包空空如也！"
+    )
+    
+    if isinstance(msgs, str):
+        await handle_send(bot, event, msgs)
+    else:
+        await send_msg_handler(bot, event, '丹药背包', bot.self_id, msgs)
+    
+    await danyao_back.finish()
 
 
 @shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])

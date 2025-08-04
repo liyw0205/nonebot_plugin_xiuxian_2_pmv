@@ -449,6 +449,182 @@ async def get_msg_pic(msg, boss_name="", scale=True):
         pic = img.sync_draw_to(msg, boss_name, scale)
     return pic
 
+def CommandObjectID() -> int:
+    """
+    根据消息事件的类型获取对象id
+    私聊->用户id
+    群聊->群id
+    频道->子频道id
+    :return: 对象id
+    """
+
+    def _event_id(event):
+        if event.message_type == "private":
+            return event.user_id
+        elif event.message_type == "group":
+            return event.group_id
+        elif event.message_type == "guild":
+            return event.channel_id
+
+    return Depends(_event_id)
+
+
+def format_number(num):
+    """格式化数字，满足特殊显示要求"""
+    num = round(num, 1)  # 先四舍五入到1位小数
+    if num >= 10:
+        # 显示小数部分（自动去除末尾的0）
+        return f"{num:.1f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
+    else:
+        # 只显示个位数
+        return f"{int(num)}" if num.is_integer() else f"{num:.1f}".rstrip('0').rstrip('.')
+
+def number_to(num):
+    """
+    递归实现，精确为最大单位值
+    满足特殊显示要求：
+    - 只显示个位数
+    - 大于单位的才会有小数
+    - 小数位0则不显示
+    """
+
+    def strofsize(num, level):
+        if level >= 29:
+            return num, level
+        elif num >= 10000:
+            num /= 10000
+            level += 1
+            return strofsize(num, level)
+        else:
+            return num, level
+
+    units = [
+        "", "万", "亿", "兆", "京", "垓", "秭", "穰", "沟", "涧",
+        "正", "载", "极", "恒河沙", "阿僧祗", "那由他", "不思议", "无量大"
+    ]
+    
+    # 处理科学计数法
+    if "e" in str(num):
+        num = float(num)
+    
+    num, level = strofsize(float(num), 0)
+    if level >= len(units):
+        level = len(units) - 1
+    
+    formatted_num = format_number(num)
+    return f"{formatted_num}{units[level]}"
+
+def number_to2(num):
+    """
+    递归实现，但限制单位到"京"
+    满足特殊显示要求：
+    - 只显示个位数
+    - 大于单位的才会有小数
+    - 小数位0则不显示
+    """
+    units = ["", "万", "亿", "兆", "京"]
+    base = 10000
+
+    # 处理科学计数法
+    try:
+        num = float(num)
+    except (TypeError, ValueError):
+        raise ValueError("输入必须是数字或科学计数法字符串")
+
+    # 处理负数
+    sign = "-" if num < 0 else ""
+    num = abs(num)
+
+    # 如果数字 < 1万，直接返回
+    if num < base:
+        return f"{sign}{int(num)}" if num.is_integer() else f"{sign}{num:.3f}".rstrip('0').rstrip('.')
+
+    # 递归计算单位和数值
+    def convert(n, level):
+        if level >= len(units) - 1 or n < base:
+            return n, level
+        n /= base
+        level += 1
+        return convert(n, level)
+
+    num, level = convert(num, 0)
+    formatted_num = format_number(num)
+    return f"{sign}{formatted_num}{units[level]}"
+
+async def pic_msg_format(msg, event):
+    user_name = event.sender.card if event.sender.card else event.sender.nickname
+    result = "@" + user_name + "\n" + msg
+    return result
+            
+def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
+    """添加节点进转发消息
+
+    Args:
+        list_tp (list): 要制作的转发消息列表
+        summary (str): 转发消息的标题
+        content (_type_): 转发消息的内容
+    """
+    list_tp.append(
+        {
+            "type": "node",
+            "data": {
+                "name": summary,
+                "uin": bot.self_id,
+                "content": content,
+            },
+        }
+    )
+
+from typing import List, Union
+
+async def handle_pagination(
+    item_list: List[str],
+    current_page: int = 1,
+    per_page: int = 31,
+    title: str = None,
+    empty_msg: str = "空空如也"
+) -> Union[List[str], str]:
+    """
+    通用分页处理函数（返回消息内容版）
+    
+    参数:
+        item_list: 要分页的物品列表
+        current_page: 当前页码，默认为1
+        per_page: 每页显示的物品数量，默认为31
+        title: 可选标题，如"修仙界物品列表"、"我的背包"等
+        empty_msg: 列表为空时返回的消息，默认为"空空如也"
+        
+    返回:
+        分页后的消息列表或空提示消息
+    """
+    # 检查列表是否为空
+    if not item_list:
+        return empty_msg
+
+    total_items = len(item_list)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 页码有效性检查
+    if current_page < 1 or current_page > total_pages:
+        return f"页码错误，有效范围为1~{total_pages}页！"
+    
+    # 计算当前页数据范围
+    start_index = (current_page - 1) * per_page
+    end_index = start_index + per_page
+    paged_items = item_list[start_index:end_index]
+    
+    # 构建消息内容
+    final_msg = []
+    if title:  # 如果有标题则添加标题
+        final_msg.append(f"{title}（第{current_page}/{total_pages}页）")
+    
+    final_msg.extend(paged_items)  # 添加分页内容
+    
+    # 添加页码提示
+    final_msg.append(f"提示：发送 命令+页码 查看其他页（共{total_pages}页）")
+    
+    return final_msg
+
 
 async def send_msg_handler(bot, event, *args):
     """
@@ -561,114 +737,6 @@ async def send_msg_handler(bot, event, *args):
             raise ValueError("参数数量或类型不匹配")
 
 
-def CommandObjectID() -> int:
-    """
-    根据消息事件的类型获取对象id
-    私聊->用户id
-    群聊->群id
-    频道->子频道id
-    :return: 对象id
-    """
-
-    def _event_id(event):
-        if event.message_type == "private":
-            return event.user_id
-        elif event.message_type == "group":
-            return event.group_id
-        elif event.message_type == "guild":
-            return event.channel_id
-
-    return Depends(_event_id)
-
-
-def format_number(num):
-    """格式化数字，满足特殊显示要求"""
-    num = round(num, 1)  # 先四舍五入到1位小数
-    if num >= 10:
-        # 显示小数部分（自动去除末尾的0）
-        return f"{num:.1f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
-    else:
-        # 只显示个位数
-        return f"{int(num)}" if num.is_integer() else f"{num:.1f}".rstrip('0').rstrip('.')
-
-def number_to(num):
-    """
-    递归实现，精确为最大单位值
-    满足特殊显示要求：
-    - 只显示个位数
-    - 大于单位的才会有小数
-    - 小数位0则不显示
-    """
-
-    def strofsize(num, level):
-        if level >= 29:
-            return num, level
-        elif num >= 10000:
-            num /= 10000
-            level += 1
-            return strofsize(num, level)
-        else:
-            return num, level
-
-    units = [
-        "", "万", "亿", "兆", "京", "垓", "秭", "穰", "沟", "涧",
-        "正", "载", "极", "恒河沙", "阿僧祗", "那由他", "不思议", "无量大"
-    ]
-    
-    # 处理科学计数法
-    if "e" in str(num):
-        num = float(num)
-    
-    num, level = strofsize(float(num), 0)
-    if level >= len(units):
-        level = len(units) - 1
-    
-    formatted_num = format_number(num)
-    return f"{formatted_num}{units[level]}"
-
-def number_to2(num):
-    """
-    递归实现，但限制单位到"京"
-    满足特殊显示要求：
-    - 只显示个位数
-    - 大于单位的才会有小数
-    - 小数位0则不显示
-    """
-    units = ["", "万", "亿", "兆", "京"]
-    base = 10000
-
-    # 处理科学计数法
-    try:
-        num = float(num)
-    except (TypeError, ValueError):
-        raise ValueError("输入必须是数字或科学计数法字符串")
-
-    # 处理负数
-    sign = "-" if num < 0 else ""
-    num = abs(num)
-
-    # 如果数字 < 1万，直接返回
-    if num < base:
-        return f"{sign}{int(num)}" if num.is_integer() else f"{sign}{num:.3f}".rstrip('0').rstrip('.')
-
-    # 递归计算单位和数值
-    def convert(n, level):
-        if level >= len(units) - 1 or n < base:
-            return n, level
-        n /= base
-        level += 1
-        return convert(n, level)
-
-    num, level = convert(num, 0)
-    formatted_num = format_number(num)
-    return f"{sign}{formatted_num}{units[level]}"
-
-async def pic_msg_format(msg, event):
-    user_name = event.sender.card if event.sender.card else event.sender.nickname
-    result = "@" + user_name + "\n" + msg
-    return result
-
-
 async def handle_send(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""    
     if XiuConfig().img:
@@ -690,23 +758,3 @@ async def handle_send(bot, event, msg: str):
             await bot.send_private_msg(
                 user_id=event.user_id, message=msg
             )
-
-            
-def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
-    """添加节点进转发消息
-
-    Args:
-        list_tp (list): 要制作的转发消息列表
-        summary (str): 转发消息的标题
-        content (_type_): 转发消息的内容
-    """
-    list_tp.append(
-        {
-            "type": "node",
-            "data": {
-                "name": summary,
-                "uin": bot.self_id,
-                "content": content,
-            },
-        }
-    )
