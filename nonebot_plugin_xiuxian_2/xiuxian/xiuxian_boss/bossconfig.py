@@ -5,7 +5,7 @@ except ImportError:
 import os
 from pathlib import Path
 
-configkey = ["Boss灵石", "Boss名字", "Boss倍率", "Boss个数上限", "Boss生成时间参数", 'open', "世界积分商品"]
+configkey = ["Boss灵石", "Boss名字", "Boss倍率", "Boss生成时间参数", 'open', "世界积分商品"]
 CONFIG = {
     "open": {
         "000000": {}

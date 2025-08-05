@@ -202,7 +202,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""
         c = self.conn.cursor()
-        sql = f"INSERT INTO user_xiuxian (user_id,stone,root,root_type,root_level,level,power,create_time,user_name,exp,sect_id,sect_position,user_stamina) VALUES (?,0,?,0,?,'江湖好手',?,?,?,100,NULL,NULL,?)"
+        sql = f"INSERT INTO user_xiuxian (user_id,stone,root,root_type,root_level,level,power,create_time,user_name,exp,sect_id,sect_position,user_stamina) VALUES (?,0,?,?,0,'江湖好手',?,?,?,100,NULL,NULL,?)"
         c.execute(sql, (user_id, root, type, power, create_time, user_name,XiuConfig().max_stamina))
         self.conn.commit()
 
@@ -371,15 +371,15 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def get_root_rate(self, name, user_id):
         """获取灵根倍率"""
         data = jsondata.root_data()
-        type_speeds = data[name]['type_speeds']
         if name == '命运道果':
+            type_speeds = data[name]['type_speeds']
             user_info = sql_message.get_user_info_with_id(user_id)
             root_level = user_info['root_level']
             type_speeds2 = data['永恒道果']['type_speeds']
             type_speeds3 = (type_speeds2 + (root_level * type_speeds))
             return type_speeds3
         else:
-            return type_speeds
+            return data[name]['type_speeds']
 
     def get_level_power(self, name):
         """获取境界倍率|exp"""
