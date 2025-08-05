@@ -45,22 +45,35 @@ rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
-use_rift_key = on_command("道具使用秘境钥匙", priority=5, block=True)
-use_rift_explore = on_command("道具使用秘藏令", priority=5, block=True)
+use_rift_key = on_command("秘境钥匙", priority=5, block=True)
+use_rift_explore = on_command("秘藏令", priority=5, block=True)
 
 __rift_help__ = f"""
-秘境帮助信息:
-指令：
-秘境开启、关闭:秘境生成的通知，管理员权限
-生成秘境:生成一个随机秘境，管理员权限
-探索秘境:探索秘境获取随机奖励
-秘境结算、结算秘境:结算秘境奖励
-秘境探索终止、终止探索秘境:终止秘境事件
-道具使用秘境钥匙:立即结算当前秘境
-道具使用秘藏令:再次探索秘境
-非指令：
-1、每天0点和12点生成一个随机等级的秘境
+【秘境探索系统】🗝️
+
+🔧 管理指令（需管理员权限）：
+  • 秘境开启/关闭 - 控制秘境生成通知
+  • 生成秘境 - 手动生成随机秘境
+
+🔍 探索指令：
+  • 探索秘境 - 进入秘境获取随机奖励
+  • 秘境结算 - 领取秘境奖励
+  • 秘境探索终止 - 放弃当前秘境
+
+🎁 道具使用：
+  • 秘境钥匙 - 立即结算当前秘境
+  • 秘藏令 - 获得额外探索机会
+
+⏰ 秘境刷新：
+  • 每日自动生成时间：0点 & 12点
+  • 秘境等级随机生成
+
+💡 小贴士：
+  1. 秘境奖励随探索时间增加
+  2. 使用道具可提升收益
+  3. 终止探索会损失奖励
 """.strip()
+
 
 
 @DRIVER.on_startup

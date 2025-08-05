@@ -23,20 +23,30 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
 
 __warring_help__ = f"""
-详情：
-散尽修为，轮回重修，将万世的道果凝聚为极致天赋，开启永恒不灭之路
-修为、功法、神通将被清空！！
+【轮回重修系统】♾️
 
-进入千世轮回：获得轮回灵根
-最低境界：{XiuConfig().lunhui_min_level}
+⚠️ 警告：此操作不可逆！
+散尽毕生修为，轮回重修，凝聚万世道果为极致天赋，开启永恒不灭之路
 
-进入万世轮回：获得真轮回灵根
-最低境界：{XiuConfig().twolun_min_level}
+🔥 所有修为、功法、神通、灵石、修炼等级、虚神界修炼时间将被清空！
 
-进入永恒轮回：获得永恒灵根
-最低境界：{XiuConfig().threelun_min_level}
+🔄 轮回选项：
+1. 千世轮回 - 获得【轮回灵根】
+   • 最低境界要求：{XiuConfig().lunhui_min_level}
+   
+2. 万世轮回 - 获得【真·轮回灵根】 
+   • 最低境界要求：{XiuConfig().twolun_min_level}
 
-自废修为：字面意思，仅感气境可用
+3. 永恒轮回 - 获得【永恒灵根】
+   • 最低境界要求：{XiuConfig().threelun_min_level}
+
+💀 自废修为 - 仅感气境可用
+  • 完全重置修为（慎用！）
+
+📌 注意事项：
+• 轮回后将更新灵根资质
+• 所有装备、物品不会丢失
+
 """.strip()
 
 cache_help_fk = {}
@@ -97,7 +107,6 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_levelrate(user_id, 0) #重置突破成功率
         sql_message.update_j_exp(user_id, now_exp) #重置用户修为
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
-        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
@@ -151,7 +160,6 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_levelrate(user_id, 0) #重置突破成功率
         sql_message.update_j_exp(user_id, now_exp) #重置用户修为
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
-        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
@@ -224,7 +232,6 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         sql_message.update_levelrate(user_id, 0) #重置突破成功率
         sql_message.update_j_exp(user_id, now_exp) #重置用户修为
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
-        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
