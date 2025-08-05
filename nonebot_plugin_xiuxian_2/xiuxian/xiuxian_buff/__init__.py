@@ -578,7 +578,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await up_exp.finish()
     else:
-        level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
+        level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
         user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
@@ -753,7 +753,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         exp_time = (
                 OtherSet().date_diff(now_time, in_closing_time) // 60
         )  # 闭关时长计算(分钟) = second // 60
-        level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
+        level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
         user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
@@ -838,7 +838,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sql_message.update_user_hp(user_id)
     user_msg = sql_message.get_user_real_info(user_id)
 
-    level_rate = sql_message.get_root_rate(user_msg['root_type'])  # 灵根倍率
+    level_rate = sql_message.get_root_rate(user_msg['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[user_msg['level']]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5

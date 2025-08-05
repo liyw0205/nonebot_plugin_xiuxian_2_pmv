@@ -12,7 +12,6 @@ WEAPONPATH = READPATH / "装备"
 ELIXIRPATH = READPATH / "丹药"
 PACKAGESPATH = READPATH / "礼包"
 XIULIANITEMPATH = READPATH / "修炼物品"
-BOSSDROPSPATH = READPATH / "boss掉落物"
 
 
 class Items:
@@ -30,7 +29,6 @@ class Items:
         self.mix_elixir_type_jsonpath = ELIXIRPATH / "炼丹丹药.json"
         self.ldl_jsonpath = ELIXIRPATH / "炼丹炉.json"
         self.jlq_jsonpath = XIULIANITEMPATH / "聚灵旗.json"
-        self.dlw_jsonpath = BOSSDROPSPATH / "boss掉落物.json"
         self.sw_jsonpath = ELIXIRPATH / "神物.json"
         self.special_jsonpath = XIULIANITEMPATH / "特殊物品.json" 
         self.items = {}
@@ -47,7 +45,6 @@ class Items:
         self.set_item_data(self.get_mix_elixir_type_data(), "合成丹药")
         self.set_item_data(self.get_ldl_data(), "炼丹炉")
         self.set_item_data(self.get_jlq_data(), "聚灵旗")
-        self.set_item_data(self.get_dlw_data(), "掉落物")
         self.set_item_data(self.get_sw_data(), "神物")
         self.set_item_data(self.get_special_data(), "特殊物品") 
         self.savef(self.items)
@@ -103,9 +100,6 @@ class Items:
 
     def get_jlq_data(self):
         return self.readf(self.jlq_jsonpath)
-    
-    def get_dlw_data(self):
-        return self.readf(self.dlw_jsonpath)
     
     def get_sw_data(self):
         return self.readf(self.sw_jsonpath)

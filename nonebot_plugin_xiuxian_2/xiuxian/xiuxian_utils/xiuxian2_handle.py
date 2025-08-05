@@ -71,6 +71,7 @@ class XiuxianDateManage:
       "stone" integer DEFAULT 0,
       "root" TEXT,
       "root_type" TEXT,
+      "root_level" integer DEFAULT 0,
       "level" TEXT,
       "power" integer DEFAULT 0,
       "create_time" integer,
@@ -201,7 +202,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""
         c = self.conn.cursor()
-        sql = f"INSERT INTO user_xiuxian (user_id,stone,root,root_type,level,power,create_time,user_name,exp,sect_id,sect_position,user_stamina) VALUES (?,0,?,?,'江湖好手',?,?,?,100,NULL,NULL,?)"
+        sql = f"INSERT INTO user_xiuxian (user_id,stone,root,root_type,root_level,level,power,create_time,user_name,exp,sect_id,sect_position,user_stamina) VALUES (?,0,?,0,?,'江湖好手',?,?,?,100,NULL,NULL,?)"
         c.execute(sql, (user_id, root, type, power, create_time, user_name,XiuConfig().max_stamina))
         self.conn.commit()
 
@@ -367,10 +368,18 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.update_power2(user_id) # 更新战力
         return f"逆天之行，重获新生，新的灵根为：{lg}，类型为：{type}"
 
-    def get_root_rate(self, name):
+    def get_root_rate(self, name, user_id):
         """获取灵根倍率"""
         data = jsondata.root_data()
-        return data[name]['type_speeds']
+        type_speeds = data[name]['type_speeds']
+        if name == '命运道果':
+            user_info = sql_message.get_user_info_with_id(user_id)
+            root_level = user_info['root_level']
+            type_speeds2 = data['永恒道果']['type_speeds']
+            type_speeds3 = (type_speeds2 + (root_level * type_speeds))
+            return type_speeds3
+        else:
+            return type_speeds
 
     def get_level_power(self, name):
         """获取境界倍率|exp"""
@@ -387,9 +396,9 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         UserMessage = self.get_user_info_with_id(user_id)
         cur = self.conn.cursor()
         level = jsondata.level_data()
-        root = jsondata.root_data()
+        root_rate = sql_message.get_root_rate(UserMessage['root_type'], user_id) 
         sql = f"UPDATE user_xiuxian SET power=round(exp*?*?,0) WHERE user_id=?"
-        cur.execute(sql, (root[UserMessage['root_type']]["type_speeds"], level[UserMessage['level']]["spend"], user_id))
+        cur.execute(sql, (root_rate, level[UserMessage['level']]["spend"], user_id))
         self.conn.commit()
 
     def update_ls(self, user_id, price, key):
@@ -406,7 +415,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             self.conn.commit()
 
     def update_root(self, user_id, key):
-        """更新灵根  1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒"""
+        """更新灵根  1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒,9为命运"""
         cur = self.conn.cursor()
         if int(key) == 1:
             sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
@@ -454,7 +463,15 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
             cur.execute(sql, ("轮回无尽不灭，只为触及永恒之境", "永恒道果", user_id))
             root_name = "永恒道果"
-            self.conn.commit()            
+            self.conn.commit() 
+            
+        elif int(key) == 9:
+            user_info = sql_message.get_user_info_with_id(user_id)
+            
+            sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+            cur.execute(sql, (f"轮回命主·{user_info['user_name']}", "命运道果", user_id))
+            root_name = "命运道果"
+            self.conn.commit()
 
         return root_name  # 返回灵根名称
 
@@ -576,6 +593,14 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.conn.commit()
 
 
+    def updata_root_level(self, user_id, level_num):
+        """更新轮回等级"""
+        sql = f"UPDATE user_xiuxian SET root_level=root_level+? WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (level_num, user_id))
+        self.conn.commit()
+        
+        
     def get_user_cd(self, user_id):
         """
         获取用户操作CD
@@ -2060,7 +2085,7 @@ def leave_harm_time(user_id):
     """重伤恢复时间"""
     user_mes = sql_message.get_user_info_with_id(user_id)
     level = user_mes['level']
-    level_rate = sql_message.get_root_rate(user_mes['root_type']) # 灵根倍率
+    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id) # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"] # 境界倍率
     main_buff_data = UserBuffDate(user_id).get_user_main_buff_data() # 主功法数据
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data else 0 # 主功法修炼倍率

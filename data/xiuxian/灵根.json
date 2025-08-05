@@ -224,5 +224,11 @@
         ],
         "type_speeds": 7,
         "type_flag": []
+    },
+    "命运道果": {
+        "type_rate": 0,
+        "type_list": [],
+        "type_speeds": 2,
+        "type_flag": []
     }
 }

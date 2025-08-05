@@ -296,7 +296,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     # 计算本次修炼经验
-    level_rate = sql_message.get_root_rate(user_info['root_type'])  # 灵根倍率
+    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
     mainbuffdata = user_buff_data.get_user_main_buff_data()
@@ -568,7 +568,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     )  # 虚神界闭关时长计算(分钟) = second // 60
 
     # 获取灵根、境界和功法倍率
-    level_rate = sql_message.get_root_rate(user_mes['root_type'])  # 灵根倍率
+    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5

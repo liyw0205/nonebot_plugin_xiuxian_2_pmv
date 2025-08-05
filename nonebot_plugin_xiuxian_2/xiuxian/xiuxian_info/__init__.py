@@ -31,7 +31,7 @@ async def get_user_xiuxian_info(user_id):
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
-    level_rate = sql_message.get_root_rate(user_info['root_type'])  # 灵根倍率
+    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
     sect_id = user_info['sect_id']
     if sect_id:

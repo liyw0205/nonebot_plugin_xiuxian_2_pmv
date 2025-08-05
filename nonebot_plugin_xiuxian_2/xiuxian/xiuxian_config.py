@@ -53,26 +53,37 @@ def convert_rank(rank_name):
 class XiuConfig:
     def __init__(self):
         self.sql_table = ["user_xiuxian", "user_cd", "sects", "back", "BuffInfo"]  
-        self.sql_user_xiuxian = ["id", "user_id", "user_name", "stone", "root",
-                                 "root_type", "level", "power",
-                                 "create_time", "is_sign", "is_beg", "is_compensation", "is_ban",
-                                 "exp", "work_num", "level_up_cd",
-                                 "level_up_rate", "sect_id",
-                                 "sect_position", "hp", "mp", "atk",
-                                 "atkpractice", "hppractice", "mppractice", "sect_task", "sect_contribution",
-                                 "sect_elixir_get", "blessed_spot_flag", "blessed_spot_name", "user_stamina"]
-        self.sql_user_cd = ["user_id", "type", "create_time", "scheduled_time", "last_check_info_time"]
-        self.sql_sects = ["sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "sect_fairyland",
-                          "sect_materials", "mainbuff", "secbuff", "elixir_room_level"]
-        self.sql_buff = ["id", "user_id", "main_buff", "sec_buff", "effect1_buff", "effect2_buff", "faqi_buff", "fabao_weapon", "armor_buff",
-                         "atk_buff", "sub_buff", "blessed_spot"]
-        self.sql_back = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
-                         "remake", "day_num", "all_num", "action_time", "state", "bind_num"]
+        self.sql_user_xiuxian = [
+            "id", "user_id", "user_name", "stone", "root",
+            "root_type", "root_level", "level", "power",
+            "create_time", "is_sign", "is_beg", "is_compensation", "is_ban",
+            "exp", "work_num", "level_up_cd",
+            "level_up_rate", "sect_id",
+            "sect_position", "hp", "mp", "atk",
+            "atkpractice", "hppractice", "mppractice", "sect_task", "sect_contribution",
+            "sect_elixir_get", "blessed_spot_flag", "blessed_spot_name", "user_stamina"
+        ]
+        self.sql_user_cd = [
+            "user_id", "type", "create_time", "scheduled_time", "last_check_info_time"
+        ]
+        self.sql_sects = [
+            "sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "sect_fairyland",
+            "sect_materials", "mainbuff", "secbuff", "elixir_room_level"
+        ]
+        self.sql_buff = [
+            "id", "user_id", "main_buff", "sec_buff", "effect1_buff", "effect2_buff", "faqi_buff", 
+            "fabao_weapon", "armor_buff", "atk_buff", "sub_buff", "blessed_spot"
+        ]
+        self.sql_back = [
+            "user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
+            "remake", "day_num", "all_num", "action_time", "state", "bind_num"
+        ]
         self.sql_user_auctions = [""]
         # 上面是数据库校验,不知道做什么的话别动
         self.level = convert_rank('江湖好手')[1] # 境界列表，别动
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
+        self.xiuxian_info_img = False # 开启则使用网络背景图
         self.private_chat_enabled = False # 私聊功能开关，默认关闭
         self.level_up_cd = 0  # 突破CD(分钟)
         self.closing_exp = 100  # 闭关每分钟获取的修为
@@ -108,10 +119,10 @@ class XiuConfig:
         self.lunhui_min_level = "星芒境初期" # 千世轮回最低境界
         self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
         self.threelun_min_level = "无界境初期" # 永恒轮回最低境界
-        self.xiuxian_info_img = False # 开启则使用网络背景图
+        self.Infinite_reincarnation_min_level = "永恒境初期" # 永恒轮回最低境界
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
-        self.merge_forward_send = 2 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
+        self.merge_forward_send = 1 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
         self.img_compression_limit = 90 # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
         self.img_type = "webp" # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
         self.img_send_type = "io" # 图片发送类型，官方bot建议base64

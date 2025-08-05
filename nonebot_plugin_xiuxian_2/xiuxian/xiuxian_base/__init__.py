@@ -283,7 +283,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             break
     
     root, root_type = XiuxianJsonDate().linggen_get()  # 获取灵根，灵根类型
-    rate = sql_message.get_root_rate(root_type)  # 灵根倍率
+    rate = sql_message.get_root_rate(root_type, user_id)  # 灵根倍率
     power = 100 * float(rate)  # 战力=境界的power字段 * 灵根的rate字段
     create_time = str(datetime.now())
     is_new_user, msg = sql_message.create_user(
@@ -1352,7 +1352,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     give_qq = None  # 艾特的时候存到这里
     arg_list = args.extract_plain_text().split()
     if not args:
-        msg = f"请输入正确指令！例如：轮回力量 道号 8(1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒)"
+        msg = f"请输入正确指令！例如：轮回力量 道号 8(1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒,9为命运)"
         await handle_send(bot, event, msg)
         await gmm_command.finish()
     if len(arg_list) < 2:
