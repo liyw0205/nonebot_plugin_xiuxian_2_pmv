@@ -150,10 +150,10 @@ async def punish_all_bosses():
     severe_punishment_hours = {8, 12, 20, 0}
     
     if current_hour in severe_punishment_hours:
-        delete_count = max(1, len(bosss) // 2)
+        delete_count = 10
         logger.opt(colors=True).warning(f"<yellow>现在是 {current_hour}:00，执行严重天罚！</yellow>")
     else:
-        delete_count = min(random.randint(5, 20), len(bosses))
+        delete_count = min(random.randint(5, 10), len(bosses))
         
     delete_count = min(delete_count, len(bosss))
 
@@ -210,12 +210,7 @@ async def save_boss_():
 @boss_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
-    send_group_id = "000000"
-    if str(send_group_id) in groups:
-        msg = __boss_help__ + f"\n非指令:1、拥有定时任务:每{groups[str(send_group_id)]['hours']}小时{groups[str(send_group_id)]['minutes']}分钟生成一只随机大境界的世界Boss"
-    else:
-        msg = __boss_help__ 
+    msg = __boss_help__ 
     await handle_send(bot, event, msg)
     await boss_help.finish()
 
@@ -464,10 +459,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
     
     elif victor == "群友赢了":
-        # 新增boss战斗积分点数
         boss_all_hp = bossinfo['总血量']  # 总血量
         boss_integral = 1000
-        killed_jj = bossinfo['jj']
         if user_info['root'] == "凡人":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
@@ -502,17 +495,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             sql_message.send_back(user_info['user_id'], drops_info['id'],drops_info['name'], drops_info['type'], 1)
         else :
             drops_msg = " "
-            
-        boss_jj = createboss()
-        for boss in group_boss[group_id][:]:
-            if boss['jj'] == boss_jj:
-                group_boss[group_id].remove(boss)
-                break
-    
-        bossinfo = createboss_jj(boss_jj)    
-        group_boss[group_id].append(bossinfo)
-        old_boss_info.save_boss(group_boss)
-            
+
+        battle_flag[group_id] = False
         if boss_old_stone == 0:
             get_stone = 1
         sql_message.update_ls(user_id, get_stone, 1)
@@ -526,6 +510,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             await send_msg_handler(bot, event, result)
         except ActionFailed:
             msg += f"Boss战消息发送错,可能被风控!"
+        group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
+        new_boss = createboss_jj(bossinfo['jj'])
+        if new_boss:  
+            group_boss[group_id].append(new_boss)
         old_boss_info.save_boss(group_boss)
         await handle_send(bot, event, msg)
         await battle.finish()
