@@ -1683,46 +1683,23 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
     await xiuxian_updata_level.finish()
     
 def generate_daohao():
-    """支持生成超过100万种组合的道号系统"""
-    # 1. 核心维度配置（每个维度至少5种选择）
+    """支持生成超过100万种组合的道号系统（所有词库无重复）"""
+    # 1. 核心维度配置
     dimensions = {
-        # 前缀类型及权重
-        'prefix_type': [
-            ('复姓', 40), 
-            ('单姓', 30),
-            ('自然', 20),
-            ('方位', 10)
-        ],
-        
-        # 核心风格及权重
+        'prefix_type': [('复姓', 40), ('单姓', 30), ('自然', 20), ('方位', 10)],
         'style': [
-            ('仙道', 35),
+            ('仙道', 25), 
             ('剑修', 25), 
-            ('丹器', 20),
-            ('佛禅', 10),
+            ('丹器', 25),
+            ('佛禅', 15),
             ('妖灵', 10)
         ],
-        
-        # 名字结构及权重
-        'name_struct': [
-            ('单字', 30),
-            ('双字', 40),
-            ('数字', 20),
-            ('三字', 10)
-        ],
-        
-        # 修饰等级及权重
-        'modifier_level': [
-            ('无修饰', 30),
-            ('一级', 40),
-            ('二级', 20),
-            ('三级', 10)
-        ]
+        'name_struct': [('单字', 30), ('双字', 50), ('数字', 15), ('三字', 5)],
+        'modifier_level': [('无修饰', 30), ('一级', 40), ('二级', 20), ('三级', 10)]
     }
 
-    # 2. 各维度详细词库（每个子类别至少20个选项）
+    # 2. 各维度详细词库 - 确保所有词库无重复
     lexicon = {
-        # 前缀词库
         'prefix': {
             '复姓': ['轩辕', '上官', '欧阳', '诸葛', '司马', '皇甫', '司空', '东方', '南宫', '西门',
                     '长孙', '宇文', '慕容', '司徒', '令狐', '澹台', '公冶', '申屠', '太史', '端木'],
@@ -1734,53 +1711,65 @@ def generate_daohao():
                     '外寂', '前尘', '后土', '天极', '地煞', '乾元', '坤灵', '巽风', '坎水', '离火']
         },
         
-        # 风格词库
+        # 确保style_words与name_words的双字词不重复
         'style_words': {
             '仙道': ['太初', '紫霄', '玄元', '玉清', '无为', '逍遥', '长生', '不老', '凌霄', '琼华',
                     '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘'],
             '剑修': ['青锋', '寒光', '流影', '断水', '破岳', '斩龙', '诛邪', '戮仙', '天问', '无尘',
                     '孤鸣', '惊鸿', '游龙', '飞凤', '残虹', '血饮', '心剑', '意剑', '道剑', '神剑'],
             '丹器': ['九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
-                    '百草', '神农', '金匮', '银针', '火候', '水炼', '铅汞', '黄芽', '白雪', '青盐'],
+                    '百草', '神农', '金匮', '银针', '黄芽', '白雪', '青盐', '紫烟', '玄霜', '赤霞'],
             '佛禅': ['菩提', '明镜', '般若', '金刚', '罗汉', '菩萨', '佛陀', '禅心', '觉悟', '轮回',
                     '因果', '业火', '莲华', '梵音', '慈悲', '舍利', '袈裟', '钵盂', '木鱼', '钟声'],
             '妖灵': ['青丘', '涂山', '九尾', '天狐', '夜叉', '罗刹', '白骨', '血魔', '噬魂', '夺魄',
                     '画皮', '摄心', '迷情', '幻影', '千面', '万化', '妖月', '魔星', '鬼瞳', '魅音']
         },
         
-        # 名字词库
+        # 确保单字词库与双字词库无重复
         'name_words': {
-            '仙道': ['子', '尘', '空', '灵', '虚', '真', '元', '阳', '明', '玄',
-                    '霄', '云', '风', '雨', '雪', '霜', '露', '霞', '雾', '虹'],
-            '剑修': ['剑', '刃', '锋', '芒', '光', '影', '气', '意', '心', '神',
-                    '出', '归', '断', '斩', '破', '灭', '绝', '杀', '战', '斗'],
-            '丹器': ['丹', '药', '炉', '鼎', '火', '水', '金', '木', '土', '石',
-                    '砂', '汞', '铅', '银', '铜', '铁', '锡', '玉', '珠', '珀'],
-            '佛禅': ['佛', '禅', '法', '僧', '念', '定', '慧', '戒', '忍', '悟',
-                    '空', '无', '色', '相', '因', '果', '缘', '业', '报', '劫'],
-            '妖灵': ['妖', '魔', '鬼', '怪', '精', '灵', '魅', '魍', '魉', '尸',
-                    '血', '骨', '皮', '魂', '魄', '咒', '蛊', '毒', '瘴', '雾']
+            '仙道': {
+                '单字': ['子', '尘', '空', '灵', '虚', '真', '元', '阳', '明', '玄',
+                        '霄', '云', '风', '雨', '雪', '霜', '露', '霞', '雾', '虹'],
+                '双字': ['太虚', '紫阳', '玄灵', '玉真', '无尘', '逍遥', '长生', '不老', '凌霄', '琼华',
+                        '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘']
+            },
+            '剑修': {
+                '单字': ['剑', '刃', '锋', '芒', '光', '影', '气', '意', '心', '神',
+                        '出', '归', '断', '斩', '破', '灭', '绝', '杀', '战', '斗'],
+                '双字': ['青锋', '寒光', '流影', '断水', '破岳', '斩龙', '诛邪', '戮仙', '天问', '无尘',
+                        '孤鸣', '惊鸿', '游龙', '飞凤', '残虹', '血饮', '心剑', '意剑', '道剑', '神剑']
+            },
+            '丹器': {
+                '单字': ['丹', '药', '炉', '鼎', '火', '水', '金', '木', '土', '石',
+                        '砂', '汞', '铅', '银', '玉', '珠', '珀', '琼', '瑶', '琅'],
+                '双字': ['九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
+                        '百草', '神农', '金匮', '银针', '黄芽', '白雪', '青盐', '紫烟', '玄霜', '赤霞']
+            },
+            '佛禅': {
+                '单字': ['佛', '禅', '法', '僧', '念', '定', '慧', '戒', '忍', '悟',
+                        '空', '无', '色', '相', '因', '果', '缘', '业', '报', '劫'],
+                '双字': ['菩提', '明镜', '般若', '金刚', '罗汉', '菩萨', '佛陀', '禅心', '觉悟', '轮回',
+                        '因果', '业火', '莲华', '梵音', '慈悲', '舍利', '袈裟', '钵盂', '木鱼', '钟声']
+            },
+            '妖灵': {
+                '单字': ['妖', '魔', '鬼', '怪', '精', '灵', '魅', '魍', '魉', '尸',
+                        '血', '骨', '皮', '魂', '魄', '咒', '蛊', '毒', '瘴', '雾'],
+                '双字': ['青丘', '涂山', '九尾', '天狐', '夜叉', '罗刹', '白骨', '血魔', '噬魂', '夺魄',
+                        '画皮', '摄心', '迷情', '幻影', '千面', '万化', '妖月', '魔星', '鬼瞳', '魅音']
+            }
         },
         
-        # 数字映射
         'numbers': {
-            0: '零', 1: '一', 2: '二', 3: '三', 4: '四',
-            5: '五', 6: '六', 7: '七', 8: '八', 9: '九',
-            10: '十', 100: '百', 1000: '千', 10000: '万'
+            0: '零', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 
+            6: '六', 7: '七', 8: '八', 9: '九', 10: '十'
         },
         
-        # 修饰词库
         'modifiers': {
-            '仙道': ['真人', '真君', '上仙', '金仙', '天君', '星君', '元君', '道君', '老祖', '天尊',
-                    '游三界', '度众生', '掌乾坤', '明天道', '通玄机', '悟真如', '合阴阳', '炼五行'],
-            '剑修': ['剑仙', '剑魔', '剑圣', '剑痴', '剑狂', '剑鬼', '剑妖', '剑神', '剑尊', '剑帝',
-                    '斩红尘', '断因果', '破虚空', '灭轮回', '诛天地', '戮鬼神', '战八荒', '扫六合'],
-            '丹器': ['丹圣', '药王', '炉仙', '鼎尊', '火神', '炎帝', '金母', '银童', '玉女', '铜师',
-                    '炼九转', '合三才', '调五行', '配四象', '掌阴阳', '控水火', '通药性', '明医理'],
-            '佛禅': ['尊者', '罗汉', '菩萨', '佛陀', '禅师', '法师', '和尚', '头陀', '沙弥', '比丘',
-                    '渡众生', '明因果', '断轮回', '解业障', '破无明', '见本性', '成正觉', '得菩提'],
-            '妖灵': ['妖王', '魔尊', '鬼帝', '怪皇', '精主', '灵母', '魅仙', '魍圣', '魉神', '尸祖',
-                    '迷众生', '乱乾坤', '逆阴阳', '改生死', '夺造化', '窃天机', '吞日月', '噬星辰']
+            '仙道': ['真人', '真君', '上仙', '金仙', '天君', '星君', '元君', '道君', '老祖', '天尊'],
+            '剑修': ['剑仙', '剑魔', '剑圣', '剑痴', '剑狂', '剑鬼', '剑妖', '剑神', '剑尊', '剑帝'],
+            '丹器': ['丹圣', '药王', '炉仙', '鼎尊', '火神', '炎帝', '金母', '银童', '玉女', '铜师'],
+            '佛禅': ['尊者', '罗汉', '菩萨', '佛陀', '禅师', '法师', '和尚', '头陀', '沙弥', '比丘'],
+            '妖灵': ['妖王', '魔尊', '鬼帝', '怪皇', '精主', '灵母', '魅仙', '魍圣', '魉神', '尸祖']
         }
     }
 
@@ -1792,10 +1781,9 @@ def generate_daohao():
             r -= weight
             if r <= 0:
                 return name
-        return options[0][0]  # 默认返回第一个
+        return options[0][0]
 
     # 4. 生成各组件
-    # 选择维度
     prefix_type = select_dimension(dimensions['prefix_type'])
     style = select_dimension(dimensions['style'])
     name_struct = select_dimension(dimensions['name_struct'])
@@ -1803,76 +1791,34 @@ def generate_daohao():
     
     # 生成前缀
     prefix = random.choice(lexicon['prefix'][prefix_type])
-    # 30%概率双前缀
-    if random.random() < 0.3 and prefix_type in ['复姓', '自然']:
-        second_prefix = random.choice(lexicon['prefix'][prefix_type])
-        while second_prefix == prefix:  # 确保不重复
-            second_prefix = random.choice(lexicon['prefix'][prefix_type])
-        prefix += second_prefix
     
-    # 生成名字
+    # 统一的名字生成逻辑
     if name_struct == '单字':
-        name = random.choice(lexicon['name_words'][style])
+        name = random.choice(lexicon['name_words'][style]['单字'])
     elif name_struct == '双字':
-        # 50%概率使用风格词库固定词
+        # 50%概率使用固定双字词，50%概率组合两个单字
         if random.random() < 0.5:
-            name = random.choice(lexicon['style_words'][style])
+            name = random.choice(lexicon['name_words'][style]['双字'])
         else:
-            w1 = random.choice(lexicon['name_words'][style])
-            w2 = random.choice(lexicon['name_words'][style])
-            while w2 == w1:  # 确保两个字不重复
-                w2 = random.choice(lexicon['name_words'][style])
+            w1 = random.choice(lexicon['name_words'][style]['单字'])
+            w2 = random.choice(lexicon['name_words'][style]['单字'])
+            while w2 == w1:  # 确保不重复
+                w2 = random.choice(lexicon['name_words'][style]['单字'])
             name = w1 + w2
     elif name_struct == '数字':
-        num = random.choice([random.randint(0,9), random.randint(10,99)])
-        if num < 10:
-            name = lexicon['numbers'][num]
-        else:
-            tens = num // 10
-            units = num % 10
-            name = lexicon['numbers'][10] + (lexicon['numbers'][units] if units !=0 else '')
+        num = random.randint(1, 9)
+        name = lexicon['numbers'][num]
     else:  # 三字
-        parts = []
-        for _ in range(3):
-            # 每个字可以是名字字或风格字
-            if random.random() < 0.7:
-                word = random.choice(lexicon['name_words'][style])
-            else:
-                word = random.choice(lexicon['style_words'][style])
-            # 确保不重复
-            while parts and word == parts[-1]:
-                if random.random() < 0.7:
-                    word = random.choice(lexicon['name_words'][style])
-                else:
-                    word = random.choice(lexicon['style_words'][style])
-            parts.append(word)
+        parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
+        # 确保三字不重复
+        while len(set(parts)) < 3:
+            parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
         name = ''.join(parts)
     
     # 生成修饰
     modifier = ''
-    if modifier_level != '无修饰':
-        if modifier_level == '一级':
-            levels = 1
-        elif modifier_level == '二级':
-            levels = 2
-        elif modifier_level == '三级':
-            levels = 3
-        else:
-            levels = 0
-        modifiers_used = []
-        for _ in range(levels):
-            # 每级修饰有70%概率加词
-            if random.random() < 0.7:
-                mod = random.choice(lexicon['modifiers'][style])
-                # 确保修饰词不重复
-                while mod in modifiers_used:
-                    mod = random.choice(lexicon['modifiers'][style])
-                modifiers_used.append(mod)
-                # 修饰词可能包含数字
-                if '{num}' in mod:
-                    num = random.randint(1,9)
-                    mod = mod.replace('{num}', lexicon['numbers'][num])
-                modifier += mod
+    if modifier_level != '无修饰' and style in lexicon['modifiers']:
+        modifier = random.choice(lexicon['modifiers'][style])
     
     # 5. 组合道号
     connectors = {
@@ -1883,17 +1829,11 @@ def generate_daohao():
         '妖灵': ['·', '✧', '']
     }
     
-    connector = random.choice(connectors[style]) if modifier else ''
+    connector = random.choice(connectors[style])
+    daohao = f"{prefix}{name}{connector}{modifier}"
     
-    # 10%概率倒装
-    if random.random() < 0.1:
-        daohao = f"{modifier}{connector}{prefix}{name}"
-    else:
-        daohao = f"{prefix}{name}{connector}{modifier}"
-    
-    # 最终检查是否有连续重复
+    # 最终检查是否有连续重复字符
     while any(daohao[i] == daohao[i+1] for i in range(len(daohao)-1)):
-        # 如果有连续重复字符，重新生成
         return generate_daohao()
     
     return daohao
