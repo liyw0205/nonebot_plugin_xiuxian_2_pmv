@@ -46,18 +46,9 @@ __beg_help__ = f"""
 
 beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
-compensation = on_command("补偿", priority=7, block=True)
-xiuxian_compensation = on_command("重置补偿", permission=SUPERUSER, priority=7, block=True)
+compensation = on_command("新手礼包", priority=7, block=True)
+xiuxian_compensation = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
 
-# 重置补偿
-@xiuxian_compensation.handle(parameterless=[Cooldown(at_sender=False)])
-async def xiuxian_compensation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sql_message.compensation_remake()
-    msg = "补偿重置成功"
-    await handle_send(bot, event, msg)
-    await xiuxian_compensation.finish()
-    
     
 @beg_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -154,56 +145,77 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     user_id = event.get_user_id()
-    user_msg = sql_message.get_user_info_with_id(user_id)
-    user_root = user_msg['root_type']
     
     if not isUser:
         await handle_send(bot, event, msg)
         await compensation.finish()
     
-    compensation = sql_message.get_compensation(user_id)
-    if compensation is None:
-        msg = '贪心的人是不会有好运的！'
-    else:
-        num = 1
-        goods_id = "15053"
-        goods_info = items.get_data_by_item_id(goods_id)
-        package_name = goods_info['name']
-        msg_parts = []
-        i = 1
-        while True:
-            buff_key = f'buff_{i}'
-            name_key = f'name_{i}'
-            type_key = f'type_{i}'
-            amount_key = f'amount_{i}'
+    # 检查是否已领取
+    if sql_message.get_compensation(user_id) is None:
+        msg = '您已经领取过新手礼包了！'
+        await handle_send(bot, event, msg)
+        await compensation.finish()
+    
+    # 检查是否是新用户(创建时间在24小时内)
+    create_time = datetime.strptime(user_info['create_time'], "%Y-%m-%d %H:%M:%S.%f")
+    now_time = datetime.now()
+    diff_time = now_time - create_time
+    diff_hours = diff_time.total_seconds() / 3600
+    
+    if diff_hours > 24:
+        msg = '新手礼包仅限创建角色24小时内领取！'
+        await handle_send(bot, event, msg)
+        await compensation.finish()
+    
+    # 发放新手礼包
+    num = 1
+    goods_id = "15052"  # 新手礼包物品ID
+    goods_info = items.get_data_by_item_id(goods_id)
+    package_name = goods_info['name']
+    msg_parts = []
+    i = 1
+    while True:
+        buff_key = f'buff_{i}'
+        name_key = f'name_{i}'
+        type_key = f'type_{i}'
+        amount_key = f'amount_{i}'
 
-            if name_key not in goods_info:
-                break
+        if name_key not in goods_info:
+            break
 
-            item_name = goods_info[name_key]
-            item_amount = goods_info.get(amount_key, 1) * num
-            item_type = goods_info.get(type_key)
-            buff_id = goods_info.get(buff_key)
+        item_name = goods_info[name_key]
+        item_amount = goods_info.get(amount_key, 1) * num
+        item_type = goods_info.get(type_key)
+        buff_id = goods_info.get(buff_key)
 
-            if item_name == "灵石":
-                key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
-                sql_message.update_ls(user_id, abs(item_amount), key)
-                msg_parts.append(f"获得灵石 {item_amount} 枚\n")
+        if item_name == "灵石":
+            key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
+            sql_message.update_ls(user_id, abs(item_amount), key)
+            msg_parts.append(f"获得灵石 {item_amount} 枚\n")
+        else:
+            if item_type in ["辅修功法", "神通", "功法"]:
+                goods_type_item = "技能"
+            elif item_type in ["法器", "防具"]:
+                goods_type_item = "装备"
             else:
-                if item_type in ["辅修功法", "神通", "功法"]:
-                    goods_type_item = "技能"
-                elif item_type in ["法器", "防具"]:
-                    goods_type_item = "装备"
-                else:
-                    goods_type_item = item_type
-                if buff_id is not None:
-                    sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-                    msg_parts.append(f"获得 {item_name} x{item_amount}\n")
-            
-            i += 1            
+                goods_type_item = item_type
+            if buff_id is not None:
+                sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+                msg_parts.append(f"获得 {item_name} x{item_amount}\n")
+        
+        i += 1            
 
-        if buff_id is not None:
-            sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-        msg = f"道友的补偿:\n" + "".join(msg_parts)
+    if buff_id is not None:
+        sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+    msg = f"道友的新手礼包:\n" + "".join(msg_parts)
     sql_message.save_compensation(user_id)
     await handle_send(bot, event, msg)
+
+@xiuxian_compensation.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiuxian_compensation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置新手礼包(管理员命令)"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    sql_message.compensation_remake()
+    msg = "新手礼包重置成功，所有玩家可以重新领取新手礼包！"
+    await handle_send(bot, event, msg)
+    await xiuxian_compensation.finish()

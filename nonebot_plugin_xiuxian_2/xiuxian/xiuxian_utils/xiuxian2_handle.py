@@ -202,7 +202,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""
         c = self.conn.cursor()
-        sql = f"INSERT INTO user_xiuxian (user_id,stone,root,root_type,root_level,level,power,create_time,user_name,exp,sect_id,sect_position,user_stamina) VALUES (?,0,?,?,0,'江湖好手',?,?,?,100,NULL,NULL,?)"
+        sql = f"INSERT INTO user_xiuxian (user_id, stone, root, root_type, root_level, level, power, create_time, user_name, exp, sect_id, sect_position, user_stamina, is_compensation) VALUES (?, 0, ?, ?, 0, '江湖好手', ?, ?, ?, 100, NULL, NULL, ?, 0)"
         c.execute(sql, (user_id, root, type, power, create_time, user_name,XiuConfig().max_stamina))
         self.conn.commit()
 
@@ -346,18 +346,35 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             return ls
         elif result[0] == 1:
             return None
-
+            
     def get_compensation(self, user_id):
-        """获取补偿信息"""
+        """检查用户是否已领取新手礼包"""
         cur = self.conn.cursor()
         sql = f"select is_compensation from user_xiuxian WHERE user_id=?"
         cur.execute(sql, (user_id,))
         result = cur.fetchone()
         if result[0] == 0:            
-            return True
+            return True  # 可以领取
         elif result[0] == 1:
-            return None
-            
+            return None  # 已领取
+
+    def save_compensation(self, user_id):
+        """标记用户已领取新手礼包"""
+        sql = f"UPDATE user_xiuxian SET is_compensation=1 WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (user_id,))
+        self.conn.commit()
+    
+    def get_user_create_time(self, user_id):
+        """获取用户创建时间"""
+        cur = self.conn.cursor()
+        sql = f"SELECT create_time FROM user_xiuxian WHERE user_id=?"
+        cur.execute(sql, (user_id,))
+        result = cur.fetchone()
+        if result:
+            return datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S.%f")
+        return None
+    
     def ramaker(self, lg, type, user_id):
         """洗灵根"""
         cur = self.conn.cursor()
@@ -519,21 +536,6 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur = self.conn.cursor()
         cur.execute(sql, )
         self.conn.commit()
-        
-    def compensation_remake(self):
-        """重置补偿"""
-        sql = f"UPDATE user_xiuxian SET is_compensation=0"
-        cur = self.conn.cursor()
-        cur.execute(sql, )
-        self.conn.commit()      
-        
-    def save_compensation(self, user_id):
-        """更新补偿"""
-        sql = f"UPDATE user_xiuxian SET is_compensation=1 WHERE user_id=?"
-        cur = self.conn.cursor()
-        cur.execute(sql, (user_id,))
-        self.conn.commit()
-
 
     def ban_user(self, user_id):
         """小黑屋"""
