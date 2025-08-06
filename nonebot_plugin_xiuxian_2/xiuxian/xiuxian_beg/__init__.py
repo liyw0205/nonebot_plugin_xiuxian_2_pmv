@@ -37,17 +37,45 @@ async def xiuxian_beg_():
     
 
 __beg_help__ = f"""
-详情:
-为了让初入仙途的道友们更顺利地踏上修炼之路，特别开辟了额外的机缘
-天降灵石，助君一臂之力。
-若有心人借此谋取不正之利，必将遭遇天道轮回，异象降临，后果自负。
-诸位道友，若不信此言，可自行一试，便知天机不可泄露，天道不容欺。
+仙途奇缘系统帮助
+
+【基本介绍】
+本系统为初入修真界的道友提供额外机缘，包含以下功能：
+1. 仙途奇缘 - 每日获取随机灵石奖励
+2. 新手礼包 - 创建角色24小时内可领取的专属福利
+
+【功能详情】
+═════════════
+1. 仙途奇缘
+- 每日可领取一次随机灵石奖励
+- 限制条件：
+  * 修为不超过{XiuConfig().beg_max_level}
+  * 角色创建不超过{XiuConfig().beg_max_days}天
+  * 未加入宗门或拥有特殊灵根
+- 奖励内容：随机数量的灵石
+
+2. 新手礼包
+- 创建角色24小时内可领取
+- 包含：灵石、功法、装备等基础资源
+- 每位玩家限领一次
+
+【注意事项】
+- 请勿滥用系统，违者可能受到惩罚
+- 奖励数量和质量随角色条件变化
+- 管理员可使用"重置新手礼包"命令重置全服领取状态
+
+【温馨提示】
+修真之路漫长，这些只是起点助力。
+真正的机缘还需道友自行探索！
+═════════════
+当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
+
 
 beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
-compensation = on_command("新手礼包", priority=7, block=True)
-xiuxian_compensation = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
+novice = on_command("新手礼包", priority=7, block=True)
+xiuxian_novice = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
 
     
 @beg_help.handle(parameterless=[Cooldown(at_sender=False)])
@@ -140,21 +168,21 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await beg_help.finish()
 
     
-@compensation.handle(parameterless=[Cooldown(at_sender=False)])
-async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@novice.handle(parameterless=[Cooldown(at_sender=False)])
+async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     user_id = event.get_user_id()
     
     if not isUser:
         await handle_send(bot, event, msg)
-        await compensation.finish()
+        await novice.finish()
     
     # 检查是否已领取
-    if sql_message.get_compensation(user_id) is None:
+    if sql_message.get_novice(user_id) is None:
         msg = '您已经领取过新手礼包了！'
         await handle_send(bot, event, msg)
-        await compensation.finish()
+        await novice.finish()
     
     # 检查是否是新用户(创建时间在24小时内)
     create_time = datetime.strptime(user_info['create_time'], "%Y-%m-%d %H:%M:%S.%f")
@@ -165,7 +193,7 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     if diff_hours > 24:
         msg = '新手礼包仅限创建角色24小时内领取！'
         await handle_send(bot, event, msg)
-        await compensation.finish()
+        await novice.finish()
     
     # 发放新手礼包
     num = 1
@@ -208,14 +236,14 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     if buff_id is not None:
         sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
     msg = f"道友的新手礼包:\n" + "".join(msg_parts)
-    sql_message.save_compensation(user_id)
+    sql_message.save_novice(user_id)
     await handle_send(bot, event, msg)
 
-@xiuxian_compensation.handle(parameterless=[Cooldown(at_sender=False)])
-async def xiuxian_compensation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@xiuxian_novice.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置新手礼包(管理员命令)"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sql_message.compensation_remake()
+    sql_message.novice_remake()
     msg = "新手礼包重置成功，所有玩家可以重新领取新手礼包！"
     await handle_send(bot, event, msg)
-    await xiuxian_compensation.finish()
+    await xiuxian_novice.finish()

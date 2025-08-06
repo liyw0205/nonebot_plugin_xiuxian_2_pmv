@@ -56,7 +56,7 @@ class XiuConfig:
         self.sql_user_xiuxian = [
             "id", "user_id", "user_name", "stone", "root",
             "root_type", "root_level", "level", "power",
-            "create_time", "is_sign", "is_beg", "is_compensation", "is_ban",
+            "create_time", "is_sign", "is_beg", "is_novice", "is_ban",
             "exp", "work_num", "level_up_cd",
             "level_up_rate", "sect_id",
             "sect_position", "hp", "mp", "atk",
