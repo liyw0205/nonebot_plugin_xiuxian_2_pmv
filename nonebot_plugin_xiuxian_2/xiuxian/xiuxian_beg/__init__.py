@@ -193,7 +193,7 @@ async def compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             sql_message.update_ls(user_id, abs(item_amount), key)
             msg_parts.append(f"获得灵石 {item_amount} 枚\n")
         else:
-            if item_type in ["辅修功法", "神通", "功法"]:
+            if item_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
                 goods_type_item = "技能"
             elif item_type in ["法器", "防具"]:
                 goods_type_item = "装备"
