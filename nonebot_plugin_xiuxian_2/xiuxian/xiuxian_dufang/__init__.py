@@ -1,4 +1,7 @@
 import random
+import json
+import os
+from pathlib import Path
 from nonebot import on_command
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
@@ -15,7 +18,59 @@ from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_t
 
 sql_message = XiuxianDateManage()
 
+# 共享用户数据文件路径
+SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
+
+# 初始化共享数据文件
+if not SHARING_DATA_PATH.exists():
+    with open(SHARING_DATA_PATH, "w", encoding="utf-8") as f:
+        json.dump({"users": []}, f, ensure_ascii=False, indent=4)
+
+# 加载共享用户数据
+def load_sharing_users():
+    with open(SHARING_DATA_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)["users"]
+
+# 保存共享用户数据
+def save_sharing_users(users):
+    with open(SHARING_DATA_PATH, "w", encoding="utf-8") as f:
+        json.dump({"users": users}, f, ensure_ascii=False, indent=4)
+
+# 添加共享用户
+def add_sharing_user(user_id):
+    users = load_sharing_users()
+    if user_id not in users:
+        users.append(user_id)
+        save_sharing_users(users)
+        return True
+    return False
+
+# 移除共享用户
+def remove_sharing_user(user_id):
+    users = load_sharing_users()
+    if user_id in users:
+        users.remove(user_id)
+        save_sharing_users(users)
+        return True
+    return False
+
+# 检查是否在共享列表中
+def is_sharing_user(user_id):
+    users = load_sharing_users()
+    return user_id in users
+
+# 获取随机共享用户(排除自己)
+def get_random_sharing_users(user_id, count=3):
+    users = [uid for uid in load_sharing_users() if uid != user_id]
+    if not users:
+        return []
+    count = min(count, len(users))
+    return random.sample(users, count)
+
 unseal = on_command("鉴石", priority=9, block=True)
+unseal_share_on = on_command("鉴石开启共享", priority=10, block=True)
+unseal_share_off = on_command("鉴石关闭共享", priority=10, block=True)
+unseal_help = on_command("鉴石帮助", priority=10, block=True)
 
 # 尘封之物类型（共20种）
 SEALED_ENTITIES = [
@@ -35,7 +90,7 @@ SEALED_ENTITIES = [
     {"name": "古佛舍利", "desc": "一颗金色骨珠，散发着祥和佛光", "type": "佛宝"},
     {"name": "龙族逆鳞", "desc": "一片巴掌大的七彩鳞片，坚硬无比", "type": "材料"},
     {"name": "鬼修魂灯", "desc": "一盏青铜古灯，灯焰呈幽绿色", "type": "鬼器"},
-    {"name": "仙酿玉壶", "desc": "玲珑剔透的玉壶，壶口有灵雾缭绕", "type": "容器"},
+    {"name": "仙酿玉壶", "desc": "玲珑剔透的玉壶，壶口有灵雾缭绕", "type": "container"},
     {"name": "巫族图腾", "desc": "刻有狰狞兽首的黑色木牌", "type": "巫器"},
     {"name": "剑仙剑意", "desc": "一缕被封存的凌厉剑气", "type": "意境"},
     {"name": "时空碎片", "desc": "不规则的透明薄片，周围空间微微扭曲", "type": "奇物"}
@@ -217,6 +272,133 @@ UNSEAL_PROCESS = [
     "物品突然发出刺耳的尖啸声，几乎要震破耳膜..."
 ]
 
+# 共享事件类型
+SHARING_EVENTS = [
+    {
+        "title": "劫修团伙",
+        "desc": "你解封时引发的灵气波动引来了劫修团伙！",
+        "effect": lambda cost: int(cost * random.uniform(0.4, 0.6)),  # 40%-60%损失
+        "message": "这群劫修顺着灵气波动又袭击了附近的其他道友！"
+    },
+    {
+        "title": "灵气污染",
+        "desc": "解封过程中产生了危险的灵气污染！",
+        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%损失
+        "message": "污染的灵气扩散开来，影响了附近修炼的其他道友！"
+    },
+    {
+        "title": "诅咒蔓延",
+        "desc": "物品上的古老诅咒开始向外扩散！",
+        "effect": lambda cost: int(cost * random.uniform(0.35, 0.55)),  # 35%-55%损失
+        "message": "诅咒之力蔓延，不幸波及了附近的其他道友！"
+    },
+    {
+        "title": "福泽共享",
+        "desc": "解封产生的祥瑞之气扩散开来！",
+        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%收益
+        "message": "祥瑞之气惠及了附近的其他道友！"
+    }
+]
+
+# 鉴石帮助
+@unseal_help.handle()
+async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    help_msg = """※※ 鉴石系统帮助 ※※
+【鉴石】- 消耗灵石解封尘封之物
+【鉴石开启共享】- 开启鉴石结果共享
+【鉴石关闭共享】- 关闭鉴石结果共享
+
+◆ 基础消耗500灵石
+◆ 可传入灵石作为额外消耗(最多当前灵石的10%)
+◆ 开启共享后，你的鉴石结果可能会影响其他开启共享的道友
+◆ 共享事件可能带来连锁反应，福祸难料"""
+    await handle_send(bot, event, help_msg)
+
+# 开启共享
+@unseal_share_on.handle()
+async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    if is_sharing_user(user_id):
+        msg = "你已经开启了鉴石结果共享！"
+    else:
+        add_sharing_user(user_id)
+        msg = "成功开启鉴石结果共享！你的鉴石过程可能会对其他道友产生影响。"
+    
+    await handle_send(bot, event, msg)
+
+# 关闭共享
+@unseal_share_off.handle()
+async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    if not is_sharing_user(user_id):
+        msg = "你尚未开启鉴石结果共享！"
+    else:
+        remove_sharing_user(user_id)
+        msg = "成功关闭鉴石结果共享！你的鉴石过程将不再影响其他道友。"
+    
+    await handle_send(bot, event, msg)
+
+# 处理共享事件
+async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, cost: int, result_type: str):
+    sharing_users = get_random_sharing_users(user_id, random.randint(1, 3))
+    if not sharing_users:
+        return None
+    
+    # 根据鉴石结果类型选择共享事件
+    if result_type in ["great_success", "success"]:
+        # 只选择正面共享事件（福泽共享）
+        eligible_events = [e for e in SHARING_EVENTS if "福泽" in e["title"]]
+    else:
+        # 只选择负面共享事件（排除福泽共享）
+        eligible_events = [e for e in SHARING_EVENTS if "福泽" not in e["title"]]
+    
+    if not eligible_events:
+        return None
+    
+    event_data = random.choice(eligible_events)
+    effect_amount = event_data["effect"](cost)
+    
+    # 获取当前用户道号（仅用于显示消息）
+    user_info = sql_message.get_user_info_with_id(user_id)
+    user_name = user_info['user_name']
+    
+    # 处理共享用户的损失/收益
+    affected_users = []
+    for target_id in sharing_users:
+        target_info = sql_message.get_user_info_with_id(target_id)
+        target_name = target_info['user_name']
+        target_stone = int(target_info['stone'])
+        
+        if "福泽" in event_data["title"]:
+            sql_message.update_ls(target_id, effect_amount, 1)
+            affected_users.append(f"{target_name}(+{number_to(effect_amount)})")
+        else:
+            actual_shared_loss = min(effect_amount, target_stone)
+            if actual_shared_loss > 0:
+                sql_message.update_ls(target_id, actual_shared_loss, 2)
+                affected_users.append(f"{target_name}(-{number_to(actual_shared_loss)})")
+    
+    # 构建消息
+    msg = [
+        f"\n※※ {event_data['title']} ※※",
+        event_data['desc'],
+        f"\n{event_data['message']}",
+        f"\n受影响道友: {', '.join(affected_users)}"
+    ]
+    
+    return "\n".join(msg)
+
+
 @unseal.handle(parameterless=[Cooldown(at_sender=False)])
 async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -295,4 +477,18 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         f"\n当前灵石：{current_stone}({number_to(current_stone)})"
     ]
     
-    await handle_send(bot, event, "\n".join(full_msg))
+    final_msg = "\n".join(full_msg)
+    await handle_send(bot, event, final_msg)
+    
+    # 处理共享事件 (负面结果时触发负面共享，正面结果时触发正面共享)
+    if is_sharing_user(user_id):
+        # 负面结果有20%概率触发共享，大失败100%触发
+        if (result in ["failure", "critical_failure"] and random.random() < 0.2) or result == "critical_failure":
+            shared_event_msg = await handle_shared_event(bot, event, user_id, cost, result)
+            if shared_event_msg:
+                await handle_send(bot, event, shared_event_msg)
+        # 正面结果有10%概率触发共享，大成功100%触发
+        elif (result == "success" and random.random() < 0.1) or (result == "great_success"):
+            shared_event_msg = await handle_shared_event(bot, event, user_id, cost, result)
+            if shared_event_msg:
+                await handle_send(bot, event, shared_event_msg)

@@ -80,6 +80,19 @@ class XiuConfig:
         ]
         self.sql_user_auctions = [""]
         # 上面是数据库校验,不知道做什么的话别动
+        self.put_bot = []  
+        # ["123456"]
+        # 接收消息qq,主qq，框架将只处理此qq的消息
+        self.main_bo = []  
+        # 负责发送消息的qq
+        self.shield_group = []  
+        # ["123456"]
+        # 屏蔽的群聊
+        self.response_group = False  # 反转屏蔽的群聊，仅响应这些群的消息
+        self.admin_debug = False # 管理员调试模式，开启后只响应超管指令
+        self.layout_bot_dict = {}
+        # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
+        # "123456":"123456",
         self.level = convert_rank('江湖好手')[1] # 境界列表，别动
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
@@ -87,12 +100,6 @@ class XiuConfig:
         self.private_chat_enabled = False # 私聊功能开关，默认关闭
         self.level_up_cd = 0  # 突破CD(分钟)
         self.closing_exp = 100  # 闭关每分钟获取的修为
-        self.put_bot = []  # 接收消息qq,主qq，框架将只处理此qq的消息
-        self.main_bo = []  # 负责发送消息的qq
-        self.shield_group = []  # 屏蔽的群聊
-        self.layout_bot_dict = {}
-        # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
-        # "123456":"123456",
         self.sect_min_level = "结丹境圆满" # 创建宗门最低境界
         self.sect_create_cost = 5000000 # 创建宗门消耗
         self.sect_rename_cost = 50000000 # 宗门改名消耗
@@ -126,7 +133,6 @@ class XiuConfig:
         self.img_compression_limit = 90 # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
         self.img_type = "webp" # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
         self.img_send_type = "io" # 图片发送类型，官方bot建议base64
-        self.admin_debug = False # 管理员调试模式，开启后只响应超管指令
         self.version = "xiuxian_2.2" # 修仙插件版本，别动
 
 

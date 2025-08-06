@@ -34,6 +34,7 @@ except Exception as e:
 
 put_bot = XiuConfig().put_bot
 shield_group = XiuConfig().shield_group
+response_group = XiuConfig().response_group
 
 try:
     put_bot_ = put_bot[0]
@@ -78,11 +79,15 @@ async def do_something(bot: Bot, event: GroupMessageEvent):
         pass
     else:
         if str(bot.self_id) in put_bot:
-            if str(event.group_id) in shield_group:
-                raise IgnoredException("为屏蔽群消息,已忽略")
+            if response_group:
+                if str(event.group_id) in shield_group:
+                    pass
+                else:
+                    raise IgnoredException("不为响应群消息,已忽略")
             else:
-                pass
+                if str(event.group_id) in shield_group:
+                    raise IgnoredException("为屏蔽群消息,已忽略")
+                else:
+                    pass
         else:
             raise IgnoredException("非主bot信息,已忽略")
-
-
