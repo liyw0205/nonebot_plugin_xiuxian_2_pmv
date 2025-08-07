@@ -1817,7 +1817,83 @@ async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = 
 
     await auction_withdraw.finish()
 
+@goods_re_root.handle(parameterless=[Cooldown(at_sender=False)])
+async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """炼金"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    group_id = "000000"
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    if args is None:
+        msg = "请输入要炼化的物品！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
         
+    # 判断输入是ID还是名称
+    goods_id = None
+    if args[0].isdigit():
+        goods_id = int(args[0])
+        item_info = items.get_data_by_item_id(goods_id)
+        if not item_info:
+            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
+            await handle_send(bot, event, msg)
+            await goods_re_root.finish()
+        goods_name = item_info['name']
+    else:  # 视为物品名称
+        goods_name = args[0]
+    back_msg = sql_message.get_back_msg(user_id)  # 背包sql信息,list(back)
+    if back_msg is None:
+        msg = "道友的背包空空如也！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+    in_flag = False  # 判断指令是否正确，道具是否在背包内
+    goods_id = None
+    goods_type = None
+    goods_state = None
+    goods_num = None
+    for back in back_msg:
+        if goods_name == back['goods_name']:
+            in_flag = True
+            goods_id = back['goods_id']
+            goods_type = back['goods_type']
+            goods_state = back['state']
+            goods_num = back['goods_num']
+            break
+    if not in_flag:
+        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+
+    if goods_type == "装备" and int(goods_state) == 1 and int(goods_num) == 1:
+        msg = f"装备：{goods_name}已经被道友装备在身，无法炼金！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+
+    if get_item_msg_rank(goods_id) == 520:
+        msg = "此类物品不支持！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+    try:
+        if 1 <= int(args[1]) <= int(goods_num):
+            num = int(args[1])
+    except:
+            num = 1 
+    price = int((convert_rank('江湖好手')[0] + 5) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    if price <= 0:
+        msg = f"物品：{goods_name}炼金失败，凝聚{price}枚灵石，记得通知晓楠！"
+        await handle_send(bot, event, msg)
+        await goods_re_root.finish()
+
+    sql_message.update_back_j(user_id, goods_id, num=num)
+    sql_message.update_ls(user_id, price, 1)
+    msg = f"物品：{goods_name} 数量：{num} 炼金成功，凝聚{price}枚灵石！"
+    await handle_send(bot, event, msg)
+    await goods_re_root.finish()
+    
 @no_use_zb.handle(parameterless=[Cooldown(at_sender=False)])
 async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """卸载物品（只支持装备）
