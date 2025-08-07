@@ -272,7 +272,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
 
 @run_xiuxian.handle(parameterless=[Cooldown(at_sender=False)])
 async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """加入修仙"""
+    """我要修仙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     user_id = event.get_user_id()
     
@@ -1682,6 +1682,8 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
     
+import random
+
 def generate_daohao():
     """支持生成超过100万种组合的道号系统（所有词库无重复）"""
     # 1. 核心维度配置
@@ -1711,7 +1713,6 @@ def generate_daohao():
                     '外寂', '前尘', '后土', '天极', '地煞', '乾元', '坤灵', '巽风', '坎水', '离火']
         },
         
-        # 确保style_words与name_words的双字词不重复
         'style_words': {
             '仙道': ['太初', '紫霄', '玄元', '玉清', '无为', '逍遥', '长生', '不老', '凌霄', '琼华',
                     '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘'],
@@ -1725,7 +1726,6 @@ def generate_daohao():
                     '画皮', '摄心', '迷情', '幻影', '千面', '万化', '妖月', '魔星', '鬼瞳', '魅音']
         },
         
-        # 确保单字词库与双字词库无重复
         'name_words': {
             '仙道': {
                 '单字': ['子', '尘', '空', '灵', '虚', '真', '元', '阳', '明', '玄',
@@ -1742,8 +1742,8 @@ def generate_daohao():
             '丹器': {
                 '单字': ['丹', '药', '炉', '鼎', '火', '水', '金', '木', '土', '石',
                         '砂', '汞', '铅', '银', '玉', '珠', '珀', '琼', '瑶', '琅'],
-                '双字': ['九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
-                        '百草', '神农', '金匮', '银针', '黄芽', '白雪', '青盐', '紫烟', '玄霜', '赤霞']
+                '双字': ['九鼎', '七炉', '五火', '三丹', '金砂', '玉屑', '炉纹', '鼎纹', '药圣', '灵丹',
+                        '百炼', '神工', '金方', '银方', '黄精', '白芷', '青黛', '紫草', '玄参', '赤芍']
             },
             '佛禅': {
                 '单字': ['佛', '禅', '法', '僧', '念', '定', '慧', '戒', '忍', '悟',
@@ -1789,7 +1789,7 @@ def generate_daohao():
     name_struct = select_dimension(dimensions['name_struct'])
     modifier_level = select_dimension(dimensions['modifier_level'])
     
-    # 生成前缀
+    # 生成前缀 - 只取一个词
     prefix = random.choice(lexicon['prefix'][prefix_type])
     
     # 统一的名字生成逻辑
@@ -1815,10 +1815,17 @@ def generate_daohao():
             parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
         name = ''.join(parts)
     
-    # 生成修饰
-    modifier = ''
+    # 生成修饰词 - 最多2个
+    modifiers = []
     if modifier_level != '无修饰' and style in lexicon['modifiers']:
-        modifier = random.choice(lexicon['modifiers'][style])
+        modifier_count = min(int(modifier_level[-1]), 2)  # 最多2个修饰词
+        available_modifiers = lexicon['modifiers'][style].copy()
+        for _ in range(modifier_count):
+            if not available_modifiers:
+                break
+            selected = random.choice(available_modifiers)
+            modifiers.append(selected)
+            available_modifiers.remove(selected)  # 避免重复
     
     # 5. 组合道号
     connectors = {
@@ -1829,8 +1836,14 @@ def generate_daohao():
         '妖灵': ['·', '✧', '']
     }
     
-    connector = random.choice(connectors[style])
-    daohao = f"{prefix}{name}{connector}{modifier}"
+    # 基础道号
+    daohao = prefix + name
+    
+    # 添加修饰词
+    if modifiers:
+        connector = random.choice(connectors[style])
+        for modifier in modifiers:
+            daohao += connector + modifier
     
     # 最终检查是否有连续重复字符
     while any(daohao[i] == daohao[i+1] for i in range(len(daohao)-1)):

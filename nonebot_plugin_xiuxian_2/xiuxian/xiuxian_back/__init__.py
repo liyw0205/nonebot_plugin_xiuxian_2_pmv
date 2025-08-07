@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 import re
 import os
 import json
@@ -56,23 +57,40 @@ sql_message = XiuxianDateManage()  # sql类
 set_auction_by_scheduler = require("nonebot_plugin_apscheduler").scheduler
 reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 
-# 仙肆相关命令
+# 仙肆系统配置
+XIANSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
+MIN_PRICE = 500000  # 最低上架价格50万灵石
+MAX_QUANTITY = 10   # 单次最大上架数量
+
+# 文件路径
+XIANSHI_DATA_PATH = Path(__file__).parent / "xianshi_data"
+XIANSHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
 xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
-xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permission=SUPERUSER, block=True)
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xian_shop_remove = on_command("仙肆下架", priority=5, block=True)
 xian_buy = on_command("仙肆购买", priority=5, block=True)
 my_xian_shop = on_command("我的仙肆", priority=5, block=True)
+xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permission=SUPERUSER, block=True)
 xian_shop_remove_by_admin = on_command("系统仙肆下架", priority=5, permission=SUPERUSER, block=True)
 
-# 坊市相关命令
+# 坊市系统配置
+FANGSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
+FANGSHI_MIN_PRICE = 500000  # 最低上架价格50万灵石
+FANGSHI_MAX_QUANTITY = 10   # 单次最大上架数量
+
+# 文件路径
+FANGSHI_DATA_PATH = Path(__file__).parent / "fangshi_data"
+FANGSHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+# 初始化命令
 shop_view = on_command("坊市查看", priority=5, permission=GROUP, block=True)
 shop_added = on_command("坊市上架", priority=5, permission=GROUP, block=True)
-shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SUPERUSER, block=True)
 shop_remove = on_command("坊市下架", priority=5, permission=GROUP, block=True)
-shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=SUPERUSER, block=True)
 buy = on_command("坊市购买", priority=5, permission=GROUP, block=True)
 my_shop = on_command("我的坊市", priority=5, permission=GROUP, block=True)
+shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SUPERUSER, block=True)
+shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=SUPERUSER, block=True)
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
 # 其他原有命令保持不变
@@ -404,93 +422,159 @@ async def xiuxian_sone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, msg)
     await xiuxian_sone.finish()
 
-# 仙肆数据结构
-XIANSHI_DATA = {
-    "system_items": {},  # 系统物品 {id: {item_info}}
-    "user_items": {},    # 用户物品 {id: {item_info}}
-    "next_system_id": 1, # 系统物品ID计数器
-}
-
-# 仙肆最低价格限制
-MIN_PRICE = 500000  # 50万灵石
-
-TRADE_DATA_PATH = Path(__file__).parent / "trade_data"
-XIANSHI_DATA_PATH = TRADE_DATA_PATH / "xianshi.json"
-
-# 确保目录存在
-TRADE_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-def get_xianshi_data():
-    """获取仙肆数据"""
+def get_xianshi_index():
+    """获取仙肆索引数据"""
+    index_file = XIANSHI_DATA_PATH / "仙肆索引.json"
     try:
-        if XIANSHI_DATA_PATH.exists():
-            with open(XIANSHI_DATA_PATH, "r", encoding="utf-8") as f:
+        if index_file.exists():
+            with open(index_file, "r", encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
-        logger.error(f"读取仙肆数据失败: {e}")
-    return {"system_items": {}, "user_items": {}, "next_system_id": 1}
+        logger.error(f"读取仙肆索引失败: {e}")
+    return {"next_id": 1, "items": {}}
 
-def save_xianshi_data(data):
-    """保存仙肆数据"""
+def save_xianshi_index(data):
+    """保存仙肆索引"""
+    index_file = XIANSHI_DATA_PATH / "仙肆索引.json"
     try:
-        with open(XIANSHI_DATA_PATH, "w", encoding="utf-8") as f:
+        with open(index_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         return True
     except Exception as e:
-        logger.error(f"保存仙肆数据失败: {e}")
+        logger.error(f"保存仙肆索引失败: {e}")
         return False
 
-def generate_xianshi_id():
-    """生成6-10位不重复的仙肆ID"""
-    data = get_xianshi_data()
-    while True:
-        xianshi_id = str(random.randint(100000, 9999999999))
-        if xianshi_id not in data["system_items"] and xianshi_id not in data["user_items"]:
-            return xianshi_id
-
-FANGSHI_DATA_PATH = TRADE_DATA_PATH / "fangshi_data"
-
-# 确保目录存在
-FANGSHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-def get_fangshi_data(group_id):
-    """获取坊市数据"""
-    filepath = FANGSHI_DATA_PATH / f"fangshi_{group_id}.json"
+def get_xianshi_type_data(item_type):
+    """获取指定类型的仙肆数据"""
+    if item_type not in XIANSHI_TYPES:
+        return None
+    
+    type_file = XIANSHI_DATA_PATH / f"仙肆_{item_type}.json"
     try:
-        if filepath.exists():
-            with open(filepath, "r", encoding="utf-8") as f:
+        if type_file.exists():
+            with open(type_file, "r", encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
-        logger.error(f"读取坊市数据失败: {e}")
-    return {"system_items": {}, "user_items": {}, "next_system_id": 1}
+        logger.error(f"读取仙肆{item_type}数据失败: {e}")
+    return {}
 
-def save_fangshi_data(group_id, data):
-    """保存坊市数据"""
-    filepath = FANGSHI_DATA_PATH / f"fangshi_{group_id}.json"
+def save_xianshi_type_data(item_type, data):
+    """保存指定类型的仙肆数据"""
+    if item_type not in XIANSHI_TYPES:
+        return False
+    
+    type_file = XIANSHI_DATA_PATH / f"仙肆_{item_type}.json"
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
+        with open(type_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         return True
     except Exception as e:
-        logger.error(f"保存坊市数据失败: {e}")
+        logger.error(f"保存仙肆{item_type}数据失败: {e}")
+        return False
+
+def get_item_type_by_id(goods_id):
+    """根据物品ID获取类型"""
+    # 这里需要接入您的物品系统
+    # 示例: return items.get_data_by_item_id(goods_id)['type']
+    return items.get_data_by_item_id(goods_id)['type']
+
+def generate_unique_id(existing_ids):
+    """生成6-10位随机不重复ID"""
+    while True:
+        # 使用时间戳+随机数确保唯一性
+        timestamp_part = int(time.time() % 10000)
+        random_part = random.randint(100, 99999)
+        new_id = int(f"{timestamp_part}{random_part}") % 10**10  # 确保不超过10位
+        
+        # 限制在6-10位
+        new_id = max(100000, min(new_id, 9999999999))
+        
+        # 检查是否已存在
+        if str(new_id) not in existing_ids:
+            return str(new_id)
+
+def generate_fangshi_id(existing_ids):
+    """生成6-10位随机不重复坊市ID"""
+    while True:
+        # 组合时间戳和随机数确保唯一性
+        timestamp_part = int(time.time() % 10000)  # 取时间戳后4位
+        random_part = random.randint(100, 99999)   # 5位随机数
+        new_id = int(f"{timestamp_part}{random_part}") % 10**10  # 确保不超过10位
+        
+        # 限制在6-10位范围
+        new_id = max(100000, min(new_id, 9999999999))
+        
+        # 检查是否已存在
+        if str(new_id) not in existing_ids:
+            return str(new_id)
+
+def get_fangshi_index(group_id):
+    """获取坊市索引数据"""
+    index_file = FANGSHI_DATA_PATH / f"坊市索引_{group_id}.json"
+    try:
+        if index_file.exists():
+            with open(index_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"读取坊市索引失败: {e}")
+    return {"next_id": 1, "items": {}}
+
+def save_fangshi_index(group_id, data):
+    """保存坊市索引"""
+    index_file = FANGSHI_DATA_PATH / f"坊市索引_{group_id}.json"
+    try:
+        with open(index_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"保存坊市索引失败: {e}")
+        return False
+
+def get_fangshi_type_data(group_id, item_type):
+    """获取指定类型的坊市数据"""
+    if item_type not in FANGSHI_TYPES:
+        return None
+    
+    type_file = FANGSHI_DATA_PATH / f"坊市_{group_id}_{item_type}.json"
+    try:
+        if type_file.exists():
+            with open(type_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"读取坊市{item_type}数据失败: {e}")
+    return {}
+
+def save_fangshi_type_data(group_id, item_type, data):
+    """保存指定类型的坊市数据"""
+    if item_type not in FANGSHI_TYPES:
+        return False
+    
+    type_file = FANGSHI_DATA_PATH / f"坊市_{group_id}_{item_type}.json"
+    try:
+        with open(type_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"保存坊市{item_type}数据失败: {e}")
         return False
 
 def get_xianshi_min_price(goods_name):
     """获取仙肆中该物品的最低价格"""
-    data = get_xianshi_data()
     min_price = None
     
-    # 检查系统物品
-    for item in data["system_items"].values():
-        if item["goods_name"] == goods_name:
-            if min_price is None or item["price"] < min_price:
-                min_price = item["price"]
-    
-    # 检查用户物品
-    for item in data["user_items"].values():
-        if item["goods_name"] == goods_name:
-            if min_price is None or item["price"] < min_price:
-                min_price = item["price"]
+    # 遍历所有类型
+    for item_type in ["药材", "装备", "丹药", "技能"]:
+        type_file = XIANSHI_DATA_PATH / f"仙肆_{item_type}.json"
+        if not type_file.exists():
+            continue
+        
+        with open(type_file, "r", encoding="utf-8") as f:
+            type_items = json.load(f)
+        
+        for item in type_items.values():
+            if item["name"] == goods_name:
+                if min_price is None or item["price"] < min_price:
+                    min_price = item["price"]
     
     return min_price
     
@@ -498,8 +582,8 @@ def get_xianshi_min_price(goods_name):
 async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
@@ -507,33 +591,22 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     args = args.extract_plain_text().split()
     
     if len(args) < 2:
-        msg = "请输入正确指令！例如：仙肆上架 物品 价格 [数量]"
+        msg = "请输入正确指令！格式：仙肆上架 物品名称 价格 [数量]"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
     goods_name = args[0]
     try:
-        price = max(int(args[1]), MIN_PRICE)  # 确保不低于最低价格
+        price = max(int(args[1]), MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
+        quantity = min(quantity, MAX_QUANTITY)
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    MAX_QUANTITY = 10  # 最大上架数量
-
-    if quantity > MAX_QUANTITY:
-        msg = f"单次上架数量不能超过{MAX_QUANTITY}个！"
-        await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
-        
-    # 检查背包是否有足够物品
+    # 检查背包是否有该物品（需要接入您的背包系统）
     back_msg = sql_message.get_back_msg(user_id)
-    if not back_msg:
-        msg = "道友的背包空空如也！"
-        await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
-    
     goods_info = None
     for item in back_msg:
         if item['goods_name'] == goods_name:
@@ -545,12 +618,27 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    if quantity > goods_info['goods_num'] - goods_info['bind_num']:
-        msg = f"道友的 {goods_name} 数量不足（需要 {quantity} 个，拥有 {goods_info['goods_num']} 个，其中 {goods_info['bind_num']} 个是绑定的）"
+    # 检查绑定物品
+    if goods_info['bind_num'] >= goods_info['goods_num']:
+        msg = f"该物品是绑定物品，无法上架！"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    # 计算手续费（按总价计算一次）
+    # 检查可上架数量
+    available_num = goods_info['goods_num'] - goods_info['bind_num']
+    if quantity > available_num:
+        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），最多可上架{available_num}个"
+        await handle_send(bot, event, msg)
+        await xian_shop_add.finish()
+    
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_info['goods_id'])
+    if goods_type not in XIANSHI_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(XIANSHI_TYPES)}"
+        await handle_send(bot, event, msg)
+        await xian_shop_add.finish()
+    
+    # 计算手续费
     total_price = price * quantity
     if total_price <= 5000000:
         fee_rate = 0.1
@@ -561,51 +649,65 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     else:
         fee_rate = 0.3
     
-    fee = int(total_price * fee_rate)
-    if user_info['stone'] < fee:
-        msg = f"道友的灵石不足支付手续费（需要 {fee} 枚灵石）"
+    # 计算手续费（按单个物品计算）
+    single_fee = int(price * fee_rate)
+    total_fee = single_fee * quantity
+    
+    if user_info['stone'] < total_fee:
+        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    # 扣除手续费和物品
-    sql_message.update_ls(user_id, fee, 2)
-    sql_message.update_back_j(user_id, goods_info['goods_id'], num=quantity)
+    # 扣除总手续费
+    sql_message.update_ls(user_id, total_fee, 2)
     
-    # 保存到仙肆数据（每个物品单独存储）
-    data = get_xianshi_data()
+    # 为每个物品创建独立条目
     success_count = 0
-    
     for _ in range(quantity):
-        xianshi_id = generate_xianshi_id()
-        data["user_items"][xianshi_id] = {
+        # 生成唯一ID
+        index_data = get_xianshi_index()
+        existing_ids = set(index_data["items"].keys())
+        xianshi_id = generate_unique_id(existing_ids)
+        
+        # 添加到索引
+        index_data["items"][xianshi_id] = {
+            "type": goods_type,
+            "user_id": user_id
+        }
+        save_xianshi_index(index_data)
+        
+        # 添加到类型文件，数量固定为1
+        type_items = get_xianshi_type_data(goods_type)
+        type_items[xianshi_id] = {
             "id": xianshi_id,
             "goods_id": goods_info['goods_id'],
-            "goods_name": goods_name,
-            "goods_type": goods_info['goods_type'],
+            "name": goods_name,
+            "type": goods_type,
             "price": price,
-            "quantity": 1,
+            "quantity": 1,  # 固定为1
             "user_id": user_id,
             "user_name": user_info['user_name'],
             "desc": get_item_msg(goods_info['goods_id'])
         }
+        save_xianshi_type_data(goods_type, type_items)
+        
+        # 从背包扣除1个物品
+        sql_message.update_back_j(user_id, goods_info['goods_id'], num=1)
         success_count += 1
     
-    save_xianshi_data(data)
+    msg = f"成功上架 {goods_name} x{success_count} 到仙肆！\n"
+    msg += f"单价: {number_to(price)} 灵石\n"
+    msg += f"总手续费: {number_to(total_fee)} 灵石"
     
-    msg = f"成功上架 {goods_name} {success_count} 件到仙肆！\n单价: {price} 灵石\n总价: {total_price} 灵石\n手续费: {fee} 灵石"
     await handle_send(bot, event, msg)
     await xian_shop_add.finish()
 
 @xian_shop_remove.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """仙肆下架
-    用法: 
-    1. 仙肆下架 物品名 - 下架该物品价格最低的一个
-    2. 仙肆下架 物品名 数量 - 按价格从低到高下架指定数量(最多10个)
-    """
+    """仙肆下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await xian_shop_remove.finish()
     
@@ -613,98 +715,72 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     args = args.extract_plain_text().split()
     
     if not args:
-        msg = "请输入要下架的物品名称！\n例如：仙肆下架 生骨丹 或 仙肆下架 生骨丹 3"
+        msg = "请输入要下架的物品名称！"
         await handle_send(bot, event, msg)
         await xian_shop_remove.finish()
     
     goods_name = args[0]
-    quantity = 1  # 默认下架1个
+    quantity = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
     
-    # 解析数量参数
-    if len(args) > 1:
-        try:
-            quantity = min(int(args[1]), 10)  # 限制最多下架10个
-            if quantity <= 0:
-                msg = "下架数量必须大于0！"
-                await handle_send(bot, event, msg)
-                await xian_shop_remove.finish()
-        except ValueError:
-            msg = "请输入有效的数量！"
-            await handle_send(bot, event, msg)
-            await xian_shop_remove.finish()
+    # 获取所有类型中该用户上架的该物品
+    user_items = []
+    index_data = get_xianshi_index()
     
-    data = get_xianshi_data()
-    removed_items = []
-    remaining_quantity = quantity
-    
-    # 获取用户所有该物品的上架记录，按价格排序
-    user_items = [
-        item for item in data["user_items"].values() 
-        if str(item["user_id"]) == str(user_id) 
-        and item["goods_name"] == goods_name
-    ]
-    user_items.sort(key=lambda x: x["price"])  # 按价格从低到高排序
+    for xianshi_id, item_info in index_data["items"].items():
+        if str(item_info["user_id"]) == str(user_id):
+            type_items = get_xianshi_type_data(item_info["type"])
+            if xianshi_id in type_items and type_items[xianshi_id]["name"] == goods_name:
+                user_items.append({
+                    "id": xianshi_id,
+                    "price": type_items[xianshi_id]["price"],
+                    "type": item_info["type"]
+                })
     
     if not user_items:
-        msg = f"未找到您上架的 {goods_name} 物品！"
+        msg = f"您在仙肆中没有上架 {goods_name}！"
         await handle_send(bot, event, msg)
         await xian_shop_remove.finish()
     
-    # 计算总可用数量
-    total_available = sum(item["quantity"] for item in user_items)
-    if quantity > total_available:
-        msg = f"您只有 {total_available} 个 {goods_name} 在仙肆中，无法下架 {quantity} 个！"
-        await handle_send(bot, event, msg)
-        await xian_shop_remove.finish()
+    # 按价格从低到高排序
+    user_items.sort(key=lambda x: x["price"])
     
-    # 开始下架
-    for item in user_items:
-        if remaining_quantity <= 0:
-            break
-            
-        item_id = item["id"]
-        item_quantity = item["quantity"]
-        
-        # 计算本次能下架的数量
-        remove_num = min(item_quantity, remaining_quantity)
-        
-        # 退回物品
-        sql_message.send_back(
-            user_id, 
-            item["goods_id"], 
-            item["goods_name"], 
-            item["goods_type"], 
-            remove_num
-        )
-        
-        # 记录下架信息
-        removed_items.append({
-            "name": item["goods_name"],
-            "price": item["price"],
-            "quantity": remove_num
-        })
-        
-        # 更新物品数量或删除物品
-        if item_quantity == remove_num:
-            del data["user_items"][item_id]
-        else:
-            data["user_items"][item_id]["quantity"] -= remove_num
-        
-        remaining_quantity -= remove_num
-    
-    # 保存数据
-    save_xianshi_data(data)
-    
-    # 构造返回消息
-    if removed_items:
-        msg = "成功下架以下物品：\n"
-        for item in removed_items:
-            msg += f"{item['name']} {item['price']}灵石 x{item['quantity']}\n"
-        
-        if remaining_quantity > 0:
-            msg += f"\n注意：实际下架了 {quantity - remaining_quantity} 个，未达到请求数量 {quantity} 个"
+    # 确定要下架的数量
+    if quantity is None:
+        # 没指定数量则下架最低价的1个
+        items_to_remove = [user_items[0]]
     else:
-        msg = "没有物品被下架！"
+        # 指定数量则下架价格从低到高的指定数量
+        items_to_remove = user_items[:quantity]
+    
+    # 执行下架操作
+    removed_count = 0
+    for item in items_to_remove:
+        # 从类型文件中移除
+        type_items = get_xianshi_type_data(item["type"])
+        if item["id"] in type_items:
+            # 退回物品到背包
+            item_data = type_items[item["id"]]
+            sql_message.send_back(
+                user_id,
+                item_data["goods_id"],
+                goods_name,
+                item["type"],
+                1  # 每个条目数量固定为1
+            )
+            
+            # 从系统中移除
+            del type_items[item["id"]]
+            save_xianshi_type_data(item["type"], type_items)
+            
+            # 从索引中移除
+            del index_data["items"][item["id"]]
+            save_xianshi_index(index_data)
+            
+            removed_count += 1
+    
+    msg = f"成功下架 {goods_name} x{removed_count}！已退回背包"
+    if len(user_items) > removed_count:
+        msg += f"\n(仙肆中仍有 {len(user_items)-removed_count} 个 {goods_name})"
     
     await handle_send(bot, event, msg)
     await xian_shop_remove.finish()
@@ -713,98 +789,103 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆查看"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await xiuxian_shop_view.finish()
     
     # 解析参数
     args_str = args.extract_plain_text().strip()
-    parts = args_str.split()
     
+    # 情况1：无参数 - 显示可用类型
+    if not args_str:
+        msg = "请指定查看类型：【药材、装备、丹药、技能】"
+        await handle_send(bot, event, msg)
+        await xiuxian_shop_view.finish()
+    
+    # 解析类型和页码
     item_type = None
     current_page = 1
     
-    if parts:
-        # 尝试解析类型和页码
-        for t in ["装备", "技能", "丹药", "药材"]:
-            if parts[0].startswith(t):
-                item_type = t
-                if len(parts[0]) > len(t) and parts[0][len(t):].isdigit():
-                    current_page = int(parts[0][len(t):])
-                elif len(parts) > 1 and parts[1].isdigit():
-                    current_page = int(parts[1])
-                break
+    # 检查是否直接拼接类型和页码（无空格）
+    for t in XIANSHI_TYPES:
+        if args_str.startswith(t):
+            item_type = t
+            remaining = args_str[len(t):].strip()
+            if remaining.isdigit():
+                current_page = int(remaining)
+            break
     
-    data = get_xianshi_data()
-    items_list = []
-    for item in data["system_items"].values():
-        if not item_type or item["goods_type"] == item_type:
-            items_list.append({
-                "id": item["id"],
-                "name": item["goods_name"],
-                "price": item["price"],
-                "quantity": item.get("quantity", "无限"),
-                "is_system": True
-            })
-
-    # 添加用户物品（去重，只保留最低价格）
-    user_items_map = {}
-    for item in data["user_items"].values():
-        if not item_type or item["goods_type"] == item_type:
-            key = item["goods_name"]
-            if key not in user_items_map or item["price"] < user_items_map[key]["price"]:
-                user_items_map[key] = {
-                    "id": item["id"],
-                    "name": item["goods_name"],
-                    "price": item["price"],
-                    "quantity": item["quantity"],
-                    "is_system": False
-                }
-
-    # 合并系统物品和用户物品
-    items_list.extend(user_items_map.values())
-
-    # 检查分类下是否有物品
-    if not items_list:
-        if item_type:
-            msg = f"仙肆中暂无{item_type}类物品！"
-        else:
-            msg = "仙肆目前空空如也！"
+    # 情况2：有空格分隔
+    if item_type is None:
+        parts = args_str.split(maxsplit=1)
+        if parts[0] in XIANSHI_TYPES:
+            item_type = parts[0]
+            if len(parts) > 1 and parts[1].isdigit():
+                current_page = int(parts[1])
+    
+    # 检查类型有效性
+    if item_type not in XIANSHI_TYPES:
+        msg = f"无效类型！可用类型：【{', '.join(XIANSHI_TYPES)}】"
         await handle_send(bot, event, msg)
         await xiuxian_shop_view.finish()
+    
+    # 读取对应类型的物品数据
+    type_items = get_xianshi_type_data(item_type)
+    if not type_items:
+        msg = f"仙肆中暂无{item_type}类物品！"
+        await handle_send(bot, event, msg)
+        await xiuxian_shop_view.finish()
+    
+    # 处理物品显示逻辑
+    system_items = []  # 存储系统物品
+    user_items = {}    # 存储用户物品（按名称分组，只保留最低价）
+    
+    for item_id, item in type_items.items():
+        if item['user_id'] == 0:  # 系统物品
+            system_items.append(item)
+        else:  # 用户物品
+            item_name = item['name']
+            # 如果还没有记录或者当前价格更低，更新记录
+            if item_name not in user_items or item['price'] < user_items[item_name]['price']:
+                user_items[item_name] = item
+    
+    # 合并系统物品和用户物品，并按价格排序
+    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['price'])
     
     # 分页处理
     per_page = 10
     total_pages = (len(items_list) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
+    
+    if current_page > total_pages:
+        msg = f"页码超出范围，最多{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await xiuxian_shop_view.finish()
+    
+    # 构建消息
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
     paged_items = items_list[start_idx:end_idx]
-    
-    # 构建消息 - 修改显示格式
-    msg_list = []
-    if item_type:
-        msg_list.append(f"☆------仙肆 {item_type} 物品------☆")
-    else:
-        msg_list.append("☆------仙肆所有物品------☆")
-    
+
+    # 构建消息
+    msg_list = [f"☆------仙肆 {item_type}------☆"]
     for item in paged_items:
-        if item["is_system"]:
-            msg = f"{item['name']} {item['price']}灵石 ID:{item['id']}"
-            if item["quantity"] != "无限":  # 系统物品显示数量或"无限"
-                msg += f" 数量:{item['quantity']}"
-            else:
-                msg += " 数量:无限"
-        else:
-            msg = f"{item['name']} {item['price']}灵石 ID:{item['id']}"
-            if item["quantity"] > 1:  # 用户物品数量大于1时显示
-                msg += f" 数量:{item['quantity']}"
+        price_str = number_to(item['price'])
+        msg = f"\n{item['name']} {price_str}灵石 \nID:{item['id']}"
+        
+        # 处理数量显示
+        if isinstance(item['quantity'], str) and item['quantity'] == "无限":
+            msg += f" 不限量"
+        elif item['quantity'] > 1:
+            msg += f" 限售:{item['quantity']}"
+        
         msg_list.append(msg)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     if total_pages > 1:
-        msg_list.append(f"输入 仙肆查看{item_type}{current_page + 1} 查看下一页")
+        next_page_cmd = f"仙肆查看{item_type}{current_page + 1}"
+        msg_list.append(f"输入 {next_page_cmd} 查看下一页")
     
     await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list)
     await xiuxian_shop_view.finish()
@@ -813,8 +894,8 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """我的仙肆"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await my_xian_shop.finish()
     
@@ -824,58 +905,59 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     except:
         current_page = 1
     
-    data = get_xianshi_data()
+    user_id = user_info['user_id']
+    
+    # 从索引获取用户所有物品
+    index_data = get_xianshi_index()
     user_items = []
     
-    # 获取用户所有上架物品
-    for item in data["user_items"].values():
-        if str(item["user_id"]) == str(user_info["user_id"]):
-            user_items.append(item)
+    for xianshi_id, item_info in index_data["items"].items():
+        if str(item_info["user_id"]) == str(user_id):
+            # 从对应类型文件读取详细信息
+            type_items = get_xianshi_type_data(item_info["type"])
+            if xianshi_id in type_items:
+                user_items.append(type_items[xianshi_id])
     
-    # 按物品名称和价格分组
-    item_groups = {}
-    for item in user_items:
-        key = (item["goods_name"], item["price"])
-        if key not in item_groups:
-            item_groups[key] = 0
-        item_groups[key] += item["quantity"]
-        
-    # 检查用户是否有上架物品
+    # 按价格排序
+    user_items.sort(key=lambda x: x['price'])
+    
+    # 检查是否有上架物品
     if not user_items:
         msg = "您在仙肆中没有上架任何物品！"
         await handle_send(bot, event, msg)
         await my_xian_shop.finish()
-
-    # 转换为消息列表
-    msg_list = []
-    for (name, price), quantity in item_groups.items():
-        msg = f"{name} {price}灵石"
-        if quantity > 1:
-            msg += f" x{quantity}"
-        msg_list.append(msg)
     
     # 分页处理
     per_page = 10
-    total_pages = (len(msg_list) + per_page - 1) // per_page
+    total_pages = (len(user_items) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
+    
+    # 构建消息
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
-    paged_msgs = msg_list[start_idx:end_idx]
+    paged_items = user_items[start_idx:end_idx]
     
-    # 构建最终消息
-    final_msg = [f"☆------{user_info['user_name']}的仙肆物品------☆"]
-    final_msg.extend(paged_msgs)
-    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    msg_list = [f"☆------{user_info['user_name']}的仙肆物品------☆"]
+    for item in paged_items:
+        price_str = number_to(item['price'])
+        msg = f"{item['name']} {price_str}灵石"
+        if item['quantity'] > 1:
+            msg += f" x{item['quantity']}"
+        msg_list.append(msg)
     
-    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, final_msg)
+    msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    if total_pages > 1:
+        msg_list.append(f"输入 我的仙肆 {current_page + 1} 查看下一页")
+    
+    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list)
     await my_xian_shop.finish()
 
 @xian_buy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await xian_buy.finish()
     
@@ -890,79 +972,80 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     xianshi_id = args[0]
     quantity = int(args[1]) if len(args) > 1 else 1
     
-    # 获取仙肆数据
-    data = get_xianshi_data()
-    item = None
-    
-    # 查找物品
-    if xianshi_id in data["system_items"]:
-        item = data["system_items"][xianshi_id]
-    elif xianshi_id in data["user_items"]:
-        item = data["user_items"][xianshi_id]
-    
-    if not item:
+    # 从索引查找物品
+    index_data = get_xianshi_index()
+    if xianshi_id not in index_data["items"]:
         msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
         await handle_send(bot, event, msg)
         await xian_buy.finish()
     
+    item_info = index_data["items"][xianshi_id]
+    
     # 检查是否是自己的物品
-    if "user_id" in item and str(item["user_id"]) == str(user_id):
+    if str(item_info["user_id"]) == str(user_id):
         msg = "不能购买自己上架的物品！"
         await handle_send(bot, event, msg)
         await xian_buy.finish()
     
-    # 检查库存
-    if "quantity" in item:
-        if isinstance(item["quantity"], str) and item["quantity"] == "无限":
-            pass  # 无限数量无需检查
-        elif item["quantity"] < quantity:
-            msg = f"库存不足，只有 {item['quantity']} 个可用！"
+    # 从类型文件获取详细信息
+    type_items = get_xianshi_type_data(item_info["type"])
+    if xianshi_id not in type_items:
+        msg = "物品数据异常，请联系管理员！"
+        await handle_send(bot, event, msg)
+        await xian_buy.finish()
+    
+    item = type_items[xianshi_id]
+    seller_name = "系统" if item["user_id"] == 0 else item["user_name"]
+    
+    # 检查库存（系统无限物品跳过检查）
+    if not (isinstance(item["quantity"], str) and item["quantity"] == "无限"):
+        if item["quantity"] < quantity:
+            msg = f"库存不足！只有 {item['quantity']} 个可用"
             await handle_send(bot, event, msg)
             await xian_buy.finish()
     
+    # 计算总价
     total_price = item["price"] * quantity
     
     # 检查灵石是否足够
     if user_info["stone"] < total_price:
-        msg = f"灵石不足，需要 {total_price} 枚灵石！"
+        msg = f"灵石不足！需要 {number_to(total_price)} 灵石，当前拥有 {number_to(user_info['stone'])} 灵石"
         await handle_send(bot, event, msg)
         await xian_buy.finish()
     
     try:
-        # 扣除灵石
+        # 扣除买家灵石
         sql_message.update_ls(user_id, total_price, 2)
         
-        # 如果是用户物品，给卖家灵石
-        if "user_id" in item:
-            seller_id = item["user_id"]
+        # 给卖家灵石（如果不是系统物品）
+        if item_info["user_id"] != 0:
+            seller_id = item_info["user_id"]
             sql_message.update_ls(seller_id, total_price, 1)
         
         # 给买家物品
         sql_message.send_back(
             user_id,
             item["goods_id"],
-            item["goods_name"],
-            item["goods_type"],
+            item["name"],
+            item["type"],
             quantity
         )
         
-        # 更新库存或删除物品
-        if "quantity" in item:
-            if isinstance(item["quantity"], str) and item["quantity"] == "无限":
-                pass  # 无限数量无需处理
+        # 更新库存（系统无限物品不更新）
+        if not (isinstance(item["quantity"], str) and item["quantity"] == "无限"):
+            item["quantity"] -= quantity
+            if item["quantity"] <= 0:
+                # 从系统中移除
+                del index_data["items"][xianshi_id]
+                del type_items[xianshi_id]
             else:
-                item["quantity"] -= quantity
-                if item["quantity"] <= 0:
-                    if xianshi_id in data["system_items"]:
-                        del data["system_items"][xianshi_id]
-                    else:
-                        del data["user_items"][xianshi_id]
+                type_items[xianshi_id] = item
+            
+            # 保存更改
+            save_xianshi_index(index_data)
+            save_xianshi_type_data(item_info["type"], type_items)
         
-        # 保存数据
-        if not save_xianshi_data(data):
-            raise Exception("保存仙肆数据失败")
-        
-        msg = f"成功购买 {item['goods_name']} x{quantity}！\n花费: {total_price} 灵石"
+        msg = f"成功购买 {item['name']} x{quantity}（来自{seller_name}）！花费 {number_to(total_price)} 灵石"
         await handle_send(bot, event, msg)
     except Exception as e:
         logger.error(f"仙肆购买出错: {e}")
@@ -978,14 +1061,22 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     args = args.extract_plain_text().split()
     
     if len(args) < 1:
-        msg = "请输入正确指令！例如：系统仙肆上架 物品 [价格] [数量]"
+        msg = "请输入正确指令！格式：系统仙肆上架 物品名称 [价格] [数量]"
         await handle_send(bot, event, msg)
         await xian_shop_added_by_admin.finish()
     
     goods_name = args[0]
-    goods_id = None
+    try:
+        price = int(args[1]) if len(args) > 1 else MIN_PRICE
+        price = max(price, MIN_PRICE)
+        quantity = int(args[2]) if len(args) > 2 else 0  # 0表示无限
+    except ValueError:
+        msg = "请输入有效的价格和数量！"
+        await handle_send(bot, event, msg)
+        await xian_shop_added_by_admin.finish()
     
     # 查找物品ID
+    goods_id = None
     for k, v in items.items.items():
         if goods_name == v['name']:
             goods_id = k
@@ -996,40 +1087,47 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
         await handle_send(bot, event, msg)
         await xian_shop_added_by_admin.finish()
     
-    # 解析价格和数量
-    try:
-        price = int(args[1]) if len(args) > 1 else MIN_PRICE
-        quantity = int(args[2]) if len(args) > 2 else 0  # 0表示无限
-    except ValueError:
-        msg = "请输入有效的价格和数量！"
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_id)
+    if goods_type not in XIANSHI_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(XIANSHI_TYPES)}"
         await handle_send(bot, event, msg)
         await xian_shop_added_by_admin.finish()
     
-    price = max(price, MIN_PRICE)
+    # 添加到仙肆系统
+    # 获取索引数据
+    index_data = get_xianshi_index()
+    xianshi_id = str(index_data["next_id"])  # 使用顺序ID
     
-    # 添加到系统仙肆
-    data = get_xianshi_data()
-    system_id = str(data["next_system_id"])
-    data["next_system_id"] += 1
+    # 更新下一个ID
+    index_data["next_id"] += 1
     
-    data["system_items"][system_id] = {
-        "id": system_id,
+    # 添加到索引
+    index_data["items"][xianshi_id] = {
+        "type": goods_type,
+        "user_id": 0  # 0表示系统物品
+    }
+    save_xianshi_index(index_data)
+    
+    # 添加到类型文件
+    type_items = get_xianshi_type_data(goods_type)
+    type_items[xianshi_id] = {
+        "id": xianshi_id,
         "goods_id": goods_id,
-        "goods_name": goods_name,
-        "goods_type": items.get_data_by_item_id(goods_id)["type"],
+        "name": goods_name,
+        "type": goods_type,
         "price": price,
-        "quantity": quantity if quantity > 0 else "无限",
+        "quantity": "无限" if quantity == 0 else quantity,  # 0表示无限
+        "user_id": 0,
+        "user_name": "系统",
         "desc": get_item_msg(goods_id)
     }
+    save_xianshi_type_data(goods_type, type_items)
     
-    save_xianshi_data(data)
-    
-    msg = f"系统成功上架 {goods_name} 到仙肆！\n价格: {price} 灵石\n"
-    if quantity > 0:
-        msg += f"数量: {quantity}"
-    else:
-        msg += "数量: 无限"
-    msg += f"\n仙肆ID: {system_id}"
+    msg = f"系统成功上架 {goods_name} 到仙肆！\n"
+    msg += f"价格: {number_to(price)} 灵石\n"
+    msg += f"数量: {'无限' if quantity == 0 else quantity}\n"
+    msg += f"仙肆ID: {xianshi_id}"
     
     await handle_send(bot, event, msg)
     await xian_shop_added_by_admin.finish()
@@ -1045,72 +1143,65 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
         await handle_send(bot, event, msg)
         await xian_shop_remove_by_admin.finish()
     
-    data = get_xianshi_data()
+    index_data = get_xianshi_index()
     removed_items = []
     
     if arg.isdigit():  # 按ID下架
         xianshi_id = arg
-        if xianshi_id in data["system_items"]:
-            removed_items.append(data["system_items"][xianshi_id])
-            del data["system_items"][xianshi_id]
-        elif xianshi_id in data["user_items"]:
-            item = data["user_items"][xianshi_id]
-            # 退回给玩家
-            sql_message.send_back(
-                item["user_id"],
-                item["goods_id"],
-                item["goods_name"],
-                item["goods_type"],
-                item["quantity"]
-            )
-            removed_items.append(item)
-            del data["user_items"][xianshi_id]
+        if xianshi_id in index_data["items"]:
+            item_info = index_data["items"][xianshi_id]
+            type_items = get_xianshi_type_data(item_info["type"])
+            if xianshi_id in type_items:
+                removed_items.append(type_items[xianshi_id])
+                
+                # 如果是用户物品，退回
+                if item_info["user_id"] != 0:
+                    sql_message.send_back(
+                        item_info["user_id"],
+                        type_items[xianshi_id]["goods_id"],
+                        type_items[xianshi_id]["name"],
+                        item_info["type"],
+                        type_items[xianshi_id]["quantity"]
+                    )
+                
+                # 从系统中移除
+                del index_data["items"][xianshi_id]
+                del type_items[xianshi_id]
+                save_xianshi_index(index_data)
+                save_xianshi_type_data(item_info["type"], type_items)
         else:
             msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
             await handle_send(bot, event, msg)
             await xian_shop_remove_by_admin.finish()
     else:  # 按名称下架
         goods_name = arg
-        # 先找系统物品
-        system_items = [item for item in data["system_items"].values() 
-                       if item["goods_name"] == goods_name]
-        
-        if system_items:
-            for item in system_items:
-                removed_items.append(item)
-                del data["system_items"][item["id"]]
-        else:
-            # 找用户物品（按价格排序）
-            user_items = [item for item in data["user_items"].values() 
-                         if item["goods_name"] == goods_name]
-            user_items.sort(key=lambda x: x["price"])
-            
-            if user_items:
-                item = user_items[0]
-                # 退回给玩家
-                sql_message.send_back(
-                    item["user_id"],
-                    item["goods_id"],
-                    item["goods_name"],
-                    item["goods_type"],
-                    item["quantity"]
-                )
-                removed_items.append(item)
-                del data["user_items"][item["id"]]
-            else:
-                msg = f"未找到名称为 {goods_name} 的物品！"
-                await handle_send(bot, event, msg)
-                await xian_shop_remove_by_admin.finish()
-    
-    save_xianshi_data(data)
+        # 查找所有匹配的物品
+        for xianshi_id, item_info in index_data["items"].items():
+            type_items = get_xianshi_type_data(item_info["type"])
+            if xianshi_id in type_items and type_items[xianshi_id]["name"] == goods_name:
+                removed_items.append(type_items[xianshi_id])
+                
+                # 如果是用户物品，退回
+                if item_info["user_id"] != 0:
+                    sql_message.send_back(
+                        item_info["user_id"],
+                        type_items[xianshi_id]["goods_id"],
+                        goods_name,
+                        item_info["type"],
+                        type_items[xianshi_id]["quantity"]
+                    )
+                
+                # 从系统中移除
+                del index_data["items"][xianshi_id]
+                del type_items[xianshi_id]
+                save_xianshi_index(index_data)
+                save_xianshi_type_data(item_info["type"], type_items)
     
     if removed_items:
         msg = "成功下架以下物品：\n"
         for item in removed_items:
-            if "user_id" in item:
-                msg += f"用户物品: {item['goods_name']} x{item['quantity']} (价格: {item['price']})\n"
-            else:
-                msg += f"系统物品: {item['goods_name']} x{item.get('quantity', '无限')}\n"
+            owner = "系统" if item["user_id"] == 0 else item["user_name"]
+            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (来自:{owner})\n"
     else:
         msg = "没有物品被下架！"
     
@@ -1121,8 +1212,8 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
 async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """坊市上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
@@ -1131,7 +1222,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     args = args.extract_plain_text().split()
     
     if len(args) < 2:
-        msg = "请输入正确指令！例如：坊市上架 物品 价格 [数量]"
+        msg = "请输入正确指令！格式：坊市上架 物品名称 价格 [数量]"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
@@ -1144,20 +1235,24 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
-    MAX_QUANTITY = 10  # 最大上架数量
-
-    if quantity > MAX_QUANTITY:
-        msg = f"单次上架数量不能超过{MAX_QUANTITY}个！"
-        await handle_send(bot, event, msg)
-        await shop_added.finish()
-        
-    # 检查背包是否有足够物品
-    back_msg = sql_message.get_back_msg(user_id)
-    if not back_msg:
-        msg = "道友的背包空空如也！"
+    # 原有价格限制逻辑
+    if price < 500000:  # 最低50万灵石
+        msg = "坊市最低价格为50万灵石！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
+    # 检查仙肆最低价
+    xianshi_min_price = get_xianshi_min_price(goods_name)
+    if xianshi_min_price is not None:
+        min_price = max(500000, xianshi_min_price // 2)
+        max_price = xianshi_min_price * 2
+        if price < min_price or price > max_price:
+            msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
+            await handle_send(bot, event, msg)
+            await shop_added.finish()
+    
+    # 检查背包物品
+    back_msg = sql_message.get_back_msg(user_id)
     goods_info = None
     for item in back_msg:
         if item['goods_name'] == goods_name:
@@ -1169,28 +1264,21 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
-    if quantity > goods_info['goods_num'] - goods_info['bind_num']:
-        msg = f"道友的 {goods_name} 数量不足（需要 {quantity} 个，拥有 {goods_info['goods_num']} 个，其中 {goods_info['bind_num']} 个是绑定的）"
+    # 检查可上架数量
+    available_num = goods_info['goods_num'] - goods_info['bind_num']
+    if quantity > available_num:
+        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），最多可上架{available_num}个"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
-    # 获取仙肆最低价格并设置价格限制
-    xianshi_min_price = get_xianshi_min_price(goods_name)
-    if xianshi_min_price is not None:
-        min_price = max(MIN_PRICE, xianshi_min_price // 2)
-        max_price = xianshi_min_price * 2
-        if price < min_price or price > max_price:
-            msg = f"该物品在仙肆的最低价格为 {xianshi_min_price}，坊市价格限制为 {min_price}-{max_price} 灵石！"
-            await handle_send(bot, event, msg)
-            await shop_added.finish()
-    else:
-        min_price = MIN_PRICE
-        if price < min_price:
-            msg = f"坊市最低价格为 {min_price} 灵石！"
-            await handle_send(bot, event, msg)
-            await shop_added.finish()
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_info['goods_id'])
+    if goods_type not in ["药材", "装备", "丹药", "技能"]:
+        msg = "只能上架药材、装备、丹药或技能类物品！"
+        await handle_send(bot, event, msg)
+        await shop_added.finish()
     
-    # 计算手续费（按总价计算一次）
+    # 计算手续费
     total_price = price * quantity
     if total_price <= 5000000:
         fee_rate = 0.1
@@ -1203,7 +1291,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     
     fee = int(total_price * fee_rate)
     if user_info['stone'] < fee:
-        msg = f"道友的灵石不足支付手续费（需要 {fee} 枚灵石）"
+        msg = f"灵石不足支付手续费！需要{fee}灵石，当前拥有{user_info['stone']}灵石"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
@@ -1211,41 +1299,48 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     sql_message.update_ls(user_id, fee, 2)
     sql_message.update_back_j(user_id, goods_info['goods_id'], num=quantity)
     
-    # 添加到坊市数据（每个物品单独存储）
-    data = get_fangshi_data(group_id)
-    success_count = 0
+    # 添加到坊市系统
+    # 生成唯一坊市ID
+    index_data = get_fangshi_index(group_id)
+    existing_ids = set(index_data["items"].keys())
+    fangshi_id = generate_fangshi_id(existing_ids)
     
-    for _ in range(quantity):
-        fangshi_id = str(len(data["user_items"]) + 1)
-        data["user_items"][fangshi_id] = {
-            "id": fangshi_id,
-            "goods_id": goods_info['goods_id'],
-            "goods_name": goods_name,
-            "goods_type": goods_info['goods_type'],
-            "price": price,
-            "quantity": 1,  # 每个物品单独存储，数量为1
-            "user_id": user_id,
-            "user_name": user_info['user_name'],
-            "desc": get_item_msg(goods_info['goods_id'])
-        }
-        success_count += 1
+    # 添加到索引
+    index_data["items"][fangshi_id] = {
+        "type": goods_type,
+        "user_id": user_id
+    }
+    save_fangshi_index(group_id, index_data)
     
-    save_fangshi_data(group_id, data)
+    # 添加到类型文件
+    type_items = get_fangshi_type_data(group_id, goods_type)
+    type_items[fangshi_id] = {
+        "id": fangshi_id,
+        "goods_id": goods_info['goods_id'],
+        "name": goods_name,
+        "type": goods_type,
+        "price": price,
+        "quantity": quantity,  # 用户物品为具体数量
+        "user_id": user_id,
+        "user_name": user_info['user_name'],
+        "desc": get_item_msg(goods_info['goods_id'])
+    }
+    save_fangshi_type_data(group_id, goods_type, type_items)
     
-    msg = f"成功上架 {goods_name} {success_count} 件到坊市！\n单价: {price} 灵石\n总价: {total_price} 灵石\n手续费: {fee} 灵石"
+    msg = f"成功上架 {goods_name} x{quantity} 到坊市！\n"
+    msg += f"单价: {number_to(price)} 灵石\n"
+    msg += f"总价: {number_to(total_price)} 灵石\n"
+    msg += f"手续费: {number_to(fee)} 灵石"
+    
     await handle_send(bot, event, msg)
     await shop_added.finish()
 
 @shop_remove.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def shop_remove_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """坊市下架
-    用法: 
-    1. 坊市下架 物品名 - 下架该物品价格最低的一个
-    2. 坊市下架 物品名 数量 - 按价格从低到高下架指定数量(最多10个)
-    """
+    """坊市下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await shop_remove.finish()
     
@@ -1254,101 +1349,72 @@ async def shop_remove_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     args = args.extract_plain_text().split()
     
     if not args:
-        msg = "请输入要下架的物品名称！\n例如：坊市下架 生骨丹 或 坊市下架 生骨丹 3"
+        msg = "请输入要下架的物品名称！"
         await handle_send(bot, event, msg)
         await shop_remove.finish()
     
     goods_name = args[0]
-    quantity = 1  # 默认下架1个
+    quantity = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
     
-    # 解析数量参数
-    if len(args) > 1:
-        try:
-            quantity = min(int(args[1]), 10)  # 限制最多下架10个
-            if quantity <= 0:
-                msg = "下架数量必须大于0！"
-                await handle_send(bot, event, msg)
-                await shop_remove.finish()
-        except ValueError:
-            msg = "请输入有效的数量！"
-            await handle_send(bot, event, msg)
-            await shop_remove.finish()
+    # 获取所有类型中该用户上架的该物品
+    user_items = []
+    index_data = get_fangshi_index(group_id)
     
-    data = get_fangshi_data(group_id)
-    removed_items = []
-    remaining_quantity = quantity
-    
-    # 获取用户所有该物品的上架记录，按价格排序
-    user_items = [
-        item for item in data["user_items"].values() 
-        if str(item["user_id"]) == str(user_id) 
-        and item["goods_name"] == goods_name
-    ]
-    user_items.sort(key=lambda x: x["price"])  # 按价格从低到高排序
+    for fangshi_id, item_info in index_data["items"].items():
+        if str(item_info["user_id"]) == str(user_id):
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items and type_items[fangshi_id]["name"] == goods_name:
+                user_items.append({
+                    "id": fangshi_id,
+                    "price": type_items[fangshi_id]["price"],
+                    "type": item_info["type"]
+                })
     
     if not user_items:
-        msg = f"未找到您上架的 {goods_name} 物品！"
+        msg = f"您在坊市中没有上架 {goods_name}！"
         await handle_send(bot, event, msg)
         await shop_remove.finish()
     
-    # 计算总可用数量
-    total_available = sum(item["quantity"] for item in user_items)
-    if quantity > total_available:
-        msg = f"您只有 {total_available} 个 {goods_name} 在坊市中，无法下架 {quantity} 个！"
-        await handle_send(bot, event, msg)
-        await shop_remove.finish()
+    # 按价格从低到高排序
+    user_items.sort(key=lambda x: x["price"])
     
-    # 开始下架
-    for item in user_items:
-        if remaining_quantity <= 0:
-            break
-            
-        item_id = item["id"]
-        item_quantity = item["quantity"]
-        
-        # 计算本次能下架的数量
-        remove_num = min(item_quantity, remaining_quantity)
-        
-        # 退回物品
-        sql_message.send_back(
-            user_id, 
-            item["goods_id"], 
-            item["goods_name"], 
-            item["goods_type"], 
-            remove_num
-        )
-        
-        # 记录下架信息
-        removed_items.append({
-            "name": item["goods_name"],
-            "price": item["price"],
-            "quantity": remove_num
-        })
-        
-        # 更新物品数量或删除物品
-        if item_quantity == remove_num:
-            del data["user_items"][item_id]
-        else:
-            data["user_items"][item_id]["quantity"] -= remove_num
-        
-        remaining_quantity -= remove_num
-    
-    # 重新编号
-    data["user_items"] = reset_dict_num(data["user_items"])
-    
-    # 保存数据
-    save_fangshi_data(group_id, data)
-    
-    # 构造返回消息
-    if removed_items:
-        msg = "成功下架以下物品：\n"
-        for item in removed_items:
-            msg += f"{item['name']} {item['price']}灵石 x{item['quantity']}\n"
-        
-        if remaining_quantity > 0:
-            msg += f"\n注意：实际下架了 {quantity - remaining_quantity} 个，未达到请求数量 {quantity} 个"
+    # 确定要下架的数量
+    if quantity is None:
+        # 没指定数量则下架最低价的1个
+        items_to_remove = [user_items[0]]
     else:
-        msg = "没有物品被下架！"
+        # 指定数量则下架价格从低到高的指定数量
+        items_to_remove = user_items[:quantity]
+    
+    # 执行下架操作
+    removed_count = 0
+    for item in items_to_remove:
+        # 从类型文件中移除
+        type_items = get_fangshi_type_data(group_id, item["type"])
+        if item["id"] in type_items:
+            # 退回物品到背包
+            item_data = type_items[item["id"]]
+            sql_message.send_back(
+                user_id,
+                item_data["goods_id"],
+                goods_name,
+                item["type"],
+                1  # 每个条目数量固定为1
+            )
+            
+            # 从系统中移除
+            del type_items[item["id"]]
+            save_fangshi_type_data(group_id, item["type"], type_items)
+            
+            # 从索引中移除
+            del index_data["items"][item["id"]]
+            save_fangshi_index(group_id, index_data)
+            
+            removed_count += 1
+    
+    msg = f"成功下架 {goods_name} x{removed_count}！已退回背包"
+    if len(user_items) > removed_count:
+        msg += f"\n(坊市中仍有 {len(user_items)-removed_count} 个 {goods_name})"
     
     await handle_send(bot, event, msg)
     await shop_remove.finish()
@@ -1357,8 +1423,8 @@ async def shop_remove_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
 async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """坊市购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await buy.finish()
     
@@ -1374,79 +1440,79 @@ async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg())
     fangshi_id = args[0]
     quantity = int(args[1]) if len(args) > 1 else 1
     
-    # 获取坊市数据
-    data = get_fangshi_data(group_id)
-    item = None
-    
-    # 查找物品
-    if fangshi_id in data["system_items"]:
-        item = data["system_items"][fangshi_id]
-    elif fangshi_id in data["user_items"]:
-        item = data["user_items"][fangshi_id]
-    
-    if not item:
+    # 从索引查找物品
+    index_data = get_fangshi_index(group_id)
+    if fangshi_id not in index_data["items"]:
         msg = f"未找到坊市ID为 {fangshi_id} 的物品！"
         await handle_send(bot, event, msg)
         await buy.finish()
     
+    item_info = index_data["items"][fangshi_id]
+    
     # 检查是否是自己的物品
-    if "user_id" in item and str(item["user_id"]) == str(user_id):
+    if str(item_info["user_id"]) == str(user_id):
         msg = "不能购买自己上架的物品！"
         await handle_send(bot, event, msg)
         await buy.finish()
     
-    # 检查库存
-    if "quantity" in item:
-        if isinstance(item["quantity"], str) and item["quantity"] == "无限":
-            pass  # 无限数量无需检查
-        elif item["quantity"] < quantity:
-            msg = f"库存不足，只有 {item['quantity']} 个可用！"
+    # 从类型文件获取详细信息
+    type_items = get_fangshi_type_data(group_id, item_info["type"])
+    if fangshi_id not in type_items:
+        msg = "物品数据异常，请联系管理员！"
+        await handle_send(bot, event, msg)
+        await buy.finish()
+    
+    item = type_items[fangshi_id]
+    seller_name = "系统" if item["user_id"] == 0 else item["user_name"]
+    # 检查库存（无限物品跳过检查）
+    if not (isinstance(item["quantity"], str) and item["quantity"] == "无限"):
+        if item["quantity"] < quantity:
+            msg = f"库存不足！只有 {item['quantity']} 个可用"
             await handle_send(bot, event, msg)
             await buy.finish()
     
+    # 计算总价
     total_price = item["price"] * quantity
     
     # 检查灵石是否足够
     if user_info["stone"] < total_price:
-        msg = f"灵石不足，需要 {total_price} 枚灵石！"
+        msg = f"灵石不足！需要 {number_to(total_price)} 灵石，当前拥有 {number_to(user_info['stone'])} 灵石"
         await handle_send(bot, event, msg)
         await buy.finish()
     
     try:
-        # 扣除灵石
+        # 扣除买家灵石
         sql_message.update_ls(user_id, total_price, 2)
         
-        # 如果是用户物品，给卖家灵石
-        if "user_id" in item:
-            seller_id = item["user_id"]
+        # 给卖家灵石（如果不是系统物品）
+        if item_info["user_id"] != 0:
+            seller_id = item_info["user_id"]
             sql_message.update_ls(seller_id, total_price, 1)
         
         # 给买家物品
         sql_message.send_back(
             user_id,
             item["goods_id"],
-            item["goods_name"],
-            item["goods_type"],
+            item["name"],
+            item["type"],
             quantity
         )
         
-        # 更新库存或删除物品
-        if "quantity" in item:
-            if isinstance(item["quantity"], str) and item["quantity"] == "无限":
-                pass  # 无限数量无需处理
+        # 更新库存（无限物品不更新）
+        if not (isinstance(item["quantity"], str) and item["quantity"] == "无限"):
+            item["quantity"] -= quantity
+            if item["quantity"] <= 0:
+                # 从系统中移除
+                del index_data["items"][fangshi_id]
+                del type_items[fangshi_id]
             else:
-                item["quantity"] -= quantity
-                if item["quantity"] <= 0:
-                    if fangshi_id in data["system_items"]:
-                        del data["system_items"][fangshi_id]
-                    else:
-                        del data["user_items"][fangshi_id]
+                type_items[fangshi_id] = item
+            
+            # 保存更改
+            save_fangshi_index(group_id, index_data)
+            save_fangshi_type_data(group_id, item_info["type"], type_items)
         
-        # 保存数据
-        if not save_fangshi_data(group_id, data):
-            raise Exception("保存坊市数据失败")
-        
-        msg = f"成功购买 {item['goods_name']} x{quantity}！\n花费: {total_price} 灵石"
+        msg = f"成功购买 {item['name']} x{quantity}（来自{seller_name}）！花费 {number_to(total_price)} 灵石"
         await handle_send(bot, event, msg)
     except Exception as e:
         logger.error(f"坊市购买出错: {e}")
@@ -1459,8 +1525,8 @@ async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg())
 async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """坊市查看"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await shop_view.finish()
     
@@ -1468,91 +1534,96 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     
     # 解析参数
     args_str = args.extract_plain_text().strip()
-    parts = args_str.split()
     
+    # 情况1：无参数 - 显示可用类型
+    if not args_str:
+        msg = "请指定查看类型：【药材、装备、丹药、技能】"
+        await handle_send(bot, event, msg)
+        await shop_view.finish()
+    
+    # 解析类型和页码
     item_type = None
     current_page = 1
     
-    if parts:
-        # 尝试解析类型和页码
-        for t in ["装备", "技能", "丹药", "药材"]:
-            if parts[0].startswith(t):
-                item_type = t
-                if len(parts[0]) > len(t) and parts[0][len(t):].isdigit():
-                    current_page = int(parts[0][len(t):])
-                elif len(parts) > 1 and parts[1].isdigit():
-                    current_page = int(parts[1])
-                break
+    # 检查是否直接拼接类型和页码（无空格）
+    for t in FANGSHI_TYPES:
+        if args_str.startswith(t):
+            item_type = t
+            remaining = args_str[len(t):].strip()
+            if remaining.isdigit():
+                current_page = int(remaining)
+            break
     
-    data = get_fangshi_data(group_id)
-    items_list = []
-    for item in data["system_items"].values():
-        if not item_type or item["goods_type"] == item_type:
-            items_list.append({
-                "id": item["id"],
-                "name": item["goods_name"],
-                "price": item["price"],
-                "quantity": item.get("quantity", "无限"),
-                "is_system": True
-            })
-
-    # 添加用户物品（去重，只保留最低价格）
-    user_items_map = {}
-    for item in data["user_items"].values():
-        if not item_type or item["goods_type"] == item_type:
-            key = item["goods_name"]
-            if key not in user_items_map or item["price"] < user_items_map[key]["price"]:
-                user_items_map[key] = {
-                    "id": item["id"],
-                    "name": item["goods_name"],
-                    "price": item["price"],
-                    "quantity": item["quantity"],
-                    "is_system": False
-                }
-
-    # 合并系统物品和用户物品
-    items_list.extend(user_items_map.values())
-
-    # 检查分类下是否有物品
-    if not items_list:
-        if item_type:
-            msg = f"坊市中暂无{item_type}类物品！"
-        else:
-            msg = "坊市目前空空如也！"
+    # 情况2：有空格分隔
+    if item_type is None:
+        parts = args_str.split(maxsplit=1)
+        if parts[0] in FANGSHI_TYPES:
+            item_type = parts[0]
+            if len(parts) > 1 and parts[1].isdigit():
+                current_page = int(parts[1])
+    
+    # 检查类型有效性
+    if item_type not in FANGSHI_TYPES:
+        msg = f"无效类型！可用类型：【{', '.join(FANGSHI_TYPES)}】"
         await handle_send(bot, event, msg)
         await shop_view.finish()
+    
+    # 读取对应类型的物品数据
+    type_items = get_fangshi_type_data(group_id, item_type)
+    if not type_items:
+        msg = f"坊市中暂无{item_type}类物品！"
+        await handle_send(bot, event, msg)
+        await shop_view.finish()
+    
+    # 处理物品显示逻辑
+    system_items = []  # 存储系统物品
+    user_items = {}    # 存储用户物品（按名称分组，只保留最低价）
+    
+    for item_id, item in type_items.items():
+        if item['user_id'] == 0:  # 系统物品
+            system_items.append(item)
+        else:  # 用户物品
+            item_name = item['name']
+            # 如果还没有记录或者当前价格更低，更新记录
+            if item_name not in user_items or item['price'] < user_items[item_name]['price']:
+                user_items[item_name] = item
+    
+    # 合并系统物品和用户物品，并按价格排序
+    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['price'])
     
     # 分页处理
     per_page = 10
     total_pages = (len(items_list) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
+    
+    if current_page > total_pages:
+        msg = f"页码超出范围，最多{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await shop_view.finish()
+    
+    # 构建消息
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
     paged_items = items_list[start_idx:end_idx]
-    
+
     # 构建消息
-    msg_list = []
-    if item_type:
-        msg_list.append(f"☆------坊市 {item_type} 物品------☆")
-    else:
-        msg_list.append("☆------坊市所有物品------☆")
-    
+    msg_list = [f"☆------坊市 {item_type}------☆"]
     for item in paged_items:
-        if item["is_system"]:
-            msg = f"{item['name']} {item['price']}灵石 ID:{item['id']}"
-            if item["quantity"] != "无限":  # 系统物品显示数量或"无限"
-                msg += f" 数量:{item['quantity']}"
-            else:
-                msg += " 数量:无限"
-        else:
-            msg = f"{item['name']} {item['price']}灵石 ID:{item['id']}"
-            if item["quantity"] > 1:  # 用户物品数量大于1时显示
-                msg += f" 数量:{item['quantity']}"
+        price_str = number_to(item['price'])
+        msg = f"\n{item['name']} {price_str}灵石 \nID:{item['id']}"
+        
+        # 处理数量显示
+        if isinstance(item['quantity'], str) and item['quantity'] == "无限":
+            msg += f" 不限量"
+        elif item['quantity'] > 1:
+            msg += f" 限售:{item['quantity']}"
+        
         msg_list.append(msg)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     if total_pages > 1:
-        msg_list.append(f"输入 坊市查看{item_type}{current_page + 1} 查看下一页")
+        next_page_cmd = f"坊市查看{item_type}{current_page + 1}"
+        msg_list.append(f"输入 {next_page_cmd} 查看下一页")
     
     await send_msg_handler(bot, event, '坊市查看', bot.self_id, msg_list)
     await shop_view.finish()
@@ -1561,12 +1632,13 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
 async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """我的坊市"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
         await my_shop.finish()
     
     group_id = str(event.group_id)
+    user_id = user_info['user_id']
     
     # 获取页码
     try:
@@ -1574,68 +1646,138 @@ async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     except:
         current_page = 1
     
-    data = get_fangshi_data(group_id)
+    # 从索引获取用户所有物品
+    index_data = get_fangshi_index(group_id)
     user_items = []
     
-    # 获取用户所有上架物品
-    for item in data["user_items"].values():
-        if str(item["user_id"]) == str(user_info["user_id"]):
-            user_items.append(item)
+    for fangshi_id, item_info in index_data["items"].items():
+        if str(item_info["user_id"]) == str(user_id):
+            # 从对应类型文件读取详细信息
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items:
+                user_items.append(type_items[fangshi_id])
     
-    # 按物品名称和价格分组
-    item_groups = {}
-    for item in user_items:
-        key = (item["goods_name"], item["price"])
-        if key not in item_groups:
-            item_groups[key] = 0
-        item_groups[key] += item["quantity"]
-
-    # 检查用户是否有上架物品
+    # 按价格排序
+    user_items.sort(key=lambda x: x['price'])
+    
+    # 检查是否有上架物品
     if not user_items:
         msg = "您在坊市中没有上架任何物品！"
         await handle_send(bot, event, msg)
         await my_shop.finish()
-
-    # 转换为消息列表
-    msg_list = []
-    for (name, price), quantity in item_groups.items():
-        msg = f"{name} {price}灵石"
-        if quantity > 1:
-            msg += f" x{quantity}"
-        msg_list.append(msg)
     
     # 分页处理
     per_page = 10
-    total_pages = (len(msg_list) + per_page - 1) // per_page
+    total_pages = (len(user_items) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
+    
+    # 构建消息
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
-    paged_msgs = msg_list[start_idx:end_idx]
+    paged_items = user_items[start_idx:end_idx]
     
-    # 构建最终消息
-    final_msg = [f"☆------{user_info['user_name']}的坊市物品------☆"]
-    final_msg.extend(paged_msgs)
-    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    msg_list = [f"☆------{user_info['user_name']}的坊市物品------☆"]
+    for item in paged_items:
+        price_str = number_to(item['price'])
+        msg = f"{item['name']} {price_str}灵石"
+        if isinstance(item['quantity'], int) and item['quantity'] > 1:
+            msg += f" x{item['quantity']}"
+        msg_list.append(msg)
     
-    await send_msg_handler(bot, event, '我的坊市', bot.self_id, final_msg)
+    msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    if total_pages > 1:
+        msg_list.append(f"输入 我的坊市 {current_page + 1} 查看下一页")
+    
+    await send_msg_handler(bot, event, '我的坊市', bot.self_id, msg_list)
+    await my_shop.finish()
+
+@my_shop.handle(parameterless=[Cooldown(at_sender=False)])
+async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """我的坊市"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await my_shop.finish()
+    
+    group_id = str(event.group_id)
+    user_id = user_info['user_id']
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    # 从索引获取用户所有物品
+    index_data = get_fangshi_index(group_id)
+    user_items = []
+    
+    for fangshi_id, item_info in index_data["items"].items():
+        if str(item_info["user_id"]) == str(user_id):
+            # 从对应类型文件读取详细信息
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items:
+                user_items.append(type_items[fangshi_id])
+    
+    # 按价格排序
+    user_items.sort(key=lambda x: x['price'])
+    
+    # 检查是否有上架物品
+    if not user_items:
+        msg = "您在坊市中没有上架任何物品！"
+        await handle_send(bot, event, msg)
+        await my_shop.finish()
+    
+    # 分页处理
+    per_page = 10
+    total_pages = (len(user_items) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = user_items[start_idx:end_idx]
+    
+    msg_list = [f"☆------{user_info['user_name']}的坊市物品------☆"]
+    for item in paged_items:
+        price_str = number_to(item['price'])
+        msg = f"{item['name']} {price_str}灵石"
+        if isinstance(item['quantity'], int) and item['quantity'] > 1:
+            msg += f" x{item['quantity']}"
+        msg_list.append(msg)
+    
+    msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    if total_pages > 1:
+        msg_list.append(f"输入 我的坊市 {current_page + 1} 查看下一页")
+    
+    await send_msg_handler(bot, event, '我的坊市', bot.self_id, msg_list)
     await my_shop.finish()
 
 @shop_added_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def shop_added_by_admin_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """系统坊市上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = str(event.group_id)
     args = args.extract_plain_text().split()
     
     if len(args) < 1:
-        msg = "请输入正确指令！例如：系统坊市上架 物品 [价格] [数量]"
+        msg = "请输入正确指令！格式：系统坊市上架 物品名称 [价格] [数量]"
         await handle_send(bot, event, msg)
         await shop_added_by_admin.finish()
     
+    group_id = str(event.group_id)
     goods_name = args[0]
-    goods_id = None
+    try:
+        price = int(args[1]) if len(args) > 1 else FANGSHI_MIN_PRICE
+        price = max(price, FANGSHI_MIN_PRICE)
+        quantity = int(args[2]) if len(args) > 2 else 0  # 0表示无限
+    except ValueError:
+        msg = "请输入有效的价格和数量！"
+        await handle_send(bot, event, msg)
+        await shop_added_by_admin.finish()
     
     # 查找物品ID
+    goods_id = None
     for k, v in items.items.items():
         if goods_name == v['name']:
             goods_id = k
@@ -1646,40 +1788,47 @@ async def shop_added_by_admin_(bot: Bot, event: GroupMessageEvent, args: Message
         await handle_send(bot, event, msg)
         await shop_added_by_admin.finish()
     
-    # 解析价格和数量
-    try:
-        price = int(args[1]) if len(args) > 1 else MIN_PRICE
-        quantity = int(args[2]) if len(args) > 2 else 0  # 0表示无限
-    except ValueError:
-        msg = "请输入有效的价格和数量！"
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_id)
+    if goods_type not in FANGSHI_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(FANGSHI_TYPES)}"
         await handle_send(bot, event, msg)
         await shop_added_by_admin.finish()
     
-    price = max(price, MIN_PRICE)
+    # 添加到坊市系统
+    # 获取索引数据
+    index_data = get_fangshi_index(group_id)
+    fangshi_id = str(index_data["next_id"])  # 使用顺序ID
     
-    # 添加到系统坊市
-    data = get_fangshi_data(group_id)
-    system_id = str(data["next_system_id"])
-    data["next_system_id"] += 1
+    # 更新下一个ID
+    index_data["next_id"] += 1
     
-    data["system_items"][system_id] = {
-        "id": system_id,
+    # 添加到索引
+    index_data["items"][fangshi_id] = {
+        "type": goods_type,
+        "user_id": 0  # 0表示系统物品
+    }
+    save_fangshi_index(group_id, index_data)
+    
+    # 添加到类型文件
+    type_items = get_fangshi_type_data(group_id, goods_type)
+    type_items[fangshi_id] = {
+        "id": fangshi_id,
         "goods_id": goods_id,
-        "goods_name": goods_name,
-        "goods_type": items.get_data_by_item_id(goods_id)["type"],
+        "name": goods_name,
+        "type": goods_type,
         "price": price,
-        "quantity": quantity if quantity > 0 else "无限",
+        "quantity": "无限" if quantity == 0 else quantity,  # 0表示无限
+        "user_id": 0,
+        "user_name": "系统",
         "desc": get_item_msg(goods_id)
     }
+    save_fangshi_type_data(group_id, goods_type, type_items)
     
-    save_fangshi_data(group_id, data)
-    
-    msg = f"系统成功上架 {goods_name} 到坊市！\n价格: {price} 灵石\n"
-    if quantity > 0:
-        msg += f"数量: {quantity}"
-    else:
-        msg += "数量: 无限"
-    msg += f"\n坊市ID: {system_id}"
+    msg = f"系统成功上架 {goods_name} 到坊市！\n"
+    msg += f"价格: {number_to(price)} 灵石\n"
+    msg += f"数量: {'无限' if quantity == 0 else quantity}\n"
+    msg += f"坊市ID: {fangshi_id}"
     
     await handle_send(bot, event, msg)
     await shop_added_by_admin.finish()
@@ -1696,78 +1845,123 @@ async def shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent, args: Messag
         await handle_send(bot, event, msg)
         await shop_remove_by_admin.finish()
     
-    data = get_fangshi_data(group_id)
+    index_data = get_fangshi_index(group_id)
     removed_items = []
     
     if arg.isdigit():  # 按ID下架
         fangshi_id = arg
-        if fangshi_id in data["system_items"]:
-            removed_items.append(data["system_items"][fangshi_id])
-            del data["system_items"][fangshi_id]
-        elif fangshi_id in data["user_items"]:
-            item = data["user_items"][fangshi_id]
-            # 退回给玩家
-            sql_message.send_back(
-                item["user_id"],
-                item["goods_id"],
-                item["goods_name"],
-                item["goods_type"],
-                item["quantity"]
-            )
-            removed_items.append(item)
-            del data["user_items"][fangshi_id]
+        if fangshi_id in index_data["items"]:
+            item_info = index_data["items"][fangshi_id]
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items:
+                removed_items.append(type_items[fangshi_id])
+                
+                # 如果是用户物品，退回
+                if item_info["user_id"] != 0:
+                    sql_message.send_back(
+                        item_info["user_id"],
+                        type_items[fangshi_id]["goods_id"],
+                        type_items[fangshi_id]["name"],
+                        item_info["type"],
+                        type_items[fangshi_id]["quantity"]
+                    )
+                
+                # 从系统中移除
+                del index_data["items"][fangshi_id]
+                del type_items[fangshi_id]
+                save_fangshi_index(group_id, index_data)
+                save_fangshi_type_data(group_id, item_info["type"], type_items)
         else:
             msg = f"未找到坊市ID为 {fangshi_id} 的物品！"
             await handle_send(bot, event, msg)
             await shop_remove_by_admin.finish()
     else:  # 按名称下架
         goods_name = arg
-        # 先找系统物品
-        system_items = [item for item in data["system_items"].values() 
-                       if item["goods_name"] == goods_name]
-        
-        if system_items:
-            for item in system_items:
-                removed_items.append(item)
-                del data["system_items"][item["id"]]
-        else:
-            # 找用户物品（按价格排序）
-            user_items = [item for item in data["user_items"].values() 
-                         if item["goods_name"] == goods_name]
-            user_items.sort(key=lambda x: x["price"])
-            
-            if user_items:
-                item = user_items[0]
-                # 退回给玩家
-                sql_message.send_back(
-                    item["user_id"],
-                    item["goods_id"],
-                    item["goods_name"],
-                    item["goods_type"],
-                    item["quantity"]
-                )
-                removed_items.append(item)
-                del data["user_items"][item["id"]]
-            else:
-                msg = f"未找到名称为 {goods_name} 的物品！"
-                await handle_send(bot, event, msg)
-                await shop_remove_by_admin.finish()
-    
-    save_fangshi_data(group_id, data)
+        # 查找所有匹配的物品
+        for fangshi_id, item_info in index_data["items"].items():
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items and type_items[fangshi_id]["name"] == goods_name:
+                removed_items.append(type_items[fangshi_id])
+                
+                # 如果是用户物品，退回
+                if item_info["user_id"] != 0:
+                    sql_message.send_back(
+                        item_info["user_id"],
+                        type_items[fangshi_id]["goods_id"],
+                        goods_name,
+                        item_info["type"],
+                        type_items[fangshi_id]["quantity"]
+                    )
+                
+                # 从系统中移除
+                del index_data["items"][fangshi_id]
+                del type_items[fangshi_id]
+                save_fangshi_index(group_id, index_data)
+                save_fangshi_type_data(group_id, item_info["type"], type_items)
     
     if removed_items:
         msg = "成功下架以下物品：\n"
         for item in removed_items:
-            if "user_id" in item:
-                msg += f"用户物品: {item['goods_name']} x{item['quantity']} (价格: {item['price']})\n"
-            else:
-                msg += f"系统物品: {item['goods_name']} x{item.get('quantity', '无限')}\n"
+            owner = "系统" if item["user_id"] == 0 else item["user_name"]
+            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (来自:{owner})\n"
     else:
         msg = "没有物品被下架！"
     
     await handle_send(bot, event, msg)
     await shop_remove_by_admin.finish()
 
+@shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])
+async def shop_off_all_(bot: Bot, event: GroupMessageEvent):
+    """清空坊市"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await shop_off_all.finish()
+    
+    group_id = str(event.group_id)
+    
+    msg = "正在清空坊市，请稍候..."
+    await handle_send(bot, event, msg)
+    
+    # 获取所有物品
+    index_data = get_fangshi_index(group_id)
+    removed_items = []
+    
+    for fangshi_id, item_info in index_data["items"].items():
+        type_items = get_fangshi_type_data(group_id, item_info["type"])
+        if fangshi_id in type_items:
+            item = type_items[fangshi_id]
+            removed_items.append(item)
+            
+            # 如果是用户物品，退回
+            if item_info["user_id"] != 0:
+                sql_message.send_back(
+                    item_info["user_id"],
+                    item["goods_id"],
+                    item["name"],
+                    item_info["type"],
+                    item["quantity"]
+                )
+    
+    # 清空所有数据
+    for item_type in FANGSHI_TYPES:
+        save_fangshi_type_data(group_id, item_type, {})
+    
+    save_fangshi_index(group_id, {"next_id": 1, "items": {}})
+    
+    if removed_items:
+        msg = "成功清空坊市！共下架以下物品：\n"
+        for item in removed_items[:10]:  # 最多显示10条
+            owner = "系统" if item["user_id"] == 0 else item["user_name"]
+            msg += f"{item['name']} x{item['quantity']} (来自:{owner})\n"
+        if len(removed_items) > 10:
+            msg += f"...等共{len(removed_items)}件物品"
+    else:
+        msg = "坊市已经是空的，没有物品被下架！"
+    
+    await handle_send(bot, event, msg)
+    await shop_off_all.finish()
 
 @auction_withdraw.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP)])
 async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
@@ -1884,13 +2078,13 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             num = 1 
     price = int((convert_rank('江湖好手')[0] + 5) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
     if price <= 0:
-        msg = f"物品：{goods_name}炼金失败，凝聚{price}枚灵石，记得通知晓楠！"
+        msg = f"物品：{goods_name}炼金失败，凝聚{number_to(price)}枚灵石，记得通知晓楠！"
         await handle_send(bot, event, msg)
         await goods_re_root.finish()
 
     sql_message.update_back_j(user_id, goods_id, num=num)
     sql_message.update_ls(user_id, price, 1)
-    msg = f"物品：{goods_name} 数量：{num} 炼金成功，凝聚{price}枚灵石！"
+    msg = f"物品：{goods_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
     await handle_send(bot, event, msg)
     await goods_re_root.finish()
     
@@ -2406,7 +2600,7 @@ async def offer_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Com
     dif_time = (now_time - auction['start_time']).total_seconds()
     remaining_time = int(AUCTIONSLEEPTIME - dif_time + AUCTIONOFFERSLEEPTIME * auction_offer_time_count)
     msg = (
-        f"来自群{group_id}的{user_info['user_name']}道友拍卖：{price}枚灵石！" +
+        f"来自群{group_id}的{user_info['user_name']}道友拍卖：{number_to(price)}枚灵石！" +
         f"竞拍时间增加：{AUCTIONOFFERSLEEPTIME}秒，竞拍剩余时间：{remaining_time}秒"
     )
     error_msg = None
@@ -2523,7 +2717,7 @@ async def auction_added_(bot: Bot, event: GroupMessageEvent, args: Message = Com
     savef_auction(config)
     sql_message.update_back_j(user_id, goods_id, num=quantity)
 
-    msg = f"道友的拍卖品：{goods_name}成功提交，底价：{price}枚灵石，数量：{quantity}"
+    msg = f"道友的拍卖品：{goods_name}成功提交，底价：{number_to(price)}枚灵石，数量：{quantity}"
     msg += f"\n下次拍卖将优先拍卖道友的拍卖品！！！"
     await handle_send(bot, event, msg)
     await auction_added.finish()
@@ -2743,53 +2937,6 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await send_msg_handler(bot, event, '丹药背包', bot.self_id, msgs)
     
     await danyao_back.finish()
-
-
-@shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GROUP, parallel=1)])
-async def shop_off_all_(bot: Bot, event: GroupMessageEvent):
-    """坊市清空"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await shop_off_all.finish()
-    group_id = str(event.group_id)
-    shop_data = get_shop_data(group_id)
-    if shop_data[group_id] == {}:
-        msg = "坊市目前空空如也！"
-        await handle_send(bot, event, msg)
-        await shop_off_all.finish()
-
-    msg = "正在清空,稍等！"
-    await handle_send(bot, event, msg)
-
-    list_msg = []
-    msg = ""
-    num = len(shop_data[group_id])
-    for x in range(num):
-        x = num - x
-        if shop_data[group_id][str(x)]['user_id'] == 0:  # 这么写为了防止bot.send发送失败，不结算
-            msg += f"成功下架系统物品：{shop_data[group_id][str(x)]['goods_name']}!\n"
-            del shop_data[group_id][str(x)]
-            save_shop(shop_data)
-        else:
-            sql_message.send_back(shop_data[group_id][str(x)]['user_id'], shop_data[group_id][str(x)]['goods_id'],
-                                  shop_data[group_id][str(x)]['goods_name'],
-                                  shop_data[group_id][str(x)]['goods_type'], shop_data[group_id][str(x)]['stock'])
-            msg += f"成功下架{shop_data[group_id][str(x)]['user_name']}的{shop_data[group_id][str(x)]['stock']}个{shop_data[group_id][str(x)]['goods_name']}!\n"
-            del shop_data[group_id][str(x)]
-            save_shop(shop_data)
-    shop_data[group_id] = reset_dict_num(shop_data[group_id])
-    save_shop(shop_data)
-    list_msg.append(
-                    {"type": "node", "data": {"name": "执行清空坊市ing", "uin": bot.self_id,
-                                              "content": msg}})
-    try:
-        await send_msg_handler(bot, event, list_msg)
-    except ActionFailed:
-        await handle_send(bot, event, msg)
-    await shop_off_all.finish()
-
 
 def reset_dict_num(dict_):
     i = 1
