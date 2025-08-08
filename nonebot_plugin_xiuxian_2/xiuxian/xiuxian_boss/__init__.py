@@ -121,76 +121,40 @@ async def read_boss_():
 
 
 @DRIVER.on_startup
-async def set_boss_punishment():
+async def set_boss_generation():
     try:
-        # 每小时执行天罚
-        scheduler.add_job(
-            func=punish_all_bosses,
-            trigger='interval',
-            hours=1,
-            id="punish_all_bosses",
-            misfire_grace_time=60
-        )
-        logger.opt(colors=True).success(f"<green>已开启每小时执行天罚世界BOSS定时任务！</green>")
+        # 根据配置的时间参数执行自动生成全部BOSS
+        hours = config['Boss生成时间参数']['hours']
+        minutes = config['Boss生成时间参数']['minutes']
+        
+        # 计算总分钟数
+        total_minutes = hours * 60 + minutes
+        
+        if total_minutes > 0:
+            scheduler.add_job(
+                func=generate_all_bosses_task,
+                trigger='interval',
+                minutes=total_minutes,
+                id="generate_all_bosses",
+                misfire_grace_time=60
+            )
+            logger.opt(colors=True).success(f"<green>已开启自动生成全部世界BOSS定时任务，每{hours}小时{minutes}分钟执行一次！</green>")
+        else:
+            logger.opt(colors=True).warning(f"<yellow>Boss生成时间参数配置为0，不开启自动生成BOSS定时任务</yellow>")
     except Exception as e:
-        logger.opt(colors=True).warning(f"<red>警告,天罚定时任务加载失败!,{e}!</red>")
+        logger.opt(colors=True).warning(f"<red>警告,自动生成BOSS定时任务加载失败!,{e}!</red>")
 
-async def punish_all_bosses():
+async def generate_all_bosses_task():
     global group_boss
     group_id = "000000"  # 全局BOSS存储键
-
-    # 获取当前BOSS列表
-    bosss = group_boss.get(group_id, [])
-    if not bosss:
-        logger.opt(colors=True).info(f"<yellow>当前没有世界BOSS，无需天罚</yellow>")
-        return
-        
-    now = datetime.now()
-    current_hour = now.hour   
-    severe_punishment_hours = {8, 12, 20, 0}
     
-    if current_hour in severe_punishment_hours:
-        delete_count = 10
-        logger.opt(colors=True).warning(f"<yellow>现在是 {current_hour}:00，执行严重天罚！</yellow>")
-    else:
-        delete_count = min(random.randint(5, 10), len(bosses))
-        
-    delete_count = min(delete_count, len(bosss))
-
-    # 记录被天罚BOSS的境界
-    punished_bosses = random.sample(bosss, delete_count)
-    punished_jj_list = [boss['jj'] for boss in punished_bosses]
-    punished_names = [boss['name'] for boss in punished_bosses]
-
-    # 从列表中移除被天罚的BOSS
-    for boss in punished_bosses:
-        group_boss[group_id].remove(boss)
-
-    # 保存更新后的BOSS数据
+    # 生成全部BOSS
+    bosses = create_all_bosses()
+    group_boss[group_id] = bosses
     old_boss_info.save_boss(group_boss)
-    logger.opt(colors=True).info(f"<green>天罚已随机清除了 {delete_count} 个世界BOSS: {', '.join(punished_names)}</green>")
-
-    # 生成与被天罚BOSS相同境界的新BOSS
-    current_boss_count = len(group_boss[group_id])
     
-    generated_bosses = []
-    for jj in punished_jj_list:
-        if current_boss_count <= 0:
-            break
-        bossinfo = createboss_jj(jj, None)  # 生成指定境界的随机BOSS
-        if bossinfo:
-            group_boss[group_id].append(bossinfo)
-            generated_bosses.append(bossinfo['name'])
-            current_boss_count -= 1
-
-    if generated_bosses:
-        old_boss_info.save_boss(group_boss)
-        logger.opt(colors=True).info(f"<green>已生成{len(generated_bosses)}个新BOSS: {', '.join(generated_bosses)}</green>")
-
     # 发送通知
-    msg = f"天雷降临，随机天罚了 {delete_count} 个世界BOSS：{', '.join(punished_names)}！"
-    if generated_bosses:
-        msg += f"\n天道循环，又孕育出了新的BOSS：{', '.join(generated_bosses)}"
+    msg = f"天道循环，已自动生成全部 {len(bosses)} 个境界的世界BOSS！"
     
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
@@ -198,7 +162,6 @@ async def punish_all_bosses():
             continue
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
-
 
 @DRIVER.on_shutdown
 async def save_boss_():

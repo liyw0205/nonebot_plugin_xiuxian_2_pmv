@@ -924,7 +924,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             i = 1
             for user in userlist:
                 msg = f"""编号{i}:{user['user_name']},{user['level']}\n宗门职位：{jsondata.sect_config_data()[f"{user['sect_position']}"]['title']}\n宗门贡献度：{user['sect_contribution']}\n"""
-                msg += f"QQ号{user['user_id']}"
+                msg += f"ID:{user['user_id']}"
                 msg_list.append(msg)
                 i += 1
         else:

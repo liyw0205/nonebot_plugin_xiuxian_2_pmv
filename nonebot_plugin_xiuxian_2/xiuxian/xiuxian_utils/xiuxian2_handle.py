@@ -522,7 +522,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, )
         result = cur.fetchall()
         return result
-
+        
     def sign_remake(self):
         """重置签到"""
         sql = f"UPDATE user_xiuxian SET is_sign=0"
@@ -814,7 +814,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     
     def realm_top(self):
-        """境界排行榜前100"""
+        """境界排行榜前50"""
         rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
     
         sql = """SELECT user_name, level, exp FROM user_xiuxian 
@@ -824,7 +824,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         for level, value in sorted(rank_mapping.items(), key=lambda x: x[1], reverse=True):
             sql += f"WHEN '{level}' THEN '{value:02}' "
     
-        sql += """ELSE level END) ASC LIMIT 100"""
+        sql += """ELSE level END) ASC LIMIT 50"""
     
         cur = self.conn.cursor()
         cur.execute(sql, )
@@ -834,7 +834,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def stone_top(self):
         """这也是灵石排行榜"""
-        sql = f"SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY stone DESC LIMIT 100"
+        sql = f"SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY stone DESC LIMIT 50"
         cur = self.conn.cursor()
         cur.execute(sql, )
         result = cur.fetchall()
@@ -842,7 +842,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def power_top(self):
         """战力排行榜"""
-        sql = f"SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY power DESC LIMIT 100"
+        sql = f"SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY power DESC LIMIT 50"
         cur = self.conn.cursor()
         cur.execute(sql, )
         result = cur.fetchall()
@@ -859,7 +859,14 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         result = cur.fetchall()
         return result
 
-
+    def root_top(self):
+        """这是轮回排行榜"""
+        sql = f"SELECT user_name,root_level FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY root_level DESC LIMIT 50"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
+        result = cur.fetchall()
+        return result
+        
     def get_all_sects(self):
         """
         获取所有宗门信息
