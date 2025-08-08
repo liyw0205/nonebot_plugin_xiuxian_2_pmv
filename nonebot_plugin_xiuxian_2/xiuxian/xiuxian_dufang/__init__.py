@@ -68,8 +68,8 @@ def get_random_sharing_users(user_id, count=3):
     return random.sample(users, count)
 
 unseal = on_command("鉴石", priority=9, block=True)
-unseal_share_on = on_command("鉴石开启共享", priority=10, block=True)
-unseal_share_off = on_command("鉴石关闭共享", priority=10, block=True)
+unseal_share_on = on_command("鉴石共享开启", priority=10, block=True)
+unseal_share_off = on_command("鉴石共享关闭", priority=10, block=True)
 unseal_help = on_command("鉴石帮助", priority=10, block=True)
 
 # 尘封之物类型（共20种）
@@ -305,16 +305,16 @@ SHARING_EVENTS = [
 async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     help_msg = """※※ 鉴石系统帮助 ※※
 【鉴石】- 消耗灵石解封尘封之物
-【鉴石开启共享】- 开启鉴石结果共享
-【鉴石关闭共享】- 关闭鉴石结果共享
+【鉴石共享开启】- 开启鉴石结果共享
+【鉴石共享关闭】- 关闭鉴石结果共享
 
 ◆ 基础消耗500灵石
 ◆ 可传入灵石作为额外消耗(最多当前灵石的10%)
-◆ 开启共享后，你的鉴石结果可能会影响其他开启共享的道友
+◆ 共享开启后，你的鉴石结果可能会影响其他共享开启的道友
 ◆ 共享事件可能带来连锁反应，福祸难料"""
     await handle_send(bot, event, help_msg)
 
-# 开启共享
+# 共享开启
 @unseal_share_on.handle()
 async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
@@ -331,7 +331,7 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     await handle_send(bot, event, msg)
 
-# 关闭共享
+# 共享关闭
 @unseal_share_off.handle()
 async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)

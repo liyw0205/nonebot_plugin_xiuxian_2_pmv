@@ -8,7 +8,7 @@ import unicodedata
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
-
+from typing import List, Union
 from nonebot.adapters import MessageSegment
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -545,8 +545,6 @@ def append_draw_card_node(bot: Bot, list_tp: list, summary: str, content):
             },
         }
     )
-
-from typing import List, Union
 
 async def handle_pagination(
     item_list: List[str],
