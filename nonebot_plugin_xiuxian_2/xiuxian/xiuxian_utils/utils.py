@@ -470,86 +470,57 @@ def CommandObjectID() -> int:
 
 
 def format_number(num):
-    """格式化数字，满足特殊显示要求"""
-    num = round(num, 1)  # 先四舍五入到1位小数
-    if num >= 10:
-        # 显示小数部分（自动去除末尾的0）
-        return f"{num:.1f}".rstrip('0').rstrip('.') if num % 1 != 0 else f"{int(num)}"
+    """核心格式化逻辑：处理小数和单位"""
+    if num < 10000:
+        # 无单位时直接返回整数（丢弃小数）
+        return str(int(num))
     else:
-        # 只显示个位数
-        return f"{int(num)}" if num.is_integer() else f"{num:.1f}".rstrip('0').rstrip('.')
+        # 有单位时保留1位小数，并去除末尾的".0"
+        formatted = f"{num:.1f}".rstrip("0").rstrip(".")
+        return formatted
 
 def number_to(num):
-    """
-    递归实现，精确为最大单位值
-    满足特殊显示要求：
-    - 只显示个位数
-    - 大于单位的才会有小数
-    - 小数位0则不显示
-    """
-
-    def strofsize(num, level):
-        if level >= 29:
-            return num, level
-        elif num >= 10000:
-            num /= 10000
-            level += 1
-            return strofsize(num, level)
-        else:
-            return num, level
-
+    """带中文单位的格式化（支持超大数，保留原单位列表）"""
     units = [
         "", "万", "亿", "兆", "京", "垓", "秭", "穰", "沟", "涧",
         "正", "载", "极", "恒河沙", "阿僧祗", "那由他", "不思议", "无量大"
     ]
     
-    # 处理科学计数法
-    if "e" in str(num):
+    # 处理科学计数法/字符串输入
+    try:
         num = float(num)
-    
-    num, level = strofsize(float(num), 0)
-    if level >= len(units):
-        level = len(units) - 1
-    
+    except (TypeError, ValueError):
+        raise ValueError("输入必须是数字")
+
+    # 递归计算单位和数值
+    def convert(n, level):
+        if level >= len(units) - 1 or n < 10000:
+            return n, level
+        return convert(n / 10000, level + 1)
+
+    num, level = convert(num, 0)
     formatted_num = format_number(num)
     return f"{formatted_num}{units[level]}"
 
 def number_to2(num):
-    """
-    递归实现，但限制单位到"京"
-    满足特殊显示要求：
-    - 只显示个位数
-    - 大于单位的才会有小数
-    - 小数位0则不显示
-    """
+    """带中文单位的格式化（限制单位到'京'，保留原单位列表）"""
     units = ["", "万", "亿", "兆", "京"]
-    base = 10000
-
-    # 处理科学计数法
+    
+    # 处理科学计数法/字符串输入
     try:
         num = float(num)
     except (TypeError, ValueError):
-        raise ValueError("输入必须是数字或科学计数法字符串")
-
-    # 处理负数
-    sign = "-" if num < 0 else ""
-    num = abs(num)
-
-    # 如果数字 < 1万，直接返回
-    if num < base:
-        return f"{sign}{int(num)}" if num.is_integer() else f"{sign}{num:.3f}".rstrip('0').rstrip('.')
+        raise ValueError("输入必须是数字")
 
     # 递归计算单位和数值
     def convert(n, level):
-        if level >= len(units) - 1 or n < base:
+        if level >= len(units) - 1 or n < 10000:
             return n, level
-        n /= base
-        level += 1
-        return convert(n, level)
+        return convert(n / 10000, level + 1)
 
     num, level = convert(num, 0)
     formatted_num = format_number(num)
-    return f"{sign}{formatted_num}{units[level]}"
+    return f"{formatted_num}{units[level]}"
 
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
