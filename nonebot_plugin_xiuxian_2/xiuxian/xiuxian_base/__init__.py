@@ -1714,7 +1714,7 @@ def generate_daohao():
             ('妖灵', 10)
         ],
         'name_struct': [('单字', 30), ('双字', 50), ('数字', 15), ('三字', 5)],
-        'modifier_level': [('无修饰', 30), ('一级', 40), ('二级', 20), ('三级', 10)]
+        'modifier_level': [('无修饰', 30), ('一级', 50), ('二级', 20)]
     }
 
     # 2. 各维度详细词库 - 确保所有词库无重复
@@ -1832,10 +1832,11 @@ def generate_daohao():
             parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
         name = ''.join(parts)
     
-    # 生成修饰词 - 最多2个
+    # 生成修饰词
     modifiers = []
     if modifier_level != '无修饰' and style in lexicon['modifiers']:
-        modifier_count = min(int(modifier_level[-1]), 2)  # 最多2个修饰词
+        level_map = {"一级":1, "二级":2}
+        modifier_count = min(level_map.get(modifier_level, 1), 3)
         available_modifiers = lexicon['modifiers'][style].copy()
         for _ in range(modifier_count):
             if not available_modifiers:
