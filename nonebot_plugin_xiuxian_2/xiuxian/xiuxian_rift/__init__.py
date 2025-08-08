@@ -45,8 +45,8 @@ rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
-use_rift_key = on_command("秘境钥匙", priority=5, block=True)
-use_rift_explore = on_command("秘藏令", priority=5, block=True)
+use_rift_key = on_command("道具使用秘境钥匙", priority=5, block=True)
+use_rift_explore = on_command("道具使用秘藏令", priority=5, block=True)
 
 __rift_help__ = f"""
 【秘境探索系统】🗝️

@@ -2366,6 +2366,9 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 
     elif goods_type == "丹药":
         msg = check_use_elixir(user_id, goods_id, num)
+        
+    elif goods_type == "特殊道具":
+        msg = f"请发送:道具使用{goods_info['name']}"
 
     elif goods_type == "神物":
         user_info = sql_message.get_user_info_with_id(user_id)

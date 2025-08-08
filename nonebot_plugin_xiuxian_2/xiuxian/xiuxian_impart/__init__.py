@@ -71,7 +71,7 @@ re_impart_load = on_fullmatch("加载传承数据", priority=45, block=True)
 impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
 )
-use_wishing_stone = on_command("使用祈愿石", priority=5, block=True)
+use_wishing_stone = on_command("道具使用祈愿石", priority=5, block=True)
 
 __impart_help__ = f"""
 【虚神界传承系统】✨
