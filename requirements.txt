@@ -8,4 +8,5 @@ asyncio
 aiohttp
 pydantic
 aiofiles
+psutil
 nonebot_plugin_apscheduler 

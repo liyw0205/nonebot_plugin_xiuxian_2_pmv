@@ -6,7 +6,8 @@ from nonebot.log import logger
 from nonebot.message import event_preprocessor, IgnoredException
 from nonebot.adapters.onebot.v11 import (
     Bot,
-    GroupMessageEvent
+    GroupMessageEvent,
+    PrivateMessageEvent
 )
 from nonebot import get_driver
 from .xiuxian_config import XiuConfig
@@ -73,7 +74,7 @@ __plugin_meta__ = PluginMetadata(
 
 
 @event_preprocessor
-async def do_something(bot: Bot, event: GroupMessageEvent):
+async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     global put_bot
     if not put_bot:
         pass

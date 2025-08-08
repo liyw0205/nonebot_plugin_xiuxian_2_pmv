@@ -73,6 +73,7 @@ xian_buy = on_command("仙肆购买", priority=5, block=True)
 my_xian_shop = on_command("我的仙肆", priority=5, block=True)
 xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permission=SUPERUSER, block=True)
 xian_shop_remove_by_admin = on_command("系统仙肆下架", priority=5, permission=SUPERUSER, block=True)
+xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSER, block=True)
 
 # 坊市系统配置
 FANGSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
@@ -115,38 +116,44 @@ __back_help__ = f"""
 修仙交易系统帮助
 
 【背包管理】
-🔹 我的背包 [页码] - 查看背包物品
-🔹 药材背包 [页码] - 查看药材类物品
-🔹 丹药背包 [页码] - 查看丹药类物品
-🔹 使用+物品名 [数量] - 使用物品
-🔹 换装+装备名 - 卸下装备
-🔹 炼金+物品名 [数量] - 将物品转化为灵石
+🔹🔹 我的背包 [页码] - 查看背包物品
+🔹🔹 药材背包 [页码] - 查看药材类物品
+🔹🔹 丹药背包 [页码] - 查看丹药类物品
+🔹🔹 使用+物品名 [数量] - 使用物品
+🔹🔹 换装+装备名 - 卸下装备
+🔹🔹 炼金+物品名 [数量] - 将物品转化为灵石
 
 【坊市交易】（群内）
-🔸 坊市查看 [类型] [页码] - 查看群坊市
+🔸🔸 坊市查看 [类型] [页码] - 查看群坊市
   ▶ 支持类型：技能|装备|丹药|药材
-🔸 坊市上架 物品 金额 [数量] - 上架物品
+🔸🔸 坊市上架 物品 金额 [数量] - 上架物品
   ▶ 最低金额50万灵石，手续费10-30%
-🔸 坊市购买 编号 [数量] - 购买物品
-🔸 坊市下架 编号 - 下架自己的物品
+🔸🔸 坊市购买 编号 [数量] - 购买物品
+🔸🔸 坊市下架 编号 - 下架自己的物品
+🔸🔸 我的坊市 [页码] - 查看自己上架的物品
+🔸🔸 清空坊市 - (管理员)清空所有坊市物品
 
 【仙肆交易】（全服）
-🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
-🔸 仙肆上架 物品 金额 [数量] - 上架物品
-🔸 仙肆购买 编号 [数量] - 购买物品
-🔸 仙肆下架 编号 - 下架自己的物品
+🔸🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
+🔸🔸 仙肆上架 物品 金额 [数量] - 上架物品
+  ▶ 最低50万灵石，自动匹配仙肆最低价
+🔸🔸 仙肆购买 编号 [数量] - 购买物品
+🔸🔸 仙肆下架 编号 - 下架自己的物品
+🔸🔸 我的仙肆 [页码] - 查看自己上架的物品
+🔸🔸 清空仙肆 - (管理员)清空所有仙肆物品
 
 【拍卖会】
-🎫 查看拍卖品 - 查看待拍卖物品
-🎫 提交拍卖品 物品 底价 [数量] - 提交拍卖
-🎫 拍卖+金额 - 参与竞拍
-🎫 撤回拍卖品 编号 - 撤回自己的拍卖品
+🎫🎫 查看拍卖品 - 查看待拍卖物品
+🎫🎫 提交拍卖品 物品 底价 [数量] - 提交拍卖
+🎫🎫 拍卖+金额 - 参与竞拍
+🎫🎫 撤回拍卖品 编号 - 撤回自己的拍卖品
+🎫🎫 举行拍卖会 - (管理员)开启拍卖
 
 【其他功能】
-🔍 查看效果+物品名 - 查看物品详情
-📜 查看修仙界物品+类型 [页码] 
+🔍🔍 查看效果+物品名 - 查看物品详情
+📜📜 查看修仙界物品+类型 [页码] 
   ▶ 支持类型：功法|神通|丹药|法器|防具等
-💎 灵石 - 查看当前灵石数量
+💎💎 灵石 - 查看当前灵石数量
 
 【系统规则】
 ⏰ 每日{auction_time_config['hours']}点自动举行拍卖会
@@ -155,7 +162,7 @@ __back_help__ = f"""
   - 500-1000万：15% 
   - 1000-2000万：20%
   - 2000万以上：30%
-
+  
 输入具体指令查看详细用法，祝道友交易愉快！
 """.strip()
 
@@ -851,7 +858,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 user_items[item_name] = item
     
     # 合并系统物品和用户物品，并按价格排序
-    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['price'])
+    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['name'])
     
     # 分页处理
     per_page = 10
@@ -919,7 +926,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 user_items.append(type_items[xianshi_id])
     
     # 按价格排序
-    user_items.sort(key=lambda x: x['price'])
+    user_items.sort(key=lambda x: x['name'])
     
     # 检查是否有上架物品
     if not user_items:
@@ -1152,16 +1159,17 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
             item_info = index_data["items"][xianshi_id]
             type_items = get_xianshi_type_data(item_info["type"])
             if xianshi_id in type_items:
-                removed_items.append(type_items[xianshi_id])
+                item_data = type_items[xianshi_id]
+                removed_items.append(item_data)
                 
                 # 如果是用户物品，退回
                 if item_info["user_id"] != 0:
                     sql_message.send_back(
                         item_info["user_id"],
-                        type_items[xianshi_id]["goods_id"],
-                        type_items[xianshi_id]["name"],
+                        item_data["goods_id"],
+                        item_data["name"],
                         item_info["type"],
-                        type_items[xianshi_id]["quantity"]
+                        item_data["quantity"]
                     )
                 
                 # 从系统中移除
@@ -1175,38 +1183,127 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
             await xian_shop_remove_by_admin.finish()
     else:  # 按名称下架
         goods_name = arg
-        # 查找所有匹配的物品
+        # 解析数量
+        parts = goods_name.split()
+        quantity = None
+        if len(parts) > 1 and parts[-1].isdigit():
+            quantity = int(parts[-1])
+            goods_name = " ".join(parts[:-1])
+        
+        # 查找所有匹配的用户物品（不包括系统物品）
+        user_items = []
         for xianshi_id, item_info in index_data["items"].items():
-            type_items = get_xianshi_type_data(item_info["type"])
-            if xianshi_id in type_items and type_items[xianshi_id]["name"] == goods_name:
-                removed_items.append(type_items[xianshi_id])
+            if item_info["user_id"] != 0:  # 排除系统物品
+                type_items = get_xianshi_type_data(item_info["type"])
+                if xianshi_id in type_items and type_items[xianshi_id]["name"] == goods_name:
+                    user_items.append({
+                        "id": xianshi_id,
+                        "price": type_items[xianshi_id]["price"],
+                        "type": item_info["type"],
+                        "user_id": item_info["user_id"],
+                        "item_data": type_items[xianshi_id]
+                    })
+        
+        if not user_items:
+            msg = f"仙肆中没有用户上架的 {goods_name} 物品！"
+            await handle_send(bot, event, msg)
+            await xian_shop_remove_by_admin.finish()
+        
+        # 按价格从低到高排序
+        user_items.sort(key=lambda x: x["price"])
+        
+        # 确定要下架的数量
+        if quantity is None:
+            # 没指定数量则下架最低价的1个
+            items_to_remove = [user_items[0]]
+        else:
+            # 指定数量则下架价格从低到高的指定数量
+            items_to_remove = user_items[:quantity]
+        
+        # 执行下架操作
+        for item in items_to_remove:
+            # 从类型文件中移除
+            type_items = get_xianshi_type_data(item["type"])
+            if item["id"] in type_items:
+                item_data = item["item_data"]
+                removed_items.append(item_data)
                 
-                # 如果是用户物品，退回
-                if item_info["user_id"] != 0:
-                    sql_message.send_back(
-                        item_info["user_id"],
-                        type_items[xianshi_id]["goods_id"],
-                        goods_name,
-                        item_info["type"],
-                        type_items[xianshi_id]["quantity"]
-                    )
+                # 退回物品给用户
+                sql_message.send_back(
+                    item["user_id"],
+                    item_data["goods_id"],
+                    item_data["name"],
+                    item["type"],
+                    item_data["quantity"]
+                )
                 
                 # 从系统中移除
-                del index_data["items"][xianshi_id]
-                del type_items[xianshi_id]
+                del index_data["items"][item["id"]]
+                del type_items[item["id"]]
                 save_xianshi_index(index_data)
-                save_xianshi_type_data(item_info["type"], type_items)
+                save_xianshi_type_data(item["type"], type_items)
     
     if removed_items:
         msg = "成功下架以下物品：\n"
         for item in removed_items:
             owner = "系统" if item["user_id"] == 0 else item["user_name"]
-            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (来自:{owner})\n"
+            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (已退回给:{owner})\n"
     else:
         msg = "没有物品被下架！"
     
     await handle_send(bot, event, msg)
     await xian_shop_remove_by_admin.finish()
+
+@xian_shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GLOBAL, parallel=1)])
+async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """清空仙肆"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await xian_shop_off_all.finish()
+    
+    msg = "正在清空全服仙肆，请稍候..."
+    await handle_send(bot, event, msg)
+    
+    # 获取所有物品
+    index_data = get_xianshi_index()
+    removed_items = []
+    
+    for xianshi_id, item_info in index_data["items"].items():
+        type_items = get_xianshi_type_data(item_info["type"])
+        if xianshi_id in type_items:
+            item = type_items[xianshi_id]
+            removed_items.append(item)
+            
+            # 如果是用户物品，退回
+            if item_info["user_id"] != 0:
+                sql_message.send_back(
+                    item_info["user_id"],
+                    item["goods_id"],
+                    item["name"],
+                    item_info["type"],
+                    item["quantity"]
+                )
+    
+    # 清空所有数据
+    for item_type in XIANSHI_TYPES:
+        save_xianshi_type_data(item_type, {})
+    
+    save_xianshi_index({"next_id": 1, "items": {}})
+    
+    if removed_items:
+        msg = "成功清空仙肆！共下架以下物品：\n"
+        for item in removed_items[:10]:  # 最多显示10条
+            owner = "系统" if item["user_id"] == 0 else item["user_name"]
+            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (来自:{owner})\n"
+        if len(removed_items) > 10:
+            msg += f"...等共{len(removed_items)}件物品"
+    else:
+        msg = "仙肆已经是空的，没有物品被下架！"
+    
+    await handle_send(bot, event, msg)
+    await xian_shop_off_all.finish()
 
 @shop_added.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
@@ -1589,7 +1686,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                 user_items[item_name] = item
     
     # 合并系统物品和用户物品，并按价格排序
-    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['price'])
+    items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['name'])
     
     # 分页处理
     per_page = 10
@@ -1658,70 +1755,7 @@ async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
                 user_items.append(type_items[fangshi_id])
     
     # 按价格排序
-    user_items.sort(key=lambda x: x['price'])
-    
-    # 检查是否有上架物品
-    if not user_items:
-        msg = "您在坊市中没有上架任何物品！"
-        await handle_send(bot, event, msg)
-        await my_shop.finish()
-    
-    # 分页处理
-    per_page = 10
-    total_pages = (len(user_items) + per_page - 1) // per_page
-    current_page = max(1, min(current_page, total_pages))
-    
-    # 构建消息
-    start_idx = (current_page - 1) * per_page
-    end_idx = start_idx + per_page
-    paged_items = user_items[start_idx:end_idx]
-    
-    msg_list = [f"☆------{user_info['user_name']}的坊市物品------☆"]
-    for item in paged_items:
-        price_str = number_to(item['price'])
-        msg = f"{item['name']} {price_str}灵石"
-        if isinstance(item['quantity'], int) and item['quantity'] > 1:
-            msg += f" x{item['quantity']}"
-        msg_list.append(msg)
-    
-    msg_list.append(f"\n第 {current_page}/{total_pages} 页")
-    if total_pages > 1:
-        msg_list.append(f"输入 我的坊市 {current_page + 1} 查看下一页")
-    
-    await send_msg_handler(bot, event, '我的坊市', bot.self_id, msg_list)
-    await my_shop.finish()
-
-@my_shop.handle(parameterless=[Cooldown(at_sender=False)])
-async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """我的坊市"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
-        await my_shop.finish()
-    
-    group_id = str(event.group_id)
-    user_id = user_info['user_id']
-    
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except:
-        current_page = 1
-    
-    # 从索引获取用户所有物品
-    index_data = get_fangshi_index(group_id)
-    user_items = []
-    
-    for fangshi_id, item_info in index_data["items"].items():
-        if str(item_info["user_id"]) == str(user_id):
-            # 从对应类型文件读取详细信息
-            type_items = get_fangshi_type_data(group_id, item_info["type"])
-            if fangshi_id in type_items:
-                user_items.append(type_items[fangshi_id])
-    
-    # 按价格排序
-    user_items.sort(key=lambda x: x['price'])
+    user_items.sort(key=lambda x: x['name'])
     
     # 检查是否有上架物品
     if not user_items:
@@ -1854,16 +1888,17 @@ async def shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent, args: Messag
             item_info = index_data["items"][fangshi_id]
             type_items = get_fangshi_type_data(group_id, item_info["type"])
             if fangshi_id in type_items:
-                removed_items.append(type_items[fangshi_id])
+                item_data = type_items[fangshi_id]
+                removed_items.append(item_data)
                 
-                # 如果是用户物品，退回
+                # 如果是用户物品，退回给用户
                 if item_info["user_id"] != 0:
                     sql_message.send_back(
                         item_info["user_id"],
-                        type_items[fangshi_id]["goods_id"],
-                        type_items[fangshi_id]["name"],
+                        item_data["goods_id"],
+                        item_data["name"],
                         item_info["type"],
-                        type_items[fangshi_id]["quantity"]
+                        item_data["quantity"]
                     )
                 
                 # 从系统中移除
@@ -1877,33 +1912,70 @@ async def shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent, args: Messag
             await shop_remove_by_admin.finish()
     else:  # 按名称下架
         goods_name = arg
-        # 查找所有匹配的物品
+        # 解析数量
+        parts = goods_name.split()
+        quantity = None
+        if len(parts) > 1 and parts[-1].isdigit():
+            quantity = int(parts[-1])
+            goods_name = " ".join(parts[:-1])
+        
+        # 查找所有匹配的用户物品（不包括系统物品）
+        user_items = []
         for fangshi_id, item_info in index_data["items"].items():
-            type_items = get_fangshi_type_data(group_id, item_info["type"])
-            if fangshi_id in type_items and type_items[fangshi_id]["name"] == goods_name:
-                removed_items.append(type_items[fangshi_id])
+            if item_info["user_id"] != 0:  # 排除系统物品
+                type_items = get_fangshi_type_data(group_id, item_info["type"])
+                if fangshi_id in type_items and type_items[fangshi_id]["name"] == goods_name:
+                    user_items.append({
+                        "id": fangshi_id,
+                        "price": type_items[fangshi_id]["price"],
+                        "type": item_info["type"],
+                        "user_id": item_info["user_id"],
+                        "item_data": type_items[fangshi_id]
+                    })
+        
+        if not user_items:
+            msg = f"坊市中没有用户上架的 {goods_name} 物品！"
+            await handle_send(bot, event, msg)
+            await shop_remove_by_admin.finish()
+        
+        # 按价格从低到高排序
+        user_items.sort(key=lambda x: x["price"])
+        
+        # 确定要下架的数量
+        if quantity is None:
+            # 没指定数量则下架最低价的1个
+            items_to_remove = [user_items[0]]
+        else:
+            # 指定数量则下架价格从低到高的指定数量
+            items_to_remove = user_items[:quantity]
+        
+        # 执行下架操作
+        for item in items_to_remove:
+            # 从类型文件中移除
+            type_items = get_fangshi_type_data(group_id, item["type"])
+            if item["id"] in type_items:
+                removed_items.append(item["item_data"])
                 
-                # 如果是用户物品，退回
-                if item_info["user_id"] != 0:
-                    sql_message.send_back(
-                        item_info["user_id"],
-                        type_items[fangshi_id]["goods_id"],
-                        goods_name,
-                        item_info["type"],
-                        type_items[fangshi_id]["quantity"]
-                    )
+                # 退回物品给用户
+                sql_message.send_back(
+                    item["user_id"],
+                    item["item_data"]["goods_id"],
+                    item["item_data"]["name"],
+                    item["type"],
+                    item["item_data"]["quantity"]
+                )
                 
                 # 从系统中移除
-                del index_data["items"][fangshi_id]
-                del type_items[fangshi_id]
+                del index_data["items"][item["id"]]
+                del type_items[item["id"]]
                 save_fangshi_index(group_id, index_data)
-                save_fangshi_type_data(group_id, item_info["type"], type_items)
+                save_fangshi_type_data(group_id, item["type"], type_items)
     
     if removed_items:
         msg = "成功下架以下物品：\n"
         for item in removed_items:
-            owner = "系统" if item["user_id"] == 0 else item["user_name"]
-            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (来自:{owner})\n"
+            owner = "系统" if item["user_id"] == 0 else sql_message.get_user_info_with_id(item["user_id"])["user_name"]
+            msg += f"ID:{item['id']} {item['name']} x{item['quantity']} (已退回给:{owner})\n"
     else:
         msg = "没有物品被下架！"
     
@@ -3019,12 +3091,3 @@ def get_auction_msg(auction_id):
         msg += f"效果：{item_info['desc']}"
 
     return msg
-
-async def check_trade_data_dir():
-    """检查交易数据文件夹"""
-    if not TRADE_DATA_PATH.exists():
-        TRADE_DATA_PATH.mkdir(parents=True)
-        logger.info(f"创建交易数据目录: {TRADE_DATA_PATH}")
-
-# 在机器人启动时调用
-check_trade_data_dir()
