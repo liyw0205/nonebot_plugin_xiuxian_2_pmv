@@ -119,6 +119,8 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
+        xiuxian_impart.update_impart_lv(user_id, 0)
+        #重置虚神界等级
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 6) #更换灵根
@@ -172,6 +174,8 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
+        xiuxian_impart.update_impart_lv(user_id, 0)
+        #重置虚神界等级
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 7) #更换灵根
@@ -244,6 +248,8 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
+        xiuxian_impart.update_impart_lv(user_id, 0)
+        #重置虚神界等级
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 8) #更换灵根

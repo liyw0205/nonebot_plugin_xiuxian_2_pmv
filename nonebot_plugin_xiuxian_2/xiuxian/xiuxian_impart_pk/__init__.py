@@ -43,12 +43,6 @@ async def impart_re_():
     impart_pk.re_data()
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
-    
-# 每周星期一0点重置虚神界等级
-@impart_relv.scheduled_job("cron", hour=0, minute=0, day_of_week=1)
-async def impart_relv_():
-    xiuxian_impart.impart_lv_reset()
-    logger.opt(colors=True).info(f"<green>已重置虚神界等级</green>")
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -370,7 +364,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
     
     impart_time = impart_data_draw['exp_day']
-    impart_exp_up = impart_lv * 0.1
+    impart_exp_up = impart_lv * 0.15
     impart_name_new = impart_level.get(impart_lv, "未知秘境")
     msg += f"\n现位于：{impart_name_new}（LV {impart_lv}）"
     msg += f"\n虚神界修炼时间：{impart_time} 分钟"
@@ -489,7 +483,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg = random.choice(up_rate_msgs)
     
     xiuxian_impart.use_impart_exp_day(impart_time, user_id)
-    xiuxian_impart.update_impart_lv(impart_lv, user_id)
+    xiuxian_impart.update_impart_lv(user_id, impart_lv)
     impart_pk.update_user_impart_lv(user_info['user_id'])
     
     impart_exp_up = impart_lv * 0.15

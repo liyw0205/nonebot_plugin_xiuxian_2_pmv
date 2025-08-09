@@ -2082,7 +2082,7 @@ class XIUXIAN_IMPART_BUFF:
         cur.execute(sql, (impart_stone,))
         self.conn.commit()
         
-    def update_impart_lv(self, impart_lv, user_id):
+    def update_impart_lv(self, user_id, impart_lv):
         """更新虚神界等级"""
         cur = self.conn.cursor()
         sql = "UPDATE xiuxian_impart SET impart_lv=? WHERE user_id=?"
