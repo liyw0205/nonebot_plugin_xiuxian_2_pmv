@@ -330,7 +330,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         sql_message.update_exp(user_id, exp)
         sql_message.update_power2(user_id)  # 更新战力
-        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次闭关增加修为：{number_to(exp)}"
+        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次增加修为：{number_to(exp)}"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
