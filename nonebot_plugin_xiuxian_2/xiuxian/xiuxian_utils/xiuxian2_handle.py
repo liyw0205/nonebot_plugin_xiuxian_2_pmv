@@ -1553,7 +1553,8 @@ class OtherSet(XiuConfig):
         if user_exp >= need_exp:
             pass
         else:
-            return f"道友的修为不足以突破！距离下次突破需要{need_exp - user_exp}修为！突破境界为：{is_updata_level}"
+            from .utils import number_to
+            return f"道友的修为不足以突破！距离下次突破需要{number_to(need_exp - user_exp)}修为！突破境界为：{is_updata_level}"
 
         success_rate = True if random.randint(0, 100) < rate else False
 
