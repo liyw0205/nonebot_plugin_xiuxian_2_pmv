@@ -447,10 +447,10 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
                     if exp_limit_1 >= user_get_exp_max_1:
                         sql_message.update_exp(user_1['user_id'], user_get_exp_max_1)
-                        msg += f"{user_1['user_name']}修为到达上限，增加修为{user_get_exp_max_1}。"
+                        msg += f"{user_1['user_name']}修为到达上限，增加修为{number_to(user_get_exp_max_1)}。"
                     else:
                         sql_message.update_exp(user_1['user_id'], exp_limit_1)
-                        msg += f"{user_1['user_name']}增加修为{exp_limit_1}。"
+                        msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     sql_message.update_power2(user_1['user_id'])
 
                     if user_2['sect_position'] is None:
@@ -465,10 +465,10 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
                     if exp_limit_2 >= user_get_exp_max_2:
                         sql_message.update_exp(user_2['user_id'], user_get_exp_max_2)
-                        msg += f"{user_2['user_name']}修为到达上限，增加修为{user_get_exp_max_2}。"
+                        msg += f"{user_2['user_name']}修为到达上限，增加修为{number_to(user_get_exp_max_2)}。"
                     else:
                         sql_message.update_exp(user_2['user_id'], exp_limit_2)
-                        msg += f"{user_2['user_name']}增加修为{exp_limit_2}。"
+                        msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
                     sql_message.update_power2(user_2['user_id'])
                     sql_message.update_levelrate(user_1['user_id'], user_1['level_up_rate'] + 2)
                     sql_message.update_levelrate(user_2['user_id'], user_2['level_up_rate'] + 2)
@@ -491,10 +491,10 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                         exp_limit_1 = exp
                     if exp_limit_1 >= user_get_exp_max_1:
                         sql_message.update_exp(user_1['user_id'], user_get_exp_max_1)
-                        msg += f"{user_1['user_name']}修为到达上限，增加修为{user_get_exp_max_1}。"
+                        msg += f"{user_1['user_name']}修为到达上限，增加修为{number_to(user_get_exp_max_1)}。"
                     else:
                         sql_message.update_exp(user_1['user_id'], exp_limit_1)
-                        msg += f"{user_1['user_name']}增加修为{exp_limit_1}。"
+                        msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     sql_message.update_power2(user_1['user_id'])
 
                     if user_2['sect_position'] is None:
@@ -508,10 +508,10 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                         exp_limit_2 = exp
                     if exp_limit_2 >= user_get_exp_max_2:
                         sql_message.update_exp(user_2['user_id'], user_get_exp_max_2)
-                        msg += f"{user_2['user_name']}修为到达上限，增加修为{user_get_exp_max_2}。"
+                        msg += f"{user_2['user_name']}修为到达上限，增加修为{number_to(user_get_exp_max_2)}。"
                     else:
                         sql_message.update_exp(user_2['user_id'], exp_limit_2)
-                        msg += f"{user_2['user_name']}增加修为{exp_limit_2}。"
+                        msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
                     sql_message.update_power2(user_2['user_id'])
                     two_exp_cd.add_user(user_1['user_id'])
                     two_exp_cd.add_user(user_2['user_id'])

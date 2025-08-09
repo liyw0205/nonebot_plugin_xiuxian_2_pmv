@@ -43,10 +43,10 @@ cache_level2_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
-run_xiuxian = on_command("我要修仙", priority=8, block=True)
+run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_fullmatch("重入仙途", priority=7, block=True)
 sign_in = on_command("修仙签到", priority=13, block=True)
-help_in = on_command("修仙帮助", priority=12, block=True)
+help_in = on_command("修仙帮助", aliases={"菜单", "帮助"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
@@ -66,13 +66,14 @@ rob_stone = on_command("抢灵石", aliases={"抢劫"}, priority=5, permission=G
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
 set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
-user_leveluprate = on_command('我的突破概率', aliases={'突破概率'}, priority=5, block=True)
+auto_root = on_command("自动选择灵根", aliases={'开启自动选择灵根', '关闭自动选择灵根'}, permission=SUPERUSER, priority=5, block=True)
+user_leveluprate = on_command('我的突破概率', aliases={"突破概率", "概率"}, priority=5, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)
 xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, permission=GROUP, block=True)
 xiuxian_uodata_data = on_fullmatch('更新记录', priority=15, permission=GROUP, block=True)
-level_help = on_fullmatch("灵根帮助", priority=15, block=True)
-level1_help = on_fullmatch("品阶帮助", priority=15, block=True)
-level2_help = on_fullmatch("境界帮助", priority=15, block=True)
+level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, block=True)
+level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
+level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
 
 __xiuxian_notes__ = f"""
 【修仙指令】✨
@@ -108,7 +109,6 @@ __xiuxian_notes__ = f"""
 ===========
 ⚙️ 系统设置
 → 修改道号:发送"修仙改名+道号"✏️
-→ 灵根优化:发送"开启/关闭自动选择灵根"🤖
 → 悬赏任务:发送"悬赏令帮助"📜
 → 状态查看:发送"我的状态"📝
 ===========
@@ -398,6 +398,24 @@ async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg)
         await level2_help.finish()
 
+@auto_root.handle()
+async def auto_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """开关自动选择灵根功能"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    command = event.get_plaintext().strip()
+    
+    if "开启" in command:
+        JsonConfig().write_data(5)  # 5对应开启自动选择灵根
+        msg = "已开启自动选择最佳灵根功能！重入仙途时将自动为您选择最佳灵根。"
+    elif "关闭" in command:
+        JsonConfig().write_data(6)  # 6对应关闭自动选择灵根
+        msg = "已关闭自动选择灵根功能！重入仙途时将需要手动选择灵根。"
+    else:
+        status = "开启" if JsonConfig().is_auto_root_selection_enabled() else "关闭"
+        msg = f"当前自动选择灵根功能状态：{status}\n使用'开启自动选择灵根'或'关闭自动选择灵根'来修改设置"
+    
+    await handle_send(bot, event, msg)
+    await auto_root.finish()
 
 @restart.handle(parameterless=[Cooldown(at_sender=False)])
 async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
@@ -413,19 +431,33 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         await handle_send(bot, event, msg)
         await restart.finish()
 
-    state["user_id"] = user_info['user_id']  # 将用户信息存储在状态中
-
+    user_id = user_info['user_id']
+    
+    # 生成10个随机灵根选项
     linggen_options = []
     for _ in range(10):
         name, root_type = XiuxianJsonDate().linggen_get()
         linggen_options.append((name, root_type))
-
-    linggen_list_msg = "\n".join([f"{i+1}. {name} ({root_type})" for i, (name, root_type) in enumerate(linggen_options)])
-    msg = f"请从以下灵根中选择一个:\n{linggen_list_msg}\n请输入对应的数字选择 (1-10):"
-    state["linggen_options"] = linggen_options
-
-    await handle_send(bot, event, msg)
-
+    
+    # 显示所有随机生成的灵根选项
+    linggen_list_msg = "本次随机生成的灵根有：\n"
+    linggen_list_msg += "\n".join([f"{i+1}. {name} ({root_type})" for i, (name, root_type) in enumerate(linggen_options)])
+    
+    # 自动选择最佳灵根
+    if JsonConfig().is_auto_root_selection_enabled():
+        # 按灵根倍率排序选择最佳灵根
+        selected_name, selected_root_type = max(linggen_options, 
+                                             key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
+        msg = f"{linggen_list_msg}\n\n已自动为您选择最佳灵根：{selected_name} ({selected_root_type})\n"
+        msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
+        await handle_send(bot, event, msg)
+        await restart.finish()
+    else:
+        # 保留原来的手动选择逻辑
+        state["user_id"] = user_id
+        msg = f"{linggen_list_msg}\n\n请从以上灵根中选择一个:\n请输入对应的数字选择 (1-10):"
+        state["linggen_options"] = linggen_options
+        await handle_send(bot, event, msg)
 
 @restart.receive()
 async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
