@@ -654,7 +654,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
             msg = (
                 f"虚神界闭关结束，共闭关{exp_time}分钟，"
                 f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
-                f"{int(effective_single_exp_time)}没有获得祝福，"
+                f"{int(effective_single_exp_time)}分钟没有获得祝福，"
                 f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
             )
     await handle_send(bot, event, msg)

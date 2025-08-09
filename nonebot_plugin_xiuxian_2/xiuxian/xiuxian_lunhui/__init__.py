@@ -297,13 +297,8 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
-        sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
-        sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
-        sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
-        sql_message.update_ls(user_id, user_info['stone'], 2)
-        #重置用户灵石
         sql_message.update_root(user_id, 9) #更换灵根
         sql_message.updata_root_level(user_id, 1) #更新轮回等级
         msg = f"超越永恒，超脱命运，执掌因果轮回！恭喜大能{user_name}突破命运桎梏，成就无上命运道果！"

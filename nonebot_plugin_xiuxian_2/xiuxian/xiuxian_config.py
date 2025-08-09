@@ -123,10 +123,10 @@ class XiuConfig:
         self.remaname = 10000000  # 修仙改名的消费
         self.max_stamina = 240 # 体力上限
         self.stamina_recovery_points = 2 # 体力恢复点数/分钟
-        self.lunhui_min_level = "星芒境初期" # 千世轮回最低境界
-        self.twolun_min_level = "祭道境初期" # 万世轮回最低境界
-        self.threelun_min_level = "无界境初期" # 永恒轮回最低境界
-        self.Infinite_reincarnation_min_level = "永恒境初期" # 永恒轮回最低境界
+        self.lunhui_min_level = "至尊境初期" # 千世轮回最低境界
+        self.twolun_min_level = "星芒境初期" # 万世轮回最低境界
+        self.threelun_min_level = "祭道境初期" # 永恒轮回最低境界
+        self.Infinite_reincarnation_min_level = "破虚境初期" # 永恒轮回最低境界
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
         self.merge_forward_send = 1 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
