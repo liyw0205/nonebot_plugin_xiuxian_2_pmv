@@ -78,51 +78,62 @@ sect_users = on_command("宗门成员查看", aliases={"查看宗门成员"}, pr
 sect_elixir_room_make = on_command("宗门丹房建设", aliases={"建设宗门丹房"}, priority=5, block=True)
 sect_elixir_get = on_command("宗门丹药领取", aliases={"领取宗门丹药"}, priority=5, block=True)
 sect_rename = on_command("宗门改名", priority=5,  block=True)
+sect_close_join = on_command("关闭宗门加入", priority=5, block=True)
+sect_open_join = on_command("开放宗门加入", priority=5, block=True)
+sect_close_mountain = on_command("封闭山门", priority=5, block=True)
+sect_close_mountain2 = on_command("确认封闭山门", priority=5, block=True)
+sect_disband = on_command("解散宗门", priority=5, block=True)
+sect_disband2 = on_command("确认解散宗门", priority=5, block=True)
+sect_inherit = on_command("继承宗主", priority=5, block=True)
 
 __sect_help__ = f"""
-【宗门系统】🏯
+【宗门系统】🏯🏯
 
-🏛️ 基础指令：
+🏛🏛️ 基础指令：
   • 我的宗门 - 查看当前宗门信息
   • 宗门列表 - 浏览全服宗门
   • 创建宗门 - 消耗{XiuConfig().sect_create_cost}灵石（需境界{XiuConfig().sect_min_level}）
   • 加入宗门 [ID] - 申请加入指定宗门
 
-👑 宗主专属：
+👑👑 宗主专属：
   • 宗门职位变更 [道号] [0-4] - 调整成员职位
     0=宗主 | 1=长老 | 2=亲传 | 3=内门 | 4=外门
   • 宗门改名 [新名称] - 修改宗门名称
   • 宗主传位 [道号] - 禅让宗主之位
   • 踢出宗门 [道号] - 移除宗门成员
+  • 开放宗门加入 - 允许其他修士加入宗门
+  • 关闭宗门加入 - 禁止其他修士加入宗门
+  • 封闭山门 - 关闭宗门并退位为长老(需确认)
+  • 解散宗门 - 解散宗门并踢出所有成员(需确认)
 
-📈 宗门建设：
+📈📈 宗门建设：
   • 宗门捐献 - 提升建设度（每{config["等级建设度"]}建设度提升1级修炼上限）
   • 升级攻击/元血/灵海修炼 - 提升对应属性（每级+4%攻/8%血/5%真元）
 
-📚 功法传承：
+📚📚 功法传承：
   • 宗门功法、神通搜寻 - 宗主可消耗资源搜索功法（100次）
   • 学习宗门功法/神通 [名称] - 成员消耗资材学习
   • 宗门功法查看 - 浏览宗门藏书
 
-💊 丹房系统：
+💊💊 丹房系统：
   • 建设宗门丹房 - 开启每日丹药福利
   • 领取宗门丹药 - 获取每日丹药补给
 
-📝 宗门任务：
+📝📝 宗门任务：
   • 宗门任务接取 - 获取任务（每日上限：{config["每日宗门任务次上限"]}次）
   • 宗门任务完成 - 提交任务（CD：{config["宗门任务完成cd"]}秒）
   • 宗门任务刷新 - 更换任务（CD：{config["宗门任务刷新cd"]}秒）
 
-⏰ 自动福利：
+⏰⏰⏰ 自动福利：
   • 每日{config["发放宗门资材"]["时间"]}点发放{config["发放宗门资材"]["倍率"]}倍建设度资材
   • 职位修为加成：宗主＞长老＞亲传＞内门＞外门＞散修
 
-💡 小贴士：
+💡💡 小贴士：
   1. 外门弟子无法获得修炼资源
   2. 建设度决定宗门整体实力
   3. 每日任务收益随职位提升
+  4. 封闭山门后长老可以使用【继承宗主】来继承宗主之位
 """.strip()
-
 
 # 定时任务每1小时按照宗门贡献度增加资材
 @materialsupdate.scheduled_job("cron", hour=config["发放宗门资材"]["时间"])
@@ -171,6 +182,24 @@ async def auto_sect_owner_change_():
 
         user_info = sql_message.get_user_info_with_id(owner_id)
         sect_id = user_info['sect_id']
+        sect_info = sql_message.get_sect_info(sect_id)
+        
+        # 如果是封闭山门状态
+        if sect_info['closed']:
+            # 自动选择贡献最高的长老继承
+            new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
+            if new_owner_id:
+                new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
+                sql_message.update_usr_sect(owner_id, sect_id, 1)  # 原宗主降为长老
+                sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)  # 新宗主
+                sql_message.update_sect_owner(new_owner_id[0], sect_id)
+                sql_message.update_sect_closed_status(sect_id, 0)  # 解除封闭
+                sql_message.update_sect_join_status(sect_id, 1)  # 开放加入
+                logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位，解除封闭状态</green>")
+            else:
+                logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的长老可以继承</red>")
+            continue
+            
         logger.opt(colors=True).info(f"<red>{user_info['user_name']}离线时间超过{XiuConfig().auto_change_sect_owner_cd}天，开始自动换宗主</red>")
         new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
         new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
@@ -1409,35 +1438,46 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
 
 @join_sect.handle(parameterless=[Cooldown(at_sender=False)])
 async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """加入宗门,后跟宗门ID,要求加入者当前状态无宗门,入门默认为外门弟子"""
+    """加入宗门"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         msg = f"守山弟子：凡人，回去吧，仙途难入，莫要自误！"
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
-    user_id = user_info['user_id']
-    if not user_info['sect_id']:
-        sect_no = args.extract_plain_text().strip()
-        sql_sects = sql_message.get_all_sect_id()
-        sects_all = [tup[0] for tup in sql_sects]
-        if not sect_no.isdigit():
-            msg = f"申请加入的宗门编号解析异常，应全为数字!"
-        elif int(sect_no) not in sects_all:
-            msg = f"申请加入的宗门编号似乎有误，未在宗门名录上发现!"
+    
+    # 检查是否已有宗门
+    if user_info['sect_id']:
+        msg = f"道友已经加入了宗门:{user_info['sect_name']}，无法再加入其他宗门。"
+        await handle_send(bot, event, msg)
+        await join_sect.finish()
+    
+    sect_no = args.extract_plain_text().strip()
+    sql_sects = sql_message.get_all_sects_id_scale()
+    sects_all = [tup[0] for tup in sql_sects]
+    
+    if not sect_no.isdigit():
+        msg = f"申请加入的宗门编号解析异常，应全为数字!"
+    elif int(sect_no) not in sects_all:
+        msg = f"申请加入的宗门编号似乎有误，未在宗门名录上发现!"
+    else:
+        sect_info = sql_message.get_sect_info(int(sect_no))
+        # 检查宗门是否封闭
+        if sect_info['closed']:
+            msg = f"该宗门已封闭山门，暂不接收新成员！"
+        # 检查宗门是否开放加入
+        elif not sect_info['join_open']:
+            msg = f"该宗门已关闭加入，暂不接收新成员！"
         else:
             owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
             owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 4
-            sql_message.update_usr_sect(user_id, int(sect_no), owner_position)
+            sql_message.update_usr_sect(user_info['user_id'], int(sect_no), owner_position)
             new_sect = sql_message.get_sect_info_by_id(int(sect_no))
             msg = f"欢迎{user_info['user_name']}师弟入我{new_sect['sect_name']}，共参天道。"
-    else:
-        msg = f"守山弟子：我观道友气运中已有宗门气运加持，又何必与我为难。"
+    
     await handle_send(bot, event, msg)
     await join_sect.finish()
 
-
-# editer:zyp981204
 @my_sect.handle(parameterless=[Cooldown(at_sender=False)])
 async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的宗门"""
@@ -1461,15 +1501,21 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             elixir_room_name = "暂无"
         else:
             elixir_room_name = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]['name']
+        
+        # 获取宗门状态
+        join_status = "开放加入" if sect_info['join_open'] else "关闭加入"
+        closed_status = "（封闭山门）" if sect_info['closed'] else ""
+        
         msg = f"""
 {user_name}所在宗门
 宗门名讳：{sect_info['sect_name']}
 宗门编号：{sect_id}
-宗   主：{sql_message.get_user_info_with_id(sect_info['sect_owner'])['user_name']}
-道友职位：{jsondata.sect_config_data()[f"{sect_position}"]['title']}
+宗   主：{sql_message.get_user_info_with_id(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
+道友职位：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}
+宗门状态：{join_status}{closed_status}
 宗门建设度：{number_to(sect_info['sect_scale'])}
 洞天福地：{sect_info['sect_fairyland'] if sect_info['sect_fairyland'] else "暂无"}
-宗门位面排名：{top_idx_list.index(sect_id) + 1}
+宗门位面排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
 宗门拥有资材：{number_to(sect_info['sect_materials'])}
 宗门贡献度：{number_to(user_info['sect_contribution'])}
 宗门丹房：{elixir_room_name}
@@ -1482,6 +1528,233 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await my_sect.finish()
 
+@sect_close_join.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """关闭宗门加入"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_close_join.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_close_join.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        sql_message.update_sect_join_status(sect_id, 0)
+        msg = "已关闭宗门加入，其他修士将无法申请加入本宗！"
+    else:
+        msg = "只有宗主可以关闭宗门加入！"
+    
+    await handle_send(bot, event, msg)
+    await sect_close_join.finish()
+
+@sect_open_join.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """开放宗门加入"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_open_join.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_open_join.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        sql_message.update_sect_join_status(sect_id, 1)
+        msg = "已开放宗门加入，其他修士可以申请加入本宗了！"
+    else:
+        msg = "只有宗主可以开放宗门加入！"
+    
+    await handle_send(bot, event, msg)
+    await sect_open_join.finish()
+
+@sect_close_mountain.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_close_mountain_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """封闭山门"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_close_mountain.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_close_mountain.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        # 再次确认
+        msg = "确定要封闭山门吗？封闭后：\n1. 自动关闭宗门加入\n2. 你将退位为长老\n3. 宗门将处于无主状态\n4. 长老们可以继承宗主之位\n\n请确认后再次发送【确认封闭山门】"
+        await handle_send(bot, event, msg)
+        await sect_close_mountain.finish()
+    else:
+        msg = "只有宗主可以封闭山门！"
+        await handle_send(bot, event, msg)
+        await sect_close_mountain.finish()
+
+@sect_close_mountain2.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """确认封闭山门"""
+
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_close_mountain2.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_close_mountain2.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        # 1. 关闭宗门加入
+        sql_message.update_sect_join_status(sect_id, 0)
+        # 2. 设置封闭状态
+        sql_message.update_sect_closed_status(sect_id, 1)
+        # 3. 宗主退位为长老
+        sql_message.update_usr_sect(user_info['user_id'], sect_id, 1)  # 1是长老职位
+        # 4. 清空宗主
+        sql_message.update_sect_owner(None, sect_id)
+        
+        msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
+    else:
+        msg = "只有宗主可以封闭山门！"
+    
+    await handle_send(bot, event, msg)
+    await sect_close_mountain2.finish()
+
+@sect_inherit.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """继承宗主"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_inherit.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_inherit.finish()
+    
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info['closed']:
+        msg = "宗门未封闭，无需继承！"
+        await handle_send(bot, event, msg)
+        await sect_inherit.finish()
+    
+    sect_position = user_info['sect_position']
+    elder_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
+    elder_position = int(elder_idx[0]) if len(elder_idx) == 1 else 1
+    
+    if sect_position == elder_position:
+        # 1. 继承宗主
+        sql_message.update_usr_sect(user_info['user_id'], sect_id, 0)  # 0是宗主
+        sql_message.update_sect_owner(user_info['user_id'], sect_id)
+        # 2. 解除封闭
+        sql_message.update_sect_closed_status(sect_id, 0)
+        # 3. 开放加入
+        sql_message.update_sect_join_status(sect_id, 1)
+        
+        msg = f"恭喜{user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
+    else:
+        msg = "只有长老可以继承宗主之位！"
+    
+    await handle_send(bot, event, msg)
+    await sect_inherit.finish()
+
+@sect_disband.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_disband_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """解散宗门"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_disband.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_disband.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        # 再次确认
+        msg = "确定要解散宗门吗？解散后：\n1. 所有成员将被踢出\n2. 宗门将被删除\n3. 所有宗门资源将消失\n\n请确认后再次发送【确认解散宗门】"
+        await handle_send(bot, event, msg)
+        await sect_disband.finish()
+    else:
+        msg = "只有宗主可以解散宗门！"
+        await handle_send(bot, event, msg)
+        await sect_disband.finish()
+
+@sect_disband2.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """确认解散宗门"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_disband2.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = "道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_disband2.finish()
+    
+    sect_position = user_info['sect_position']
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
+    if sect_position == owner_position:
+        # 1. 获取所有成员
+        members = sql_message.get_all_users_by_sect_id(sect_id)
+        # 2. 踢出所有成员
+        for member in members:
+            sql_message.update_usr_sect(member['user_id'], None, None)
+            sql_message.update_user_sect_contribution(member['user_id'], 0)
+        # 3. 删除宗门
+        sql_message.delete_sect(sect_id)
+        
+        msg = f"宗门已解散！所有成员已被移除。"
+    else:
+        msg = "只有宗主可以解散宗门！"
+    
+    await handle_send(bot, event, msg)
+    await sect_disband2.finish()
 
 def create_user_sect_task(user_id):
     tasklist = config["宗门任务"]

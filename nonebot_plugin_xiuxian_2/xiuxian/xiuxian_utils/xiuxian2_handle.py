@@ -105,6 +105,8 @@ class XiuxianDateManage:
   "sect_owner" integer,
   "sect_scale" integer NOT NULL,
   "sect_used_stone" integer,
+  "join_open" integer DEFAULT 1,
+  "closed" integer DEFAULT 0,
   "sect_fairyland" integer
 );""")
             elif i == "back":
@@ -640,7 +642,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :param sect_name:宗门名称
         :return:
         """
-        sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone) VALUES (?,?,0,0)"
+        sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone, join_open, closed) VALUES (?,?,0,0,1,0)"
         cur = self.conn.cursor()
         cur.execute(sql, (sect_name, user_id))
         self.conn.commit()
@@ -747,7 +749,27 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return None
 
+    def update_sect_join_status(self, sect_id, status):
+        """更新宗门加入状态"""
+        sql = f"UPDATE sects SET join_open=? WHERE sect_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (status, sect_id))
+        self.conn.commit()
 
+    def update_sect_closed_status(self, sect_id, status):
+        """更新宗门封闭状态"""
+        sql = f"UPDATE sects SET closed=? WHERE sect_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (status, sect_id))
+        self.conn.commit()
+
+    def delete_sect(self, sect_id):
+        """删除宗门"""
+        sql = f"DELETE FROM sects WHERE sect_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (sect_id,))
+        self.conn.commit()
+        
     def get_all_sect_id(self):
         """获取全部宗门id"""
         sql = "SELECT sect_id FROM sects"

@@ -67,7 +67,7 @@ class XiuConfig:
             "user_id", "type", "create_time", "scheduled_time", "last_check_info_time"
         ]
         self.sql_sects = [
-            "sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "sect_fairyland",
+            "sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "join_open", "closed", "sect_fairyland",
             "sect_materials", "mainbuff", "secbuff", "elixir_room_level"
         ]
         self.sql_buff = [

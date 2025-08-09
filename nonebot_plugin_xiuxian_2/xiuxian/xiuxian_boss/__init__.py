@@ -68,8 +68,8 @@ battle = on_command("讨伐boss", aliases={"讨伐世界boss", "讨伐Boss", "�
 boss_help = on_command("世界boss帮助", aliases={"世界Boss帮助", "世界BOSS帮助"}, priority=5, block=True)
 boss_delete = on_command("天罚boss", aliases={"天罚世界boss", "天罚Boss", "天罚BOSS", "天罚世界Boss", "天罚世界BOSS"}, permission=SUPERUSER, priority=7, block=True)
 boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界boss", "天罚所有Boss", "天罚所有BOSS", "天罚所有世界Boss","天罚所有世界BOSS", "天罚全部boss", "天罚全部世界boss"}, permission=SUPERUSER, priority=5, block=True)
-boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询"} ,priority=10, block=True)
-boss_integral_store = on_command("世界积分商店",aliases={"查看世界商店", "查询世界商店", "世界商店查询"} ,priority=10, block=True)
+boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询", "查看世界BOSS积分", "查询世界BOSS积分", "世界BOSS积分查询"} ,priority=10, block=True)
+boss_integral_store = on_command("世界积分商店",aliases={"查看世界商店", "查询世界商店", "世界商店查询", "查看世界BOSS商店", "查询世界BOSS商店", "世界BOSS商店查询"} ,priority=10, block=True)
 boss_integral_use = on_command("世界积分兑换", priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", priority=6, block=True)
 challenge_training_puppet = on_command("挑战训练傀儡", priority=6, block=True)
@@ -106,7 +106,7 @@ __boss_help__ = f"""
 🌟 自动刷新机制：每小时自动清理部分BOSS
 
 【注意事项】
-⚠ 全服每{config['Boss生成时间参数']['hours']}小时自动生成BOSS
+⚠ 全服定时自动生成BOSS
 ⚠ 重伤状态下无法挑战BOSS
 ⚠ 世界积分可永久保存，请合理使用
 
