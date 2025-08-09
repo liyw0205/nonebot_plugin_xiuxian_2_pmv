@@ -432,7 +432,13 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         await restart.finish()
 
     user_id = user_info['user_id']
-    
+    user_root = user_info['root_type']
+  
+    if user_root == '轮回道果' or user_root == '真·轮回道果' or user_root == '永恒道果' or user_root == '命运道果':
+        msg = f"道友已入轮回，拥有{user_root}无需重入仙途！"
+        await handle_send(bot, event, msg)
+        await restart.finish()
+
     # 生成10个随机灵根选项
     linggen_options = []
     for _ in range(10):
@@ -448,8 +454,9 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
                                              key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
-        msg = f"{linggen_list_msg}\n\n已自动为您选择最佳灵根：{selected_name} ({selected_root_type})\n"
-        msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
+        msg = f"{linggen_list_msg}\n\n已自动为您选择最佳灵根：{selected_name} ({selected_root_type})"
+        await handle_send(bot, event, msg)
+        msg = sql_message.ramaker(selected_name, selected_root_type, user_id)
         await handle_send(bot, event, msg)
         await restart.finish()
     else:
