@@ -960,7 +960,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             for idx, user in enumerate(userlist, 1):
                 msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
                 msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
-                msg += f"宗门贡献度:{user['sect_contribution']}\nID:{user['user_id']}"
+                msg += f"宗门贡献度:{user['sect_contribution']}"
                 msg_list.append(msg)
             
             title = f"☆【{sect_info['sect_name']}】的成员信息☆"

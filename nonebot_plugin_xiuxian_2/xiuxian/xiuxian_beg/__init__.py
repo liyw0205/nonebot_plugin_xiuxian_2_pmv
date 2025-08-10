@@ -184,14 +184,14 @@ async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await novice.finish()
     
-    # 检查是否是新用户(创建时间在24小时内)
+    # 检查是否是新用户
     create_time = datetime.strptime(user_info['create_time'], "%Y-%m-%d %H:%M:%S.%f")
     now_time = datetime.now()
     diff_time = now_time - create_time
-    diff_hours = diff_time.total_seconds() / 3600
+    diff_days = diff_time.days
     
-    if diff_hours > 24:
-        msg = '新手礼包仅限创建角色24小时内领取！'
+    if diff_days > XiuConfig().beg_max_days:  
+        msg = f'新手礼包仅限创建角色{XiuConfig().beg_max_days}天内领取！'
         await handle_send(bot, event, msg)
         await novice.finish()
     
