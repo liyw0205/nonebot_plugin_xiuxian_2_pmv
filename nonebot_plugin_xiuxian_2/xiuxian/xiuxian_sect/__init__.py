@@ -23,7 +23,7 @@ from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig
 from .sectconfig import get_config
 from ..xiuxian_utils.utils import (
     check_user, number_to,
-    get_msg_pic, send_msg_handler, CommandObjectID, handle_send,
+    get_msg_pic, send_msg_handler, CommandObjectID, handle_send, handle_pagination,
     Txt2Img
 )
 from ..xiuxian_utils.item_json import Items
@@ -935,32 +935,52 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @sect_users.handle(parameterless=[Cooldown(at_sender=False)])
-async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):  
+async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):  
     """查看所在宗门成员信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg_list = []
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_users.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
     if user_info:
         sect_id = user_info['sect_id']
         if sect_id:
             sect_info = sql_message.get_sect_info(sect_id)
             userlist = sql_message.get_all_users_by_sect_id(sect_id)
-            msg = f"☆【{sect_info['sect_name']}】的成员信息☆\n"
-            msg_list.append(msg)
-            i = 1
-            for user in userlist:
-                msg = f"""编号{i}:{user['user_name']},{user['level']}\n宗门职位：{jsondata.sect_config_data()[f"{user['sect_position']}"]['title']}\n宗门贡献度：{user['sect_contribution']}\n"""
-                msg += f"ID:{user['user_id']}"
+            
+            # 构建成员信息列表
+            msg_list = []
+            for idx, user in enumerate(userlist, 1):
+                msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
+                msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
+                msg += f"宗门贡献度:{user['sect_contribution']}\nID:{user['user_id']}"
                 msg_list.append(msg)
-                i += 1
+            
+            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
+            msgs = await handle_pagination(
+                msg_list, 
+                current_page,
+                title=title,
+                empty_msg="宗门目前没有成员！"
+            )
+            
+            if isinstance(msgs, str):
+                await handle_send(bot, event, msgs)
+            else:
+                await send_msg_handler(bot, event, '宗门成员', bot.self_id, msgs)
         else:
-            msg_list.append(f"一介散修，莫要再问。")
+            msg = "一介散修，莫要再问。"
     else:
-        msg_list.append(f"未曾踏入修仙世界，输入【我要修仙】加入我们，看破这世间虚妄!")
-    await send_msg_handler(bot, event, '宗门成员', bot.self_id, msg_list)
+        msg = "未曾踏入修仙世界，输入【我要修仙】加入我们，看破这世间虚妄!"
+        await handle_send(bot, event, msg)
+    
     await sect_users.finish()
 
 

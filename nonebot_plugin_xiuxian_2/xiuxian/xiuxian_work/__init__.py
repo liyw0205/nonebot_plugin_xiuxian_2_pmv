@@ -207,7 +207,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 max_exp = int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit
                 
                 if big_suc:  # 大成功
-                    exp_rate = random.uniform(1.1, 1.5)
+                    exp_rate = random.uniform(1.5, 2.5)
                     gain_exp = int(give_exp * exp_rate)
                 else:
                     gain_exp = give_exp
