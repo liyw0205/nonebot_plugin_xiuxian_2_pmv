@@ -59,7 +59,7 @@ reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 # 仙肆系统配置
 XIANSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
-MIN_PRICE = 500000  # 最低上架价格50万灵石
+MIN_PRICE = 600000  # 最低上架价格60万灵石
 MAX_QUANTITY = 10   # 单次最大上架数量
 
 # 文件路径
@@ -77,7 +77,7 @@ xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSE
 
 # 坊市系统配置
 FANGSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
-FANGSHI_MIN_PRICE = 500000  # 最低上架价格50万灵石
+FANGSHI_MIN_PRICE = 600000  # 最低上架价格60万灵石
 FANGSHI_MAX_QUANTITY = 10   # 单次最大上架数量
 
 # 文件路径
@@ -97,6 +97,7 @@ shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, bl
 # 其他原有命令保持不变
 check_item_effect = on_command("查看效果", aliases={"查看物品"}, priority=5, block=True)
 goods_re_root = on_command("炼金", priority=6, block=True)
+fast_alchemy = on_command("快速炼金", priority=6, block=True)
 auction_view = on_command("拍卖品查看", aliases={"查看拍卖品"}, priority=8, permission=GROUP, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
 yaocai_back = on_command('药材背包', priority=10, block=True)
@@ -127,7 +128,7 @@ __back_help__ = f"""
 🔸🔸 坊市查看 [类型] [页码] - 查看群坊市
   ▶ 支持类型：技能|装备|丹药|药材
 🔸🔸 坊市上架 物品 金额 [数量] - 上架物品
-  ▶ 最低金额50万灵石，手续费10-30%
+  ▶ 最低金额60万灵石，手续费10-30%
 🔸🔸 坊市购买 编号 [数量] - 购买物品
 🔸🔸 坊市下架 编号 - 下架自己的物品
 🔸🔸 我的坊市 [页码] - 查看自己上架的物品
@@ -136,7 +137,7 @@ __back_help__ = f"""
 【仙肆交易】（全服）
 🔸🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
 🔸🔸 仙肆上架 物品 金额 [数量] - 上架物品
-  ▶ 最低50万灵石，自动匹配仙肆最低价
+  ▶ 最低60万灵石，自动匹配仙肆最低价
 🔸🔸 仙肆购买 编号 [数量] - 购买物品
 🔸🔸 仙肆下架 编号 - 下架自己的物品
 🔸🔸 我的仙肆 [页码] - 查看自己上架的物品
@@ -1035,7 +1036,8 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             item["goods_id"],
             item["name"],
             item["type"],
-            quantity
+            quantity,
+            1
         )
         
         # 更新库存（系统无限物品不更新）
@@ -1333,15 +1335,15 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await shop_added.finish()
     
     # 原有价格限制逻辑
-    if price < 500000:  # 最低50万灵石
-        msg = "坊市最低价格为50万灵石！"
+    if price < 600000:  # 最低60万灵石
+        msg = "坊市最低价格为60万灵石！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
     # 检查仙肆最低价
     xianshi_min_price = get_xianshi_min_price(goods_name)
     if xianshi_min_price is not None:
-        min_price = max(500000, xianshi_min_price // 2)
+        min_price = max(600000, xianshi_min_price // 2)
         max_price = xianshi_min_price * 2
         if price < min_price or price > max_price:
             msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
@@ -1377,7 +1379,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     
     # 计算手续费
     total_price = price * quantity
-    if total_price <= 5000000:
+    if total_price <= 6000000:
         fee_rate = 0.1
     elif total_price <= 10000000:
         fee_rate = 0.15
@@ -1592,7 +1594,8 @@ async def buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg())
             item["goods_id"],
             item["name"],
             item["type"],
-            quantity
+            quantity,
+            1
         )
         
         # 更新库存（无限物品不更新）
@@ -2148,7 +2151,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             num = int(args[1])
     except:
             num = 1 
-    price = int((convert_rank('江湖好手')[0] + 5) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    price = int((convert_rank('江湖好手')[0] - 16) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
     if price <= 0:
         msg = f"物品：{goods_name}炼金失败，凝聚{number_to(price)}枚灵石，记得通知晓楠！"
         await handle_send(bot, event, msg)
@@ -2159,7 +2162,196 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = f"物品：{goods_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
     await handle_send(bot, event, msg)
     await goods_re_root.finish()
+
+@fast_alchemy.handle(parameterless=[Cooldown(at_sender=False)])
+async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """快速炼金（支持装备/药材/全部类型 + 全部品阶）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
     
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    
+    # 指令格式检查
+    if len(args) < 2:
+        msg = "指令格式：快速炼金 [类型] [品阶]\n" \
+              "▶ 类型：装备|法器|防具|药材|全部\n" \
+              "▶ 品阶：全部|人阶|黄阶|...|仙阶（输入'品阶帮助'查看完整列表）"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+    
+    item_type = args[0]  # 物品类型
+    rank_name = " ".join(args[1:])  # 处理多字品阶名（如"上品纯阳法器"）
+
+    # === 保护机制 ===
+    if item_type.lower() == "全部" and rank_name.lower() == "全部":
+        msg = "⚠️ 为防止误操作，不能同时选择【全部类型】和【全部品阶】！"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+
+    # === 类型检查 ===
+    type_mapping = {
+        "装备": ["法器", "防具"],
+        "技能": ["功法", "神通", "辅修功法", "身法", "瞳术"],
+        "功法": ["功法"],
+        "神通": ["神通"],
+        "辅修功法": ["辅修功法"],
+        "身法": ["身法"],
+        "瞳术": ["瞳术"],
+        "法器": ["法器"],
+        "防具": ["防具"],
+        "药材": ["药材"],
+        "全部": ["法器", "防具", "药材", "功法", "神通", "辅修功法", "身法", "瞳术"]
+    }
+    
+    if item_type not in type_mapping:
+        msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+    
+    # === 品阶检查 ===
+    rank_map = {
+        # --- 装备品阶 ---
+        "符器": ["下品符器", "上品符器"],
+        "法器": ["下品法器", "上品法器"],
+        "纯阳法器": ["下品纯阳法器", "上品纯阳法器"],
+        "通天法器": ["下品通天法器", "上品通天法器"],
+        "仙器": ["下品仙器", "上品仙器"],
+        # 具体品阶
+        "下品符器": ["下品符器"],
+        "上品符器": ["上品符器"],
+        "下品法器": ["下品法器"],
+        "上品法器": ["上品法器"],
+        "下品纯阳法器": ["下品纯阳法器"],
+        "上品纯阳法器": ["上品纯阳法器"],
+        "下品通天法器": ["下品通天法器"],
+        "上品通天法器": ["上品通天法器"],
+        "下品仙器": ["下品仙器"],
+        "上品仙器": ["上品仙器"],
+        
+        # --- 药材品阶 ---
+        "一品药材": ["一品药材"],
+        "二品药材": ["二品药材"],
+        "三品药材": ["三品药材"],
+        "四品药材": ["四品药材"],
+        "五品药材": ["五品药材"],
+        "六品药材": ["六品药材"],
+        "七品药材": ["七品药材"],
+        "八品药材": ["八品药材"],
+        "九品药材": ["九品药材"],
+        
+        # --- 功法品阶 ---
+        "人阶下品": "人阶下品", "人阶上品": "人阶上品",
+        "黄阶下品": "黄阶下品", "黄阶上品": "黄阶上品",
+        "玄阶下品": "玄阶下品", "玄阶上品": "玄阶上品",
+        "地阶下品": "地阶下品", "地阶上品": "地阶上品",
+        "天阶下品": "天阶下品", "天阶上品": "天阶上品",
+        "仙阶下品": "仙阶下品", "仙阶上品": "仙阶上品",
+        "人阶": ["人阶下品", "人阶上品"],
+        "黄阶": ["黄阶下品", "黄阶上品"],
+        "玄阶": ["玄阶下品", "玄阶上品"],
+        "地阶": ["地阶下品", "地阶上品"],
+        "天阶": ["天阶下品", "天阶上品"],
+        "仙阶": ["仙阶下品", "仙阶上品"],
+        
+        # --- 全部品阶 ---
+        "全部": [
+            # 装备
+            "下品符器", "上品符器", "下品法器", "上品法器",
+            "下品纯阳法器", "上品纯阳法器", "下品通天法器", "上品通天法器",
+            "下品仙器", "上品仙器",
+            # 药材
+            "一品药材", "二品药材", "三品药材", "四品药材",
+            "五品药材", "六品药材", "七品药材", "八品药材", "九品药材"
+        ]
+    }
+    
+    if rank_name not in rank_map:
+        msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+    
+    # === 获取背包物品 ===
+    back_msg = sql_message.get_back_msg(user_id)
+    if not back_msg:
+        msg = "💼 道友的背包空空如也！"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+    
+    # === 筛选物品 ===
+    target_types = type_mapping[item_type]
+    target_ranks = rank_map[rank_name]
+    
+    items_to_alchemy = []
+    for item in back_msg:
+        item_info = items.get_data_by_item_id(item['goods_id'])
+        if not item_info:
+            continue
+            
+        # 类型匹配
+        type_match = (
+            item['goods_type'] in target_types or 
+            item_info.get('item_type', '') in target_types
+        )
+        
+        # 品阶匹配（如果是"全部"则跳过检查）
+        rank_match = (
+            rank_name == "全部" or 
+            item_info.get('level', '') in target_ranks
+        )
+        
+        if type_match and rank_match:
+            available_num = item['goods_num']
+            if available_num > 0:
+                # 计算价格（基础rank - 物品rank）* 100000
+                base_rank = convert_rank('江湖好手')[0]
+                item_rank = get_item_msg_rank(item['goods_id'])
+                price = max(1, (base_rank - 16) * 100000 - item_rank * 100000)  # 防止负数
+                
+                items_to_alchemy.append({
+                    'id': item['goods_id'],
+                    'name': item['goods_name'],
+                    'quantity': available_num,
+                    'price': price
+                })
+
+    # === 执行炼金 ===
+    if not items_to_alchemy:
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        await handle_send(bot, event, msg)
+        await fast_alchemy.finish()
+    
+    total_stone = 0
+    result_msg = []
+    
+    for item in items_to_alchemy:
+        item_total = item['price'] * item['quantity']
+        total_stone += item_total
+        
+        # 从背包移除
+        sql_message.update_back_j(user_id, item['id'], num=item['quantity'])
+        
+        # 记录结果
+        result_msg.append(
+            f"{item['name']} ×{item['quantity']} → {number_to(item_total)}灵石"
+        )
+    
+    # 增加灵石
+    sql_message.update_ls(user_id, total_stone, 1)
+    
+    # === 返回结果 ===
+    msg = [
+        f"✨ 成功炼金 {len(items_to_alchemy)} 件物品",
+        *result_msg,
+        f"💎 总计获得：{number_to(total_stone)}灵石"
+    ]
+    
+    await send_msg_handler(bot, event, '快速炼金', bot.self_id, msg)
+    await fast_alchemy.finish()
+
 @no_use_zb.handle(parameterless=[Cooldown(at_sender=False)])
 async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """卸载物品（只支持装备）

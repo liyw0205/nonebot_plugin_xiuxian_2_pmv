@@ -313,7 +313,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 # 配方
-@mix_make.handle(parameterless=[Cooldown(stamina_cost = 3, at_sender=False)])
+@mix_make.handle(parameterless=[Cooldown(at_sender=False)])
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
     """配方,用来炼制丹药"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -329,33 +329,33 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         zhuyao_num = int(matched.groups()[1])  # 数量一定会有
         check, zhuyao_goods_id = await check_yaocai_name_in_back(user_id, zhuyao_name, zhuyao_num)
         if not check:
-            msg = f"请检查药材：{zhuyao_name} 是否在背包中，或者数量是否足够！"
+            msg = f"请检查主药：{zhuyao_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg)
             await mix_make.finish()
         yaoyin_name = matched.groups()[2]
         yaoyin_num = int(matched.groups()[3])  # 数量一定会有
         check, yaoyin_goods_id = await check_yaocai_name_in_back(user_id, yaoyin_name, yaoyin_num)
         if not check:
-            msg = f"请检查药材：{yaoyin_name} 是否在背包中，或者数量是否足够！"
+            msg = f"请检查药引：{yaoyin_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg)
             await mix_make.finish()
         fuyao_name = matched.groups()[4]
         fuyao_num = int(matched.groups()[5])
         check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num)
         if not check:
-            msg = f"请检查药材：{fuyao_name} 是否在背包中，或者数量是否足够！"
+            msg = f"请检查辅药：{fuyao_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg)
             await mix_make.finish()
         if zhuyao_name == fuyao_name:
             check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num + zhuyao_num)
             if not check:
-                msg = f"请检查药材：{zhuyao_name} 是否在背包中，或者数量是否足够！"
+                msg = f"请检查主药：{zhuyao_name} 是否在背包中，或者数量是否足够！"
                 await handle_send(bot, event, msg)
                 await mix_make.finish()
         if yaoyin_name == fuyao_name:
             check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num + yaoyin_num)
             if not check:
-                msg = f"请检查药材：{yaoyin_name} 是否在背包中，或者数量是否足够！"
+                msg = f"请检查药引：{yaoyin_name} 是否在背包中，或者数量是否足够！"
                 await handle_send(bot, event, msg)
                 await mix_make.finish()
 
@@ -442,7 +442,7 @@ async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
     for back in user_back:
         if back['goods_type'] == '药材':
             if Items().get_data_by_item_id(back['goods_id'])['name'] == yaocai_name:
-                if int(back['goods_num']) >= int(yaocai_num):
+                if int(back['goods_num']) >= int(yaocai_num) and int(yaocai_num) >= 1:
                     flag = True
                     goods_id = back['goods_id']
                     break
