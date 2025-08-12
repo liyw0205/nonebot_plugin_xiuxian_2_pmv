@@ -109,7 +109,7 @@ STORY = {
         },
         "灵石": {
             "type_rate": 70,
-            "stone": 300000
+            "stone": 3000000
         }
     },
     "战斗": {
@@ -171,12 +171,12 @@ STORY = {
                     "value": [0.003, 0.004, 0.005]
                 },
                 "hp": {
-                    "type_rate": 60,
+                    "type_rate": 70,
                     "value": [0.3, 0.5, 0.7]
                 },
                 "stone": {
-                    "type_rate": 30,
-                    "value": [5000000, 10000000, 15000000]
+                    "type_rate": 20,
+                    "value": [3000000, 5000000, 1000000]
                 },
             }
         },
@@ -235,7 +235,7 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
     if victor == "群友赢了":  # 获胜
         user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0] # 60-用户当前等级 原50
         success_info = STORY['战斗']['Boss战斗']['success']
-        msg = success_info['desc'].format(boss_info['name'])
+        msg = random.choice(success_info['desc']).format(boss_info['name'])
         give_exp = int(random.choice(success_info["give"]["exp"]) * user_info['exp'])
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
         sql_message.update_exp(user_info['user_id'], give_exp)
@@ -243,7 +243,7 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
         msg += f"获得了修为：{give_exp}点，灵石：{give_stone}枚！"
     else:  # 输了
         fail_info = STORY['战斗']['Boss战斗']["fail"]
-        msg = fail_info['desc'].format(boss_info["name"])
+        msg = random.choice(fail_info['desc']).format(boss_info['name'])
     return result, msg
 
 

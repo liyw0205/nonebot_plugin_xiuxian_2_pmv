@@ -1875,7 +1875,11 @@ def get_sectbufftxt(sect_scale, config_):
     buffgear = divmod(sect_scale, config_['建设度'])[0]
     if buffgear >= 100:
         buffgear = 100
-    elif buffgear <= 1:
+    elif buffgear >= 50:
+        buffgear = 50
+    elif buffgear >= 10:
+        buffgear = 10
+    elif buffgear < 1:
         buffgear = 1
     else:
         pass

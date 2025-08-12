@@ -425,7 +425,19 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     impart_time = random.randint(300, 1000)
     impart_rate = random.randint(1, 3)
 
-    if impart_suc <= 40:
+    if impart_suc <= 30:
+        stay_msgs = [
+            f"道友突然心有所感，决定原地静修，参悟{impart_name}的玄机",
+            f"《{random.choice(['太虚','九幽','混元'])}经》自行运转，道友决定暂缓探索",
+            f"冥冥中似有警示，道友决定今日不宜继续探索虚神界",
+            f"道友在{impart_name}中偶得顿悟，决定就地闭关参悟",
+            f"「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」发出共鸣，道友决定停下脚步"
+        ]
+        msg = random.choice(stay_msgs)
+        xiuxian_impart.use_impart_exp_day(impart_time, user_id)
+        await handle_send(bot, event, msg)
+        await impart_pk_go.finish()
+    elif 31 <= impart_suc <= 50:
         fail_msgs = [
             f"遭遇{impart_name}守护大阵反噬，道友元神受创退回！",
             f"虚空突现《{random.choice(['太虚','九幽','混元'])}禁制》，将道友逼退！",
@@ -439,9 +451,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         impart_pk.update_user_impart_lv(user_info['user_id'])
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
-    
-    impart_suc = random.randint(1, 100)
-    if 41 <= impart_suc <= 60:
+    elif 51 <= impart_suc <= 65:
         impart_lv = max(impart_lv - 1, 0)
         down_msgs = [
             f"道友误触{random.choice(['周天','洪荒','太古'])}禁制，境界暂时跌落",
@@ -451,7 +461,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"《{random.choice(['道藏','佛经','魔典'])}》显化天碑，道友参悟有误反受其害"
         ]
         msg = random.choice(down_msgs)
-    elif 61 <= impart_suc <= 80:
+    elif 71 <= impart_suc <= 85:
         impart_lv = min(impart_lv + 1, 30)
         up_msgs = [
             f"道友顿悟{random.choice(['太初','鸿蒙','混沌'])}真意，境界突破！",
@@ -461,7 +471,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"引动{random.choice(['周天星辰','地脉龙气','混沌雷劫'])}之力，开辟前路"
         ]
         msg = random.choice(up_msgs)
-    elif 81 <= impart_suc <= 90:
+    elif 86 <= impart_suc <= 95:
         impart_lv = max(impart_lv - impart_rate, 0)
         down_rate_msgs = [
             f"遭逢{random.choice(['量劫','天人五衰','纪元更迭'])}天象，道基受损！",
