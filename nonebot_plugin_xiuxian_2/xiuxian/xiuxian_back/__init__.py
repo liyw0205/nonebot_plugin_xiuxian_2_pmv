@@ -98,7 +98,7 @@ shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, bl
 chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=5, block=True)
 check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=6, block=True)
 goods_re_root = on_command("炼金", priority=6, block=True)
-fast_alchemy = on_command("快速炼金", priority=6, block=True)
+fast_alchemy = on_command("快速炼金", aliases={"一键炼金"}, priority=6, block=True)
 auction_view = on_command("拍卖品查看", aliases={"查看拍卖品"}, priority=8, permission=GROUP, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
 yaocai_back = on_command('药材背包', priority=10, block=True)
@@ -936,7 +936,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await my_xian_shop.finish()
     
     # 分页处理
-    per_page = 10
+    per_page = 20
     total_pages = (len(user_items) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
     
@@ -1767,7 +1767,7 @@ async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
         await my_shop.finish()
     
     # 分页处理
-    per_page = 10
+    per_page = 20
     total_pages = (len(user_items) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
     
@@ -2297,11 +2297,8 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             item_info.get('item_type', '') in target_types
         )
         
-        # 品阶匹配（如果是"全部"则跳过检查）
-        rank_match = (
-            rank_name == "全部" or 
-            item_info.get('level', '') in target_ranks
-        )
+        # 品阶匹配
+        rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
             available_num = item['goods_num']
