@@ -350,7 +350,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
     user_rank = convert_rank(userinfo['level'])[0]
     rank_name_list = convert_rank(user_info["level"])[1]
-    if boss_rank - user_rank >= 4:
+    if boss_rank - user_rank >= 5:
         msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
@@ -1106,7 +1106,7 @@ class BossDrops:
             
         # 计算适合用户等级的掉落物范围
         user_rank = convert_rank(user_level)[0]
-        min_rank = max(convert_rank(user_level)[0] - 17, 8)
+        min_rank = max(convert_rank(user_level)[0] - 16, 8)
         max_rank = min(random.randint(min_rank, min_rank + 30), 55)
         
         # 筛选符合条件的掉落物

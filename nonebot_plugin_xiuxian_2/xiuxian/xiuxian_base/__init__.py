@@ -1,3 +1,7 @@
+try:
+    import ujson as json
+except ImportError:
+    import json
 import re
 import random
 import asyncio
@@ -32,6 +36,8 @@ from ..xiuxian_utils.utils import (
     Txt2Img, send_msg_handler, handle_send
 )
 from ..xiuxian_utils.item_json import Items
+from .stone_limit import stone_limit
+from .lottery_pool import lottery_pool
 items = Items()
 
 # 定时任务
@@ -46,6 +52,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_fullmatch("重入仙途", priority=7, block=True)
 sign_in = on_command("修仙签到", priority=13, block=True)
+hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
 help_in = on_command("修仙帮助", aliases={"菜单", "帮助"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
@@ -210,7 +217,16 @@ async def xiuxian_sing_():
     sql_message.sign_remake()
     logger.opt(colors=True).info(f"<green>每日修仙签到重置成功！</green>")
 
-
+@scheduler.scheduled_job("cron", hour=0, minute=0)
+async def reset_lottery_participants():
+    lottery_pool.reset_daily()
+    logger.opt(colors=True).info(f"<green>每日借运参与者已重置！</green>")
+    
+@scheduler.scheduled_job("cron", hour=0, minute=0)
+async def reset_stone_limits():
+    stone_limit.reset_limits()
+    logger.opt(colors=True).info(f"<green>每日灵石赠送额度已重置！</green>")
+    
 @xiuxian_uodata_data.handle(parameterless=[Cooldown(at_sender=False)])
 async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent):
     """更新记录"""
@@ -311,14 +327,95 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await sign_in.finish()
     user_id = user_info['user_id']
+    
+    # 1. 执行签到逻辑
     result = sql_message.get_sign(user_id)
-    msg = result
+    if result == "贪心的人是不会有好运的！":
+        await handle_send(bot, event, result)
+        await sign_in.finish()
+     # 2. 自动参与"借运"抽奖
+    lottery_result = await handle_lottery(user_info)
+    
+    # 3. 组合签到结果和抽奖结果
+    msg = f"{result}\n{lottery_result}"
+    
     try:
         await handle_send(bot, event, msg)
         await sign_in.finish()
     except ActionFailed:
         await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
+async def handle_lottery(user_info: dict):
+    """处理借运抽奖逻辑"""
+    user_id = user_info['user_id']
+    user_name = user_info['user_name']
+    
+    # 1. 每人每次签到存入10000灵石到奖池
+    deposit_amount = 10000
+    lottery_pool.deposit_to_pool(deposit_amount)
+    lottery_pool.add_participant(user_id)
+    
+    # 2. 生成1-100000的随机数，中奖号码为66666
+    lottery_number = random.randint(1, 100000)
+    
+    if lottery_number == 66666:
+        # 中奖逻辑
+        prize = lottery_pool.get_pool()
+        
+        # 发放奖励
+        sql_message.update_ls(user_id, prize, 1)
+        
+        # 记录中奖信息
+        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
+        
+        return f"✨鸿运当头！道友借运成功，获得奖池中全部{prize}灵石！(中奖号码：{lottery_number})✨"
+    
+    # 3. 未中奖情况
+    return f"本次签到借运未中奖，你的号码是{lottery_number}，奖池继续累积~"
+
+def read_lottery_data():
+    """读取奖池数据"""
+    try:
+        with open('xiuxian_lottery.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # 初始化数据
+        return {
+            'pool': 0,
+            'participants': [],
+            'last_winner': None
+        }
+
+def save_lottery_data(data):
+    """保存奖池数据"""
+    with open('xiuxian_lottery.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+@hongyun.handle(parameterless=[Cooldown(at_sender=False)])
+async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看中奖记录和当前奖池"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    # 构建消息
+    msg = "✨【鸿运当头】奖池信息✨\n"
+    msg += f"当前奖池累计：{number_to(lottery_pool.get_pool())}灵石\n"
+    msg += f"本期参与人数：{lottery_pool.get_participants()}位道友\n\n"
+    
+    last_winner = lottery_pool.get_last_winner()
+    if last_winner:
+        msg += "🎉🎉上期中奖记录🎉🎉\n"
+        msg += f"中奖道友：{last_winner['name']}\n"
+        msg += f"中奖时间：{last_winner['time']}\n"
+        msg += f"中奖金额：{number_to(last_winner['amount'])}灵石\n"
+        if 'lottery_number' in last_winner:
+            msg += f"中奖号码：{last_winner['lottery_number']}\n"
+    else:
+        msg += "暂无历史中奖记录，道友快来签到借运吧！\n"
+    
+    msg += "\n※ 每次签到自动存入10000灵石到奖池，中奖号码66666将独享全部奖池！"
+    
+    await handle_send(bot, event, msg)
+    await hongyun.finish()
 
 @help_in.handle(parameterless=[Cooldown(at_sender=False)])
 async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -999,49 +1096,81 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     if not isUser:
         await handle_send(bot, event, msg)
         await give_stone.finish()
+        
     user_id = user_info['user_id']
     user_stone_num = user_info['stone']
     give_qq = None  # 艾特的时候存到这里
     arg_list = args.extract_plain_text().split()
+    
     if len(arg_list) < 2:
         msg = f"请输入正确的指令，例如：送灵石 少姜 600000"
         await handle_send(bot, event, msg)
         await give_stone.finish()
+        
     stone_num = arg_list[1]  # 灵石数
     nick_name = arg_list[0]  # 道号
-    if stone_num:
-        pass
-    else:
+    
+    if not stone_num.isdigit():
         msg = f"请输入正确的灵石数量！"
         await handle_send(bot, event, msg)
         await give_stone.finish()
-    give_stone_num = stone_num
-    if int(give_stone_num) > int(user_stone_num):
+        
+    give_stone_num = int(stone_num)
+    
+    # 检查发送方今日已送额度
+    daily_send_limit = 1000000000  # 每日送灵石上限
+    already_sent = stone_limit.get_send_limit(user_id)
+    remaining_send = daily_send_limit - already_sent
+    
+    if give_stone_num > remaining_send:
+        msg = f"道友今日已送{number_to(already_sent)}灵石，还可赠送{number_to(remaining_send)}灵石！"
+        await handle_send(bot, event, msg)
+        await give_stone.finish()
+        
+    if give_stone_num > int(user_stone_num):
         msg = f"道友的灵石不够，请重新输入！"
         await handle_send(bot, event, msg)
         await give_stone.finish()
+
     for arg in args:
         if arg.type == "at":
             give_qq = arg.data.get("qq", "")
+            
     if give_qq:
         if str(give_qq) == str(user_id):
             msg = f"请不要送灵石给自己！"
             await handle_send(bot, event, msg)
             await give_stone.finish()
+            
+        give_user = sql_message.get_user_info_with_id(give_qq)
+        if give_user:
+            # 检查接收方今日已收额度
+            daily_receive_limit = 1000000000  # 每日收灵石上限
+            already_received = stone_limit.get_receive_limit(give_qq)
+            remaining_receive = daily_receive_limit - already_received
+            
+            if give_stone_num > remaining_receive:
+                msg = f"{give_user['user_name']}道友今日已收{number_to(already_received)}灵石，还可接收{number_to(remaining_receive)}灵石！"
+                await handle_send(bot, event, msg)
+                await give_stone.finish()
+                
+            # 执行赠送
+            sql_message.update_ls(user_id, give_stone_num, 2)  # 减少用户灵石
+            give_stone_num2 = int(give_stone_num * 0.1)
+            num = int(give_stone_num) - give_stone_num2
+            sql_message.update_ls(give_qq, num, 1)  # 增加用户灵石
+            
+            # 更新额度记录
+            stone_limit.update_send_limit(user_id, give_stone_num)
+            stone_limit.update_receive_limit(give_qq, num)
+            
+            msg = f"共赠送{number_to(give_stone_num)}枚灵石给{give_user['user_name']}道友！收取手续费{number_to(give_stone_num2)}枚"
+            await handle_send(bot, event, msg)
+            await give_stone.finish()
         else:
-            give_user = sql_message.get_user_info_with_id(give_qq)
-            if give_user:
-                sql_message.update_ls(user_id, give_stone_num, 2)  # 减少用户灵石
-                give_stone_num2 = int(give_stone_num) * 0.1
-                num = int(give_stone_num) - int(give_stone_num2)
-                sql_message.update_ls(give_qq, num, 1)  # 增加用户灵石
-                msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_user['user_name']}道友！收取手续费{int(give_stone_num2)}枚"
-                await handle_send(bot, event, msg)
-                await give_stone.finish()
-            else:
-                msg = f"对方未踏入修仙界，不可赠送！"
-                await handle_send(bot, event, msg)
-                await give_stone.finish()
+            msg = f"对方未踏入修仙界，不可赠送！"
+            await handle_send(bot, event, msg)
+            await give_stone.finish()
 
     if nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name)
@@ -1050,14 +1179,30 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 msg = f"请不要送灵石给自己！"
                 await handle_send(bot, event, msg)
                 await give_stone.finish()
-            else:
-                sql_message.update_ls(user_id, give_stone_num, 2)  # 减少用户灵石
-                give_stone_num2 = int(give_stone_num) * 0.1
-                num = int(give_stone_num) - int(give_stone_num2)
-                sql_message.update_ls(give_message['user_id'], num, 1)  # 增加用户灵石
-                msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_message['user_name']}道友！收取手续费{int(give_stone_num2)}枚"
+                
+            # 检查接收方今日已收额度
+            daily_receive_limit = 1000000000  # 每日收灵石上限
+            already_received = stone_limit.get_receive_limit(give_message['user_id'])
+            remaining_receive = daily_receive_limit - already_received
+            
+            if give_stone_num > remaining_receive:
+                msg = f"{give_message['user_name']}道友今日已收{number_to(already_received)}灵石，还可接收{number_to(remaining_receive)}灵石！"
                 await handle_send(bot, event, msg)
                 await give_stone.finish()
+                
+            # 执行赠送
+            sql_message.update_ls(user_id, give_stone_num, 2)  # 减少用户灵石
+            give_stone_num2 = int(give_stone_num * 0.1)
+            num = int(give_stone_num) - give_stone_num2
+            sql_message.update_ls(give_message['user_id'], num, 1)  # 增加用户灵石
+            
+            # 更新额度记录
+            stone_limit.update_send_limit(user_id, give_stone_num)
+            stone_limit.update_receive_limit(give_message['user_id'], num)
+            
+            msg = f"共赠送{number_to(give_stone_num)}枚灵石给{give_message['user_name']}道友！收取手续费{number_to(give_stone_num2)}枚"
+            await handle_send(bot, event, msg)
+            await give_stone.finish()
         else:
             msg = f"对方未踏入修仙界，不可赠送！"
             await handle_send(bot, event, msg)

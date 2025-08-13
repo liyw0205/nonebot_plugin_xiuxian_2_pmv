@@ -95,7 +95,8 @@ shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=S
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
 # 其他原有命令保持不变
-check_item_effect = on_command("查看效果", aliases={"查看物品"}, priority=5, block=True)
+chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=5, block=True)
+check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=6, block=True)
 goods_re_root = on_command("炼金", priority=6, block=True)
 fast_alchemy = on_command("快速炼金", priority=6, block=True)
 auction_view = on_command("拍卖品查看", aliases={"查看拍卖品"}, priority=8, permission=GROUP, block=True)
@@ -103,7 +104,7 @@ main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, bl
 yaocai_back = on_command('药材背包', priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
 use = on_command("使用", priority=15, block=True)
-no_use_zb = on_command("换装", priority=5, block=True)
+no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 auction_added = on_command("提交拍卖品", aliases={"拍卖品提交"}, priority=10, permission=GROUP, block=True)
 auction_withdraw = on_command("撤回拍卖品", aliases={"拍卖品撤回"}, priority=10, permission=GROUP, block=True)
 set_auction = on_command("拍卖会", priority=4, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), block=True)
@@ -111,7 +112,6 @@ creat_auction = on_fullmatch("举行拍卖会", priority=5, permission=GROUP and
 offer_auction = on_command("拍卖", priority=5, permission=GROUP, block=True)
 back_help = on_command("背包帮助", aliases={"坊市帮助"}, priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
-chakan_wupin = on_command("查看修仙界物品", priority=25, block=True)
 
 __back_help__ = f"""
 修仙交易系统帮助
