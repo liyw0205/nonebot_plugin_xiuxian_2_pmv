@@ -56,15 +56,15 @@ def get_user_work_status(user_id: str) -> Tuple[int, Any]:
                 return 4, work_info  # 已过期的悬赏令
             else:
                 return 3, work_info  # 未过期的悬赏令
-    
+
     return 0, None  # 无悬赏
 
 def check_work_expired(create_time: str) -> bool:
     """检查悬赏令是否过期"""
     try:
-        work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S.%f")
+        work_time = datetime.strptime(creat*e_time, "%Y-%m-%d %H:%M:%S.%f")
     except:
-        work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S")
+        work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S.%f")
     return (datetime.now() - work_time) > timedelta(minutes=WORK_EXPIRE_MINUTES)
 
 async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, work_data: dict):
@@ -230,6 +230,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     mode = args[0]  # 刷新、终止、结算、接取等操作
 
     if mode == "查看":
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         status, work_data = get_user_work_status(user_id)
         
         if status == 1:  # 进行中的悬赏
@@ -268,13 +273,18 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             msg = work_msg_f
         elif status == 4:  # 已过期的悬赏令
             msg = "悬赏令已过期，请重新刷新获取新悬赏！"
-        else:  # 无悬赏
+        elif status == 0:  # 无悬赏
             msg = "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
         
         await handle_send(bot, event, msg)
         await do_work.finish()
 
     elif mode == "刷新":
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         status, work_data = get_user_work_status(user_id)
         
         if status == 1:  # 进行中的悬赏
@@ -296,16 +306,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         
         usernums = sql_message.get_work_num(user_id)
-        isUser, user_info, msg = check_user(event)
-        if not isUser:
-            await handle_send(bot, event, msg)
-            await do_work.finish()
-        
-        is_type, msg = check_user_type(user_id, 0)
-        if not is_type:
-            await handle_send(bot, event, msg)
-            await do_work.finish()
-        
+
         freenum = count - usernums
         if freenum <= 0:
             msg = (
@@ -325,14 +326,23 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
             await handle_send(bot, event, msg)
             await do_work.finish()
-        elif status == 4:  # 已过期的悬赏令        
+        elif status == 4 or status == 0:  # 已过期的悬赏令/无悬赏令
         # 生成新悬赏令
             work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
             msg = generate_work_message(work_msg, freenum)
+            sql_message.update_work_num(user_id, usernums + 1)
+
             await handle_send(bot, event, msg)
             await do_work.finish()
+        else:  # 不在悬赏令
+            msg = work_data
 
     elif mode == "确认刷新":
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         usernums = sql_message.get_work_num(user_id)
         freenum = count - usernums
         if freenum <= 0:
@@ -343,13 +353,17 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         # 确认刷新，删除旧悬赏令        
         work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
         msg = generate_work_message(work_msg, freenum-1)
-        
         sql_message.update_work_num(user_id, usernums + 1)
         
         await handle_send(bot, event, msg)
         await do_work.finish()
 
     elif mode == "结算":
+        is_type, msg = check_user_type(user_id, 2)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         status, work_data = get_user_work_status(user_id)
     
         if status != 2:  # 没有可结算的悬赏
@@ -361,6 +375,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "终止":
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         status, work_data = get_user_work_status(user_id)
     
         if status == 2:  # 可结算的悬赏，自动结算
@@ -383,6 +402,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "接取":
+        is_type, msg = check_user_type(user_id, 0)
+        if not is_type:
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+            
         status, work_data = get_user_work_status(user_id)
         
         # 如果已有进行中或可结算的悬赏，显示当前悬赏状态

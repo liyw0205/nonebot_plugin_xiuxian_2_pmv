@@ -43,7 +43,7 @@ class workhandle(XiuxianJsonDate):
             work_data = {
                 "tasks": {},
                 "status": 1,
-                "refresh_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
+                "refresh_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "user_level": level
             }
             
