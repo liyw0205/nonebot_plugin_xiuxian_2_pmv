@@ -748,7 +748,21 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             return result
         else:
             return None
-
+            
+    def get_highest_contrib_user(self, sect_id):
+        """获取宗门中贡献最高的用户（不限职位）"""
+        cur = self.conn.cursor()
+        sql = """
+        SELECT user_id 
+        FROM user_xiuxian 
+        WHERE sect_id = ? 
+        ORDER BY sect_contribution DESC 
+        LIMIT 1
+        """
+        cur.execute(sql, (sect_id,))
+        result = cur.fetchone()
+        return result
+        
     def update_sect_join_status(self, sect_id, status):
         """更新宗门加入状态"""
         sql = f"UPDATE sects SET join_open=? WHERE sect_id=?"
@@ -1359,11 +1373,11 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, )
         self.conn.commit()
 
-    def reset_work_num(self):
+    def reset_work_num(self, count):
         """重置用户悬赏令刷新次数"""
-        sql = f"UPDATE user_xiuxian SET work_num=0"
+        sql = f"UPDATE user_xiuxian SET work_num=?"
         cur = self.conn.cursor()
-        cur.execute(sql, )
+        cur.execute(sql, (count,))
         self.conn.commit()
 
     def get_work_num(self, user_id):
