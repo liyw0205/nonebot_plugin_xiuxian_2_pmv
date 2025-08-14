@@ -1,13 +1,13 @@
+import json
 import os
-from nonebot.log import logger
-from ..xiuxian_utils.data_source import *
-
+from pathlib import Path
+from datetime import datetime
+from ..xiuxian_utils.data_source import JsonDate
 
 WORKDATA = Path() / "data" / "xiuxian" / "work"
-
+PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 class reward(JsonDate):
-
     def __init__(self):
         super().__init__()
         self.Reward_ansa_jsonpath = WORKDATA / "暗杀.json"
@@ -43,30 +43,29 @@ class reward(JsonDate):
             data = json.loads(file_data)
             return data
 
-
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
-
+def savef(user_id, data):
+    """保存悬赏令信息到JSON"""
+    user_id = str(user_id)
+    if not os.path.exists(PLAYERSDATA / user_id):
+        os.makedirs(PLAYERSDATA / user_id)
+    
+    FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
+    save_data = {
+        "tasks": data["tasks"],
+        "status": data.get("status", 1),  # 默认1-未接取
+        "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
+        "user_level": data.get("user_level")
+    }
+    with open(FILEPATH, "w", encoding="UTF-8") as f:
+        json.dump(save_data, f, ensure_ascii=False, indent=4)
 
 def readf(user_id):
+    """从JSON加载悬赏令信息"""
     user_id = str(user_id)
-
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
+    if not os.path.exists(FILEPATH):
+        return None
+    
     with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
-
-
-def savef(user_id, data):
-    user_id = str(user_id)
-
-    if not os.path.exists(PLAYERSDATA / user_id):
-        logger.opt(colors=True).info(f"<green>用户目录不存在，创建目录</green>")
-        os.makedirs(PLAYERSDATA / user_id)
-
-    FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
-
-    savemode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=savemode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
-    return True
+        data = json.load(f)
+    return data

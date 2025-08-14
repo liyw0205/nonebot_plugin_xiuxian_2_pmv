@@ -707,7 +707,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await level_up.finish()
 
 
-@level_up_zj.handle(parameterless=[Cooldown(stamina_cost=3, at_sender=False)])
+@level_up_zj.handle(parameterless=[Cooldown(at_sender=False)])
 async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """直接突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
