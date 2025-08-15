@@ -168,7 +168,7 @@
         "atk_buff": 0.15,
         "crit_buff": 0.15,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12002": {
@@ -177,7 +177,7 @@
         "atk_buff": 0.1,
         "crit_buff": 0.2,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12003": {
@@ -186,7 +186,7 @@
         "atk_buff": 0.1,
         "crit_buff": 0.2,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12004": {
@@ -195,7 +195,7 @@
         "atk_buff": 0.1,
         "crit_buff": 0.2,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12005": {
@@ -204,7 +204,7 @@
         "atk_buff": 0.15,
         "crit_buff": 0.15,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12006": {
@@ -213,7 +213,7 @@
         "atk_buff": 0,
         "crit_buff": 0.3,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12007": {
@@ -222,7 +222,7 @@
         "atk_buff": 0.5,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "12008": {
@@ -231,7 +231,7 @@
         "atk_buff": 0.5,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "6099": {
@@ -240,7 +240,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15500": {
@@ -249,7 +249,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15501": {
@@ -258,7 +258,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15502": {
@@ -267,7 +267,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15503": {
@@ -276,7 +276,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15504": {
@@ -285,7 +285,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15505": {
@@ -294,7 +294,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.1,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15506": {
@@ -303,7 +303,7 @@
         "atk_buff": 0,
         "crit_buff": 0.15,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15507": {
@@ -312,7 +312,7 @@
         "atk_buff": 0,
         "crit_buff": 0,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15508": {
@@ -321,7 +321,7 @@
         "atk_buff": 0.2,
         "crit_buff": 0.3,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15509": {
@@ -330,7 +330,7 @@
         "atk_buff": 0,
         "crit_buff": 0,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "6095": {
@@ -339,7 +339,7 @@
         "atk_buff": -0.5,
         "crit_buff": 0,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备"
     },
     "15510": {
@@ -348,7 +348,7 @@
         "crit_buff": 0.2,
         "def_buff": 0.35,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备",
         "fusion": {
             "need_item": {
@@ -369,7 +369,7 @@
         "crit_buff": 0.2,
         "def_buff": 0.4,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备",
         "fusion": {
             "need_item": {
@@ -390,7 +390,7 @@
         "crit_buff": 0.15,
         "def_buff": 0.25,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备",
         "fusion": {
             "need_item": {
@@ -411,7 +411,7 @@
         "crit_buff": 0.3,
         "def_buff": 0.2,
         "rank": -5,
-        "level": "无上仙器",
+        "level": "无上",
         "type": "装备",
         "fusion": {
             "need_item": {
