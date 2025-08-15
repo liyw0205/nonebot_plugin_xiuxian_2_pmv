@@ -41,6 +41,7 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, CommandObjectID,
     pic_msg_format, send_msg_handler, handle_send
 )
+from .boss_limit import boss_limit
 from .. import DRIVER
 # boss定时任务
 require('nonebot_plugin_apscheduler')
@@ -58,46 +59,46 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
-create = on_command("生成世界boss", aliases={"生成世界Boss", "生成世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
-generate_all = on_command("生成全部世界boss", aliases={"生成全部世界Boss", "生成全部世界BOSS"}, permission=SUPERUSER, priority=5, block=True)
-create_appoint = on_command("生成指定世界boss", aliases={"生成指定世界boss", "生成指定世界BOSS", "生成指定BOSS", "生成指定boss"}, permission=SUPERUSER, priority=5,)
-boss_info = on_command("查询世界boss", aliases={"查询世界Boss", "查询世界BOSS", "查询boss", "世界Boss查询", "世界BOSS查询", "boss查询"}, priority=6, block=True)
-boss_info2 = on_command("查询世界boss列表", aliases={"查询世界Boss列表", "查询世界BOSS列表", "查询boss列表", "世界Boss列表查询", "世界BOSS列表查询", "boss列表查询"}, priority=6, block=True)
-set_group_boss = on_command("世界boss", aliases={"世界Boss", "世界BOSS"}, priority=13, permission=SUPERUSER, block=True)
-battle = on_command("讨伐boss", aliases={"讨伐世界boss", "讨伐Boss", "讨伐BOSS", "讨伐世界Boss", "讨伐世界BOSS"}, priority=6, block=True)
-boss_help = on_command("世界boss帮助", aliases={"世界Boss帮助", "世界BOSS帮助"}, priority=5, block=True)
-boss_delete = on_command("天罚boss", aliases={"天罚世界boss", "天罚Boss", "天罚BOSS", "天罚世界Boss", "天罚世界BOSS"}, permission=SUPERUSER, priority=7, block=True)
-boss_delete_all = on_command("天罚所有boss", aliases={"天罚所有世界boss", "天罚所有Boss", "天罚所有BOSS", "天罚所有世界Boss","天罚所有世界BOSS", "天罚全部boss", "天罚全部世界boss"}, permission=SUPERUSER, priority=5, block=True)
-boss_integral_info = on_command("世界积分查看",aliases={"查看世界积分", "查询世界积分", "世界积分查询", "查看世界BOSS积分", "查询世界BOSS积分", "世界BOSS积分查询"} ,priority=10, block=True)
-boss_integral_store = on_command("世界积分商店",aliases={"查看世界商店", "查询世界商店", "世界商店查询", "查看世界BOSS商店", "查询世界BOSS商店", "世界BOSS商店查询"} ,priority=10, block=True)
-boss_integral_use = on_command("世界积分兑换", priority=6, block=True)
-challenge_scarecrow = on_command("挑战稻草人", priority=6, block=True)
-challenge_training_puppet = on_command("挑战训练傀儡", priority=6, block=True)
+create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成"}, permission=SUPERUSER, priority=5, block=True)
+generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部生成", "世界Boss全部生成"}, permission=SUPERUSER, priority=5, block=True)
+create_appoint = on_command("世界BOSS指定生成", aliases={"世界boss指定生成", "世界Boss指定生成"}, permission=SUPERUSER, priority=5)
+boss_info = on_command("世界BOSS查询", aliases={"世界boss查询", "世界Boss查询"}, priority=6, block=True)
+boss_info2 = on_command("世界BOSS列表", aliases={"世界boss列表", "世界Boss列表"}, priority=6, block=True)
+set_group_boss = on_command("世界BOSS设置", aliases={"世界boss设置", "世界Boss设置"}, priority=13, permission=SUPERUSER, block=True)
+battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐"}, priority=6, block=True)
+boss_help = on_command("世界BOSS帮助", aliases={"世界boss帮助", "世界Boss帮助"}, priority=5, block=True)
+boss_delete = on_command("世界BOSS天罚", aliases={"世界boss天罚", "世界Boss天罚"}, permission=SUPERUSER, priority=7, block=True)
+boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全部天罚", "世界Boss全部天罚"}, permission=SUPERUSER, priority=5, block=True)
+boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
+boss_integral_store = on_command("世界BOSS商店", aliases={"世界boss商店", "世界Boss商店"}, priority=10, block=True)
+boss_integral_use = on_command("世界BOSS兑换", aliases={"世界boss兑换", "世界Boss兑换"}, priority=6, block=True)
+challenge_scarecrow = on_command("世界BOSS稻草人", aliases={"世界boss稻草人", "世界Boss稻草人"}, priority=6, block=True)
+challenge_training_puppet = on_command("世界BOSS训练傀儡", aliases={"世界boss训练傀儡", "世界Boss训练傀儡"}, priority=6, block=True)
 
 __boss_help__ = f"""
 世界BOSS系统帮助          
 
 【指令大全】
-🔹 生成指令：
-  ▶ 生成世界boss [数量] - 生成随机境界BOSS（超管权限）
-  ▶ 生成指定世界boss [境界] [名称] - 生成指定BOSS（超管权限）
-  ▶ 生成全部世界boss - 一键生成所有境界BOSS（超管权限）
+🔹🔹 生成指令：
+  ▶ 世界BOSS生成 [数量] - 生成随机境界BOSS（超管权限）
+  ▶ 世界BOSS指定生成 [境界] [名称] - 生成指定BOSS（超管权限）
+  ▶ 世界BOSS全部生成 - 一键生成所有境界BOSS（超管权限）
 
-🔹 查询指令：
-  ▶ 查询世界boss - 查看全服BOSS列表
-  ▶ 查询世界boss列表 [页码] - 分页查看BOSS详情
-  ▶ 世界积分查看 - 查看个人积分
-  ▶ 世界积分商店 - 查看可兑换物品
+🔹🔹 查询指令：
+  ▶ 世界BOSS查询 - 查看全服BOSS列表
+  ▶ 世界BOSS列表 [页码] - 分页查看BOSS详情
+  ▶ 世界BOSS信息 - 查看个人信息
+  ▶ 世界BOSS商店 - 查看可兑换物品
 
-🔹 战斗指令：
-  ▶ 讨伐boss [编号] - 挑战指定BOSS
-  ▶ 挑战稻草人 - 练习战斗技巧（无消耗）
-  ▶ 挑战训练傀儡 [境界] [名称] - 自定义训练对手
+🔹🔹 战斗指令：
+  ▶ 世界BOSS讨伐 [编号] - 挑战指定BOSS
+  ▶ 世界BOSS稻草人 - 练习战斗技巧（无消耗）
+  ▶ 世界BOSS训练傀儡 [境界] [名称] - 自定义训练对手
 
-🔹 管理指令：
-  ▶ 天罚boss [编号] - 删除指定BOSS（超管权限）
-  ▶ 天罚所有boss - 清空所有BOSS（超管权限）
-  ▶ 世界boss 开启/关闭 - 管理群通知（管理员权限）
+🔹🔹 管理指令：
+  ▶ 世界BOSS天罚 [编号] - 删除指定BOSS（超管权限）
+  ▶ 世界BOSS全部天罚 - 清空所有BOSS（超管权限）
+  ▶ 世界BOSS设置 开启/关闭 - 管理群通知（管理员权限）
 
 【特色功能】
 🌟 境界压制系统：高境界打低境界BOSS收益降低
@@ -169,6 +170,10 @@ async def save_boss_():
     old_boss_info.save_boss(group_boss)
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
+@scheduler.scheduled_job("cron", hour=0, minute=0)
+async def reset_boss_limits():
+    boss_limit.reset_limits()
+    logger.opt(colors=True).info(f"<green>每日BOSS奖励限制已重置！</green>")
 
 @boss_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -370,21 +375,40 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     boss_now_hp = bossinfo_new['气血']
     total_damage = boss_old_hp - boss_now_hp
     
+    # 获取今日已获得的积分和灵石
+    today_integral = boss_limit.get_integral(user_id)
+    today_stone = boss_limit.get_stone(user_id)
+    
+    # 设置每日上限
+    integral_limit = 6000
+    stone_limit = 1000000000
+    
     if victor == "Boss赢了":
         # 伤害奖励（最多10%）
         damage_ratio = min(total_damage / boss_all_hp, 0.10)
-        get_stone = int(boss_max_stone * damage_ratio)
+        
+        # 计算积分奖励
+        if today_integral >= integral_limit:
+            boss_integral = 0
+            integral_msg = "今日积分已达上限，无法获得更多积分！"
+        else:
+            boss_integral = int(damage_ratio * 1500)
+            boss_integral = min(boss_integral, integral_limit - today_integral)
+            integral_msg = f"获得世界积分：{boss_integral}点"
+        
+        # 计算灵石奖励
+        if today_stone >= stone_limit:
+            get_stone = 0
+            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
+        else:
+            get_stone = int(boss_max_stone * damage_ratio)
+            get_stone = min(get_stone, stone_limit - today_stone)
+            stone_msg = f"获得灵石{get_stone}枚"
         
         # 应用灵石加成
         stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
         get_stone = int(get_stone * (1 + stone_buff))
         get_stone = max(get_stone, 1)  # 至少获得1灵石
-        
-        # 积分计算
-        boss_integral = int(damage_ratio * 1500)
-        boss_integral = min(boss_integral, 1500)
-        if boss_integral < 5:
-            boss_integral = 0
             
         # 凡人境界加成
         if user_info['root'] == "凡人":
@@ -404,12 +428,15 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         
         # 更新数据
         sql_message.update_ls(user_id, get_stone, 1)
+        boss_limit.update_stone(user_id, get_stone)
+        
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         user_boss_fight_info['boss_integral'] += boss_integral
+        boss_limit.update_integral(user_id, boss_integral)
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         
         # 构建消息
-        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点{exp_msg}"
+        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
         if user_info['root'] == "凡人" and boss_integral < 0:
             msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
         
@@ -419,14 +446,26 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         
     elif victor == "群友赢了":
         # 击杀奖励（50%）
-        get_stone = int(boss_max_stone * 0.50)
+        if today_integral >= integral_limit:
+            boss_integral = 0
+            integral_msg = "今日积分已达上限，无法获得更多积分！"
+        else:
+            boss_integral = 1000
+            boss_integral = min(boss_integral, integral_limit - today_integral)
+            integral_msg = f"获得世界积分：{boss_integral}点"
+            
+        if today_stone >= stone_limit:
+            get_stone = 0
+            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
+        else:
+            get_stone = int(boss_max_stone * 0.50)
+            get_stone = min(get_stone, stone_limit - today_stone)
+            stone_msg = f"获得灵石{get_stone}枚"
         
         # 应用灵石加成
         stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
         get_stone = int(get_stone * (1 + stone_buff))
         
-        # 积分奖励
-        boss_integral = 1000
         if user_info['root'] == "凡人":
             boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
             points_bonus = int(80 * (user_rank - boss_rank))
@@ -459,12 +498,15 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         
         # 更新数据
         sql_message.update_ls(user_id, get_stone, 1)
+        boss_limit.update_stone(user_id, get_stone)
+        
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         user_boss_fight_info['boss_integral'] += boss_integral
+        boss_limit.update_integral(user_id, boss_integral)
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         
         # 构建消息
-        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，收获灵石{get_stone}枚，{more_msg}获得世界积分：{boss_integral}点!{exp_msg}"
+        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}!{exp_msg}"
         if drops_msg:
             msg += f"\n{drops_msg}"
         if user_info['root'] == "凡人" and boss_integral < 0:
@@ -916,21 +958,41 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
     await boss_integral_store.finish()
 
-
 @boss_integral_info.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """世界积分"""
+    """世界BOSS信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await boss_integral_info.finish()
+    
     user_id = user_info['user_id']    
     user_boss_fight_info = get_user_boss_fight_info(user_id)
-    msg = f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"
+    
+    # 获取今日已获得的积分和灵石
+    today_integral = boss_limit.get_integral(user_id)
+    today_stone = boss_limit.get_stone(user_id)
+    
+    # 设置每日上限
+    integral_limit = 6000
+    stone_limit = 1000000000
+    
+    # 构建消息
+    msg = f"""
+════════════
+【世界BOSS信息】
+════════════
+当前世界积分：{user_boss_fight_info['boss_integral']}点
+今日已获积分：{today_integral}/{integral_limit}点
+今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚
+════════════
+提示：每日0点重置获取上限
+""".strip()
+    
     await handle_send(bot, event, msg)
     await boss_integral_info.finish()
-
+    
 @boss_integral_use.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """世界积分商店兑换"""
@@ -979,7 +1041,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             user_boss_fight_info['boss_integral'] -= total_cost
             save_user_boss_fight_info(user_id, user_boss_fight_info)
             item_info = Items().get_data_by_item_id(item_id)
-            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity)  # 兑换指定数量
+            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity, 1)  # 兑换指定数量
             msg = f"道友成功兑换获得：{item_info['name']}{quantity}个"
             await handle_send(bot, event, msg)
             await boss_integral_use.finish()

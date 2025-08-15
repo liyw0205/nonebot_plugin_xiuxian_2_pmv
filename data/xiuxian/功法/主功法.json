@@ -1611,7 +1611,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1",
         "fusion": {
             "need_item": {
@@ -1646,7 +1646,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9932": {
@@ -1669,7 +1669,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9933": {
@@ -1692,7 +1692,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9934": {
@@ -1715,7 +1715,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "15355": {
@@ -1738,7 +1738,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "15356": {
@@ -1761,7 +1761,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "15357": {
@@ -1784,7 +1784,7 @@
         "random_buff": 1,
         "ew": 15468,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "15358": {
@@ -1807,7 +1807,7 @@
         "random_buff": 0,
         "ew": 15453,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9935": {
@@ -1830,7 +1830,7 @@
         "random_buff": 0,
         "ew": 15469,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9936": {
@@ -1853,7 +1853,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9937": {
@@ -1876,7 +1876,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9938": {
@@ -1899,7 +1899,7 @@
         "random_buff": 0,
         "ew": 0,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
     "9939": {
@@ -1922,7 +1922,7 @@
         "random_buff": 0,
         "ew": 15467,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1",
         "fusion": {
             "need_item": {
@@ -1957,10 +1957,10 @@
         "random_buff": 0,
         "ew": 15470,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1"
     },
-    "9940": {
+    "9941": {
         "name": "赎罪",
         "hpbuff": 1,
         "mpbuff": 1,
@@ -1980,7 +1980,7 @@
         "random_buff": 0,
         "ew": 7084,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1",
         "fusion": {
             "need_item": {
@@ -1994,7 +1994,7 @@
             "limit": 1
         }
     },
-    "9941": {
+    "9942": {
         "name": "太一诀",
         "hpbuff": 4.5,
         "mpbuff": 3.5,
@@ -2014,7 +2014,7 @@
         "random_buff": 0,
         "ew": 15471,
         "desc": "",
-        "rank": "无上仙法",
+        "rank": "无上",
         "level": "1",
         "fusion": {
             "need_item": {

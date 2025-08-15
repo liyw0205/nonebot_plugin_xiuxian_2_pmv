@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 import json
 from typing import Tuple, Any, Dict
 from nonebot import on_regex, require, on_command
@@ -30,6 +31,9 @@ sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
 WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
+
+# 用户提醒状态字典
+user_reminder_status = {}  # 格式: {user_id: {"pending": bool, "reminded": bool}}
 
 def get_user_work_status(user_id: str) -> Tuple[int, Any]:
     """获取用户悬赏令状态(包含自动更新过期状态)"""
@@ -124,8 +128,18 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
             f"请输入【悬赏令结算】领取奖励！"
         )
     elif status == 3:  # 未过期的悬赏令
+        # 计算剩余时间
+        try:
+            refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S")
+        
+        expire_time = refresh_time + timedelta(minutes=WORK_EXPIRE_MINUTES)
+        remaining_time = expire_time - datetime.now()
+        remaining_minutes = max(int(remaining_time.total_seconds() // 60), 0)
+        
         work_list = []
-        work_msg_f = "\n══  道友的悬赏令   ═══\n"
+        work_msg_f = f"\n══  道友的悬赏令   ═══\n剩余时间：{remaining_minutes}分钟\n════════════\n"
         tasks = list(work_data["tasks"].items())
         for n, (task_name, task_data) in enumerate(tasks, 1):
             item_msg = "无"
@@ -222,10 +236,16 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 def generate_work_message(work_list: list, freenum: int) -> str:
     """生成悬赏令消息"""
+    # 计算剩余时间
+    refresh_time = datetime.now()
+    expire_time = refresh_time + timedelta(minutes=WORK_EXPIRE_MINUTES)
+    remaining_time = expire_time - datetime.now()
+    remaining_minutes = max(int(remaining_time.total_seconds() // 60), 0)
+    
     work_msg_f = (
         f"\n══  道友的悬赏令   ═══\n"
         f"剩余刷新次数：{freenum}次\n"
-        f"悬赏令有效期：{WORK_EXPIRE_MINUTES}分钟\n"
+        f"悬赏令剩余时间：{remaining_minutes}分钟\n"
         f"════════════\n"
     )
     
@@ -267,7 +287,7 @@ do_work = on_regex(
 do_work_cz = on_command("悬赏力量", permission=SUPERUSER, priority=6, block=True)
 
 __work_help__ = f"""
-════ 悬赏令系统 ════════
+════ 悬赏令系统 ════════════
 
 【悬赏令操作】
 悬赏令查看 - 浏览当前可接取的悬赏任务
@@ -364,15 +384,43 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg)
             await do_work.finish()
         elif status == 4 or status == 0:  # 已过期的悬赏令/无悬赏令
-        # 生成新悬赏令
+            # 生成新悬赏令
             work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
             msg = generate_work_message(work_msg, usernums - 1)
             sql_message.update_work_num(user_id, usernums - 1)
-
+            
+            # 设置提醒状态
+            user_reminder_status[user_id] = {"pending": True, "reminded": False}
+            
+            # 启动延迟检测
+            async def delayed_check():
+                await asyncio.sleep(180)
+                if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
+                    status, work_data = get_user_work_status(user_id)
+                    if status == 3:  # 仍未接取
+                        # 计算剩余时间
+                        try:
+                            refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S.%f")
+                        except ValueError:
+                            refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S")
+                        
+                        expire_time = refresh_time + timedelta(minutes=WORK_EXPIRE_MINUTES)
+                        remaining_time = expire_time - datetime.now()
+                        remaining_minutes = max(int(remaining_time.total_seconds() // 60), 0)
+                        
+                        reminder_msg = (
+                            "您已有未接取的悬赏令\n"
+                            f"剩余时间：{remaining_minutes}分钟\n"
+                            "请输入【悬赏令查看】查看当前悬赏"
+                        )
+                        await handle_send(bot, event, reminder_msg)
+                    user_reminder_status[user_id]["pending"] = False
+                    user_reminder_status[user_id]["reminded"] = True
+            
+            asyncio.create_task(delayed_check())
+            
             await handle_send(bot, event, msg)
             await do_work.finish()
-        else:  # 不在悬赏令
-            msg = work_data
 
     elif mode == "确认刷新":
         is_type, msg = check_user_type(user_id, 0)
@@ -390,6 +438,36 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
         msg = generate_work_message(work_msg, usernums - 1)
         sql_message.update_work_num(user_id, usernums - 1)
+        
+        # 更新提醒状态
+        user_reminder_status[user_id] = {"pending": True, "reminded": False}
+        
+        # 启动延迟检测
+        async def delayed_check():
+            await asyncio.sleep(180)
+            if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
+                status, work_data = get_user_work_status(user_id)
+                if status == 3:  # 仍未接取
+                    # 计算剩余时间
+                    try:
+                        refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S.%f")
+                    except ValueError:
+                        refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S")
+                    
+                    expire_time = refresh_time + timedelta(minutes=WORK_EXPIRE_MINUTES)
+                    remaining_time = expire_time - datetime.now()
+                    remaining_minutes = max(int(remaining_time.total_seconds() // 60), 0)
+                    
+                    reminder_msg = (
+                        "您已有未接取的悬赏令\n"
+                        f"剩余时间：{remaining_minutes}分钟\n"
+                        "请输入【悬赏令查看】查看当前悬赏"
+                    )
+                    await handle_send(bot, event, reminder_msg)
+                user_reminder_status[user_id]["pending"] = False
+                user_reminder_status[user_id]["reminded"] = True
+        
+        asyncio.create_task(delayed_check())
         
         await handle_send(bot, event, msg)
         await do_work.finish()
@@ -414,12 +492,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await settle_work(bot, event, user_id, work_data)
         await do_work.finish()
 
-    elif mode == "终止":
-        is_type, msg = check_user_type(user_id, 0)
-        if not is_type:
-            await handle_send(bot, event, msg)
-            await do_work.finish()
-            
+    elif mode == "终止":            
         status, work_data = get_user_work_status(user_id)
     
         if status == 2:  # 可结算的悬赏，自动结算
@@ -435,15 +508,12 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 f"悬赏已终止！"
             )
         elif status == 3 or status == 4:  # 有未接取的悬赏
-            work_file = PLAYERSDATA / str(user_id) / "workinfo.json"
-            if work_file.exists():
-                try:
-                    os.remove(work_file)
-                except:
-                    pass
             msg = "未接取的悬赏令已终止！"
         else:
             msg = "没有查到您的悬赏令信息！"
+        work_file = PLAYERSDATA / str(user_id) / "workinfo.json"
+        if work_file.exists():
+            os.remove(work_file)
         await handle_send(bot, event, msg)
         await do_work.finish()
 
@@ -485,6 +555,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         # 更新悬赏状态为已接取
         work_data["status"] = 2
         savef(user_id, work_data)
+        
+        # 更新提醒状态
+        if user_id in user_reminder_status:
+            user_reminder_status[user_id]["pending"] = False
                 
         msg = (
             f"成功接取悬赏令！\n"
@@ -497,18 +571,9 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     elif mode == "重置":
         work_file = PLAYERSDATA / str(user_id) / "workinfo.json"
         if work_file.exists():
-            try:
-                os.remove(work_file)
-            except:
-                pass
+            os.remove(work_file)
         user_cd_message = sql_message.get_user_cd(user_id)
         if user_cd_message['type'] == 2:
             sql_message.do_work(user_id, 0)
         msg = "已重置悬赏令"
         await handle_send(bot, event, msg)
-        await do_work.finish()
-
-    elif mode == "帮助":
-        msg = f"\n{__work_help__}"
-        await handle_send(bot, event, msg)
-        await do_work.finish()

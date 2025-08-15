@@ -48,7 +48,9 @@ cache_level1_help = {}
 cache_level2_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+qqq = 144795954
 
+gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_fullmatch("重入仙途", priority=7, block=True)
 sign_in = on_command("修仙签到", priority=13, block=True)
@@ -118,6 +120,7 @@ __xiuxian_notes__ = f"""
 → 修改道号:发送"修仙改名+道号"✏️
 → 悬赏任务:发送"悬赏令帮助"📜
 → 状态查看:发送"我的状态"📝
+→ 加入官群:发送"官群"🎁
 ===========
 🏆 排行榜单
 修仙/灵石/战力/宗门/轮回/排行榜
@@ -235,7 +238,12 @@ async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await xiuxian_uodata_data.finish() 
 
-
+@gfqq.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
+async def gfqq_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg = f"{qqq}"
+    await handle_send(bot, event, msg)
+    
 @remaname.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修改道号"""

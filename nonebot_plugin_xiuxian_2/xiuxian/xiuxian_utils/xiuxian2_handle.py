@@ -80,6 +80,7 @@ class XiuxianDateManage:
       "is_novice" integer DEFAULT 0,      
       "is_ban" integer DEFAULT 0,
       "exp" integer DEFAULT 0,
+      "work_num" integer DEFAULT 5,
       "user_name" TEXT DEFAULT NULL,
       "level_up_cd" integer DEFAULT NULL,
       "level_up_rate" integer DEFAULT 0
@@ -204,7 +205,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""
         c = self.conn.cursor()
-        sql = f"INSERT INTO user_xiuxian (user_id, stone, root, root_type, root_level, level, power, create_time, user_name, exp, sect_id, sect_position, user_stamina, is_novice) VALUES (?, 0, ?, ?, 0, '江湖好手', ?, ?, ?, 100, NULL, NULL, ?, 0)"
+        sql = f"INSERT INTO user_xiuxian (user_id, stone, root, root_type, root_level, level, power, create_time, user_name, exp, work_num, sect_id, sect_position, user_stamina, is_novice) VALUES (?, 0, ?, ?, 0, '江湖好手', ?, ?, ?, 100, 5, NULL, NULL, ?, 0)"
         c.execute(sql, (user_id, root, type, power, create_time, user_name,XiuConfig().max_stamina))
         self.conn.commit()
 
