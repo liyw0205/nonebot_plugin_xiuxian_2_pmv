@@ -97,19 +97,19 @@ STORY = {
             "type_rate": 50,
         },
         "辅修功法": {
-            "type_rate": 45,
+            "type_rate": 10,
         },
         "神通": {
             "type_rate": 50,
         },
         "法器": {
-            "type_rate": 35,
+            "type_rate": 15,
         },
         "防具": {
-            "type_rate": 40,
+            "type_rate": 20,
         },
         "灵石": {
-            "type_rate": 70,
+            "type_rate": 55,
             "stone": 3000000
         }
     },

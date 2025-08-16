@@ -1,5 +1,7 @@
 import re
 import random
+from nonebot.typing import T_State
+from typing import List
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, BuffJsonDate,
     get_main_info_msg, UserBuffDate, get_sec_msg
@@ -168,49 +170,49 @@ async def resetusertask_():
 async def auto_sect_owner_change_():
     logger.opt(colors=True).info(f"<yellow>开始检测不常玩的宗主</yellow>")
     
-    all_sect_owners_id = sql_message.get_sect_owners()
-    all_active = all(sql_message.get_last_check_info_time(owner_id) is None or
-                     datetime.now() - sql_message.get_last_check_info_time(owner_id) < timedelta(days=XiuConfig().auto_change_sect_owner_cd)
-                     for owner_id in all_sect_owners_id)
-    if all_active:
-        logger.opt(colors=True).info(f"<green>各宗宗主在修行之途上勤勉不辍，宗门安危无忧，可喜可贺！</green>")
-
-    for owner_id in all_sect_owners_id:
-        last_check_time = sql_message.get_last_check_info_time(owner_id)
-        if last_check_time is None or datetime.now() - last_check_time < timedelta(days=XiuConfig().auto_change_sect_owner_cd):
-            continue
-
-        user_info = sql_message.get_user_info_with_id(owner_id)
-        sect_id = user_info['sect_id']
+    all_sects = sql_message.get_all_sects()
+    for sect in all_sects:
+        sect_id = sect['sect_id']
         sect_info = sql_message.get_sect_info(sect_id)
         
         # 如果是封闭山门状态
         if sect_info['closed']:
-            # 自动选择贡献最高的长老继承
-            new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
+            # 自动选择贡献最高的用户继承（不限制职位）
+            new_owner_id = sql_message.get_highest_contrib_user(sect_id)
             if new_owner_id:
                 new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
-                sql_message.update_usr_sect(owner_id, sect_id, 1)  # 原宗主降为长老
                 sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)  # 新宗主
                 sql_message.update_sect_owner(new_owner_id[0], sect_id)
                 sql_message.update_sect_closed_status(sect_id, 0)  # 解除封闭
                 sql_message.update_sect_join_status(sect_id, 1)  # 开放加入
                 logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位，解除封闭状态</green>")
             else:
-                logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的长老可以继承</red>")
+                logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的成员可以继承</red>")
             continue
             
-        logger.opt(colors=True).info(f"<red>{user_info['user_name']}离线时间超过{XiuConfig().auto_change_sect_owner_cd}天，开始自动换宗主</red>")
-        new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
-        new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
-        
-        sql_message.update_usr_sect(owner_id, sect_id, 1)
-        sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)
-        sql_message.update_sect_owner(new_owner_id[0], sect_id)
-        sect_info = sql_message.get_sect_info_by_id(sect_id)
-        logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位</green>")
+        # 正常检测不活跃宗主
+        owner_id = sect_info['sect_owner']
+        if not owner_id:  # 没有宗主的情况
+            continue
+            
+        last_check_time = sql_message.get_last_check_info_time(owner_id)
+        if last_check_time is None or datetime.now() - last_check_time < timedelta(days=XiuConfig().auto_change_sect_owner_cd):
+            continue
 
-    
+        user_info = sql_message.get_user_info_with_id(owner_id)
+        logger.opt(colors=True).info(f"<red>{user_info['user_name']}离线时间超过{XiuConfig().auto_change_sect_owner_cd}天，开始自动换宗主</red>")
+        
+        # 选择贡献最高的非宗主成员
+        new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
+        if new_owner_id:
+            new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
+            sql_message.update_usr_sect(owner_id, sect_id, 1)  # 原宗主降为长老
+            sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)  # 新宗主
+            sql_message.update_sect_owner(new_owner_id[0], sect_id)
+            logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位</green>")
+        else:
+            logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的长老可以继承</red>")
+
 @sect_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """宗门帮助"""
@@ -437,7 +439,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
-        if sect_position == 4:
+        if sect_position == 4 or sect_position == 3:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足学习要求!"""
             await handle_send(bot, event, msg)
             await sect_mainbuff_learn.finish()
@@ -643,7 +645,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
-        if sect_position == 4:
+        if sect_position == 4 or sect_position == 3:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]['title']}，不满足学习要求!"""
             await handle_send(bot, event, msg)
             await sect_secbuff_learn.finish()
@@ -719,13 +721,12 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg)
             await upatkpractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[
-                                                       0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限25级
+        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - useratkpractice)
-        if sect_position == 4:
+        if sect_position == 4 or sect_position == 3:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upatkpractice.finish()
@@ -785,13 +786,12 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg)
             await uphppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[
-                                                       0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限25级
+        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - userhppractice)
-        if sect_position == 4:
+        if sect_position == 4 or sect_position == 3:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await uphppractice.finish()
@@ -851,13 +851,12 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg)
             await upmppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[
-                                                       0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限25级
+        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - usermppractice)
-        if sect_position == 4:
+        if sect_position == 4 or sect_position == 3:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upmppractice.finish()
@@ -928,6 +927,8 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg_list = []
     for sect in sect_lists_with_members:
         sect_id, sect_name, sect_scale, user_name, member_count = sect
+        if user_name is None:
+            user_name = "暂无"
         msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门建设度：{number_to(sect_scale)}\n成员数：{member_count}")
 
     await send_msg_handler(bot, event, '宗门列表', bot.self_id, msg_list)
@@ -1224,44 +1225,133 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                     continue
             await sect_rename.finish()
 
-
-
 @create_sect.handle(parameterless=[Cooldown(at_sender=False)])
-async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """创建宗门，对灵石、修为等级有要求，且需要当前状态无宗门"""
+async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
+    """创建宗门（提供10个候选名称+取消选项）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
+    
     if not isUser:
-        msg = f"区区凡人，也想创立万世仙门，大胆！"
+        msg = "区区凡人，也想创立万世仙门，大胆！"
         await handle_send(bot, event, msg)
         await create_sect.finish()
+    
     user_id = user_info['user_id']
-    # 首先判断是否满足创建宗门的三大条件
     level = user_info['level']
     list_level_all = list(jsondata.level_data().keys())
+    # 检查境界
     if (list_level_all.index(level) < list_level_all.index(XiuConfig().sect_min_level)):
-        msg = f"创建宗门要求:创建者境界最低要求为{XiuConfig().sect_min_level}"
+        msg = f"需达到{XiuConfig().sect_min_level}境才可创建宗门！"
+        await handle_send(bot, event, msg)
+        await create_sect.finish()
+    
+    # 检查灵石
+    if user_info['stone'] < XiuConfig().sect_create_cost:
+        msg = f"创建需{XiuConfig().sect_create_cost}灵石！"
+        await handle_send(bot, event, msg)
+        await create_sect.finish()
+    
+    # 检查是否已有宗门
+    if user_info['sect_id']:
+        msg = f"道友已是【{user_info['sect_name']}】成员，无法另立门户！"
+        await handle_send(bot, event, msg)
+        await create_sect.finish()
+    
+    # 生成10个候选名称
+    name_options = generate_random_sect_name(10)
+    options_msg = "\n".join([f"{i}. {name}" for i, name in enumerate(name_options, 1)])    
 
-    elif user_info['stone'] < XiuConfig().sect_create_cost:
-        msg = f"创建宗门要求:需要创建者拥有灵石{XiuConfig().sect_create_cost}枚"
-    elif user_info['sect_id']:
-        msg = f"道友已经加入了宗门:{user_info['sect_name']}，无法再创建宗门。"
-    else:
-        # 获取宗门名称
-        sect_name = args.extract_plain_text().strip()
-        if sect_name:
-            sql_message.create_sect(user_id, sect_name)
-            new_sect = sql_message.get_sect_info_by_qq(user_id)
-            owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
-            owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
-            sql_message.update_usr_sect(user_id, new_sect['sect_id'], owner_position)
-            sql_message.update_ls(user_id, XiuConfig().sect_create_cost, 2)
-            msg = f"恭喜{user_info['user_name']}道友创建宗门——{sect_name}，宗门编号为{new_sect['sect_id']}。为道友贺！为仙道贺！"
+    state["options"] = name_options
+    state["user_id"] = user_id
+    state["stone_cost"] = XiuConfig().sect_create_cost  # 存储创建所需灵石
+    state["refresh_count"] = 0  # 刷新次数
+    msg = (
+        f"\n请选择宗门名称：\n"
+        f"{options_msg}\n"
+        f"0. 取消创建\n"
+        f"00. 刷新名称\n"
+        f"回复编号（0-10）进行选择\n"
+        f"输入其他内容将随机选择"
+    )
+    await handle_send(bot, event, msg)
+
+@create_sect.receive()
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
+    """处理选择结果"""
+    user_choice = event.get_plaintext().strip()
+    name_options = state["options"]
+    user_id = state["user_id"]
+    stone_cost = state["stone_cost"]
+    refresh_count = state["refresh_count"]
+    
+    user_info = sql_message.get_user_info_with_id(user_id)
+    
+    # 0 - 取消创建
+    if user_choice == "0":
+        await create_sect.finish("道友已取消创建宗门。")
+    
+    # 00 - 刷新名称
+    elif user_choice == "00":
+        # 检查灵石是否足够
+        if user_info['stone'] < stone_cost:
+            # 灵石不足，自动随机选择一个
+            sect_name = random.choice(name_options)
+            msg = f"灵石不足，已自动选择宗门名称：{sect_name}"
+            await handle_send(bot, event, msg)
+            # 继续创建流程
         else:
-            msg = f"道友确定要创建无名之宗门？还请三思。"
+            # 扣除灵石
+            sql_message.update_ls(user_id, stone_cost, 2)
+            # 生成新名称
+            name_options = generate_random_sect_name(10)
+            options_msg = "\n".join([f"{i}. {name}" for i, name in enumerate(name_options, 1)])
+            
+            # 更新状态
+            state["options"] = name_options
+            state["refresh_count"] = refresh_count + 1
+            
+            msg = (
+                f"\n当前刷新次数：{refresh_count + 1}\n"
+                f"请选择宗门名称：\n"
+                f"{options_msg}\n"
+                f"0. 取消创建\n"
+                f"00. 再次刷新（每次刷新消耗{XiuConfig().sect_create_cost}灵石）\n"
+                f"回复编号（0-10）进行选择\n"
+                f"输入其他内容将随机选择"
+            )
+            await handle_send(bot, event, msg)
+            await create_sect.reject()  # 继续等待用户选择
+            return
+    
+    # 有效选择
+    elif user_choice.isdigit() and 1 <= int(user_choice) <= 10:
+        sect_name = name_options[int(user_choice)-1]
+    else:
+        # 非数字或超出范围，随机选择一个名字
+        sect_name = random.choice(name_options)
+    
+    # 创建宗门
+    sql_message.create_sect(user_id, sect_name)
+    new_sect = sql_message.get_sect_info_by_qq(user_id)
+    
+    # 设置宗主职位
+    owner_position = next(
+        (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
+        0
+    )
+    sql_message.update_usr_sect(user_id, new_sect['sect_id'], owner_position)
+    sql_message.update_ls(user_id, stone_cost, 2)  # 扣除创建费用
+    
+    # 获取用户信息
+    user_info = sql_message.get_user_info_with_id(user_id)
+    
+    msg = (
+        f"恭喜{user_info['user_name']}道友创建宗门——{sect_name}，"
+        f"宗门编号为{new_sect['sect_id']}。\n"
+        f"为道友贺！为仙道贺！"
+    )
     await handle_send(bot, event, msg)
     await create_sect.finish()
-
 
 @sect_kick_out.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1889,3 +1979,168 @@ def get_sectbufftxt(sect_scale, config_):
 def get_sect_level(sect_id):
     sect = sql_message.get_sect_info(sect_id)
     return divmod(sect['sect_scale'], config["等级建设度"])
+
+def generate_random_sect_name(count: int = 1) -> List[str]:
+    """随机生成多样化的宗门名称（包含正邪佛魔妖鬼等各类宗门）"""
+    # 基础前缀词库（按字数分类，已大幅扩充）
+    base_prefixes = {
+        # 单字（1字） - 权重10%
+        1: [
+            # 天象类
+            "天", "昊", "穹", "霄", "星", "月", "日", "辰", "云", "霞",
+            "风", "雷", "电", "雨", "雪", "霜", "露", "雾", "虹", "霓",
+            # 地理类
+            "山", "海", "川", "河", "江", "湖", "泉", "溪", "渊", "崖",
+            "峰", "岭", "谷", "洞", "岛", "洲", "泽", "野", "原", "林",
+            # 五行类
+            "金", "木", "水", "火", "土", "阴", "阳", "乾", "坤", "艮",
+            # 仙道类
+            "玄", "虚", "太", "清", "灵", "真", "元", "始", "极", "妙",
+            "神", "仙", "圣", "佛", "魔", "妖", "鬼", "邪", "煞", "冥",
+            # 数字类
+            "一", "三", "五", "七", "九", "十", "百", "千", "万", "亿"
+        ],
+        # 双字（2字） - 权重30%
+        2: [
+            # 天象组合
+            "九天", "凌霄", "太虚", "玄天", "紫霄", "青冥", "碧落", "黄泉",
+            "星河", "月华", "日曜", "云海", "风雷", "霜雪", "虹霓", "霞光",
+            # 地理组合
+            "昆仑", "蓬莱", "方丈", "瀛洲", "岱舆", "员峤", "峨眉", "青城",
+            "天山", "沧海", "长河", "大江", "五湖", "四海", "八荒", "六合",
+            # 五行组合
+            "太阴", "太阳", "少阴", "少阳", "玄黄", "洪荒", "混沌", "鸿蒙",
+            "乾坤", "坎离", "震巽", "艮兑", "两仪", "四象", "八卦", "五行",
+            # 仙道组合
+            "太上", "玉清", "上清", "太清", "玄都", "紫府", "瑶池", "琼台",
+            "菩提", "般若", "金刚", "罗汉", "天魔", "血煞", "幽冥", "黄泉",
+            # 数字组合
+            "一元", "两仪", "三才", "四象", "五行", "六合", "七星", "八卦",
+            "九宫", "十方", "百炼", "千幻", "万法", "亿劫"
+        ],
+        # 三字（3字） - 权重40%
+        3: [
+            # 天象三字
+            "九霄云", "凌霄殿", "太虚境", "玄天宫", "紫霄阁", "青冥峰", "碧落泉", "黄泉路",
+            "星河转", "月华轮", "日曜光", "云海潮", "风雷动", "霜雪寒", "虹霓现", "霞光漫",
+            # 地理三字
+            "昆仑山", "蓬莱岛", "方丈洲", "瀛洲境", "岱舆峰", "员峤谷", "峨眉顶", "青城山",
+            "天山雪", "沧海月", "长河落", "大江流", "五湖烟", "四海平", "八荒寂", "六合清",
+            # 五行三字
+            "太阴月", "太阳星", "少阴寒", "少阳暖", "玄黄气", "洪荒初", "混沌开", "鸿蒙始",
+            "乾坤转", "坎离合", "震巽动", "艮兑静", "两仪生", "四象变", "八卦演", "五行轮",
+            # 仙道三字
+            "太上道", "玉清宫", "上清观", "太清殿", "玄都府", "紫府天", "瑶池宴", "琼台会",
+            "菩提树", "般若智", "金刚身", "罗汉果", "天魔舞", "血煞阵", "幽冥界", "黄泉河",
+            # 数字三字
+            "一元始", "两仪分", "三才立", "四象成", "五行生", "六合聚", "七星列", "八卦演",
+            "九宫变", "十方界", "百炼钢", "千幻影", "万法归", "亿劫渡"
+        ],
+        # 四字（4字） - 权重20%
+        4: [
+            "九霄云外", "太虚仙境", "玄天无极", "紫霄神宫", "青冥之上", "碧落黄泉", "星河倒悬", "月华如水",
+            "日曜中天", "云海翻腾", "风雷激荡", "霜雪漫天", "虹霓贯日", "霞光万道", "昆仑之巅", "蓬莱仙岛",
+            "方丈神山", "瀛洲幻境", "岱舆悬圃", "员峤仙山", "峨眉金顶", "青城洞天", "天山雪莲", "沧海月明",
+            "长河落日", "大江东去", "五湖烟雨", "四海升平", "八荒六合", "洪荒宇宙", "混沌初开", "鸿蒙未判",
+            "乾坤无极", "坎离既济", "震巽相薄", "艮兑相成", "两仪四象", "五行八卦", "太上忘情", "玉清圣境",
+            "上清灵宝", "太清道德", "玄都紫府", "瑶池仙境", "琼台玉宇", "菩提般若", "金刚不坏", "罗汉金身",
+            "天魔乱舞", "血煞冲天", "幽冥鬼域", "黄泉路上"
+        ]
+    }
+
+    # 特色宗门类型（正派）
+    righteous_types = {
+        "剑修": ["剑", "剑阁", "剑宗", "剑派", "剑宫", "剑山", "剑域", "天剑", "神剑", "仙剑", "御剑", "飞剑", "心剑"],
+        "丹修": ["丹", "丹阁", "丹宗", "丹派", "丹鼎", "丹霞", "丹元", "丹心", "灵丹", "仙丹", "神丹", "药王"],
+        "器修": ["器", "器阁", "器宗", "器派", "器殿", "器魂", "器灵", "神工", "天工", "炼器", "铸剑", "百炼"],
+        "符修": ["符", "符阁", "符宗", "符派", "符殿", "符箓", "符道", "天符", "神符", "灵符", "咒印", "真言"],
+        "阵修": ["阵", "阵阁", "阵宗", "阵派", "阵殿", "阵法", "阵玄", "天阵", "神阵", "灵阵", "奇门", "遁甲"],
+        "道修": ["道", "道观", "道宫", "道宗", "道院", "道德", "天道", "真武", "玄门", "妙法", "无为", "自然"],
+        "佛修": ["佛", "佛寺", "佛院", "佛宗", "禅院", "禅林", "菩提", "金刚", "般若", "罗汉", "明王", "如来"]
+    }
+
+    # 邪魔外道类型
+    evil_types = {
+        "魔修": ["魔", "魔宫", "魔宗", "魔教", "魔殿", "天魔", "血魔", "心魔", "真魔", "幻魔", "阴魔", "煞魔"],
+        "妖修": ["妖", "妖宫", "妖宗", "妖盟", "妖殿", "天妖", "万妖", "百妖", "真妖", "幻妖", "灵妖", "大妖"],
+        "鬼修": ["鬼", "鬼门", "鬼宗", "鬼教", "鬼殿", "幽冥", "黄泉", "阴司", "夜叉", "罗刹", "无常", "判官"],
+        "邪修": ["邪", "邪门", "邪宗", "邪派", "邪殿", "极乐", "合欢", "血煞", "噬魂", "夺魄", "摄心", "炼尸"]
+    }
+
+    # 王朝类名称
+    dynasty_names = [
+        "仙朝", "仙廷", "神朝", "天朝", "圣朝", "皇朝", "帝朝", "仙国",
+        "神国", "天国", "圣国", "皇庭", "帝庭", "仙庭", "神庭", "天宫",
+        "天庭", "玉京", "紫府", "瑶台", "琼楼", "金阙", "银汉", "碧城"
+    ]
+
+    # 通用后缀词库
+    common_suffixes = [
+        "门", "派", "宗", "宫", "殿", "阁", "轩", "楼", "观", "院",
+        "堂", "居", "斋", "舍", "苑", "坊", "亭", "台", "榭", "坞",
+        "谷", "山", "峰", "岛", "洞", "府", "林", "海", "渊", "崖",
+        "境", "界", "天", "地", "台", "坛", "塔", "庙", "庵", "祠"
+    ]
+
+    # 邪派专用后缀
+    evil_suffixes = [
+        "窟", "洞", "渊", "狱", "殿", "教", "门", "派", "宗", "宫",
+        "血池", "魔窟", "鬼域", "妖巢", "邪殿", "煞地", "阴间", "炼狱",
+        "魔渊", "妖洞", "鬼窟", "邪巢", "血海", "骨山", "尸林", "魂冢"
+    ]
+
+    # 权重分配：基础40%，正派30%，邪派20%，王朝10%
+    type_weights = [0.4, 0.3, 0.2, 0.1]
+    
+    # 获取已有宗门名称避免重复
+    used_names = {sect['sect_name'] for sect in sql_message.get_all_sects()}
+    options = []
+    
+    while len(options) < count:
+        # 随机选择名称类型
+        name_type = random.choices(["base", "righteous", "evil", "dynasty"], weights=type_weights, k=1)[0]
+        
+        if name_type == "base":  # 基础宗门名称
+            prefix_length = random.choices([1, 2, 3, 4], weights=[0.1, 0.3, 0.4, 0.2], k=1)[0]
+            prefix = random.choice(base_prefixes[prefix_length])
+            suffix = random.choice(common_suffixes)
+            while prefix.endswith(suffix):
+                suffix = random.choice(common_suffixes)
+            name = f"{prefix}{suffix}"
+            
+        elif name_type == "righteous":  # 正派特色宗门
+            spec_type = random.choice(list(righteous_types.keys()))
+            spec_suffixes = righteous_types[spec_type]
+            
+            if random.random() < 0.5:  # 50%单字前缀+特色后缀
+                prefix = random.choice(base_prefixes[1])
+                suffix = random.choice(spec_suffixes)
+            else:  # 50%双字前缀+特色后缀
+                prefix = random.choice(base_prefixes[2])
+                suffix = random.choice(spec_suffixes[1:])  # 跳过单字特色后缀
+                
+            name = f"{prefix}{suffix}"
+            
+        elif name_type == "evil":  # 邪魔外道宗门
+            spec_type = random.choice(list(evil_types.keys()))
+            spec_suffixes = evil_types[spec_type]
+            
+            if random.random() < 0.7:  # 70%使用邪派专用后缀
+                prefix = random.choice(base_prefixes[1 if random.random() < 0.5 else 2])
+                suffix = random.choice(evil_suffixes)
+            else:  # 30%使用特色后缀
+                prefix = random.choice(base_prefixes[1 if random.random() < 0.5 else 2])
+                suffix = random.choice(spec_suffixes)
+                
+            name = f"{prefix}{suffix}"
+            
+        else:  # 王朝类名称
+            prefix = random.choice(base_prefixes[1 if random.random() < 0.5 else 2])
+            suffix = random.choice(dynasty_names)
+            name = f"{prefix}{suffix}"
+        
+        # 检查是否已存在
+        if name not in used_names and name not in options:
+            options.append(name)
+    
+    return options if count > 1 else options[0]
