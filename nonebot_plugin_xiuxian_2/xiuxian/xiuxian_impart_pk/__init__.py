@@ -36,6 +36,7 @@ impart_pk_list = on_fullmatch("虚神界列表", priority=7, block=True)
 impart_pk_exp = on_command("虚神界修炼", priority=8, block=True)
 impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
+impart_top = on_command("虚神界排行榜", priority=8, block=True)
 
 # 每日0点重置用虚神界次数
 @impart_re.scheduled_job("cron", hour=0, minute=0)
@@ -43,6 +44,19 @@ async def impart_re_():
     impart_pk.re_data()
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
+
+@impart_relv.scheduled_job("cron", day_of_week=0, hour=0, minute=0)  # 每周一0点
+async def impart_relv_():
+    """每周调整虚神界等级"""
+    logger.opt(colors=True).info(f"<green>开始执行虚神界等级批量调整...</green>")
+    
+    # 随机决定是增加还是减少等级
+    change_type = random.choice([1, 2])  # 1增加，2减少
+    change_amount = random.randint(1, 3)  # 1-3级
+    
+    xiuxian_impart.update_all_users_impart_lv(change_amount, change_type)
+    
+    logger.opt(colors=True).info(f"<green>虚神界等级调整完成</green>")
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -67,7 +81,39 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, msg)
     await impart_pk_project.finish()
 
-
+@impart_top.handle(parameterless=[Cooldown(at_sender=False)])
+async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    impart_level = {
+        0:"凡尘迷雾", 1:"灵气初现", 2:"感气之渊",
+        3:"练气云海", 4:"筑基灵台", 5:"金丹道场",
+        6:"元神幻境", 7:"化神星域", 8:"炼神火宅",
+        9:"返虚古路", 10:"大乘天阶", 11:"虚道玄门",
+        12:"斩我剑冢", 13:"遁一星河", 14:"至尊王座",
+        15:"微光圣境", 16:"星芒神域", 17:"月华仙宫",
+        18:"耀日天穹", 19:"祭道荒原", 20:"自在净土",
+        21:"破虚之隙", 22:"无界瀚海", 23:"混元道源",
+        24:"造化玉池", 25:"永恒神庭", 26:"至高天阙",
+        27:"大道尽头", 28:"法则本源", 29:"混沌核心",
+        30:"虚神本源"
+    }
+    
+    v_impart_top = xiuxian_impart.get_impart_rank()
+    msg = f"\n✨虚神界等级排行榜TOP50✨\n"
+    num = 0
+    for i in v_impart_top:
+        num += 1
+        user_info = sql_message.get_user_info_with_id(i['user_id'])
+        user_name = user_info['user_name'] if user_info else "未知修士"
+        impart_name = impart_level.get(i['impart_lv'], "未知秘境")
+        msg += f"第{num}位  {user_name}\n现位于：{impart_name}（LV {i['impart_lv']}）\n"
+        if num == 50:
+            break
+    await handle_send(bot, event, msg)
+    await impart_top.finish()
+        
 @impart_pk_list.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界列表"""

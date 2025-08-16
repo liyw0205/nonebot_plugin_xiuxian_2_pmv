@@ -2111,6 +2111,36 @@ class XIUXIAN_IMPART_BUFF:
         cur.execute(sql, )
         self.conn.commit()
 
+    def get_impart_rank(self):
+        """获取虚神界等级排行榜"""
+        sql = "SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, stone_num DESC LIMIT 50"
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        result = cur.fetchall()
+        columns = [column[0] for column in cur.description]
+        return [dict(zip(columns, row)) for row in result]  # 返回字典列表
+
+    def update_all_users_impart_lv(self, num, operation):
+        """
+        更新所有用户的虚神界等级
+        :param num: 要增加/减少的数值
+        :param operation: 1-增加, 2-减少
+        """
+        cur = self.conn.cursor()
+        if operation == 1:
+            sql = "UPDATE xiuxian_impart SET impart_lv = impart_lv + ? WHERE impart_lv >= 0"
+        elif operation == 2:
+            sql = "UPDATE xiuxian_impart SET impart_lv = CASE WHEN impart_lv - ? < 0 THEN 0 ELSE impart_lv - ? END WHERE impart_lv > 0"
+            # 对于减少操作，需要确保等级不低于0
+            cur.execute(sql, (num, num))
+            self.conn.commit()
+            return
+        else:
+            return
+    
+        cur.execute(sql, (num,))
+        self.conn.commit()
+
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""
         cur = self.conn.cursor()
