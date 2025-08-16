@@ -70,6 +70,7 @@ xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
 xianshi_fast_add = on_command("仙肆快速上架", priority=5, block=True)
+xianshi_fast_buy = on_command("仙肆快速购买", priority=5, block=True)
 xian_shop_remove = on_command("仙肆下架", priority=5, block=True)
 xian_buy = on_command("仙肆购买", priority=5, block=True)
 my_xian_shop = on_command("我的仙肆", priority=5, block=True)
@@ -91,6 +92,7 @@ shop_view = on_command("坊市查看", priority=5, permission=GROUP, block=True)
 shop_added = on_command("坊市上架", priority=5, permission=GROUP, block=True)
 fangshi_auto_add = on_command("坊市自动上架", priority=5, permission=GROUP, block=True)
 fangshi_fast_add = on_command("坊市快速上架", priority=5, permission=GROUP, block=True)
+fangshi_fast_buy = on_command("坊市快速购买", priority=5, permission=GROUP, block=True)
 shop_remove = on_command("坊市下架", priority=5, permission=GROUP, block=True)
 buy = on_command("坊市购买", priority=5, permission=GROUP, block=True)
 my_shop = on_command("我的坊市", priority=5, permission=GROUP, block=True)
@@ -144,6 +146,8 @@ __back_help__ = f"""
   ▶ 最低金额60万灵石，手续费10-30%
 🔸 仙肆快速上架 物品 [金额] - 快速上架10个物品
   ▶ 自动匹配最低价，数量固定10个（或全部）
+🔸 仙肆快速购买 物品 - 快速购买物品
+  ▶ 自动匹配最低价，可快速购买5种物品
 🔸 仙肆自动上架 类型 品阶 [数量] - 批量上架
   ▶ 示例：仙肆自动上架 装备 通天
 🔸 仙肆购买 编号 [数量] - 购买物品
@@ -157,6 +161,8 @@ __back_help__ = f"""
   ▶ 最低金额60万灵石，手续费10-30%
 🔸 坊市快速上架 物品 [金额] - 快速上架10个物品
   ▶ 自动匹配最低价，数量固定10个（或全部）
+🔸 坊市快速购买 物品 - 快速购买物品
+  ▶ 自动匹配最低价，可快速购买5种物品
 🔸 坊市自动上架 类型 品阶 [数量] - 批量上架
   ▶ 示例：坊市自动上架 药材 五品
 🔸 坊市购买 编号 [数量] - 购买物品
@@ -1579,6 +1585,124 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await xianshi_fast_add.finish()
 
+@xianshi_fast_buy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """仙肆快速购买"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await xianshi_fast_buy.finish()
+    
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 1:
+        msg = "指令格式：仙肆快速购买 物品名1,物品名2 [数量]\n" \
+              "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
+              "▶ 示例：仙肆快速购买 两仪心经,两仪心经,两仪心经"
+        await handle_send(bot, event, msg)
+        await xianshi_fast_buy.finish()
+    
+    # 解析物品名列表（允许重复且保留顺序）
+    goods_names = args[0].split(",")
+    if len(goods_names) > 5:
+        msg = "一次最多指定5个物品名（可重复）！"
+        await handle_send(bot, event, msg)
+        await xianshi_fast_buy.finish()
+    
+    quantity_per_item = 1
+    
+    # 获取所有用户物品（不包括系统物品）
+    index_data = get_xianshi_index()
+    user_items = []
+    
+    for xianshi_id, item_info in index_data["items"].items():
+        if item_info["user_id"] != 0:  # 排除系统物品
+            type_items = get_xianshi_type_data(item_info["type"])
+            if xianshi_id in type_items:
+                item_data = type_items[xianshi_id]
+                if item_data["name"] in goods_names:
+                    user_items.append({
+                        "id": xianshi_id,
+                        "goods_id": item_data["goods_id"],
+                        "name": item_data["name"],
+                        "type": item_info["type"],
+                        "price": item_data["price"],
+                        "seller_id": item_info["user_id"],
+                        "seller_name": item_data["user_name"]
+                    })
+    
+    if not user_items:
+        msg = "仙肆中没有符合条件的用户物品！"
+        await handle_send(bot, event, msg)
+        await xianshi_fast_buy.finish()
+    
+    # 按价格从低到高排序
+    user_items.sort(key=lambda x: x["price"])
+    
+    # 执行购买（严格按照输入顺序处理每个物品名）
+    total_cost = 0
+    success_items = []
+    failed_items = []
+    
+    for name in goods_names:
+        # 查找该物品所有可购买项（按价格排序）
+        available = [item for item in user_items if item["name"] == name]
+        remaining = quantity_per_item
+        purchased = 0
+        item_total = 0
+        
+        for item in available:
+            if remaining <= 0:
+                break
+            
+            try:
+                # 检查物品是否已被购买（可能被前一轮购买）
+                if item["id"] not in index_data["items"]:
+                    continue
+                
+                # 执行购买
+                sql_message.update_ls(user_id, item["price"], 2)  # 扣钱
+                sql_message.update_ls(item["seller_id"], item["price"], 1)  # 给卖家
+                sql_message.send_back(user_id, item["goods_id"], item["name"], item["type"], 1, 1)
+                
+                # 从系统中移除
+                type_items = get_xianshi_type_data(item["type"])
+                del index_data["items"][item["id"]]
+                del type_items[item["id"]]
+                save_xianshi_index(index_data)
+                save_xianshi_type_data(item["type"], type_items)
+                
+                purchased += 1
+                item_total += item["price"]
+                total_cost += item["price"]
+                remaining -= 1
+                
+            except Exception as e:
+                logger.error(f"快速购买出错: {e}")
+                continue
+        
+        # 记录结果（每个name单独记录）
+        if purchased > 0:
+            success_items.append(f"{name}×{purchased} ({number_to(item_total)}灵石)")
+        if remaining > 0:
+            failed_items.append(f"{name}×{remaining}（库存不足）")
+    
+    # 构建结果消息
+    msg_parts = []
+    if success_items:
+        msg_parts.append("成功购买：")
+        msg_parts.extend(success_items)
+        msg_parts.append(f"总计花费：{number_to(total_cost)}灵石")
+    if failed_items:
+        msg_parts.append("购买失败：")
+        msg_parts.extend(failed_items)
+    
+    msg = "\n".join(msg_parts)
+    await handle_send(bot, event, msg)
+    await xianshi_fast_buy.finish()
+    
 @xian_shop_remove_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """系统仙肆下架"""
@@ -2261,6 +2385,130 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     await handle_send(bot, event, msg)
     await fangshi_fast_add.finish()
 
+@fangshi_fast_buy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def fangshi_fast_buy_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """坊市快速购买"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await fangshi_fast_buy.finish()
+    
+    group_id = str(event.group_id)
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 1:
+        msg = "指令格式：坊市快速购买 物品名1,物品名2 [数量]\n" \
+              "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
+              "▶ 示例：坊市快速购买 两仪心经,两仪心经,两仪心经"
+        await handle_send(bot, event, msg)
+        await fangshi_fast_buy.finish()
+    
+    # 解析物品名列表（允许重复且保留顺序）
+    goods_names = args[0].split(",")
+    if len(goods_names) > 5:
+        msg = "一次最多指定5个物品名（可重复）！"
+        await handle_send(bot, event, msg)
+        await fangshi_fast_buy.finish()
+    
+    quantity_per_item = 1
+    
+    # 获取所有用户物品（不包括系统物品）
+    index_data = get_fangshi_index(group_id)
+    user_items = []
+    
+    for fangshi_id, item_info in index_data["items"].items():
+        if item_info["user_id"] != 0:  # 排除系统物品
+            type_items = get_fangshi_type_data(group_id, item_info["type"])
+            if fangshi_id in type_items:
+                item_data = type_items[fangshi_id]
+                if item_data["name"] in goods_names:
+                    user_items.append({
+                        "id": fangshi_id,
+                        "goods_id": item_data["goods_id"],
+                        "name": item_data["name"],
+                        "type": item_info["type"],
+                        "price": item_data["price"],
+                        "seller_id": item_info["user_id"],
+                        "seller_name": item_data["user_name"]
+                    })
+    
+    if not user_items:
+        msg = "坊市中没有符合条件的用户物品！"
+        await handle_send(bot, event, msg)
+        await fangshi_fast_buy.finish()
+    
+    # 按价格从低到高排序
+    user_items.sort(key=lambda x: x["price"])
+    
+    # 执行购买（严格按照输入顺序处理每个物品名）
+    total_cost = 0
+    success_items = []
+    failed_items = []
+    
+    for name in goods_names:
+        # 查找该物品所有可购买项（按价格排序）
+        available = [item for item in user_items if item["name"] == name]
+        remaining = quantity_per_item
+        purchased = 0
+        item_total = 0
+        
+        for item in available:
+            if remaining <= 0:
+                break
+            
+            try:
+                # 检查物品是否已被购买（可能被前一轮购买）
+                if item["id"] not in index_data["items"]:
+                    continue
+                
+                # 检查灵石是否足够
+                if user_info['stone'] < item["price"]:
+                    failed_items.append(f"{item['name']}×1（灵石不足）")
+                    continue
+                
+                # 执行购买
+                sql_message.update_ls(user_id, item["price"], 2)  # 扣钱
+                sql_message.update_ls(item["seller_id"], item["price"], 1)  # 给卖家
+                sql_message.send_back(user_id, item["goods_id"], item["name"], item["type"], 1, 1)
+                
+                # 从系统中移除
+                type_items = get_fangshi_type_data(group_id, item["type"])
+                del index_data["items"][item["id"]]
+                del type_items[item["id"]]
+                save_fangshi_index(group_id, index_data)
+                save_fangshi_type_data(group_id, item["type"], type_items)
+                
+                purchased += 1
+                item_total += item["price"]
+                total_cost += item["price"]
+                remaining -= 1
+                
+            except Exception as e:
+                logger.error(f"坊市快速购买出错: {e}")
+                continue
+        
+        # 记录结果（每个name单独记录）
+        if purchased > 0:
+            success_items.append(f"{name}×{purchased} ({number_to(item_total)}灵石)")
+        if remaining > 0:
+            failed_items.append(f"{name}×{remaining}（库存不足）")
+    
+    # 构建结果消息
+    msg_parts = []
+    if success_items:
+        msg_parts.append("成功购买：")
+        msg_parts.extend(success_items)
+        msg_parts.append(f"总计花费：{number_to(total_cost)}灵石")
+    if failed_items:
+        msg_parts.append("购买失败：")
+        msg_parts.extend(failed_items)
+    
+    msg = "\n".join(msg_parts)
+    await handle_send(bot, event, msg)
+    await fangshi_fast_buy.finish()
+    
 @shop_remove.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def shop_remove_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """坊市下架"""
