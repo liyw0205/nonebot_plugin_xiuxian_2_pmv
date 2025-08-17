@@ -120,14 +120,7 @@ back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", 
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
 __back_help__ = f"""
-【交易帮助】
-💰 交易系统总帮助（输入具体分类查看详细帮助）
-🔹 背包帮助 - 查看背包相关功能
-🔹 仙肆帮助 - 查看全服交易系统
-🔹 坊市帮助 - 查看群内交易系统
-🔹 拍卖帮助 - 查看拍卖会功能
-
-【背包帮助】
+\n【背包帮助】
 🔹 我的背包 [页码] - 查看背包物品
 🔹 药材背包 [页码] - 查看药材类物品
 🔹 丹药背包 [页码] - 查看丹药类物品
@@ -426,29 +419,112 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """交易系统帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     message = str(event.message)
+    
+    # 提取中文关键词
     rank_msg = r'[\u4e00-\u9fa5]+'
     message = re.findall(rank_msg, message)
     
+    # 帮助内容分块
     help_sections = {
-        "交易": __back_help__.split("【交易帮助】")[1].split("【背包帮助】")[0],
-        "背包": __back_help__.split("【背包帮助】")[1].split("【仙肆帮助】")[0],
-        "仙肆": __back_help__.split("【仙肆帮助】")[1].split("【坊市帮助】")[0],
-        "坊市": __back_help__.split("【坊市帮助】")[1].split("【拍卖帮助】")[0],
-        "拍卖": __back_help__.split("【拍卖帮助】")[1].split("【系统规则】")[0],
-        "拍卖会": __back_help__.split("【拍卖帮助】")[1].split("【系统规则】")[0],
+        "全部": __back_help__,
+        "背包": """
+【背包帮助】
+🔹 我的背包 [页码] - 查看背包物品
+🔹 药材背包 [页码] - 查看药材类物品
+🔹 丹药背包 [页码] - 查看丹药类物品
+🔹 使用+物品名 [数量] - 使用物品
+🔹 换装/卸装+装备名 - 卸下装备
+🔹 炼金+物品名 [数量] - 将物品转化为灵石
+🔹 快速炼金 类型 品阶 - 批量炼金指定类型物品
+🔹 查看修仙界物品+类型 [页码] - 查看物品图鉴
+🔹 查看效果+物品名 - 查看物品详情
+🔹 灵石 - 查看当前灵石数量
+""".strip(),
+        "仙肆": """
+【仙肆帮助】（全服交易）
+🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
+  ▶ 支持类型：技能|装备|丹药|药材
+🔸 仙肆上架 物品 金额 [数量] - 上架物品
+  ▶ 最低金额60万灵石，手续费10-30%
+🔸 仙肆快速上架 物品 [金额] - 快速上架10个物品
+  ▶ 自动匹配最低价，数量固定10个（或全部）
+🔸 仙肆快速购买 物品 - 快速购买物品
+  ▶ 自动匹配最低价，可快速购买5种物品
+🔸 仙肆自动上架 类型 品阶 [数量] - 批量上架
+  ▶ 示例：仙肆自动上架 装备 通天
+🔸 仙肆购买 编号 [数量] - 购买物品
+🔸 仙肆下架 编号 - 下架自己的物品
+🔸 我的仙肆 [页码] - 查看自己上架的物品
+""".strip(),
+        "坊市": """
+【坊市帮助】（群内交易）
+🔸 坊市查看 [类型] [页码] - 查看群坊市
+  ▶ 支持类型：技能|装备|丹药|药材
+🔸 坊市上架 物品 金额 [数量] - 上架物品
+  ▶ 最低金额60万灵石，手续费10-30%
+🔸 坊市快速上架 物品 [金额] - 快速上架10个物品
+  ▶ 自动匹配最低价，数量固定10个（或全部）
+🔸 坊市快速购买 物品 - 快速购买物品
+  ▶ 自动匹配最低价，可快速购买5种物品
+🔸 坊市自动上架 类型 品阶 [数量] - 批量上架
+  ▶ 示例：坊市自动上架 药材 五品
+🔸 坊市购买 编号 [数量] - 购买物品
+🔸 坊市下架 编号 - 下架自己的物品
+🔸 我的坊市 [页码] - 查看自己上架的物品
+""".strip(),
+        "拍卖": f"""
+【拍卖帮助】
+🎫 查看拍卖品 - 查看待拍卖物品
+🎫 提交拍卖品 物品 底价 [数量] - 提交拍卖
+🎫 拍卖+金额 - 参与竞拍
+🎫 撤回拍卖品 编号 - 撤回自己的拍卖品
+🎫 举行拍卖会 - (管理员)开启拍卖
+⏰ 每日{auction_time_config['hours']}点自动举行拍卖会
+""".strip(),
+        "交易": """
+【交易系统总览】
+输入以下关键词查看详细帮助：
+🔹 背包帮助 - 背包相关功能
+🔹 仙肆帮助 - 全服交易市场
+🔹 坊市帮助 - 群内交易市场
+🔹 拍卖帮助 - 拍卖会功能
+
+【系统规则】
+💰 手续费规则：
+  - 500万以下：10%
+  - 500-1000万：15% 
+  - 1000-2000万：20%
+  - 2000万以上：30%
+""".strip()
     }
     
-    if message:
-        message = message[0]    
-    if message == "交易帮助":
-        msg = "【交易系统帮助】\n请输入：\n交易帮助全部 - 查看总览\n背包帮助 - 背包功能\n仙肆帮助 - 全服交易\n坊市帮助 - 群内交易\n拍卖帮助 - 拍卖功能"
-    elif message in help_sections:
-        msg = f"【{message}】" + help_sections[message]
+    # 默认显示交易总览
+    if not message:
+        msg = help_sections["交易"]
     else:
-        msg = __back_help__
-
+        # 获取第一个中文关键词
+        keyword = message[0]
+        
+        # 检查是否包含特定关键词
+        if "背包" in keyword:
+            msg = help_sections["背包"]
+        elif "仙肆" in keyword:
+            msg = help_sections["仙肆"]
+        elif "坊市" in keyword:
+            msg = help_sections["坊市"]
+        elif "拍卖" in keyword or "拍卖会" in keyword:
+            msg = help_sections["拍卖"]
+        elif "全部" in keyword:
+            msg = help_sections["全部"]
+        elif "交易" in keyword:
+            msg = help_sections["交易"]
+        else:
+            # 默认显示交易总览和可用指令
+            msg = "请输入正确的帮助关键词：\n"
+            msg += "背包帮助 | 仙肆帮助 | 坊市帮助 | 拍卖帮助 | 交易帮助\n"
+            msg += "或输入'交易帮助全部'查看完整帮助"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, f"\n{msg}")
     await back_help.finish()
 
 @xiuxian_sone.handle(parameterless=[Cooldown(at_sender=False)])
@@ -1891,13 +1967,14 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     try:
         price = int(args[1])
         quantity = int(args[2]) if len(args) > 2 else 1
+        quantity = min(quantity, 10)  # 限制最大数量为10
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
     # 原有价格限制逻辑
-    if price < 600000:  # 最低60万灵石
+    if price < FANGSHI_MIN_PRICE:  # 最低60万灵石
         msg = "坊市最低价格为60万灵石！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
@@ -1905,7 +1982,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     # 检查仙肆最低价
     xianshi_min_price = get_xianshi_min_price(goods_name)
     if xianshi_min_price is not None:
-        min_price = max(600000, xianshi_min_price // 2)
+        min_price = max(FANGSHI_MIN_PRICE, xianshi_min_price // 2)
         max_price = xianshi_min_price * 2
         if price < min_price or price > max_price:
             msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
@@ -1939,7 +2016,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
-    # 计算手续费
+    # 计算总手续费
     total_price = price * quantity
     if total_price <= 6000000:
         fee_rate = 0.1
@@ -1960,35 +2037,39 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     sql_message.update_ls(user_id, fee, 2)
     sql_message.update_back_j(user_id, goods_info['goods_id'], num=quantity)
     
-    # 添加到坊市系统
-    # 生成唯一坊市ID
-    index_data = get_fangshi_index(group_id)
-    existing_ids = set(index_data["items"].keys())
-    fangshi_id = generate_fangshi_id(existing_ids)
+    # 为每个物品创建独立条目
+    success_count = 0
+    for _ in range(quantity):
+        # 添加到坊市系统
+        # 生成唯一坊市ID
+        index_data = get_fangshi_index(group_id)
+        existing_ids = set(index_data["items"].keys())
+        fangshi_id = generate_fangshi_id(existing_ids)
+        
+        # 添加到索引
+        index_data["items"][fangshi_id] = {
+            "type": goods_type,
+            "user_id": user_id
+        }
+        save_fangshi_index(group_id, index_data)
+        
+        # 添加到类型文件
+        type_items = get_fangshi_type_data(group_id, goods_type)
+        type_items[fangshi_id] = {
+            "id": fangshi_id,
+            "goods_id": goods_info['goods_id'],
+            "name": goods_name,
+            "type": goods_type,
+            "price": price,
+            "quantity": 1,  # 每个条目数量固定为1
+            "user_id": user_id,
+            "user_name": user_info['user_name'],
+            "desc": get_item_msg(goods_info['goods_id'])
+        }
+        save_fangshi_type_data(group_id, goods_type, type_items)
+        success_count += 1
     
-    # 添加到索引
-    index_data["items"][fangshi_id] = {
-        "type": goods_type,
-        "user_id": user_id
-    }
-    save_fangshi_index(group_id, index_data)
-    
-    # 添加到类型文件
-    type_items = get_fangshi_type_data(group_id, goods_type)
-    type_items[fangshi_id] = {
-        "id": fangshi_id,
-        "goods_id": goods_info['goods_id'],
-        "name": goods_name,
-        "type": goods_type,
-        "price": price,
-        "quantity": quantity,  # 用户物品为具体数量
-        "user_id": user_id,
-        "user_name": user_info['user_name'],
-        "desc": get_item_msg(goods_info['goods_id'])
-    }
-    save_fangshi_type_data(group_id, goods_type, type_items)
-    
-    msg = f"成功上架 {goods_name} x{quantity} 到坊市！\n"
+    msg = f"成功上架 {goods_name} x{success_count} 到坊市！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(fee)} 灵石"
@@ -2321,8 +2402,18 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         else:
             price = min_price
     else:
-        # 检查用户指定的价格是否低于最低价
-        price = max(price, FANGSHI_MIN_PRICE)  # 确保不低于系统最低价
+        # 检查用户指定的价格是否符合限制
+        xianshi_min = get_xianshi_min_price(goods_name)
+        if xianshi_min is not None:
+            min_price = max(FANGSHI_MIN_PRICE, xianshi_min // 2)
+            max_price = xianshi_min * 2
+            if price < min_price or price > max_price:
+                msg = f"该物品在仙肆的最低价格为{xianshi_min}，坊市价格限制为{min_price}-{max_price}灵石！"
+                await handle_send(bot, event, msg)
+                await fangshi_fast_add.finish()
+        else:
+            if price < FANGSHI_MIN_PRICE:
+                price = max(price, FANGSHI_MIN_PRICE)
     
     # 计算总手续费
     total_price = price * quantity

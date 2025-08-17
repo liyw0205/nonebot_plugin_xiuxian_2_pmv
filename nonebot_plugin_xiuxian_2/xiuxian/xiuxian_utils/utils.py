@@ -476,30 +476,39 @@ def format_number(num):
         return str(int(num))
     else:
         # 有单位时保留1位小数，并去除末尾的".0"
-        formatted = f"{num:.1f}".rstrip("0").rstrip(".")
+        formatted = f"{num:.1f}"
+        if formatted.endswith(".0"):
+            formatted = formatted[:-2]  # 去除".0"
         return formatted
 
 def number_to(num):
-    """带中文单位的格式化（支持超大数，保留原单位列表）"""
-    units = [
-        "", "万", "亿", "兆", "京", "垓", "秭", "穰", "沟", "涧",
-        "正", "载", "极", "恒河沙", "阿僧祗", "那由他", "不思议", "无量大"
-    ]
+    """带中文单位的格式化（精确到小数点后2位）"""
+    units = ["", "万", "亿", "兆", "京"]
     
-    # 处理科学计数法/字符串输入
     try:
         num = float(num)
     except (TypeError, ValueError):
         raise ValueError("输入必须是数字")
 
-    # 递归计算单位和数值
     def convert(n, level):
         if level >= len(units) - 1 or n < 10000:
             return n, level
         return convert(n / 10000, level + 1)
 
     num, level = convert(num, 0)
-    formatted_num = format_number(num)
+    
+    # 特殊处理：当小数部分为0时显示整数，否则保留1-2位小数
+    if num == int(num):
+        formatted_num = str(int(num))
+    else:
+        # 先尝试保留1位小数
+        temp = round(num, 1)
+        if temp == int(temp):
+            formatted_num = str(int(temp))
+        else:
+            # 保留2位小数并去除末尾的0
+            formatted_num = "{0:.2f}".format(num).rstrip('0').rstrip('.')
+    
     return f"{formatted_num}{units[level]}"
 
 def number_to2(num):
@@ -627,7 +636,7 @@ async def send_msg_handler(bot, event, *args):
             merged_content = "\n\n".join(merged_contents)
             first_msg = args[0][0] if args[0] else None
             name = first_msg["data"]["name"] if first_msg else "系统"
-            uin = first_msg["data"]["uin"] if first_msg else int(bot_id)
+            uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
             messages = [
                 {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
             ]

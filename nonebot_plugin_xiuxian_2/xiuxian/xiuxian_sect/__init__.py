@@ -76,6 +76,7 @@ sect_mainbuff_learn = on_command("学习宗门功法", priority=5, block=True)
 sect_secbuff_get = on_command("宗门神通搜寻", aliases={"搜寻宗门神通"}, priority=6, block=True)
 sect_secbuff_learn = on_command("学习宗门神通", priority=5, block=True)
 sect_buff_info = on_command("宗门功法查看", aliases={"查看宗门功法"}, priority=9, block=True)
+sect_buff_info2 = on_command("宗门神通查看", aliases={"查看宗门神通"}, priority=9, block=True)
 sect_users = on_command("宗门成员查看", aliases={"查看宗门成员"}, priority=8, block=True)
 sect_elixir_room_make = on_command("宗门丹房建设", aliases={"建设宗门丹房"}, priority=5, block=True)
 sect_elixir_get = on_command("宗门丹药领取", aliases={"领取宗门丹药"}, priority=5, block=True)
@@ -375,58 +376,93 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_buff_info.finish()
+    
     sect_id = user_info['sect_id']
-    if sect_id:
-        sect_info = sql_message.get_sect_info(sect_id)
-        if sect_info['mainbuff'] == 0 and sect_info['secbuff'] == 0:
-            msg = f"本宗尚未获得任何功法、神通，请宗主发送宗门功法、神通搜寻来获得！"
-            await handle_send(bot, event, msg)
-            await sect_buff_info.finish()
-
-        list_tp = []
-        msg = ""
-        if sect_info['mainbuff'] != 0:
-            mainbufflist = get_sect_mainbuff_id_list(sect_id)
-            main_msg = f"\n☆------宗门功法------☆\n"
-            msg += main_msg
-            list_tp.append(
-                {"type": "node", "data": {"name": f"道友{user_info['user_name']}的宗门功法信息", "uin": bot.self_id,
-                                          "content": main_msg}})
-            for main in mainbufflist:
-                mainbuff, mainbuffmsg = get_main_info_msg(str(main))
-                mainmsg = f"{mainbuff['level']}{mainbuff['name']}:{mainbuffmsg}\n"
-                msg += mainmsg
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"道友{user_info['user_name']}的宗门秘籍信息", "uin": bot.self_id,
-                                              "content": mainmsg}})
-
-        if sect_info['secbuff'] != 0:
-            secbufflist = get_sect_secbuff_id_list(sect_id)
-            sec_msg = f"☆------宗门神通------☆\n"
-            msg += sec_msg
-            list_tp.append(
-                {"type": "node", "data": {"name": f"道友{user_info['user_name']}的宗门神通信息", "uin": bot.self_id,
-                                          "content": sec_msg}})
-            for sec in secbufflist:
-                secbuff = items.get_data_by_item_id(sec)
-                secbuffmsg = get_sec_msg(secbuff)
-                secmsg = f"{secbuff['level']}:{secbuff['name']} {secbuffmsg}\n"
-                msg += secmsg
-                list_tp.append(
-                    {"type": "node", "data": {"name": f"道友{user_info['user_name']}的宗门神通信息", "uin": bot.self_id,
-                                              "content": secmsg}})
-        try:
-            await send_msg_handler(bot, event, list_tp)
-        except ActionFailed:
-            await handle_send(bot, event, msg)
-            await sect_buff_info.finish()
-        await sect_buff_info.finish()
-    else:
+    if not sect_id:
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg)
         await sect_buff_info.finish()
+        
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info['mainbuff']:
+        msg = f"本宗尚未获得任何功法，请宗主发送【宗门功法搜寻】来获取！"
+        await handle_send(bot, event, msg)
+        await sect_buff_info.finish()
 
+    # 获取功法列表
+    mainbuff_list = get_sect_mainbuff_id_list(sect_id)
+    if not mainbuff_list:
+        msg = f"本宗功法列表为空！"
+        await handle_send(bot, event, msg)
+        await sect_buff_info.finish()
 
+    # 构建消息
+    msg_list = []
+    msg_list.append("☆------宗门功法------☆")
+    
+    for mainbuff_id in mainbuff_list:
+        if not mainbuff_id:  # 跳过空ID
+            continue
+        mainbuff, mainbuffmsg = get_main_info_msg(mainbuff_id)
+        msg_list.append(f"{mainbuff['level']}{mainbuff['name']}:{mainbuffmsg}")
+
+    # 发送消息
+    try:
+        await send_msg_handler(bot, event, '宗门功法', bot.self_id, msg_list)
+    except ActionFailed:
+        msg = "\n".join(msg_list)
+        await handle_send(bot, event, msg)
+    
+    await sect_buff_info.finish()
+
+@sect_buff_info2.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门神通查看"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_buff_info2.finish()
+    
+    sect_id = user_info['sect_id']
+    if not sect_id:
+        msg = f"道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_buff_info2.finish()
+        
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info['secbuff']:
+        msg = f"本宗尚未获得任何神通，请宗主发送【宗门神通搜寻】来获取！"
+        await handle_send(bot, event, msg)
+        await sect_buff_info2.finish()
+
+    # 获取神通列表
+    secbuff_list = get_sect_secbuff_id_list(sect_id)
+    if not secbuff_list:
+        msg = f"本宗神通列表为空！"
+        await handle_send(bot, event, msg)
+        await sect_buff_info2.finish()
+
+    # 构建消息
+    msg_list = []
+    msg_list.append("☆------宗门神通------☆")
+    
+    for secbuff_id in secbuff_list:
+        if not secbuff_id:  # 跳过空ID
+            continue
+        secbuff = items.get_data_by_item_id(secbuff_id)
+        secbuffmsg = get_sec_msg(secbuff)
+        msg_list.append(f"{secbuff['level']}:{secbuff['name']} {secbuffmsg}")
+
+    # 发送消息
+    try:
+        await send_msg_handler(bot, event, '宗门神通', bot.self_id, msg_list)
+    except ActionFailed:
+        msg = "\n".join(msg_list)
+        await handle_send(bot, event, msg)
+    
+    await sect_buff_info2.finish()
+        
 @sect_mainbuff_learn.handle(parameterless=[Cooldown(stamina_cost = 1, cd_time=10, at_sender=False)])
 async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """学习宗门功法"""
@@ -467,7 +503,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             mainbuffconfig = config['宗门主功法参数']
             mainbuff = items.get_data_by_item_id(mainbuffid)
             mainbufftype = mainbuff['level']
-            mainbuffgear = buffrankkey[mainbufftype]
+            mainbuffgear = buffrankkey.get(mainbufftype, 100)
             # 获取逻辑
             materialscost = mainbuffgear * mainbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
@@ -516,7 +552,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 mainbuffidlist = get_sect_mainbuff_id_list(sect_id)
                 results = []
 
-                for i in range(100):
+                for i in range(10):
                     if random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
                         mainbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[mainbufftype]['gf_list'])
                         if mainbuffid in mainbuffidlist:
@@ -589,7 +625,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 secbuffidlist = get_sect_secbuff_id_list(sect_id)
                 results = []
 
-                for i in range(100):
+                for i in range(10):
                     if random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
                         secbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[secbufftype]['st_list'])
                         if secbuffid in secbuffidlist:

@@ -35,6 +35,14 @@ WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
 # 用户提醒状态字典
 user_reminder_status = {}  # 格式: {user_id: {"pending": bool, "reminded": bool}}
 
+do_work = on_regex(
+    r"^悬赏令(查看|刷新|终止|结算|接取|重置|帮助|确认刷新)?\s*(\d+)?",
+    priority=10,
+    block=True
+)
+
+do_work_cz = on_command("悬赏力量", permission=SUPERUSER, priority=6, block=True)
+
 def get_user_work_status(user_id: str) -> Tuple[int, Any]:
     """获取用户悬赏令状态(包含自动更新过期状态)"""
     # 先检查是否有进行中的悬赏
@@ -277,14 +285,6 @@ def get_work_msg(work_):
 async def resetrefreshnum_():
     sql_message.reset_work_num(count)
     logger.opt(colors=True).info(f"用户悬赏令刷新次数重置成功")
-
-do_work = on_regex(
-    r"^悬赏令(查看|刷新|终止|结算|接取|重置|帮助|确认刷新)?(\d+)?",
-    priority=10,
-    block=True
-)
-
-do_work_cz = on_command("悬赏力量", permission=SUPERUSER, priority=6, block=True)
 
 __work_help__ = f"""
 ════ 悬赏令系统 ════════════
