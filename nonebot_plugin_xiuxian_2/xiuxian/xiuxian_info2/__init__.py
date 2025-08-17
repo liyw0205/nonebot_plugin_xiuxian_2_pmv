@@ -245,13 +245,13 @@ async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 @sys_info_cmd.handle()
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理系统信息命令"""
-    msg = await get_system_info()
+    sys_msg = await get_system_info(bot, event)
     await handle_send(bot, event, msg)
 
 @ping_test_cmd.handle()
 async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理ping测试命令"""
-    msg = await get_ping_test()
+    ping_msg = await get_ping_test(bot, event)
     await handle_send(bot, event, msg)
 
 @status_cmd.handle()

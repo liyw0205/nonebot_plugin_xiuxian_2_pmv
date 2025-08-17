@@ -140,6 +140,107 @@ nb run --reload
 
  </details>
  
+<details>
+<summary>(Windows安装)</summary>
+
+安装Python
+```
+https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe
+```
+安装napcat
+```
+https://napneko.github.io/guide/napcat
+```
+安装nb-cli
+- 在C/D盘根目录新建文件夹然后打开cmd
+```
+python -m venv myenv
+myenv/bin/activate
+pip install nb-cli
+```
+下载最新的project.tar.gz
+```
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest
+```
+nb安装插件
+```
+cd C:\nb #进入nb文件夹
+myenv/bin/activate #进入虚拟环境
+nb #打开nb命令行
+```
+- 选择 Create a NoneBot project.（创建项目）
+- 选择 simple
+- 输入项目名 xiu2
+选择适配器
+```
+OneBot V11 (OneBot V11 协议)
+```
+选择驱动器
+```
+FastAPI (FastAPI 驱动器)
+HTTPX (HTTPX 驱动器)
+websockets (websockets 驱动器)
+AIOHTTP (AIOHTTP 驱动器)
+```
+- 选择 In a "src" folder（在src文件夹里）
+确定安装虚拟环境和依赖
+```
+Create virtual environment? (Y/n) y
+Install dependencies now? (Y/n) y
+```
+选择 echo（默认安装插件）
+
+
+- 解压project.tar.gz
+```
+移动nonebot_plugin_xiuxian_2 
+到xiu2/src/plugins
+
+移动data 
+到xiu2
+
+移动requirements.txt 
+到xiu2
+```
+- 下载字体和卡图包
+```
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip
+```
+- 解压字体和卡图包
+```
+移动到xiu2/data/xiuxian
+```
+安装修仙2依赖
+```
+cd xiu2
+.venv/bin/activate
+pip install -r requirements.txt
+```
+修改nb配置
+```
+echo 'LOG_LEVEL=INFO # 日志等级INFO就行
+
+SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
+
+COMMAND_START = [""] # 指令前缀，默认空
+NICKNAME = [""] # 机器人昵称
+
+DEBUG = False
+HOST = 127.0.0.1
+PORT = 8080 # 反代的8080端口，有需要自己改' > xiu2/.env.dev
+```
+启动修仙2
+- 新建文件，改后缀`.bat`
+```
+call myenv/bin/activate
+cd xiu2
+nb run --reload
+```
+
+查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
+ </details>
+ 
 # 💿 配置
 
 <details>
