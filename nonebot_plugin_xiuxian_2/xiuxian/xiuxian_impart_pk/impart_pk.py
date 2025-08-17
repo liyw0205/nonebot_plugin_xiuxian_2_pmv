@@ -5,7 +5,6 @@ except ImportError:
 from pathlib import Path
 import os
 
-
 class IMPART_PK(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent

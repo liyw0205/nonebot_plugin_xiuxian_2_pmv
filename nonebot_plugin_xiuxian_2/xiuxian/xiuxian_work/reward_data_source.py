@@ -53,7 +53,7 @@ def savef(user_id, data):
     save_data = {
         "tasks": data["tasks"],
         "status": data.get("status", 1),  # 默认1-未接取
-        "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
+        "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
         "user_level": data.get("user_level")
     }
     with open(FILEPATH, "w", encoding="UTF-8") as f:
