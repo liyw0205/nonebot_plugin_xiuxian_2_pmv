@@ -114,7 +114,7 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     return msg
 
-async def get_system_info() -> str:
+async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
     """获取系统信息"""
     # 获取系统信息
     system_info = {
@@ -188,7 +188,7 @@ async def get_system_info() -> str:
     
     return msg
 
-async def get_ping_test() -> str:
+async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
     """执行ping测试"""
     # 发送测试开始提示
     await ping_test_cmd.send("正在测试网络延迟，请稍候...")
@@ -243,13 +243,13 @@ async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
 
 @sys_info_cmd.handle()
-async def handle_sys_info():
+async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理系统信息命令"""
     msg = await get_system_info()
     await handle_send(bot, event, msg)
 
 @ping_test_cmd.handle()
-async def handle_ping_test():
+async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理ping测试命令"""
     msg = await get_ping_test()
     await handle_send(bot, event, msg)
@@ -262,9 +262,9 @@ async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, bot_msg)
     
     # 然后发送系统信息
-    sys_msg = await get_system_info()
+    sys_msg = await get_system_info(bot, event)
     await handle_send(bot, event, sys_msg)
     
     # 最后执行ping测试
-    ping_msg = await get_ping_test()
+    ping_msg = await get_ping_test(bot, event)
     await handle_send(bot, event, ping_msg)
