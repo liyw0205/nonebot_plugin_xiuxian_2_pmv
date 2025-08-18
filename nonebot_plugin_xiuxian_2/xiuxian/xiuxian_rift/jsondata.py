@@ -27,7 +27,7 @@ def read_rift_data(user_id):
 def save_rift_data(user_id, data):
     user_id = str(user_id)
     if not os.path.exists(PLAYERSDATA / user_id):
-        logger.opt(colors=True).info("<red>目录不存在，创建目录</green>")
+        logger.opt(colors=True).info("<red>目录不存在，创建目录</red>")
         os.makedirs(PLAYERSDATA / user_id)
     FILEPATH = PLAYERSDATA / user_id / "riftinfo.json"
     data = json.dumps(data, ensure_ascii=False, indent=3)

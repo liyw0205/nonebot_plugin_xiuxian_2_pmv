@@ -1273,6 +1273,8 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await create_sect.finish()
     
     user_id = user_info['user_id']
+    sect_id = user_info['sect_id']
+    sect_info = sql_message.get_sect_info(sect_id)
     level = user_info['level']
     list_level_all = list(jsondata.level_data().keys())
     # 检查境界
@@ -1289,7 +1291,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     # 检查是否已有宗门
     if user_info['sect_id']:
-        msg = f"道友已是【{user_info['sect_name']}】成员，无法另立门户！"
+        msg = f"道友已是【{sect_info['sect_name']}】成员，无法另立门户！"
         await handle_send(bot, event, msg)
         await create_sect.finish()
     
@@ -1397,57 +1399,63 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_kick_out.finish()
-    user_id = user_info['user_id']
+    
+    # 检查用户是否有宗门
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
         await handle_send(bot, event, msg)
         await sect_kick_out.finish()
-    give_qq = None  # 艾特的时候存到这里
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if bool(give_qq) is False:
-        msg = args.extract_plain_text().strip()
-        give_qq = re.findall(r"\d+", msg)[0]  # QQ_ID
-    if sql_message.get_user_info_with_id(give_qq) is None:
-        msg = f"修仙界没有此人,请输入正确QQ_ID或正规at!"
+    
+    # 解析参数
+    arg_list = args.extract_plain_text().strip().split()
+    if len(arg_list) < 1:
+        msg = f"请按照规范进行操作，例如：踢出宗门 道号"
         await handle_send(bot, event, msg)
         await sect_kick_out.finish()
-    if give_qq:
-        if give_qq == user_id:
-            msg = f"无法对自己的进行踢出操作，试试退出宗门？"
+    
+    # 获取目标用户信息
+    nick_name = arg_list[0]  # 道号
+    give_user = sql_message.get_user_info_with_name(nick_name)
+    
+    if not give_user:
+        msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
+        await handle_send(bot, event, msg)
+        await sect_kick_out.finish()
+    
+    # 检查不能踢自己
+    if give_user['user_id'] == user_info['user_id']:
+        msg = f"无法对自己进行操作，试试退出宗门？"
+        await handle_send(bot, event, msg)
+        await sect_kick_out.finish()
+    
+    # 检查目标是否在同一宗门
+    if give_user['sect_id'] != user_info['sect_id']:
+        msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
+        await handle_send(bot, event, msg)
+        await sect_kick_out.finish()
+    
+    # 获取长老职位配置
+    position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
+    idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 1
+    
+    # 检查操作者权限
+    if user_info['sect_position'] <= idx_position:  # 长老及以上职位
+        if give_user['sect_position'] <= user_info['sect_position']:
+            msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
             await handle_send(bot, event, msg)
             await sect_kick_out.finish()
         else:
-            give_user = sql_message.get_user_info_with_id(give_qq)
-            if give_user['sect_id'] == user_info['sect_id']:
-                position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
-                idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 1
-                if user_info['sect_position'] <= idx_position:
-                    if give_user['sect_position'] <= user_info['sect_position']:
-                        msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
-                        await handle_send(bot, event, msg)
-                        await sect_kick_out.finish()
-                    else:
-                        sect_info = sql_message.get_sect_info_by_id(give_user['sect_id'])
-                        sql_message.update_usr_sect(give_user['user_id'], None, None)
-                        sql_message.update_user_sect_contribution(give_user['user_id'], 0)
-                        msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨，即日起{give_user['user_name']}被{sect_info['sect_name']}除名"""
-                        await handle_send(bot, event, msg)
-                        await sect_kick_out.finish()
-                else:
-                    msg = f"""你的宗门职务为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，只有长老及以上可执行踢出操作。"""
-                    await handle_send(bot, event, msg)
-                    await sect_kick_out.finish()
-            else:
-                msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
-                await handle_send(bot, event, msg)
-                await sect_kick_out.finish()
+            # 执行踢出操作
+            sect_info = sql_message.get_sect_info_by_id(give_user['sect_id'])
+            sql_message.update_usr_sect(give_user['user_id'], None, None)
+            sql_message.update_user_sect_contribution(give_user['user_id'], 0)
+            msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨，即日起{give_user['user_name']}被{sect_info['sect_name']}除名"""
+            await handle_send(bot, event, msg)
+            await sect_kick_out.finish()
     else:
-        msg = f"请按照规范进行操作,ex:踢出宗门@XXX,将XXX道友(需在自己管理下的宗门）踢出宗门"
+        msg = f"""你的宗门职务为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，只有长老及以上可执行踢出操作。"""
         await handle_send(bot, event, msg)
         await sect_kick_out.finish()
-
 
 @sect_out.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1519,68 +1527,81 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
+    
     user_id = user_info['user_id']
-
+    
+    # 检查权限
     position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
     idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 1
     if user_info['sect_position'] > idx_position:
         msg = f"""你的宗门职位为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，无权进行职位管理！"""
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
-
-    give_qq = None 
-    msg = args.extract_plain_text().strip()
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if not args:
+    
+    # 解析参数（支持带空格的格式）
+    raw_args = args.extract_plain_text().strip()
+    if not raw_args:
         msg = f"请输入正确指令！例如：宗门职位变更 道号 3"
-    
-    if len(arg_list) < 2:
-        position_num = re.findall(r"\d+", msg)
-        nick_name = None
-    else:
-        position_num = arg_list[1]  # 职位
-        nick_name = arg_list[0]  # 道号
-
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    
-    if nick_name:
-        nick_name_user_info = sql_message.get_user_info_with_name(nick_name)
-        give_qq = nick_name_user_info['user_id']
-        
-    if give_qq:
-        if give_qq == user_id:
-            msg = f"无法对自己的职位进行管理。"
-            await handle_send(bot, event, msg)
-            await sect_position_update.finish()
-        else:
-            if len(position_num) > 0 and position_num[0] in list(jsondata.sect_config_data().keys()):
-                give_user = sql_message.get_user_info_with_id(give_qq)
-                if give_user['sect_id'] == user_info['sect_id'] and give_user['sect_position'] > user_info['sect_position']:
-                    if int(position_num[0]) > user_info['sect_position']:
-                        sql_message.update_usr_sect(give_user['user_id'], give_user['sect_id'], int(position_num[0]))
-                        msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨:即日起{give_user['user_name']}为本宗{jsondata.sect_config_data()[f"{int(position_num[0])}"]['title']}"""
-                        await handle_send(bot, event, msg)
-                        await sect_position_update.finish()
-                    else:
-                        msg = f"道友试图变更的职位品阶必须在你品阶之下"
-                        await handle_send(bot, event, msg)
-                        await sect_position_update.finish()
-                else:
-                    msg = f"请确保变更目标道友与你在同一宗门，且职位品阶在你之下。"
-                    await handle_send(bot, event, msg)
-                    await sect_position_update.finish()
-            else:
-                msg = f"职位品阶数字解析异常，请输入宗门职位变更帮助，查看支持的数字解析配置"
-                await handle_send(bot, event, msg)
-                await sect_position_update.finish()
-    else:
-        msg = f"""请按照规范进行操作,ex:宗门职位变更2@XXX,将XXX道友(需在自己管理下的宗门)的变更为{jsondata.sect_config_data().get('2', {'title': '没有找到2品阶'})['title']}"""
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
-
+    
+    # 分割参数（最后一个数字作为职位编号）
+    args_list = raw_args.split()
+    if len(args_list) < 2:
+        msg = f"参数不足！格式应为：宗门职位变更 道号 职位编号"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 获取职位编号（取最后一个参数）
+    position_num = args_list[-1]
+    if not position_num.isdigit() or position_num not in jsondata.sect_config_data().keys():
+        msg = f"职位编号解析异常，请输入宗门职位变更帮助，查看支持的编号"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 获取道号（合并前面的所有参数）
+    nick_name = ' '.join(args_list[:-1]).strip()
+    if not nick_name:
+        msg = f"请输入有效的道号！"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 获取目标用户信息
+    give_user = sql_message.get_user_info_with_name(nick_name)
+    if not give_user:
+        msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 检查不能操作自己
+    if give_user['user_id'] == user_id:
+        msg = f"无法对自己的职位进行管理。"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 检查目标是否在同一宗门
+    if give_user['sect_id'] != user_info['sect_id']:
+        msg = f"请确保变更目标道友与你在同一宗门。"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 检查目标职位是否低于自己
+    if give_user['sect_position'] <= user_info['sect_position']:
+        msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 检查要变更的职位是否低于自己
+    if int(position_num) <= user_info['sect_position']:
+        msg = f"道友试图变更的职位品阶必须在你品阶之下"
+        await handle_send(bot, event, msg)
+        await sect_position_update.finish()
+    
+    # 执行职位变更
+    sql_message.update_usr_sect(give_user['user_id'], give_user['sect_id'], int(position_num))
+    msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨:即日起{give_user['user_name']}为本宗{jsondata.sect_config_data()[f"{int(position_num)}"]['title']}"""
+    await handle_send(bot, event, msg)
+    await sect_position_update.finish()
 
 @join_sect.handle(parameterless=[Cooldown(at_sender=False)])
 async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1593,8 +1614,10 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await sect_position_update.finish()
     
     # 检查是否已有宗门
+    sect_id = user_info['sect_id']
+    sect_info = sql_message.get_sect_info(sect_id)
     if user_info['sect_id']:
-        msg = f"道友已经加入了宗门:{user_info['sect_name']}，无法再加入其他宗门。"
+        msg = f"道友已经加入了宗门:{sect_info['sect_name']}，无法再加入其他宗门。"
         await handle_send(bot, event, msg)
         await join_sect.finish()
     
