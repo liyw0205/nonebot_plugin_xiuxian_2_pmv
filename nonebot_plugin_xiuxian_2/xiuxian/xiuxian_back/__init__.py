@@ -100,6 +100,29 @@ shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SU
 shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=SUPERUSER, block=True)
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
+# 鬼市系统配置
+GUISHI_TYPES = ["药材", "装备", "技能"]  # 允许交易的类型
+GUISHI_MIN_PRICE = 600000  # 最低交易价格60万灵石
+GUISHI_MAX_QUANTITY = 100   # 单次最大交易数量
+# 配置参数
+BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
+MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
+MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
+
+# 文件路径
+GUISHI_DATA_PATH = Path(__file__).parent / "guishi_data"
+GUISHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+# 鬼市命令
+guishi_deposit = on_command("鬼市存灵石", priority=5, block=True)
+guishi_withdraw = on_command("鬼市取灵石", priority=5, block=True)
+guishi_take_item = on_command("鬼市取物品", priority=5, block=True)
+guishi_info = on_command("鬼市信息", priority=5, block=True)
+guishi_qiugou = on_command("鬼市求购", priority=5, block=True)
+guishi_cancel_qiugou = on_command("鬼市取消求购", priority=5, block=True)
+guishi_baitan = on_command("鬼市摆摊", priority=5, block=True)
+guishi_shoutan = on_command("鬼市收摊", priority=5, block=True)
+
 # 其他原有命令保持不变
 chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=5, block=True)
 check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=6, block=True)
@@ -116,69 +139,8 @@ auction_withdraw = on_command("撤回拍卖品", aliases={"拍卖品撤回"}, pr
 set_auction = on_command("拍卖会", priority=4, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), block=True)
 creat_auction = on_fullmatch("举行拍卖会", priority=5, permission=GROUP and SUPERUSER, block=True)
 offer_auction = on_command("拍卖", priority=5, permission=GROUP, block=True)
-back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "拍卖帮助"}, priority=8, block=True)
+back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市", "拍卖帮助"}, priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
-
-__back_help__ = f"""
-\n【背包帮助】
-🔹 我的背包 [页码] - 查看背包物品
-🔹 药材背包 [页码] - 查看药材类物品
-🔹 丹药背包 [页码] - 查看丹药类物品
-🔹 使用+物品名 [数量] - 使用物品
-🔹 换装/卸装+装备名 - 卸下装备
-🔹 炼金+物品名 [数量] - 将物品转化为灵石
-🔹 快速炼金 类型 品阶 - 批量炼金指定类型物品
-🔹 查看修仙界物品+类型 [页码] - 查看物品图鉴
-🔹 查看效果+物品名 - 查看物品详情
-🔹 灵石 - 查看当前灵石数量
-
-【仙肆帮助】（全服交易）
-🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
-  ▶ 支持类型：技能|装备|丹药|药材
-🔸 仙肆上架 物品 金额 [数量] - 上架物品
-  ▶ 最低金额60万灵石，手续费10-30%
-🔸 仙肆快速上架 物品 [金额] - 快速上架10个物品
-  ▶ 自动匹配最低价，数量固定10个（或全部）
-🔸 仙肆快速购买 物品 - 快速购买物品
-  ▶ 自动匹配最低价，可快速购买5种物品
-🔸 仙肆自动上架 类型 品阶 [数量] - 批量上架
-  ▶ 示例：仙肆自动上架 装备 通天
-🔸 仙肆购买 编号 [数量] - 购买物品
-🔸 仙肆下架 编号 - 下架自己的物品
-🔸 我的仙肆 [页码] - 查看自己上架的物品
-
-【坊市帮助】（群内交易）
-🔸 坊市查看 [类型] [页码] - 查看群坊市
-  ▶ 支持类型：技能|装备|丹药|药材
-🔸 坊市上架 物品 金额 [数量] - 上架物品
-  ▶ 最低金额60万灵石，手续费10-30%
-🔸 坊市快速上架 物品 [金额] - 快速上架10个物品
-  ▶ 自动匹配最低价，数量固定10个（或全部）
-🔸 坊市快速购买 物品 - 快速购买物品
-  ▶ 自动匹配最低价，可快速购买5种物品
-🔸 坊市自动上架 类型 品阶 [数量] - 批量上架
-  ▶ 示例：坊市自动上架 药材 五品
-🔸 坊市购买 编号 [数量] - 购买物品
-🔸 坊市下架 编号 - 下架自己的物品
-🔸 我的坊市 [页码] - 查看自己上架的物品
-
-【拍卖帮助】
-🎫 查看拍卖品 - 查看待拍卖物品
-🎫 提交拍卖品 物品 底价 [数量] - 提交拍卖
-🎫 拍卖+金额 - 参与竞拍
-🎫 撤回拍卖品 编号 - 撤回自己的拍卖品
-🎫 举行拍卖会 - (管理员)开启拍卖
-⏰ 每日{auction_time_config['hours']}点自动举行拍卖会
-
-【系统规则】
-💰 手续费规则：
-  - 500万以下：10%
-  - 500-1000万：15% 
-  - 1000-2000万：20%
-  - 2000万以上：30%
-  
-输入具体指令查看详细用法，祝道友交易愉快！
-""".strip()
 
 # 重置丹药每日使用次数
 @reset_day_num_scheduler.scheduled_job("cron", hour=0, minute=0, )
@@ -426,7 +388,6 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 帮助内容分块
     help_sections = {
-        "全部": __back_help__,
         "背包": """
 【背包帮助】
 🔹 我的背包 [页码] - 查看背包物品
@@ -472,6 +433,16 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔸 坊市下架 编号 - 下架自己的物品
 🔸 我的坊市 [页码] - 查看自己上架的物品
 """.strip(),
+        "鬼市": """
+【鬼市帮助】（匿名交易）
+👻 鬼市存灵石 数量 - 存入灵石到鬼市账户
+👻 鬼市取灵石 数量 - 取出灵石（收取20%暂存费）
+👻 鬼市信息 - 查看鬼市账户和交易信息
+👻 鬼市求购 物品 价格 [数量] - 发布求购订单
+👻 鬼市取消求购 订单ID - 取消求购订单
+👻 鬼市摆摊 物品 价格 [数量] - 摆摊出售物品
+👻 鬼市收摊 摊位ID - 收摊并结算
+""".strip(),
         "拍卖": f"""
 【拍卖帮助】
 🎫 查看拍卖品 - 查看待拍卖物品
@@ -512,10 +483,18 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = help_sections["仙肆"]
         elif "坊市" in keyword:
             msg = help_sections["坊市"]
+        elif "鬼市" in keyword:
+            msg = help_sections["鬼市"]
         elif "拍卖" in keyword or "拍卖会" in keyword:
             msg = help_sections["拍卖"]
         elif "全部" in keyword:
-            msg = help_sections["全部"]
+            msg = (
+                help_sections["背包"] + "\n\n" + 
+                help_sections["仙肆"] + "\n\n" + 
+                help_sections["坊市"] + "\n\n" + 
+                help_sections["鬼市"] + "\n\n" + 
+                help_sections["拍卖"]
+            )
         elif "交易" in keyword:
             msg = help_sections["交易"]
         else:
@@ -3204,6 +3183,750 @@ async def shop_off_all_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await shop_off_all.finish()
 
+def get_guishi_user_data(user_id):
+    """获取用户鬼市数据"""
+    user_file = GUISHI_DATA_PATH / f"user_{user_id}.json"
+    try:
+        if user_file.exists():
+            with open(user_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"读取鬼市用户数据失败: {e}")
+    return {
+        "stone": 0,  # 鬼市账户灵石
+        "qiugou_orders": {},  # 求购订单 {order_id: {item_name, price, quantity, filled}}
+        "baitan_orders": {},  # 摆摊订单 {order_id: {item_id, item_name, price, quantity, sold}}
+        "items": {}  # 暂存物品 {item_id: {name, type, quantity}}
+    }
+
+def save_guishi_user_data(user_id, data):
+    """保存用户鬼市数据"""
+    user_file = GUISHI_DATA_PATH / f"user_{user_id}.json"
+    try:
+        with open(user_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"保存鬼市用户数据失败: {e}")
+        return False
+
+def generate_guishi_id(existing_ids):
+    """生成6-10位随机不重复ID"""
+    while True:
+        # 使用时间戳+随机数确保唯一性
+        timestamp_part = int(time.time() % 10000)
+        random_part = random.randint(100, 99999)
+        new_id = int(f"{timestamp_part}{random_part}") % 10**10  # 确保不超过10位
+        
+        # 限制在6-10位
+        new_id = max(100000, min(new_id, 9999999999))
+        
+        # 检查是否已存在
+        if str(new_id) not in existing_ids:
+            return str(new_id)
+
+async def process_guishi_transactions(user_id):
+    """处理鬼市交易"""
+    user_data = get_guishi_user_data(user_id)
+    transactions = []
+    
+    # 处理求购订单
+    for order_id, order in list(user_data["qiugou_orders"].items()):
+        # 查找匹配的摆摊订单（价格<=求购价）
+        matched_orders = []
+        for other_user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+            if other_user_file.name == f"user_{user_id}.json":
+                continue  # 跳过自己的订单
+                
+            other_data = json.loads(other_user_file.read_text(encoding="utf-8"))
+            for other_order_id, other_order in other_data["baitan_orders"].items():
+                if (other_order["item_name"] == order["item_name"] and 
+                    other_order["price"] <= order["price"] and
+                    other_order["quantity"] - other_order.get("sold", 0) > 0):
+                    matched_orders.append((other_user_file, other_data, other_order_id, other_order))
+        
+        # 按价格从低到高排序
+        matched_orders.sort(key=lambda x: x[3]["price"])
+        
+        for other_user_file, other_data, other_order_id, other_order in matched_orders:
+            if order.get("filled", 0) >= order["quantity"]:
+                break  # 订单已完成
+                
+            available = other_order["quantity"] - other_order.get("sold", 0)
+            needed = order["quantity"] - order.get("filled", 0)
+            trade_num = min(available, needed)
+            
+            # 检查鬼市账户余额是否足够
+            total_cost = trade_num * other_order["price"]
+            if user_data["stone"] < total_cost:
+                continue  # 余额不足，跳过
+                
+            # 执行交易
+            user_data["stone"] -= total_cost
+            other_data["stone"] += total_cost
+            
+            # 更新订单状态
+            order["filled"] = order.get("filled", 0) + trade_num
+            other_order["sold"] = other_order.get("sold", 0) + trade_num
+            
+            # 转移物品
+            item_id = other_order["item_id"]
+            if item_id not in user_data["items"]:
+                user_data["items"][item_id] = {
+                    "name": other_order["item_name"],
+                    "type": items.get_data_by_item_id(item_id)["type"],
+                    "quantity": 0
+                }
+            user_data["items"][item_id]["quantity"] += trade_num
+            
+            # 记录交易（修改这里）
+            transactions.append(f"求购：已收购 {other_order['item_name']} x{trade_num} (花费{number_to(total_cost)}灵石)")
+            
+            # 保存对方数据
+            save_guishi_user_data(other_user_file.stem.split("_")[1], other_data)
+            
+        # 检查订单是否完成
+        if order.get("filled", 0) >= order["quantity"]:
+            user_data["qiugou_orders"].pop(order_id)
+            transactions.append(f"求购订单 {order_id} 已完成")
+    
+    # 处理摆摊订单
+    for order_id, order in list(user_data["baitan_orders"].items()):
+        # 查找匹配的求购订单（价格>=摆摊价）
+        matched_orders = []
+        for other_user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+            if other_user_file.name == f"user_{user_id}.json":
+                continue  # 跳过自己的订单
+                
+            other_data = json.loads(other_user_file.read_text(encoding="utf-8"))
+            for other_order_id, other_order in other_data["qiugou_orders"].items():
+                if (other_order["item_name"] == order["item_name"] and 
+                    other_order["price"] >= order["price"] and
+                    other_order["quantity"] - other_order.get("filled", 0) > 0):
+                    matched_orders.append((other_user_file, other_data, other_order_id, other_order))
+        
+        # 按价格从高到低排序
+        matched_orders.sort(key=lambda x: -x[3]["price"])
+        
+        for other_user_file, other_data, other_order_id, other_order in matched_orders:
+            if order.get("sold", 0) >= order["quantity"]:
+                break  # 订单已完成
+                
+            available = order["quantity"] - order.get("sold", 0)
+            needed = other_order["quantity"] - other_order.get("filled", 0)
+            trade_num = min(available, needed)
+            
+            # 检查对方鬼市账户余额是否足够
+            total_cost = trade_num * order["price"]
+            if other_data["stone"] < total_cost:
+                continue  # 对方余额不足，跳过
+                
+            # 执行交易
+            other_data["stone"] -= total_cost
+            user_data["stone"] += total_cost
+            
+            # 更新订单状态
+            order["sold"] = order.get("sold", 0) + trade_num
+            other_order["filled"] = other_order.get("filled", 0) + trade_num
+            
+            # 转移物品
+            item_id = other_order.get("item_id")  # 求购订单可能没有item_id
+            if item_id:
+                if item_id not in other_data["items"]:
+                    other_data["items"][item_id] = {
+                        "name": order["item_name"],
+                        "type": items.get_data_by_item_id(item_id)["type"],
+                        "quantity": 0
+                    }
+                other_data["items"][item_id]["quantity"] += trade_num
+            
+            # 记录交易（修改这里）
+            transactions.append(f"摆摊：已出售 {order['item_name']} x{trade_num} (获得{number_to(total_cost)}灵石)")
+            
+            # 保存对方数据
+            save_guishi_user_data(other_user_file.stem.split("_")[1], other_data)
+            
+        # 检查订单是否完成
+        if order.get("sold", 0) >= order["quantity"]:
+            user_data["baitan_orders"].pop(order_id)
+            transactions.append(f"摆摊订单 {order_id} 已完成")
+    
+    # 保存用户数据
+    save_guishi_user_data(user_id, user_data)
+    
+    return transactions
+
+@guishi_deposit.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """鬼市存灵石"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_deposit.finish()
+    
+    user_id = user_info['user_id']
+    amount_str = args.extract_plain_text().strip()
+    
+    if not amount_str.isdigit():
+        msg = "请输入正确的灵石数量！"
+        await handle_send(bot, event, msg)
+        await guishi_deposit.finish()
+    
+    amount = int(amount_str)
+    if amount <= 0:
+        msg = "存入数量必须大于0！"
+        await handle_send(bot, event, msg)
+        await guishi_deposit.finish()
+    
+    if user_info['stone'] < amount:
+        msg = f"灵石不足！当前拥有 {user_info['stone']} 灵石"
+        await handle_send(bot, event, msg)
+        await guishi_deposit.finish()
+    
+    # 扣除用户灵石
+    sql_message.update_ls(user_id, amount, 2)
+    
+    # 存入鬼市账户
+    user_data = get_guishi_user_data(user_id)
+    user_data["stone"] += amount
+    save_guishi_user_data(user_id, user_data)
+    
+    msg = f"成功存入 {number_to(amount)} 灵石到鬼市账户！"
+    await handle_send(bot, event, msg)
+    await guishi_deposit.finish()
+
+@guishi_withdraw.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """鬼市取灵石（收取20%暂存费）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
+    
+    user_id = user_info['user_id']
+    amount_str = args.extract_plain_text().strip()
+    
+    if not amount_str.isdigit():
+        msg = "请输入正确的灵石数量！"
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
+    
+    amount = int(amount_str)
+    if amount <= 0:
+        msg = "取出数量必须大于0！"
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
+    
+    user_data = get_guishi_user_data(user_id)
+    if user_data["stone"] < amount:
+        msg = f"鬼市账户余额不足！当前余额 {user_data['stone']} 灵石"
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
+    
+    # 计算手续费（20%）
+    fee = int(amount * 0.2)
+    actual_amount = amount - fee
+    
+    # 更新鬼市账户
+    user_data["stone"] -= amount
+    save_guishi_user_data(user_id, user_data)
+    
+    # 给用户灵石
+    sql_message.update_ls(user_id, actual_amount, 1)
+    
+    msg = f"成功取出 {number_to(amount)} 灵石（扣除20%暂存费，实际到账 {number_to(actual_amount)} 灵石）"
+    await handle_send(bot, event, msg)
+    await guishi_withdraw.finish()
+
+@guishi_info.handle(parameterless=[Cooldown(at_sender=False)])
+async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """鬼市信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_info.finish()
+    
+    user_id = user_info['user_id']
+    user_data = get_guishi_user_data(user_id)
+    
+    # 处理交易
+    transactions = await process_guishi_transactions(user_id)
+    
+    # 构建消息
+    msg = f"☆------鬼市账户信息------☆\n"
+    msg += f"账户余额：{number_to(user_data['stone'])} 灵石\n"
+    
+    if transactions:
+        msg += "\n☆------最近交易------☆\n"
+        msg += "\n".join(transactions) + "\n"
+    else:
+        msg += "\n☆------最近交易------☆\n"
+        msg += "无\n"
+    
+    msg += "\n☆------求购订单------☆\n"
+    if user_data["qiugou_orders"]:
+        for order_id, order in user_data["qiugou_orders"].items():
+            filled = order.get("filled", 0)
+            status = f"{filled}/{order['quantity']}" if order["quantity"] > 1 else "进行中"
+            if filled >= order["quantity"]:
+                status = "已完成"
+            msg += f"ID:{order_id} {order['item_name']} 单价:{number_to(order['price'])} 状态:{status}\n"
+    else:
+        msg += "无\n"
+    
+    msg += "\n☆------摆摊订单------☆\n"
+    if user_data["baitan_orders"]:
+        for order_id, order in user_data["baitan_orders"].items():
+            sold = order.get("sold", 0)
+            status = f"{sold}/{order['quantity']}" if order["quantity"] > 1 else "进行中"
+            if sold >= order["quantity"]:
+                status = "已完成"
+            msg += f"ID:{order_id} {order['item_name']} 单价:{number_to(order['price'])} 状态:{status}\n"
+    else:
+        msg += "无\n"
+    
+    msg += "\n☆------暂存物品------☆\n"
+    if user_data["items"]:
+        for item_id, item in user_data["items"].items():
+            msg += f"{item['name']} x{item['quantity']}\n"
+    else:
+        msg += "无\n"
+    
+    await handle_send(bot, event, msg)
+    await guishi_info.finish()
+
+@guishi_qiugou.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """鬼市求购"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 2:
+        msg = "指令格式：鬼市求购 物品名称 价格 [数量]\n数量不填默认为1"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    goods_name = args[0]
+    try:
+        price = int(args[1])
+        quantity = int(args[2]) if len(args) > 2 else 1
+        quantity = min(quantity, GUISHI_MAX_QUANTITY)
+    except ValueError:
+        msg = "请输入有效的价格和数量！"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    # 检查禁止交易的物品
+    goods_id = None
+    for k, v in items.items.items():
+        if goods_name == v['name']:
+            if str(k) in BANNED_ITEM_IDS:
+                msg = f"物品 {goods_name} 禁止在鬼市交易！"
+                await handle_send(bot, event, msg)
+                await guishi_qiugou.finish()
+            goods_id = k
+            break
+    
+    if not goods_id:
+        msg = f"物品 {goods_name} 不存在！"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    # 检查订单数量限制
+    user_data = get_guishi_user_data(user_id)
+    if len(user_data["qiugou_orders"]) >= MAX_QIUGOU_ORDERS:
+        msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请先取消部分订单！"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    # 检查鬼市账户余额是否足够
+    user_data = get_guishi_user_data(user_id)
+    total_cost = price * quantity
+    if user_data["stone"] < total_cost:
+        msg = f"鬼市账户余额不足！需要 {number_to(total_cost)} 灵石，当前余额 {number_to(user_data['stone'])} 灵石"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+    
+    # 生成订单ID
+    existing_ids = set(user_data["qiugou_orders"].keys())
+    order_id = generate_guishi_id(existing_ids)
+    
+    # 添加求购订单
+    user_data["qiugou_orders"][order_id] = {
+        "item_name": goods_name,
+        "price": price,
+        "quantity": quantity,
+        "filled": 0
+    }
+    
+    # 冻结相应灵石
+    user_data["stone"] -= total_cost
+    save_guishi_user_data(user_id, user_data)
+    
+    # 处理可能的即时交易
+    transactions = await process_guishi_transactions(user_id)
+    
+    msg = f"成功发布求购订单！\n"
+    msg += f"物品：{goods_name}\n"
+    msg += f"价格：{number_to(price)} 灵石\n"
+    msg += f"数量：{quantity}\n"
+    msg += f"订单ID：{order_id}\n"
+    
+    if transactions:
+        msg += "\n☆------交易结果------☆\n"
+        msg += "\n".join(transactions)
+    
+    await handle_send(bot, event, msg)
+    await guishi_qiugou.finish()
+
+@guishi_cancel_qiugou.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """取消鬼市求购（支持无参数自动取消已完成、指定ID或全部取消）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_cancel_qiugou.finish()
+    
+    user_id = user_info['user_id']
+    arg = args.extract_plain_text().strip()
+    
+    user_data = get_guishi_user_data(user_id)
+    if not user_data["qiugou_orders"]:
+        msg = "您当前没有求购订单！"
+        await handle_send(bot, event, msg)
+        await guishi_cancel_qiugou.finish()
+    
+    # 处理不同参数情况
+    if not arg:  # 无参数，自动取消已完成的
+        completed_orders = []
+        refund_total = 0
+        for order_id, order in list(user_data["qiugou_orders"].items()):
+            if order.get("filled", 0) >= order["quantity"]:
+                completed_orders.append(order_id)
+                # 已完成订单的灵石已全部扣除，无需退还
+        
+        if not completed_orders:
+            msg = "没有已完成的求购订单可自动取消！"
+            await handle_send(bot, event, msg)
+            await guishi_cancel_qiugou.finish()
+        
+        msg = "已自动取消以下已完成订单：\n"
+        for order_id in completed_orders:
+            order = user_data["qiugou_orders"][order_id]
+            msg += f"ID:{order_id} {order['item_name']} x{order['quantity']}\n"
+            del user_data["qiugou_orders"][order_id]
+        
+    elif arg == "全部":  # 取消所有求购订单
+        msg = "已取消所有求购订单：\n"
+        refund_total = 0
+        for order_id, order in list(user_data["qiugou_orders"].items()):
+            filled = order.get("filled", 0)
+            refund = (order["quantity"] - filled) * order["price"]
+            refund_total += refund
+            
+            msg += f"ID:{order_id} {order['item_name']} 已购:{filled}/{order['quantity']}\n"
+            del user_data["qiugou_orders"][order_id]
+        
+        if refund_total > 0:
+            user_data["stone"] += refund_total
+            msg += f"\n退还 {number_to(refund_total)} 灵石到鬼市账户"
+        
+    else:  # 指定ID取消
+        order_id = arg
+        if order_id not in user_data["qiugou_orders"]:
+            msg = f"未找到求购订单 {order_id}！"
+            await handle_send(bot, event, msg)
+            await guishi_cancel_qiugou.finish()
+        
+        order = user_data["qiugou_orders"][order_id]
+        filled = order.get("filled", 0)
+        refund = (order["quantity"] - filled) * order["price"]
+        
+        # 退还灵石
+        user_data["stone"] += refund
+        del user_data["qiugou_orders"][order_id]
+        
+        msg = f"已取消求购订单 {order_id}：\n"
+        msg += f"物品：{order['item_name']}\n"
+        msg += f"价格：{number_to(order['price'])} 灵石\n"
+        msg += f"已购：{filled}/{order['quantity']}\n"
+        if refund > 0:
+            msg += f"退还 {number_to(refund)} 灵石到鬼市账户"
+    
+    save_guishi_user_data(user_id, user_data)
+    await handle_send(bot, event, msg)
+    await guishi_cancel_qiugou.finish()
+
+@guishi_baitan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """鬼市摆摊"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 2:
+        msg = "指令格式：鬼市摆摊 物品名称 价格 [数量]\n数量不填默认为1"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    goods_name = args[0]
+    try:
+        price = int(args[1])
+        quantity = int(args[2]) if len(args) > 2 else 1
+        quantity = min(quantity, GUISHI_MAX_QUANTITY)
+    except ValueError:
+        msg = "请输入有效的价格和数量！"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 检查背包物品
+    back_msg = sql_message.get_back_msg(user_id)
+    goods_info = None
+    for item in back_msg:
+        if item['goods_name'] == goods_name:
+            if str(item['goods_id']) in BANNED_ITEM_IDS:
+                msg = f"物品 {goods_name} 禁止在鬼市交易！"
+                await handle_send(bot, event, msg)
+                await guishi_baitan.finish()
+            goods_info = item
+            break
+    
+    if not goods_info:
+        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 检查订单数量限制
+    user_data = get_guishi_user_data(user_id)
+    if len(user_data["baitan_orders"]) >= MAX_BAITAN_ORDERS:
+        msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 检查物品总数量
+    if goods_info['goods_num'] < quantity:
+        msg = f"数量不足！背包仅有 {goods_info['goods_num']} 个 {goods_name}"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_info['goods_id'])
+    if goods_type not in GUISHI_TYPES:
+        msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 从背包扣除物品
+    sql_message.update_back_j(user_id, goods_info['goods_id'], num=quantity)
+    
+    # 生成订单ID
+    user_data = get_guishi_user_data(user_id)
+    existing_ids = set(user_data["baitan_orders"].keys())
+    order_id = generate_guishi_id(existing_ids)
+    
+    # 添加摆摊订单
+    user_data["baitan_orders"][order_id] = {
+        "item_id": goods_info['goods_id'],
+        "item_name": goods_name,
+        "price": price,
+        "quantity": quantity,
+        "sold": 0
+    }
+    save_guishi_user_data(user_id, user_data)
+    
+    # 处理可能的即时交易
+    transactions = await process_guishi_transactions(user_id)
+    
+    msg = f"成功摆摊！\n"
+    msg += f"物品：{goods_name}\n"
+    msg += f"价格：{number_to(price)} 灵石\n"
+    msg += f"数量：{quantity}\n"
+    msg += f"摊位ID：{order_id}\n"
+    
+    if transactions:
+        msg += "\n☆------交易结果------☆\n"
+        msg += "\n".join(transactions)
+    
+    await handle_send(bot, event, msg)
+    await guishi_baitan.finish()
+
+@guishi_shoutan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """鬼市收摊（支持无参数自动收摊已完成、指定ID或全部收摊）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_shoutan.finish()
+    
+    user_id = user_info['user_id']
+    arg = args.extract_plain_text().strip()
+    
+    user_data = get_guishi_user_data(user_id)
+    if not user_data["baitan_orders"]:
+        msg = "您当前没有摆摊订单！"
+        await handle_send(bot, event, msg)
+        await guishi_shoutan.finish()
+    
+    # 处理不同参数情况
+    if not arg:  # 无参数，自动收摊已完成的
+        completed_orders = []
+        for order_id, order in list(user_data["baitan_orders"].items()):
+            if order.get("sold", 0) >= order["quantity"]:
+                completed_orders.append(order_id)
+        
+        if not completed_orders:
+            msg = "没有已完成的摆摊订单可自动收摊！"
+            await handle_send(bot, event, msg)
+            await guishi_shoutan.finish()
+        
+        msg = "已自动收摊以下已完成订单：\n"
+        for order_id in completed_orders:
+            order = user_data["baitan_orders"][order_id]
+            msg += f"ID:{order_id} {order['item_name']} x{order['quantity']}\n"
+            del user_data["baitan_orders"][order_id]
+        
+    elif arg == "全部":  # 收摊所有订单
+        msg = "已收摊所有摆摊订单：\n"
+        for order_id, order in list(user_data["baitan_orders"].items()):
+            sold = order.get("sold", 0)
+            remaining = order["quantity"] - sold
+            
+            # 退还未售出的物品
+            if remaining > 0:
+                sql_message.send_back(
+                    user_id,
+                    order["item_id"],
+                    order["item_name"],
+                    items.get_data_by_item_id(order["item_id"])["type"],
+                    remaining
+                )
+            
+            msg += f"ID:{order_id} {order['item_name']} 已售:{sold}/{order['quantity']}\n"
+            del user_data["baitan_orders"][order_id]
+        
+    else:  # 指定ID收摊
+        order_id = arg
+        if order_id not in user_data["baitan_orders"]:
+            msg = f"未找到摆摊订单 {order_id}！"
+            await handle_send(bot, event, msg)
+            await guishi_shoutan.finish()
+        
+        order = user_data["baitan_orders"][order_id]
+        sold = order.get("sold", 0)
+        remaining = order["quantity"] - sold
+        
+        # 退还未售出的物品
+        if remaining > 0:
+            sql_message.send_back(
+                user_id,
+                order["item_id"],
+                order["item_name"],
+                items.get_data_by_item_id(order["item_id"])["type"],
+                remaining
+            )
+        
+        msg = f"已收摊订单 {order_id}：\n"
+        msg += f"物品：{order['item_name']}\n"
+        msg += f"价格：{number_to(order['price'])} 灵石\n"
+        msg += f"已售：{sold}/{order['quantity']}\n"
+        if remaining > 0:
+            msg += f"退还 {remaining} 个到背包"
+        
+        del user_data["baitan_orders"][order_id]
+    
+    save_guishi_user_data(user_id, user_data)
+    await handle_send(bot, event, msg)
+    await guishi_shoutan.finish()
+
+guishi_take_item = on_command("鬼市取物品", priority=5, block=True)
+
+@guishi_take_item.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """取出暂存在鬼市的物品"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    user_id = user_info['user_id']
+    arg = args.extract_plain_text().strip()
+    
+    user_data = get_guishi_user_data(user_id)
+    if not user_data["items"]:
+        msg = "您的鬼市暂存中没有物品！"
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    # 处理不同参数情况
+    if not arg:  # 无参数，显示暂存物品列表
+        msg = "☆------鬼市暂存物品------☆\n"
+        msg += "请使用'鬼市取物品 物品名'或'鬼市取物品 全部'取出物品\n\n"
+        for item_id, item in user_data["items"].items():
+            msg += f"{item['name']} x{item['quantity']}\n"
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    if arg == "全部":  # 取出所有物品
+        msg = "已从鬼市取出以下物品：\n"
+        for item_id, item in list(user_data["items"].items()):
+            sql_message.send_back(
+                user_id,
+                item_id,
+                item["name"],
+                item["type"],
+                item["quantity"]
+            )
+            msg += f"{item['name']} x{item['quantity']}\n"
+            del user_data["items"][item_id]
+        
+        save_guishi_user_data(user_id, user_data)
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    # 取出指定物品
+    matched_items = []
+    for item_id, item in user_data["items"].items():
+        if arg == item["name"]:
+            matched_items.append((item_id, item))
+    
+    if not matched_items:
+        msg = f"暂存中没有名为 {arg} 的物品！"
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    # 处理多个同名物品情况（理论上不会出现，因为鬼市合并了同名物品）
+    for item_id, item in matched_items:
+        sql_message.send_back(
+            user_id,
+            item_id,
+            item["name"],
+            item["type"],
+            item["quantity"]
+        )
+        del user_data["items"][item_id]
+    
+    save_guishi_user_data(user_id, user_data)
+    msg = f"已从鬼市取出 {arg} x{matched_items[0][1]['quantity']}"
+    await handle_send(bot, event, msg)
+    await guishi_take_item.finish()
+    
 @auction_withdraw.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP)])
 async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """用户撤回拍卖品"""
@@ -4195,8 +4918,6 @@ async def set_auction_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
             await set_auction.finish()
 
     else:
-        msg = __back_help__
-        await handle_send(bot, event, msg)
         await set_auction.finish()
 
 
