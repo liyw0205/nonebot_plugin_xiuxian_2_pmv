@@ -476,7 +476,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             boss_integral = 0
             integral_msg = "今日积分已达上限，无法获得更多积分！"
         else:
-            boss_integral = int(max(damage_ratio * 1500), 1)
+            boss_integral = max(int(damage_ratio * 1500), 1)
             boss_integral = min(boss_integral, integral_limit - today_integral)
             integral_msg = f"获得世界积分：{boss_integral}点"
         
