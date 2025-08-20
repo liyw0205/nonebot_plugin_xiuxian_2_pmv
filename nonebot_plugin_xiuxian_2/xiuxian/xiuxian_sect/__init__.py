@@ -2061,20 +2061,24 @@ def get_sectbufftxt(sect_scale, config_):
         6: '玄阶上品',
         7: '地阶下品',
         8: '地阶上品', 
-        9: '天阶下品',
-        10: '天阶上品',
-        50: '仙阶下品',
-        100: '仙阶上品'
+        90: '天阶下品',
+        100: '天阶上品',
+        500: '仙阶下品',
+        1000: '仙阶上品'
     }
     
     # 计算当前档位
-    current_gear = min(max(1, sect_scale // config_['建设度']), 100)
+    current_gear = min(max(1, sect_scale // config_['建设度']), 1000)
     
     # 特殊处理仙阶档位
-    if current_gear >= 100:
+    if current_gear >= 1000:
+        current_gear = 1000
+    elif current_gear >= 500:
+        current_gear = 500
+    elif current_gear >= 100:
         current_gear = 100
-    elif current_gear >= 50:
-        current_gear = 50
+    elif current_gear >= 90:
+        current_gear = 90
     
     # 获取所有<=当前档位的品阶
     available_gears = [g for g in buff_gear_map.keys() if g <= current_gear]
