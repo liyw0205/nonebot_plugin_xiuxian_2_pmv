@@ -637,8 +637,10 @@ def get_use_jlq_msg(user_id, goods_id):
     else:
         item_info = items.get_data_by_item_id(goods_id)
         user_buff_data = UserBuffDate(user_id).BuffInfo
-        if int(user_buff_data['blessed_spot']) >= item_info['修炼速度']:
-            msg = f"该聚灵旗的等级不能满足道友的福地了，使用了也没效果"
+        if int(user_buff_data['blessed_spot']) > item_info['level']:
+            msg = f"当前福地聚灵旗等级较高，无需降级"
+        elif int(user_buff_data['blessed_spot']) == item_info['level']:
+            msg = f"聚灵旗和福地聚灵旗等级相同，无需使用"
         else:
             mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
             mix_elixir_info['药材速度'] = item_info['药材速度']
