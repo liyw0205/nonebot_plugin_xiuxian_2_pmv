@@ -103,6 +103,16 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         msg = "道友已是万世轮回之身！"
         await handle_send(bot, event, msg)
         await lunhui.finish()
+
+    if user_root == '永恒道果' :
+        msg = "道友已是永恒轮回之身！"
+        await handle_send(bot, event, msg)
+        await lunhui.finish()
+
+    if user_root == '命运道果' :
+        msg = "道友已可无限轮回！"
+        await handle_send(bot, event, msg)
+        await lunhui.finish()
         
     if list_level_all.index(level) >= list_level_all.index(XiuConfig().lunhui_min_level):
         exp = user_msg['exp']
@@ -153,6 +163,16 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         msg = "道友已是万世轮回之身！"
         await handle_send(bot, event, msg)
         await twolun.finish() 
+
+    if user_root == '永恒道果' :
+        msg = "道友已是永恒轮回之身！"
+        await handle_send(bot, event, msg)
+        await lunhui.finish()
+
+    if user_root == '命运道果' :
+        msg = "道友已可无限轮回！"
+        await handle_send(bot, event, msg)
+        await lunhui.finish()
         
     if user_root != '轮回道果':
         msg = "道友还未轮回过，请先进入千世轮回！"
@@ -226,7 +246,12 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         msg = "道友还未万世轮回，请先进入万世轮回！"
         await handle_send(bot, event, msg)
         await threelun.finish() 
-                
+
+    if user_root == '命运道果' :
+        msg = "道友已可无限轮回！"
+        await handle_send(bot, event, msg)
+        await lunhui.finish()
+
     if user_root != '真·轮回道果':
         msg = "道友还未完成轮回，请先进入轮回！"
         await handle_send(bot, event, msg)

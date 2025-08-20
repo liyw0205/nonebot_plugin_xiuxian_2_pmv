@@ -399,7 +399,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     return "\n".join(msg)
 
 
-@unseal.handle(parameterless=[Cooldown(at_sender=False, stamina_cost=15, cd_time=30)])
+@unseal.handle(parameterless=[Cooldown(at_sender=False, stamina_cost=20)])
 async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
