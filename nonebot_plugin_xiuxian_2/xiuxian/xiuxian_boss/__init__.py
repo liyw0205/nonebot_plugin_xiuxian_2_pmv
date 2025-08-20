@@ -170,10 +170,26 @@ async def save_boss_():
     old_boss_info.save_boss(group_boss)
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
-@scheduler.scheduled_job("cron", hour=0, minute=0)
-async def reset_boss_limits():
-    boss_limit.reset_limits()
-    logger.opt(colors=True).info(f"<green>每日BOSS奖励限制已重置！</green>")
+@DRIVER.on_startup
+async def set_boss_limits_reset():
+    # 每日0点重置积分和灵石上限
+    scheduler.add_job(
+        boss_limit.reset_limits,
+        'cron',
+        hour=0,
+        minute=0,
+        id="daily_boss_limit_reset"
+    )
+    
+    # 每周一0点重置商品限购
+    scheduler.add_job(
+        boss_limit.reset_weekly_limits,
+        'cron',
+        day_of_week='mon',
+        hour=0,
+        minute=0,
+        id="weekly_boss_shop_reset"
+    )
 
 @boss_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -942,7 +958,6 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
 
-
 @boss_integral_store.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """世界积分商店"""
@@ -956,14 +971,17 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     boss_integral_shop = config['世界积分商品']
     l_msg = [f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"]
+    
     if boss_integral_shop != {}:
         for k, v in boss_integral_shop.items():
             msg = f"编号:{k}\n"
             msg += f"描述：{v['desc']}\n"
-            msg += f"所需世界积分：{v['cost']}点"
+            msg += f"所需世界积分：{v['cost']}点\n"
+            msg += f"每周限购：{v.get('weekly_limit', 1)}个"  # 添加限购信息
             l_msg.append(msg)
     else:
         l_msg.append(f"世界积分商店内空空如也！")
+        
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
     await boss_integral_store.finish()
 
@@ -1015,7 +1033,6 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg = args.extract_plain_text().strip()
     shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
     
-
     if shop_info:
         shop_id = int(shop_info[0][0])
         quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
@@ -1028,20 +1045,32 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     is_in = False
     cost = None
     item_id = None
+    weekly_limit = None
+    
     if boss_integral_shop:
         for k, v in boss_integral_shop.items():
             if shop_id == int(k):
                 is_in = True
                 cost = v['cost']
                 item_id = v['id']
+                weekly_limit = v.get('weekly_limit', 1)  # 默认为1
                 break
     else:
         msg = f"世界积分商店内空空如也！"
         await handle_send(bot, event, msg)
         await boss_integral_use.finish()
+        
     if is_in:
+        # 检查每周限购
+        already_purchased = boss_limit.get_weekly_purchases(user_id, shop_id)
+        if already_purchased + quantity > weekly_limit:
+            msg = f"该商品每周限购{weekly_limit}个，您本周已购买{already_purchased}个，无法再购买{quantity}个！"
+            await handle_send(bot, event, msg)
+            await boss_integral_use.finish()
+            
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         total_cost = cost * quantity
+        
         if user_boss_fight_info['boss_integral'] < total_cost:
             msg = f"道友的世界积分不满足兑换条件呢"
             await handle_send(bot, event, msg)
@@ -1049,8 +1078,12 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         else:
             user_boss_fight_info['boss_integral'] -= total_cost
             save_user_boss_fight_info(user_id, user_boss_fight_info)
+            
+            # 更新每周购买记录
+            boss_limit.update_weekly_purchase(user_id, shop_id, quantity)
+            
             item_info = Items().get_data_by_item_id(item_id)
-            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity, 1)  # 兑换指定数量
+            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity, 1)
             msg = f"道友成功兑换获得：{item_info['name']}{quantity}个"
             await handle_send(bot, event, msg)
             await boss_integral_use.finish()
@@ -1058,7 +1091,6 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = f"该编号不在商品列表内哦，请检查后再兑换"
         await handle_send(bot, event, msg)
         await boss_integral_use.finish()
-
 
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
