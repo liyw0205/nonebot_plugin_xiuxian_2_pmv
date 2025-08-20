@@ -255,7 +255,13 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await remaname.finish()
     user_id = user_info['user_id']
     
-    # 如果没有提供新道号，则生成随机道号（免费）
+    if user_info['stone'] < XiuConfig().remaname:
+        msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
+        await handle_send(bot, event, msg)
+        await remaname.finish()
+    # 扣除灵石
+    sql_message.update_ls(user_id, XiuConfig().remaname, 2)
+    # 如果没有提供新道号，则生成随机道号
     user_name = args.extract_plain_text().strip()
     if not user_name:
         # 生成不重复的道号
@@ -264,30 +270,34 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             if not sql_message.get_user_info_with_name(user_name):
                 break
         msg = f"你获得了随机道号：{user_name}\n"
-    else:
-        if user_info['stone'] < XiuConfig().remaname:
-            msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
+    else:            
+        # 检查易名符
+        has_item = False
+        back_msg = sql_message.get_back_msg(user_id)
+        for item in back_msg:
+            if item['goods_id'] == 20011 and item['goods_name'] == "易名符":
+                has_item = True
+                break
+                
+        if not has_item:
+            msg = "修改道号需要消耗1个易名符！"
             await handle_send(bot, event, msg)
             await remaname.finish()
             
-        len_username = len(user_name.encode('gbk'))
-        if len_username > 20:
-            msg = "道号长度过长，请修改后重试！"
+        # 检查名字长度（7个中文字符）
+        if len(user_name) > 7:
+            msg = "道号长度不能超过7个字符！"
             await handle_send(bot, event, msg)
             await remaname.finish()
-        elif len_username < 1:
-            if XiuConfig().img:            
-                msg = "道友确定要改名无名？还请三思。"
-            await handle_send(bot, event, msg)            
-            await remaname.finish()
+            
         # 检查道号是否已存在
         if sql_message.get_user_info_with_name(user_name):
             msg = "该道号已被使用，请选择其他道号！"
             await handle_send(bot, event, msg)
             await remaname.finish()
         
-        # 扣除灵石
-        sql_message.update_ls(user_id, XiuConfig().remaname, 2)
+        # 扣除易名符
+        sql_message.update_back_j(user_id, 20011, use_key=1)
     
     result = sql_message.update_user_name(user_id, user_name)
     msg += result
@@ -1890,173 +1900,174 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
     msg = '境界适配成功成功！'
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
-    
-import random
 
 def generate_daohao():
-    """支持生成超过100万种组合的道号系统（所有词库无重复）"""
-    # 1. 核心维度配置
-    dimensions = {
-        'prefix_type': [('复姓', 40), ('单姓', 30), ('自然', 20), ('方位', 10)],
-        'style': [
-            ('仙道', 25), 
-            ('剑修', 25), 
-            ('丹器', 25),
-            ('佛禅', 15),
-            ('妖灵', 10)
+    """生成严格控制在2-7实际汉字长度的道号系统（完整词库版）"""
+    # 拼接符号库（不计入总字数）
+    connectors = ['·', '-', '~', '丨', '※', '〓', '§']
+    
+    # 姓氏库（单姓、复姓和三字姓）
+    family_names = {
+        'single': [
+            '李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
+            '玄', '玉', '清', '云', '风', '霜', '雪', '月', '星', '阳',
+            '金', '木', '水', '火', '土', '阴', '阳', '乾', '坤', '艮',
+            '神', '仙', '圣', '佛', '魔', '妖', '鬼', '邪', '煞', '冥',
+            '天', '昊', '穹', '苍', '幽', '冥', '太', '上', '元', '始',
+            '剑', '刀', '枪', '戟', '弓', '琴', '棋', '书', '画', '符'
         ],
-        'name_struct': [('单字', 30), ('双字', 50), ('数字', 15), ('三字', 5)],
-        'modifier_level': [('无修饰', 30), ('一级', 50), ('二级', 20)]
+        'double': [
+            '轩辕', '上官', '欧阳', '诸葛', '司马', '皇甫', '司空', '东方', '南宫', '西门',
+            '长孙', '宇文', '慕容', '司徒', '令狐', '澹台', '公冶', '申屠', '太史', '端木',
+            '青松', '白石', '碧泉', '紫竹', '金枫', '玉梅', '寒潭', '幽兰', '流云', '飞雪',
+            '惊雷', '暮雨', '晨露', '晚霞', '孤峰', '断崖', '古木', '残阳', '新月', '繁星',
+            '九霄', '太虚', '凌霄', '玄天', '紫霄', '青冥', '碧落', '黄泉', '星河', '月华',
+            '昆仑', '蓬莱', '方丈', '瀛洲', '岱舆', '员峤', '峨眉', '青城', '天山', '沧海'
+        ],
+        'triple': [
+            '太乙玄', '九幽寒', '凌霄子', '紫阳君', '玄冥上', '青莲剑', '白虹贯', '金乌曜',
+            '玉虚宫', '碧游仙', '黄泉路', '血煞魔', '噬魂妖', '夺魄鬼', '摄心怪', '炼尸精'
+        ]
     }
 
-    # 2. 各维度详细词库 - 确保所有词库无重复
-    lexicon = {
-        'prefix': {
-            '复姓': ['轩辕', '上官', '欧阳', '诸葛', '司马', '皇甫', '司空', '东方', '南宫', '西门',
-                    '长孙', '宇文', '慕容', '司徒', '令狐', '澹台', '公冶', '申屠', '太史', '端木'],
-            '单姓': ['李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
-                    '玄', '玉', '清', '云', '风', '霜', '雪', '月', '星', '阳'],
-            '自然': ['青松', '白石', '碧泉', '紫竹', '金枫', '玉梅', '寒潭', '幽兰', '流云', '飞雪',
-                    '惊雷', '暮雨', '晨露', '晚霞', '孤峰', '断崖', '古木', '残阳', '新月', '繁星'],
-            '方位': ['东华', '西岭', '南天', '北冥', '中岳', '上清', '下幽', '左玄', '右虚', '内明',
-                    '外寂', '前尘', '后土', '天极', '地煞', '乾元', '坤灵', '巽风', '坎水', '离火']
-        },
-        
-        'style_words': {
-            '仙道': ['太初', '紫霄', '玄元', '玉清', '无为', '逍遥', '长生', '不老', '凌霄', '琼华',
-                    '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘'],
-            '剑修': ['青锋', '寒光', '流影', '断水', '破岳', '斩龙', '诛邪', '戮仙', '天问', '无尘',
-                    '孤鸣', '惊鸿', '游龙', '飞凤', '残虹', '血饮', '心剑', '意剑', '道剑', '神剑'],
-            '丹器': ['九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
-                    '百草', '神农', '金匮', '银针', '黄芽', '白雪', '青盐', '紫烟', '玄霜', '赤霞'],
-            '佛禅': ['菩提', '明镜', '般若', '金刚', '罗汉', '菩萨', '佛陀', '禅心', '觉悟', '轮回',
-                    '因果', '业火', '莲华', '梵音', '慈悲', '舍利', '袈裟', '钵盂', '木鱼', '钟声'],
-            '妖灵': ['青丘', '涂山', '九尾', '天狐', '夜叉', '罗刹', '白骨', '血魔', '噬魂', '夺魄',
-                    '画皮', '摄心', '迷情', '幻影', '千面', '万化', '妖月', '魔星', '鬼瞳', '魅音']
-        },
-        
-        'name_words': {
-            '仙道': {
-                '单字': ['子', '尘', '空', '灵', '虚', '真', '元', '阳', '明', '玄',
-                        '霄', '云', '风', '雨', '雪', '霜', '露', '霞', '雾', '虹'],
-                '双字': ['太虚', '紫阳', '玄灵', '玉真', '无尘', '逍遥', '长生', '不老', '凌霄', '琼华',
-                        '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘']
-            },
-            '剑修': {
-                '单字': ['剑', '刃', '锋', '芒', '光', '影', '气', '意', '心', '神',
-                        '出', '归', '断', '斩', '破', '灭', '绝', '杀', '战', '斗'],
-                '双字': ['青锋', '寒光', '流影', '断水', '破岳', '斩龙', '诛邪', '戮仙', '天问', '无尘',
-                        '孤鸣', '惊鸿', '游龙', '飞凤', '残虹', '血饮', '心剑', '意剑', '道剑', '神剑']
-            },
-            '丹器': {
-                '单字': ['丹', '药', '炉', '鼎', '火', '炎', '金', '玉', '玄', '灵',
-                        '芝', '露', '霞', '虹', '珠', '珀', '琼', '瑶', '琅', '琥'],
-                '双字': ['九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
-                        '百草', '神农', '金匮', '银针', '黄芽', '白雪', '青盐', '紫烟', '玄霜', '赤霞']
-            },
-            '佛禅': {
-                '单字': ['佛', '禅', '法', '僧', '念', '定', '慧', '戒', '忍', '悟',
-                        '空', '无', '色', '相', '因', '果', '缘', '业', '报', '劫'],
-                '双字': ['菩提', '明镜', '般若', '金刚', '罗汉', '菩萨', '佛陀', '禅心', '觉悟', '轮回',
-                        '因果', '业火', '莲华', '梵音', '慈悲', '舍利', '袈裟', '钵盂', '木鱼', '钟声']
-            },
-            '妖灵': {
-                '单字': ['妖', '魔', '鬼', '怪', '精', '灵', '魅', '魍', '魉', '尸',
-                        '血', '骨', '皮', '魂', '魄', '咒', '蛊', '毒', '瘴', '雾'],
-                '双字': ['青丘', '涂山', '九尾', '天狐', '夜叉', '罗刹', '白骨', '血魔', '噬魂', '夺魄',
-                        '画皮', '摄心', '迷情', '幻影', '千面', '万化', '妖月', '魔星', '鬼瞳', '魅音']
-            }
-        },
-        
-        'numbers': {
-            0: '零', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 
-            6: '六', 7: '七', 8: '八', 9: '九', 10: '十'
-        },
-        
-        'modifiers': {
-            '仙道': ['真人', '真君', '上仙', '金仙', '天君', '星君', '元君', '道君', '老祖', '天尊'],
-            '剑修': ['剑仙', '剑魔', '剑圣', '剑痴', '剑狂', '剑鬼', '剑妖', '剑神', '剑尊', '剑帝'],
-            '丹器': ['丹圣', '药尊', '炉仙', '鼎君', '火灵', '炎帝', '金仙', '玉女', '玄师', '灵童'],
-            '佛禅': ['尊者', '罗汉', '菩萨', '佛陀', '禅师', '法师', '和尚', '头陀', '沙弥', '比丘'],
-            '妖灵': ['妖王', '魔尊', '鬼帝', '怪皇', '精主', '灵母', '魅仙', '魍圣', '魉神', '尸祖']
-        }
+    # 名字库（单字、双字和三字）
+    given_names = {
+        'single': [
+            '子', '尘', '空', '灵', '虚', '真', '元', '阳', '明', '玄',
+            '霄', '云', '风', '雨', '雪', '霜', '露', '霞', '雾', '虹',
+            '剑', '刃', '锋', '芒', '光', '影', '气', '意', '心', '神',
+            '丹', '药', '炉', '鼎', '火', '炎', '金', '玉', '玄', '灵',
+            '佛', '禅', '法', '僧', '念', '定', '慧', '戒', '忍', '悟',
+            '龙', '凤', '麟', '龟', '虎', '雀', '鹏', '蛟', '猿', '鹤'
+        ],
+        'double': [
+            '太虚', '紫阳', '玄灵', '玉真', '无尘', '逍遥', '长生', '不老', '凌霄', '琼华',
+            '妙法', '通玄', '悟真', '明心', '见性', '合道', '冲虚', '守一', '抱朴', '坐忘',
+            '青锋', '寒光', '流影', '断水', '破岳', '斩龙', '诛邪', '戮仙', '天问', '无尘',
+            '九转', '七返', '五气', '三花', '金丹', '玉液', '炉火', '鼎纹', '药王', '灵枢',
+            '菩提', '明镜', '般若', '金刚', '罗汉', '菩萨', '佛陀', '禅心', '觉悟', '轮回',
+            '青龙', '白虎', '朱雀', '玄武', '麒麟', '凤凰', '鲲鹏', '蛟龙', '仙鹤', '灵龟'
+        ],
+        'triple': [
+            '太乙剑', '九幽火', '凌霄子', '紫阳君', '玄冥气', '青莲剑', '白虹贯', '金乌曜',
+            '玉虚宫', '碧游仙', '黄泉路', '血煞魔', '噬魂妖', '夺魄鬼', '摄心怪', '炼尸精',
+            '混元一', '两仪生', '三才立', '四象成', '五行转', '六合聚', '七星列', '八卦演',
+            '九宫变', '十方界', '百炼钢', '千幻影', '万法归', '亿劫渡', '无量寿', '永恒道'
+        ]
     }
 
-    # 3. 维度选择器
-    def select_dimension(options):
-        total = sum(w for (_, w) in options)
-        r = random.randint(1, total)
-        for (name, weight) in options:
-            r -= weight
-            if r <= 0:
-                return name
-        return options[0][0]
+    # 修饰词库（1-5字）
+    modifiers = {
+        'single': [
+            '子', '君', '公', '仙', '圣', '尊', '王', '皇', '帝', '祖',
+            '魔', '妖', '鬼', '怪', '精', '灵', '魅', '魍', '魉', '尸',
+            '神', '佛', '道', '儒', '剑', '刀', '枪', '戟', '弓', '琴'
+        ],
+        'double': [
+            '真人', '真君', '上仙', '金仙', '天君', '星君', '元君', '道君', '老祖', '天尊',
+            '剑仙', '剑魔', '剑圣', '剑痴', '剑狂', '剑鬼', '剑妖', '剑神', '剑尊', '剑帝',
+            '丹圣', '药尊', '炉仙', '鼎君', '火灵', '炎帝', '金仙', '玉女', '玄师', '灵童',
+            '尊者', '罗汉', '菩萨', '佛陀', '禅师', '法师', '和尚', '头陀', '沙弥', '比丘',
+            '妖王', '魔尊', '鬼帝', '怪皇', '精主', '灵母', '魅仙', '魍圣', '魉神', '尸祖'
+        ],
+        'triple': [
+            '大罗仙', '混元子', '太乙尊', '玄天君', '紫霄神', '青冥主', '碧落仙', '黄泉使',
+            '星河君', '月华主', '日曜神', '云海仙', '风雷尊', '霜雪神', '虹霓使', '霞光君',
+            '昆仑仙', '蓬莱客', '方丈僧', '瀛洲使', '岱舆君', '员峤主', '峨眉仙', '青城道',
+            '金刚身', '罗汉果', '菩提心', '般若智', '明王怒', '如来掌', '天魔舞', '血煞阵'
+        ],
+        'quad': [
+            '太乙救苦', '混元无极', '玄天上帝', '紫霄雷帝', '青冥剑主', '碧落黄泉', '星河倒悬',
+            '月华如水', '日曜中天', '云海翻腾', '风雷激荡', '霜雪漫天', '虹霓贯日', '霞光万道',
+            '昆仑之巅', '蓬莱仙岛', '方丈神山', '瀛洲幻境', '金刚不坏', '罗汉金身', '菩提般若',
+            '明王怒火', '如来神掌', '天魔乱舞', '血煞冲天', '幽冥鬼域', '黄泉路上', '九幽之主',
+            '噬魂夺魄'
+        ],
+        'quint': [
+            '太乙救苦天尊', '混元无极道君', '玄天荡魔大帝', '紫霄神雷真君', '青冥剑道至尊',
+            '碧落黄泉主宰', '星河倒悬真仙', '月华如水仙子', '日曜中天神君', '云海翻腾老祖',
+            '金刚不坏罗汉', '菩提般若菩萨', '明王怒火金刚', '如来神掌佛陀', '天魔乱舞魔尊',
+            '血煞冲天妖王', '幽冥鬼域鬼帝', '黄泉路上阎君', '九幽之主冥王', '噬魂夺魄魔君'
+        ]
+    }
 
-    # 4. 生成各组件
-    prefix_type = select_dimension(dimensions['prefix_type'])
-    style = select_dimension(dimensions['style'])
-    name_struct = select_dimension(dimensions['name_struct'])
-    modifier_level = select_dimension(dimensions['modifier_level'])
-    
-    # 生成前缀 - 只取一个词
-    prefix = random.choice(lexicon['prefix'][prefix_type])
-    
-    # 统一的名字生成逻辑
-    if name_struct == '单字':
-        name = random.choice(lexicon['name_words'][style]['单字'])
-    elif name_struct == '双字':
-        # 50%概率使用固定双字词，50%概率组合两个单字
-        if random.random() < 0.5:
-            name = random.choice(lexicon['name_words'][style]['双字'])
+    # 选择修饰词类型（权重分配）
+    mod_type = random.choices(
+        ['single', 'double', 'triple', 'quad', 'quint'],
+        weights=[20, 30, 25, 15, 10]
+    )[0]
+    modifier = random.choice(modifiers[mod_type])
+
+    # 根据修饰词长度选择姓氏和名字
+    if mod_type == 'quint':  # 5字修饰词特殊处理
+        # 只能搭配单字姓或单字名
+        if random.random() < 0.7:
+            family_name = random.choice(family_names['single'])
+            given_name = ""
         else:
-            w1 = random.choice(lexicon['name_words'][style]['单字'])
-            w2 = random.choice(lexicon['name_words'][style]['单字'])
-            while w2 == w1:  # 确保不重复
-                w2 = random.choice(lexicon['name_words'][style]['单字'])
-            name = w1 + w2
-    elif name_struct == '数字':
-        num = random.randint(1, 9)
-        name = lexicon['numbers'][num]
-    else:  # 三字
-        parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
-        # 确保三字不重复
-        while len(set(parts)) < 3:
-            parts = [random.choice(lexicon['name_words'][style]['单字']) for _ in range(3)]
-        name = ''.join(parts)
-    
-    # 生成修饰词
-    modifiers = []
-    if modifier_level != '无修饰' and style in lexicon['modifiers']:
-        level_map = {"一级":1, "二级":2}
-        modifier_count = min(level_map.get(modifier_level, 1), 3)
-        available_modifiers = lexicon['modifiers'][style].copy()
-        for _ in range(modifier_count):
-            if not available_modifiers:
-                break
-            selected = random.choice(available_modifiers)
-            modifiers.append(selected)
-            available_modifiers.remove(selected)  # 避免重复
-    
-    # 5. 组合道号
-    connectors = {
-        '仙道': ['·', '之', ''],
-        '剑修': ['·', '丨', ''],
-        '丹器': ['·', '※', ''],
-        '佛禅': ['·', '卍', ''],
-        '妖灵': ['·', '✧', '']
-    }
-    
-    # 基础道号
-    daohao = prefix + name
-    
-    # 添加修饰词
-    if modifiers:
-        connector = random.choice(connectors[style])
-        for modifier in modifiers:
-            daohao += connector + modifier
-    
-    # 最终检查是否有连续重复字符
-    while any(daohao[i] == daohao[i+1] for i in range(len(daohao)-1)):
-        return generate_daohao()
+            family_name = ""
+            given_name = random.choice(given_names['single'])
+    else:
+        # 正常选择姓氏（单70%，复25%，三字5%）
+        family_type = random.choices(
+            ['single', 'double', 'triple'],
+            weights=[70, 25, 5]
+        )[0]
+        family_name = random.choice(family_names[family_type])
+        
+        # 正常选择名字（单40%，双50%，三字10%）
+        given_type = random.choices(
+            ['single', 'double', 'triple'],
+            weights=[40, 50, 10]
+        )[0]
+        given_name = random.choice(given_names[given_type])
+
+    # 可选的拼接符号（30%概率添加）
+    connector = random.choices(
+        ['', random.choice(connectors)],
+        weights=[70, 30]
+    )[0]
+
+    # 计算实际汉字长度（忽略连接符）
+    def real_length(s):
+        return len([c for c in s if c not in connectors])
+
+    # 生成所有可能的结构选项（带权重）
+    options = []
+
+    # 1. 正向结构：姓[+连接符]+名[+连接符]+修饰词
+    def add_option(parts, weight):
+        s = connector.join(filter(None, parts))
+        if 2 <= real_length(s) <= 7:
+            options.append((s, weight))
+
+    # 正向组合
+    add_option([family_name, given_name, modifier], 25)  # 姓+名+修饰词
+    add_option([family_name, modifier], 15)             # 姓+修饰词
+    add_option([given_name, modifier], 15)              # 名+修饰词
+    add_option([family_name, given_name], 10)          # 姓+名
+
+    # 倒装组合（确保修饰词位置正确）
+    add_option([modifier, given_name, family_name], 10)  # 修饰词+名+姓
+    add_option([modifier, family_name], 8)               # 修饰词+姓
+    add_option([modifier, given_name], 7)                # 修饰词+名
+
+    # 单独使用（需长度2-7）
+    if 2 <= len(modifier) <= 7:
+        options.append((modifier, 5))  # 单独修饰词
+    if family_name and given_name:
+        add_option([family_name, given_name], 5)  # 姓+名（已添加，权重叠加）
+
+    # 如果没有合适选项（理论上不会发生），返回保底结果
+    if not options:
+        return modifier[:7] if len(modifier) >= 2 else "道君"
+
+    # 按权重随机选择
+    daohao_list, weights = zip(*options)
+    daohao = random.choices(daohao_list, weights=weights)[0]
+
+    # 最终验证
+    if not (2 <= real_length(daohao) <= 7):
+        return generate_daohao()  # 重新生成
     
     return daohao

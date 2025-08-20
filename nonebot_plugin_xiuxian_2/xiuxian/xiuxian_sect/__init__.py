@@ -404,7 +404,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         if not mainbuff_id:  # 跳过空ID
             continue
         mainbuff, mainbuffmsg = get_main_info_msg(mainbuff_id)
-        msg_list.append(f"{mainbuff['level']}{mainbuff['name']}:{mainbuffmsg}")
+        msg_list.append(f"{mainbuff['level']}{mainbuff['name']}")
 
     # 发送消息
     try:
@@ -452,7 +452,7 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             continue
         secbuff = items.get_data_by_item_id(secbuff_id)
         secbuffmsg = get_sec_msg(secbuff)
-        msg_list.append(f"{secbuff['level']}:{secbuff['name']} {secbuffmsg}")
+        msg_list.append(f"{secbuff['level']}:{secbuff['name']}")
 
     # 发送消息
     try:
@@ -525,21 +525,27 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
 @sect_mainbuff_get.handle(parameterless=[Cooldown(stamina_cost=8, at_sender=False)])
 async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """搜寻宗门功法"""
+    """搜寻宗门功法（可获取当前及以下所有品阶功法）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_mainbuff_get.finish()
+    
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
         owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
         owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+        
         if sect_position == owner_position:
             mainbuffconfig = config['宗门主功法参数']
             sect_info = sql_message.get_sect_info(sect_id)
-            mainbuffgear, mainbufftype = get_sectbufftxt(sect_info['sect_scale'], mainbuffconfig)
+            
+            # 获取当前档位和所有可搜寻品阶
+            mainbuffgear, mainbufftypes = get_sectbufftxt(sect_info['sect_scale'], mainbuffconfig)
+            
+            # 计算消耗（按最高档位计算）
             stonecost = mainbuffgear * mainbuffconfig['获取消耗的灵石']
             materialscost = mainbuffgear * mainbuffconfig['获取消耗的资材']
             total_stone_cost = stonecost
@@ -552,26 +558,36 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 mainbuffidlist = get_sect_mainbuff_id_list(sect_id)
                 results = []
 
-                for i in range(10):
+                for i in range(100):  # 每次搜寻尝试100次
                     if random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
-                        mainbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[mainbufftype]['gf_list'])
+                        # 随机从可获取品阶中选择一个
+                        selected_tier = random.choice(mainbufftypes)
+                        # 从该品阶的功法列表中随机选择
+                        mainbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['gf_list'])
+                        
                         if mainbuffid in mainbuffidlist:
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
                             repeat_count += 1
-                            results.append(f"第{i + 1}次获取到重复功法：{mainbuff['name']}")
+                            results.append(f"第{i+1}次获取到重复功法：{mainbuff['name']}({selected_tier})")
                         else:
                             mainbuffidlist.append(mainbuffid)
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
                             success_count += 1
-                            results.append(f"第{i + 1}次获取到{mainbufftype}功法：{mainbuff['name']}")
+                            results.append(f"第{i+1}次获取到{selected_tier}功法：{mainbuff['name']}")
                     else:
                         fail_count += 1
 
+                # 更新数据库
                 sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-                sql_message.update_sect_scale_and_used_stone(sect_id, sect_info['sect_used_stone'] - total_stone_cost, sect_info['sect_scale'])
+                sql_message.update_sect_scale_and_used_stone(
+                    sect_id, 
+                    sect_info['sect_used_stone'] - total_stone_cost, 
+                    sect_info['sect_scale']
+                )
                 sql = set_sect_list(mainbuffidlist)
                 sql_message.update_sect_mainbuff(sect_id, sql)
 
+                # 构建结果消息
                 msg = f"共消耗{total_stone_cost}宗门灵石，{total_materials_cost}宗门资材。\n"
                 msg += f"失败{fail_count}次，获取重复功法{repeat_count}次"
                 if success_count > 0:
@@ -595,29 +611,34 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg)
         await sect_mainbuff_get.finish()
 
-
 @sect_secbuff_get.handle(parameterless=[Cooldown(stamina_cost=8, at_sender=False)])
 async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """搜寻宗门神通"""
+    """搜寻宗门神通（可获取当前及以下所有品阶神通）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await sect_secbuff_get.finish()
+    
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
         owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
         owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+        
         if sect_position == owner_position:
             secbuffconfig = config['宗门神通参数']
             sect_info = sql_message.get_sect_info(sect_id)
-            secbuffgear, secbufftype = get_sectbufftxt(sect_info['sect_scale'], secbuffconfig)
+            
+            # 获取当前档位和所有可搜寻品阶
+            secbuffgear, secbufftypes = get_sectbufftxt(sect_info['sect_scale'], secbuffconfig)
+            
+            # 计算消耗（按最高档位计算）
             stonecost = secbuffgear * secbuffconfig['获取消耗的灵石']
             materialscost = secbuffgear * secbuffconfig['获取消耗的资材']
             total_stone_cost = stonecost
             total_materials_cost = materialscost
-            
+
             if sect_info['sect_used_stone'] >= total_stone_cost and sect_info['sect_materials'] >= total_materials_cost:
                 success_count = 0
                 fail_count = 0
@@ -625,26 +646,36 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 secbuffidlist = get_sect_secbuff_id_list(sect_id)
                 results = []
 
-                for i in range(10):
+                for i in range(100):  # 每次搜寻尝试100次
                     if random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
-                        secbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[secbufftype]['st_list'])
+                        # 随机从可获取品阶中选择一个
+                        selected_tier = random.choice(secbufftypes)
+                        # 从该品阶的神通列表中随机选择
+                        secbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['st_list'])
+                        
                         if secbuffid in secbuffidlist:
                             secbuff = items.get_data_by_item_id(secbuffid)
                             repeat_count += 1
-                            results.append(f"第{i + 1}次获取到重复神通：{secbuff['name']}")
+                            results.append(f"第{i+1}次获取到重复神通：{secbuff['name']}({selected_tier})")
                         else:
                             secbuffidlist.append(secbuffid)
                             secbuff = items.get_data_by_item_id(secbuffid)
                             success_count += 1
-                            results.append(f"第{i + 1}次获取到{secbufftype}神通：{secbuff['name']}\n")
+                            results.append(f"第{i+1}次获取到{selected_tier}神通：{secbuff['name']}\n")
                     else:
                         fail_count += 1
 
+                # 更新数据库
                 sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-                sql_message.update_sect_scale_and_used_stone(sect_id, sect_info['sect_used_stone'] - total_stone_cost, sect_info['sect_scale'])
+                sql_message.update_sect_scale_and_used_stone(
+                    sect_id, 
+                    sect_info['sect_used_stone'] - total_stone_cost, 
+                    sect_info['sect_scale']
+                )
                 sql = set_sect_list(secbuffidlist)
                 sql_message.update_sect_secbuff(sect_id, sql)
 
+                # 构建结果消息
                 msg = f"共消耗{total_stone_cost}宗门灵石，{total_materials_cost}宗门资材。\n"
                 msg += f"失败{fail_count}次，获取重复神通{repeat_count}次"
                 if success_count > 0:
@@ -667,8 +698,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg)
         await sect_secbuff_get.finish()
-
-
+        
 @sect_secbuff_learn.handle(parameterless=[Cooldown(stamina_cost=1, cd_time=10, at_sender=False)])
 async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """学习宗门神通"""
@@ -2016,23 +2046,46 @@ def get_secnameid(buffname, bufflist):
 
 def get_sectbufftxt(sect_scale, config_):
     """
-    获取宗门当前获取功法的品阶 档位 + 3
-    参数:sect_scale=宗门建设度
-    config=宗门主功法参数
+    获取宗门当前可搜寻的功法/神通品阶列表（包含当前及以下所有品阶）
+    参数:
+        sect_scale: 宗门建设度
+        config_: 宗门主功法/神通参数
+    返回: (当前档位, 可搜寻品阶列表)
     """
-    bufftxt = {1: '人阶下品', 2: '人阶上品', 3: '黄阶下品', 4: '黄阶上品', 5: '玄阶下品', 6: '玄阶上品', 7: '地阶下品', 8: '地阶上品', 9: '天阶下品', 10: '天阶上品', 50: '仙阶下品', 100: '仙阶上品'}
-    buffgear = divmod(sect_scale, config_['建设度'])[0]
-    if buffgear >= 100:
-        buffgear = 100
-    elif buffgear >= 50:
-        buffgear = 50
-    elif buffgear >= 10:
-        buffgear = 10
-    elif buffgear < 1:
-        buffgear = 1
-    else:
-        pass
-    return buffgear, bufftxt[buffgear]
+    buff_gear_map = {
+        1: '人阶下品',
+        2: '人阶上品',
+        3: '黄阶下品', 
+        4: '黄阶上品',
+        5: '玄阶下品',
+        6: '玄阶上品',
+        7: '地阶下品',
+        8: '地阶上品', 
+        9: '天阶下品',
+        10: '天阶上品',
+        50: '仙阶下品',
+        100: '仙阶上品'
+    }
+    
+    # 计算当前档位
+    current_gear = min(max(1, sect_scale // config_['建设度']), 100)
+    
+    # 特殊处理仙阶档位
+    if current_gear >= 100:
+        current_gear = 100
+    elif current_gear >= 50:
+        current_gear = 50
+    
+    # 获取所有<=当前档位的品阶
+    available_gears = [g for g in buff_gear_map.keys() if g <= current_gear]
+    
+    # 去重并排序
+    available_gears = sorted(list(set(available_gears)))
+    
+    # 转换为品阶名称列表
+    available_tiers = [buff_gear_map[g] for g in available_gears]
+    
+    return current_gear, available_tiers
 
 
 def get_sect_level(sect_id):
