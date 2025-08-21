@@ -8,6 +8,7 @@ import unicodedata
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
+from datetime import datetime
 from typing import List, Union
 from nonebot.adapters import MessageSegment
 from nonebot.adapters.onebot.v11 import (
@@ -736,3 +737,88 @@ async def handle_send(bot, event, msg: str):
             await bot.send_private_msg(
                 user_id=event.user_id, message=msg
             )
+
+def log_message(user_id: str, msg: str):
+    """
+    记录用户日志
+    
+    参数:
+        user_id: 用户ID
+        msg: 要记录的日志消息
+    """
+    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    try:
+        # 确保用户文件夹存在
+        user_dir = PLAYERSDATA / str(user_id)
+        if not user_dir.exists():
+            os.makedirs(user_dir)
+        
+        # 创建logs文件夹
+        logs_dir = user_dir / "logs"
+        if not logs_dir.exists():
+            os.makedirs(logs_dir)
+        
+        # 获取当前日期(格式: 年月日，如250820)
+        today = datetime.now().strftime("%y%m%d")
+        log_file = logs_dir / f"{today}.log"
+        
+        # 准备日志数据
+        log_data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "message": msg
+        }
+        
+        # 如果文件不存在，创建新文件并写入第一条日志
+        if not log_file.exists():
+            logs = [log_data]
+            with open(log_file, "w", encoding="utf-8") as f:
+                json.dump(logs, f, ensure_ascii=False, indent=4)
+        else:
+            # 读取现有日志，将新日志添加到开头
+            with open(log_file, "r", encoding="utf-8") as f:
+                existing_logs = json.load(f)
+            
+            existing_logs.insert(0, log_data)
+            
+            # 写入更新后的日志
+            with open(log_file, "w", encoding="utf-8") as f:
+                json.dump(existing_logs, f, ensure_ascii=False, indent=4)
+                
+    except Exception as e:
+        logger.error(f"记录日志失败: {e}")
+
+def get_logs(user_id: str, date_str: str = None, limit: int = 20) -> list:
+    """
+    获取用户日志
+    
+    参数:
+        user_id: 用户ID
+        date_str: 日期字符串(格式: 年月日，如250820)，不传则获取今天
+        limit: 要获取的日志条数，默认20条
+        
+    返回:
+        日志列表，每条包含时间和消息
+    """
+    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    try:
+        # 确定日期
+        if date_str is None:
+            date_str = datetime.now().strftime("%y%m%d")
+        
+        # 构建日志文件路径
+        log_file = PLAYERSDATA / str(user_id) / "logs" / f"{date_str}.log"
+        
+        # 如果文件不存在，返回空列表
+        if not log_file.exists():
+            return []
+        
+        # 读取日志文件
+        with open(log_file, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+        
+        # 限制返回数量
+        return logs[:limit]
+        
+    except Exception as e:
+        logger.error(f"获取日志失败: {e}")
+        return []

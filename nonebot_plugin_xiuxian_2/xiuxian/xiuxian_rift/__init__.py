@@ -20,7 +20,7 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    send_msg_handler, get_msg_pic, CommandObjectID, handle_send
+    send_msg_handler, get_msg_pic, CommandObjectID, log_message, handle_send
 )
 from .riftconfig import get_rift_config, savef_rift
 from .jsondata import save_rift_data, read_rift_data
@@ -319,21 +319,25 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             if rift_type == "无事":
                 msg = random.choice(NONEMSG)
                 await handle_send(bot, event, msg)
+                log_message(user_id, msg)
                 await complete_rift.finish()
             elif rift_type == "战斗":
                 rift_type = get_battle_type()
                 if rift_type == "掉血事件":
                     msg = get_dxsj_info("掉血事件", user_info)
                     await handle_send(bot, event, msg)
+                    log_message(user_id, msg)
                     await complete_rift.finish()
                 elif rift_type == "Boss战斗":
                     result, msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
                     await send_msg_handler(bot, event, result)
                     await handle_send(bot, event, msg)
+                    log_message(user_id, msg)
                     await complete_rift.finish()
             elif rift_type == "宝物":
                 msg = get_treasure_info(user_info, rift_rank)
                 await handle_send(bot, event, msg)
+                log_message(user_id, msg)
                 await complete_rift.finish()
 
 
@@ -469,7 +473,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 消耗秘境钥匙
     sql_message.update_back_j(user_id, rift_key_id)
     msg = f"道友使用 1 个秘境钥匙，秘境 {rift_info['name']} 已立即结算！\n{result_msg}"
-
+    log_message(user_id, result_msg)
     await handle_send(bot, event, msg)
     await use_rift_key.finish()
 

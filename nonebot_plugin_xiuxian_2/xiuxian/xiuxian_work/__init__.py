@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from .work_handle import workhandle
 from datetime import datetime, timedelta
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA, readf, savef
 from ..xiuxian_utils.item_json import Items
@@ -238,7 +238,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"悬赏名称：{work_data['scheduled_time']}\n"
             f"获得修为：{number_to(gain_exp)}"
         )
-    
+    log_message(user_id, msg)
     await handle_send(bot, event, msg)
     return msg
 
@@ -287,7 +287,7 @@ async def resetrefreshnum_():
     logger.opt(colors=True).info(f"用户悬赏令刷新次数重置成功")
 
 __work_help__ = f"""
-════ 悬赏令系统 ════════════
+═══  悬赏令帮助   ═══
 
 【悬赏令操作】
 悬赏令查看 - 浏览当前可接取的悬赏任务
@@ -577,3 +577,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             sql_message.do_work(user_id, 0)
         msg = "已重置悬赏令"
         await handle_send(bot, event, msg)
+
+    elif mode == "帮助":
+        msg = f"\n{__work_help__}"
+        await handle_send(bot, event, msg)
+    

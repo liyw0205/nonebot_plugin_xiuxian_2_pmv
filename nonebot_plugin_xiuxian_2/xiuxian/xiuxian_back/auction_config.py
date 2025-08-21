@@ -45,17 +45,21 @@ DEFAULT_CONFIG = {
         "大道归一丹": {"id": 15102, "start_price": 500000000},
         "天地玄功": {"id": 9934, "start_price": 11500000000000},
         "渡劫天功": {"id": 9931, "start_price": 1200000000},
-        "道师符经": {"id": 9921, "start_price": 55000000000}
+        "道师符经": {"id": 9921, "start_price": 55000000000},
+        "易名符": {"id": 20011, "start_price": 10000000},
+        "蕴灵石": {"id": 20004, "start_price": 100000000},
+        "神圣石": {"id": 20003, "start_price": 1000000000},
+        "化道石": {"id": 20002, "start_price": 10000000000}
     },
     "schedule": {
         "start_hour": 17,
         "start_minute": 0,
-        "duration_hours": 2,
+        "duration_hours": 5,
         "enabled": True
     },
     "rules": {
         "max_user_items": 3,
-        "min_price": 1000000,  # 调整为100万
+        "min_price": 1000000,
         "fee_rate": 0.2
     }
 }

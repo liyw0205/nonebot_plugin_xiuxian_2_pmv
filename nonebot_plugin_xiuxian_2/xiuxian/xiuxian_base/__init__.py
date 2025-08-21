@@ -33,7 +33,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler, handle_send
+    Txt2Img, send_msg_handler, handle_send, get_logs, log_message
 )
 from ..xiuxian_utils.item_json import Items
 from .stone_limit import stone_limit
@@ -83,6 +83,7 @@ xiuxian_uodata_data = on_fullmatch('更新记录', priority=15, permission=GROUP
 level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, block=True)
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
+view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
 
 __xiuxian_notes__ = f"""
 【修仙指令】✨
@@ -350,6 +351,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 1. 执行签到逻辑
     result = sql_message.get_sign(user_id)
     if result == "贪心的人是不会有好运的！":
+        log_message(user_id, result)
         await handle_send(bot, event, result)
         await sign_in.finish()
      # 2. 自动参与"借运"抽奖
@@ -359,6 +361,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"{result}\n{lottery_result}"
     
     try:
+        log_message(user_id, msg)
         await handle_send(bot, event, msg)
         await sign_in.finish()
     except ActionFailed:
@@ -1808,6 +1811,60 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
         await handle_send(bot, event, msg)
         await restate.finish()
 
+@view_logs.handle(parameterless=[Cooldown(at_sender=False)])
+async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看修仙日志"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await view_logs.finish()
+    
+    user_id = user_info['user_id']
+    raw_msg = event.get_plaintext().strip()
+    
+    # 解析命令参数
+    parts = raw_msg.split()
+    date_str = None
+    limit = 20  # 默认显示20条
+    
+    if len(parts) > 1:
+        # 检查是否有日期参数 (6位数字)
+        if len(parts[1]) == 6 and parts[1].isdigit():
+            date_str = parts[1]
+            
+            # 检查是否有数量参数
+            if len(parts) > 2 and parts[2].isdigit():
+                limit = min(int(parts[2]), 100)  # 限制最大100条
+        elif parts[1].isdigit():
+            # 只有数量参数
+            limit = min(int(parts[1]), 100)
+    
+    # 获取日志
+    logs = get_logs(user_id, date_str, limit)
+    
+    if not logs:
+        msg = "没有找到相关日志记录！"
+        if date_str:
+            msg = f"在 {date_str} 没有找到日志记录！"
+    else:
+        # 格式化日志信息
+        log_date = date_str if date_str else datetime.now().strftime("%y%m%d")
+        msg = f"\n【修仙日志 - {log_date}】\n"
+        msg += "════════════\n"
+        
+        for i, log in enumerate(logs, 1):
+            msg += (
+                f"{log['timestamp']}\n"
+                f"{log['message']}\n"
+                "════════════\n"
+            )
+        
+        if len(logs) == limit:
+            msg += f"提示: 只显示最近{limit}条日志，输入【修仙日志 {log_date} 数量】查看更多"
+    
+    await handle_send(bot, event, msg)
+    await view_logs.finish()
 
 @set_xiuxian.handle()
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent):
