@@ -60,6 +60,7 @@ DEFAULT_CONFIG = {
     "rules": {
         "max_user_items": 3,
         "min_price": 1000000,
+        "min_increment_percent": 0.1,
         "fee_rate": 0.2
     }
 }

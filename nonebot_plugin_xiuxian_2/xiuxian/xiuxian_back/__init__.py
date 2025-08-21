@@ -61,6 +61,7 @@ for path in [XIANSHI_DATA_PATH, FANGSHI_DATA_PATH, GUISHI_DATA_PATH]:
 
 # 通用物品类型
 ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
+ITEM_TYPES = ["药材", "装备", "技能"]
 BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
 
 # 拍卖命令
@@ -375,7 +376,7 @@ def save_xianshi_index(data):
 
 def get_xianshi_type_data(item_type):
     """获取指定类型的仙肆数据"""
-    if item_type not in XIANSHI_TYPES:
+    if item_type not in ITEM_TYPES:
         return None
     
     type_file = XIANSHI_DATA_PATH / f"仙肆_{item_type}.json"
@@ -389,7 +390,7 @@ def get_xianshi_type_data(item_type):
 
 def save_xianshi_type_data(item_type, data):
     """保存指定类型的仙肆数据"""
-    if item_type not in XIANSHI_TYPES:
+    if item_type not in ITEM_TYPES:
         return False
     
     type_file = XIANSHI_DATA_PATH / f"仙肆_{item_type}.json"
@@ -461,7 +462,7 @@ def save_fangshi_index(group_id, data):
 
 def get_fangshi_type_data(group_id, item_type):
     """获取指定类型的坊市数据"""
-    if item_type not in FANGSHI_TYPES:
+    if item_type not in ITEM_TYPES:
         return None
     
     type_file = FANGSHI_DATA_PATH / f"坊市_{group_id}_{item_type}.json"
@@ -475,7 +476,7 @@ def get_fangshi_type_data(group_id, item_type):
 
 def save_fangshi_type_data(group_id, item_type, data):
     """保存指定类型的坊市数据"""
-    if item_type not in FANGSHI_TYPES:
+    if item_type not in ITEM_TYPES:
         return False
     
     type_file = FANGSHI_DATA_PATH / f"坊市_{group_id}_{item_type}.json"
@@ -586,8 +587,8 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 获取物品类型
     goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in XIANSHI_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(XIANSHI_TYPES)}"
+    if goods_type not in ITEM_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
@@ -761,7 +762,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     current_page = 1
     
     # 检查是否直接拼接类型和页码（无空格）
-    for t in XIANSHI_TYPES:
+    for t in ITEM_TYPES:
         if args_str.startswith(t):
             item_type = t
             remaining = args_str[len(t):].strip()
@@ -772,14 +773,14 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 情况2：有空格分隔
     if item_type is None:
         parts = args_str.split(maxsplit=1)
-        if parts[0] in XIANSHI_TYPES:
+        if parts[0] in ITEM_TYPES:
             item_type = parts[0]
             if len(parts) > 1 and parts[1].isdigit():
                 current_page = int(parts[1])
     
     # 检查类型有效性
-    if item_type not in XIANSHI_TYPES:
-        msg = f"无效类型！可用类型：【{', '.join(XIANSHI_TYPES)}】"
+    if item_type not in ITEM_TYPES:
+        msg = f"无效类型！可用类型：【{', '.join(ITEM_TYPES)}】"
         await handle_send(bot, event, msg)
         await xiuxian_shop_view.finish()
     
@@ -1043,8 +1044,8 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     
     # 获取物品类型
     goods_type = get_item_type_by_id(goods_id)
-    if goods_type not in XIANSHI_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(XIANSHI_TYPES)}"
+    if goods_type not in ITEM_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xian_shop_added_by_admin.finish()
     
@@ -1391,8 +1392,8 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 获取物品类型
     goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in XIANSHI_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(XIANSHI_TYPES)}"
+    if goods_type not in ITEM_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
@@ -1739,7 +1740,7 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 )
     
     # 清空所有数据
-    for item_type in XIANSHI_TYPES:
+    for item_type in ITEM_TYPES:
         save_xianshi_type_data(item_type, {})
     
     save_xianshi_index({"next_id": 1, "items": {}})
@@ -2196,8 +2197,8 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     
     # 获取物品类型
     goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in FANGSHI_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(FANGSHI_TYPES)}"
+    if goods_type not in ITEM_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await fangshi_fast_add.finish()
     
@@ -2624,7 +2625,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     current_page = 1
     
     # 检查是否直接拼接类型和页码（无空格）
-    for t in FANGSHI_TYPES:
+    for t in ITEM_TYPES:
         if args_str.startswith(t):
             item_type = t
             remaining = args_str[len(t):].strip()
@@ -2635,14 +2636,14 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     # 情况2：有空格分隔
     if item_type is None:
         parts = args_str.split(maxsplit=1)
-        if parts[0] in FANGSHI_TYPES:
+        if parts[0] in ITEM_TYPES:
             item_type = parts[0]
             if len(parts) > 1 and parts[1].isdigit():
                 current_page = int(parts[1])
     
     # 检查类型有效性
-    if item_type not in FANGSHI_TYPES:
-        msg = f"无效类型！可用类型：【{', '.join(FANGSHI_TYPES)}】"
+    if item_type not in ITEM_TYPES:
+        msg = f"无效类型！可用类型：【{', '.join(ITEM_TYPES)}】"
         await handle_send(bot, event, msg)
         await shop_view.finish()
     
@@ -2805,8 +2806,8 @@ async def shop_added_by_admin_(bot: Bot, event: GroupMessageEvent, args: Message
     
     # 获取物品类型
     goods_type = get_item_type_by_id(goods_id)
-    if goods_type not in FANGSHI_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(FANGSHI_TYPES)}"
+    if goods_type not in ITEM_TYPES:
+        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await shop_added_by_admin.finish()
     
@@ -2998,7 +2999,7 @@ async def shop_off_all_(bot: Bot, event: GroupMessageEvent):
                 )
     
     # 清空所有数据
-    for item_type in FANGSHI_TYPES:
+    for item_type in ITEM_TYPES:
         save_fangshi_type_data(group_id, item_type, {})
     
     save_fangshi_index(group_id, {"next_id": 1, "items": {}})
@@ -3955,6 +3956,15 @@ def end_auction():
     results = []
     rules = get_auction_rules()
     
+    # 保存最后一次展示的拍卖品到历史展示
+    last_display = get_display_auctions()
+    if last_display:
+        save_display_auctions({
+            **last_display,
+            "is_history": True,
+            "end_time": time.time()
+        })
+    
     for auction_id, item in current_auctions["items"].items():
         # 准备拍卖结果记录
         result = {
@@ -4017,7 +4027,6 @@ def end_auction():
     
     # 清空当前拍卖
     save_current_auctions({})
-    save_display_auctions({})
     
     return results
 
@@ -4147,8 +4156,11 @@ def place_bid(user_id, user_name, auction_id, bid_price):
     # 扣除当前出价者的灵石
     sql_message.update_ls(user_id, bid_price, 2)  # 2表示扣除
     
-    # 添加出价记录
+    # 添加出价记录和时间戳
     item["bids"][str(user_id)] = bid_price
+    if "bid_times" not in item:
+        item["bid_times"] = {}
+    item["bid_times"][str(user_id)] = time.time()
     item["current_price"] = bid_price
     item["last_bid_time"] = time.time()
     
@@ -4161,7 +4173,7 @@ def place_bid(user_id, user_name, auction_id, bid_price):
     
     # 构造返回消息
     msg = [
-        f"☆------竞拍成功------☆",
+        f"\n☆------竞拍成功------☆",
         f"物品: {item['name']}",
         f"出价: {number_to(bid_price)}灵石",
         f"当前最高价: {number_to(bid_price)}灵石"
@@ -4193,7 +4205,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             
             # 构造详情消息
             msg = [
-                f"☆------拍卖品详情------☆",
+                f"\n☆------拍卖品详情------☆",
                 f"编号: {item['id']}",
                 f"物品: {item['name']}",
                 f"当前价: {number_to(item['current_price'])}灵石",
@@ -4201,10 +4213,25 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             ]
             
             if item["bids"]:
-                msg.append("\n竞拍记录:")
-                for i, (bidder, price) in enumerate(sorted(item["bids"].items(), key=lambda x: -x[1])[:3]):
-                    user = sql_message.get_user_info_with_id(bidder)
-                    msg.append(f"{i+1}. {user['user_name'] if user else bidder}: {number_to(price)}灵石")
+                # 按时间排序获取最近的5条记录
+                bid_records = []
+                for bidder_id, price in item["bids"].items():
+                    bid_time = item.get("bid_times", {}).get(bidder_id, 0)
+                    bid_records.append({
+                        "bidder_id": bidder_id,
+                        "price": price,
+                        "time": bid_time
+                    })
+                
+                # 按时间降序排序
+                bid_records.sort(key=lambda x: -x["time"])
+                recent_bids = bid_records[:5]  # 只取最近的5条
+                
+                msg.append("\n☆------竞拍记录------☆")
+                for i, bid in enumerate(recent_bids):
+                    bidder = sql_message.get_user_info_with_id(bid["bidder_id"])
+                    time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
+                    msg.append(f"{i+1}. {bidder['user_name'] if bidder else bid['bidder_id']}: {number_to(bid['price'])}灵石 {time_str}")
             
             await handle_send(bot, event, "\n".join(msg))
             return
@@ -4213,7 +4240,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         for record in reversed(auction_history):
             if record["auction_id"] == auction_id:
                 msg = [
-                    f"☆------拍卖历史详情------☆",
+                    f"\n☆------拍卖历史详情------☆",
                     f"编号: {record['auction_id']}",
                     f"物品: {record['item_name']}",
                     f"状态: {record['status']}"
@@ -4224,7 +4251,8 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     msg.extend([
                         f"成交价: {number_to(record['final_price'])}灵石",
                         f"买家: {winner['user_name'] if winner else record['winner_id']}",
-                        f"卖家: {record['seller_name']}"
+                        f"卖家: {record['seller_name']}",
+                        f"手续费: {number_to(record['fee'])}灵石"
                     ])
                 else:
                     msg.append(f"卖家: {record['seller_name']}")
@@ -4253,15 +4281,29 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     items_list = list(display_auctions["items"].values())
     items_list.sort(key=lambda x: -x["current_price"])
     
-    msg = ["☆------拍卖物品列表------☆"]
+    msg = [f"\n☆------拍卖物品列表------☆"]
     for item in items_list[:10]:  # 最多显示10个
+        status = ""
+        if display_auctions.get("is_history"):
+            # 历史拍卖显示成交状态
+            if item["bids"]:
+                winner_id, final_price = max(item["bids"].items(), key=lambda x: x[1])
+                winner = sql_message.get_user_info_with_id(winner_id)
+                status = f" (已成交: {winner['user_name'] if winner else winner_id} {number_to(final_price)}灵石)"
+            else:
+                status = " (流拍)"
+        
         msg.append(
             f"\n编号: {item['id']}\n"
             f"物品: {item['name']}\n"
-            f"当前价: {number_to(item['current_price'])}灵石"
+            f"当前价: {number_to(item['current_price'])}灵石{status}"
         )
     
-    if auction_status["active"]:
+    if display_auctions.get("is_history"):
+        end_time = datetime.fromtimestamp(display_auctions["end_time"]).strftime("%Y-%m-%d %H:%M")
+        msg.append(f"\n☆------历史拍卖记录------☆")
+        msg.append(f"拍卖结束时间: {end_time}")
+    elif auction_status["active"]:
         end_time = auction_status["end_time"].strftime("%H:%M")
         msg.append(f"\n拍卖进行中，预计{end_time}结束")
     else:
