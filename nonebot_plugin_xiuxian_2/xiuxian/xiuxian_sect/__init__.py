@@ -166,53 +166,123 @@ async def resetusertask_():
                 sql_message.update_sect_materials(sect_id=sect_info['sect_id'], sect_materials=elixir_room_cost, key=2)
     logger.opt(colors=True).info(f"<green>已重置所有宗门任务次数、宗门丹药领取次数，已扣除丹房维护费</green>")
 
-# 定时任务每1小时自动检测不常玩的宗主
-@auto_sect_owner_change.scheduled_job("interval", hours=1)
-async def auto_sect_owner_change_():
-    logger.opt(colors=True).info(f"<yellow>开始检测不常玩的宗主</yellow>")
+# 定时任务每6小时自动检测并处理宗门状态
+@auto_sect_owner_change.scheduled_job("interval", hours=6)
+async def auto_handle_inactive_sect_owners():
+    logger.info("⏳ 开始检测并处理宗门状态")
     
-    all_sects = sql_message.get_all_sects()
-    for sect in all_sects:
-        sect_id = sect['sect_id']
-        sect_info = sql_message.get_sect_info(sect_id)
+    try:
+        # 使用新的方法获取宗门列表（包含成员数量）
+        all_sects = sql_message.get_all_sects_with_member_count()
+        logger.info(f"获取到宗门总数：{len(all_sects)}个")
         
-        # 如果是封闭山门状态
-        if sect_info['closed']:
-            # 自动选择贡献最高的用户继承（不限制职位）
-            new_owner_id = sql_message.get_highest_contrib_user(sect_id)
-            if new_owner_id:
-                new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
-                sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)  # 新宗主
-                sql_message.update_sect_owner(new_owner_id[0], sect_id)
-                sql_message.update_sect_closed_status(sect_id, 0)  # 解除封闭
-                sql_message.update_sect_join_status(sect_id, 1)  # 开放加入
-                logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位，解除封闭状态</green>")
-            else:
-                logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的成员可以继承</red>")
-            continue
+        if not all_sects:
+            logger.info("当前没有任何宗门存在，跳过处理")
+            return
             
-        # 正常检测不活跃宗主
-        owner_id = sect_info['sect_owner']
-        if not owner_id:  # 没有宗主的情况
-            continue
+        for sect in all_sects:
+            sect_id = sect[0]  # 宗门ID
+            sect_name = sect[1]  # 宗门名称
+            member_count = sect[4]  # 成员数量
             
-        last_check_time = sql_message.get_last_check_info_time(owner_id)
-        if last_check_time is None or datetime.now() - last_check_time < timedelta(days=XiuConfig().auto_change_sect_owner_cd):
-            continue
-
-        user_info = sql_message.get_user_info_with_id(owner_id)
-        logger.opt(colors=True).info(f"<red>{user_info['user_name']}离线时间超过{XiuConfig().auto_change_sect_owner_cd}天，开始自动换宗主</red>")
-        
-        # 选择贡献最高的非宗主成员
-        new_owner_id = sql_message.get_highest_contrib_user_except_current(sect_id, owner_id)
-        if new_owner_id:
-            new_owner_info = sql_message.get_user_info_with_id(new_owner_id[0])
-            sql_message.update_usr_sect(owner_id, sect_id, 1)  # 原宗主降为长老
-            sql_message.update_usr_sect(new_owner_id[0], sect_id, 0)  # 新宗主
-            sql_message.update_sect_owner(new_owner_id[0], sect_id)
-            logger.opt(colors=True).info(f"<green>由{new_owner_info['user_name']}继承{sect_info['sect_name']}宗主之位</green>")
-        else:
-            logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}没有合适的长老可以继承</red>")
+            try:
+                logger.info(f"处理宗门：{sect_name}(ID:{sect_id})")
+                
+                # 获取宗门详细信息
+                sect_info = sql_message.get_sect_info(sect_id)
+                if not sect_info:
+                    logger.error(f"获取宗门详细信息失败，跳过处理")
+                    continue
+                    
+                # ===== 第一阶段：优先处理已封闭山门的宗门 =====
+                if sect_info['closed']:
+                    logger.info("处理封闭山门的宗门（继承流程）")
+                    
+                    # 获取所有成员
+                    members = sql_message.get_all_users_by_sect_id(sect_id)
+                    logger.info(f"宗门成员数量：{len(members)}人")
+                    
+                    if not members:
+                        logger.info("宗门没有成员，执行解散操作")
+                        sql_message.delete_sect(sect_id)
+                        logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                        continue
+                        
+                    # 按职位优先级和贡献度排序：长老(1) > 亲传(2) > 内门(3) > 外门(4)
+                    sorted_members = sorted(
+                        members,
+                        key=lambda x: (x['sect_position'], -x['sect_contribution'])
+                    )
+                    
+                    # 排除当前宗主(如果有)
+                    candidates = [m for m in sorted_members if m['sect_position'] != 0]
+                    logger.info(f"符合条件的候选人数量：{len(candidates)}")
+                    
+                    if not candidates:
+                        logger.info("没有符合条件的继承人，执行解散操作")
+                        sql_message.delete_sect(sect_id)
+                        logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                        continue
+                        
+                    # 选择贡献最高的候选人
+                    new_owner = candidates[0]
+                    logger.info(f"选定继承人：{new_owner['user_name']}")
+                    
+                    # 执行继承
+                    sql_message.update_usr_sect(new_owner['user_id'], sect_id, 0)  # 设为宗主
+                    sql_message.update_sect_owner(new_owner['user_id'], sect_id)
+                    sql_message.update_sect_closed_status(sect_id, 0)  # 解除封闭
+                    sql_message.update_sect_join_status(sect_id, 1)  # 开放加入
+                    
+                    logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
+                    continue
+                    
+                # ===== 第二阶段：处理未封闭的宗门（检测不活跃宗主） =====
+                logger.info("检测未封闭的宗门（不活跃宗主检查）")
+                
+                owner_id = sect_info['sect_owner']
+                if not owner_id:
+                    logger.info("该宗门没有宗主，跳过检测")
+                    continue
+                    
+                # 获取最后活跃时间
+                last_check_time = sql_message.get_last_check_info_time(owner_id)
+                if not last_check_time:
+                    logger.info(f"宗主 {owner_id} 没有最后活跃时间记录，跳过检测")
+                    continue
+                    
+                # 计算离线天数
+                offline_days = (datetime.now() - last_check_time).days
+                logger.info(f"宗主 {owner_id} 最后活跃：{last_check_time} | 已离线：{offline_days}天")
+                
+                if offline_days < 30:
+                    logger.info("宗主活跃时间在30天内，跳过处理")
+                    continue
+                    
+                # 获取宗主信息
+                user_info = sql_message.get_user_info_with_id(owner_id)
+                if not user_info:
+                    logger.error(f"获取宗主信息失败：{owner_id}")
+                    continue
+                    
+                logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
+                
+                # 执行降位处理
+                sql_message.update_sect_join_status(sect_id, 0)  # 关闭宗门加入
+                sql_message.update_sect_closed_status(sect_id, 1)  # 设置封闭状态
+                sql_message.update_usr_sect(owner_id, sect_id, 1)  # 降为长老
+                sql_message.update_sect_owner(None, sect_id)  # 清空宗主
+                
+                logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
+                
+            except Exception as e:
+                logger.error(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"定时任务执行出错：{str(e)}")
+    finally:
+        logger.info("✅ 宗门状态检测处理完成")
 
 @sect_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -1797,7 +1867,6 @@ async def sect_close_mountain_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         msg = "道友尚未加入宗门！"
         await handle_send(bot, event, msg)
         await sect_close_mountain.finish()
-    
     sect_position = user_info['sect_position']
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
@@ -1870,23 +1939,35 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await sect_inherit.finish()
     
-    sect_position = user_info['sect_position']
-    elder_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
-    elder_position = int(elder_idx[0]) if len(elder_idx) == 1 else 1
+    # 检查职位是否符合继承条件
+    if user_info['sect_position'] not in [1, 2, 3]:  # 1=长老, 2=亲传, 3=内门
+        msg = "只有长老、亲传弟子或内门弟子可以继承宗主之位！"
+        await handle_send(bot, event, msg)
+        await sect_inherit.finish()
     
-    if sect_position == elder_position:
-        # 1. 继承宗主
-        sql_message.update_usr_sect(user_info['user_id'], sect_id, 0)  # 0是宗主
-        sql_message.update_sect_owner(user_info['user_id'], sect_id)
-        # 2. 解除封闭
-        sql_message.update_sect_closed_status(sect_id, 0)
-        # 3. 开放加入
-        sql_message.update_sect_join_status(sect_id, 1)
-        
-        msg = f"恭喜{user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
-    else:
-        msg = "只有长老可以继承宗主之位！"
+    # 检查是否有更高优先级的继承人
+    members = sql_message.get_all_users_by_sect_id(sect_id)
+    higher_priority = [
+        m for m in members 
+        if m['sect_position'] < user_info['sect_position'] 
+        and m['sect_position'] != 0  # 排除当前宗主
+    ]
     
+    if higher_priority:
+        msg = "存在更高优先级的继承人，请等待他们继承！"
+        await handle_send(bot, event, msg)
+        await sect_inherit.finish()
+    
+    # 执行继承
+    # 1. 继承宗主
+    sql_message.update_usr_sect(user_info['user_id'], sect_id, 0)  # 0是宗主
+    sql_message.update_sect_owner(user_info['user_id'], sect_id)
+    # 2. 解除封闭
+    sql_message.update_sect_closed_status(sect_id, 0)
+    # 3. 开放加入
+    sql_message.update_sect_join_status(sect_id, 1)
+    
+    msg = f"恭喜{user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
     await handle_send(bot, event, msg)
     await sect_inherit.finish()
 

@@ -15,8 +15,9 @@ class BossLimit:
         """初始化数据文件"""
         if not os.path.exists(self.data_path):
             default_data = {
-                "boss_integral": {},  # 每日BOSS积分记录
-                "boss_stone": {}      # 每日BOSS灵石记录
+                "boss_integral": {},   # 每日BOSS积分记录
+                "boss_stone": {},      # 每日BOSS灵石记录
+                "weekly_purchases": {} # 每周商品购买记录
             }
             self._save_data(default_data)
 
@@ -58,13 +59,38 @@ class BossLimit:
         data["boss_stone"][user_id] = data["boss_stone"].get(user_id, 0) + amount
         self._save_data(data)
 
+    def get_weekly_purchases(self, user_id, item_id):
+        """获取用户本周已购买某商品的数量"""
+        data = self._load_data()
+        user_id = str(user_id)
+        item_id = str(item_id)
+        return data["weekly_purchases"].get(user_id, {}).get(item_id, 0)
+
+    def update_weekly_purchase(self, user_id, item_id, quantity):
+        """更新用户本周购买某商品的数量"""
+        data = self._load_data()
+        user_id = str(user_id)
+        item_id = str(item_id)
+        
+        if user_id not in data["weekly_purchases"]:
+            data["weekly_purchases"][user_id] = {}
+        
+        current = data["weekly_purchases"][user_id].get(item_id, 0)
+        data["weekly_purchases"][user_id][item_id] = current + quantity
+        self._save_data(data)
+
     def reset_limits(self):
-        """重置所有BOSS奖励限制"""
-        default_data = {
-            "boss_integral": {},
-            "boss_stone": {}
-        }
-        self._save_data(default_data)
+        """重置所有每日BOSS奖励限制"""
+        data = self._load_data()
+        data["boss_integral"] = {}
+        data["boss_stone"] = {}
+        self._save_data(data)
+
+    def reset_weekly_limits(self):
+        """重置所有每周商品购买限制"""
+        data = self._load_data()
+        data["weekly_purchases"] = {}
+        self._save_data(data)
 
 
 boss_limit = BossLimit()
