@@ -28,7 +28,6 @@ from .back_util import (
     get_item_msg, get_item_msg_rank, check_use_elixir,
     get_use_jlq_msg, get_no_use_equipment_sql
 )
-from .backconfig import get_auction_config, savef_auction, remove_auction_item
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, 
@@ -40,32 +39,47 @@ from ..xiuxian_utils.xiuxian2_handle import (
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
 )
 from ..xiuxian_config import XiuConfig, convert_rank
+from .auction_config import *
+from nonebot import require
 
+# 初始化组件
 items = Items()
-config = get_auction_config()
-groups = config['open']  # list，群交流会使用
-auction = {}
-AUCTIONSLEEPTIME = 120  # 拍卖初始等待时间（秒）
-cache_help = {}
-auction_offer_flag = False  # 拍卖标志
-AUCTIONOFFERSLEEPTIME = 30  # 每次拍卖增加拍卖剩余的时间（秒）
-auction_offer_time_count = 0  # 计算剩余时间
-auction_offer_all_count = 0  # 控制线程等待时间
-auction_time_config = config['拍卖会定时参数'] # 定时配置
-sql_message = XiuxianDateManage()  # sql类
-# 定时任务
-set_auction_by_scheduler = require("nonebot_plugin_apscheduler").scheduler
+sql_message = XiuxianDateManage()
+scheduler = require("nonebot_plugin_apscheduler").scheduler
 reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 
-# 仙肆系统配置
-XIANSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
-MIN_PRICE = 600000  # 最低上架价格60万灵石
-MAX_QUANTITY = 10   # 单次最大上架数量
+# === 通用配置 ===
+# 数据文件路径
+DATA_PATH = Path(__file__).parent
+XIANSHI_DATA_PATH = DATA_PATH / "xianshi_data"
+FANGSHI_DATA_PATH = DATA_PATH / "fangshi_data"
+GUISHI_DATA_PATH = DATA_PATH / "guishi_data"
 
-# 文件路径
-XIANSHI_DATA_PATH = Path(__file__).parent / "xianshi_data"
-XIANSHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
+# 创建目录
+for path in [XIANSHI_DATA_PATH, FANGSHI_DATA_PATH, GUISHI_DATA_PATH]:
+    path.mkdir(parents=True, exist_ok=True)
 
+# 通用物品类型
+ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
+BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
+
+# 拍卖命令
+auction_view = on_command("拍卖查看", aliases={"查看拍卖"}, priority=5, block=True)
+auction_bid = on_command("拍卖竞拍", aliases={"竞拍"}, priority=5, block=True)
+auction_add = on_command("拍卖上架", priority=5, block=True)
+auction_remove = on_command("拍卖下架", priority=5, block=True)
+auction_info = on_command("拍卖信息", priority=5, block=True)
+auction_start = on_fullmatch("开启拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_end = on_fullmatch("结束拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_lock = on_fullmatch("封闭拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_unlock = on_fullmatch("解封拍卖", priority=4, permission=SUPERUSER, block=True)
+
+# === 仙肆系统 ===
+# 配置
+XIANSHI_MIN_PRICE = 600000  # 最低上架价格60万灵石
+XIANSHI_MAX_QUANTITY = 10   # 单次最大上架数量
+
+# 仙肆命令
 xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
@@ -78,16 +92,12 @@ xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permissi
 xian_shop_remove_by_admin = on_command("系统仙肆下架", priority=5, permission=SUPERUSER, block=True)
 xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSER, block=True)
 
-# 坊市系统配置
-FANGSHI_TYPES = ["药材", "装备", "丹药", "技能"]  # 允许上架的类型
+# === 坊市系统 ===
+# 配置
 FANGSHI_MIN_PRICE = 600000  # 最低上架价格60万灵石
 FANGSHI_MAX_QUANTITY = 10   # 单次最大上架数量
 
-# 文件路径
-FANGSHI_DATA_PATH = Path(__file__).parent / "fangshi_data"
-FANGSHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-# 初始化命令
+# 坊市命令
 shop_view = on_command("坊市查看", priority=5, permission=GROUP, block=True)
 shop_added = on_command("坊市上架", priority=5, permission=GROUP, block=True)
 fangshi_auto_add = on_command("坊市自动上架", priority=5, permission=GROUP, block=True)
@@ -100,18 +110,12 @@ shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SU
 shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=SUPERUSER, block=True)
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
-# 鬼市系统配置
-GUISHI_TYPES = ["药材", "装备", "技能"]  # 允许交易的类型
+# === 鬼市系统 ===
+# 配置
 GUISHI_MIN_PRICE = 600000  # 最低交易价格60万灵石
 GUISHI_MAX_QUANTITY = 100   # 单次最大交易数量
-# 配置参数
-BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
 MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
 MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
-
-# 文件路径
-GUISHI_DATA_PATH = Path(__file__).parent / "guishi_data"
-GUISHI_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 # 鬼市命令
 guishi_deposit = on_command("鬼市存灵石", priority=5, block=True)
@@ -123,23 +127,17 @@ guishi_cancel_qiugou = on_command("鬼市取消求购", priority=5, block=True)
 guishi_baitan = on_command("鬼市摆摊", priority=5, block=True)
 guishi_shoutan = on_command("鬼市收摊", priority=5, block=True)
 
-# 其他原有命令保持不变
+# === 其他原有命令 ===
 chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=5, block=True)
 check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=6, block=True)
 goods_re_root = on_command("炼金", priority=6, block=True)
 fast_alchemy = on_command("快速炼金", aliases={"一键炼金"}, priority=6, block=True)
-auction_view = on_command("拍卖品查看", aliases={"查看拍卖品"}, priority=8, permission=GROUP, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
 yaocai_back = on_command('药材背包', priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
 use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
-auction_added = on_command("提交拍卖品", aliases={"拍卖品提交"}, priority=10, permission=GROUP, block=True)
-auction_withdraw = on_command("撤回拍卖品", aliases={"拍卖品撤回"}, priority=10, permission=GROUP, block=True)
-set_auction = on_command("拍卖会", priority=4, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), block=True)
-creat_auction = on_fullmatch("举行拍卖会", priority=5, permission=GROUP and SUPERUSER, block=True)
-offer_auction = on_command("拍卖", priority=5, permission=GROUP, block=True)
-back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市", "拍卖帮助"}, priority=8, block=True)
+back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
 # 重置丹药每日使用次数
@@ -147,190 +145,6 @@ xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 async def reset_day_num_scheduler_():
     sql_message.day_num_reset()
     logger.opt(colors=True).info(f"<green>每日丹药使用次数重置成功！</green>")
-
-
-# 定时任务生成拍卖会
-@set_auction_by_scheduler.scheduled_job("cron", hour=auction_time_config['hours'], minute=auction_time_config['minutes'])
-async def set_auction_by_scheduler_():
-    global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
-    if groups:
-        if auction:
-            logger.opt(colors=True).info(f"<green>已存在一场拍卖会，已清除！</green>")
-            auction = {}
-
-    auction_items = []
-    try:
-        # 用户拍卖品
-        user_auction_id_list = get_user_auction_id_list()
-        for auction_id in user_auction_id_list:
-            user_auction_info = get_user_auction_price_by_id(auction_id)
-            auction_items.append((auction_id, user_auction_info['quantity'], user_auction_info['start_price'], True))
-
-        # 系统拍卖品
-        auction_id_list = get_auction_id_list()
-        auction_count = random.randint(3, 8)  # 随机挑选系统拍卖品数量
-        auction_ids = random.sample(auction_id_list, auction_count)
-        for auction_id in auction_ids:
-            item_info = items.get_data_by_item_id(auction_id)
-            item_quantity = 1
-            if item_info['type'] in ['神物', '丹药']:
-                item_quantity = random.randint(1, 3) # 丹药的话随机挑1-3个
-            auction_items.append((auction_id, item_quantity, get_auction_price_by_id(auction_id)['start_price'], False))
-    except LookupError:
-        logger.opt(colors=True).info("<red>获取不到拍卖物品的信息，请检查配置文件！</red>")
-        return
-    
-    # 打乱拍卖品顺序
-    random.shuffle(auction_items)
-    
-    logger.opt(colors=True).info("<red>野生的大世界定时拍卖会出现了！！！，请管理员在这个时候不要重启机器人</red>")
-    msg = f"大世界定时拍卖会出现了！！！\n"
-    msg = f"请各位道友稍作准备，拍卖即将开始...\n"
-    msg += f"本场拍卖会共有{len(auction_items)}件物品，将依次拍卖，分别是：\n"
-    for idx, (auction_id, item_quantity, start_price, is_user_auction) in enumerate(auction_items):
-        item_name = items.get_data_by_item_id(auction_id)['name']
-        if is_user_auction:
-            owner_info = sql_message.get_user_info_with_id(get_user_auction_price_by_id(auction_id)['user_id'])
-            owner_name = owner_info['user_name']
-            msg += f"{idx + 1}号：{item_name}x{item_quantity}（由{owner_name}道友提供）\n"
-        else:
-            msg += f"{idx + 1}号：{item_name}x{item_quantity}（由拍卖场提供）\n"
-
-    for gid in groups:
-        bot = await assign_bot_group(group_id=gid)
-        try:
-            await handle_send(bot, event, msg)
-        except ActionFailed:
-            continue
-    
-    auction_results = []  # 拍卖结果
-    for i, (auction_id, item_quantity, start_price, is_user_auction) in enumerate(auction_items):
-        auction_info = items.get_data_by_item_id(auction_id)
-
-        auction = {
-            'id': auction_id,
-            'user_id': 0,
-            'now_price': start_price,
-            'name': auction_info['name'],
-            'type': auction_info['type'],
-            'quantity': item_quantity,
-            'start_time': datetime.now(),
-            'group_id': 0
-        }
-
-        
-        if i + 1 == len(auction_items):
-            msg = f"最后一件拍卖品为：\n{get_auction_msg(auction_id)}\n"
-        else:
-            msg = f"第{i + 1}件拍卖品为：\n{get_auction_msg(auction_id)}\n"
-        msg += f"\n底价为{start_price}，加价不少于{int(start_price * 0.05)}"
-        msg += f"\n竞拍时间为:{AUCTIONSLEEPTIME}秒，请诸位道友发送 拍卖+金额 来进行拍卖吧！"
-
-        if auction['quantity'] > 1:
-            msg += f"\n注意：拍卖品共{auction['quantity']}件，最终价为{auction['quantity']}x成交价。\n"
-
-        if i + 1 < len(auction_items):
-            next_item_name = items.get_data_by_item_id(auction_items[i + 1][0])['name']
-            msg += f"\n下一件拍卖品为：{next_item_name}，请心仪的道友提前开始准备吧！"
-
-        for gid in groups:
-            bot = await assign_bot_group(group_id=gid)
-            try:
-                await handle_send(bot, event, msg)
-            except ActionFailed:
-                continue
-
-     
-        remaining_time = AUCTIONSLEEPTIME # 第一轮定时
-        while remaining_time > 0:
-            await asyncio.sleep(10)
-            remaining_time -= 10
-
-
-        while auction_offer_flag:  # 有人拍卖
-            if auction_offer_all_count == 0:
-                auction_offer_flag = False
-                break
-
-            logger.opt(colors=True).info(f"<green>有人拍卖，本次等待时间：{auction_offer_all_count * AUCTIONOFFERSLEEPTIME}秒</green>")
-            first_time = auction_offer_all_count * AUCTIONOFFERSLEEPTIME
-            auction_offer_all_count = 0
-            auction_offer_flag = False
-            await asyncio.sleep(first_time)
-            logger.opt(colors=True).info(f"<green>总计等待时间{auction_offer_time_count * AUCTIONOFFERSLEEPTIME}秒，当前拍卖标志：{auction_offer_flag}，本轮等待时间：{first_time}</green>")
-
-        logger.opt(colors=True).info(f"<green>等待时间结束，总计等待时间{auction_offer_time_count * AUCTIONOFFERSLEEPTIME}秒</green>")
-        if auction['user_id'] == 0:
-            msg = f"很可惜，{auction['name']}流拍了\n"
-            if i + 1 == len(auction_items):
-                msg += f"本场拍卖会到此结束，开始整理拍卖会结果，感谢各位道友参与！"
-                
-            for gid in groups:
-                bot = await assign_bot_group(group_id=gid)
-                try:
-                    await handle_send(bot, event, msg)
-                except ActionFailed:  # 发送群消息失败
-                    continue
-            auction_results.append((auction_id, None, auction['group_id'], auction_info['type'], auction['now_price'], auction['quantity']))
-            auction = {}
-            continue
-        
-        user_info = sql_message.get_user_info_with_id(auction['user_id'])
-        msg = f"(拍卖锤落下)！！！\n"
-        msg += f"恭喜来自群{auction['group_id']}的{user_info['user_name']}道友成功拍下：{auction['type']}-{auction['name']}x{auction['quantity']}，将在拍卖会结算后送到您手中。\n"
-        if i + 1 == len(auction_items):
-            msg += f"本场拍卖会到此结束，开始整理拍卖会结果，感谢各位道友参与！"
-
-        auction_results.append((auction_id, user_info['user_id'], auction['group_id'], 
-                                auction_info['type'], auction['now_price'], auction['quantity']))
-        auction = {}
-        auction_offer_time_count = 0
-        for gid in groups:
-
-            bot = await assign_bot_group(group_id=gid)
-            try:
-                await handle_send(bot, event, msg)
-            except ActionFailed:
-                continue
-
-        await asyncio.sleep(random.randint(5, 30))
-
-    # 拍卖会结算
-    logger.opt(colors=True).info(f"<green>野生的大世界定时拍卖会结束了！！！</green>")
-    end_msg = f"本场拍卖会结束！感谢各位道友的参与。\n拍卖结果整理如下：\n"
-    for idx, (auction_id, user_id, group_id, item_type, final_price, quantity) in enumerate(auction_results):
-        item_name = items.get_data_by_item_id(auction_id)['name']
-        final_user_info = sql_message.get_user_info_with_id(user_id)
-        if user_id:
-            if final_user_info['stone'] < (int(final_price) * quantity):
-                end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity} - 道友{final_user_info['user_name']}的灵石不足，流拍了\n"
-            else:
-                sql_message.update_ls(user_id, int(final_price) * quantity, 2)
-                sql_message.send_back(user_id, auction_id, item_name, item_type, quantity)
-                end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity}由群{group_id}的{final_user_info['user_name']}道友成功拍下\n"
-
-            user_auction_info = get_user_auction_price_by_id(auction_id)
-            if user_auction_info:
-                seller_id = user_auction_info['user_id']
-                auction_earnings = int(final_price) * quantity * 0.7 # 收个手续费
-                sql_message.update_ls(seller_id, auction_earnings, 1)
-
-            remove_auction_item(auction_id)
-
-            auction = {}
-            auction_offer_time_count = 0
-        else:
-            end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity} - 流拍了\n"
-
-    for gid in groups:
-        bot = await assign_bot_group(group_id=gid)
-        try:
-            await handle_send(bot, event, end_msg)
-        except ActionFailed:  # 发送群消息失败
-            continue
-
-    return
-
 
 @check_item_effect.handle(parameterless=[Cooldown(at_sender=False)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -444,13 +258,28 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 👻 鬼市收摊 摊位ID - 收摊并结算
 """.strip(),
         "拍卖": f"""
-【拍卖帮助】
-🎫 查看拍卖品 - 查看待拍卖物品
-🎫 提交拍卖品 物品 底价 [数量] - 提交拍卖
-🎫 拍卖+金额 - 参与竞拍
-🎫 撤回拍卖品 编号 - 撤回自己的拍卖品
-🎫 举行拍卖会 - (管理员)开启拍卖
-⏰ 每日{auction_time_config['hours']}点自动举行拍卖会
+【拍卖帮助】🎫
+🔹 拍卖查看 [ID] - 查看拍卖品
+  ▶ 无参数：查看当前拍卖列表
+  ▶ 加ID：查看指定拍卖品详情
+
+🔹 拍卖竞拍 ID 价格 - 参与竞拍
+  ▶ 每次加价不得少于100万灵石
+  ▶ 示例：拍卖竞拍 123456 5000000
+
+🔹 拍卖上架 物品名 底价 - 提交拍卖品
+  ▶ 最低底价：100万灵石
+  ▶ 每人最多上架3件
+
+🔹 拍卖下架 物品名 - 撤回拍卖品
+  ▶ 仅在非拍卖期间可操作
+
+🔹 拍卖信息 - 查看拍卖状态
+  ▶ 包含开启时间、当前状态等信息
+
+⏰ 自动拍卖时间：每日17点
+⏳ 持续时间：2小时
+💼 手续费：20%
 """.strip(),
         "交易": """
 【交易系统总览】
@@ -458,7 +287,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔹 背包帮助 - 背包相关功能
 🔹 仙肆帮助 - 全服交易市场
 🔹 坊市帮助 - 群内交易市场
-🔹 拍卖帮助 - 拍卖会功能
+🔹 拍卖帮助 - 拍卖行功能
 
 【系统规则】
 💰 手续费规则：
@@ -3854,8 +3683,6 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await guishi_shoutan.finish()
 
-guishi_take_item = on_command("鬼市取物品", priority=5, block=True)
-
 @guishi_take_item.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """取出暂存在鬼市的物品"""
@@ -3926,54 +3753,800 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = f"已从鬼市取出 {arg} x{matched_items[0][1]['quantity']}"
     await handle_send(bot, event, msg)
     await guishi_take_item.finish()
+
+import json
+import random
+import time
+from pathlib import Path
+from datetime import datetime, timedelta
+from .auction_config import (
+    AUCTION_DATA_PATH, 
+    get_system_items,
+    get_auction_rules,
+    get_auction_schedule
+)
+
+# 数据文件路径
+PLAYER_AUCTIONS_FILE = AUCTION_DATA_PATH / "player_auctions.json"
+CURRENT_AUCTIONS_FILE = AUCTION_DATA_PATH / "current_auctions.json"
+DISPLAY_AUCTIONS_FILE = AUCTION_DATA_PATH / "display_auctions.json"
+AUCTION_HISTORY_FILE = AUCTION_DATA_PATH / "auction_history.json"
+
+def generate_auction_id(existing_ids=None):
+    """生成6-10位不重复纯数字ID"""
+    existing_ids = existing_ids or set()
+    while True:
+        # 生成6-10位随机数字
+        auction_id = str(random.randint(100000, 9999999999))
+        auction_id = auction_id[:random.randint(6, 10)]
+        if auction_id not in existing_ids:
+            return auction_id
+
+def get_player_auctions():
+    """获取玩家上架物品"""
+    try:
+        if PLAYER_AUCTIONS_FILE.exists():
+            with open(PLAYER_AUCTIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"读取玩家上架数据失败: {e}")
+    return {}
+
+def save_player_auctions(data):
+    """保存玩家上架物品"""
+    try:
+        with open(PLAYER_AUCTIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存玩家上架数据失败: {e}")
+        return False
+
+def get_current_auctions():
+    """获取当前拍卖品竞拍列表"""
+    try:
+        if CURRENT_AUCTIONS_FILE.exists():
+            with open(CURRENT_AUCTIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"读取当前拍卖数据失败: {e}")
+    return {}
+
+def save_current_auctions(data):
+    """保存当前拍卖品竞拍列表"""
+    try:
+        with open(CURRENT_AUCTIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存当前拍卖数据失败: {e}")
+        return False
+
+def get_display_auctions():
+    """获取展示拍卖品"""
+    try:
+        if DISPLAY_AUCTIONS_FILE.exists():
+            with open(DISPLAY_AUCTIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"读取展示拍卖数据失败: {e}")
+    return {}
+
+def save_display_auctions(data):
+    """保存展示拍卖品"""
+    try:
+        with open(DISPLAY_AUCTIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存展示拍卖数据失败: {e}")
+        return False
+
+def get_auction_history():
+    """获取拍卖历史"""
+    try:
+        if AUCTION_HISTORY_FILE.exists():
+            with open(AUCTION_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"读取拍卖历史失败: {e}")
+    return []
+
+def save_auction_history(data):
+    """保存拍卖历史"""
+    try:
+        with open(AUCTION_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存拍卖历史失败: {e}")
+        return False
+
+def get_auction_status():
+    """获取拍卖状态"""
+    current_auctions = get_current_auctions()
+    if not current_auctions:
+        return {
+            "active": False,
+            "start_time": None,
+            "end_time": None
+        }
     
-@auction_withdraw.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GROUP)])
-async def auction_withdraw_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """用户撤回拍卖品"""
+    schedule = get_auction_schedule()
+    start_time = datetime.fromtimestamp(current_auctions["start_time"])
+    duration = timedelta(hours=schedule["duration_hours"])
+    end_time = start_time + duration
+    
+    return {
+        "active": True,
+        "start_time": start_time,
+        "end_time": end_time
+    }
+
+def start_auction():
+    """开启拍卖"""
+    player_auctions = get_player_auctions()
+    system_items = get_system_items()
+    
+    # 生成系统拍卖品 (随机3个)
+    selected_system_items = random.sample(list(system_items.items()), min(3, len(system_items)))
+    
+    # 生成拍卖品列表
+    current_auctions = {
+        "start_time": time.time(),
+        "items": {}
+    }
+    
+    # 添加系统拍卖品
+    for item_name, item in selected_system_items:
+        auction_id = generate_auction_id(set(current_auctions["items"].keys()))
+        current_auctions["items"][auction_id] = {
+            "id": auction_id,
+            "item_id": item["id"],
+            "name": item_name,
+            "start_price": item["start_price"],
+            "current_price": item["start_price"],
+            "seller_id": 0,  # 系统
+            "seller_name": "系统",
+            "bids": {},
+            "is_system": True,
+            "last_bid_time": None
+        }
+    
+    # 添加玩家拍卖品
+    for user_id, items_list in player_auctions.items():
+        for item in items_list:
+            auction_id = generate_auction_id(set(current_auctions["items"].keys()))
+            current_auctions["items"][auction_id] = {
+                "id": auction_id,
+                "item_id": item["item_id"],
+                "name": item["name"],
+                "start_price": item["price"],
+                "current_price": item["price"],
+                "seller_id": user_id,
+                "seller_name": item.get("user_name", ""),
+                "bids": {},
+                "is_system": False,
+                "last_bid_time": None
+            }
+    
+    # 保存当前拍卖
+    save_current_auctions(current_auctions)
+    
+    # 生成初始展示列表
+    refresh_display_auctions()
+    
+    # 清空玩家上架数据
+    save_player_auctions({})
+    
+    return True
+
+def end_auction():
+    """结束拍卖，处理所有拍卖品结算"""
+    current_auctions = get_current_auctions()
+    if not current_auctions or "items" not in current_auctions:
+        return []
+    
+    auction_history = get_auction_history()
+    results = []
+    rules = get_auction_rules()
+    
+    for auction_id, item in current_auctions["items"].items():
+        # 准备拍卖结果记录
+        result = {
+            "auction_id": auction_id,
+            "item_id": item["item_id"],
+            "item_name": item["name"],
+            "start_price": item["start_price"],
+            "seller_id": item["seller_id"],
+            "seller_name": item["seller_name"],
+            "start_time": current_auctions["start_time"],
+            "end_time": time.time(),
+            "bids": item["bids"]
+        }
+        
+        if item["bids"]:
+            # 有出价，成交
+            winner_id, final_price = max(item["bids"].items(), key=lambda x: x[1])
+            winner_info = sql_message.get_user_info_with_id(winner_id)
+            
+            # 给买家物品
+            item_info = items.get_data_by_item_id(item["item_id"])
+            if item_info:
+                sql_message.send_back(
+                    winner_id,
+                    item["item_id"],
+                    item["name"],
+                    item_info["type"],
+                    1
+                )
+            
+            # 给卖家灵石（系统物品不处理）
+            if not item["is_system"]:
+                earnings = int(final_price * (1 - rules["fee_rate"]))  # 扣除手续费
+                sql_message.update_ls(item["seller_id"], earnings, 1)
+            
+            result.update({
+                "winner_id": winner_id,
+                "winner_name": winner_info["user_name"] if winner_info else str(winner_id),
+                "final_price": final_price,
+                "status": "成交",
+                "fee": final_price * rules["fee_rate"],
+                "seller_earnings": earnings if not item["is_system"] else 0
+            })
+        else:
+            # 无出价，流拍（系统物品不处理，玩家物品不退）
+            result.update({
+                "winner_id": None,
+                "winner_name": None,
+                "final_price": None,
+                "status": "流拍",
+                "fee": 0,
+                "seller_earnings": 0
+            })
+        
+        results.append(result)
+        auction_history.append(result)
+    
+    # 保存历史记录
+    save_auction_history(auction_history)
+    
+    # 清空当前拍卖
+    save_current_auctions({})
+    save_display_auctions({})
+    
+    return results
+
+def refresh_display_auctions():
+    """刷新展示拍卖品（随机10个）"""
+    current_auctions = get_current_auctions()
+    if not current_auctions or "items" not in current_auctions:
+        return False
+    
+    all_items = list(current_auctions["items"].values())
+    if len(all_items) <= 10:
+        display_items = all_items
+    else:
+        display_items = random.sample(all_items, 10)
+    
+    # 按当前价格排序
+    display_items.sort(key=lambda x: -x["current_price"])
+    
+    save_display_auctions({
+        "items": {item["id"]: item for item in display_items},
+        "last_refresh": time.time()
+    })
+    
+    return True
+
+def add_player_auction(user_id, user_name, item_id, item_name, price):
+    """玩家上架拍卖品"""
+    player_auctions = get_player_auctions()
+    
+    # 检查是否已经上架过相同物品
+    if str(user_id) in player_auctions:
+        for item in player_auctions[str(user_id)]:
+            if item["item_id"] == item_id:
+                return False, "不能重复上架相同物品！"
+    
+    # 检查上架数量限制
+    rules = get_auction_rules()
+    if str(user_id) not in player_auctions:
+        player_auctions[str(user_id)] = []
+    
+    if len(player_auctions[str(user_id)]) >= rules["max_user_items"]:
+        return False, f"每人最多上架{rules['max_user_items']}件物品！"
+    
+    # 检查最低价格
+    if price < rules["min_price"]:
+        return False, f"最低上架价格为{rules['min_price']}灵石！"
+    
+    # 添加上架记录
+    player_auctions[str(user_id)].append({
+        "item_id": item_id,
+        "name": item_name,
+        "price": price,
+        "user_name": user_name
+    })
+    
+    save_player_auctions(player_auctions)
+    return True, "上架成功！"
+
+def remove_player_auction(user_id, item_name):
+    """玩家下架拍卖品"""
+    player_auctions = get_player_auctions()
+    if str(user_id) not in player_auctions:
+        return False, "你没有上架任何物品！"
+    
+    # 查找要下架的物品
+    item_to_remove = None
+    for item in player_auctions[str(user_id)]:
+        if item["name"] == item_name:
+            item_to_remove = item
+            break
+    
+    if not item_to_remove:
+        return False, f"没有找到名为{item_name}的上架物品！"
+    
+    # 移除物品
+    player_auctions[str(user_id)].remove(item_to_remove)
+    if not player_auctions[str(user_id)]:
+        del player_auctions[str(user_id)]
+    
+    save_player_auctions(player_auctions)
+    return True, "下架成功！"
+
+def place_bid(user_id, user_name, auction_id, bid_price):
+    """参与竞拍（每次加价不得少于100万灵石）"""
+    MIN_INCREMENT = 1000000  # 最低加价100万
+    
+    current_auctions = get_current_auctions()
+    if not current_auctions or "items" not in current_auctions:
+        return False, "拍卖当前未开启！"
+    
+    if auction_id not in current_auctions["items"]:
+        return False, "无效的拍卖品ID！"
+    
+    item = current_auctions["items"][auction_id]
+    
+    # 检查最低加价
+    required_min_bid = item["current_price"] + MIN_INCREMENT
+    if bid_price < required_min_bid:
+        return False, (
+            f"每次加价不得少于100万灵石！\n"
+            f"当前价: {number_to(item['current_price'])}\n"
+            f"最低出价: {number_to(required_min_bid)}"
+        )
+    
+    # 检查是否是自己的拍卖品
+    #if str(user_id) == str(item["seller_id"]):
+    #    return False, "不能竞拍自己上架的物品！"
+    
+    # 获取用户当前灵石
+    user_info = sql_message.get_user_info_with_id(user_id)
+    if not user_info:
+        return False, "用户信息获取失败！"
+    
+    if user_info['stone'] < bid_price:
+        return False, f"灵石不足！当前拥有 {number_to(user_info['stone'])} 灵石"
+    
+    # 处理上一个最高出价者
+    prev_winner_id = None
+    prev_price = 0
+    if item["bids"]:
+        prev_winner_id, prev_price = max(item["bids"].items(), key=lambda x: x[1])
+        
+        # 退还上一个出价者的灵石
+        if prev_winner_id:
+            sql_message.update_ls(prev_winner_id, prev_price, 1)  # 1表示增加
+    
+    # 扣除当前出价者的灵石
+    sql_message.update_ls(user_id, bid_price, 2)  # 2表示扣除
+    
+    # 添加出价记录
+    item["bids"][str(user_id)] = bid_price
+    item["current_price"] = bid_price
+    item["last_bid_time"] = time.time()
+    
+    # 保存更新
+    current_auctions["items"][auction_id] = item
+    save_current_auctions(current_auctions)
+    
+    # 刷新展示列表
+    refresh_display_auctions()
+    
+    # 构造返回消息
+    msg = [
+        f"☆------竞拍成功------☆",
+        f"物品: {item['name']}",
+        f"出价: {number_to(bid_price)}灵石",
+        f"当前最高价: {number_to(bid_price)}灵石"
+    ]
+    
+    if prev_winner_id:
+        prev_winner = sql_message.get_user_info_with_id(prev_winner_id)
+        msg.append(f"已退还 {prev_winner['user_name']} 的 {number_to(prev_price)} 灵石")
+    
+    msg.append(f"\n下次最低加价: {number_to(bid_price + MIN_INCREMENT)}灵石")
+    
+    return True, "\n".join(msg)
+
+@auction_view.handle()
+async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看拍卖"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await auction_withdraw.finish()
-
-    group_id = "000000"
-    if group_id not in groups:
-        msg = '尚未开启拍卖会功能，请联系管理员开启！'
-        await handle_send(bot, event, msg)
-        await auction_withdraw.finish()
-
-    config = get_auction_config()
-    user_auctions = config.get('user_auctions', [])
-
-    if not user_auctions:
-        msg = f"拍卖会目前没有道友提交的物品！"
-        await handle_send(bot, event, msg)
-        await auction_withdraw.finish()
-
     arg = args.extract_plain_text().strip()
-    auction_index = int(arg) - 1
-    if auction_index < 0 or auction_index >= len(user_auctions):
-        msg = f"请输入正确的编号"
+    
+    # 查看指定ID
+    if arg and arg.isdigit():
+        auction_id = arg
+        current_auctions = get_current_auctions()
+        auction_history = get_auction_history()
+        
+        # 先查当前拍卖
+        if current_auctions and "items" in current_auctions and auction_id in current_auctions["items"]:
+            item = current_auctions["items"][auction_id]
+            
+            # 构造详情消息
+            msg = [
+                f"☆------拍卖品详情------☆",
+                f"编号: {item['id']}",
+                f"物品: {item['name']}",
+                f"当前价: {number_to(item['current_price'])}灵石",
+                f"起拍价: {number_to(item['start_price'])}灵石"
+            ]
+            
+            if item["bids"]:
+                msg.append("\n竞拍记录:")
+                for i, (bidder, price) in enumerate(sorted(item["bids"].items(), key=lambda x: -x[1])[:3]):
+                    user = sql_message.get_user_info_with_id(bidder)
+                    msg.append(f"{i+1}. {user['user_name'] if user else bidder}: {number_to(price)}灵石")
+            
+            await handle_send(bot, event, "\n".join(msg))
+            return
+        
+        # 查历史记录
+        for record in reversed(auction_history):
+            if record["auction_id"] == auction_id:
+                msg = [
+                    f"☆------拍卖历史详情------☆",
+                    f"编号: {record['auction_id']}",
+                    f"物品: {record['item_name']}",
+                    f"状态: {record['status']}"
+                ]
+                
+                if record["status"] == "成交":
+                    winner = sql_message.get_user_info_with_id(record["winner_id"])
+                    msg.extend([
+                        f"成交价: {number_to(record['final_price'])}灵石",
+                        f"买家: {winner['user_name'] if winner else record['winner_id']}",
+                        f"卖家: {record['seller_name']}"
+                    ])
+                else:
+                    msg.append(f"卖家: {record['seller_name']}")
+                
+                start_time = datetime.fromtimestamp(record["start_time"]).strftime("%Y-%m-%d %H:%M")
+                end_time = datetime.fromtimestamp(record["end_time"]).strftime("%Y-%m-%d %H:%M")
+                msg.append(f"时间: {start_time} 至 {end_time}")
+                
+                await handle_send(bot, event, "\n".join(msg))
+                return
+        
+        await handle_send(bot, event, "未找到该拍卖品！")
+        return
+    
+    # 查看展示列表
+    display_auctions = get_display_auctions()
+    auction_status = get_auction_status()
+    
+    if not display_auctions or "items" not in display_auctions:
+        msg = "当前没有拍卖品展示！"
+        if auction_status["active"]:
+            msg += "\n拍卖正在进行中，请稍后再试或查看指定ID"
         await handle_send(bot, event, msg)
-        await auction_withdraw.finish()
+        return
+    
+    items_list = list(display_auctions["items"].values())
+    items_list.sort(key=lambda x: -x["current_price"])
+    
+    msg = ["☆------拍卖物品列表------☆"]
+    for item in items_list[:10]:  # 最多显示10个
+        msg.append(
+            f"\n编号: {item['id']}\n"
+            f"物品: {item['name']}\n"
+            f"当前价: {number_to(item['current_price'])}灵石"
+        )
+    
+    if auction_status["active"]:
+        end_time = auction_status["end_time"].strftime("%H:%M")
+        msg.append(f"\n拍卖进行中，预计{end_time}结束")
+    else:
+        msg.append("\n拍卖当前未开启")
+    
+    msg.append("\n输入【拍卖查看 ID】查看详情")
+    await handle_send(bot, event, "\n".join(msg))
 
-    auction = user_auctions[auction_index]
-    goods_name, details = list(auction.items())[0]
-    if details['user_id'] != user_info['user_id']:
-        msg = f"这不是你的拍卖品！"
+@auction_bid.handle()
+async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """参与拍卖竞拍"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
         await handle_send(bot, event, msg)
-        await auction_withdraw.finish()
+        return
+    
+    args = args.extract_plain_text().split()
+    if len(args) < 2:
+        msg = "格式错误！正确格式：拍卖竞拍 [拍卖品ID] [出价]"
+        await handle_send(bot, event, msg)
+        return
+    
+    auction_id, price = args[0], args[1]
+    try:
+        price = int(price)
+    except ValueError:
+        msg = "出价必须是整数！"
+        await handle_send(bot, event, msg)
+        return
+    
+    success, result = place_bid(
+        user_info['user_id'],
+        user_info['user_name'],
+        auction_id,
+        price
+    )
+    await handle_send(bot, event, result)
 
-    sql_message.send_back(details['user_id'], details['id'], goods_name, details['goods_type'], details['quantity'])
-    user_auctions.pop(auction_index)
-    config['user_auctions'] = user_auctions
-    savef_auction(config)
+@auction_add.handle()
+async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """上架物品到拍卖"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查拍卖状态
+    auction_status = get_auction_status()
+    if auction_status["active"]:
+        await handle_send(bot, event, "拍卖进行中时不能上架物品！")
+        return
+    
+    args = args.extract_plain_text().split()
+    if len(args) < 2:
+        rules = get_auction_rules()
+        msg = f"格式错误！正确格式：拍卖上架 [物品名] [起拍价]\n最低起拍价：{rules['min_price']}灵石"
+        await handle_send(bot, event, msg)
+        return
+    
+    item_name, price = args[0], args[1]
+    try:
+        price = int(price)
+    except ValueError:
+        msg = "价格必须是整数！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查背包物品
+    back_msg = sql_message.get_back_msg(user_info['user_id'])
+    item_data = None
+    for item in back_msg:
+        if item['goods_name'] == item_name:
+            if item['bind_num'] >= item['goods_num']:
+                msg = "绑定物品不能上架！"
+                await handle_send(bot, event, msg)
+                return
+            item_data = item
+            break
+    
+    if not item_data:
+        msg = f"背包中没有 {item_name} 或物品已绑定！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 从背包移除
+    sql_message.update_back_j(user_info['user_id'], item_data['goods_id'], num=1)
+    
+    # 添加上架记录
+    success, result = add_player_auction(
+        user_info['user_id'],
+        user_info['user_name'],
+        item_data['goods_id'],
+        item_name,
+        price
+    )
+    await handle_send(bot, event, result)
 
-    msg = f"成功撤回拍卖品：{goods_name}x{details['quantity']}！"
+@auction_remove.handle()
+async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """下架拍卖品（仅在非拍卖期间有效）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查拍卖状态
+    auction_status = get_auction_status()
+    if auction_status["active"]:
+        await handle_send(bot, event, "拍卖进行中时不能下架物品！")
+        return
+    
+    item_name = args.extract_plain_text().strip()
+    if not item_name:
+        msg = "请输入要下架的物品名！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 下架物品
+    success, result = remove_player_auction(user_info['user_id'], item_name)
+    if success:
+        # 退还物品到背包
+        item_info = None
+        for item_id, item in items.items.items():
+            if item["name"] == item_name:
+                item_info = {
+                    "id": item_id,
+                    "name": item_name,
+                    "type": item["type"]
+                }
+                break
+        
+        if item_info:
+            sql_message.send_back(
+                user_info['user_id'],
+                item_info["id"],
+                item_info["name"],
+                item_info["type"],
+                1
+            )
+    
+    await handle_send(bot, event, result)
+
+@auction_info.handle()
+async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看拍卖信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    schedule = get_auction_schedule()
+    rules = get_auction_rules()
+    auction_status = get_auction_status()
+    player_auctions = get_player_auctions()
+    auction_history = get_auction_history()
+    
+    # 计算玩家上架物品总数
+    total_player_items = sum(len(items) for items in player_auctions.values())
+    
+    msg = [
+        "☆------拍卖信息------☆",
+        f"状态: {'运行中' if auction_status['active'] else '未运行'}",
+        f"自动拍卖时间: 每天{schedule['start_hour']}点{schedule['start_minute']}分",
+        f"持续时间: {schedule['duration_hours']}小时",
+        f"自动拍卖: {'开启' if schedule['enabled'] else '关闭'}",
+        f"每人最大上架数: {rules['max_user_items']}",
+        f"最低起拍价: {number_to(rules['min_price'])}灵石",
+        f"手续费率: {int(rules['fee_rate'] * 100)}%",
+        f"当前拍卖品数量: {len(auction_status.get('items', [])) if auction_status['active'] else 0}",
+        f"等待上架的玩家物品: {total_player_items}",
+        f"历史拍卖记录: {len(auction_history)}次"
+    ]
+    
+    if auction_status["active"]:
+        start_time = auction_status["start_time"].strftime("%H:%M")
+        end_time = auction_status["end_time"].strftime("%H:%M")
+        msg.append(f"\n本次拍卖时间: {start_time} 至 {end_time}")
+    
+    await handle_send(bot, event, "\n".join(msg))
+
+@auction_start.handle()
+async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """管理员开启拍卖"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    auction_status = get_auction_status()
+    if auction_status["active"]:
+        await handle_send(bot, event, "拍卖已经在运行中！")
+        return
+    
+    # 解封拍卖
+    update_schedule({"enabled": True})
+    
+    # 开启拍卖
+    success = start_auction()
+    if not success:
+        await handle_send(bot, event, "开启拍卖失败！")
+        return
+    
+    schedule = get_auction_schedule()
+    end_time = (datetime.now() + timedelta(hours=schedule["duration_hours"])).strftime("%H:%M")
+    msg = f"拍卖已开启！本次拍卖将持续{schedule['duration_hours']}小时，预计{end_time}结束。"
     await handle_send(bot, event, msg)
 
-    await auction_withdraw.finish()
+@auction_end.handle()
+async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """管理员结束拍卖"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    auction_status = get_auction_status()
+    if not auction_status["active"]:
+        await handle_send(bot, event, "拍卖当前未开启！")
+        return
+    
+    results = end_auction()
+    if not results:
+        await handle_send(bot, event, "结束拍卖失败！")
+        return
+    
+    # 构造结果消息
+    msg = ["拍卖已结束！成交结果："]
+    for result in results[:5]:  # 最多显示5条
+        if result["status"] == "成交":
+            winner = sql_message.get_user_info_with_id(result["winner_id"])
+            msg.append(
+                f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 手续费: {number_to(result['fee'])}灵石 "
+                f"买家: {winner['user_name'] if winner else result['winner_id']}"
+            )
+        else:
+            msg.append(f"{result['item_name']} 流拍")
+    
+    await handle_send(bot, event, "\n".join(msg))
+
+@auction_lock.handle()
+async def auction_lock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """封闭拍卖（取消自动开启）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    update_schedule({"enabled": False})
+    msg = "拍卖已封闭，将不再自动开启！"
+    await handle_send(bot, event, msg)
+
+@auction_unlock.handle()
+async def auction_unlock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """解封拍卖（恢复自动开启）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    update_schedule({"enabled": True})
+    msg = "拍卖已解封，将按照计划自动开启！"
+    await handle_send(bot, event, msg)
+
+@scheduler.scheduled_job("cron", hour=get_auction_schedule()["start_hour"], 
+                        minute=get_auction_schedule()["start_minute"])
+async def auto_start_auction():
+    """根据配置时间自动开启拍卖"""
+    schedule = get_auction_schedule()
+    if schedule["enabled"]:
+        success = start_auction()
+        if success:
+            logger.info("拍卖已自动开启")
+        else:
+            logger.error("拍卖自动开启失败")
+
+@scheduler.scheduled_job("interval", minutes=10)
+async def check_auction_status():
+    """每10分钟检查拍卖状态"""
+    auction_status = get_auction_status()
+    if not auction_status["active"]:
+        return
+    
+    # 刷新展示列表
+    refresh_display_auctions()
+    
+    # 检查是否需要结束
+    if datetime.now() >= auction_status["end_time"]:
+        results = end_auction()
+        if results:
+            logger.info(f"拍卖已自动结束，共处理{len(results)}件拍卖品")
+        else:
+            logger.error("拍卖自动结束失败")
+
+@scheduler.scheduled_job("interval", minutes=1)
+async def check_auction_end():
+    """每分钟检查是否需要结束（更精确的检查）"""
+    auction_status = get_auction_status()
+    if auction_status["active"] and datetime.now() >= auction_status["end_time"]:
+        results = end_auction()
+        if results:
+            logger.info(f"拍卖已自动结束，共处理{len(results)}件拍卖品")
 
 @goods_re_root.handle(parameterless=[Cooldown(at_sender=False)])
 async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -4301,7 +4874,6 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await no_use_zb.finish()
 
-
 @use.handle(parameterless=[Cooldown(at_sender=False)])
 async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用物品"""
@@ -4484,441 +5056,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     # 发送结果消息
     await handle_send(bot, event, msg)
     await use.finish()
-
-@auction_view.handle(parameterless=[Cooldown(at_sender=False, isolate_level=CooldownIsolateLevel.GROUP)])
-async def auction_view_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """查看拍卖会物品"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    group_id = "000000"
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await auction_view.finish()
-    
-    if group_id not in groups:
-        msg = '尚未开启拍卖会功能，请联系管理员开启！'
-        await handle_send(bot, event, msg)
-        await auction_view.finish()
-
-    config = get_auction_config()
-    user_auctions = config.get('user_auctions', [])
-   
-
-    if not user_auctions:
-        msg = "拍卖会目前没有道友提交的物品！"
-        await handle_send(bot, event, msg)
-        await auction_view.finish()
-
-    auction_list_msg = "拍卖会物品列表:\n"
-    
-    for idx, auction in enumerate(user_auctions):
-        for goods_name, details in auction.items():
-            user_info = sql_message.get_user_info_with_id(details['user_id'])
-            auction_list_msg += f"编号: {idx + 1}\n物品名称: {goods_name}\n物品类型：{details['goods_type']}\n所有者：{user_info['user_name']}\n底价: {details['start_price']} 枚灵石\n数量: {details['quantity']}\n"
-            auction_list_msg += "☆------------------------------☆\n"
-
-    await handle_send(bot, event, auction_list_msg)
-
-    await auction_view.finish()
-
-
-@creat_auction.handle(parameterless=[Cooldown(at_sender=False)])
-async def creat_auction_(bot: Bot, event: GroupMessageEvent):
-    global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
-    group_id = "000000"
-    bot = await assign_bot_group(group_id=group_id)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await creat_auction.finish()
-        
-    if group_id not in groups:
-        msg = '尚未开启拍卖会功能，请联系管理员开启！'
-        await handle_send(bot, event, msg)
-        await creat_auction.finish()
-
-    if auction:
-        msg = "已存在一场拍卖会，请等待拍卖会结束！"
-        await handle_send(bot, event, msg)
-        await creat_auction.finish()
-
-    auction_items = []
-    try:
-        # 用户拍卖品
-        user_auction_id_list = get_user_auction_id_list()
-        for auction_id in user_auction_id_list:
-            user_auction_info = get_user_auction_price_by_id(auction_id)
-            auction_items.append((auction_id, user_auction_info['quantity'], user_auction_info['start_price'], True))
-
-        # 系统拍卖品
-        auction_id_list = get_auction_id_list()
-        auction_count = random.randint(1, 2)  # 随机挑选系统拍卖品数量
-        auction_ids = random.sample(auction_id_list, auction_count)
-        for auction_id in auction_ids:
-            item_info = items.get_data_by_item_id(auction_id)
-            item_quantity = 1
-            if item_info['type'] in ['神物', '丹药']:
-                item_quantity = random.randint(1, 3) # 如果是丹药的话随机挑1-3个
-            auction_items.append((auction_id, item_quantity, get_auction_price_by_id(auction_id)['start_price'], False))
-    except LookupError:
-        msg = f"获取不到拍卖物品的信息，请检查配置文件！"
-        await handle_send(bot, event, msg)
-        await creat_auction.finish()
-
-    # 打乱拍卖品顺序
-    random.shuffle(auction_items)
-
-    msg = f"请各位道友稍作准备，拍卖即将开始...\n"
-    msg += f"本场拍卖会共有{len(auction_items)}件物品，将依次拍卖，分别是：\n"
-    for idx, (auction_id, item_quantity, start_price, is_user_auction) in enumerate(auction_items):
-        item_name = items.get_data_by_item_id(auction_id)['name']
-        if is_user_auction:
-            owner_info = sql_message.get_user_info_with_id(get_user_auction_price_by_id(auction_id)['user_id'])
-            owner_name = owner_info['user_name']
-            msg += f"{idx + 1}号：{item_name}x{item_quantity}（由{owner_name}道友提供）\n"
-        else:
-            msg += f"{idx + 1}号：{item_name}x{item_quantity}（由拍卖场提供）\n"
-    
-    for gid in groups:
-        bot = await assign_bot_group(group_id=gid)
-        try:
-            await handle_send(bot, event, msg)
-        except ActionFailed:
-            continue
-    
-    auction_results = []  # 拍卖结果
-    for i, (auction_id, item_quantity, start_price, is_user_auction) in enumerate(auction_items):
-        auction_info = items.get_data_by_item_id(auction_id)
-
-        auction = {
-            'id': auction_id,
-            'user_id': 0,
-            'now_price': start_price,
-            'name': auction_info['name'],
-            'type': auction_info['type'],
-            'quantity': item_quantity,
-            'start_time': datetime.now(),
-            'group_id': group_id
-        }
-        
-        if i + 1 == len(auction_items):
-            msg = f"最后一件拍卖品为：\n{get_auction_msg(auction_id)}\n"
-        else:
-            msg = f"第{i + 1}件拍卖品为：\n{get_auction_msg(auction_id)}\n"
-        msg += f"\n底价为{start_price}，加价不少于{int(start_price * 0.05)}"
-        msg += f"\n竞拍时间为:{AUCTIONSLEEPTIME}秒，请诸位道友发送 拍卖+金额 来进行拍卖吧！"
-
-        if auction['quantity'] > 1:
-            msg += f"\n注意：拍卖品共{auction['quantity']}件，最终价为{auction['quantity']}x成交价。\n"
-
-        if i + 1 < len(auction_items):
-            next_item_name = items.get_data_by_item_id(auction_items[i + 1][0])['name']
-            msg += f"\n下一件拍卖品为：{next_item_name}，请心仪的道友提前开始准备吧！"
-
-        for gid in groups:
-            bot = await assign_bot_group(group_id=gid)
-            try:
-                await handle_send(bot, event, msg)
-            except ActionFailed:
-                continue
-        
-        remaining_time = AUCTIONSLEEPTIME # 第一轮定时
-        while remaining_time > 0:
-            await asyncio.sleep(10)
-            remaining_time -= 10
-
-        while auction_offer_flag:  # 有人拍卖
-            if auction_offer_all_count == 0:
-                auction_offer_flag = False
-                break
-
-            logger.opt(colors=True).info(f"<green>有人拍卖，本次等待时间：{auction_offer_all_count * AUCTIONOFFERSLEEPTIME}秒</green>")
-            first_time = auction_offer_all_count * AUCTIONOFFERSLEEPTIME
-            auction_offer_all_count = 0
-            auction_offer_flag = False
-            await asyncio.sleep(first_time)
-            logger.opt(colors=True).info(f"<green>总计等待时间{auction_offer_time_count * AUCTIONOFFERSLEEPTIME}秒，当前拍卖标志：{auction_offer_flag}，本轮等待时间：{first_time}</green>")
-
-        logger.opt(colors=True).info(f"<green>等待时间结束，总计等待时间{auction_offer_time_count * AUCTIONOFFERSLEEPTIME}秒</green>")
-        if auction['user_id'] == 0:
-            msg = f"很可惜，{auction['name']}流拍了\n"
-            if i + 1 == len(auction_items):
-                msg += f"本场拍卖会到此结束，开始整理拍卖会结果，感谢各位道友参与！"
-
-            for gid in groups:
-                bot = await assign_bot_group(group_id=gid)
-                try:
-                    await handle_send(bot, event, msg)
-                except ActionFailed:
-                    continue
-            auction_results.append((auction_id, None, auction['group_id'], auction_info['type'], auction['now_price'], auction['quantity']))
-            auction = {}
-            continue
-        
-        user_info = sql_message.get_user_info_with_id(auction['user_id'])
-        msg = f"(拍卖锤落下)！！！\n"
-        msg += f"恭喜来自群{auction['group_id']}的{user_info['user_name']}道友成功拍下：{auction['type']}-{auction['name']}x{auction['quantity']}，将在拍卖会结算后送到您手中。\n"
-        if i + 1 == len(auction_items):
-            msg += f"本场拍卖会到此结束，开始整理拍卖会结果，感谢各位道友参与！"
-
-        auction_results.append((auction_id, user_info['user_id'], auction['group_id'], 
-                                auction_info['type'], auction['now_price'], auction['quantity']))
-        auction = {}
-        auction_offer_time_count = 0
-        for gid in groups:
-            bot = await assign_bot_group(group_id=gid)
-            try:
-                await handle_send(bot, event, msg)
-            except ActionFailed:
-                continue
-        
-    # 拍卖会结算
-    end_msg = f"本场拍卖会结束！感谢各位道友的参与。\n拍卖结果整理如下：\n"
-    for idx, (auction_id, user_id, group_id, item_type, final_price, quantity) in enumerate(auction_results):
-        item_name = items.get_data_by_item_id(auction_id)['name']
-        final_user_info = sql_message.get_user_info_with_id(user_id)
-        if user_id:
-            if final_user_info['stone'] < (int(final_price) * quantity):
-                end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity} - 道友{final_user_info['user_name']}的灵石不足，流拍了\n"
-            else:
-                sql_message.update_ls(user_id, int(final_price) * quantity, 2)
-                sql_message.send_back(user_id, auction_id, item_name, item_type, quantity)
-                end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity}由群{group_id}的{final_user_info['user_name']}道友成功拍下\n"
-
-            user_auction_info = get_user_auction_price_by_id(auction_id)
-            if user_auction_info:
-                seller_id = user_auction_info['user_id']
-                auction_earnings = int(final_price * quantity * 0.7) # 收个手续费
-                sql_message.update_ls(seller_id, auction_earnings, 1)
-
-            remove_auction_item(auction_id)
-
-            auction = {}
-            auction_offer_time_count = 0
-        else:
-            end_msg += f"{idx + 1}号拍卖品：{item_name}x{quantity} - 流拍了\n"
-
-    for gid in groups:
-        bot = await assign_bot_group(group_id=gid)
-        try:
-            await handle_send(bot, event, end_msg)
-        except ActionFailed:  # 发送群消息失败
-            continue
-
-    await creat_auction.finish()
-
-
-@offer_auction.handle(parameterless=[Cooldown(1.4, at_sender=False, isolate_level=CooldownIsolateLevel.GLOBAL)])
-async def offer_auction_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """拍卖"""
-    group_id = "000000"
-    bot = await assign_bot_group(group_id=group_id)
-    isUser, user_info, msg = check_user(event)
-    global auction, auction_offer_flag, auction_offer_all_count, auction_offer_time_count
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-    if group_id not in groups:
-        msg = f"尚未开启拍卖会功能，请联系管理员开启！"
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-    if not auction:
-        msg = f"不存在拍卖会，请等待拍卖会开启！"
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-    price = args.extract_plain_text().strip()
-    try:
-        price = int(price)
-    except ValueError:
-        msg = f"请发送正确的灵石数量"
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-    now_price = auction['now_price']
-    min_price = int(now_price * 0.05)  # 最低加价5%
-    if price <= 0 or price <= auction['now_price'] or price > user_info['stone']:
-        msg = f"走开走开，别捣乱！小心清空你灵石捏"
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-    if price - now_price < min_price:
-        msg = f"拍卖不得少于当前竞拍价的5%，目前最少加价为：{min_price}灵石，目前竞拍价为：{now_price}!"
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-    auction_offer_flag = True  # 有人拍卖
-    auction_offer_time_count += 1
-    auction_offer_all_count += 1
-
-    auction['user_id'] = user_info['user_id']
-    auction['now_price'] = price
-    auction['group_id'] = group_id
-
-    logger.opt(colors=True).info(f"<green>{user_info['user_name']}({auction['user_id']})竞价了！！</green>")
-
-    now_time = datetime.now()
-    dif_time = (now_time - auction['start_time']).total_seconds()
-    remaining_time = int(AUCTIONSLEEPTIME - dif_time + AUCTIONOFFERSLEEPTIME * auction_offer_time_count)
-    msg = (
-        f"来自群{group_id}的{user_info['user_name']}道友拍卖：{number_to(price)}枚灵石！" +
-        f"竞拍时间增加：{AUCTIONOFFERSLEEPTIME}秒，竞拍剩余时间：{remaining_time}秒"
-    )
-    error_msg = None
-    for group_id in groups:
-        bot = await assign_bot_group(group_id=group_id)
-        try:
-            await handle_send(bot, event, msg)
-        except ActionFailed:
-            continue
-    logger.opt(colors=True).info(
-        f"<green>有人拍卖，拍卖标志：{auction_offer_flag}，当前等待时间：{auction_offer_all_count * AUCTIONOFFERSLEEPTIME}，总计拍卖次数：{auction_offer_time_count}</green>")
-    if error_msg is None:
-        await offer_auction.finish()
-    else:
-        msg = error_msg
-        await handle_send(bot, event, msg)
-        await offer_auction.finish()
-
-
-@auction_added.handle(parameterless=[Cooldown(1.4, isolate_level=CooldownIsolateLevel.GROUP)])
-async def auction_added_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """用户提交拍卖品"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    group_id = "000000"
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    if group_id not in groups:
-        msg = f"尚未开启拍卖会功能，请联系管理员开启！"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    user_id = user_info['user_id']
-    args = args.extract_plain_text().split()
-    goods_name = args[0] if len(args) > 0 else None
-    price_str = args[1] if len(args) > 1 else "1"
-    quantity_str = args[2] if len(args) > 2 else "1"
-
-    if not goods_name:
-        msg = f"请输入正确指令！例如：提交拍卖品 物品 可选参数为(金额 数量)"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    back_msg = sql_message.get_back_msg(user_id)  # 获取背包信息
-    if back_msg is None:
-        msg = f"道友的背包空空如也！"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    # 物品是否存在于背包中
-    in_flag = False
-    goods_id = None
-    goods_type = None
-    goods_state = None
-    goods_num = None
-    goods_bind_num = None
-    for back in back_msg:
-        if goods_name == back['goods_name']:
-            in_flag = True
-            goods_id = back['goods_id']
-            goods_type = back['goods_type']
-            goods_state = back['state']
-            goods_num = back['goods_num']
-            goods_bind_num = back['bind_num']
-            break
-
-    if not in_flag:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    try:
-        price = int(price_str)
-        quantity = int(quantity_str)
-        if price <= 0 or quantity <= 0 or quantity > goods_num:
-            raise ValueError("价格和数量必须为正数，或者超过了你拥有的数量!")
-    except ValueError as e:
-        msg = f"请输入正确的金额和数量: {str(e)}"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    if goods_type == "装备" and int(goods_state) == 1 and int(goods_num) == 1:
-        msg = f"装备：{goods_name}已经被道友装备在身，无法提交！"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-
-    if int(goods_num) <= int(goods_bind_num):
-        msg = f"该物品是绑定物品，无法提交！"
-        await handle_send(bot, event, msg)
-        await auction_added.finish()
-    if goods_type == "聚灵旗" or goods_type == "炼丹炉":
-        if user_info['root'] == "凡人":
-            pass
-        else:
-            msg = f"道友职业无法上架！"
-            await handle_send(bot, event, msg)
-            await auction_added.finish()
-
-    config = get_auction_config()
-
-    user_auction = {
-        goods_name: {
-            'id': goods_id,
-            'goods_type': goods_type,
-            'user_id': user_id,
-            'start_price': price,
-            'quantity': quantity
-        }
-    }
-    config['user_auctions'].append(user_auction)
-
-    savef_auction(config)
-    sql_message.update_back_j(user_id, goods_id, num=quantity)
-
-    msg = f"道友的拍卖品：{goods_name}成功提交，底价：{number_to(price)}枚灵石，数量：{quantity}"
-    msg += f"\n下次拍卖将优先拍卖道友的拍卖品！！！"
-    await handle_send(bot, event, msg)
-    await auction_added.finish()
-
-
-@set_auction.handle(parameterless=[Cooldown(at_sender=False)])
-async def set_auction_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """拍卖会开关"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    mode = args.extract_plain_text().strip()
-    group_id = "000000"
-    is_in_group = is_in_groups(event)  # True在，False不在
-
-    if mode == '开启':
-        if is_in_group:
-            msg = "已开启拍卖会，请勿重复开启!"
-            await handle_send(bot, event, msg)
-            await set_auction.finish()
-        else:
-            config['open'].append(group_id)
-            savef_auction(config)
-            msg = "已开启拍卖会"
-            await handle_send(bot, event, msg)
-            await set_auction.finish()
-
-    elif mode == '关闭':
-        if is_in_group:
-            config['open'].remove(group_id)
-            savef_auction(config)
-            msg = "已关闭拍卖会!"
-            await handle_send(bot, event, msg)
-            await set_auction.finish()
-        else:
-            msg = "未开启拍卖会!"
-            await handle_send(bot, event, msg)
-            await set_auction.finish()
-
-    else:
-        await set_auction.finish()
 
 
 @chakan_wupin.handle(parameterless=[Cooldown(at_sender=False)])
