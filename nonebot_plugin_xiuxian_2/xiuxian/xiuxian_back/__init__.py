@@ -23,7 +23,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from .back_util import (
-    get_user_main_back_msg, get_user_yaocai_back_msg, get_user_danyao_back_msg, check_equipment_can_use,
+    get_user_main_back_msg, get_user_yaocai_back_msg, get_user_yaocai_detail_back_msg, get_user_danyao_back_msg, check_equipment_can_use,
     get_use_equipment_sql, get_shop_data, save_shop,
     get_item_msg, get_item_msg_rank, check_use_elixir,
     get_use_jlq_msg, get_no_use_equipment_sql
@@ -135,6 +135,7 @@ goods_re_root = on_command("炼金", priority=6, block=True)
 fast_alchemy = on_command("快速炼金", aliases={"一键炼金"}, priority=6, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
 yaocai_back = on_command('药材背包', priority=10, block=True)
+yaocai_detail_back = on_command('药材背包详细', aliases={'药材背包详情'}, priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
 use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
@@ -5244,6 +5245,38 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await send_msg_handler(bot, event, '药材背包', bot.self_id, msgs)
     
     await yaocai_back.finish()
+
+@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """药材背包详情版"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await yaocai_detail_back.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_yaocai_detail_back_msg(user_id)
+    title = f"{user_info['user_name']}的药材背包详情"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page,
+        title=title,
+        empty_msg="道友的药材背包空空如也！"
+    )
+    
+    if isinstance(msgs, str):
+        await handle_send(bot, event, msgs)
+    else:
+        await send_msg_handler(bot, event, '药材背包详情', bot.self_id, msgs)
+    
+    await yaocai_detail_back.finish()
 
 @danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
 async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

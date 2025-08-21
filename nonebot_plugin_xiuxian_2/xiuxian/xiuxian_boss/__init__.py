@@ -39,7 +39,7 @@ items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic, CommandObjectID,
-    pic_msg_format, send_msg_handler, handle_send
+    pic_msg_format, send_msg_handler, log_message, handle_send
 )
 from .boss_limit import boss_limit
 from .. import DRIVER
@@ -550,6 +550,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     except ActionFailed:
         msg += f"\nBoss战消息发送错误,可能被风控!"
     await handle_send(bot, event, msg)
+    log_message(user_id, msg)
     await battle.finish()
 
 @challenge_scarecrow.handle(parameterless=[Cooldown(stamina_cost=1, cd_time=30, at_sender=False)])

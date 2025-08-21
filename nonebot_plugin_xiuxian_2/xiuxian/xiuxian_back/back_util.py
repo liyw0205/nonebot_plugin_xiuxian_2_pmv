@@ -221,14 +221,91 @@ def get_user_yaocai_back_msg(user_id):
     user_backs = sql_message.get_back_msg(user_id)  # list(back)
     if user_backs is None:
         return l_msg
+    
+    # 按品阶排序的药材字典
+    sorted_yaocai = {
+        "一品药材": [],
+        "二品药材": [],
+        "三品药材": [],
+        "四品药材": [],
+        "五品药材": [],
+        "六品药材": [],
+        "七品药材": [],
+        "八品药材": [],
+        "九品药材": []
+    }
+    
     for user_back in user_backs:
         if user_back['goods_type'] == "药材":
-            l_yaocai_msg = get_yaocai_msg(l_yaocai_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
-    if l_yaocai_msg:
-        l_msg.append("☆------药材背包------☆")
-        for msg in l_yaocai_msg:
-            l_msg.append(msg)            
-    return l_msg    
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            level = item_info['level']
+            if level in sorted_yaocai:
+                sorted_yaocai[level].append({
+                    'id': user_back['goods_id'],
+                    'name': item_info['name'],
+                    'num': user_back['goods_num'],
+                    'bind_num': user_back['bind_num']
+                })
+    
+    # 构建排序后的消息
+    for level, yaocai_list in sorted_yaocai.items():
+        if yaocai_list:
+            l_msg.append(f"☆------{level}------☆")
+            for yaocai in yaocai_list:
+                msg = f"名字：{yaocai['name']}\n"
+                msg += f"ID：{yaocai['id']}\n"
+                msg += f"拥有数量：{yaocai['num']}，绑定数量：{yaocai['bind_num']}"
+                l_msg.append(msg)
+    
+    return l_msg
+
+def get_user_yaocai_detail_back_msg(user_id):
+    """
+    获取药材背包详细信息
+    """
+    l_msg = []
+    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    if user_backs is None:
+        return l_msg
+    
+    # 按品阶排序的药材字典
+    sorted_yaocai = {
+        "一品药材": [],
+        "二品药材": [],
+        "三品药材": [],
+        "四品药材": [],
+        "五品药材": [],
+        "六品药材": [],
+        "七品药材": [],
+        "八品药材": [],
+        "九品药材": []
+    }
+    
+    for user_back in user_backs:
+        if user_back['goods_type'] == "药材":
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            level = item_info['level']
+            if level in sorted_yaocai:
+                # 获取药材详细信息
+                yaocai_detail = {
+                    'id': user_back['goods_id'],
+                    'name': item_info['name'],
+                    'num': user_back['goods_num'],
+                    'bind_num': user_back['bind_num'],
+                    'info': get_yaocai_info_msg(user_back['goods_id'], item_info)  # 使用已有的详细信息函数
+                }
+                sorted_yaocai[level].append(yaocai_detail)
+    
+    # 构建排序后的消息
+    for level, yaocai_list in sorted_yaocai.items():
+        if yaocai_list:
+            l_msg.append(f"☆------{level}------☆")
+            for yaocai in yaocai_list:
+                msg = f"{yaocai['info']}\n"  # 包含完整药材信息
+                msg += f"拥有数量：{yaocai['num']}，绑定数量：{yaocai['bind_num']}"
+                l_msg.append(msg)
+    
+    return l_msg
 
 def get_libao_msg(l_msg, goods_id, goods_num, bind_num):
     """
