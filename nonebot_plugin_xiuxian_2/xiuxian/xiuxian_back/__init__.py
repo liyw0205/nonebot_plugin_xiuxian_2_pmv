@@ -68,6 +68,7 @@ auction_view = on_command("拍卖查看", aliases={"查看拍卖"}, priority=5, 
 auction_bid = on_command("拍卖竞拍", aliases={"竞拍"}, priority=5, block=True)
 auction_add = on_command("拍卖上架", priority=5, block=True)
 auction_remove = on_command("拍卖下架", priority=5, block=True)
+my_auction = on_command("我的拍卖", priority=5, block=True)
 auction_info = on_command("拍卖信息", priority=5, block=True)
 auction_start = on_fullmatch("开启拍卖", priority=4, permission=SUPERUSER, block=True)
 auction_end = on_fullmatch("结束拍卖", priority=4, permission=SUPERUSER, block=True)
@@ -274,6 +275,8 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔹 拍卖下架 物品名 - 撤回拍卖品
   ▶ 仅在非拍卖期间可操作
 
+🔹 我的拍卖 - 查看已上架物品
+  
 🔹 拍卖信息 - 查看拍卖状态
   ▶ 包含开启时间、当前状态等信息
 
@@ -4299,7 +4302,7 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 @auction_add.handle()
 async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """上架物品到拍卖"""
+    """上架物品到拍卖（限制ITEM_TYPES类型）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -4336,6 +4339,14 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 msg = "绑定物品不能上架！"
                 await handle_send(bot, event, msg)
                 return
+            
+            # 检查物品类型是否允许
+            goods_type = get_item_type_by_id(item['goods_id'])
+            if goods_type not in ITEM_TYPES:
+                msg = f"该物品类型不允许拍卖！允许类型：{', '.join(ITEM_TYPES)}"
+                await handle_send(bot, event, msg)
+                return
+                
             item_data = item
             break
     
@@ -4402,6 +4413,37 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             )
     
     await handle_send(bot, event, result)
+
+@my_auction.handle(parameterless=[Cooldown(at_sender=False)])
+async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看我上架的拍卖物品（不显示ID）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await my_auction.finish()
+    
+    user_id = user_info['user_id']
+    player_auctions = get_player_auctions()
+    
+    # 获取当前用户上架的物品
+    user_items = player_auctions.get(str(user_id), [])
+    
+    if not user_items:
+        msg = "您当前没有上架任何拍卖物品！"
+        await handle_send(bot, event, msg)
+        await my_auction.finish()
+    
+    # 构建消息
+    msg = ["☆------我的拍卖物品------☆"]
+    for item in user_items:
+        msg.append(f"\n物品: {item['name']}")
+        msg.append(f"起拍价: {number_to(item['price'])}灵石")
+    
+    msg.append("\n使用【拍卖下架 物品名】可以下架物品")
+    
+    await handle_send(bot, event, "\n".join(msg))
+    await my_auction.finish()
 
 @auction_info.handle()
 async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
