@@ -47,6 +47,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
+clear_expired_baitan = require("nonebot_plugin_apscheduler").scheduler
 
 # === 通用配置 ===
 # 数据文件路径
@@ -60,9 +61,16 @@ for path in [XIANSHI_DATA_PATH, FANGSHI_DATA_PATH, GUISHI_DATA_PATH]:
     path.mkdir(parents=True, exist_ok=True)
 
 # 通用物品类型
-ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
-ITEM_TYPES = ["药材", "装备", "技能"]
 BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
+ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
+MIN_PRICE = 600000
+MAX_QUANTITY = 10
+GUISHI_TYPES = ["药材", "装备", "技能"]
+GUISHI_BAITAN_START_HOUR = 18  # 18点开始
+GUISHI_BAITAN_END_HOUR = 8     # 次日8点结束
+GUISHI_MAX_QUANTITY = 100   # 单次最大交易数量
+MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
+MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
 
 # 拍卖命令
 auction_view = on_command("拍卖查看", aliases={"查看拍卖"}, priority=5, block=True)
@@ -77,9 +85,6 @@ auction_lock = on_fullmatch("封闭拍卖", priority=4, permission=SUPERUSER, bl
 auction_unlock = on_fullmatch("解封拍卖", priority=4, permission=SUPERUSER, block=True)
 
 # === 仙肆系统 ===
-# 配置
-XIANSHI_MIN_PRICE = 600000  # 最低上架价格60万灵石
-XIANSHI_MAX_QUANTITY = 10   # 单次最大上架数量
 
 # 仙肆命令
 xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
@@ -95,10 +100,6 @@ xian_shop_remove_by_admin = on_command("系统仙肆下架", priority=5, permiss
 xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSER, block=True)
 
 # === 坊市系统 ===
-# 配置
-FANGSHI_MIN_PRICE = 600000  # 最低上架价格60万灵石
-FANGSHI_MAX_QUANTITY = 10   # 单次最大上架数量
-
 # 坊市命令
 shop_view = on_command("坊市查看", priority=5, permission=GROUP, block=True)
 shop_added = on_command("坊市上架", priority=5, permission=GROUP, block=True)
@@ -113,11 +114,6 @@ shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=S
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
 # === 鬼市系统 ===
-# 配置
-GUISHI_MIN_PRICE = 600000  # 最低交易价格60万灵石
-GUISHI_MAX_QUANTITY = 100   # 单次最大交易数量
-MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
-MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
 
 # 鬼市命令
 guishi_deposit = on_command("鬼市存灵石", priority=5, block=True)
@@ -591,7 +587,12 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
-    
+    # 检查禁止交易的物品
+    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
+        msg = f"物品 {goods_name} 禁止在仙肆交易！"
+        await handle_send(bot, event, msg)
+        await xian_shop_add.finish()
+
     # 计算手续费
     total_price = price * quantity
     if total_price <= 5000000:
@@ -1113,7 +1114,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     quantity = int(args[-1]) if args[-1].isdigit() else 1  # 数量参数
     
     # 数量限制
-    quantity = max(1, min(quantity, 10))
+    quantity = max(1, min(quantity, MAX_QUANTITY))
     
     # === 类型检查 ===
     type_mapping = {
@@ -1254,6 +1255,9 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     result_msg = []
     
     for item in items_to_add:
+        if str(item['id']) in BANNED_ITEM_IDS:
+            continue  # 跳过禁止交易的物品
+        
         # 获取仙肆最低价
         min_price = get_xianshi_min_price(item['name'])
         
@@ -1396,7 +1400,13 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
-    
+
+    # 检查禁止交易的物品
+    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
+        msg = f"物品 {goods_name} 禁止在仙肆交易！"
+        await handle_send(bot, event, msg)
+        await xianshi_fast_add.finish()
+
     # 获取价格（如果用户未指定价格）
     if price is None:
         # 获取仙肆最低价
@@ -1780,14 +1790,14 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     try:
         price = int(args[1])
         quantity = int(args[2]) if len(args) > 2 else 1
-        quantity = min(quantity, 10)  # 限制最大数量为10
+        quantity = min(quantity, MAX_QUANTITY)
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
     # 原有价格限制逻辑
-    if price < FANGSHI_MIN_PRICE:  # 最低60万灵石
+    if price < MIN_PRICE:  # 最低60万灵石
         msg = "坊市最低价格为60万灵石！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
@@ -1795,7 +1805,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     # 检查仙肆最低价
     xianshi_min_price = get_xianshi_min_price(goods_name)
     if xianshi_min_price is not None:
-        min_price = max(FANGSHI_MIN_PRICE, xianshi_min_price // 2)
+        min_price = max(MIN_PRICE, xianshi_min_price // 2)
         max_price = xianshi_min_price * 2
         if price < min_price or price > max_price:
             msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
@@ -1828,7 +1838,11 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         msg = "只能上架药材、装备、丹药或技能类物品！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
-    
+    # 检查禁止交易的物品
+    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
+        msg = f"物品 {goods_name} 禁止在坊市交易！"
+        await handle_send(bot, event, msg)
+        await shop_added.finish()
     # 计算总手续费
     total_price = price * quantity
     if total_price <= 6000000:
@@ -1917,7 +1931,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     quantity = int(args[-1]) if args[-1].isdigit() else 1  # 数量参数
     
     # 数量限制
-    quantity = max(1, min(quantity, 10))
+    quantity = max(1, min(quantity, MAX_QUANTITY))
     
     # === 类型检查 ===
     type_mapping = {
@@ -2058,6 +2072,8 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     result_msg = []
     
     for item in items_to_add:
+        if str(item['id']) in BANNED_ITEM_IDS:
+            continue  # 跳过禁止交易的物品
         # 获取坊市最低价
         min_price = get_fangshi_min_price(group_id, item['name'])
         
@@ -2065,7 +2081,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         if min_price is None:
             base_rank = convert_rank('江湖好手')[0]
             item_rank = get_item_msg_rank(item['id'])
-            price = max(FANGSHI_MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
         else:
             price = min_price
         
@@ -2201,7 +2217,13 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await fangshi_fast_add.finish()
-    
+
+    # 检查禁止交易的物品
+    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
+        msg = f"物品 {goods_name} 禁止在坊市交易！"
+        await handle_send(bot, event, msg)
+        await fangshi_fast_add.finish()
+
     # 获取价格（如果用户未指定价格）
     if price is None:
         # 获取坊市最低价
@@ -2211,22 +2233,22 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         if min_price is None:
             base_rank = convert_rank('江湖好手')[0]
             item_rank = get_item_msg_rank(goods_info['goods_id'])
-            price = max(FANGSHI_MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
         else:
             price = min_price
     else:
         # 检查用户指定的价格是否符合限制
         xianshi_min = get_xianshi_min_price(goods_name)
         if xianshi_min is not None:
-            min_price = max(FANGSHI_MIN_PRICE, xianshi_min // 2)
+            min_price = max(MIN_PRICE, xianshi_min // 2)
             max_price = xianshi_min * 2
             if price < min_price or price > max_price:
                 msg = f"该物品在仙肆的最低价格为{xianshi_min}，坊市价格限制为{min_price}-{max_price}灵石！"
                 await handle_send(bot, event, msg)
                 await fangshi_fast_add.finish()
         else:
-            if price < FANGSHI_MIN_PRICE:
-                price = max(price, FANGSHI_MIN_PRICE)
+            if price < MIN_PRICE:
+                price = max(price, MIN_PRICE)
     
     # 计算总手续费
     total_price = price * quantity
@@ -2784,8 +2806,8 @@ async def shop_added_by_admin_(bot: Bot, event: GroupMessageEvent, args: Message
     group_id = str(event.group_id)
     goods_name = args[0]
     try:
-        price = int(args[1]) if len(args) > 1 else FANGSHI_MIN_PRICE
-        price = max(price, FANGSHI_MIN_PRICE)
+        price = int(args[1]) if len(args) > 1 else MIN_PRICE
+        price = max(price, MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 0  # 0表示无限
     except ValueError:
         msg = "请输入有效的价格和数量！"
@@ -3503,10 +3525,32 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
 
 @guishi_baitan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """鬼市摆摊"""
+    """鬼市摆摊（每天18:00-次日8:00开放）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 检查摆摊时间
+    now = datetime.now()
+    current_hour = now.hour
+    
+    # 判断是否在允许摆摊的时间段 (18:00-23:59 或 00:00-08:00)
+    if not (GUISHI_BAITAN_START_HOUR <= current_hour <= 23 or 0 <= current_hour < GUISHI_BAITAN_END_HOUR):
+        next_start = now.replace(hour=GUISHI_BAITAN_START_HOUR, minute=0, second=0, microsecond=0)
+        if now.hour >= GUISHI_BAITAN_END_HOUR:  # 如果当前时间已经过了8点，则下个开始时间是今天18点
+            if now.hour >= GUISHI_BAITAN_START_HOUR:  # 如果已经过了18点，则下个开始时间是明天18点
+                next_start += timedelta(days=1)
+        else:  # 如果当前时间小于8点，则下个开始时间是今天18点
+            pass
+        
+        time_left = next_start - now
+        hours = time_left.seconds // 3600
+        minutes = (time_left.seconds % 3600) // 60
+        
+        msg = f"鬼市摆摊时间：每天18:00-次日8:00\n"
+        msg += f"下次可摆摊时间：{next_start.strftime('%m月%d日 %H:%M')}（{hours}小时{minutes}分钟后）"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
@@ -3528,20 +3572,19 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
-    # 检查背包物品
-    back_msg = sql_message.get_back_msg(user_id)
-    goods_info = None
-    for item in back_msg:
-        if item['goods_name'] == goods_name:
-            if str(item['goods_id']) in BANNED_ITEM_IDS:
+    # 检查禁止交易的物品
+    goods_id = None
+    for k, v in items.items.items():
+        if goods_name == v['name']:
+            if str(k) in BANNED_ITEM_IDS:
                 msg = f"物品 {goods_name} 禁止在鬼市交易！"
                 await handle_send(bot, event, msg)
                 await guishi_baitan.finish()
-            goods_info = item
+            goods_id = k
             break
     
-    if not goods_info:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+    if not goods_id:
+        msg = f"物品 {goods_name} 不存在！"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
@@ -3549,6 +3592,19 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_data = get_guishi_user_data(user_id)
     if len(user_data["baitan_orders"]) >= MAX_BAITAN_ORDERS:
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
+        await handle_send(bot, event, msg)
+        await guishi_baitan.finish()
+    
+    # 检查背包物品
+    back_msg = sql_message.get_back_msg(user_id)
+    goods_info = None
+    for item in back_msg:
+        if item['goods_name'] == goods_name:
+            goods_info = item
+            break
+    
+    if not goods_info:
+        msg = f"请检查该道具 {goods_name} 是否在背包内！"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
@@ -3573,31 +3629,78 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     existing_ids = set(user_data["baitan_orders"].keys())
     order_id = generate_guishi_id(existing_ids)
     
+    # 计算收摊时间（次日8点）
+    end_time = now.replace(hour=GUISHI_BAITAN_END_HOUR, minute=0, second=0, microsecond=0)
+    if now.hour >= GUISHI_BAITAN_END_HOUR:  # 如果当前时间已经过了8点，则结束时间是明天8点
+        end_time += timedelta(days=1)
+    
     # 添加摆摊订单
     user_data["baitan_orders"][order_id] = {
         "item_id": goods_info['goods_id'],
         "item_name": goods_name,
         "price": price,
         "quantity": quantity,
-        "sold": 0
+        "sold": 0,
+        "create_time": time.time(),
+        "end_time": end_time.timestamp()
     }
     save_guishi_user_data(user_id, user_data)
     
     # 处理可能的即时交易
     transactions = await process_guishi_transactions(user_id)
     
+    # 计算剩余时间
+    time_left = end_time - now
+    hours = time_left.seconds // 3600
+    minutes = (time_left.seconds % 3600) // 60
+    
     msg = f"成功摆摊！\n"
     msg += f"物品：{goods_name}\n"
     msg += f"价格：{number_to(price)} 灵石\n"
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"
+    msg += f"⚠️ 请在 {hours}小时{minutes}分钟内收摊（{end_time.strftime('%m月%d日 %H:%M')}前）\n"
+    msg += f"⚠️ 超时未收摊将自动清空摊位，物品不退还！"
     
     if transactions:
-        msg += "\n☆------交易结果------☆\n"
+        msg += "\n\n☆------交易结果------☆\n"
         msg += "\n".join(transactions)
     
     await handle_send(bot, event, msg)
     await guishi_baitan.finish()
+
+# 添加定时任务检查超时摊位
+@clear_expired_baitan.scheduled_job("cron", hour=GUISHI_BAITAN_END_HOUR, minute=0)
+async def clear_expired_baitan_():
+    """每天8点自动清空未收摊的摊位"""
+    logger.info("开始检查超时鬼市摊位...")
+    
+    # 获取所有用户数据
+    expired_count = 0
+    for user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+        try:
+            user_id = user_file.stem.split("_")[1]
+            user_data = json.loads(user_file.read_text(encoding="utf-8"))
+            
+            # 检查是否有超时摊位
+            expired_orders = []
+            for order_id, order in list(user_data["baitan_orders"].items()):
+                if time.time() > order.get("end_time", 0):
+                    expired_orders.append(order_id)
+                    expired_count += 1
+            
+            # 移除超时订单
+            for order_id in expired_orders:
+                del user_data["baitan_orders"][order_id]
+            
+            if expired_orders:
+                save_guishi_user_data(user_id, user_data)
+                logger.info(f"已清空用户 {user_id} 的 {len(expired_orders)} 个超时摊位")
+                
+        except Exception as e:
+            logger.error(f"处理用户 {user_file} 时出错: {e}")
+    
+    logger.info(f"共清空 {expired_count} 个超时摊位")
 
 @guishi_shoutan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -4392,7 +4495,12 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 
             item_data = item
             break
-    
+    # 检查禁止交易的物品
+    if str(item['goods_id']) in BANNED_ITEM_IDS:
+        msg = f"物品 {item_name} 禁止拍卖！"
+        await handle_send(bot, event, msg)
+        return
+
     if not item_data:
         msg = f"背包中没有 {item_name} 或物品已绑定！"
         await handle_send(bot, event, msg)
