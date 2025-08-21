@@ -960,7 +960,7 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await set_group_boss.finish()
 
 @boss_integral_store.handle(parameterless=[Cooldown(at_sender=False)])
-async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """世界积分商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -971,18 +971,50 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     user_id = user_info['user_id']    
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     boss_integral_shop = config['世界积分商品']
-    l_msg = [f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"]
+    
+    # 获取页码参数
+    arg = args.extract_plain_text().strip()
+    page = 1
+    if arg.isdigit():
+        page = int(arg)
+    
+    # 分页设置
+    per_page = 10  # 每页显示10个商品
+    total_items = len(boss_integral_shop)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # 检查页码是否有效
+    if page < 1 or page > total_pages:
+        msg = f"页码错误，有效范围为1~{total_pages}页！"
+        await handle_send(bot, event, msg)
+        await boss_integral_store.finish()
+    
+    # 构建消息
+    l_msg = [f"\n道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"]
+    l_msg.append(f"════════════\n【世界积分商店】第{page}/{total_pages}页")
     
     if boss_integral_shop != {}:
-        for k, v in boss_integral_shop.items():
+        # 计算当前页的商品范围
+        start_index = (page - 1) * per_page
+        end_index = min(start_index + per_page, total_items)
+        
+        # 获取当前页的商品
+        shop_items = list(boss_integral_shop.items())[start_index:end_index]
+        
+        for k, v in shop_items:
             msg = f"编号:{k}\n"
             msg += f"描述：{v['desc']}\n"
             msg += f"所需世界积分：{v['cost']}点\n"
-            msg += f"每周限购：{v.get('weekly_limit', 1)}个"  # 添加限购信息
+            msg += f"每周限购：{v.get('weekly_limit', 1)}个\n"
+            msg += f"════════════"
             l_msg.append(msg)
     else:
         l_msg.append(f"世界积分商店内空空如也！")
-        
+    
+    # 添加翻页提示
+    if total_pages > 1:
+        l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
+    
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
     await boss_integral_store.finish()
 
