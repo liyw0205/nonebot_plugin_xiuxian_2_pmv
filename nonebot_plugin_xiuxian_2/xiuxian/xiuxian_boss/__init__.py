@@ -72,8 +72,8 @@ boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全�
 boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
 boss_integral_store = on_command("世界BOSS商店", aliases={"世界boss商店", "世界Boss商店"}, priority=10, block=True)
 boss_integral_use = on_command("世界BOSS兑换", aliases={"世界boss兑换", "世界Boss兑换"}, priority=6, block=True)
-challenge_scarecrow = on_command("世界BOSS稻草人", aliases={"世界boss稻草人", "世界Boss稻草人"}, priority=6, block=True)
-challenge_training_puppet = on_command("世界BOSS训练傀儡", aliases={"世界boss训练傀儡", "世界Boss训练傀儡"}, priority=6, block=True)
+challenge_scarecrow = on_command("挑战稻草人", aliases={"挑战稻草人", "挑战稻草人"}, priority=6, block=True)
+challenge_training_puppet = on_command("挑战训练傀儡", aliases={"挑战训练傀儡", "挑战训练傀儡"}, priority=6, block=True)
 
 __boss_help__ = f"""
 世界BOSS系统帮助          
@@ -92,8 +92,8 @@ __boss_help__ = f"""
 
 🔹🔹 战斗指令：
   ▶ 世界BOSS讨伐 [编号] - 挑战指定BOSS
-  ▶ 世界BOSS稻草人 - 练习战斗技巧（无消耗）
-  ▶ 世界BOSS训练傀儡 [境界] [名称] - 自定义训练对手
+  ▶ 挑战稻草人 - 练习战斗技巧（无消耗）
+  ▶ 挑战训练傀儡 [境界] [名称] - 自定义训练对手
 
 🔹🔹 管理指令：
   ▶ 世界BOSS天罚 [编号] - 删除指定BOSS（超管权限）

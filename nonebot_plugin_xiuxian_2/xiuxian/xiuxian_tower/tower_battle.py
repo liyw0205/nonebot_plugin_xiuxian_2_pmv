@@ -95,7 +95,7 @@ class TowerBattle:
             "stone": 1000000
         }
         
-        return boss_info boss_name
+        return boss_info
     
     async def challenge_floor(self, bot, event, user_id, floor=None, continuous=False):
         """挑战通天塔"""
@@ -172,37 +172,46 @@ class TowerBattle:
         success_floors = []
         failed_floor = None
         reward_msg = ""
-        
+        total_score = 0
+    
         for floor in range(start_floor, max_floor + 1):
             boss_info = self.generate_tower_boss(floor)
             result, victor, bossinfo_new, _ = await Boss_fight(player, boss_info, type_in=1, bot_id=bot.self_id)
             if victor == "群友赢了":
-                success_floors.append(floor)                
+                success_floors.append(floor)
+                # 给予基础奖励
+                score = self.config["积分奖励"]["每层基础"]
+                total_score += score
+            
+                # 每10层额外奖励
+                if floor % 10 == 0:
+                    score += self.config["积分奖励"]["每10层额外"]
+                    total_score += self.config["积分奖励"]["每10层额外"]
+                    reward_msg = self._give_special_reward(user_id, user_info, floor)
+                    reward_msg = f"\n{reward_msg}"
+                
                 # 更新层数
                 tower_info = tower_data.get_user_tower_info(user_id)
                 tower_info["current_floor"] = floor
                 tower_info["max_floor"] = max(tower_info["max_floor"], floor)
+                tower_info["score"] += score  # 添加积分
                 tower_data.save_user_tower_info(user_id, tower_info)
-                    
+                
                 # 更新排行榜
                 tower_data.update_tower_rank(
                     user_id, 
                     user_info["user_name"], 
                     floor
                 )
-                # 每10层给予额外奖励
-                if floor % 10 == 0:
-                    reward_msg = self._give_special_reward(user_id, user_info, floor)
-                    reward_msg = f"\n{reward_msg}"
             else:
                 failed_floor = floor
                 break
         await send_msg_handler(bot, event, result)
         if failed_floor:
-            msg = f"连续挑战失败，止步第{failed_floor - 1}层！"
+            msg = f"连续挑战失败，止步第{failed_floor - 1}层！共获得积分：{total_score}点"
             return False, msg
         else:
-            msg = f"连续挑战完成，成功通关第{max_floor}层！{reward_msg}"
+            msg = f"连续挑战完成，成功通关第{max_floor}层！共获得积分：{total_score}点{reward_msg}"
             return True, msg
     
     def _prepare_player_data(self, user_info):

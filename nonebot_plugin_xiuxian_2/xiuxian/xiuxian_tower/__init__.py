@@ -1,5 +1,6 @@
 import re
 import asyncio
+import json
 from nonebot_plugin_apscheduler import scheduler
 from datetime import datetime
 from nonebot import on_command, on_regex
@@ -17,7 +18,7 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, log_message, handle_send, 
     number_to, send_msg_handler
 )
-from .tower_data import tower_data
+from .tower_data import tower_data, PLAYERSDATA
 from .tower_battle import tower_battle
 
 # 定义命令

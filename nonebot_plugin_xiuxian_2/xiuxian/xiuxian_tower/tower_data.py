@@ -5,11 +5,10 @@ from datetime import datetime
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
-TOWER_RANK_PATH = Path() / "data" / "xiuxian" / "tower_rank.json"
+TOWER_RANK_PATH = Path(__file__).parent / "tower_rank.json"
 TOWER_CONFIG_PATH = Path(__file__).parent / "tower_config.json"
 sql_message = XiuxianDateManage()
 
-# 修改通天塔的DEFAULT_CONFIG中的商店商品部分
 DEFAULT_CONFIG = {
     "体力消耗": {
         "单层爬塔": 5,
