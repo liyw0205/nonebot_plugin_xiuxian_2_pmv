@@ -738,6 +738,61 @@ async def handle_send(bot, event, msg: str):
                 user_id=event.user_id, message=msg
             )
 
+async def handle_pic_send(bot: Bot, event: GroupMessageEvent, imgpath: Union[str, Path, BytesIO]):
+    """
+    图片发送函数
+    
+    参数:
+        bot: 机器人实例
+        event: 事件对象
+        imgpath: 图片路径或BytesIO对象，可以是字符串、Path对象或BytesIO
+    """
+    try:
+        # 处理不同类型的图片输入
+        if isinstance(imgpath, (str, Path)):
+            # 检查图片文件是否存在
+            if not os.path.exists(imgpath):
+                logger.error(f"图片文件不存在: {imgpath}")
+                await bot.send(event, "图片文件不存在！")
+                return
+                
+            # 读取图片文件
+            with open(imgpath, 'rb') as f:
+                img_data = BytesIO(f.read())
+        elif isinstance(imgpath, BytesIO):
+            img_data = imgpath
+        else:
+            logger.error(f"不支持的图片类型: {type(imgpath)}")
+            await bot.send(event, "不支持的图片类型！")
+            return
+            
+        # 根据配置发送图片
+        if XiuConfig().img_send_type == "io":
+            pic = img_data
+        elif XiuConfig().img_send_type == "base64":
+            # 转换为base64格式
+            img_data.seek(0)
+            base64_str = "base64://" + b64encode(img_data.getvalue()).decode()
+            pic = base64_str
+        else:
+            pic = img_data  # 默认使用io方式
+            
+        # 发送图片消息
+        if isinstance(event, GroupMessageEvent):
+            await bot.send_group_msg(
+                group_id=event.group_id, 
+                message=MessageSegment.image(pic)
+            )
+        else:
+            await bot.send_private_msg(
+                user_id=event.user_id, 
+                message=MessageSegment.image(pic)
+            )
+            
+    except Exception as e:
+        logger.error(f"发送图片失败: {e}")
+        await bot.send(event, f"发送图片失败: {e}")
+
 def log_message(user_id: str, msg: str):
     """
     记录用户日志

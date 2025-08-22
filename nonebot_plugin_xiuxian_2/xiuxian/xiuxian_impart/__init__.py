@@ -22,7 +22,8 @@ from ..xiuxian_utils.utils import (
     check_user,
     get_msg_pic,
     handle_send,
-    send_msg_handler
+    send_msg_handler,
+    handle_pic_send
 )
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -476,11 +477,7 @@ async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     img_name = str(args.extract_plain_text().strip())
     if img_name in img_list:
         img = get_image_representation(img_name)
-        if isinstance(event, GroupMessageEvent):
-           await bot.send_group_msg(group_id=event.group_id, message=img)
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=img)
-        await impart_img.finish()
+        await handle_pic_send(bot, event, img)
     else:
         msg = "没有找到此卡图！"
         await handle_send(bot, event, msg)

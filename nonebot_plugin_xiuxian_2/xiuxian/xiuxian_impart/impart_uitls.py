@@ -11,8 +11,7 @@ from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-img_path = Path() / os.getcwd() / "data" / "xiuxian" / "卡图"
-
+img_path = Path() / "data" / "xiuxian" / "卡图"
 
 def random_int():
     return numpy.random.randint(low=0, high=10000, size=None, dtype="l")
@@ -115,17 +114,7 @@ async def update_user_impart_data(user_id, time: int):
     await re_impart_data(user_id)
 
 
-def get_image_representation(image_name: str) -> MessageSegment | str:
-    """根据是否发送图片获取获取对应卡面描述
-
-    Args:
-        image_name: 卡面名称
-
-    Returns:
-        图片或者文字描述
+def get_image_representation(image_name: str):
+    """根据获取对应卡图地址
     """
-    return (
-        MessageSegment.image(img_path / str(image_name + ".webp"))
-        if XiuConfig().merge_forward_send
-        else str(image_name)
-    )
+    return img_path / f"{image_name}.webp"
