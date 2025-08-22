@@ -26,7 +26,7 @@ from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage ,OtherSet, leave_harm_time
+    XiuxianDateManage ,UserBuffDate, OtherSet, leave_harm_time
 )
 from ..xiuxian_config import convert_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
@@ -57,18 +57,18 @@ battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
-create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成"}, permission=SUPERUSER, priority=5, block=True)
-generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部生成", "世界Boss全部生成"}, permission=SUPERUSER, priority=5, block=True)
-create_appoint = on_command("世界BOSS指定生成", aliases={"世界boss指定生成", "世界Boss指定生成"}, permission=SUPERUSER, priority=5)
-boss_info = on_command("世界BOSS查询", aliases={"世界boss查询", "世界Boss查询"}, priority=6, block=True)
+create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
+generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部生成", "世界Boss全部生成", "生成全部世界BOSS", "生成全部世界boss", "生成全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
+create_appoint = on_command("世界BOSS指定生成", aliases={"世界boss指定生成", "世界Boss指定生成", "指定生成世界BOSS", "指定生成世界boss", "指定生成世界Boss"}, permission=SUPERUSER, priority=5)
+boss_info = on_command("世界BOSS查询", aliases={"世界boss查询", "世界Boss查询", "查询世界BOSS", "查询世界boss", "查询世界Boss"}, priority=6, block=True)
 boss_info2 = on_command("世界BOSS列表", aliases={"世界boss列表", "世界Boss列表"}, priority=6, block=True)
-set_group_boss = on_command("世界BOSS设置", aliases={"世界boss设置", "世界Boss设置"}, priority=13, permission=SUPERUSER, block=True)
-battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐"}, priority=6, block=True)
+set_group_boss = on_command("世界BOSS设置", aliases={"世界boss设置", "世界Boss设置", "设置世界BOSS", "设置世界boss", "设置世界Boss"}, priority=13, permission=SUPERUSER, block=True)
+battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐", "讨伐世界BOSS", "讨伐世界boss", "讨伐世界Boss"}, priority=6, block=True)
 boss_help = on_command("世界BOSS帮助", aliases={"世界boss帮助", "世界Boss帮助"}, priority=5, block=True)
-boss_delete = on_command("世界BOSS天罚", aliases={"世界boss天罚", "世界Boss天罚"}, permission=SUPERUSER, priority=7, block=True)
-boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全部天罚", "世界Boss全部天罚"}, permission=SUPERUSER, priority=5, block=True)
+boss_delete = on_command("世界BOSS天罚", aliases={"世界boss天罚", "世界Boss天罚", "天罚世界BOSS", "天罚世界boss", "天罚世界Boss"}, permission=SUPERUSER, priority=7, block=True)
+boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全部天罚", "世界Boss全部天罚", "天罚全部世界BOSS", "天罚全部世界boss", "天罚全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
 boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
-boss_integral_store = on_command("世界BOSS商店", aliases={"世界boss商店", "世界Boss商店"}, priority=10, block=True)
+boss_integral_store = on_command("世界BOSS商店", aliases={"世界boss商店", "世界Boss商店", "世界boss积分商店", "世界Boss积分商店", "世界BOSS积分商店"}, priority=10, block=True)
 boss_integral_use = on_command("世界BOSS兑换", aliases={"世界boss兑换", "世界Boss兑换"}, priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", aliases={"挑战稻草人", "挑战稻草人"}, priority=6, block=True)
 challenge_training_puppet = on_command("挑战训练傀儡", aliases={"挑战训练傀儡", "挑战训练傀儡"}, priority=6, block=True)
@@ -83,19 +83,19 @@ __boss_help__ = f"""
   ▶ 世界BOSS全部生成 - 一键生成所有境界BOSS（超管权限）
 
 🔹🔹 查询指令：
-  ▶ 世界BOSS查询 - 查看全服BOSS列表
+  ▶ 查询世界BOSS - 查看全服BOSS列表
   ▶ 世界BOSS列表 [页码] - 分页查看BOSS详情
   ▶ 世界BOSS信息 - 查看个人信息
   ▶ 世界BOSS商店 - 查看可兑换物品
 
 🔹🔹 战斗指令：
-  ▶ 世界BOSS讨伐 [编号] - 挑战指定BOSS
+  ▶ 讨伐世界BOSS [编号] - 挑战指定BOSS
   ▶ 挑战稻草人 - 练习战斗技巧（无消耗）
   ▶ 挑战训练傀儡 [境界] [名称] - 自定义训练对手
 
 🔹🔹 管理指令：
-  ▶ 世界BOSS天罚 [编号] - 删除指定BOSS（超管权限）
-  ▶ 世界BOSS全部天罚 - 清空所有BOSS（超管权限）
+  ▶ 天罚世界BOSS [编号] - 删除指定BOSS（超管权限）
+  ▶ 天罚全部世界BOSS - 清空所有BOSS（超管权限）
   ▶ 世界BOSS设置 开启/关闭 - 管理群通知（管理员权限）
 
 【特色功能】
@@ -329,21 +329,23 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     player = sql_message.get_player_data(user_id)
-
+    
+    user1_sub_buff_data = UserBuffDate(user_info['user_id']).get_user_sub_buff_data()
+    exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
     bossinfo = group_boss[group_id][boss_num - 1]
     if bossinfo['jj'] == '零':
         boss_rank = convert_rank((bossinfo['jj']))[0]
     else:
         boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
-    user_rank = convert_rank(userinfo['level'])[0]
+    user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank(user_info["level"])[1]
     if boss_rank - user_rank >= 5:
-        msg = f"道友已是{userinfo['level']}之人，妄图抢小辈的Boss，可耻！"
+        msg = f"道友已是{user_info['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
     if user_rank - boss_rank >= 4:
         required_rank_name = rank_name_list[len(rank_name_list) - (boss_rank + 4)]
-        msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{userinfo['level']}，不宜过早挑战Boss，还请三思。"
+        msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
         await handle_send(bot, event, msg)
         await battle.finish()
     
@@ -420,7 +422,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             exp_msg = f"，获得修为{now_exp}点！"
         
         # 掉落物品
-        drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, userinfo)
+        drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
         drops_msg = ""
         if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
@@ -619,7 +621,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     boss_name = "散发着威压的尸体"
     if len(arg_list) == 0:
         # 根据玩家的大境界确定训练傀儡的境界
-        player_jj = (userinfo['level'])
+        player_jj = (user_info['level'])
         scarecrow_jj = player_jj[:3]
         if player_jj == "江湖好手":
             scarecrow_jj = "感气境"

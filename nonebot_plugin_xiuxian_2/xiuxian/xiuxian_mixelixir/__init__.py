@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler, 
-    get_msg_pic, CommandObjectID, handle_send
+    get_msg_pic, CommandObjectID, handle_send, log_message
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict
@@ -184,9 +184,13 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             mix_elixir_info['收取时间'] = nowtime
             save_player_info(user_id, mix_elixir_info, "mix_elixir_info")
             await handle_send(bot, event, msg)
+            log_message(user_id, msg)
             await yaocai_get.finish()
         else:
-            msg = f"道友的灵田还不能收取，下次收取时间为：{round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2) - timedeff}小时之后"
+            remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2) - timedeff
+            hours = int(remaining_time)
+            minutes = int((remaining_time - hours) * 60)
+            msg = f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
             await handle_send(bot, event, msg)
             await yaocai_get.finish()
 

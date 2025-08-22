@@ -1820,58 +1820,42 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
         await restate.finish()
 
 @view_logs.handle(parameterless=[Cooldown(at_sender=False)])
-async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看修仙日志"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
+    args = args.extract_plain_text().split()
+    date_str = None
+    page = 1
+    
+    # 解析参数
+    if len(args) >= 1:
+        # 检查第一个参数是否是6位数字（日期格式yymmdd）
+        if args[0].isdigit() and len(args[0]) == 6:
+            date_str = args[0]
+            # 如果有第二个参数且是数字，作为页码
+            if len(args) >= 2 and args[1].isdigit():
+                page = int(args[1])
+        elif args[0].isdigit():
+            # 如果只有一个数字参数，作为页码
+            page = int(args[0])
+    
+    user_id = event.get_user_id()
+    logs_data = get_logs(user_id, date_str=date_str, page=page)
+    
+    if not logs_data["logs"]:
+        msg = "没有找到日志记录！"
+        if "error" in logs_data:
+            msg += f"\n错误：{logs_data['error']}"
         await handle_send(bot, event, msg)
         await view_logs.finish()
     
-    user_id = user_info['user_id']
-    raw_msg = event.get_plaintext().strip()
+    # 构建日志消息
+    date_display = date_str if date_str else datetime.now().strftime("%y%m%d")
+    msg = [f"\n修仙日志 - {date_display}\n第{page}页/共{logs_data['total_pages']}页\n═════════════"]
     
-    # 解析命令参数
-    parts = raw_msg.split()
-    date_str = None
-    limit = 20  # 默认显示20条
+    for log in logs_data["logs"]:
+        msg.append(f"{log['timestamp']}\n{log['message']}\n═════════════")
     
-    if len(parts) > 1:
-        # 检查是否有日期参数 (6位数字)
-        if len(parts[1]) == 6 and parts[1].isdigit():
-            date_str = parts[1]
-            
-            # 检查是否有数量参数
-            if len(parts) > 2 and parts[2].isdigit():
-                limit = min(int(parts[2]), 100)  # 限制最大100条
-        elif parts[1].isdigit():
-            # 只有数量参数
-            limit = min(int(parts[1]), 100)
-    
-    # 获取日志
-    logs = get_logs(user_id, date_str, limit)
-    
-    if not logs:
-        msg = "没有找到相关日志记录！"
-        if date_str:
-            msg = f"在 {date_str} 没有找到日志记录！"
-    else:
-        # 格式化日志信息
-        log_date = date_str if date_str else datetime.now().strftime("%y%m%d")
-        msg = f"\n【修仙日志 - {log_date}】\n"
-        msg += "════════════\n"
-        
-        for i, log in enumerate(logs, 1):
-            msg += (
-                f"{log['timestamp']}\n"
-                f"{log['message']}\n"
-                "════════════\n"
-            )
-        
-        if len(logs) == limit:
-            msg += f"提示: 只显示最近{limit}条日志，输入【修仙日志 {log_date} 数量】查看更多"
-    
-    await handle_send(bot, event, msg)
+    await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg)
     await view_logs.finish()
 
 @set_xiuxian.handle()

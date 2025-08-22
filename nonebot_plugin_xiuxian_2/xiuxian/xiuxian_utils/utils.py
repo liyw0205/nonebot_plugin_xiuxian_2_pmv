@@ -787,38 +787,91 @@ def log_message(user_id: str, msg: str):
     except Exception as e:
         logger.error(f"记录日志失败: {e}")
 
-def get_logs(user_id: str, date_str: str = None, limit: int = 20) -> list:
+def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 10) -> dict:
     """
-    获取用户日志
+    获取用户日志（带分页功能）
     
     参数:
         user_id: 用户ID
         date_str: 日期字符串(格式: 年月日，如250820)，不传则获取今天
-        limit: 要获取的日志条数，默认20条
+        page: 当前页码，默认为1
+        per_page: 每页显示的日志数量，默认为10
         
     返回:
-        日志列表，每条包含时间和消息
+        包含分页信息的字典:
+        {
+            "logs": 日志列表,
+            "total": 总日志数,
+            "total_pages": 总页数,
+            "current_page": 当前页码
+        }
     """
     PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     try:
         # 确定日期
         if date_str is None:
             date_str = datetime.now().strftime("%y%m%d")
+        else:
+            # 验证日期格式是否正确
+            try:
+                datetime.strptime(date_str, "%y%m%d")
+            except ValueError:
+                return {
+                    "logs": [],
+                    "total": 0,
+                    "total_pages": 0,
+                    "current_page": page,
+                    "error": "日期格式错误，请使用6位数字格式(yymmdd)，例如250822表示2025年8月22日"
+                }
         
         # 构建日志文件路径
         log_file = PLAYERSDATA / str(user_id) / "logs" / f"{date_str}.log"
         
-        # 如果文件不存在，返回空列表
+        # 如果文件不存在，返回空结果
         if not log_file.exists():
-            return []
+            return {
+                "logs": [],
+                "total": 0,
+                "total_pages": 0,
+                "current_page": page,
+                "error": f"未找到{date_str}的日志记录"
+            }
         
         # 读取日志文件
         with open(log_file, "r", encoding="utf-8") as f:
-            logs = json.load(f)
+            all_logs = json.load(f)
         
-        # 限制返回数量
-        return logs[:limit]
+        total_logs = len(all_logs)
+        total_pages = (total_logs + per_page - 1) // per_page
+        
+        # 检查页码是否有效
+        if page < 1 or page > total_pages:
+            return {
+                "logs": [],
+                "total": total_logs,
+                "total_pages": total_pages,
+                "current_page": page,
+                "error": f"页码错误，有效范围为1~{total_pages}页"
+            }
+        
+        # 计算分页范围
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paged_logs = all_logs[start_index:end_index]
+        
+        return {
+            "logs": paged_logs,
+            "total": total_logs,
+            "total_pages": total_pages,
+            "current_page": page
+        }
         
     except Exception as e:
         logger.error(f"获取日志失败: {e}")
-        return []
+        return {
+            "logs": [],
+            "total": 0,
+            "total_pages": 0,
+            "current_page": page,
+            "error": f"获取日志失败: {e}"
+        }

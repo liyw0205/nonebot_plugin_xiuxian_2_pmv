@@ -81,8 +81,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not isUser:
         await handle_send(bot, event, msg)
         await tower_challenge.finish()
-    
     user_id = user_info["user_id"]
+    is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await battle.finish()
+        
     success, msg = await tower_battle.challenge_floor(bot, event, user_id)
     
     await handle_send(bot, event, msg)
@@ -97,8 +101,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not isUser:
         await handle_send(bot, event, msg)
         await tower_continuous.finish()
-    
     user_id = user_info["user_id"]
+    is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await battle.finish()
+
     success, msg = await tower_battle.challenge_floor(bot, event, user_id, continuous=True)
     
     await handle_send(bot, event, msg)

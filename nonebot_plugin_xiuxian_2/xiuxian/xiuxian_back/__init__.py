@@ -126,8 +126,8 @@ guishi_baitan = on_command("鬼市摆摊", priority=5, block=True)
 guishi_shoutan = on_command("鬼市收摊", priority=5, block=True)
 
 # === 其他原有命令 ===
-chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=5, block=True)
-check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=6, block=True)
+chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=20, block=True)
+check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priority=25, block=True)
 goods_re_root = on_command("炼金", priority=6, block=True)
 fast_alchemy = on_command("快速炼金", aliases={"一键炼金"}, priority=6, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
