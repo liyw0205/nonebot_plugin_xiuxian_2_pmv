@@ -26,8 +26,7 @@ from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage ,OtherSet, UserBuffDate,
-    XIUXIAN_IMPART_BUFF, leave_harm_time
+    XiuxianDateManage ,OtherSet, leave_harm_time
 )
 from ..xiuxian_config import convert_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
@@ -56,7 +55,6 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成"}, permission=SUPERUSER, priority=5, block=True)
@@ -330,39 +328,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, msg)
         await battle.finish()
 
-    player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
-    userinfo = sql_message.get_user_real_info(user_id)
-    user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
-
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    boss_atk = impart_data['boss_atk'] if impart_data['boss_atk'] is not None else 0
-    user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
-    user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
-    user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
-    integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
-    exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
-    
-    if user_main_data != None:
-        main_crit_buff = user_main_data['crit_buff']
-    else:
-        main_crit_buff = 0
-  
-    if user_armor_data != None:
-        armor_crit_buff = user_armor_data['crit_buff']
-    else:
-        armor_crit_buff = 0
-    
-    if user_weapon_data != None:
-        player['会心'] = int(((user_weapon_data['crit_buff']) + (armor_crit_buff) + (main_crit_buff)) * 100)
-    else:
-        player['会心'] = (armor_crit_buff + main_crit_buff) * 100
-
-    player['user_id'] = userinfo['user_id']
-    player['道号'] = userinfo['user_name']
-    player['气血'] = userinfo['hp']
-    player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
-    player['真元'] = userinfo['mp']
-    player['exp'] = userinfo['exp']
+    player = sql_message.get_player_data(user_id)
 
     bossinfo = group_boss[group_id][boss_num - 1]
     if bossinfo['jj'] == '零':
@@ -580,21 +546,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await challenge_scarecrow.finish()
 
     # 获取玩家信息
-    player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
-    userinfo = sql_message.get_user_real_info(user_id)
-    user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
-    user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
-    user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
-
-    player['user_id'] = userinfo['user_id']
-    player['道号'] = userinfo['user_name']
-    player['气血'] = userinfo['hp']
-    player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
-    player['真元'] = userinfo['mp']
-    player['exp'] = userinfo['exp']
-    player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
+    player = sql_message.get_player_data(user_id)
     scarecrow_hp = int(jsondata.level_data()["至高"]["power"]) * 10000
 
     # 定义稻草人属性（固定）
@@ -661,21 +613,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         await challenge_training_puppet.finish()
 
     # 获取玩家信息
-    player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
-    userinfo = sql_message.get_user_real_info(user_id)
-    user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
-    user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
-    user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
-
-    player['user_id'] = userinfo['user_id']
-    player['道号'] = userinfo['user_name']
-    player['气血'] = userinfo['hp']
-    player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
-    player['真元'] = userinfo['mp']
-    player['exp'] = userinfo['exp']
-    player['会心'] = (user_weapon_data['crit_buff'] + user_armor_data['crit_buff'] + user_main_data['crit_buff']) * 100 if user_weapon_data and user_armor_data and user_main_data else 0
+    player = sql_message.get_player_data(user_id)
     
     arg_list = args.extract_plain_text().split()
     boss_name = "散发着威压的尸体"

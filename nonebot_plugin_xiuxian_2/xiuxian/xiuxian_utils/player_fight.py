@@ -573,7 +573,7 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                             user1_turn_skip = True
                             user1_buff_turn = True
                     
-                    elif user2skill_type == 6:  # 叠加类技能
+                    elif user2_skill_type == 6:  # 叠加类技能
                         isCrit, player2_sh = get_turnatk(player2, user2_skill_sh,
                                                              user2_battle_buff_date)  # 判定是否暴击 辅修功法14
 
@@ -732,12 +732,8 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
     {"user_id": None,"道号": None, "气血": None, "攻击": None, "真元": None, '会心':None, 'exp':None}
     """
     user1_buff_date = UserBuffDate(player1['user_id'])  # 1号的buff信息
-    if user1_buff_date is None:  # 处理为空的情况
-        user1_main_buff_data = None
-        user1_sub_buff_data = None
-    else:
-        user1_main_buff_data = user1_buff_date.get_user_main_buff_data()
-        user1_sub_buff_data = user1_buff_date.get_user_sub_buff_data()  # 获取玩家1的辅修功法
+    user1_main_buff_data = user1_buff_date.get_user_main_buff_data()
+    user1_sub_buff_data = user1_buff_date.get_user_sub_buff_data()  # 获取玩家1的辅修功法
     user1_hp_buff = user1_main_buff_data['hpbuff'] if user1_main_buff_data is not None else 0
     user1_mp_buff = user1_main_buff_data['mpbuff'] if user1_main_buff_data is not None else 0
     user1_random_buff = user1_main_buff_data['random_buff'] if user1_main_buff_data is not None else 0

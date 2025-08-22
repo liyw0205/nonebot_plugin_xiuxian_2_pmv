@@ -272,6 +272,43 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return None
 
+    def get_player_data(self, user_id):
+        """根据USER_ID获取用户信息,获取属性"""
+        player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
+        userinfo = sql_message.get_user_real_info(user_id)
+        user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
+
+        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+        boss_atk = impart_data['boss_atk'] if impart_data['boss_atk'] is not None else 0
+        user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
+        user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
+        user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
+        integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
+        exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
+    
+        if user_main_data != None:
+            main_crit_buff = user_main_data['crit_buff']
+        else:
+            main_crit_buff = 0
+  
+        if user_armor_data != None:
+            armor_crit_buff = user_armor_data['crit_buff']
+        else:
+            armor_crit_buff = 0
+    
+        if user_weapon_data != None:
+            player['会心'] = int(((user_weapon_data['crit_buff']) + (armor_crit_buff) + (main_crit_buff)) * 100)
+        else:
+            player['会心'] = (armor_crit_buff + main_crit_buff) * 100
+
+        player['user_id'] = userinfo['user_id']
+        player['道号'] = userinfo['user_name']
+        player['气血'] = userinfo['hp']
+        player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
+        player['真元'] = userinfo['mp']
+        player['exp'] = userinfo['exp']
+        return player
+
     def get_sect_info(self, sect_id):
         """
         通过宗门编号获取宗门信息
@@ -2128,18 +2165,30 @@ class XIUXIAN_IMPART_BUFF:
         """
         cur = self.conn.cursor()
         if operation == 1:
-            sql = "UPDATE xiuxian_impart SET impart_lv = impart_lv + ? WHERE impart_lv >= 0"
-        elif operation == 2:
-            sql = "UPDATE xiuxian_impart SET impart_lv = CASE WHEN impart_lv - ? < 0 THEN 0 ELSE impart_lv - ? END WHERE impart_lv > 0"
-            # 对于减少操作，需要确保等级不低于0
+            sql = """
+            UPDATE xiuxian_impart 
+            SET impart_lv = CASE 
+                WHEN impart_lv + ? > 30 THEN 30 
+                ELSE impart_lv + ? 
+            END 
+            WHERE impart_lv >= 0
+            """
             cur.execute(sql, (num, num))
-            self.conn.commit()
-            return
+        elif operation == 2:
+            sql = """
+            UPDATE xiuxian_impart 
+            SET impart_lv = CASE 
+                WHEN impart_lv - ? < 0 THEN 0 
+                ELSE impart_lv - ? 
+            END 
+            WHERE impart_lv > 0
+            """
+            cur.execute(sql, (num, num))
         else:
             return
     
-        cur.execute(sql, (num,))
         self.conn.commit()
+
 
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""

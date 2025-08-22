@@ -215,16 +215,9 @@ class TowerBattle:
             return True, msg
     
     def _prepare_player_data(self, user_info):
-        """准备玩家战斗数据"""
-        player = {
-            "user_id": user_info["user_id"],
-            "道号": user_info["user_name"],
-            "气血": user_info["hp"],
-            "攻击": user_info["atk"],
-            "真元": user_info["mp"],
-            "exp": user_info["exp"],
-            "会心": 0  # 简化处理，实际应根据装备计算
-        }
+        """准备玩家战斗数据（添加与世界BOSS相同的加成）"""
+        user_id = user_info['user_id']
+        player = sql_message.get_player_data(user_id)
         return player
     
     def _give_floor_reward(self, user_id, user_info, floor):
