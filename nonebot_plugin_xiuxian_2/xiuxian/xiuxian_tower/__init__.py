@@ -18,8 +18,10 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, log_message, handle_send, 
     number_to, send_msg_handler
 )
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from .tower_data import tower_data, PLAYERSDATA
 from .tower_battle import tower_battle
+sql_message = XiuxianDateManage()
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -86,7 +88,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not is_type:
         await handle_send(bot, event, msg)
         await battle.finish()
-        
+    if user_info['hp'] is None or user_info['hp'] == 0:
+        sql_message.update_user_hp(user_id)
+
+    if user_info['hp'] <= user_info['exp'] / 10:
+        time = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["单层爬塔"], 1)
+        await handle_send(bot, event, msg)
+        await tower_challenge.finish()
     success, msg = await tower_battle.challenge_floor(bot, event, user_id)
     
     await handle_send(bot, event, msg)
@@ -107,6 +118,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await battle.finish()
 
+    if user_info['hp'] is None or user_info['hp'] == 0:
+        sql_message.update_user_hp(user_id)
+
+    if user_info['hp'] <= user_info['exp'] / 10:
+        time = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
+        await handle_send(bot, event, msg)
+        await tower_challenge.finish()
     success, msg = await tower_battle.challenge_floor(bot, event, user_id, continuous=True)
     
     await handle_send(bot, event, msg)
