@@ -1121,6 +1121,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         
     user_id = user_info['user_id']
     user_stone_num = user_info['stone']
+    hujiang_rank = convert_rank("江湖好手")[0]
     give_qq = None  # 艾特的时候存到这里
     arg_list = args.extract_plain_text().split()
     
@@ -1139,8 +1140,11 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         
     give_stone_num = int(stone_num)
     
+    # 计算发送方每日赠送上限（基础100000000 + 每境界20000000）
+    user_rank = convert_rank(user_info['level'])[0]
+    daily_send_limit = 100000000 + (hujiang_rank - user_rank) * 20000000
+    
     # 检查发送方今日已送额度
-    daily_send_limit = 1000000000  # 每日送灵石上限
     already_sent = stone_limit.get_send_limit(user_id)
     remaining_send = daily_send_limit - already_sent
     
@@ -1166,8 +1170,10 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
             
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
-            # 检查接收方今日已收额度
-            daily_receive_limit = 1000000000  # 每日收灵石上限
+            # 检查接收方每日接收上限（同样计算）
+            receiver_rank = convert_rank(give_user['level'])[0]
+            daily_receive_limit = 100000000 + (hujiang_rank - receiver_rank) * 20000000
+            
             already_received = stone_limit.get_receive_limit(give_qq)
             remaining_receive = daily_receive_limit - already_received
             
@@ -1202,8 +1208,10 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
                 await handle_send(bot, event, msg)
                 await give_stone.finish()
                 
-            # 检查接收方今日已收额度
-            daily_receive_limit = 1000000000  # 每日收灵石上限
+            # 检查接收方每日接收上限
+            receiver_rank = convert_rank(give_message['level'])[0]
+            daily_receive_limit = 100000000 + (hujiang_rank - receiver_rank) * 20000000
+            
             already_received = stone_limit.get_receive_limit(give_message['user_id'])
             remaining_receive = daily_receive_limit - already_received
             
@@ -1234,7 +1242,6 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         msg = f"未获到对方信息，请输入正确的道号！"
         await handle_send(bot, event, msg)
         await give_stone.finish()
-
 
 # 偷灵石
 @steal_stone.handle(parameterless=[Cooldown(stamina_cost = 10, at_sender=False)])
