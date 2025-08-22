@@ -53,7 +53,7 @@ def savef(user_id, data):
     save_data = {
         "tasks": data["tasks"],
         "status": data.get("status", 1),  # 默认1-未接取
-        "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
         "user_level": data.get("user_level")
     }
     with open(FILEPATH, "w", encoding="UTF-8") as f:
@@ -69,3 +69,52 @@ def readf(user_id):
     with open(FILEPATH, "r", encoding="UTF-8") as f:
         data = json.load(f)
     return data
+
+def delete_work_file(user_id):
+    """删除悬赏令信息文件"""
+    user_id = str(user_id)
+    FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
+    if os.path.exists(FILEPATH):
+        try:
+            os.remove(FILEPATH)
+            return True
+        except Exception as e:
+            logger.error(f"删除悬赏令文件失败: {e}")
+            return False
+    return False
+
+def has_unaccepted_work(user_id, check_expired=True, expire_minutes=30):
+    """
+    检查用户是否有未接取的悬赏令
+    :param user_id: 用户ID
+    :param check_expired: 是否检查过期状态
+    :param expire_minutes: 过期时间(分钟)
+    :return: (has_work, work_data) 是否有未接取悬赏令和悬赏数据
+    """
+    work_data = readf(user_id)
+    if not work_data:
+        return False, None
+    
+    # 检查状态是否为未接取(1)
+    if work_data.get("status") != 1:
+        return False, work_data
+    
+    # 如果需要检查过期状态
+    if check_expired:
+        try:
+            refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            try:
+                refresh_time = datetime.strptime(work_data["refresh_time"], "%Y-%m-%d %H:%M:%S")
+            except Exception as e:
+                logger.error(f"解析悬赏令时间失败: {e}, 时间: {work_data['refresh_time']}")
+                return False, work_data
+        
+        time_diff = datetime.now() - refresh_time
+        if time_diff.total_seconds() > expire_minutes * 60:
+            # 自动标记为过期
+            work_data["status"] = 0
+            savef(user_id, work_data)
+            return False, work_data
+    
+    return True, work_data

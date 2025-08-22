@@ -24,7 +24,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.utils import (
     number_to, check_user, send_msg_handler,
-    check_user_type, get_msg_pic, CommandObjectID, handle_send
+    check_user_type, get_msg_pic, CommandObjectID, handle_send, log_message
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from .two_exp_cd import two_exp_cd
@@ -360,6 +360,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    global two_exp_limit
     isUser, user_1, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
@@ -393,10 +394,31 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 await handle_send(bot, event, msg)
                 await two_exp.finish()
             else:
+                # 保留双修次数检测
+                limt_1 = two_exp_cd.find_user(user_1['user_id'])
+                limt_2 = two_exp_cd.find_user(user_2['user_id'])
                 sql_message.update_last_check_info_time(user_1['user_id']) # 更新查看修仙信息时间
+                # 加入传承
+                impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_1['user_id'])
+                impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_2['user_id'])
+                impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 is not None else 0
+                impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 is not None else 0
                 
-                max_exp_1 = int(exp_1 * 0.001)  # 最大获得修为为当前修为的1%
-                max_exp_2 = int(exp_2 * 0.001)
+                main_two_data_1 = UserBuffDate(user_1['user_id']).get_user_main_buff_data()#功法双修次数提升
+                main_two_data_2 = UserBuffDate(user_2['user_id']).get_user_main_buff_data()
+                main_two_1 =  main_two_data_1['two_buff'] if main_two_data_1 is not None else 0
+                main_two_2 =  main_two_data_2['two_buff'] if main_two_data_2 is not None else 0
+                if limt_1 >= two_exp_limit + impart_two_exp_1 + main_two_1:
+                    msg = "道友今天双修次数已经到达上限！"
+                    await handle_send(bot, event, msg)
+                    await two_exp.finish()
+                if limt_2 >= two_exp_limit + impart_two_exp_2 + main_two_2:
+                    msg = "对方今天双修次数已经到达上限！"
+                    await handle_send(bot, event, msg)
+                    await two_exp.finish()
+                
+                max_exp_1 = int(exp_1 * 0.01)  # 最大获得修为为当前修为的1%
+                max_exp_2 = int(exp_2 * 0.01)
                 
                 # 随机事件描述
                 event_descriptions = [
@@ -424,7 +446,7 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 event_desc = random.choice(event_descriptions)
                 
                 if random.randint(1, 100) in [13, 14, 52, 10, 66]:  # 特殊事件概率
-                    exp = int((exp_1 + exp_2) * 0.0005)
+                    exp = int((exp_1 + exp_2) * 0.0055)
                     
                     # 限制获得的修为不超过1%
                     exp_limit_1 = min(exp, max_exp_1)
@@ -439,11 +461,16 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     sql_message.update_levelrate(user_1['user_id'], user_1['level_up_rate'] + 2)
                     sql_message.update_levelrate(user_2['user_id'], user_2['level_up_rate'] + 2)
                     
+                    two_exp_cd.add_user(user_1['user_id'])
+                    two_exp_cd.add_user(user_2['user_id'])
+                    
                     msg = f"\n{event_desc}\n{random.choice(special_events)}\n"
                     msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
                     msg += f"离开时双方互相留法宝为对方护道,双方各增加突破概率2%。"
                     await handle_send(bot, event, msg)
+                    log_message(user_1['user_id'], msg)
+                    log_message(user_2['user_id'], msg)
                     await two_exp.finish()
                 else:
                     exp = int((exp_1 + exp_2) * 0.0055)
@@ -458,10 +485,15 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     sql_message.update_exp(user_2['user_id'], exp_limit_2)
                     sql_message.update_power2(user_2['user_id'])
                     
+                    two_exp_cd.add_user(user_1['user_id'])
+                    two_exp_cd.add_user(user_2['user_id'])
+                    
                     msg = f"\n{event_desc}\n"
                     msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
                     await handle_send(bot, event, msg)
+                    log_message(user_1['user_id'], msg)
+                    log_message(user_2['user_id'], msg)
                     await two_exp.finish()
     else:
         msg = "修仙者应一心向道，务要留恋凡人！"
