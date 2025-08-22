@@ -5,6 +5,7 @@ from nonebot_plugin_apscheduler import scheduler
 from datetime import datetime
 from nonebot import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
+from nonebot.log import logger
 from nonebot.adapters.onebot.v11 import (
     Bot,
     Message,
@@ -36,13 +37,13 @@ tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, bl
 @scheduler.scheduled_job("cron", day=1, hour=0, minute=0)
 async def reset_tower_floors():
     tower_data.reset_all_floors()
-    print("通天塔层数已重置")
+    logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
 
 # 每周一0点重置商店限购
 @scheduler.scheduled_job("cron", day_of_week="mon", hour=0, minute=0)
 async def reset_shop_limits():
     tower_data.reset_weekly_limits()
-    print("通天塔商店限购已重置")
+    logger.opt(colors=True).info("<green>通天塔商店限购已重置</green>")
 
 tower_help = on_command("通天塔帮助", priority=5, block=True)
 
