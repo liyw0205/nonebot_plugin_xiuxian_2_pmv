@@ -330,7 +330,7 @@ def Player_fight(player1: dict, player2: dict, type_in, bot_id):
                             user2_turn_skip = True
                             user2_buff_turn = True
                             
-                    elif user1skill_type == 6:  # 叠加类技能
+                    elif user1_skill_type == 6:  # 叠加类技能
                         isCrit, player1_sh = get_turnatk(player1, user1_skill_sh,
                                                              user1_battle_buff_date)  # 判定是否暴击 辅修功法14
 
@@ -1343,13 +1343,13 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
             if user1_turn_skip:  # 无需跳过回合
                 turn_start_msg = f"☆------{player1['道号']}的回合------☆"
                 play_list.append(get_msg_dict(player1, player_init_hp, turn_start_msg))
-                user1hpconst, user1mpcost, user1skill_type, skillrate = get_skill_hp_mp_data(player1, user1_skill_data)
+                user1hpconst, user1mpcost, user1_skill_type, skillrate = get_skill_hp_mp_data(player1, user1_skill_data)
                 if player1_turn_cost == 0:  # 没有持续性技能生效
                     player1_js = player1_f_js  # 没有持续性技能生效,减伤恢复
                     if isEnableUserSikll(player1, user1hpconst, user1mpcost, player1_turn_cost,
                                          skillrate):  # 满足技能要求，#此处为技能的第一次释放
                         skillmsg, user1_skill_sh, player1_turn_cost = get_skill_sh_data(player1, user1_skill_data)
-                        if user1skill_type == 1:  # 直接伤害类技能
+                        if user1_skill_type == 1:  # 直接伤害类技能
                             play_list.append(get_msg_dict(player1, player_init_hp, skillmsg))
                             player1 = calculate_skill_cost(player1, user1hpconst, user1mpcost)
                             boss['气血'] = boss['气血'] - int(
@@ -1358,7 +1358,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
                             sh += user1_skill_sh
 
-                        elif user1skill_type == 2:  # 持续性伤害技能
+                        elif user1_skill_type == 2:  # 持续性伤害技能
                             play_list.append(get_msg_dict(player1, player_init_hp, skillmsg))
                             player1 = calculate_skill_cost(player1, user1hpconst, user1mpcost)
                             boss['气血'] = boss['气血'] - int(
@@ -1367,7 +1367,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
                             sh += user1_skill_sh
 
-                        elif user1skill_type == 3:  # buff类技能
+                        elif user1_skill_type == 3:  # buff类技能
                             user1buff_type = user1_skill_data['bufftype']
                             if user1buff_type == 1:  # 攻击类buff
                                 isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date,
@@ -1405,7 +1405,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                 player1_js = player1_f_js - user1_skill_sh
                                 sh += player1_sh
 
-                        elif user1skill_type == 4:  # 封印类技能
+                        elif user1_skill_type == 4:  # 封印类技能
                             play_list.append(get_msg_dict(player1, player_init_hp, skillmsg))
                             player1 = calculate_skill_cost(player1, user1hpconst, user1mpcost)
 
@@ -1413,7 +1413,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                                 boss_turn_skip = False
                                 bossbuffturn = False
                                 
-                        elif user1skill_type == 5:  # 随机伤害类型技能
+                        elif user1_skill_type == 5:  # 随机伤害类型技能
                             play_list.append(get_msg_dict(player1, player_init_hp, skillmsg))
                             player1 = calculate_skill_cost(player1, user1hpconst, user1mpcost)
                             boss['气血'] = boss['气血'] - int(
@@ -1422,7 +1422,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
                             sh += user1_skill_sh
 
-                        elif user1skill_type == 6:  # 叠加类技能
+                        elif user1_skill_type == 6:  # 叠加类技能
                             isCrit, player1_sh = get_turnatk(player1, 0, user1_battle_buff_date,
                                                                  boss_buff, random_buff)  # 判定是否暴击 辅修功法14
                             if isCrit:
@@ -1454,7 +1454,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                         sh += player1_sh
 
                 else:  # 持续性技能判断,不是第一次
-                    if user1skill_type == 2:  # 持续性伤害技能
+                    if user1_skill_type == 2:  # 持续性伤害技能
                         player1_turn_cost = player1_turn_cost - 1
                         skillmsg = get_persistent_skill_msg(player1['道号'], user1_skill_data['name'], user1_skill_sh,
                                                             player1_turn_cost)
@@ -1472,7 +1472,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                         play_list.append(get_msg_dict(player1, player_init_hp, boss_hp_msg))
                         sh += player1_sh + user1_skill_sh
 
-                    elif user1skill_type == 3:  # buff类技能
+                    elif user1_skill_type == 3:  # buff类技能
                         user1buff_type = user1_skill_data['bufftype']
                         if user1buff_type == 1:  # 攻击类buff
                             isCrit, player1_sh = get_turnatk(player1, user1_skill_sh, user1_battle_buff_date,
@@ -1510,7 +1510,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             player1_js = player1_f_js - user1_skill_sh
                             sh += player1_sh
 
-                    elif user1skill_type == 4:  # 封印类技能
+                    elif user1_skill_type == 4:  # 封印类技能
                         player1_turn_cost = player1_turn_cost - 1
                         skillmsg = get_persistent_skill_msg(player1['道号'], user1_skill_data['name'], user1_skill_sh,
                                                             player1_turn_cost)
@@ -1531,7 +1531,7 @@ async def Boss_fight(player1: dict, boss: dict, type_in=2, bot_id=0):
                             boss_turn_skip = True
                             bossbuffturn = True
                             
-                    elif user1skill_type == 6:  # 叠加类技能
+                    elif user1_skill_type == 6:  # 叠加类技能
                         isCrit, player1_sh = get_turnatk(player1, user1_skill_sh, user1_battle_buff_date,
                                                              boss_buff, random_buff)  # 判定是否暴击 辅修功法14
 
