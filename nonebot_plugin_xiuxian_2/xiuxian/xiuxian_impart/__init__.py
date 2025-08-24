@@ -29,6 +29,7 @@ from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
 from .impart_uitls import (
     get_image_representation,
+    get_star_rating,
     get_rank,
     img_path,
     impart_check,
@@ -120,7 +121,6 @@ async def impart_help_(
         await handle_send(bot, event, msg)
         await impart_help.finish()
 
-
 @impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承祈愿"""
@@ -151,7 +151,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         times = 10
 
     # 检查思恋结晶是否足够
-    required_crystals = times  # 每抽一次消耗10颗
+    required_crystals = times  # 每抽一次消耗1颗思恋结晶
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
         return
@@ -163,25 +163,25 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
-    total_seclusion_time = 0
     new_cards = []
     duplicate_cards = []
-    list_tp = []
     current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
+    total_seclusion_time = 0
+    current_draw_duplicates = {}  # 记录本次抽卡获得的重复卡牌数量
 
     # 执行抽卡
     for _ in range(times // 10):
         if get_rank(user_id):
             # 中奖情况
             reap_img = random.choice(img_list)
-            if impart_data_json.data_person_add(user_id, reap_img):
-                # 重复卡片
-                duplicate_cards.append(reap_img)
-                total_seclusion_time += 1200
-            else:
-                # 新卡片
+            is_new_card, _ = impart_data_json.data_person_add(user_id, reap_img)
+            if is_new_card:
                 new_cards.append(reap_img)
                 total_seclusion_time += 660
+            else:
+                # 记录本次抽卡获得的重复卡牌数量
+                current_draw_duplicates[reap_img] = current_draw_duplicates.get(reap_img, 0) + 1
+                total_seclusion_time += 1200
             # 中奖（新卡或重复卡）后重置抽卡概率为0
             current_wish = 0
         else:
@@ -196,11 +196,16 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         xiuxian_impart.update_impart_wish(current_wish, user_id)
     impart_data_draw = await impart_check(user_id)
 
+    # 格式化重复卡牌信息
+    duplicate_cards_info = []
+    for card_name, count in current_draw_duplicates.items():
+        duplicate_cards_info.append(f"{card_name}x{count}")
+
     summary_msg = (
         f"{summary}\n"
         f"累计获得{total_seclusion_time}分钟闭关时间！\n"
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
-        f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
+        f"重复卡片：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}\n"
         f"抽卡概率：{current_wish}/90次\n"
         f"消耗思恋结晶：{times}颗\n"        
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗"
@@ -213,7 +218,6 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except ActionFailed:
         await handle_send(bot, event, "祈愿结果发送失败！")
     await impart_draw.finish()
-
 
 @impart_draw2.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -261,21 +265,19 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     new_cards = []
     duplicate_cards = []
     current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
-    reward_stone = 0
+    current_draw_duplicates = {}  # 记录本次抽卡获得的重复卡牌数量
 
     # 执行抽卡
     for _ in range(times // 10):
         if get_rank(user_id):
             # 中奖情况
             reap_img = random.choice(img_list)
-            if impart_data_json.data_person_add(user_id, reap_img):
-                # 重复卡片
-                duplicate_cards.append(reap_img)
-                xiuxian_impart.update_stone_num(10, user_id, 1)
-                reward_stone += 10
-            else:
-                # 新卡片
+            is_new_card, _ = impart_data_json.data_person_add(user_id, reap_img)
+            if is_new_card:
                 new_cards.append(reap_img)
+            else:
+                # 记录本次抽卡获得的重复卡牌数量
+                current_draw_duplicates[reap_img] = current_draw_duplicates.get(reap_img, 0) + 1
             # 中奖（新卡或重复卡）后重置抽卡概率为0
             current_wish = 0
         else:
@@ -288,12 +290,16 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     sql_message.update_ls(user_id, required_crystals, 2)  # 2表示减少
     impart_data_draw = await impart_check(user_id)
 
+    # 格式化重复卡牌信息
+    duplicate_cards_info = []
+    for card_name, count in current_draw_duplicates.items():
+        duplicate_cards_info.append(f"{card_name}x{count}")
+
     summary_msg = (
         f"{summary}\n"
         f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
-        f"重复卡片：{', '.join(duplicate_cards) if duplicate_cards else '无'}\n"
+        f"重复卡片：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}\n"
         f"抽卡概率：{current_wish}/90次\n"
-        f"转换思恋结晶：{reward_stone}颗\n"
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
         f"消耗灵石：{number_to(required_crystals)}"
     )
@@ -304,7 +310,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     except ActionFailed:
         await handle_send(bot, event, "抽卡结果发送失败！")
     await impart_draw2.finish()
-    
+
 @use_wishing_stone.handle(parameterless=[Cooldown(at_sender=False)])
 async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用祈愿石"""
@@ -374,9 +380,8 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, "获取祈愿石结果失败！")
     await use_wishing_stone.finish()
 
-    
 @impart_back.handle(parameterless=[Cooldown(at_sender=False)])
-async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -387,30 +392,60 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
-        await handle_send(
-            bot, event, send_group_id, "发生未知错误！"
-        )
+        await handle_send(bot, event, "发生未知错误！")
         return
 
-    list_tp = []
-    img = None
     img_tp = impart_data_json.data_person_list(user_id)
-    card_count = len(img_tp) if img_tp else 0 # 当前卡片数量
-    txt_back = f"卡片数量：{card_count}/108"
-    txt_tp = f"道友拥有的传承卡片如下:\n"
-    if img_tp:
-        card_list_str = "\n".join(img_tp)
-        txt_tp += card_list_str
-    else:
-        txt_tp += "暂无传承卡片"
-
-    msg = f"""
-{txt_tp}\n\n{txt_back}"""
+    if not img_tp:
+        await handle_send(bot, event, "暂无传承卡片")
+        return
+    
+    # 解析页码参数
+    msg_text = args.extract_plain_text().strip()
     try:
-        await handle_send(bot, event, msg)
-    except ActionFailed:
-        await handle_send(bot, event, "获取传承背包数据失败！")
-
+        page = int(msg_text) if msg_text else 1
+    except ValueError:
+        page = 1
+    
+    # 统计每种卡片的数量并按名称排序
+    card_counts = {}
+    for card in img_tp:
+        card_counts[card] = card_counts.get(card, 0) + 1
+    sorted_cards = sorted(card_counts.items(), key=lambda x: x[0])
+    
+    # 分页设置
+    cards_per_page = 30  # 每页显示30张卡片
+    total_pages = (len(sorted_cards) + cards_per_page - 1) // cards_per_page
+    page = max(1, min(page, total_pages))
+    
+    # 获取当前页的卡片
+    start_idx = (page - 1) * cards_per_page
+    end_idx = start_idx + cards_per_page
+    current_page_cards = sorted_cards[start_idx:end_idx]
+    
+    # 生成卡片列表
+    card_lines = []
+    for card_name, count in current_page_cards:
+        stars = get_star_rating(count)
+        card_lines.append(f"{stars} {card_name} (x{count})")
+    
+    # 构建消息
+    msg = f"\n道友的传承卡片：\n"
+    msg += "\n".join(card_lines)
+    
+    # 只在第一页显示总数和种类
+    if page == 1:
+        unique_cards = len(card_counts)  # 不同卡牌的数量
+        total_cards = len(img_tp)        # 总卡牌数量
+        msg += f"\n\n卡片种类：{unique_cards}/108"
+        msg += f"\n总卡片数：{total_cards}"
+    
+    # 添加分页信息
+    msg += f"\n\n第{page}/{total_pages}页"
+    if total_pages > 1:
+        msg += f"\n输入【传承背包+页码】查看其他页"
+    
+    await handle_send(bot, event, msg)
 
 @re_impart_load.handle(parameterless=[Cooldown(at_sender=False)])
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

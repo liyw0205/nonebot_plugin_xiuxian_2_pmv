@@ -66,16 +66,23 @@ class IMPART_DATA(object):
     def data_person_add(self, user_id, name):
         """
         添加词条
-        :param name:
-        :param user_id:
+        :param name: 卡片名称
+        :param user_id: 用户ID
+        :return: (是否新卡, 当前该卡片数量)
         """
         user_id = str(user_id)
-        if str(name) in self.data_person[user_id]:
-            return True
-        else:
-            self.data_person[user_id].append(name)
-            self.__save()
-            return False
+        if user_id not in self.data_person:
+            self.data_person[user_id] = []
+    
+        # 统计当前用户拥有的该卡片数量
+        current_count = self.data_person[user_id].count(name)
+    
+        # 添加卡片
+        self.data_person[user_id].append(name)
+        self.__save()
+    
+        # 返回是否新卡和当前总数
+        return current_count == 0, current_count + 1
 
     def data_person_list(self, user_id):
         """
