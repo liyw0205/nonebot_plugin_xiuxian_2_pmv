@@ -19,7 +19,7 @@ training_start = on_command("开始历练", aliases={"历练开始"}, priority=5
 training_status = on_command("历练状态", priority=5, block=True)
 training_shop = on_command("历练商店", priority=5, block=True)
 training_buy = on_command("历练兑换", priority=5, block=True)
-training_rank = on_command("历练排行", priority=5, block=True)
+training_rank = on_command("历练排行榜", priority=5, block=True)
 training_reset = on_command("重置历练", permission=SUPERUSER, priority=5, block=True)
 training_help = on_command("历练帮助", priority=5, block=True)
 
@@ -34,13 +34,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "【历练状态】 - 查看当前历练进度\n"
         "【历练商店】 - 查看历练商店商品\n"
         "【历练兑换+编号】 - 兑换商店商品\n"
-        "【历练排行】 - 查看历练排行榜\n"
-        "════════════\n"
+        "【历练排行榜】 - 查看历练排行榜\n"
+        "═════════════\n"
         "历练规则说明：\n"
         "1. 每小时可进行一次历练（整点刷新）\n"
         "2. 每周一0点重置商店限购\n"
         "3. 每完成一个历练进程(12步)可获得丰厚奖励\n"
-        "════════════\n"
+        "═════════════\n"
         "输入对应命令开始你的历练之旅吧！"
     )
     
@@ -88,7 +88,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, result)
         await training_start.finish()
     
-    msg = f"道友开始了新的历练旅程！\n{result}"
+    msg = f"\n{result}"
     await handle_send(bot, event, msg)
     await training_start.finish()
 
@@ -128,12 +128,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"下次可历练时间：{next_time_str}\n"
         f"当前进度：{training_info['progress']}/12\n"
         f"累计完成次数：{training_info['completed']}\n"
-        f"════════════\n"
-        f"输入【开始历练】开始新的历练"
+        f"═════════════\n"
     )
     
     if training_info.get("last_event"):
-        msg += f"\n════════════\n上次历练事件：\n{training_info['last_event']}"
+        msg += f"上次历练事件：\n{training_info['last_event']}"
+    else:
+        msg += f"道友可以【开始历练】了"
     
     await handle_send(bot, event, msg)
     await training_status.finish()
@@ -269,11 +270,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await training_rank.finish()
     
-    msg_list = ["\n═══  历练排行榜  ═════════"]
+    msg_list = ["\n═══  历练排行榜  ═════"]
     for i, (user_id, data) in enumerate(rank_data, 1):
         msg_list.append(
-            f"第{i}名：{data['name']} - 完成{data['completed']}次\n"
-            f"最高进度：{data['max_progress']}步"
+            f"第{i}名：{data['name']} - 完成{data['completed']}次"
         )
     
     await send_msg_handler(bot, event, "历练排行榜", bot.self_id, msg_list)

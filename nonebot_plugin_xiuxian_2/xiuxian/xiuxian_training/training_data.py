@@ -7,6 +7,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .training_events import training_events
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.utils import number_to
 
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 TRAINING_RANK_PATH = Path(__file__).parent / "training_rank.json"
@@ -236,7 +237,7 @@ class TrainingData:
         file_path = PLAYERSDATA / user_id / "training_info.json"
         
         default_data = {
-            "progress": 0,        # 当前进度(0-10)
+            "progress": 0,        # 当前进度(0-12)
             "last_time": None,    # 上次历练时间
             "points": 0,          # 成就点
             "completed": 0,       # 累计完成次数
@@ -280,6 +281,7 @@ class TrainingData:
     def make_choice(self, user_id, choice_type):
         """进行历练选择"""
         training_info = self.get_user_training_info(user_id)
+        user_info = sql_message.get_user_info_with_id(user_id)
         now = datetime.now()
         
         # 记录本次历练时间
@@ -288,32 +290,34 @@ class TrainingData:
         # 根据选择类型确定事件权重
         if choice_type == 1:  # 前进
             weights = {
-                "progress_plus_1": 30,       # 小奖励
-                "progress_plus_2": 30,       # 大奖励
-                "nothing": 20,               # 无事发生
-                "progress_minus_1": 10,      # 小惩罚
-                "progress_minus_2": 10       # 大惩罚
+                "progress_plus_1": 30,
+                "progress_plus_2": 30,
+                "nothing": 20,
+                "progress_minus_1": 10,
+                "progress_minus_2": 10
             }
         elif choice_type == 2:  # 后退
             weights = {
-                "progress_plus_1": 40,       # 小奖励
-                "progress_plus_2": 0,        # 后退没有大奖励
-                "nothing": 40,               # 无事发生
-                "progress_minus_1": 20,      # 小惩罚
-                "progress_minus_2": 0        # 后退没有大惩罚
+                "progress_plus_1": 40,
+                "progress_plus_2": 0,
+                "nothing": 40,
+                "progress_minus_1": 20,
+                "progress_minus_2": 0
             }
         else:  # 休息
             weights = {
-                "progress_plus_1": 30,       # 小奖励
-                "progress_plus_2": 30,       # 大奖励
-                "nothing": 20,               # 无事发生
-                "progress_minus_1": 10,      # 小惩罚
-                "progress_minus_2": 10       # 大惩罚
+                "progress_plus_1": 30,
+                "progress_plus_2": 30,
+                "nothing": 20,
+                "progress_minus_1": 10,
+                "progress_minus_2": 10
             }
         
         # 随机选择事件
         event_type = random.choices(list(weights.keys()), weights=list(weights.values()))[0]
-        event_result = training_events.handle_event(user_id, event_type)
+        
+        # 调用事件处理器，传入用户信息
+        event_result = training_events.handle_event(user_id, user_info, event_type)
         
         # 更新进度 - 默认+1
         base_progress = 1
@@ -331,17 +335,24 @@ class TrainingData:
         
         training_info["progress"] = max(0, training_info["progress"] + progress_change)
         
-        # 记录最后事件
-        training_info["last_event"] = event_result
+        # 处理事件结果
+        if isinstance(event_result, dict):
+            # 更新成就点
+            if event_result.get("type") == "points":
+                training_info["points"] += event_result["amount"]
+            
+            # 记录最后事件
+            training_info["last_event"] = event_result.get("message", "")
+        else:
+            training_info["last_event"] = str(event_result)
         
         # 检查是否完成一个进程
         if training_info["progress"] >= 12:
             training_info["progress"] = 0
             training_info["completed"] += 1
-            training_info["max_progress"] = max(training_info["max_progress"], 10)
+            training_info["max_progress"] = max(training_info["max_progress"], 12)
             
             # 完成奖励
-            user_info = sql_message.get_user_info_with_id(user_id)
             exp_reward = int(user_info["exp"] * 0.01)  # 1%修为
             stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
             points_reward = 1000  # 1000成就点
@@ -357,6 +368,7 @@ class TrainingData:
             item_types = ["功法", "神通", "药材", "法器", "防具"]
             item_type = random.choice(item_types)
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+            
             if item_id_list:
                 item_id = random.choice(item_id_list)
                 item_info = items.get_data_by_item_id(item_id)
@@ -365,7 +377,12 @@ class TrainingData:
             else:
                 item_reward_msg = ""
             
-            event_result += f"\n恭喜道友完成一个历练进程！获得：\n修为+{number_to(exp_reward)}\n灵石+{number_to(stone_reward)}\n成就点+{points_reward}{item_reward_msg}"
+            training_info["last_event"] += (
+                f"\n恭喜道友完成一个历练进程！获得：\n"
+                f"修为+{number_to(exp_reward)}\n"
+                f"灵石+{number_to(stone_reward)}\n"
+                f"成就点+{points_reward}{item_reward_msg}"
+            )
         
         # 更新最高进度
         training_info["max_progress"] = max(training_info["max_progress"], training_info["progress"])
@@ -373,10 +390,9 @@ class TrainingData:
         self.save_user_training_info(user_id, training_info)
         
         # 更新排行榜
-        user_info = sql_message.get_user_info_with_id(user_id)
         self.update_training_rank(user_id, user_info["user_name"], training_info["completed"], training_info["max_progress"])
         
-        return True, event_result
+        return True, training_info["last_event"]
     
     def update_training_rank(self, user_id, user_name, completed, max_progress):
         """更新历练排行榜"""
@@ -386,6 +402,7 @@ class TrainingData:
         rank_data[str(user_id)] = {
             "name": user_name,
             "completed": completed,
+            "max_progress": max_progress,
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
     

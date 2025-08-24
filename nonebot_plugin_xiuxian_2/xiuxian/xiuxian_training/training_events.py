@@ -7,168 +7,410 @@ from ..xiuxian_config import convert_rank
 sql_message = XiuxianDateManage()
 items = Items()
 
-# 正面事件列表
-POSITIVE_EVENTS = [
-    "偶遇一位隐世高人，得到指点",
-    "发现一处灵气充沛的洞天福地",
-    "救助了一位受伤的修士，获得馈赠",
-    "在一处古遗迹中找到宝物",
-    "与一位道友论道，有所感悟",
-    "偶得一本上古功法残卷",
-    "发现一株珍稀灵药",
-    "帮助凡人解决困难，获得功德",
-    "在一处秘境中有所收获",
-    "与灵兽结缘，获得帮助"
-]
+# 入世事件 - 侧重红尘历练、人际交往、宗门事务等
+WORLDLY_EVENTS = {
+    "reward": {
+        "stone": {
+            "descriptions": [
+                ("帮助凡间城镇解决妖兽祸患，官府酬谢{}灵石", "base_amount + random.randint(500000, 2000000)"),
+                ("在坊市捡漏买到珍稀材料，转手获利{}灵石", "base_amount + random.randint(1000000, 3000000)"),
+                ("完成宗门任务，获得{}灵石奖励", "base_amount + random.randint(800000, 1500000)"),
+                ("救治了一位受伤的富商，获赠{}灵石", "base_amount + random.randint(700000, 1800000)"),
+                ("在拍卖会上慧眼识珠，低价购得宝物，价值{}灵石", "base_amount * 2 + random.randint(0, 1000000)")
+            ],
+            "base_amount": 2000000
+        },
+        "exp": {
+            "descriptions": [
+                ("与宗门长老论道三日，修为精进{}", "base_percent + random.uniform(0.001, 0.003)"),
+                ("在比武大会上力压群雄，心境突破，修为提升{}", "base_percent * 1.5 + random.uniform(0.002, 0.004)"),
+                ("协助处理宗门事务，获得前辈指点，修为增加{}", "base_percent + random.uniform(0.001, 0.002)"),
+                ("在藏书阁参悟前辈心得，领悟{}修为", "base_percent + random.uniform(0.0015, 0.0035)"),
+                ("救治同门获得功德，修为自然增长{}", "base_percent * 0.8 + random.uniform(0.001, 0.002)")
+            ],
+            "base_percent": 0.003
+        },
+        "item": {
+            "descriptions": [
+                ("完成宗门悬赏任务，奖励{}一件", None),
+                ("在坊市淘宝，意外购得{}", None),
+                ("帮助炼器长老打下手，获赠{}", None),
+                ("救治同门修士，对方赠予{}作为谢礼", None),
+                ("在宗门大比中获胜，奖品是{}", None)
+            ],
+            "types": ["功法", "神通", "药材", "法器", "防具"],
+            "rank_offset": 5
+        },
+        "points": {
+            "descriptions": [
+                ("解决宗门危机，获得{}成就点", "base_amount + random.randint(100, 300)"),
+                ("在修真界闯出名号，声望增加{}点", "base_amount * 1.2 + random.randint(50, 200)"),
+                ("完成一系列艰难任务，累计获得{}成就点", "base_amount + random.randint(150, 400)"),
+                ("调解门派纠纷有功，被授予{}成就点", "base_amount * 0.8 + random.randint(80, 250)"),
+                ("在修真集会上表现优异，赢得{}成就点", "base_amount + random.randint(120, 350)")
+            ],
+            "base_amount": 200
+        }
+    },
+    "punish": {
+        "stone": {
+            "descriptions": [
+                ("遭同门算计，被迫交出{}灵石平息事端", "base_amount + random.randint(200000, 800000)"),
+                ("购买法宝时被奸商所骗，损失{}灵石", "base_amount + random.randint(300000, 1000000)"),
+                ("宗门征税，上缴{}灵石", "base_amount * 0.7 + random.randint(0, 500000)"),
+                ("被劫修盯上，抢走{}灵石", "base_amount + random.randint(400000, 1200000)"),
+                ("投资商铺失败，亏损{}灵石", "base_amount * 0.8 + random.randint(100000, 600000)")
+            ],
+            "base_amount": 500000
+        },
+        "exp": {
+            "descriptions": [
+                ("被心魔所困，道心受损，修为倒退{}", "base_percent + random.uniform(0.001, 0.003)"),
+                ("与人斗法受伤，疗伤期间修为流失{}", "base_percent * 0.8 + random.uniform(0.0005, 0.002)"),
+                ("修炼时被同门干扰，行功出错损失{}修为", "base_percent + random.uniform(0.001, 0.0025)"),
+                ("卷入宗门纷争，耽误修炼，修为减退{}", "base_percent * 0.6 + random.uniform(0.001, 0.002)"),
+                ("被长辈责罚面壁思过，修为停滞倒退{}", "base_percent * 0.5 + random.uniform(0.0005, 0.0015)")
+            ],
+            "base_percent": 0.002
+        },
+        "item": {
+            "descriptions": [
+                ("遭遇同门嫉妒，{}被暗中破坏", None),
+                ("在坊市被偷，丢失{}", None),
+                ("与人比斗赌约失败，交出{}", None),
+                ("炼器失败，{}损毁", None),
+                ("为平息事端，被迫献出{}", None)
+            ]
+        },
+        "hp": {
+            "descriptions": [
+                ("与人斗法受伤，气血损失{}", "base_percent + random.uniform(0.05, 0.1)"),
+                ("遭人暗算中毒，元气大伤损失{}气血", "base_percent * 1.2 + random.uniform(0.08, 0.15)"),
+                ("修炼时被干扰，气血逆行损伤{}", "base_percent * 0.9 + random.uniform(0.06, 0.12)"),
+                ("为救人强行运功，损耗{}气血", "base_percent + random.uniform(0.07, 0.13)"),
+                ("执行危险任务受伤，损失{}气血", "base_percent * 1.1 + random.uniform(0.09, 0.16)")
+            ],
+            "base_percent": 0.15
+        }
+    }
+}
 
-# 负面事件列表
-NEGATIVE_EVENTS = [
-    "遭遇妖兽袭击，受了轻伤",
-    "误入一处险地，耗费精力才脱身",
-    "被一位邪修盯上，损失了些财物",
-    "修炼时出了点岔子，损耗了些修为",
-    "遇到一群劫修，被抢了些灵石",
-    "被幻阵所困，耗费心神才脱身",
-    "误食毒草，身体不适",
-    "被一位大能修士的威压所伤",
-    "遭遇天劫余波，受了点伤",
-    "被卷入修士争斗，受了波及"
-]
+# 出世事件 - 侧重秘境探索、自然感悟、清修等
+TRANSCENDENT_EVENTS = {
+    "reward": {
+        "stone": {
+            "descriptions": [
+                ("在灵脉深处发现{}灵石矿", "base_amount * 1.5 + random.randint(1000000, 3000000)"),
+                ("采集到珍稀灵药，售得{}灵石", "base_amount + random.randint(800000, 2000000)"),
+                ("探索古修士洞府，找到{}灵石", "base_amount * 2 + random.randint(0, 1500000)"),
+                ("灵兽报恩，衔来{}灵石", "base_amount * 0.8 + random.randint(300000, 1200000)"),
+                ("在秘境中发现灵晶，价值{}灵石", "base_amount * 3 + random.randint(0, 1000000)")
+            ],
+            "base_amount": 1000000
+        },
+        "exp": {
+            "descriptions": [
+                ("观瀑布三日，顿悟天地至理，修为提升{}", "base_percent * 2 + random.uniform(0.002, 0.005)"),
+                ("月下独酌，心境通明，修为自然增长{}", "base_percent + random.uniform(0.0015, 0.0035)"),
+                ("参悟上古石碑，领悟大道真意，修为精进{}", "base_percent * 1.8 + random.uniform(0.003, 0.006)"),
+                ("与灵兽相伴修行，修为增加{}", "base_percent * 1.2 + random.uniform(0.001, 0.003)"),
+                ("在灵泉中沐浴修炼，修为提升{}", "base_percent * 1.5 + random.uniform(0.002, 0.004)")
+            ],
+            "base_percent": 0.003
+        },
+        "item": {
+            "descriptions": [
+                ("在秘境深处发现{}", None),
+                ("灵兽指引，找到前辈遗留的{}", None),
+                ("参悟古碑时，{}从天而降", None),
+                ("清理洞府时发现尘封的{}", None),
+                ("帮助山灵解决困难，获赠{}", None)
+            ],
+            "types": ["功法", "神通", "药材", "法器", "防具"],
+            "rank_offset": 6
+        },
+        "points": {
+            "descriptions": [
+                ("解开上古禁制，获得{}成就点", "base_amount * 1.5 + random.randint(150, 400)"),
+                ("完成先贤考验，被授予{}成就点", "base_amount * 2 + random.randint(100, 300)"),
+                ("修复古阵法，天道赐予{}成就点", "base_amount + random.randint(200, 500)"),
+                ("参悟天地法则，明悟{}成就点", "base_amount * 1.2 + random.randint(120, 350)"),
+                ("帮助山灵平衡地脉，获得{}成就点", "base_amount * 0.9 + random.randint(180, 450)")
+            ],
+            "base_amount": 200
+        }
+    },
+    "punish": {
+        "stone": {
+            "descriptions": [
+                ("遭遇空间裂缝，随身携带的{}灵石被卷入虚空", "base_amount + random.randint(300000, 900000)"),
+                ("灵兽捣乱，丢失{}灵石", "base_amount * 0.7 + random.randint(200000, 600000)"),
+                ("误触禁制，为脱困消耗{}灵石", "base_amount + random.randint(400000, 800000)"),
+                ("采集灵药失败，损失{}灵石材料", "base_amount * 0.6 + random.randint(100000, 500000)"),
+                ("阵法反噬，需{}灵石修复损伤", "base_amount * 0.9 + random.randint(300000, 700000)")
+            ],
+            "base_amount": 500000
+        },
+        "exp": {
+            "descriptions": [
+                ("强行参悟高阶功法，道基受损修为倒退{}", "base_percent * 1.5 + random.uniform(0.002, 0.004)"),
+                ("遭遇心魔劫，修为跌落{}", "base_percent * 2 + random.uniform(0.003, 0.006)"),
+                ("误入时间乱流，损失{}修为", "base_percent + random.uniform(0.0015, 0.0035)"),
+                ("被古修士残念冲击，修为消散{}", "base_percent * 1.2 + random.uniform(0.002, 0.005)"),
+                ("强行突破失败，修为反噬损失{}", "base_percent * 1.8 + random.uniform(0.004, 0.007)")
+            ],
+            "base_percent": 0.002
+        },
+        "item": {
+            "descriptions": [
+                ("探索险地时，{}被空间裂缝吞噬", None),
+                ("炼丹失败，{}化为灰烬", None),
+                ("遭遇天劫余波，{}被雷击毁", None),
+                ("被古禁制锁定，被迫舍弃{}", None),
+                ("灵兽顽皮，{}不知去向", None)
+            ]
+        },
+        "hp": {
+            "descriptions": [
+                ("遭遇妖兽袭击，重伤损失{}气血", "base_percent * 1.5 + random.uniform(0.1, 0.2)"),
+                ("误入毒瘴瘴，元气损伤{}", "base_percent + random.uniform(0.08, 0.16)"),
+                ("强行破阵遭到反噬，气血流失{}", "base_percent * 1.8 + random.uniform(0.12, 0.25)"),
+                ("被古修士残念所伤，损失{}气血", "base_percent * 1.3 + random.uniform(0.09, 0.18)"),
+                ("天劫余波冲击，损伤{}气血", "base_percent * 2 + random.uniform(0.15, 0.3)")
+            ],
+            "base_percent": 0.15
+        }
+    }
+}
 
-NOTHING_EVENTS = [
-    "静心修炼，参悟天地大道",
-    "游览名山大川，陶冶情操",
-    "参加一场修士交流会，增长见闻",
-    "在坊市中闲逛，感受人间烟火",
-    "闭关数日，巩固修为",
-    "与几位道友品茶论道",
-    "观赏一场灵兽表演",
-    "在藏书阁中阅读古籍",
-    "参加凡间的花灯节",
-    "帮助宗门处理一些杂务"
-]
+# 无事发生事件
+NOTHING_EVENTS = {
+    "worldly": [
+        "在坊市闲逛一日，感受人间烟火",
+        "参加修真集会，与各路修士交流",
+        "在酒楼听了一天修真界八卦",
+        "观摩宗门大比，受益匪浅",
+        "帮助凡人解决小麻烦，心境平和"
+    ],
+    "transcendent": [
+        "静坐山巅观云海三日",
+        "在瀑布下冥想修炼",
+        "与灵兽相伴游历山水",
+        "整理洞府，清扫尘埃",
+        "观察星象，感悟天道"
+    ]
+}
 
 class TrainingEvents:
-    def handle_event(self, user_id, event_type):
+    def __init__(self):
+        self.event_style = None  # 当前事件风格
+    
+    def handle_event(self, user_id, user_info, event_type):
         """处理历练事件"""
-        user_info = sql_message.get_user_info_with_id(user_id)
-        
-        if "plus_2" in event_type:  # 大奖励
-            event_msg = random.choice(POSITIVE_EVENTS)
-            # 默认奖励150万灵石
-            sql_message.update_ls(user_id, 1500000, 1)
-            # 50%概率触发额外奖励
-            if random.random() < 0.5:
-                extra_reward = self._get_extra_reward(user_id, user_info)
-                return f"道友历练中{event_msg}，获得大机缘！\n获得灵石：1,500,000\n{extra_reward}"
-            else:
-                return f"道友历练中{event_msg}，获得大机缘！\n获得灵石：1,500,000"
-        elif "plus_1" in event_type:  # 小奖励
-            event_msg = random.choice(POSITIVE_EVENTS)
-            # 默认奖励150万灵石
-            sql_message.update_ls(user_id, 1500000, 1)
-            return f"道友历练中{event_msg}\n获得灵石：1,500,000"
-        elif "minus_2" in event_type:  # 大惩罚
-            event_msg = random.choice(NEGATIVE_EVENTS)
-            # 默认扣除50万灵石
-            sql_message.update_ls(user_id, 500000, 2)
-            # 40%概率触发额外惩罚
-            if random.random() < 0.4:
-                extra_punish = self._get_extra_punish(user_id, user_info)
-                return f"道友历练中{event_msg}，遭遇大劫难！\n损失灵石：500,000\n{extra_punish}"
-            else:
-                return f"道友历练中{event_msg}，遭遇大劫难！\n损失灵石：500,000"
-        elif "minus_1" in event_type:  # 小惩罚
-            event_msg = random.choice(NEGATIVE_EVENTS)
-            # 默认扣除50万灵石
-            sql_message.update_ls(user_id, 500000, 2)
-            return f"道友历练中{event_msg}\n损失灵石：500,000"
-        else:  # nothing
-            # 无事发生默认奖励100万灵石
-            sql_message.update_ls(user_id, 1000000, 1)
-            # 随机选择正面或负面事件描述
-            event_msg = random.choice(NOTHING_EVENTS)
-            return f"道友历练中{event_msg}\n获得灵石：1,000,000"
-
-    def _get_extra_reward(self, user_id, user_info):
-        """获取额外奖励"""
-        reward_type = random.choices(
-            ["exp", "stone", "item", "points"],
-            weights=[10, 50, 20, 20]
+        # 随机选择事件风格 (入世:60% 出世:40%)
+        self.event_style = random.choices(
+            ["worldly", "transcendent"],
+            weights=[60, 40]
         )[0]
         
-        if reward_type == "exp":
-            exp = int(user_info["exp"] * random.uniform(0.002, 0.005))
+        if "plus" in event_type:  # 奖励事件
+            return self._handle_reward(user_id, user_info, event_type)
+        elif "minus" in event_type:  # 惩罚事件
+            return self._handle_punish(user_id, user_info, event_type)
+        else:  # 无事发生
+            return self._handle_nothing()
+    
+    def _handle_reward(self, user_id, user_info, event_type):
+        """处理奖励事件"""
+        is_big_reward = "2" in event_type
+        events_pool = WORLDLY_EVENTS if self.event_style == "worldly" else TRANSCENDENT_EVENTS
+        reward_types = list(events_pool["reward"].keys())
+        
+        # 根据事件大小调整权重
+        weights = {
+            "stone": 40 if is_big_reward else 50,
+            "exp": 20 if is_big_reward else 15,
+            "item": 25 if is_big_reward else 20,
+            "points": 15 if is_big_reward else 10
+        }
+        weights = [weights[t] for t in reward_types]
+        
+        # 随机选择奖励类型
+        reward_type = random.choices(reward_types, weights=weights)[0]
+        reward_data = events_pool["reward"][reward_type]
+        desc_template, calc_rule = random.choice(reward_data["descriptions"])
+        
+        # 处理不同类型的奖励
+        if reward_type == "stone":
+            locals_dict = {"base_amount": reward_data["base_amount"], "random": random}
+            amount = eval(calc_rule, {}, locals_dict)
+            sql_message.update_ls(user_id, amount, 1)
+            return {
+                "message": desc_template.format(number_to(amount)),
+                "type": "stone",
+                "amount": amount
+            }
+        
+        elif reward_type == "exp":
+            locals_dict = {"base_percent": reward_data["base_percent"], "random": random}
+            percent = eval(calc_rule, {}, locals_dict)
+            exp = int(user_info["exp"] * percent)
             sql_message.update_exp(user_id, exp)
-            return f"额外获得修为：{number_to(exp)}"
-        elif reward_type == "stone":
-            stone = random.randint(2000000, 8000000)
-            sql_message.update_ls(user_id, stone, 1)
-            return f"额外获得灵石：{number_to(stone)}"
-        elif reward_type == "points":
-            points = random.randint(200, 500)
-            training_data = training_data.get_user_training_info(user_id)
-            training_data["points"] += points
-            training_data.save_user_training_info(user_id, training_data)
-            return f"额外获得成就点：{points}"
-        else:  # item
-            user_rank = convert_rank(user_info["level"])[0]
-            min_rank = max(user_rank - 16, 16)
-            item_rank = random.randint(min_rank, min_rank + 20)
-            item_types = ["功法", "神通", "药材", "法器", "防具"]
-            item_type = random.choice(item_types)
-            item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
-            if not item_id_list:
-                return "无额外物品奖励"
-            item_id = random.choice(item_id_list)
-            item_info = items.get_data_by_item_id(item_id)
-            sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
-            return f"额外获得物品：{item_info['level']}:{item_info['name']}"
-
-    def _get_extra_punish(self, user_id, user_info):
-        """获取额外惩罚"""
-        punish_type = random.choices(
-            ["exp", "stone", "item", "hp"],
-            weights=[10, 20, 20, 50]
-        )[0]
+            return {
+                "message": desc_template.format(number_to(exp)),
+                "type": "exp",
+                "amount": exp
+            }
         
-        if punish_type == "exp":
-            exp_loss = int(user_info["exp"] * 0.002)  # 0.2%修为
-            sql_message.update_j_exp(user_id, exp_loss)
-            return f"额外损失修为：{number_to(exp_loss)}"
-        elif punish_type == "stone":
-            stone_loss = random.randint(2000000, 5000000)
-            sql_message.update_ls(user_id, stone_loss, 2)
-            return f"额外损失灵石：{number_to(stone_loss)}"
-        elif punish_type == "hp":
-            hp_loss = int(user_info["hp"] * 0.15)  # 15%气血
-            sql_message.update_user_hp_mp(user_id, user_info["hp"] - hp_loss, user_info["mp"])
-            return f"额外损失气血：{number_to(hp_loss)}"
-        else:  # item
-            back_msg = sql_message.get_back_msg(user_id)
-            if not back_msg:
-                stone_loss = 5000000
-                sql_message.update_ls(user_id, stone_loss, 2)
-                return f"背包空空如也，额外损失灵石：{number_to(stone_loss)}"
+        elif reward_type == "item":
+            user_rank = convert_rank(user_info["level"])[0]
+            min_rank = max(user_rank - reward_data["rank_offset"], 16)
+            item_rank = random.randint(min_rank, min_rank + 20)
+            item_type = random.choice(reward_data["types"])
+            item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+            
+            if item_id_list:
+                item_id = random.choice(item_id_list)
+                item_info = items.get_data_by_item_id(item_id)
+                sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
+                return {
+                    "message": desc_template.format(f"{item_info['level']}:{item_info['name']}"),
+                    "type": "item",
+                    "item_id": item_id,
+                    "item_name": item_info["name"]
+                }
             else:
-                same_name_items = [item for item in back_msg if item["goods_num"] > 0]
-                if same_name_items:
-                    item = random.choice(same_name_items)
-                    sql_message.update_back_j(user_id, item["goods_id"], 1)
-                    return f"额外损失物品：{item['goods_name']}"
-                else:
-                    user_rank = convert_rank(user_info["level"])[0]
-                    same_rank_items = [
-                        item for item in back_msg 
-                        if items.get_data_by_item_id(item["goods_id"])["level"] == user_rank
-                    ]
-                    if same_rank_items:
-                        item = random.choice(same_rank_items)
-                        sql_message.update_back_j(user_id, item["goods_id"], 1)
-                        return f"额外损失物品：{item['goods_name']}"
-                    else:
-                        stone_loss = 5000000
-                        sql_message.update_ls(user_id, stone_loss, 2)
-                        return f"没有合适物品扣除，额外损失灵石：{number_to(stone_loss)}"
+                amount = 1000000
+                sql_message.update_ls(user_id, amount, 1)
+                return {
+                    "message": f"探索有所收获，但没找到合适物品，获得{number_to(amount)}灵石",
+                    "type": "stone",
+                    "amount": amount
+                }
+        
+        else:  # points
+            locals_dict = {"base_amount": reward_data["base_amount"], "random": random}
+            amount = eval(calc_rule, {}, locals_dict)
+            return {
+                "message": desc_template.format(amount),
+                "type": "points",
+                "amount": amount
+            }
+    
+    def _handle_punish(self, user_id, user_info, event_type):
+        """处理惩罚事件"""
+        is_big_punish = "2" in event_type
+        events_pool = WORLDLY_EVENTS if self.event_style == "worldly" else TRANSCENDENT_EVENTS
+        punish_types = list(events_pool["punish"].keys())
+        
+        # 根据事件大小调整权重
+        weights = {
+            "stone": 30 if is_big_punish else 40,
+            "exp": 20 if is_big_punish else 15,
+            "item": 30 if is_big_punish else 35,
+            "hp": 20 if is_big_punish else 10
+        }
+        weights = [weights[t] for t in punish_types]
+        
+        # 随机选择惩罚类型
+        punish_type = random.choices(punish_types, weights=weights)[0]
+        punish_data = events_pool["punish"][punish_type]
+        
+        # 处理物品惩罚的特殊情况
+        if punish_type == "item":
+            desc_template = random.choice(punish_data["descriptions"])
+            back_msg = sql_message.get_back_msg(user_id)
+            
+            if not back_msg:
+                amount = 5000000
+                sql_message.update_ls(user_id, amount, 2)
+                return {
+                    "message": f"探索遭遇意外，损失{number_to(amount)}灵石",
+                    "type": "stone",
+                    "amount": -amount
+                }
+            
+            # 优先匹配相同物品
+            same_name_items = [item for item in back_msg if item["goods_num"] > 0]
+            if same_name_items:
+                item = random.choice(same_name_items)
+                sql_message.update_back_j(user_id, item["goods_id"], 1)
+                return {
+                    "message": desc_template.format(item["goods_name"]),
+                    "type": "item",
+                    "item_id": item["goods_id"],
+                    "item_name": item["goods_name"],
+                    "lost": True
+                }
+            
+            # 其次匹配品阶
+            user_rank = convert_rank(user_info["level"])[0]
+            same_rank_items = [
+                item for item in back_msg 
+                if items.get_data_by_item_id(item["goods_id"])["level"] == user_rank
+            ]
+            if same_rank_items:
+                item = random.choice(same_rank_items)
+                sql_message.update_back_j(user_id, item["goods_id"], 1)
+                return {
+                    "message": desc_template.format(item["goods_name"]),
+                    "type": "item",
+                    "item_id": item["goods_id"],
+                    "item_name": item["goods_name"],
+                    "lost": True
+                }
+            
+            # 都没有则扣灵石
+            amount = 5000000
+            sql_message.update_ls(user_id, amount, 2)
+            return {
+                "message": f"遭遇意外，损失{number_to(amount)}灵石",
+                "type": "stone",
+                "amount": -amount
+            }
+        
+        else:
+            desc_template, calc_rule = random.choice(punish_data["descriptions"])
+            
+            if punish_type == "stone":
+                locals_dict = {"base_amount": punish_data["base_amount"], "random": random}
+                amount = eval(calc_rule, {}, locals_dict)
+                sql_message.update_ls(user_id, amount, 2)
+                return {
+                    "message": desc_template.format(number_to(amount)),
+                    "type": "stone",
+                    "amount": -amount
+                }
+            
+            elif punish_type == "exp":
+                locals_dict = {"base_percent": punish_data["base_percent"], "random": random}
+                percent = eval(calc_rule, {}, locals_dict)
+                exp = int(user_info["exp"] * percent)
+                sql_message.update_j_exp(user_id, exp)
+                return {
+                    "message": desc_template.format(number_to(exp)),
+                    "type": "exp",
+                    "amount": -exp
+                }
+            
+            else:  # hp
+                locals_dict = {"base_percent": punish_data["base_percent"], "random": random}
+                percent = eval(calc_rule, {}, locals_dict)
+                hp_loss = int(user_info["hp"] * percent)
+                sql_message.update_user_hp_mp(user_id, user_info["hp"] - hp_loss, user_info["mp"])
+                return {
+                    "message": desc_template.format(number_to(hp_loss)),
+                    "type": "hp",
+                    "amount": -hp_loss
+                }
+    
+    def _handle_nothing(self):
+        """处理无事发生"""
+        pool = NOTHING_EVENTS[self.event_style]
+        desc = random.choice(pool)
+        return {
+            "message": f"{desc}，心境略有提升",
+            "type": "nothing"
+        }
 
 training_events = TrainingEvents()
