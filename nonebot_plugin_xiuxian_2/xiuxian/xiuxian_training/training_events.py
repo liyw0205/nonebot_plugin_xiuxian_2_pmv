@@ -329,10 +329,19 @@ class TrainingEvents:
                     "amount": -amount
                 }
             
-            # 优先匹配相同物品
-            same_name_items = [item for item in back_msg if item["goods_num"] > 0]
-            if same_name_items:
-                item = random.choice(same_name_items)
+            # 获取奖励事件中的物品类型列表
+            reward_data = events_pool["reward"]["item"]
+            item_type = random.choice(reward_data["types"])
+            
+            # 优先匹配相同物品类型
+            same_type_items = [
+                item for item in back_msg 
+                if items.get_data_by_item_id(item["goods_id"])["type"] == item_type
+                and item["goods_num"] > 0
+            ]
+            
+            if same_type_items:
+                item = random.choice(same_type_items)
                 sql_message.update_back_j(user_id, item["goods_id"], 1)
                 return {
                     "message": desc_template.format(item["goods_name"]),
@@ -344,9 +353,11 @@ class TrainingEvents:
             
             # 其次匹配品阶
             user_rank = convert_rank(user_info["level"])[0]
+            min_rank = max(user_rank - punish_data["rank_offset"], 26)
+            item_rank = random.randint(min_rank, min_rank + 20)
             same_rank_items = [
                 item for item in back_msg 
-                if items.get_data_by_item_id(item["goods_id"])["level"] == user_rank
+                if items.get_data_by_item_id(item["goods_id"])["level"] == item_rank
             ]
             if same_rank_items:
                 item = random.choice(same_rank_items)

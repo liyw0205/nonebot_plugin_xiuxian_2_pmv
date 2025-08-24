@@ -173,7 +173,7 @@ class TowerBattle:
         failed_floor = None
         reward_msg = ""
         total_score = 0
-    
+
         for floor in range(start_floor, max_floor + 1):
             boss_info = self.generate_tower_boss(floor)
             result, victor, bossinfo_new, _ = await Boss_fight(player, boss_info, type_in=1, bot_id=bot.self_id)
@@ -197,7 +197,7 @@ class TowerBattle:
                 tower_info["score"] += score  # 添加积分
                 tower_data.save_user_tower_info(user_id, tower_info)
                 
-                # 更新排行榜
+                # 更新排行榜 - 每次成功都更新
                 tower_data.update_tower_rank(
                     user_id, 
                     user_info["user_name"], 
@@ -207,6 +207,22 @@ class TowerBattle:
                 failed_floor = floor
                 break
         await send_msg_handler(bot, event, result)
+        
+        # 如果有成功层数但最终失败，确保更新到最高成功层数
+        if failed_floor and success_floors:
+            max_success = max(success_floors)
+            tower_info = tower_data.get_user_tower_info(user_id)
+            tower_info["current_floor"] = max_success
+            tower_info["max_floor"] = max(tower_info["max_floor"], max_success)
+            tower_data.save_user_tower_info(user_id, tower_info)
+            
+            # 更新排行榜到最高成功层数
+            tower_data.update_tower_rank(
+                user_id, 
+                user_info["user_name"], 
+                max_success
+            )
+        
         if failed_floor:
             msg = f"连续挑战失败，止步第{failed_floor - 1}层！共获得积分：{total_score}点"
             return False, msg
