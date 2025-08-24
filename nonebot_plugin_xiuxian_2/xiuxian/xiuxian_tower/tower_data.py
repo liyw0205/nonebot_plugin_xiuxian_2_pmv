@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
             "id": 1999,
             "cost": 1000,
             "desc": "渡厄丹,使下一次突破丢失的修为减少为0!",
-            "weekly_limit": 2
+            "weekly_limit": 10
         },
         "2": {
             "id": 4003,

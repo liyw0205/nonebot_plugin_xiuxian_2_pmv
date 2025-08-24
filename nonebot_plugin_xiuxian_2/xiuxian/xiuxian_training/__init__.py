@@ -9,7 +9,7 @@ from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, Private
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from .training_data import training_data, PLAYERSDATA
 
 sql_message = XiuxianDateManage()
