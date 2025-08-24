@@ -228,10 +228,10 @@ class TrainingEvents:
         
         # 根据事件大小调整权重
         weights = {
-            "stone": 40 if is_big_reward else 50,
-            "exp": 20 if is_big_reward else 15,
+            "stone": 40 if is_big_reward else 55,
+            "exp": 10 if is_big_reward else 5,
             "item": 25 if is_big_reward else 20,
-            "points": 15 if is_big_reward else 10
+            "points": 25 if is_big_reward else 20
         }
         weights = [weights[t] for t in reward_types]
         
@@ -239,7 +239,6 @@ class TrainingEvents:
         reward_type = random.choices(reward_types, weights=weights)[0]
         reward_data = events_pool["reward"][reward_type]
         desc_template, calc_rule = random.choice(reward_data["descriptions"])
-        
         # 处理不同类型的奖励
         if reward_type == "stone":
             locals_dict = {"base_amount": reward_data["base_amount"], "random": random}
@@ -305,10 +304,10 @@ class TrainingEvents:
         
         # 根据事件大小调整权重
         weights = {
-            "stone": 30 if is_big_punish else 40,
-            "exp": 20 if is_big_punish else 15,
-            "item": 30 if is_big_punish else 35,
-            "hp": 20 if is_big_punish else 10
+            "stone": 25 if is_big_punish else 20,
+            "exp": 10 if is_big_punish else 5,
+            "item": 25 if is_big_punish else 35,
+            "hp": 40 if is_big_punish else 40
         }
         weights = [weights[t] for t in punish_types]
         
@@ -318,7 +317,7 @@ class TrainingEvents:
         
         # 处理物品惩罚的特殊情况
         if punish_type == "item":
-            desc_template = random.choice(punish_data["descriptions"])
+            desc_template, _ = random.choice(punish_data["descriptions"])
             back_msg = sql_message.get_back_msg(user_id)
             
             if not back_msg:
