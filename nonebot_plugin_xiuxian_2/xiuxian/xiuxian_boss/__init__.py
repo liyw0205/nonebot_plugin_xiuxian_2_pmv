@@ -1182,7 +1182,7 @@ class BossDrops:
             
         # 计算适合用户等级的掉落物范围
         user_rank = convert_rank(user_level)[0]
-        min_rank = max(convert_rank(user_level)[0] - 16, 8)
+        min_rank = max(convert_rank(user_level)[0] - 22, 8)
         max_rank = min(random.randint(min_rank, min_rank + 30), 55)
         
         # 筛选符合条件的掉落物
