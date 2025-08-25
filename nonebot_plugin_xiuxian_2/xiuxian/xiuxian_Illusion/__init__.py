@@ -503,7 +503,7 @@ def _give_random_item(user_id, user_level):
     # 获取用户境界对应的物品等级
     user_rank = convert_rank(user_level)[0]
     min_rank = max(user_rank - 16, 16)  # 最低16级物品
-    item_rank = random.randint(min_rank, min_rank + 20)
+    item_rank = random.randint(min_rank, min(min_rank + 20, 55))
     
     # 随机选择物品类型
     item_types = ["功法", "神通", "药材", "法器", "防具"]

@@ -130,14 +130,10 @@ async def update_user_impart_data(user_id, time: int):
 
 def get_star_rating(count):
     """将卡片数量转换为星级显示"""
-    full_stars = count // 5
-    half_star = 1 if count % 5 > 0 else 0
-    total_stars = min(5, full_stars + half_star)  # 最多5星
+    full_stars = count // 5  # 每5张卡1颗实星
+    half_stars = count % 5   # 剩余数量用空星表示
     
-    stars = '★' * full_stars
-    if half_star:
-        stars += '☆'
-    
+    stars = '★' * full_stars + '☆' * half_stars
     return stars.ljust(5, ' ')  # 固定5个字符宽度
 
 def get_image_representation(image_name: str):

@@ -264,7 +264,7 @@ class TrainingEvents:
         elif reward_type == "item":
             user_rank = convert_rank(user_info["level"])[0]
             min_rank = max(user_rank - reward_data["rank_offset"], 16)
-            item_rank = random.randint(min_rank, min_rank + 20)
+            item_rank = random.randint(min_rank, min(min_rank + 20, 55))
             item_type = random.choice(reward_data["types"])
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
             
@@ -354,7 +354,7 @@ class TrainingEvents:
             # 其次匹配品阶
             user_rank = convert_rank(user_info["level"])[0]
             min_rank = max(user_rank - punish_data["rank_offset"], 26)
-            item_rank = random.randint(min_rank, min_rank + 20)
+            item_rank = random.randint(min_rank, min(min_rank + 20, 55))
             same_rank_items = [
                 item for item in back_msg 
                 if items.get_data_by_item_id(item["goods_id"])["level"] == item_rank
