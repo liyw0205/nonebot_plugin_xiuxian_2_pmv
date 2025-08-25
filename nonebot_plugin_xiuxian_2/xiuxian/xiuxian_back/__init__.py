@@ -1210,7 +1210,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     # === 获取背包物品 ===
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼💼💼💼 道友的背包空空如也！"
+        msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
@@ -1245,7 +1245,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 })
     
     if not items_to_add:
-        msg = f"🔍🔍🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
@@ -2027,7 +2027,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     # === 获取背包物品 ===
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼💼💼💼 道友的背包空空如也！"
+        msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
@@ -2062,7 +2062,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
                 })
     
     if not items_to_add:
-        msg = f"🔍🔍🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
@@ -4818,9 +4818,9 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await goods_re_root.finish()
 
-@fast_alchemy.handle(parameterless=[Cooldown(at_sender=False)])
+@fast_alchemy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """快速炼金（支持装备/药材/全部类型 + 全部品阶）"""
+    """快速炼金（支持装备/药材/全部类型 + 全部品阶，以及回血丹）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -4830,23 +4830,77 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
+    # === 特殊处理回血丹 ===
+    if len(args) > 0 and args[0] == "回血丹":
+        back_msg = sql_message.get_back_msg(user_id)
+        if not back_msg:
+            msg = "💼 道友的背包空空如也！"
+            await handle_send(bot, event, msg)
+            await fast_alchemy.finish()
+        
+        # 筛选回血丹（buff_type为hp的丹药）
+        elixirs = []
+        for item in back_msg:
+            item_info = items.get_data_by_item_id(item['goods_id'])
+            if (item_info and item_info['type'] == "丹药" 
+                and item_info.get('buff_type') == "hp"):
+                # 回血丹都是绑定的，直接使用goods_num
+                available = item['goods_num']
+                if available > 0:
+                    elixirs.append({
+                        'id': item['goods_id'],
+                        'name': item['goods_name'],
+                        'num': available,
+                        'info': item_info
+                    })
+        
+        if not elixirs:
+            msg = "🔍 背包中没有回血丹！"
+            await handle_send(bot, event, msg)
+            await fast_alchemy.finish()
+        
+        # 执行炼金
+        total_stone = 0
+        results = []
+        
+        for elixir in elixirs:
+            # 计算价格（基础rank - 物品rank）* 100000 + 100万
+            base_rank = convert_rank('江湖好手')[0]
+            item_rank = get_item_msg_rank(elixir['id'])
+            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+            total_price = price * elixir['num']
+            
+            # 从背包扣除
+            sql_message.update_back_j(user_id, elixir['id'], num=elixir['num'])
+            
+            # 增加灵石
+            sql_message.update_ls(user_id, total_price, 1)
+            
+            total_stone += total_price
+            results.append(f"{elixir['name']} x{elixir['num']} → {number_to(total_price)}灵石")
+        
+        # 构建结果消息
+        msg = [
+            "\n☆------快速炼金结果------☆",
+            f"类型：回血丹",
+            *results,
+            f"总计获得：{number_to(total_stone)}灵石"
+        ]
+        await send_msg_handler(bot, event, '快速炼金', bot.self_id, msg)
+        await fast_alchemy.finish()
+    
+    # === 原有类型处理逻辑 ===
     # 指令格式检查
-    if len(args) < 2:
+    if len(args) < 1:
         msg = "指令格式：快速炼金 [类型] [品阶]\n" \
-              "▶ 类型：装备|法器|防具|药材|全部\n" \
+              "▶ 类型：装备|法器|防具|药材|回血丹|全部\n" \
               "▶ 品阶：全部|人阶|黄阶|...|上品通天法器（输入'品阶帮助'查看完整列表）"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
     item_type = args[0]  # 物品类型
-    rank_name = " ".join(args[1:])  # 处理多字品阶名（如"上品纯阳法器"）
-
-    # === 保护机制 ===
-    if item_type.lower() == "全部" and rank_name.lower() == "全部":
-        msg = "⚠️ 为防止误操作，不能同时选择【全部类型】和【全部品阶】！"
-        await handle_send(bot, event, msg)
-        await fast_alchemy.finish()
-
+    rank_name = " ".join(args[1:]) if len(args) > 1 else "全部"  # 品阶
+    
     # === 类型检查 ===
     type_mapping = {
         "装备": ["法器", "防具"],
@@ -4863,7 +4917,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     }
     
     if item_type not in type_mapping:
-        msg = f"❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
@@ -4934,14 +4988,14 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     }
     
     if rank_name not in rank_map:
-        msg = f"❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
     # === 获取背包物品 ===
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼💼 道友的背包空空如也！"
+        msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
@@ -4965,49 +5019,53 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
-            available_num = item['goods_num']
+            available_num = item['goods_num'] - item['bind_num']
             if available_num > 0:
-                # 计算价格（基础rank - 物品rank）* 100000
-                base_rank = convert_rank('江湖好手')[0]
-                item_rank = get_item_msg_rank(item['goods_id'])
-                price = max(1, (base_rank - 16) * 100000 - item_rank * 100000)  # 防止负数
-                
                 items_to_alchemy.append({
                     'id': item['goods_id'],
                     'name': item['goods_name'],
-                    'quantity': available_num,
-                    'price': price
+                    'type': item['goods_type'],
+                    'available_num': available_num,
+                    'info': item_info
                 })
-
-    # === 执行炼金 ===
+    
     if not items_to_alchemy:
-        msg = f"🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
+    # === 自动炼金逻辑 ===
+    success_count = 0
     total_stone = 0
     result_msg = []
     
     for item in items_to_alchemy:
-        item_total = item['price'] * item['quantity']
-        total_stone += item_total
+        if str(item['id']) in BANNED_ITEM_IDS:
+            continue  # 跳过禁止交易的物品
         
-        # 从背包移除
-        sql_message.update_back_j(user_id, item['id'], num=item['quantity'])
+        # 计算价格（基础rank - 物品rank）* 100000 + 100万
+        base_rank = convert_rank('江湖好手')[0]
+        item_rank = get_item_msg_rank(item['id'])
+        price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+        total_price = price * item['available_num']
         
-        # 记录结果
-        result_msg.append(
-            f"{item['name']} ×{item['quantity']} → {number_to(item_total)}灵石"
-        )
+        # 从背包扣除
+        sql_message.update_back_j(user_id, item['id'], num=item['available_num'])
+        
+        # 增加灵石
+        sql_message.update_ls(user_id, total_price, 1)
+        
+        success_count += item['available_num']
+        total_stone += total_price
+        result_msg.append(f"{item['name']} x{item['available_num']} → {number_to(total_price)}灵石")
     
-    # 增加灵石
-    sql_message.update_ls(user_id, total_stone, 1)
-    
-    # === 返回结果 ===
+    # 构建结果消息
     msg = [
-        f"✨ 成功炼金 {len(items_to_alchemy)} 件物品",
+        "\n☆------快速炼金结果------☆",
+        f"类型：{item_type}",
+        f"品阶：{rank_name}",
         *result_msg,
-        f"💎💎 总计获得：{number_to(total_stone)}灵石"
+        f"总计获得：{number_to(total_stone)}灵石"
     ]
     
     await send_msg_handler(bot, event, '快速炼金', bot.self_id, msg)
