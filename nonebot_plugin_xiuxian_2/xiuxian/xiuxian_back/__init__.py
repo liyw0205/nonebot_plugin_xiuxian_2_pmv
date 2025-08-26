@@ -26,7 +26,8 @@ from .back_util import (
     get_user_main_back_msg, get_user_yaocai_back_msg, get_user_yaocai_detail_back_msg, get_user_danyao_back_msg, check_equipment_can_use,
     get_use_equipment_sql, get_shop_data, save_shop,
     get_item_msg, get_item_msg_rank, check_use_elixir,
-    get_use_jlq_msg, get_no_use_equipment_sql
+    get_use_jlq_msg, get_no_use_equipment_sql,
+    get_user_equipment_msg
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
@@ -134,6 +135,7 @@ main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, bl
 yaocai_back = on_command('药材背包', priority=10, block=True)
 yaocai_detail_back = on_command('药材背包详细', aliases={'药材背包详情'}, priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
+my_equipment = on_command("我的装备", priority=10, block=True)
 use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
@@ -206,6 +208,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔹 我的背包 [页码] - 查看背包物品
 🔹 药材背包 [页码] - 查看药材类物品
 🔹 丹药背包 [页码] - 查看丹药类物品
+🔹 我的装备 [页码] - 查看背包装备
 🔹 使用+物品名 [数量] - 使用物品
 🔹 换装/卸装+装备名 - 卸下装备
 🔹 炼金+物品名 [数量] - 将物品转化为灵石
@@ -650,7 +653,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         sql_message.update_back_j(user_id, goods_info['goods_id'], num=1)
         success_count += 1
     
-    msg = f"成功上架 {goods_name} x{success_count} 到仙肆！\n"
+    msg = f"\n成功上架 {goods_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总手续费: {number_to(total_fee)} 灵石"
     
@@ -824,7 +827,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     paged_items = items_list[start_idx:end_idx]
 
     # 构建消息
-    msg_list = [f"☆------仙肆 {item_type}------☆"]
+    msg_list = [f"\n☆------仙肆 {item_type}------☆"]
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"\n{item['name']} {price_str}灵石 \nID:{item['id']}"
@@ -892,7 +895,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     end_idx = start_idx + per_page
     paged_items = user_items[start_idx:end_idx]
     
-    msg_list = [f"☆------{user_info['user_name']}的仙肆物品------☆"]
+    msg_list = [f"\n☆------{user_info['user_name']}的仙肆物品------☆"]
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"{item['name']} {price_str}灵石"
@@ -1336,7 +1339,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 构建结果消息
     msg = [
-        f"✨ 成功上架 {success_count} 件物品",
+        f"\n✨ 成功上架 {success_count} 件物品",
         *result_msg,
         f"💎 总手续费: {number_to(total_fee)}灵石"
     ]
@@ -1476,7 +1479,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         }
         save_xianshi_type_data(goods_type, type_items)
     
-    msg = f"成功上架 {goods_name} x{quantity} 到仙肆！\n"
+    msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(fee)} 灵石"
@@ -1896,7 +1899,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         save_fangshi_type_data(group_id, goods_type, type_items)
         success_count += 1
     
-    msg = f"成功上架 {goods_name} x{success_count} 到坊市！\n"
+    msg = f"\n成功上架 {goods_name} x{success_count} 到坊市！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(fee)} 灵石"
@@ -2152,7 +2155,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     
     # 构建结果消息
     msg = [
-        f"✨ 成功上架 {success_count} 件物品",
+        f"\n✨ 成功上架 {success_count} 件物品",
         *result_msg,
         f"💎 总手续费: {number_to(total_fee)}灵石"
     ]
@@ -2303,7 +2306,7 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         }
         save_fangshi_type_data(group_id, goods_type, type_items)
     
-    msg = f"成功上架 {goods_name} x{quantity} 到坊市！\n"
+    msg = f"\n成功上架 {goods_name} x{quantity} 到坊市！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(fee)} 灵石"
@@ -2708,7 +2711,7 @@ async def shop_view_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     paged_items = items_list[start_idx:end_idx]
 
     # 构建消息
-    msg_list = [f"☆------坊市 {item_type}------☆"]
+    msg_list = [f"\n☆------坊市 {item_type}------☆"]
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"\n{item['name']} {price_str}灵石 \nID:{item['id']}"
@@ -2777,7 +2780,7 @@ async def my_shop_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
     end_idx = start_idx + per_page
     paged_items = user_items[start_idx:end_idx]
     
-    msg_list = [f"☆------{user_info['user_name']}的坊市物品------☆"]
+    msg_list = [f"\n☆------{user_info['user_name']}的坊市物品------☆"]
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"{item['name']} {price_str}灵石"
@@ -3312,17 +3315,17 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     transactions = await process_guishi_transactions(user_id)
     
     # 构建消息
-    msg = f"☆------鬼市账户信息------☆\n"
-    msg += f"账户余额：{number_to(user_data['stone'])} 灵石\n"
+    msg = f"\n☆------鬼市账户信息------☆\n"
+    msg += f"账户余额：{number_to(user_data['stone'])} 灵石"
     
     if transactions:
-        msg += "\n☆------最近交易------☆\n"
+        msg += f"\n☆------最近交易------☆\n"
         msg += "\n".join(transactions) + "\n"
     else:
-        msg += "\n☆------最近交易------☆\n"
+        msg += f"\n☆------最近交易------☆\n"
         msg += "无\n"
     
-    msg += "\n☆------求购订单------☆\n"
+    msg += f"\n☆------求购订单------☆\n"
     if user_data["qiugou_orders"]:
         for order_id, order in user_data["qiugou_orders"].items():
             filled = order.get("filled", 0)
@@ -3333,7 +3336,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     else:
         msg += "无\n"
     
-    msg += "\n☆------摆摊订单------☆\n"
+    msg += f"\n☆------摆摊订单------☆\n"
     if user_data["baitan_orders"]:
         for order_id, order in user_data["baitan_orders"].items():
             sold = order.get("sold", 0)
@@ -3344,7 +3347,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     else:
         msg += "无\n"
     
-    msg += "\n☆------暂存物品------☆\n"
+    msg += f"\n☆------暂存物品------☆\n"
     if user_data["items"]:
         for item_id, item in user_data["items"].items():
             msg += f"{item['name']} x{item['quantity']}\n"
@@ -3438,7 +3441,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"订单ID：{order_id}\n"
     
     if transactions:
-        msg += "\n☆------交易结果------☆\n"
+        msg += f"\n☆------交易结果------☆\n"
         msg += "\n".join(transactions)
     
     await handle_send(bot, event, msg)
@@ -3663,7 +3666,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"⚠️ 超时未收摊将自动清空摊位，物品不退还！"
     
     if transactions:
-        msg += "\n\n☆------交易结果------☆\n"
+        msg += "\n☆------交易结果------☆\n"
         msg += "\n".join(transactions)
     
     await handle_send(bot, event, msg)
@@ -3811,7 +3814,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 处理不同参数情况
     if not arg:  # 无参数，显示暂存物品列表
-        msg = "☆------鬼市暂存物品------☆\n"
+        msg = f"\n☆------鬼市暂存物品------☆\n"
         msg += "请使用'鬼市取物品 物品名'或'鬼市取物品 全部'取出物品\n\n"
         for item_id, item in user_data["items"].items():
             msg += f"{item['name']} x{item['quantity']}\n"
@@ -4586,7 +4589,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await my_auction.finish()
     
     # 构建消息
-    msg = ["☆------我的拍卖物品------☆"]
+    msg = [f"\n☆------我的拍卖物品------☆"]
     for item in user_items:
         msg.append(f"\n物品: {item['name']}")
         msg.append(f"起拍价: {number_to(item['price'])}灵石")
@@ -4611,7 +4614,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     total_player_items = sum(len(items) for items in player_auctions.values())
     
     msg = [
-        "☆------拍卖信息------☆",
+        "\n成功上架拍卖信息------☆",
         f"状态: {'运行中' if auction_status['active'] else '未运行'}",
         f"自动拍卖时间: 每天{schedule['start_hour']}点{schedule['start_minute']}分",
         f"持续时间: {schedule['duration_hours']}小时",
@@ -4881,7 +4884,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         # 构建结果消息
         msg = [
-            "\n☆------快速炼金结果------☆",
+            f"\n☆------快速炼金结果------☆",
             f"类型：回血丹",
             *results,
             f"总计获得：{number_to(total_stone)}灵石"
@@ -5061,7 +5064,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # 构建结果消息
     msg = [
-        "\n☆------快速炼金结果------☆",
+        f"\n☆------快速炼金结果------☆",
         f"类型：{item_type}",
         f"品阶：{rank_name}",
         *result_msg,
@@ -5179,7 +5182,14 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     
     # 根据物品类型处理逻辑
     goods_info = items.get_data_by_item_id(goods_id)
-
+    user_rank = convert_rank(user_info['level'])[0]        
+    rank_name_list = convert_rank("江湖好手")[1]
+    if goods_info['rank'] == -5:
+        goods_rank = 23
+    else:
+        goods_rank = int(goods_info['rank']) + 19
+    required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
+        
     if goods_type == "礼包":
         package_name = goods_info['name']
         msg_parts = []
@@ -5220,7 +5230,9 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = f"道友打开了 {num} 个 {package_name}:\n" + "".join(msg_parts)
 
     elif goods_type == "装备":
-        if not check_equipment_can_use(user_id, goods_id):
+        if goods_rank < user_rank:
+             msg = f"道友实力不足使用{goods_info['name']}\n请提示至：{required_rank_name}"
+        elif not check_equipment_can_use(user_id, goods_id):
             msg = "该装备已被装备，请勿重复装备！"
         else:
             sql_str, item_type = get_use_equipment_sql(user_id, goods_id)
@@ -5236,7 +5248,9 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         user_buff_info = UserBuffDate(user_id).BuffInfo
         skill_info = goods_info
         skill_type = skill_info['item_type']
-        if skill_type == "神通":
+        if goods_rank < user_rank:
+             msg = f"道友实力不足使用{goods_info['name']}\n请提示至：{required_rank_name}"
+        elif skill_type == "神通":
             if int(user_buff_info['sec_buff']) == int(goods_id):
                 msg = f"道友已学会该神通：{skill_info['name']}，请勿重复学习！"
             else:
@@ -5421,6 +5435,38 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await send_msg_handler(bot, event, '背包', bot.self_id, msgs)
     
     await main_back.finish()
+
+@my_equipment.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看我的装备及其详细信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await my_equipment.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_equipment_msg(user_id)
+    title = f"{user_info['user_name']}的装备"
+    msgs = await handle_pagination(
+        msg_list, 
+        current_page,
+        title=title,
+        empty_msg="道友的背包中没有装备！"
+    )
+    
+    if isinstance(msgs, str):
+        await handle_send(bot, event, msgs)
+    else:
+        await send_msg_handler(bot, event, '我的装备', bot.self_id, msgs)
+    
+    await my_equipment.finish()
 
 @yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
 async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

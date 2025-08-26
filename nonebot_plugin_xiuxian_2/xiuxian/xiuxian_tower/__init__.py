@@ -20,9 +20,11 @@ from ..xiuxian_utils.utils import (
     number_to, send_msg_handler
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
+from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data, PLAYERSDATA
 from .tower_battle import tower_battle
 sql_message = XiuxianDateManage()
+items = Items()
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)

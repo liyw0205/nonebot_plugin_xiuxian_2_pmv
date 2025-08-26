@@ -10,10 +10,11 @@ from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
+from ..xiuxian_utils.item_json import Items
 from .training_data import training_data, PLAYERSDATA
 
 sql_message = XiuxianDateManage()
-
+items = Items()
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)

@@ -379,11 +379,9 @@ def get_equipment_msg(l_msg, user_id, goods_id, goods_num, bind_num):
     item_info = items.get_data_by_item_id(goods_id)
     msg = ""
     if item_info['item_type'] == '防具':
-    #    msg = get_armor_info_msg(goods_id, item_info)
-        msg = f"{item_info['level']}防具-{item_info['name']}:"
+        msg = f"{item_info['level']}-{item_info['name']}:"
     elif item_info['item_type'] == '法器':
-    #    msg = get_weapon_info_msg(goods_id, item_info)
-        msg = f"{item_info['level']}法器-{item_info['name']}:"
+        msg = f"{item_info['level']}-{item_info['name']}:"
     msg += f"\n拥有数量:{goods_num}，绑定数量:{bind_num}"
     is_use = check_equipment_use_msg(user_id, goods_id)
     if is_use:
@@ -393,6 +391,65 @@ def get_equipment_msg(l_msg, user_id, goods_id, goods_num, bind_num):
     l_msg.append(msg)
     return l_msg
 
+def get_user_equipment_msg(user_id):
+    """
+    获取背包内的所有装备及其详细信息
+    """
+    l_msg = []
+    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    if user_backs is None:
+        return l_msg
+    
+    # 分类存储装备
+    weapons = []  # 法器
+    armors = []   # 防具
+    
+    for user_back in user_backs:
+        if user_back['goods_type'] == "装备":
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            if item_info['item_type'] == "法器":
+                weapons.append({
+                    'id': user_back['goods_id'],
+                    'name': item_info['name'],
+                    'num': user_back['goods_num'],
+                    'bind_num': user_back['bind_num'],
+                    'is_use': check_equipment_use_msg(user_id, user_back['goods_id'])
+                })
+            elif item_info['item_type'] == "防具":
+                armors.append({
+                    'id': user_back['goods_id'],
+                    'name': item_info['name'],
+                    'num': user_back['goods_num'],
+                    'bind_num': user_back['bind_num'],
+                    'is_use': check_equipment_use_msg(user_id, user_back['goods_id'])
+                })
+    
+    # 构建详细消息
+    if weapons:
+        l_msg.append("☆------法器------☆")
+        for weapon in weapons:
+            item_info = items.get_data_by_item_id(weapon['id'])
+            msg = get_weapon_info_msg(weapon['id'], item_info)
+            msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
+            if weapon['is_use']:
+                msg += "\n※已装备※"
+            else:
+                msg += "\n可装备"
+            l_msg.append(msg)
+    
+    if armors:
+        l_msg.append("☆------防具------☆")
+        for armor in armors:
+            item_info = items.get_data_by_item_id(armor['id'])
+            msg = get_armor_info_msg(armor['id'], item_info)
+            msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
+            if armor['is_use']:
+                msg += "\n※已装备※"
+            else:
+                msg += "\n可装备"
+            l_msg.append(msg)
+    
+    return l_msg
 
 def get_skill_msg(l_msg, goods_id, goods_num, bind_num):
     """
