@@ -299,7 +299,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await send_msg_handler(bot, event, list_msg)
         await impart_pk_now.finish()
 
-
 @impart_pk_exp.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界修炼"""
@@ -316,16 +315,21 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     level = user_info['level']
-
     impaer_exp_time = args.extract_plain_text().strip()
+    
+    # 处理输入时间
     if not impaer_exp_time.isdigit():
         impaer_exp_time = 1
-
+    else:
+        impaer_exp_time = int(impaer_exp_time)
+    
+    # 获取闭关类型和经验上限
     closing_type = OtherSet().set_closing_type(user_info['level'])
     max_exp = closing_type * XiuConfig().closing_exp_upper_limit
     current_exp = user_info['exp']
-
-    if int(impaer_exp_time) > int(impart_data_draw['exp_day']):
+    
+    # 检查可用时间
+    if impaer_exp_time > int(impart_data_draw['exp_day']):
         msg = f"累计时间不足，修炼失败!"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
@@ -335,44 +339,47 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
 
-    # 计算本次修炼经验
+    # 计算每分钟获得的经验值
     level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
-    mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata != None else 0  # 功法闭关回复
     impart_data_draw = await impart_pk_check(user_id)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
     impart_exp_up2 = impart_lv * 0.15
-    exp = int((int(impaer_exp_time) * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up) * (1 + impart_exp_up2))))  # 本次闭关获取的修为
     
-    if int(impaer_exp_time) == 1:
-        if current_exp + exp > max_exp:
-            exp = max((max_exp - current_exp), 1)
-
-    exp = int(round(exp))
-    # 校验是否超出上限
-    if current_exp + exp > max_exp:
-        allowed_time = (max_exp - current_exp) // (XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up2))))
-        allowed_time = max(int(allowed_time), 1)
-        exp2 = max((max_exp - current_exp), 1)
-        if current_exp + exp2 > max_exp:
-            allowed_time = 0
-        msg = f"修炼时长超出上限，最多可修炼{allowed_time}分钟"
+    # 计算每分钟基础经验
+    exp_per_minute = int(XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up) * (1 + impart_exp_up2))))
+    
+    # 计算剩余可获取经验
+    remaining_exp = max_exp - current_exp
+    
+    # 计算最大允许修炼时间
+    max_allowed_time = remaining_exp // exp_per_minute if exp_per_minute > 0 else 0
+    
+    # 如果输入时间超过最大允许时间
+    if impaer_exp_time > max_allowed_time:
+        msg = f"修炼时长超出上限，最多可修炼{round(max_allowed_time)}分钟"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
-    else:
-        # 更新经验并返回成功
-        xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
-        sql_message.update_exp(user_id, exp)
-        sql_message.update_power2(user_id)  # 更新战力
-        msg = f"虚神界修炼结束，共修炼{impaer_exp_time}分钟，本次增加修为：{number_to(exp)}"
-        await handle_send(bot, event, msg)
-        await impart_pk_exp.finish()
+    
+    # 计算本次修炼实际获得的经验
+    exp = exp_per_minute * impaer_exp_time
+    
+    # 更新经验并返回成功
+    xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+    sql_message.update_exp(user_id, exp)
+    sql_message.update_power2(user_id)  # 更新战力
+    
+    # 计算修炼效率百分比
+    efficiency_percent = int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)
+    msg = f"虚神界修炼结束，共修炼{round(impaer_exp_time)}分钟，本次增加修为：{number_to(exp)}（修炼效率：{efficiency_percent}%）"
+    await handle_send(bot, event, msg)
+    await impart_pk_exp.finish()
 
 @impart_pk_info.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

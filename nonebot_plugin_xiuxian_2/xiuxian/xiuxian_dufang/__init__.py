@@ -20,7 +20,7 @@ sql_message = XiuxianDateManage()
 
 # 共享用户数据文件路径
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
-BANNED_UNSEAL_IDS = ["779151826"]  # 禁止交易的物品ID
+BANNED_UNSEAL_IDS = ["779151826"]  # 禁止鉴石的群
 
 # 初始化共享数据文件
 if not SHARING_DATA_PATH.exists():
