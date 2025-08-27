@@ -20,6 +20,7 @@ sql_message = XiuxianDateManage()
 
 # 共享用户数据文件路径
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
+BANNED_UNSEAL_IDS = ["779151826"]  # 禁止交易的物品ID
 
 # 初始化共享数据文件
 if not SHARING_DATA_PATH.exists():
@@ -409,7 +410,10 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     user_id = user_info['user_id']
     current_stone = int(user_info['stone'])
-    
+    if str(send_group_id) in BANNED_UNSEAL_IDS:
+        msg = f"本群不可鉴石！"
+        await handle_send(bot, event, msg)
+        return
     # 处理传入的灵石参数
     arg = args.extract_plain_text().strip()
     if arg.isdigit():

@@ -84,6 +84,35 @@ class IMPART_DATA(object):
         # 返回是否新卡和当前总数
         return current_count == 0, current_count + 1
 
+    def data_person_add_batch(self, user_id, card_names):
+        """
+        批量添加词条
+        :param user_id: 用户ID
+        :param card_names: 卡片名称列表
+        :return: (新卡列表, 各卡片的当前数量字典)
+        """
+        user_id = str(user_id)
+        if user_id not in self.data_person:
+            self.data_person[user_id] = []
+        
+        new_cards = []
+        card_counts = {}
+        
+        # 先统计原始数量
+        for name in card_names:
+            card_counts[name] = self.data_person[user_id].count(name)
+        
+        # 添加所有卡片
+        self.data_person[user_id].extend(card_names)
+        self.__save()
+        
+        # 找出新卡
+        for name, count in card_counts.items():
+            if count == 0:
+                new_cards.append(name)
+        
+        return new_cards, {name: count + card_names.count(name) for name, count in card_counts.items()}
+
     def data_person_list(self, user_id):
         """
         查找所有传承卡片

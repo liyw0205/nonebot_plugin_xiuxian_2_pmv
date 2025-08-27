@@ -150,7 +150,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    # 解析抽卡概率
+    # 解析抽卡次数
     msg = args.extract_plain_text().strip()
     if msg:
         try:
@@ -165,7 +165,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         times = 10
 
     # 检查思恋结晶是否足够
-    required_crystals = times  # 每抽一次消耗1颗思恋结晶
+    required_crystals = times
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
         return
@@ -177,55 +177,72 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
-    new_cards = []
-    duplicate_cards = []
-    current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
+    current_wish = impart_data_draw["wish"]
+    drawn_cards = []  # 记录所有抽到的卡片
     total_seclusion_time = 0
-    current_draw_duplicates = {}  # 记录本次抽卡获得的重复卡牌数量
+    total_new_cards = 0
+    total_duplicates = 0
+    guaranteed_pulls = 0  # 记录触发的保底次数
 
     # 执行抽卡
     for _ in range(times // 10):
-        if get_rank(user_id):
-            # 中奖情况
+        # 检查是否触发保底
+        if current_wish >= 90:
             reap_img = random.choice(img_list)
-            is_new_card, _ = impart_data_json.data_person_add(user_id, reap_img)
-            if is_new_card:
-                new_cards.append(reap_img)
-                total_seclusion_time += 660
-            else:
-                # 记录本次抽卡获得的重复卡牌数量
-                current_draw_duplicates[reap_img] = current_draw_duplicates.get(reap_img, 0) + 1
-                total_seclusion_time += 1200
-            # 中奖（新卡或重复卡）后重置抽卡概率为0
-            current_wish = 0
+            drawn_cards.append(reap_img)
+            guaranteed_pulls += 1
+            total_seclusion_time += 1200  # 保底获得更多闭关时间
+            current_wish = 0  # 重置概率计数
         else:
-            # 未中奖情况
-            total_seclusion_time += 660
-            random.shuffle(time_img)
-            # 未中奖时增加10次抽卡计数
-            current_wish += 10
+            if get_rank(user_id):
+                # 中奖情况
+                reap_img = random.choice(img_list)
+                drawn_cards.append(reap_img)
+                total_seclusion_time += 1200  # 中奖获得更多闭关时间
+                current_wish = 0  # 重置概率计数
+            else:
+                # 未中奖情况
+                total_seclusion_time += 660
+                current_wish += 10
 
-        # 每组十连扣除10颗结晶并更新抽卡概率
-        xiuxian_impart.update_stone_num(10, user_id, 2)
-        xiuxian_impart.update_impart_wish(current_wish, user_id)
+    # 批量添加卡片
+    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    total_new_cards = len(new_cards)
+    total_duplicates = len(drawn_cards) - total_new_cards
+
+    # 计算重复卡片信息（只显示前10个，避免消息过长）
+    duplicate_cards_info = []
+    duplicate_display_limit = 10
+    for card, count in card_counts.items():
+        if card in new_cards:
+            continue
+        if len(duplicate_cards_info) < duplicate_display_limit:
+            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
+    
+    # 如果有更多重复卡未显示
+    more_duplicates_msg = ""
+    if total_duplicates > duplicate_display_limit:
+        more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
+
+    # 更新用户数据
+    xiuxian_impart.update_stone_num(required_crystals, user_id, 2)
+    xiuxian_impart.update_impart_wish(current_wish, user_id)
+    await update_user_impart_data(user_id, total_seclusion_time)
     impart_data_draw = await impart_check(user_id)
 
-    # 格式化重复卡牌信息
-    duplicate_cards_info = []
-    for card_name, count in current_draw_duplicates.items():
-        duplicate_cards_info.append(f"{card_name}x{count}")
+    # 计算实际抽卡概率
+    actual_wish = current_wish % 90  # 显示当前概率计数（0-89）
 
     summary_msg = (
         f"{summary}\n"
         f"累计获得{total_seclusion_time}分钟闭关时间！\n"
-        f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
-        f"重复卡片：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}\n"
-        f"抽卡概率：{current_wish}/90次\n"
+        f"新获得卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}\n"
+        f"重复卡片({total_duplicates}张)：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}{more_duplicates_msg}\n"
+        f"触发保底次数：{guaranteed_pulls}次\n"
+        f"当前抽卡概率：{actual_wish}/90次\n"
         f"消耗思恋结晶：{times}颗\n"        
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗"
     )
-    await update_user_impart_data(user_id, total_seclusion_time)
-    await re_impart_data(user_id)
 
     try:
         await handle_send(bot, event, summary_msg)
@@ -249,7 +266,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    # 解析抽卡概率
+    # 解析抽卡次数
     msg = args.extract_plain_text().strip()
     if msg:
         try:
@@ -264,7 +281,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         times = 10
 
     # 检查灵石是否足够
-    required_crystals = times * 1000000 # 每抽一次消耗1000w
+    required_crystals = times * 1000000
     if user_stone_num < required_crystals:
         await handle_send(bot, event, f"灵石不足，需要{number_to(required_crystals)}!")
         return
@@ -276,48 +293,66 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
-    new_cards = []
-    duplicate_cards = []
-    current_wish = impart_data_draw["wish"]  # 初始化抽卡概率
-    current_draw_duplicates = {}  # 记录本次抽卡获得的重复卡牌数量
+    current_wish = impart_data_draw["wish"]
+    drawn_cards = []  # 记录所有抽到的卡片
+    total_new_cards = 0
+    total_duplicates = 0
+    guaranteed_pulls = 0  # 记录触发的保底次数
 
     # 执行抽卡
     for _ in range(times // 10):
-        if get_rank(user_id):
-            # 中奖情况
+        # 检查是否触发保底
+        if current_wish >= 90:
             reap_img = random.choice(img_list)
-            is_new_card, _ = impart_data_json.data_person_add(user_id, reap_img)
-            if is_new_card:
-                new_cards.append(reap_img)
-            else:
-                # 记录本次抽卡获得的重复卡牌数量
-                current_draw_duplicates[reap_img] = current_draw_duplicates.get(reap_img, 0) + 1
-            # 中奖（新卡或重复卡）后重置抽卡概率为0
-            current_wish = 0
+            drawn_cards.append(reap_img)
+            guaranteed_pulls += 1
+            current_wish = 0  # 重置概率计数
         else:
-            # 未中奖情况
-            random.shuffle(time_img)
-            # 未中奖时增加10次抽卡计数
-            current_wish += 10
+            if get_rank(user_id):
+                # 中奖情况
+                reap_img = random.choice(img_list)
+                drawn_cards.append(reap_img)
+                current_wish = 0  # 重置概率计数
+            else:
+                # 未中奖情况
+                current_wish += 10
 
-        xiuxian_impart.update_impart_wish(current_wish, user_id)
-    sql_message.update_ls(user_id, required_crystals, 2)  # 2表示减少
+    # 批量添加卡片
+    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    total_new_cards = len(new_cards)
+    total_duplicates = len(drawn_cards) - total_new_cards
+
+    # 计算重复卡片信息（只显示前10个，避免消息过长）
+    duplicate_cards_info = []
+    duplicate_display_limit = 10
+    for card, count in card_counts.items():
+        if card in new_cards:
+            continue
+        if len(duplicate_cards_info) < duplicate_display_limit:
+            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
+    
+    # 如果有更多重复卡未显示
+    more_duplicates_msg = ""
+    if total_duplicates > duplicate_display_limit:
+        more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
+
+    # 更新用户数据
+    sql_message.update_ls(user_id, required_crystals, 2)
+    xiuxian_impart.update_impart_wish(current_wish, user_id)
     impart_data_draw = await impart_check(user_id)
 
-    # 格式化重复卡牌信息
-    duplicate_cards_info = []
-    for card_name, count in current_draw_duplicates.items():
-        duplicate_cards_info.append(f"{card_name}x{count}")
+    # 计算实际抽卡概率
+    actual_wish = current_wish % 90  # 显示当前概率计数（0-89）
 
     summary_msg = (
         f"{summary}\n"
-        f"新获得卡片：{', '.join(new_cards) if new_cards else '无'}\n"
-        f"重复卡片：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}\n"
-        f"抽卡概率：{current_wish}/90次\n"
+        f"新获得卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}\n"
+        f"重复卡片({total_duplicates}张)：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}{more_duplicates_msg}\n"
+        f"触发保底次数：{guaranteed_pulls}次\n"
+        f"当前抽卡概率：{actual_wish}/90次\n"
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗\n"
         f"消耗灵石：{number_to(required_crystals)}"
     )
-    await re_impart_data(user_id)
 
     try:
         await handle_send(bot, event, summary_msg)
@@ -339,6 +374,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg_text = args.extract_plain_text().strip()
     try:
         stone_num = int(msg_text.split()[0]) if msg_text else 1  # 默认使用1个祈愿石
+        stone_num = max(1, min(stone_num, 100))  # 限制最大使用100个
     except (IndexError, ValueError):
         await handle_send(bot, event, "请输入有效的祈愿石数量（如：使用祈愿石 5）")
         await use_wishing_stone.finish()
@@ -366,28 +402,42 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, "请检查卡图数据完整！")
         await use_wishing_stone.finish()
 
-    summary = f"道友使用祈愿石的结果"
-    list_tp = []
-    img_msg = ""
-    sent_images = set()  # 记录已发送的图片
+    # 必中奖抽卡 - 直接随机选择卡片
+    drawn_cards = [random.choice(img_list) for _ in range(stone_num)]
 
-    for _ in range(stone_num):
-        reap_img = random.choice(img_list)
-        if impart_data_json.data_person_add(user_id, reap_img):
-            # 重复卡片
-            msg = f"重复卡片：{reap_img}"
-        else:
-            # 新卡片
-            msg = f"新卡片：{reap_img}"
-        img_msg += f"\n{msg}"
-        # 消耗祈愿石
-        sql_message.update_back_j(user_id, wishing_stone_id)
+    # 批量添加卡片
+    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    total_new_cards = len(new_cards)
+    total_duplicates = len(drawn_cards) - total_new_cards
 
-    # 更新用户的抽卡数据
+    # 计算重复卡片信息（只显示前10个，避免消息过长）
+    duplicate_cards_info = []
+    duplicate_display_limit = 10
+    for card, count in card_counts.items():
+        if card in new_cards:
+            continue
+        if len(duplicate_cards_info) < duplicate_display_limit:
+            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
+    
+    # 如果有更多重复卡未显示
+    more_duplicates_msg = ""
+    if total_duplicates > duplicate_display_limit:
+        more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
+
+    # 批量消耗祈愿石
+    sql_message.update_back_j(user_id, wishing_stone_id, num=stone_num)
+
+    # 更新用户的抽卡数据（不更新概率计数）
     await re_impart_data(user_id)
+    
+    # 构建结果消息
+    new_cards_msg = f"新卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}"
+    duplicate_cards_msg = f"重复卡片({total_duplicates}张)：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}{more_duplicates_msg}"
+    
     final_msg = f"""道友使用了 {stone_num} 个祈愿石，结果如下：
-{img_msg}
-    """
+{new_cards_msg}
+{duplicate_cards_msg}
+"""
     try:
         await handle_send(bot, event, final_msg)
     except ActionFailed:
@@ -451,7 +501,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if page == 1:
         unique_cards = len(card_counts)  # 不同卡牌的数量
         total_cards = len(img_tp)        # 总卡牌数量
-        msg += f"\n\n卡片种类：{unique_cards}/108"
+        msg += f"\n\n卡片种类：{unique_cards}/106"
         msg += f"\n总卡片数：{total_cards}"
     
     # 添加分页信息
