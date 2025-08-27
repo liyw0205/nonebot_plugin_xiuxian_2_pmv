@@ -40,6 +40,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
 )
 from ..xiuxian_config import XiuConfig, convert_rank
+from datetime import datetime, timedelta
 from .auction_config import *
 from nonebot import require
 
@@ -49,6 +50,7 @@ sql_message = XiuxianDateManage()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 clear_expired_baitan = require("nonebot_plugin_apscheduler").scheduler
+rebuild_guishi_index = require("nonebot_plugin_apscheduler").scheduler
 
 # === 通用配置 ===
 # 数据文件路径
@@ -72,6 +74,92 @@ GUISHI_BAITAN_END_HOUR = 8     # 次日8点结束
 GUISHI_MAX_QUANTITY = 100   # 单次最大交易数量
 MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
 MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
+
+type_mapping = {
+    "装备": ["法器", "防具"],
+    "技能": ["功法", "神通", "辅修功法", "身法", "瞳术"],
+    "功法": ["功法"],
+    "神通": ["神通"],
+    "辅修功法": ["辅修功法"],
+    "身法": ["身法"],
+    "瞳术": ["瞳术"],
+    "法器": ["法器"],
+    "防具": ["防具"],
+    "药材": ["药材"],
+    "全部": ["法器", "防具", "药材", "功法", "神通", "辅修功法", "身法", "瞳术"]
+}
+
+rank_map = {
+    # --- 装备品阶 ---
+    "符器": ["下品符器", "上品符器"],
+    "法器": ["下品法器", "上品法器"],
+    "玄器": ["下品玄器", "上品玄器"],
+    "纯阳": ["下品纯阳", "上品纯阳"],
+    "纯阳法器": ["下品纯阳法器", "上品纯阳法器"],
+    "通天": ["下品通天", "上品通天"],
+    "通天法器": ["下品通天法器", "上品通天法器"],
+    "仙器": ["下品仙器", "上品仙器"],
+    "下品符器": ["下品符器"],
+    "上品符器": ["上品符器"],
+    "下品法器": ["下品法器"],
+    "上品法器": ["上品法器"],
+    "下品玄器": ["下品玄器"],
+    "上品玄器": ["上品玄器"],
+    "下品纯阳": ["下品纯阳"],
+    "上品纯阳": ["上品纯阳"],
+    "下品纯阳法器": ["下品纯阳法器"],
+    "上品纯阳法器": ["上品纯阳法器"],
+    "下品通天": ["下品通天"],
+    "上品通天": ["上品通天"],
+    "下品通天法器": ["下品通天法器"],
+    "上品通天法器": ["上品通天法器"],
+    
+    # --- 药材品阶 ---
+    "一品药材": ["一品药材"],
+    "二品药材": ["二品药材"],
+    "三品药材": ["三品药材"],
+    "四品药材": ["四品药材"],
+    "五品药材": ["五品药材"],
+    "六品药材": ["六品药材"],
+    "七品药材": ["七品药材"],
+    "八品药材": ["八品药材"],
+    "九品药材": ["九品药材"],
+    
+    # --- 功法品阶 ---
+    "人阶下品": "人阶下品",
+    "人阶上品": "人阶上品",
+    "黄阶下品": "黄阶下品",
+    "黄阶上品": "黄阶上品",
+    "玄阶下品": "玄阶下品",
+    "玄阶上品": "玄阶上品",
+    "地阶下品": "地阶下品",
+    "地阶上品": "地阶上品",
+    "天阶下品": "天阶下品",
+    "天阶上品": "天阶上品",
+    "仙阶下品": "仙阶下品",
+    "仙阶上品": "仙阶上品",
+    "人阶": ["人阶下品", "人阶上品"],
+    "黄阶": ["黄阶下品", "黄阶上品"],
+    "玄阶": ["玄阶下品", "玄阶上品"],
+    "地阶": ["地阶下品", "地阶上品"],
+    "天阶": ["天阶下品", "天阶上品"],
+    "仙阶": ["仙阶下品", "仙阶上品"],
+    
+    # --- 全部品阶（不包含仙器、九品药材和仙阶功法） ---
+    "全部": [
+        # 装备
+        "下品符器", "上品符器", "下品法器", "上品法器", "下品玄器", "上品玄器",
+        "下品纯阳", "上品纯阳", "下品纯阳法器", "上品纯阳法器", 
+        "下品通天", "上品通天", "下品通天法器", "上品通天法器",
+        # 药材
+        "一品药材", "二品药材", "三品药材", "四品药材",
+        "五品药材", "六品药材", "七品药材", "八品药材",
+        # 功法
+        "人阶下品", "人阶上品", "黄阶下品", "黄阶上品",
+        "玄阶下品", "玄阶上品", "地阶下品", "地阶上品",
+        "天阶下品", "天阶上品"
+    ]
+}
 
 # 拍卖命令
 auction_view = on_command("拍卖查看", aliases={"查看拍卖"}, priority=5, block=True)
@@ -115,7 +203,6 @@ shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=S
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
 
 # === 鬼市系统 ===
-
 # 鬼市命令
 guishi_deposit = on_command("鬼市存灵石", priority=5, block=True)
 guishi_withdraw = on_command("鬼市取灵石", priority=5, block=True)
@@ -125,6 +212,7 @@ guishi_qiugou = on_command("鬼市求购", priority=5, block=True)
 guishi_cancel_qiugou = on_command("鬼市取消求购", priority=5, block=True)
 guishi_baitan = on_command("鬼市摆摊", priority=5, block=True)
 guishi_shoutan = on_command("鬼市收摊", priority=5, block=True)
+clear_all_guishi = on_fullmatch("清空鬼市", priority=3, permission=SUPERUSER, block=True)
 
 # === 其他原有命令 ===
 chakan_wupin = on_command("查看修仙界物品", aliases={"查看"}, priority=20, block=True)
@@ -1093,7 +1181,7 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
 
 @xianshi_auto_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """仙肆自动上架（按类型和品阶批量上架）"""
+    """仙肆自动上架（按类型和品阶批量上架）优化版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1112,112 +1200,29 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
-    item_type = args[0]  # 物品类型
-    rank_name = " ".join(args[1:-1]) if len(args) > 2 else args[1]  # 处理多字品阶名
-    quantity = int(args[-1]) if args[-1].isdigit() else 1  # 数量参数
-    
-    # 数量限制
+    item_type = args[0]
+    rank_name = " ".join(args[1:-1]) if len(args) > 2 else args[1]
+    quantity = int(args[-1]) if args[-1].isdigit() else 1
     quantity = max(1, min(quantity, MAX_QUANTITY))
     
-    # === 类型检查 ===
-    type_mapping = {
-        "装备": ["法器", "防具"],
-        "技能": ["功法", "神通", "辅修功法", "身法", "瞳术"],
-        "功法": ["功法"],
-        "神通": ["神通"],
-        "辅修功法": ["辅修功法"],
-        "身法": ["身法"],
-        "瞳术": ["瞳术"],
-        "法器": ["法器"],
-        "防具": ["防具"],
-        "药材": ["药材"],
-        "全部": ["法器", "防具", "药材", "功法", "神通", "辅修功法", "身法", "瞳术"]
-    }
-    
     if item_type not in type_mapping:
-        msg = f"❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
-    
-    # === 品阶检查 ===
-    rank_map = {
-        # --- 装备品阶---
-        "符器": ["下品符器", "上品符器"],
-        "法器": ["下品法器", "上品法器"],
-        "玄器": ["下品玄器", "上品玄器"],
-        "纯阳": ["下品纯阳", "上品纯阳"],
-        "纯阳法器": ["下品纯阳法器", "上品纯阳法器"],
-        "通天": ["下品通天", "上品通天"],
-        "通天法器": ["下品通天法器", "上品通天法器"],
-        "仙器": ["下品仙器", "上品仙器"],
-        "下品符器": ["下品符器"],
-        "上品符器": ["上品符器"],
-        "下品法器": ["下品法器"],
-        "上品法器": ["上品法器"],
-        "下品玄器": ["下品玄器"],
-        "上品玄器": ["上品玄器"],
-        "下品纯阳": ["下品纯阳"],
-        "上品纯阳": ["上品纯阳"],
-        "下品纯阳法器": ["下品纯阳法器"],
-        "上品纯阳法器": ["上品纯阳法器"],
-        "下品通天": ["下品通天"],
-        "上品通天": ["上品通天"],
-        "下品通天法器": ["下品通天法器"],
-        "上品通天法器": ["上品通天法器"],
-        
-        # --- 药材品阶---
-        "一品药材": ["一品药材"],
-        "二品药材": ["二品药材"],
-        "三品药材": ["三品药材"],
-        "四品药材": ["四品药材"],
-        "五品药材": ["五品药材"],
-        "六品药材": ["六品药材"],
-        "七品药材": ["七品药材"],
-        "八品药材": ["八品药材"],
-        "九品药材": ["九品药材"],
-        
-        # --- 功法品阶---
-        "人阶下品": "人阶下品", "人阶上品": "人阶上品",
-        "黄阶下品": "黄阶下品", "黄阶上品": "黄阶上品",
-        "玄阶下品": "玄阶下品", "玄阶上品": "玄阶上品",
-        "地阶下品": "地阶下品", "地阶上品": "地阶上品",
-        "天阶下品": "天阶下品", "天阶上品": "天阶上品",
-        "仙阶下品": "仙阶下品", "仙阶上品": "仙阶上品",
-        "人阶": ["人阶下品", "人阶上品"],
-        "黄阶": ["黄阶下品", "黄阶上品"],
-        "玄阶": ["玄阶下品", "玄阶上品"],
-        "地阶": ["地阶下品", "地阶上品"],
-        "天阶": ["天阶下品", "天阶上品"],
-        "仙阶": ["仙阶下品", "仙阶上品"],
-        
-        # --- 全部品阶（不包含仙器、九品药材和仙阶功法）---
-        "全部": [
-            # 装备
-            "下品符器", "上品符器", "下品法器", "上品法器", "下品玄器", "上品玄器",
-            "下品纯阳", "上品纯阳", "下品纯阳法器", "上品纯阳法器", "下品通天", "上品通天", "下品通天法器", "上品通天法器",
-            # 药材
-            "一品药材", "二品药材", "三品药材", "四品药材",
-            "五品药材", "六品药材", "七品药材", "八品药材",
-            # 功法
-            "人阶下品", "人阶上品", "黄阶下品", "黄阶上品",
-            "玄阶下品", "玄阶上品", "地阶下品", "地阶上品",
-            "天阶下品", "天阶上品"
-        ]
-    }
     
     if rank_name not in rank_map:
-        msg = f"❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
-    
-    # === 获取背包物品 ===
+
+    # 获取背包物品
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼 道友的背包空空如也！"
+        msg = "💼💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
-    # === 筛选物品 ===
+    # 筛选物品
     target_types = type_mapping[item_type]
     target_ranks = rank_map[rank_name]
     
@@ -1227,13 +1232,11 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         if not item_info:
             continue
             
-        # 类型匹配
         type_match = (
             item['goods_type'] in target_types or 
             item_info.get('item_type', '') in target_types
         )
         
-        # 品阶匹配
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
@@ -1248,23 +1251,19 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 })
     
     if not items_to_add:
-        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
-    # === 自动上架逻辑 ===
-    success_count = 0
-    total_fee = 0
-    result_msg = []
-    
+    # === 批量处理逻辑 ===
+    # 先计算所有要上架的物品和总手续费
+    items_to_process = []
     for item in items_to_add:
         if str(item['id']) in BANNED_ITEM_IDS:
-            continue  # 跳过禁止交易的物品
-        
-        # 获取仙肆最低价
+            continue
+
         min_price = get_xianshi_min_price(item['name'])
         
-        # 如果没有最低价，则使用炼金价格+100万
         if min_price is None:
             base_rank = convert_rank('江湖好手')[0]
             item_rank = get_item_msg_rank(item['id'])
@@ -1272,10 +1271,8 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         else:
             price = min_price
         
-        # 确定实际上架数量
         actual_quantity = min(quantity, item['available_num'])
         
-        # 计算总手续费
         total_price = price * actual_quantity
         if total_price <= 5000000:
             fee_rate = 0.1
@@ -1286,63 +1283,85 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         else:
             fee_rate = 0.3
         
-        total_fee += int(total_price * fee_rate)
+        single_fee = int(total_price * fee_rate)
         
-        # 检查灵石是否足够支付手续费
-        if user_info['stone'] < total_fee:
-            result_msg.append(f"{item['name']} - 灵石不足支付手续费！需要{total_fee}灵石")
-            continue
-        
+        items_to_process.append({
+            'id': item['id'],
+            'name': item['name'],
+            'type': item['type'],
+            'price': price,
+            'quantity': actual_quantity,
+            'fee': single_fee
+        })
+    
+    total_fee = sum(item['fee'] for item in items_to_process)
+    
+    if user_info['stone'] < total_fee:
+        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
+        await handle_send(bot, event, msg)
+        await xianshi_auto_add.finish()
+    
+    # 一次性扣除总手续费
+    sql_message.update_ls(user_id, total_fee, 2)
+    
+    # 获取当前索引数据
+    index_data = get_xianshi_index()
+    existing_ids = set(index_data["items"].keys())
+    
+    # 准备批量写入的数据
+    type_updates = {}  # 按类型分组的数据更新
+    result_msg = []
+    success_count = 0
+
+    for item in items_to_process:
         # 为每个物品创建独立条目
-        for _ in range(actual_quantity):
-            # 扣除手续费和物品
-            sql_message.update_back_j(user_id, item['id'], num=1)
-            
-            # 添加到仙肆系统
-            index_data = get_xianshi_index()
-            existing_ids = set(index_data["items"].keys())
+        for _ in range(item['quantity']):
+            # 生成唯一ID
             xianshi_id = generate_unique_id(existing_ids)
+            existing_ids.add(xianshi_id)
             
             # 添加到索引
             index_data["items"][xianshi_id] = {
                 "type": item['type'],
                 "user_id": user_id
             }
-            save_xianshi_index(index_data)
             
-            # 添加到类型文件
-            type_items = get_xianshi_type_data(item['type'])
-            type_items[xianshi_id] = {
+            # 添加到类型文件更新
+            if item['type'] not in type_updates:
+                type_updates[item['type']] = get_xianshi_type_data(item['type'])
+            
+            type_updates[item['type']][xianshi_id] = {
                 "id": xianshi_id,
                 "goods_id": item['id'],
                 "name": item['name'],
                 "type": item['type'],
-                "price": price,
-                "quantity": 1,  # 每个条目数量固定为1
+                "price": item['price'],
+                "quantity": 1,
                 "user_id": user_id,
                 "user_name": user_info['user_name'],
                 "desc": get_item_msg(item['id'])
             }
-            save_xianshi_type_data(item['type'], type_items)
+            
+            # 从背包扣除1个物品
+            sql_message.update_back_j(user_id, item['id'], num=1)
             
             success_count += 1
-        
-        result_msg.append(f"{item['name']} x{actual_quantity} - 单价:{number_to(price)}")
+            result_msg.append(f"{item['name']} x1 - 单价:{number_to(item['price'])}")
     
-    if success_count == 0:
-        msg = "没有物品被成功上架！"
-        await handle_send(bot, event, msg)
-        await xianshi_auto_add.finish()
-    
-    # 扣除总手续费
-    sql_message.update_ls(user_id, total_fee, 2)
+    # 批量保存所有更新
+    save_xianshi_index(index_data)
+    for item_type, type_items in type_updates.items():
+        save_xianshi_type_data(item_type, type_items)
     
     # 构建结果消息
     msg = [
         f"\n✨ 成功上架 {success_count} 件物品",
-        *result_msg,
-        f"💎 总手续费: {number_to(total_fee)}灵石"
+        *result_msg[:10],  # 最多显示10条
+        f"💎💎 总手续费: {number_to(total_fee)}灵石"
     ]
+    
+    if len(result_msg) > 10:
+        msg.append(f"...等共{len(result_msg)}件物品")
     
     await send_msg_handler(bot, event, '仙肆自动上架', bot.self_id, msg)
     await xianshi_auto_add.finish()
@@ -1909,7 +1928,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
 
 @fangshi_auto_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """坊市自动上架（按类型和品阶批量上架）"""
+    """坊市自动上架（批量优化版）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1929,112 +1948,30 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
-    item_type = args[0]  # 物品类型
-    rank_name = " ".join(args[1:-1]) if len(args) > 2 else args[1]  # 处理多字品阶名
-    quantity = int(args[-1]) if args[-1].isdigit() else 1  # 数量参数
-    
-    # 数量限制
+    item_type = args[0]
+    rank_name = " ".join(args[1:-1]) if len(args) > 2 else args[1]
+    quantity = int(args[-1]) if args[-1].isdigit() else 1
     quantity = max(1, min(quantity, MAX_QUANTITY))
-    
-    # === 类型检查 ===
-    type_mapping = {
-        "装备": ["法器", "防具"],
-        "技能": ["功法", "神通", "辅修功法", "身法", "瞳术"],
-        "功法": ["功法"],
-        "神通": ["神通"],
-        "辅修功法": ["辅修功法"],
-        "身法": ["身法"],
-        "瞳术": ["瞳术"],
-        "法器": ["法器"],
-        "防具": ["防具"],
-        "药材": ["药材"],
-        "全部": ["法器", "防具", "药材", "功法", "神通", "辅修功法", "身法", "瞳术"]
-    }
-    
+
+
     if item_type not in type_mapping:
-        msg = f"❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
-    
-    # === 品阶检查 ===
-    rank_map = {
-        # --- 装备品阶---
-        "符器": ["下品符器", "上品符器"],
-        "法器": ["下品法器", "上品法器"],
-        "玄器": ["下品玄器", "上品玄器"],
-        "纯阳": ["下品纯阳", "上品纯阳"],
-        "纯阳法器": ["下品纯阳法器", "上品纯阳法器"],
-        "通天": ["下品通天", "上品通天"],
-        "通天法器": ["下品通天法器", "上品通天法器"],
-        "仙器": ["下品仙器", "上品仙器"],
-        "下品符器": ["下品符器"],
-        "上品符器": ["上品符器"],
-        "下品法器": ["下品法器"],
-        "上品法器": ["上品法器"],
-        "下品玄器": ["下品玄器"],
-        "上品玄器": ["上品玄器"],
-        "下品纯阳": ["下品纯阳"],
-        "上品纯阳": ["上品纯阳"],
-        "下品纯阳法器": ["下品纯阳法器"],
-        "上品纯阳法器": ["上品纯阳法器"],
-        "下品通天": ["下品通天"],
-        "上品通天": ["上品通天"],
-        "下品通天法器": ["下品通天法器"],
-        "上品通天法器": ["上品通天法器"],
-        
-        # --- 药材品阶---
-        "一品药材": ["一品药材"],
-        "二品药材": ["二品药材"],
-        "三品药材": ["三品药材"],
-        "四品药材": ["四品药材"],
-        "五品药材": ["五品药材"],
-        "六品药材": ["六品药材"],
-        "七品药材": ["七品药材"],
-        "八品药材": ["八品药材"],
-        "九品药材": ["九品药材"],
-        
-        # --- 功法品阶---
-        "人阶下品": "人阶下品", "人阶上品": "人阶上品",
-        "黄阶下品": "黄阶下品", "黄阶上品": "黄阶上品",
-        "玄阶下品": "玄阶下品", "玄阶上品": "玄阶上品",
-        "地阶下品": "地阶下品", "地阶上品": "地阶上品",
-        "天阶下品": "天阶下品", "天阶上品": "天阶上品",
-        "仙阶下品": "仙阶下品", "仙阶上品": "仙阶上品",
-        "人阶": ["人阶下品", "人阶上品"],
-        "黄阶": ["黄阶下品", "黄阶上品"],
-        "玄阶": ["玄阶下品", "玄阶上品"],
-        "地阶": ["地阶下品", "地阶上品"],
-        "天阶": ["天阶下品", "天阶上品"],
-        "仙阶": ["仙阶下品", "仙阶上品"],
-        
-        # --- 全部品阶（不包含仙器、九品药材和仙阶功法）---
-        "全部": [
-            # 装备
-            "下品符器", "上品符器", "下品法器", "上品法器", "下品玄器", "上品玄器",
-            "下品纯阳", "上品纯阳", "下品纯阳法器", "上品纯阳法器", "下品通天", "上品通天", "下品通天法器", "上品通天法器",
-            # 药材
-            "一品药材", "二品药材", "三品药材", "四品药材",
-            "五品药材", "六品药材", "七品药材", "八品药材",
-            # 功法
-            "人阶下品", "人阶上品", "黄阶下品", "黄阶上品",
-            "玄阶下品", "玄阶上品", "地阶下品", "地阶上品",
-            "天阶下品", "天阶上品"
-        ]
-    }
     
     if rank_name not in rank_map:
-        msg = f"❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
-    
-    # === 获取背包物品 ===
+
+    # 获取背包物品
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼 道友的背包空空如也！"
+        msg = "💼💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
-    # === 筛选物品 ===
+    # 筛选物品
     target_types = type_mapping[item_type]
     target_ranks = rank_map[rank_name]
     
@@ -2044,13 +1981,11 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         if not item_info:
             continue
             
-        # 类型匹配
         type_match = (
             item['goods_type'] in target_types or 
             item_info.get('item_type', '') in target_types
         )
         
-        # 品阶匹配
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
@@ -2065,22 +2000,18 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
                 })
     
     if not items_to_add:
-        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
-    # === 自动上架逻辑 ===
-    success_count = 0
-    total_fee = 0
-    result_msg = []
-    
+    # === 批量处理逻辑 ===
+    items_to_process = []
     for item in items_to_add:
         if str(item['id']) in BANNED_ITEM_IDS:
-            continue  # 跳过禁止交易的物品
-        # 获取坊市最低价
+            continue
+
         min_price = get_fangshi_min_price(group_id, item['name'])
         
-        # 如果没有最低价，则使用炼金价格+100万
         if min_price is None:
             base_rank = convert_rank('江湖好手')[0]
             item_rank = get_item_msg_rank(item['id'])
@@ -2088,10 +2019,8 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         else:
             price = min_price
         
-        # 确定实际上架数量
         actual_quantity = min(quantity, item['available_num'])
         
-        # 计算总手续费
         total_price = price * actual_quantity
         if total_price <= 5000000:
             fee_rate = 0.1
@@ -2102,63 +2031,79 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         else:
             fee_rate = 0.3
         
-        total_fee += int(total_price * fee_rate)
+        single_fee = int(total_price * fee_rate)
         
-        # 检查灵石是否足够支付手续费
-        if user_info['stone'] < total_fee:
-            result_msg.append(f"{item['name']} - 灵石不足支付手续费！需要{total_fee}灵石")
-            continue
-        
-        # 为每个物品创建独立条目
-        for _ in range(actual_quantity):
-            # 扣除手续费和物品
-            sql_message.update_back_j(user_id, item['id'], num=1)
-            
-            # 添加到坊市系统
-            index_data = get_fangshi_index(group_id)
-            existing_ids = set(index_data["items"].keys())
+        items_to_process.append({
+            'id': item['id'],
+            'name': item['name'],
+            'type': item['type'],
+            'price': price,
+            'quantity': actual_quantity,
+            'fee': single_fee
+        })
+    
+    total_fee = sum(item['fee'] for item in items_to_process)
+    
+    if user_info['stone'] < total_fee:
+        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
+        await handle_send(bot, event, msg)
+        await fangshi_auto_add.finish()
+    
+    # 一次性扣除总手续费
+    sql_message.update_ls(user_id, total_fee, 2)
+    
+    # 获取当前索引数据
+    index_data = get_fangshi_index(group_id)
+    existing_ids = set(index_data["items"].keys())
+    
+    # 准备批量写入的数据
+    type_updates = {}
+    result_msg = []
+    success_count = 0
+
+    for item in items_to_process:
+        for _ in range(item['quantity']):
             fangshi_id = generate_fangshi_id(existing_ids)
+            existing_ids.add(fangshi_id)
             
-            # 添加到索引
             index_data["items"][fangshi_id] = {
                 "type": item['type'],
                 "user_id": user_id
             }
-            save_fangshi_index(group_id, index_data)
             
-            # 添加到类型文件
-            type_items = get_fangshi_type_data(group_id, item['type'])
-            type_items[fangshi_id] = {
+            if item['type'] not in type_updates:
+                type_updates[item['type']] = get_fangshi_type_data(group_id, item['type'])
+            
+            type_updates[item['type']][fangshi_id] = {
                 "id": fangshi_id,
                 "goods_id": item['id'],
                 "name": item['name'],
                 "type": item['type'],
-                "price": price,
-                "quantity": 1,  # 每个条目数量固定为1
+                "price": item['price'],
+                "quantity": 1,
                 "user_id": user_id,
                 "user_name": user_info['user_name'],
                 "desc": get_item_msg(item['id'])
             }
-            save_fangshi_type_data(group_id, item['type'], type_items)
             
+            sql_message.update_back_j(user_id, item['id'], num=1)
             success_count += 1
-        
-        result_msg.append(f"{item['name']} x{actual_quantity} - 单价:{number_to(price)}")
+            result_msg.append(f"{item['name']} x1 - 单价:{number_to(item['price'])}")
     
-    if success_count == 0:
-        msg = "没有物品被成功上架！"
-        await handle_send(bot, event, msg)
-        await fangshi_auto_add.finish()
-    
-    # 扣除总手续费
-    sql_message.update_ls(user_id, total_fee, 2)
+    # 批量保存
+    save_fangshi_index(group_id, index_data)
+    for item_type, type_items in type_updates.items():
+        save_fangshi_type_data(group_id, item_type, type_items)
     
     # 构建结果消息
     msg = [
         f"\n✨ 成功上架 {success_count} 件物品",
-        *result_msg,
-        f"💎 总手续费: {number_to(total_fee)}灵石"
+        *result_msg[:10],
+        f"💎💎 总手续费: {number_to(total_fee)}灵石"
     ]
+    
+    if len(result_msg) > 10:
+        msg.append(f"...等共{len(result_msg)}件物品")
     
     await send_msg_handler(bot, event, '坊市自动上架', bot.self_id, msg)
     await fangshi_auto_add.finish()
@@ -3042,6 +2987,93 @@ async def shop_off_all_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await shop_off_all.finish()
 
+GUISHI_QIUGOU_INDEX = GUISHI_DATA_PATH / "guishi_qiugou_index.json"
+GUISHI_BAITAN_INDEX = GUISHI_DATA_PATH / "guishi_baitan_index.json"
+
+# === 索引功能 ===
+def get_guishi_index(index_type):
+    """获取鬼市索引"""
+    index_file = GUISHI_QIUGOU_INDEX if index_type == "qiugou" else GUISHI_BAITAN_INDEX
+    try:
+        if index_file.exists():
+            with open(index_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"读取鬼市{index_type}索引失败: {e}")
+    return {"by_item": {}, "by_user": {}}
+
+def save_guishi_index(index_type, data):
+    """保存鬼市索引"""
+    index_file = GUISHI_QIUGOU_INDEX if index_type == "qiugou" else GUISHI_BAITAN_INDEX
+    try:
+        with open(index_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"保存鬼市{index_type}索引失败: {e}")
+        return False
+
+def update_qiugou_index(order_id, item_name, user_id, action="add"):
+    """更新求购索引"""
+    index = get_guishi_index("qiugou")
+    
+    # 按物品索引
+    if action == "add":
+        if item_name not in index["by_item"]:
+            index["by_item"][item_name] = []
+        if user_id not in index["by_item"][item_name]:
+            index["by_item"][item_name].append(user_id)
+    else:  # remove
+        if item_name in index["by_item"] and user_id in index["by_item"][item_name]:
+            index["by_item"][item_name].remove(user_id)
+            if not index["by_item"][item_name]:
+                del index["by_item"][item_name]
+    
+    # 按用户索引
+    if action == "add":
+        if user_id not in index["by_user"]:
+            index["by_user"][user_id] = []
+        if order_id not in index["by_user"][user_id]:
+            index["by_user"][user_id].append(order_id)
+    else:  # remove
+        if user_id in index["by_user"] and order_id in index["by_user"][user_id]:
+            index["by_user"][user_id].remove(order_id)
+            if not index["by_user"][user_id]:
+                del index["by_user"][user_id]
+    
+    save_guishi_index("qiugou", index)
+
+def update_baitan_index(order_id, item_name, user_id, action="add"):
+    """更新摆摊索引"""
+    index = get_guishi_index("baitan")
+    
+    # 按物品索引
+    if action == "add":
+        if item_name not in index["by_item"]:
+            index["by_item"][item_name] = []
+        if user_id not in index["by_item"][item_name]:
+            index["by_item"][item_name].append(user_id)
+    else:  # remove
+        if item_name in index["by_item"] and user_id in index["by_item"][item_name]:
+            index["by_item"][item_name].remove(user_id)
+            if not index["by_item"][item_name]:
+                del index["by_item"][item_name]
+    
+    # 按用户索引
+    if action == "add":
+        if user_id not in index["by_user"]:
+            index["by_user"][user_id] = []
+        if order_id not in index["by_user"][user_id]:
+            index["by_user"][user_id].append(order_id)
+    else:  # remove
+        if user_id in index["by_user"] and order_id in index["by_user"][user_id]:
+            index["by_user"][user_id].remove(order_id)
+            if not index["by_user"][user_id]:
+                del index["by_user"][user_id]
+    
+    save_guishi_index("baitan", index)
+
+# === 核心功能 ===
 def get_guishi_user_data(user_id):
     """获取用户鬼市数据"""
     user_file = GUISHI_DATA_PATH / f"user_{user_id}.json"
@@ -3069,8 +3101,9 @@ def save_guishi_user_data(user_id, data):
         logger.error(f"保存鬼市用户数据失败: {e}")
         return False
 
-def generate_guishi_id(existing_ids):
+def generate_guishi_id(existing_ids=None):
     """生成6-10位随机不重复ID"""
+    existing_ids = existing_ids or set()
     while True:
         # 使用时间戳+随机数确保唯一性
         timestamp_part = int(time.time() % 10000)
@@ -3085,129 +3118,142 @@ def generate_guishi_id(existing_ids):
             return str(new_id)
 
 async def process_guishi_transactions(user_id):
-    """处理鬼市交易"""
+    """使用索引优化交易处理"""
     user_data = get_guishi_user_data(user_id)
     transactions = []
     
+    # 获取索引
+    qiugou_index = get_guishi_index("qiugou")
+    baitan_index = get_guishi_index("baitan")
+    
     # 处理求购订单
     for order_id, order in list(user_data["qiugou_orders"].items()):
-        # 查找匹配的摆摊订单（价格<=求购价）
-        matched_orders = []
-        for other_user_file in GUISHI_DATA_PATH.glob("user_*.json"):
-            if other_user_file.name == f"user_{user_id}.json":
-                continue  # 跳过自己的订单
-                
-            other_data = json.loads(other_user_file.read_text(encoding="utf-8"))
-            for other_order_id, other_order in other_data["baitan_orders"].items():
-                if (other_order["item_name"] == order["item_name"] and 
-                    other_order["price"] <= order["price"] and
-                    other_order["quantity"] - other_order.get("sold", 0) > 0):
-                    matched_orders.append((other_user_file, other_data, other_order_id, other_order))
+        item_name = order["item_name"]
         
-        # 按价格从低到高排序
-        matched_orders.sort(key=lambda x: x[3]["price"])
+        # 使用索引快速查找匹配的摆摊订单
+        matched_sellers = baitan_index["by_item"].get(item_name, [])
         
-        for other_user_file, other_data, other_order_id, other_order in matched_orders:
+        for seller_id in matched_sellers:
             if order.get("filled", 0) >= order["quantity"]:
                 break  # 订单已完成
                 
-            available = other_order["quantity"] - other_order.get("sold", 0)
-            needed = order["quantity"] - order.get("filled", 0)
-            trade_num = min(available, needed)
-            
-            # 检查鬼市账户余额是否足够
-            total_cost = trade_num * other_order["price"]
-            if user_data["stone"] < total_cost:
-                continue  # 余额不足，跳过
-                
-            # 执行交易
-            user_data["stone"] -= total_cost
-            other_data["stone"] += total_cost
-            
-            # 更新订单状态
-            order["filled"] = order.get("filled", 0) + trade_num
-            other_order["sold"] = other_order.get("sold", 0) + trade_num
-            
-            # 转移物品
-            item_id = other_order["item_id"]
-            if item_id not in user_data["items"]:
-                user_data["items"][item_id] = {
-                    "name": other_order["item_name"],
-                    "type": items.get_data_by_item_id(item_id)["type"],
-                    "quantity": 0
-                }
-            user_data["items"][item_id]["quantity"] += trade_num
-            
-            # 记录交易（修改这里）
-            transactions.append(f"求购：已收购 {other_order['item_name']} x{trade_num} (花费{number_to(total_cost)}灵石)")
-            
-            # 保存对方数据
-            save_guishi_user_data(other_user_file.stem.split("_")[1], other_data)
-            
-        # 检查订单是否完成
+            seller_data = get_guishi_user_data(seller_id)
+            for seller_order_id, seller_order in list(seller_data["baitan_orders"].items()):
+                if (seller_order["item_name"] == item_name and 
+                    seller_order["price"] <= order["price"] and
+                    seller_order["quantity"] - seller_order.get("sold", 0) > 0):
+                    
+                    # 计算可交易数量
+                    available = seller_order["quantity"] - seller_order.get("sold", 0)
+                    needed = order["quantity"] - order.get("filled", 0)
+                    trade_num = min(available, needed)
+                    
+                    # 检查鬼市账户余额
+                    total_cost = trade_num * seller_order["price"]
+                    if user_data["stone"] < total_cost:
+                        continue
+                        
+                    # 执行交易
+                    user_data["stone"] -= total_cost
+                    seller_data["stone"] += total_cost
+                    
+                    # 更新订单状态
+                    order["filled"] = order.get("filled", 0) + trade_num
+                    seller_order["sold"] = seller_order.get("sold", 0) + trade_num
+                    
+                    # 转移物品
+                    item_id = seller_order["item_id"]
+                    if item_id not in user_data["items"]:
+                        user_data["items"][item_id] = {
+                            "name": seller_order["item_name"],
+                            "type": items.get_data_by_item_id(item_id)["type"],
+                            "quantity": 0
+                        }
+                    user_data["items"][item_id]["quantity"] += trade_num
+                    
+                    # 记录交易
+                    transactions.append(f"求购：已收购 {seller_order['item_name']} x{trade_num} (花费{number_to(total_cost)}灵石)")
+                    
+                    # 保存对方数据
+                    save_guishi_user_data(seller_id, seller_data)
+                    
+                    # 检查订单是否完成
+                    if seller_order["sold"] >= seller_order["quantity"]:
+                        del seller_data["baitan_orders"][seller_order_id]
+                        update_baitan_index(seller_order_id, item_name, seller_id, "remove")
+                    
+            # 保存卖家数据
+            save_guishi_user_data(seller_id, seller_data)
+        
+        # 检查求购订单是否完成
         if order.get("filled", 0) >= order["quantity"]:
-            user_data["qiugou_orders"].pop(order_id)
+            del user_data["qiugou_orders"][order_id]
+            update_qiugou_index(order_id, item_name, user_id, "remove")
             transactions.append(f"求购订单 {order_id} 已完成")
     
     # 处理摆摊订单
     for order_id, order in list(user_data["baitan_orders"].items()):
-        # 查找匹配的求购订单（价格>=摆摊价）
-        matched_orders = []
-        for other_user_file in GUISHI_DATA_PATH.glob("user_*.json"):
-            if other_user_file.name == f"user_{user_id}.json":
-                continue  # 跳过自己的订单
-                
-            other_data = json.loads(other_user_file.read_text(encoding="utf-8"))
-            for other_order_id, other_order in other_data["qiugou_orders"].items():
-                if (other_order["item_name"] == order["item_name"] and 
-                    other_order["price"] >= order["price"] and
-                    other_order["quantity"] - other_order.get("filled", 0) > 0):
-                    matched_orders.append((other_user_file, other_data, other_order_id, other_order))
+        item_name = order["item_name"]
         
-        # 按价格从高到低排序
-        matched_orders.sort(key=lambda x: -x[3]["price"])
+        # 使用索引快速查找匹配的求购订单
+        matched_buyers = qiugou_index["by_item"].get(item_name, [])
         
-        for other_user_file, other_data, other_order_id, other_order in matched_orders:
+        for buyer_id in matched_buyers:
             if order.get("sold", 0) >= order["quantity"]:
                 break  # 订单已完成
                 
-            available = order["quantity"] - order.get("sold", 0)
-            needed = other_order["quantity"] - other_order.get("filled", 0)
-            trade_num = min(available, needed)
-            
-            # 检查对方鬼市账户余额是否足够
-            total_cost = trade_num * order["price"]
-            if other_data["stone"] < total_cost:
-                continue  # 对方余额不足，跳过
-                
-            # 执行交易
-            other_data["stone"] -= total_cost
-            user_data["stone"] += total_cost
-            
-            # 更新订单状态
-            order["sold"] = order.get("sold", 0) + trade_num
-            other_order["filled"] = other_order.get("filled", 0) + trade_num
-            
-            # 转移物品
-            item_id = other_order.get("item_id")  # 求购订单可能没有item_id
-            if item_id:
-                if item_id not in other_data["items"]:
-                    other_data["items"][item_id] = {
-                        "name": order["item_name"],
-                        "type": items.get_data_by_item_id(item_id)["type"],
-                        "quantity": 0
-                    }
-                other_data["items"][item_id]["quantity"] += trade_num
-            
-            # 记录交易（修改这里）
-            transactions.append(f"摆摊：已出售 {order['item_name']} x{trade_num} (获得{number_to(total_cost)}灵石)")
-            
-            # 保存对方数据
-            save_guishi_user_data(other_user_file.stem.split("_")[1], other_data)
-            
-        # 检查订单是否完成
+            buyer_data = get_guishi_user_data(buyer_id)
+            for buyer_order_id, buyer_order in list(buyer_data["qiugou_orders"].items()):
+                if (buyer_order["item_name"] == item_name and 
+                    buyer_order["price"] >= order["price"] and
+                    buyer_order["quantity"] - buyer_order.get("filled", 0) > 0):
+                    
+                    # 计算可交易数量
+                    available = order["quantity"] - order.get("sold", 0)
+                    needed = buyer_order["quantity"] - buyer_order.get("filled", 0)
+                    trade_num = min(available, needed)
+                    
+                    # 检查对方鬼市账户余额
+                    total_cost = trade_num * order["price"]
+                    if buyer_data["stone"] < total_cost:
+                        continue
+                        
+                    # 执行交易
+                    buyer_data["stone"] -= total_cost
+                    user_data["stone"] += total_cost
+                    
+                    # 更新订单状态
+                    order["sold"] = order.get("sold", 0) + trade_num
+                    buyer_order["filled"] = buyer_order.get("filled", 0) + trade_num
+                    
+                    # 转移物品
+                    item_id = order["item_id"]
+                    if item_id not in buyer_data["items"]:
+                        buyer_data["items"][item_id] = {
+                            "name": order["item_name"],
+                            "type": items.get_data_by_item_id(item_id)["type"],
+                            "quantity": 0
+                        }
+                    buyer_data["items"][item_id]["quantity"] += trade_num
+                    
+                    # 记录交易
+                    transactions.append(f"摆摊：已出售 {order['item_name']} x{trade_num} (获得{number_to(total_cost)}灵石)")
+                    
+                    # 保存对方数据
+                    save_guishi_user_data(buyer_id, buyer_data)
+                    
+                    # 检查订单是否完成
+                    if buyer_order["filled"] >= buyer_order["quantity"]:
+                        del buyer_data["qiugou_orders"][buyer_order_id]
+                        update_qiugou_index(buyer_order_id, item_name, buyer_id, "remove")
+                    
+            # 保存买家数据
+            save_guishi_user_data(buyer_id, buyer_data)
+        
+        # 检查摆摊订单是否完成
         if order.get("sold", 0) >= order["quantity"]:
-            user_data["baitan_orders"].pop(order_id)
+            del user_data["baitan_orders"][order_id]
+            update_baitan_index(order_id, item_name, user_id, "remove")
             transactions.append(f"摆摊订单 {order_id} 已完成")
     
     # 保存用户数据
@@ -3215,6 +3261,7 @@ async def process_guishi_transactions(user_id):
     
     return transactions
 
+# === 命令处理 ===
 @guishi_deposit.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市存灵石"""
@@ -3311,19 +3358,9 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info['user_id']
     user_data = get_guishi_user_data(user_id)
     
-    # 处理交易
-    transactions = await process_guishi_transactions(user_id)
-    
     # 构建消息
     msg = f"\n☆------鬼市账户信息------☆\n"
     msg += f"账户余额：{number_to(user_data['stone'])} 灵石"
-    
-    if transactions:
-        msg += f"\n☆------最近交易------☆\n"
-        msg += "\n".join(transactions) + "\n"
-    else:
-        msg += f"\n☆------最近交易------☆\n"
-        msg += "无\n"
     
     msg += f"\n☆------求购订单------☆\n"
     if user_data["qiugou_orders"]:
@@ -3431,6 +3468,9 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_data["stone"] -= total_cost
     save_guishi_user_data(user_id, user_data)
     
+    # 更新索引
+    update_qiugou_index(order_id, goods_name, user_id, "add")
+    
     # 处理可能的即时交易
     transactions = await process_guishi_transactions(user_id)
     
@@ -3484,6 +3524,7 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
             order = user_data["qiugou_orders"][order_id]
             msg += f"ID:{order_id} {order['item_name']} x{order['quantity']}\n"
             del user_data["qiugou_orders"][order_id]
+            update_qiugou_index(order_id, order["item_name"], user_id, "remove")
         
     elif arg == "全部":  # 取消所有求购订单
         msg = "已取消所有求购订单：\n"
@@ -3495,6 +3536,7 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
             
             msg += f"ID:{order_id} {order['item_name']} 已购:{filled}/{order['quantity']}\n"
             del user_data["qiugou_orders"][order_id]
+            update_qiugou_index(order_id, order["item_name"], user_id, "remove")
         
         if refund_total > 0:
             user_data["stone"] += refund_total
@@ -3514,6 +3556,7 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         # 退还灵石
         user_data["stone"] += refund
         del user_data["qiugou_orders"][order_id]
+        update_qiugou_index(order_id, order["item_name"], user_id, "remove")
         
         msg = f"已取消求购订单 {order_id}：\n"
         msg += f"物品：{order['item_name']}\n"
@@ -3649,6 +3692,9 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     }
     save_guishi_user_data(user_id, user_data)
     
+    # 更新索引
+    update_baitan_index(order_id, goods_name, user_id, "add")
+    
     # 处理可能的即时交易
     transactions = await process_guishi_transactions(user_id)
     
@@ -3689,12 +3735,13 @@ async def clear_expired_baitan_():
             expired_orders = []
             for order_id, order in list(user_data["baitan_orders"].items()):
                 if time.time() > order.get("end_time", 0):
-                    expired_orders.append(order_id)
+                    expired_orders.append((order_id, order))
                     expired_count += 1
             
-            # 移除超时订单
-            for order_id in expired_orders:
+            # 移除超时订单并更新索引
+            for order_id, order in expired_orders:
                 del user_data["baitan_orders"][order_id]
+                update_baitan_index(order_id, order["item_name"], user_id, "remove")
             
             if expired_orders:
                 save_guishi_user_data(user_id, user_data)
@@ -3740,6 +3787,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             order = user_data["baitan_orders"][order_id]
             msg += f"ID:{order_id} {order['item_name']} x{order['quantity']}\n"
             del user_data["baitan_orders"][order_id]
+            update_baitan_index(order_id, order["item_name"], user_id, "remove")
         
     elif arg == "全部":  # 收摊所有订单
         msg = "已收摊所有摆摊订单：\n"
@@ -3759,6 +3807,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             
             msg += f"ID:{order_id} {order['item_name']} 已售:{sold}/{order['quantity']}\n"
             del user_data["baitan_orders"][order_id]
+            update_baitan_index(order_id, order["item_name"], user_id, "remove")
         
     else:  # 指定ID收摊
         order_id = arg
@@ -3789,6 +3838,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg += f"退还 {remaining} 个到背包"
         
         del user_data["baitan_orders"][order_id]
+        update_baitan_index(order_id, order["item_name"], user_id, "remove")
     
     save_guishi_user_data(user_id, user_data)
     await handle_send(bot, event, msg)
@@ -3814,7 +3864,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 处理不同参数情况
     if not arg:  # 无参数，显示暂存物品列表
-        msg = f"\n☆------鬼市暂存物品------☆\n"
+        msg = f"\n☆------鬼市暂存物品------☆"
         msg += "请使用'鬼市取物品 物品名'或'鬼市取物品 全部'取出物品\n\n"
         for item_id, item in user_data["items"].items():
             msg += f"{item['name']} x{item['quantity']}\n"
@@ -3865,17 +3915,125 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await guishi_take_item.finish()
 
-import json
-import random
-import time
-from pathlib import Path
-from datetime import datetime, timedelta
-from .auction_config import (
-    AUCTION_DATA_PATH, 
-    get_system_items,
-    get_auction_rules,
-    get_auction_schedule
-)
+# 索引重建定时任务
+@rebuild_guishi_index.scheduled_job("cron", hour=3)  # 每天凌晨3点重建索引
+async def rebuild_guishi_index_():
+    """重建鬼市索引"""
+    logger.info("开始重建鬼市索引...")
+    
+    # 重建求购索引
+    qiugou_index = {"by_item": {}, "by_user": {}}
+    for user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+        user_id = user_file.stem.split("_")[1]
+        user_data = json.loads(user_file.read_text(encoding="utf-8"))
+        
+        for order_id, order in user_data.get("qiugou_orders", {}).items():
+            item_name = order["item_name"]
+            if item_name not in qiugou_index["by_item"]:
+                qiugou_index["by_item"][item_name] = []
+            if user_id not in qiugou_index["by_item"][item_name]:
+                qiugou_index["by_item"][item_name].append(user_id)
+                
+            if user_id not in qiugou_index["by_user"]:
+                qiugou_index["by_user"][user_id] = []
+            if order_id not in qiugou_index["by_user"][user_id]:
+                qiugou_index["by_user"][user_id].append(order_id)
+    
+    save_guishi_index("qiugou", qiugou_index)
+    
+    # 重建摆摊索引
+    baitan_index = {"by_item": {}, "by_user": {}}
+    for user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+        user_id = user_file.stem.split("_")[1]
+        user_data = json.loads(user_file.read_text(encoding="utf-8"))
+        
+        for order_id, order in user_data.get("baitan_orders", {}).items():
+            item_name = order["item_name"]
+            if item_name not in baitan_index["by_item"]:
+                baitan_index["by_item"][item_name] = []
+            if user_id not in baitan_index["by_item"][item_name]:
+                baitan_index["by_item"][item_name].append(user_id)
+                
+            if user_id not in baitan_index["by_user"]:
+                baitan_index["by_user"][user_id] = []
+            if order_id not in baitan_index["by_user"][user_id]:
+                baitan_index["by_user"][user_id].append(order_id)
+    
+    save_guishi_index("baitan", baitan_index)
+    
+    logger.info("鬼市索引重建完成")
+
+@clear_all_guishi.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """清空鬼市（管理员命令）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    msg = "正在清空全服鬼市，请稍候..."
+    await handle_send(bot, event, msg)
+    
+    total_qiugou = 0
+    total_baitan = 0
+    
+    # 遍历所有用户文件
+    for user_file in GUISHI_DATA_PATH.glob("user_*.json"):
+        try:
+            user_id = user_file.stem.split("_")[1]
+            user_data = json.loads(user_file.read_text(encoding="utf-8"))
+            changed = False
+            
+            # 取消所有求购订单
+            if user_data.get("qiugou_orders"):
+                # 退还冻结的灵石
+                refund_total = 0
+                for order_id, order in list(user_data["qiugou_orders"].items()):
+                    filled = order.get("filled", 0)
+                    refund = (order["quantity"] - filled) * order["price"]
+                    refund_total += refund
+                    # 更新索引
+                    update_qiugou_index(order_id, order["item_name"], user_id, "remove")
+                
+                user_data["stone"] += refund_total
+                total_qiugou += len(user_data["qiugou_orders"])
+                user_data["qiugou_orders"] = {}
+                changed = True
+            
+            # 收摊所有摆摊订单
+            if user_data.get("baitan_orders"):
+                for order_id, order in list(user_data["baitan_orders"].items()):
+                    # 退还未售出的物品
+                    remaining = order["quantity"] - order.get("sold", 0)
+                    if remaining > 0:
+                        sql_message.send_back(
+                            user_id,
+                            order["item_id"],
+                            order["item_name"],
+                            items.get_data_by_item_id(order["item_id"])["type"],
+                            remaining
+                        )
+                    # 更新索引
+                    update_baitan_index(order_id, order["item_name"], user_id, "remove")
+                
+                total_baitan += len(user_data["baitan_orders"])
+                user_data["baitan_orders"] = {}
+                changed = True
+            
+            if changed:
+                save_guishi_user_data(user_id, user_data)
+                
+        except Exception as e:
+            logger.error(f"处理用户 {user_file} 时出错: {e}")
+            continue
+    
+    # 清空索引
+    save_guishi_index("qiugou", {"by_item": {}, "by_user": {}})
+    save_guishi_index("baitan", {"by_item": {}, "by_user": {}})
+    
+    msg = f"鬼市已清空！\n"
+    msg += f"共取消求购订单: {total_qiugou} 个\n"
+    msg += f"共收摊摆摊订单: {total_baitan} 个\n"
+    msg += "所有未完成的订单已处理，物品和灵石已退还"
+    
+    await handle_send(bot, event, msg)
 
 # 数据文件路径
 PLAYER_AUCTIONS_FILE = AUCTION_DATA_PATH / "player_auctions.json"
@@ -4904,91 +5062,10 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     item_type = args[0]  # 物品类型
     rank_name = " ".join(args[1:]) if len(args) > 1 else "全部"  # 品阶
     
-    # === 类型检查 ===
-    type_mapping = {
-        "装备": ["法器", "防具"],
-        "技能": ["功法", "神通", "辅修功法", "身法", "瞳术"],
-        "功法": ["功法"],
-        "神通": ["神通"],
-        "辅修功法": ["辅修功法"],
-        "身法": ["身法"],
-        "瞳术": ["瞳术"],
-        "法器": ["法器"],
-        "防具": ["防具"],
-        "药材": ["药材"],
-        "全部": ["法器", "防具", "药材", "功法", "神通", "辅修功法", "身法", "瞳术"]
-    }
-    
     if item_type not in type_mapping:
         msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
-    
-    # === 品阶检查 ===
-    rank_map = {
-        # --- 装备品阶---
-        "符器": ["下品符器", "上品符器"],
-        "法器": ["下品法器", "上品法器"],
-        "玄器": ["下品玄器", "上品玄器"],
-        "纯阳": ["下品纯阳", "上品纯阳"],
-        "纯阳法器": ["下品纯阳法器", "上品纯阳法器"],
-        "通天": ["下品通天", "上品通天"],
-        "通天法器": ["下品通天法器", "上品通天法器"],
-        "仙器": ["下品仙器", "上品仙器"],
-        "下品符器": ["下品符器"],
-        "上品符器": ["上品符器"],
-        "下品法器": ["下品法器"],
-        "上品法器": ["上品法器"],
-        "下品玄器": ["下品玄器"],
-        "上品玄器": ["上品玄器"],
-        "下品纯阳": ["下品纯阳"],
-        "上品纯阳": ["上品纯阳"],
-        "下品纯阳法器": ["下品纯阳法器"],
-        "上品纯阳法器": ["上品纯阳法器"],
-        "下品通天": ["下品通天"],
-        "上品通天": ["上品通天"],
-        "下品通天法器": ["下品通天法器"],
-        "上品通天法器": ["上品通天法器"],
-        
-        # --- 药材品阶---
-        "一品药材": ["一品药材"],
-        "二品药材": ["二品药材"],
-        "三品药材": ["三品药材"],
-        "四品药材": ["四品药材"],
-        "五品药材": ["五品药材"],
-        "六品药材": ["六品药材"],
-        "七品药材": ["七品药材"],
-        "八品药材": ["八品药材"],
-        "九品药材": ["九品药材"],
-        
-        # --- 功法品阶---
-        "人阶下品": "人阶下品", "人阶上品": "人阶上品",
-        "黄阶下品": "黄阶下品", "黄阶上品": "黄阶上品",
-        "玄阶下品": "玄阶下品", "玄阶上品": "玄阶上品",
-        "地阶下品": "地阶下品", "地阶上品": "地阶上品",
-        "天阶下品": "天阶下品", "天阶上品": "天阶上品",
-        "仙阶下品": "仙阶下品", "仙阶上品": "仙阶上品",
-        "人阶": ["人阶下品", "人阶上品"],
-        "黄阶": ["黄阶下品", "黄阶上品"],
-        "玄阶": ["玄阶下品", "玄阶上品"],
-        "地阶": ["地阶下品", "地阶上品"],
-        "天阶": ["天阶下品", "天阶上品"],
-        "仙阶": ["仙阶下品", "仙阶上品"],
-        
-        # --- 全部品阶（不包含仙器、九品药材和仙阶功法）---
-        "全部": [
-            # 装备
-            "下品符器", "上品符器", "下品法器", "上品法器", "下品玄器", "上品玄器",
-            "下品纯阳", "上品纯阳", "下品纯阳法器", "上品纯阳法器", "下品通天", "上品通天", "下品通天法器", "上品通天法器",
-            # 药材
-            "一品药材", "二品药材", "三品药材", "四品药材",
-            "五品药材", "六品药材", "七品药材", "八品药材",
-            # 功法
-            "人阶下品", "人阶上品", "黄阶下品", "黄阶上品",
-            "玄阶下品", "玄阶上品", "地阶下品", "地阶上品",
-            "天阶下品", "天阶上品"
-        ]
-    }
     
     if rank_name not in rank_map:
         msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"

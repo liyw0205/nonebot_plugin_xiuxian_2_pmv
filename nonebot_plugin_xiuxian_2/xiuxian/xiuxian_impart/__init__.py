@@ -66,9 +66,8 @@ impart_info = on_command(
     priority=10,    
     block=True,
 )
-impart_help = on_command(
-    "传承帮助", aliases={"虚神界帮助"}, priority=8, block=True
-)
+impart_help = on_fullmatch("传承帮助", priority=8, block=True)
+impart_pk_help = on_fullmatch("虚神界帮助", priority=8, block=True)
 re_impart_load = on_fullmatch("加载传承数据", priority=45, block=True)
 impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
@@ -87,6 +86,10 @@ __impart_help__ = f"""
   传承背包 - 查看已获得的传承卡片
   加载传承数据 - 重新加载传承属性（修复显示异常）
   传承卡图+名字 - 查看传承卡牌原画
+""".strip()
+
+__impart_pk_help__ = f"""
+【虚神界帮助】✨
 
 🌌 虚神界功能：
   投影虚神界 - 创建可被全服挑战的分身
@@ -102,10 +105,7 @@ __impart_help__ = f"""
   • 胜利奖励：20结晶（不消耗次数）
   • 失败奖励：10结晶（消耗1次次数）
   • 每日对决次数：5次
-
 """.strip()
-
-
 
 @impart_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_help_(
@@ -120,6 +120,20 @@ async def impart_help_(
         msg = __impart_help__
         await handle_send(bot, event, msg)
         await impart_help.finish()
+
+@impart_pk_help.handle(parameterless=[Cooldown(at_sender=False)])
+async def impart_pk_help_(
+    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
+):
+    """虚神界帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    if session_id in cache_help:
+        msg = cache_help[session_id]        
+        await handle_send(bot, event, msg)
+    else:
+        msg = __impart_pk_help__
+        await handle_send(bot, event, msg)
+        await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
