@@ -467,7 +467,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     else:
-        if impart_data_draw['exp_day'] < 1000:
+        if impart_data_draw['exp_day'] < 100:
             msg = f"\n道友探索虚神界时间不足，难以突破{impart_name}的禁制！"
             impart_exp_up = impart_lv * 0.15
             msg += f"\n当前区域加持：修为增益{int(impart_exp_up * 100)}%"
@@ -475,7 +475,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await impart_pk_go.finish()
     
     impart_suc = random.randint(1, 100)
-    impart_time = random.randint(300, 1000)
+    impart_time = random.randint(1, 100)
     impart_rate = random.randint(1, 3)
 
     if impart_suc <= 30:

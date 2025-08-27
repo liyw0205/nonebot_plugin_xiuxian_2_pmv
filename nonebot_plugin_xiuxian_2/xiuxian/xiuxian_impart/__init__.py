@@ -223,7 +223,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     more_duplicates_msg = ""
     if total_duplicates > duplicate_display_limit:
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
-
+    total_seclusion_time = total_seclusion_time // 10
     # 更新用户数据
     xiuxian_impart.update_stone_num(required_crystals, user_id, 2)
     xiuxian_impart.update_impart_wish(current_wish, user_id)
