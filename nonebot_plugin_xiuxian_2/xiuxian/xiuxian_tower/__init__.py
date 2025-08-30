@@ -296,7 +296,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         item_data["id"], 
         item_info["name"], 
         item_info["type"], 
-        quantity
+        quantity,
+        1
     )
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}积分！"

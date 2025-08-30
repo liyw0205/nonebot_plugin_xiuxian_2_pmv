@@ -391,7 +391,7 @@ async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateM
                     if item["type"] == "stone":
                         items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                     else:
-                        items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
                 
                 msg_lines.extend([
                     f"🆔 补偿ID: {comp_id}",
@@ -413,7 +413,7 @@ async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateM
                     if item["type"] == "stone":
                         items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                     else:
-                        items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
                 
                 msg_lines.extend([
                     f"🆔 补偿ID: {comp_id}",
@@ -457,7 +457,7 @@ async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message =
                 if item["type"] == "stone":
                     items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                 else:
-                    items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                    items_msg.append(f"{item['name']} x{item['quantity']}")
             
             msg = f"成功新增补偿 {comp_id}\n"
             msg += f"物品: {', '.join(items_msg)}\n"
@@ -770,7 +770,7 @@ async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | Private
                     if item["type"] == "stone":
                         items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                     else:
-                        items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
                 
                 msg_lines.extend([
                     f"🎁 ID: {gift_id}",
@@ -790,7 +790,7 @@ async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | Private
                     if item["type"] == "stone":
                         items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                     else:
-                        items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
                 
                 msg_lines.extend([
                     f"🎁 ID: {gift_id}",
@@ -829,7 +829,7 @@ async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message =
                 if item["type"] == "stone":
                     items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                 else:
-                    items_msg.append(f"{item['name']}(ID:{item['id']}) x{item['quantity']}")
+                    items_msg.append(f"{item['name']} x{item['quantity']}")
             
             msg = f"成功新增礼包 {gift_id}\n"
             msg += f"🎁 内容: {', '.join(items_msg)}\n"
