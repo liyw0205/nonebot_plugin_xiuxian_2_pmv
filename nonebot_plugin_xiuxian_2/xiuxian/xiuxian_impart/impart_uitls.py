@@ -1,11 +1,6 @@
 import os
 from pathlib import Path
-
 import numpy
-from nonebot.adapters.onebot.v11 import (
-    MessageSegment,
-)
-
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -16,10 +11,8 @@ img_path = Path() / "data" / "xiuxian" / "卡图"
 def random_int():
     return numpy.random.randint(low=0, high=10000, size=None, dtype="l")
 
-
-# 抽卡概率来自https://www.bilibili.com/read/cv10468091
-# 角色抽卡概率
 def character_probability(count):
+    """角色抽卡概率"""
     count += 1
     if count <= 73:
         ret = 60
@@ -27,8 +20,8 @@ def character_probability(count):
         ret = 60 + 600 * (count - 73)
     return ret
 
-
 def get_rank(user_id):
+    """获取抽卡结果"""
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     value = random_int()
     num = int(impart_data["wish"])
@@ -40,8 +33,8 @@ def get_rank(user_id):
             return True
     return False
 
-
 async def impart_check(user_id):
+    """检查用户传承数据"""
     impart_data_json.find_user_impart(user_id)
     if xiuxian_impart.get_user_impart_info_with_id(user_id) is None:
         xiuxian_impart._create_user(user_id)
@@ -51,8 +44,8 @@ async def impart_check(user_id):
 
 async def re_impart_data(user_id):
     """重新计算传承属性"""
-    list_tp = impart_data_json.data_person_list(user_id)
-    if list_tp is None:
+    card_dict = impart_data_json.data_person_list(user_id)
+    if card_dict is None:
         return False
     
     all_data = impart_data_json.data_all_()
@@ -67,14 +60,12 @@ async def re_impart_data(user_id):
     impart_mix_per = 0
     impart_reap_per = 0
     
-    # 统计每种卡片的数量
-    card_counts = {}
-    for x in list_tp:
-        card_counts[x] = card_counts.get(x, 0) + 1
-    
     # 计算加成
-    for card_name, count in card_counts.items():
-        card_data = all_data[card_name]
+    for card_name, count in card_dict.items():
+        card_data = all_data.get(card_name)
+        if not card_data:
+            continue
+            
         card_type = card_data["type"]
         base_value = card_data["vale"]
         
@@ -118,25 +109,19 @@ async def re_impart_data(user_id):
     return True
 
 async def update_user_impart_data(user_id, time: int):
-    """更新用户传承数据
-
-    Args:
-        user_id: 用户QQ号
-        time: 传承时间
-    """
+    """更新用户传承数据"""
     xiuxian_impart.add_impart_exp_day(time, user_id)
-    # 更新传承数据
     await re_impart_data(user_id)
 
 def get_star_rating(count):
     """将卡片数量转换为星级显示"""
-    full_stars = count // 5  # 每5张卡1颗实星
-    half_stars = count % 5   # 剩余数量用空星表示
+    effective_count = min(count, 25)
+    full_stars = effective_count // 5
+    half_stars = effective_count % 5
     
     stars = '★' * full_stars + '☆' * half_stars
-    return stars.ljust(5, ' ')  # 固定5个字符宽度
+    return stars.ljust(5, ' ')
 
 def get_image_representation(image_name: str):
-    """根据获取对应卡图地址
-    """
+    """获取对应卡图地址"""
     return img_path / f"{image_name}.webp"

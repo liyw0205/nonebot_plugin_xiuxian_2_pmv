@@ -157,7 +157,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             times_str = msg.split()[-1]
             times = int(times_str)
             times = (times // 10) * 10
-            times = max(10, min(times, 1000))
+            times = max(10, min(times, 1000000000))
         except (IndexError, ValueError):
             await handle_send(bot, event, "请输入有效次数（如：传承祈愿 10）")
             return
@@ -459,8 +459,8 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    img_tp = impart_data_json.data_person_list(user_id)
-    if not img_tp:
+    card_dict = impart_data_json.data_person_list(user_id)
+    if not card_dict:
         await handle_send(bot, event, "暂无传承卡片")
         return
     
@@ -471,14 +471,11 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except ValueError:
         page = 1
     
-    # 统计每种卡片的数量并按名称排序
-    card_counts = {}
-    for card in img_tp:
-        card_counts[card] = card_counts.get(card, 0) + 1
-    sorted_cards = sorted(card_counts.items(), key=lambda x: x[0])
+    # 按卡名排序
+    sorted_cards = sorted(card_dict.items(), key=lambda x: x[0])
     
     # 分页设置
-    cards_per_page = 30  # 每页显示30张卡片
+    cards_per_page = 30
     total_pages = (len(sorted_cards) + cards_per_page - 1) // cards_per_page
     page = max(1, min(page, total_pages))
     
@@ -499,8 +496,8 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     # 只在第一页显示总数和种类
     if page == 1:
-        unique_cards = len(card_counts)  # 不同卡牌的数量
-        total_cards = len(img_tp)        # 总卡牌数量
+        unique_cards = len(card_dict)
+        total_cards = sum(card_dict.values())
         msg += f"\n\n卡片种类：{unique_cards}/106"
         msg += f"\n总卡片数：{total_cards}"
     

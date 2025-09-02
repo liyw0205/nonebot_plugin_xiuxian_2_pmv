@@ -106,10 +106,10 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         "会话ID": group_id
     }
     
-    msg = "====== Bot信息 ======\n"
-    msg += "\n【🤖🤖 Bot信息】\n"
+    msg = "\n=== Bot信息 ===\n"
+    msg += "\n【🤖 Bot信息】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_info.items())
-    msg += "\n\n【⏱⏱⏱ 运行时间】\n"
+    msg += "\n\n【⏱ 运行时间】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_uptime.items())
     
     return msg
@@ -173,13 +173,13 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         system_uptime_info = {"系统运行时间": "获取失败"}
     
     # 组装系统信息
-    msg = "====== 系统信息 ======\n"
+    msg = "\n=== 系统信息 ===\n"
     info_sections = [
-        ("⏱⏱⏱ 运行时间", system_uptime_info),
-        ("💻💻 系统信息", system_info),
-        ("⚡⚡ CPU信息", cpu_info),
-        ("🧠🧠 内存信息", mem_info),
-        ("💾💾 磁盘信息", disk_info)
+        ("⏱ 运行时间", system_uptime_info),
+        ("💻 系统信息", system_info),
+        ("⚡ CPU信息", cpu_info),
+        ("🧠 内存信息", mem_info),
+        ("💾 磁盘信息", disk_info)
     ]
     
     for section, data in info_sections:
@@ -206,7 +206,7 @@ async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     }
     
     # 分组测试：先测国内站点，再测国外站点
-    msg = "====== 网络延迟测试 ======\n"
+    msg = "\n=== 网络延迟测试 ===\n"
     
     # 国内站点测试
     msg += "\n【国内站点】\n"
@@ -246,13 +246,13 @@ async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理系统信息命令"""
     sys_msg = await get_system_info(bot, event)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, sys_msg)
 
 @ping_test_cmd.handle()
 async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理ping测试命令"""
     ping_msg = await get_ping_test(bot, event)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, ping_msg)
 
 @status_cmd.handle()
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
