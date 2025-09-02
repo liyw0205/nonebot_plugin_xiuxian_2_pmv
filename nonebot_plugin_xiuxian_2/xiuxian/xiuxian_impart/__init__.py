@@ -157,7 +157,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             times_str = msg.split()[-1]
             times = int(times_str)
             times = (times // 10) * 10
-            times = max(10, min(times, 1000000000))
+            times = max(10, min(times, 10000))
         except (IndexError, ValueError):
             await handle_send(bot, event, "请输入有效次数（如：传承祈愿 10）")
             return
@@ -273,7 +273,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             times_str = msg.split()[-1]
             times = int(times_str)
             times = (times // 10) * 10
-            times = max(10, min(times, 1000))
+            times = max(10, min(times, 10000))
         except (IndexError, ValueError):
             await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
             return
