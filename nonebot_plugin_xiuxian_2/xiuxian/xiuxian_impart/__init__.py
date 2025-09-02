@@ -186,13 +186,17 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 执行抽卡
     for _ in range(times // 10):
+        # 每次10连增加10点计数
+        current_wish += 10
+        
         # 检查是否触发保底
-        if current_wish >= 90:
+        if current_wish >= 89:
             reap_img = random.choice(img_list)
             drawn_cards.append(reap_img)
             guaranteed_pulls += 1
             total_seclusion_time += 1200  # 保底获得更多闭关时间
             current_wish = 0  # 重置概率计数
+            xiuxian_impart.update_impart_wish(current_wish, user_id)
         else:
             if get_rank(user_id):
                 # 中奖情况
@@ -200,10 +204,10 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 drawn_cards.append(reap_img)
                 total_seclusion_time += 1200  # 中奖获得更多闭关时间
                 current_wish = 0  # 重置概率计数
+                xiuxian_impart.update_impart_wish(current_wish, user_id)
             else:
                 # 未中奖情况
                 total_seclusion_time += 660
-                current_wish += 10
 
     # 批量添加卡片
     new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
@@ -224,6 +228,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if total_duplicates > duplicate_display_limit:
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
     total_seclusion_time = total_seclusion_time // 10
+    
     # 更新用户数据
     xiuxian_impart.update_stone_num(required_crystals, user_id, 2)
     xiuxian_impart.update_impart_wish(current_wish, user_id)
@@ -249,6 +254,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except ActionFailed:
         await handle_send(bot, event, "祈愿结果发送失败！")
     await impart_draw.finish()
+
 
 @impart_draw2.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -301,21 +307,23 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     # 执行抽卡
     for _ in range(times // 10):
+        # 每次10连增加10点计数
+        current_wish += 10
+        
         # 检查是否触发保底
-        if current_wish >= 90:
+        if current_wish >= 89:
             reap_img = random.choice(img_list)
             drawn_cards.append(reap_img)
             guaranteed_pulls += 1
             current_wish = 0  # 重置概率计数
+            xiuxian_impart.update_impart_wish(current_wish, user_id)
         else:
             if get_rank(user_id):
                 # 中奖情况
                 reap_img = random.choice(img_list)
                 drawn_cards.append(reap_img)
                 current_wish = 0  # 重置概率计数
-            else:
-                # 未中奖情况
-                current_wish += 10
+                xiuxian_impart.update_impart_wish(current_wish, user_id)
 
     # 批量添加卡片
     new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
