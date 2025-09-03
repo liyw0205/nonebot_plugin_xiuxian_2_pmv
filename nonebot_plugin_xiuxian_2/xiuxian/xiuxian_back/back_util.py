@@ -523,6 +523,12 @@ def get_item_msg(goods_id):
     获取单个物品的消息
     """
     item_info = items.get_data_by_item_id(goods_id)
+    rank_name_list = convert_rank("江湖好手")[1]
+    if item_info['rank'] == -5:
+        goods_rank = 23
+    else:
+        goods_rank = int(item_info['rank']) + 19
+    required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
     msg = ''
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
@@ -533,27 +539,29 @@ def get_item_msg(goods_id):
     elif item_info['item_type'] == '神通':
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}"
+        msg += f"效果：{get_sec_msg(item_info)}\n{item_info['desc']}\n境界：{required_rank_name}"
     elif item_info['item_type'] == '身法':
         msg += f"身法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}"
+        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}\n境界：{required_rank_name}"
     elif item_info['item_type'] == '瞳术':
         msg += f"瞳术名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}"
+        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n{item_info['desc']}\n境界：{required_rank_name}"
     elif item_info['item_type'] == '功法':
         msg += f"功法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_main_info_msg(goods_id)[1]}"
+        msg += f"效果：{get_main_info_msg(goods_id)[1]}\n境界：{required_rank_name}"
     elif item_info['item_type'] == '辅修功法':  # 辅修功法
         msg += f"辅修名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sub_info_msg(goods_id)[1]}"
+        msg += f"效果：{get_sub_info_msg(goods_id)[1]}\n境界：{required_rank_name}"
     elif item_info['item_type'] == '防具':
         msg = get_armor_info_msg(goods_id, item_info)
+        msg += f"\n境界：{required_rank_name}"
     elif item_info['item_type'] == '法器':
         msg = get_weapon_info_msg(goods_id, item_info)
+        msg += f"\n境界：{required_rank_name}"
     elif item_info['item_type'] == "药材":
         msg = get_yaocai_info_msg(goods_id, item_info)
     elif item_info['item_type'] == "聚灵旗":
