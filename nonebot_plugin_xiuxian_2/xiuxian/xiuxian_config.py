@@ -89,6 +89,8 @@ class XiuConfig:
         # ["123456"]
         # 屏蔽的群聊
         self.response_group = False  # 反转屏蔽的群聊，仅响应这些群的消息
+        self.shield_private = True  
+        # 屏蔽私聊
         self.admin_debug = False # 管理员调试模式，开启后只响应超管指令
         self.layout_bot_dict = {}
         # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }

@@ -36,6 +36,7 @@ except Exception as e:
 put_bot = XiuConfig().put_bot
 shield_group = XiuConfig().shield_group
 response_group = XiuConfig().response_group
+shield_private = XiuConfig().shield_private
 
 try:
     put_bot_ = put_bot[0]
@@ -80,6 +81,13 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         pass
     else:
         if str(bot.self_id) in put_bot:
+            # 私聊处理
+            if isinstance(event, PrivateMessageEvent):
+                if shield_private:  # 如果屏蔽私聊
+                    raise IgnoredException("私聊功能已屏蔽,已忽略")
+                return  # 私聊不受群聊设置影响
+            
+            # 群聊处理
             if response_group:
                 if str(event.group_id) in shield_group:
                     pass
