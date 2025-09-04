@@ -493,7 +493,7 @@ async def handle_claim_compensation(bot: Bot, event: GroupMessageEvent | Private
         return
     
     if await claim_compensation(bot, event, user_id, comp_id):
-        pass  # 消息已在claim_compensation中发送
+        pass
     else:
         await handle_send(bot, event, "领取补偿失败")
 
@@ -865,7 +865,7 @@ async def handle_claim_gift_package(bot: Bot, event: GroupMessageEvent | Private
         return
     
     if await claim_gift_package(bot, event, user_id, gift_id):
-        pass  # 消息已在claim_gift_package中发送
+        pass
     else:
         await handle_send(bot, event, "领取礼包失败")
 
@@ -895,3 +895,435 @@ async def handle_delete_gift_package(bot: Bot, event: MessageEvent, args: Messag
     save_claimed_gift_packages(claimed_data)
     
     await handle_send(bot, event, f"成功删除礼包 {gift_id} 及其所有领取记录")
+
+# 兑换码系统文件路径
+REDEEM_CODE_DATA_PATH = Path(__file__).parent / "redeem_code_data"
+REDEEM_CODE_RECORDS_PATH = REDEEM_CODE_DATA_PATH / "redeem_codes.json"
+REDEEM_CODE_CLAIMED_PATH = REDEEM_CODE_DATA_PATH / "claimed_redeem_codes.json"
+
+# 确保目录存在
+REDEEM_CODE_DATA_PATH.mkdir(exist_ok=True)
+
+# 初始化兑换码记录文件
+if not REDEEM_CODE_RECORDS_PATH.exists():
+    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+
+# 初始化领取记录文件
+if not REDEEM_CODE_CLAIMED_PATH.exists():
+    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+
+def load_redeem_code_data() -> Dict[str, dict]:
+    """加载兑换码数据"""
+    with open(REDEEM_CODE_RECORDS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_redeem_code_data(data: Dict[str, dict]):
+    """保存兑换码数据"""
+    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_claimed_redeem_codes() -> Dict[str, List[str]]:
+    """加载兑换码领取记录"""
+    with open(REDEEM_CODE_CLAIMED_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_claimed_redeem_codes(data: Dict[str, List[str]]):
+    """保存兑换码领取记录"""
+    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def add_redeem_code(redeem_code: str, duration_str: str, items_str: str, usage_limit: int = 1):
+    """新增兑换码
+    :param redeem_code: 兑换码
+    :param duration_str: 持续时间字符串
+    :param items_str: 物品字符串
+    :param usage_limit: 使用次数限制 (0表示无限次)
+    """
+    data = load_redeem_code_data()
+    if redeem_code in data:
+        raise ValueError(f"兑换码 {redeem_code} 已存在")
+    
+    try:
+        duration = parse_duration(duration_str)
+        expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError as e:
+        raise ValueError(f"时间格式错误: {str(e)}")
+    
+    # 解析物品字符串
+    items_list = []
+    for item_part in items_str.split(','):
+        item_part = item_part.strip()
+        if 'x' in item_part:
+            item_id_or_name, quantity = item_part.split('x', 1)
+            quantity = int(quantity)
+        else:
+            item_id_or_name = item_part
+            quantity = 1
+        
+        if item_id_or_name == "灵石":
+            items_list.append({
+                "type": "stone",
+                "id": "stone",
+                "name": "灵石",
+                "quantity": quantity if quantity > 0 else 1000000,
+                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
+            })
+            continue
+        
+        goods_id = None
+        if item_id_or_name.isdigit():
+            goods_id = int(item_id_or_name)
+            item_info = items.get_data_by_item_id(goods_id)
+            if not item_info:
+                raise ValueError(f"物品ID {goods_id} 不存在")
+        else:
+            for k, v in items.items.items():
+                if item_id_or_name == v['name']:
+                    goods_id = k
+                    break
+            if not goods_id:
+                raise ValueError(f"物品 {item_id_or_name} 不存在")
+        
+        item_info = items.get_data_by_item_id(goods_id)
+        items_list.append({
+            "type": item_info['type'],
+            "id": goods_id,
+            "name": item_info['name'],
+            "quantity": quantity,
+            "desc": item_info['desc']
+        })
+    
+    if not items_list:
+        raise ValueError("未指定有效的兑换物品")
+    
+    data[redeem_code] = {
+        "items": items_list,
+        "expire_time": expire_time,
+        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "usage_limit": usage_limit,
+        "used_count": 0,
+        "type": "redeem_code"  # 标记为兑换码类型
+    }
+    save_redeem_code_data(data)
+    return True
+
+def get_redeem_code_info(redeem_code: str) -> Optional[dict]:
+    """获取兑换码信息"""
+    data = load_redeem_code_data()
+    return data.get(redeem_code)
+
+def is_redeem_code_expired(redeem_info: dict) -> bool:
+    """检查兑换码是否过期"""
+    expire_time = datetime.strptime(redeem_info["expire_time"], "%Y-%m-%d %H:%M:%S")
+    return datetime.now() > expire_time
+
+def is_redeem_code_used_up(redeem_info: dict) -> bool:
+    """检查兑换码是否已用完"""
+    if redeem_info["usage_limit"] == 0:  # 无限次使用
+        return False
+    return redeem_info["used_count"] >= redeem_info["usage_limit"]
+
+def has_claimed_redeem_code(user_id: str, redeem_code: str) -> bool:
+    """检查用户是否已领取过该兑换码"""
+    claimed_data = load_claimed_redeem_codes()
+    return redeem_code in claimed_data.get(user_id, [])
+
+async def claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, redeem_code: str) -> bool:
+    """领取兑换码奖励"""
+    redeem_info = get_redeem_code_info(redeem_code)
+    if not redeem_info:
+        await handle_send(bot, event, "兑换码无效或不存在")
+        return False
+    
+    if is_redeem_code_expired(redeem_info):
+        await handle_send(bot, event, "该兑换码已过期")
+        return False
+    
+    if is_redeem_code_used_up(redeem_info):
+        await handle_send(bot, event, "该兑换码已被使用完")
+        return False
+    
+    if has_claimed_redeem_code(user_id, redeem_code):
+        await handle_send(bot, event, "您已经使用过该兑换码了")
+        return False
+    
+    msg_parts = [f"成功兑换 {redeem_code}:"]
+    
+    # 发放物品
+    for item in redeem_info["items"]:
+        if item["type"] == "stone":
+            sql_message.update_ls(user_id, item["quantity"], 1)
+            msg_parts.append(f"获得灵石 {number_to(item['quantity'])} 枚")
+        else:
+            goods_id = item["id"]
+            goods_name = item["name"]
+            goods_type = item["type"]
+            quantity = item["quantity"]
+            
+            if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
+                goods_type_item = "技能"
+            elif goods_type in ["法器", "防具"]:
+                goods_type_item = "装备"
+            else:
+                goods_type_item = goods_type
+            
+            sql_message.send_back(
+                user_id,
+                goods_id,
+                goods_name,
+                goods_type_item,
+                quantity,
+                1
+            )
+            msg_parts.append(f"获得 {goods_name} x{quantity}")
+    
+    msg = "\n".join(msg_parts)
+    await handle_send(bot, event, msg)
+    
+    # 更新兑换码使用记录
+    redeem_data = load_redeem_code_data()
+    redeem_data[redeem_code]["used_count"] += 1
+    save_redeem_code_data(redeem_data)
+    
+    # 记录用户领取状态
+    claimed_data = load_claimed_redeem_codes()
+    if user_id not in claimed_data:
+        claimed_data[user_id] = []
+    claimed_data[user_id].append(redeem_code)
+    save_claimed_redeem_codes(claimed_data)
+    
+    return True
+
+# 兑换码命令处理器
+add_redeem_code_cmd = on_command("新增兑换码", permission=SUPERUSER, priority=5, block=True)
+delete_redeem_code_cmd = on_command("删除兑换码", permission=SUPERUSER, priority=5, block=True)
+list_redeem_codes_cmd = on_command("兑换码列表", permission=SUPERUSER, priority=5, block=True)
+claim_redeem_code_cmd = on_command("兑换", priority=5, block=True)
+redeem_code_help_cmd = on_command("兑换码帮助", priority=7, block=True)
+redeem_code_admin_help_cmd = on_command("兑换码管理", permission=SUPERUSER, priority=5, block=True)
+
+__redeem_code_help__ = f"""
+🎟 兑换码帮助 🎟
+═════════════
+1. 兑换 [兑换码] - 使用指定兑换码
+
+【注意事项】
+- 每个兑换码每人限用一次
+- 过期兑换码将无法使用
+- 一次性兑换码使用后失效
+═════════════
+当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+""".strip()
+
+__redeem_code_admin_help__ = f"""
+🎟 兑换码管理 🎟 
+═════════════
+1. 新增兑换码 [兑换码] [时间] [物品] [使用次数]
+   - 示例1: 新增兑换码 XMAS2023 7天 1001x1,1002x2 1 (一次性)
+   - 示例2: 新增兑换码 NEWYEAR2024 30天 灵石x500000 0 (无限次)
+
+2. 删除兑换码 [兑换码] - 删除指定兑换码
+
+3. 兑换码列表 - 查看所有兑换码(含过期)
+
+【参数说明】
+- 时间: 如"7天"或"48小时"
+- 物品: 物品ID或名称,可带数量
+   - 示例1: 1001,1002
+   - 示例2: 灵石x1000000
+   - 示例3: 渡厄丹x1,两仪心经x1
+- 使用次数: 0表示无限次,1表示一次性
+
+【注意事项】
+- 兑换码必须唯一
+- 删除操作不可逆
+═════════════
+当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+""".strip()
+
+@redeem_code_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+async def handle_redeem_code_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """兑换码帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    if XiuConfig().img:
+        pic = await get_msg_pic(__redeem_code_help__)
+        await handle_send(bot, event, MessageSegment.image(pic))
+    else:
+        await handle_send(bot, event, __redeem_code_help__)
+    await redeem_code_help_cmd.finish()
+
+@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+async def handle_redeem_code_admin_help(bot: Bot, event: MessageEvent):
+    """兑换码管理帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    if XiuConfig().img:
+        pic = await get_msg_pic(__redeem_code_admin_help__)
+        await handle_send(bot, event, MessageSegment.image(pic))
+    else:
+        await handle_send(bot, event, __redeem_code_admin_help__)
+    await redeem_code_admin_help_cmd.finish()
+
+@list_redeem_codes_cmd.handle()
+async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
+    """列出所有兑换码(仅管理员可见)"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    data = load_redeem_code_data()
+    if not data:
+        msg = "当前没有可用的兑换码"
+        await handle_send(bot, event, msg)
+        return
+    
+    msg_lines = [
+        "🎟 兑换码列表 🎟",
+        "====================",
+        "【有效兑换码】"
+    ]
+    
+    valid_codes = []
+    expired_codes = []
+    
+    for code, info in data.items():
+        expired = is_redeem_code_expired(info)
+        if expired:
+            expired_codes.append((code, info))
+        else:
+            valid_codes.append((code, info))
+    
+    if not valid_codes and not expired_codes:
+        msg_lines.append("暂无任何兑换码")
+    else:
+        if valid_codes:
+            for code, info in valid_codes:
+                items_msg = []
+                for item in info["items"]:
+                    if item["type"] == "stone":
+                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+                    else:
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
+                
+                usage_limit = "无限次" if info["usage_limit"] == 0 else f"{info['used_count']}/{info['usage_limit']}次"
+                msg_lines.extend([
+                    f"🎟 兑换码: {code}",
+                    f"🎁 内容: {', '.join(items_msg)}",
+                    f"🔄 使用限制: {usage_limit}",
+                    f"⏰ 有效期至: {info['expire_time']}",
+                    f"🕒 创建时间: {info['create_time']}",
+                    "------------------"
+                ])
+        else:
+            msg_lines.append("暂无有效兑换码")
+        
+        msg_lines.append("\n【过期兑换码】")
+        if expired_codes:
+            for code, info in expired_codes:
+                items_msg = []
+                for item in info["items"]:
+                    if item["type"] == "stone":
+                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+                    else:
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
+                
+                usage_limit = "无限次" if info["usage_limit"] == 0 else f"{info['used_count']}/{info['usage_limit']}次"
+                msg_lines.extend([
+                    f"🎟 兑换码: {code}",
+                    f"🎁 内容: {', '.join(items_msg)}",
+                    f"🔄 使用情况: {usage_limit}",
+                    f"⏰ 过期时间: {info['expire_time']}",
+                    f"🕒 创建时间: {info['create_time']}",
+                    "------------------"
+                ])
+        else:
+            msg_lines.append("暂无过期兑换码")
+    
+    msg_lines.append(f"\n⏱⏱⏱ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    msg = "\n".join(msg_lines)
+    
+    if XiuConfig().img:
+        pic = await get_msg_pic(msg)
+        await handle_send(bot, event, MessageSegment.image(pic))
+    else:
+        await handle_send(bot, event, msg)
+
+@add_redeem_code_cmd.handle()
+async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+    """新增兑换码命令处理"""
+    try:
+        arg_str = args.extract_plain_text().strip()
+        parts = arg_str.split(maxsplit=4)
+        if len(parts) < 4:
+            raise ValueError("参数不足，格式应为: 兑换码 时间 物品 使用次数")
+        
+        if len(parts) == 4:
+            redeem_code, duration, items_str, usage_limit = parts
+            reason = ""
+        else:
+            redeem_code, duration, items_str, usage_limit, reason = parts
+        
+        try:
+            usage_limit = int(usage_limit)
+        except ValueError:
+            raise ValueError("使用次数必须是数字")
+        
+        if add_redeem_code(redeem_code, duration, items_str, usage_limit):
+            redeem_info = get_redeem_code_info(redeem_code)
+            items_msg = []
+            for item in redeem_info["items"]:
+                if item["type"] == "stone":
+                    items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+                else:
+                    items_msg.append(f"{item['name']} x{item['quantity']}")
+            
+            usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次"
+            msg = f"成功新增兑换码 {redeem_code}\n"
+            msg += f"🎁 内容: {', '.join(items_msg)}\n"
+            msg += f"🔄 使用限制: {usage_msg}\n"
+            msg += f"⏰ 有效期: {duration}"
+            if reason:
+                msg += f"\n📝 备注: {reason}"
+            await handle_send(bot, event, msg)
+        else:
+            await handle_send(bot, event, "新增兑换码失败")
+    except Exception as e:
+        await handle_send(bot, event, f"新增兑换码出错: {str(e)}")
+
+@claim_redeem_code_cmd.handle()
+async def handle_claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """使用兑换码命令处理"""
+    user_id = event.get_user_id()
+    redeem_code = args.extract_plain_text().strip()
+    
+    if not redeem_code:
+        await handle_send(bot, event, "请指定要兑换的兑换码")
+        return
+    
+    await claim_redeem_code(bot, event, user_id, redeem_code)
+
+@delete_redeem_code_cmd.handle()
+async def handle_delete_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+    """删除兑换码命令处理"""
+    redeem_code = args.extract_plain_text().strip()
+    
+    if not redeem_code:
+        await handle_send(bot, event, "请指定要删除的兑换码")
+        return
+    
+    data = load_redeem_code_data()
+    if redeem_code not in data:
+        await handle_send(bot, event, f"兑换码 {redeem_code} 不存在")
+        return
+    
+    del data[redeem_code]
+    save_redeem_code_data(data)
+    
+    # 从所有用户的领取记录中删除该兑换码
+    claimed_data = load_claimed_redeem_codes()
+    for user_id in list(claimed_data.keys()):
+        if redeem_code in claimed_data[user_id]:
+            claimed_data[user_id].remove(redeem_code)
+            if not claimed_data[user_id]:
+                del claimed_data[user_id]
+    save_claimed_redeem_codes(claimed_data)
+    
+    await handle_send(bot, event, f"成功删除兑换码 {redeem_code} 及其所有领取记录")

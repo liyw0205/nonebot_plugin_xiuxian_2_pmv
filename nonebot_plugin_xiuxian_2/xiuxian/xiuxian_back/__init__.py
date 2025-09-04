@@ -3436,7 +3436,14 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"物品 {goods_name} 不存在！"
         await handle_send(bot, event, msg)
         await guishi_qiugou.finish()
-    
+
+    # 获取物品类型
+    goods_type = get_item_type_by_id(goods_id)
+    if goods_type not in GUISHI_TYPES:
+        msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
+        await handle_send(bot, event, msg)
+        await guishi_qiugou.finish()
+
     # 检查订单数量限制
     user_data = get_guishi_user_data(user_id)
     if len(user_data["qiugou_orders"]) >= MAX_QIUGOU_ORDERS:
