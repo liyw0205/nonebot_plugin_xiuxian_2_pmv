@@ -35,8 +35,8 @@ tower_shop = on_command("通天塔商店", priority=5, block=True)
 tower_buy = on_command("通天塔兑换", priority=5, block=True)
 tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
 
-# 每月1号0点重置通天塔层数
-@scheduler.scheduled_job("cron", day=1, hour=0, minute=0)
+# 每周一0点重置通天塔层数
+@scheduler.scheduled_job("cron", day_of_week="mon", hour=0, minute=0)
 async def reset_tower_floors():
     tower_data.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")

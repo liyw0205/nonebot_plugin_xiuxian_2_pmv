@@ -89,7 +89,7 @@ DEFAULT_CONFIG = {
         "11": {
             "id": 7085,
             "cost": 2000000,
-            "desc": "冲天槊槊，无上仙器，不属于这个位面的武器，似乎还有种种能力未被发掘...提升100%攻击力！提升50%会心率！提升20%减伤率！提升50%会心伤害！",
+            "desc": "冲天槊，无上仙器，不属于这个位面的武器，似乎还有种种能力未被发掘...提升100%攻击力！提升50%会心率！提升20%减伤率！提升50%会心伤害！",
             "weekly_limit": 1
         },
         "12": {
@@ -214,7 +214,7 @@ DEFAULT_CONFIG = {
         }
     },
     "重置时间": {
-        "day": 1,  # 每月1号
+        "day_of_week": "mon",  # 每周一
         "hour": 0,
         "minute": 0
     }
@@ -245,6 +245,32 @@ class TowerData:
             print(f"加载通天塔配置失败: {e}")
             return DEFAULT_CONFIG
     
+    def _check_reset(self, last_reset_str):
+        """检查是否需要重置(每周一)"""
+        if not last_reset_str:
+            return True
+            
+        last_reset = datetime.strptime(last_reset_str, "%Y-%m-%d %H:%M:%S")
+        now = datetime.now()
+        
+        # 检查是否是新的周(周一0点后)
+        return (now.isocalendar()[1] > last_reset.isocalendar()[1] or  # 周数不同
+                now.year > last_reset.year)  # 或跨年
+
+    def reset_all_floors(self):
+        """重置所有用户的通天塔层数"""
+        reset_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for user_file in PLAYERSDATA.glob("*/tower_info.json"):
+            with open(user_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # 保留历史最高层数，只重置当前层数
+            data["current_floor"] = 0
+            data["last_reset"] = reset_time  # 使用统一的重置时间
+            
+            with open(user_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+
     def get_user_tower_info(self, user_id):
         """获取用户通天塔信息"""
         user_id = str(user_id)
@@ -266,7 +292,7 @@ class TowerData:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        # 检查是否需要重置(每月1号)
+        # 检查是否需要重置(每周一)
         if self._check_reset(data.get("last_reset")):
             data["current_floor"] = 0
             data["last_reset"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -325,18 +351,6 @@ class TowerData:
                 return json.load(f)
             except:
                 return {}
-    
-    def _check_reset(self, last_reset_str):
-        """检查是否需要重置(每月1号)"""
-        if not last_reset_str:
-            return True
-            
-        last_reset = datetime.strptime(last_reset_str, "%Y-%m-%d %H:%M:%S")
-        now = datetime.now()
-        
-        # 检查是否是新的一个月
-        return (now.year > last_reset.year or 
-                now.month > last_reset.month)
     
     def get_weekly_purchases(self, user_id, item_id):
         """获取用户本周已购买某商品的数量"""

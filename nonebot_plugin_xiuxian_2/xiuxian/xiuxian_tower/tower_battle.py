@@ -184,7 +184,7 @@ class TowerBattle:
                 total_score += score
             
                 # 每10层额外奖励
-                if floor % 10 == 0:
+                if floor % 10 == 0 and floor > tower_info["max_floor"]:
                     score += self.config["积分奖励"]["每10层额外"]
                     total_score += self.config["积分奖励"]["每10层额外"]
                     reward_msg = self._give_special_reward(user_id, user_info, floor)
@@ -241,30 +241,37 @@ class TowerBattle:
         # 基础奖励
         score = self.config["积分奖励"]["每层基础"]
         stone = self.config["灵石奖励"]["每层基础"]
-        
-        # 每10层额外奖励
-        if floor % 10 == 0:
+    
+        msg = f"获得积分：{score}点，灵石：{number_to(stone)}枚"
+    
+        # 每10层首通奖励
+        if floor % 10 == 0 and floor > tower_info["max_floor"]:
             score += self.config["积分奖励"]["每10层额外"]
             stone += self.config["灵石奖励"]["每10层额外"]
+            item_msg = self._give_random_item(user_id, user_info["level"])
+            exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
+            sql_message.update_exp(user_id, exp_reward)
         
+            msg += f"，首通奖励：{item_msg}，修为：{number_to(exp_reward)}点"
+    
+        # 每100层可重复奖励(双倍十层奖励)
+        if floor % 100 == 0:
+            score += self.config["积分奖励"]["每10层额外"] * 2
+            stone += self.config["灵石奖励"]["每10层额外"] * 2
+            item_msg = self._give_random_item(user_id, user_info["level"])
+            exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
+            sql_message.update_exp(user_id, exp_reward)
+        
+            msg += f"，百层奖励：{item_msg}，修为：{number_to(exp_reward)}点"
+    
         # 更新积分
         tower_info = tower_data.get_user_tower_info(user_id)
         tower_info["score"] += score
         tower_data.save_user_tower_info(user_id, tower_info)
-        
+    
         # 给予灵石
         sql_message.update_ls(user_id, stone, 1)
-        
-        msg = f"获得积分：{score}点，灵石：{number_to(stone)}枚"
-        
-        # 每10层额外奖励
-        if floor % 10 == 0:
-            item_msg = self._give_random_item(user_id, user_info["level"])
-            exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
-            sql_message.update_exp(user_id, exp_reward)
-            
-            msg += f"，额外奖励：{item_msg}，修为：{number_to(exp_reward)}点"
-        
+    
         return msg
     
     def _give_special_reward(self, user_id, user_info, floor):
