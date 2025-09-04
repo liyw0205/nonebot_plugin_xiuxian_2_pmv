@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 import re
+from pathlib import Path
 import random
 import asyncio
 from datetime import datetime
@@ -36,6 +37,7 @@ from ..xiuxian_utils.utils import (
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message
 )
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_back import BANNED_ITEM_IDS
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 items = Items()
@@ -84,6 +86,10 @@ level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, b
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
 view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
+give_xiangyuan = on_command("送仙缘", priority=5, block=True)
+get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
+xiangyuan_list = on_command("仙缘列表", priority=5, block=True)
+clear_xiangyuan = on_command("清空仙缘", permission=SUPERUSER, priority=5, block=True)
 
 __xiuxian_notes__ = f"""
 【修仙指令】✨
@@ -2122,3 +2128,523 @@ def generate_daohao():
         return generate_daohao()  # 重新生成
     
     return daohao
+
+# 仙缘数据路径
+XIANGYUAN_DATA_PATH = Path(__file__).parent / "xiangyuan_data"
+XIANGYUAN_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+def get_xiangyuan_data(group_id):
+    """获取群仙缘数据"""
+    file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
+    try:
+        if file_path.exists():
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except:
+        pass
+    return {"gifts": {}, "last_id": 1}
+
+def save_xiangyuan_data(group_id, data):
+    """保存群仙缘数据"""
+    file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def parse_gift_items(items_str):
+    """解析仙缘物品字符串（改进版，参考补偿系统）"""
+    items_list = []
+    for item_part in items_str.split(','):
+        item_part = item_part.strip()
+        if 'x' in item_part:
+            item_id_or_name, quantity = item_part.split('x', 1)
+            quantity = int(quantity)
+        else:
+            item_id_or_name = item_part
+            quantity = 1
+        
+        # 处理灵石特殊物品
+        if item_id_or_name == "灵石":
+            items_list.append({
+                "type": "stone",
+                "id": "stone",
+                "name": "灵石",
+                "quantity": quantity if quantity > 0 else 1000000,
+                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
+            })
+            continue
+        
+        # 尝试转换为物品ID
+        goods_id = None
+        if item_id_or_name.isdigit():  # 如果是数字，直接作为ID
+            goods_id = int(item_id_or_name)
+            item_info = items.get_data_by_item_id(goods_id)
+            if not item_info:
+                raise ValueError(f"物品ID {goods_id} 不存在")
+        else:  # 否则作为物品名称查找
+            for k, v in items.items.items():
+                if item_id_or_name == v['name']:
+                    goods_id = k
+                    break
+            if not goods_id:
+                raise ValueError(f"物品 {item_id_or_name} 不存在")
+        
+        item_info = items.get_data_by_item_id(goods_id)
+        items_list.append({
+            "type": item_info['type'],
+            "id": goods_id,
+            "name": item_info['name'],
+            "quantity": quantity,
+            "desc": item_info['desc']
+        })
+    
+    if not items_list:
+        raise ValueError("未指定有效的仙缘物品")
+    
+    return items_list
+
+def check_user_has_item(user_id, item_id, quantity):
+    """检查用户是否有足够数量的物品（包含灵石检查）"""
+    if item_id == "stone":  # 灵石特殊处理
+        user_info = sql_message.get_user_info_with_id(user_id)
+        return user_info['stone'] >= quantity
+    
+    back_msg = sql_message.get_back_msg(user_id)
+    for item in back_msg:
+        if str(item["goods_id"]) == str(item_id):
+            available = item["goods_num"] - item["bind_num"]
+            return available >= quantity
+    return False
+
+@give_xiangyuan.handle(parameterless=[Cooldown(at_sender=False)])
+async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """送仙缘"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await give_xiangyuan.finish()
+    
+    user_id = user_info["user_id"]
+    group_id = str(event.group_id)
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 1:
+        msg = "指令格式：送仙缘 物品1x数量,物品2x数量 [领取人数]\n示例：送仙缘 灵石x1000000,两仪心经x1 5"
+        await handle_send(bot, event, msg)
+        await give_xiangyuan.finish()
+    
+    # 解析物品和数量
+    items_str = args[0]
+    try:
+        gift_items = parse_gift_items(items_str)
+    except ValueError as e:
+        msg = f"物品格式错误：{str(e)}"
+        await handle_send(bot, event, msg)
+        await give_xiangyuan.finish()
+    
+    # 解析领取人数
+    receiver_count = None
+    if len(args) > 1 and args[1].isdigit():
+        receiver_count = int(args[1])
+    
+    # 检查物品有效性
+    valid_items = []
+    total_stone = 0
+    
+    hujiang_rank = convert_rank("江湖好手")[0]
+    user_rank = convert_rank(user_info['level'])[0]
+    
+    # 计算发送方每日赠送上限（基础100000000 + 每境界20000000）
+    daily_send_limit = 100000000 + (hujiang_rank - user_rank) * 20000000
+    
+    for item in gift_items:
+        if item["type"] == "stone":  # 灵石特殊处理
+            total_stone += item["quantity"]
+            valid_items.append(item)
+            continue
+        
+        # 检查背包是否有该物品
+        if not check_user_has_item(user_id, item["id"], item["quantity"]):
+            msg = f"背包中没有足够的 {item['name']}！"
+            await handle_send(bot, event, msg)
+            await give_xiangyuan.finish()
+        
+        valid_items.append(item)
+
+        # 检查禁止交易的物品
+        if str(item["id"]) in BANNED_ITEM_IDS:
+            msg = f"物品 {item['name']} 禁止交易！"
+            await handle_send(bot, event, msg)
+            await give_xiangyuan.finish()
+
+    # 检查灵石赠送额度
+    if total_stone > 0:
+        # 检查发送方今日已送额度
+        already_sent = stone_limit.get_send_limit(user_id)
+        remaining_send = daily_send_limit - already_sent
+        
+        if total_stone > remaining_send:
+            msg = f"道友今日已送{number_to(already_sent)}灵石，还可赠送{number_to(remaining_send)}灵石！"
+            await handle_send(bot, event, msg)
+            await give_xiangyuan.finish()
+        
+        # 检查灵石是否足够
+        if total_stone > int(user_info['stone']):
+            msg = f"道友的灵石不够，请重新输入！"
+            await handle_send(bot, event, msg)
+            await give_xiangyuan.finish()
+    
+    # 确定领取人数
+    if receiver_count is None:
+        # 自动计算：最少为物品种类数，最多100
+        receiver_count = max(len(valid_items), 2)
+        receiver_count = min(receiver_count, 100)
+    else:
+        # 检查手动指定的人数是否合理
+        receiver_count = max(receiver_count, max(len(valid_items), 2))
+        receiver_count = min(receiver_count, 100)
+    
+    # 扣除物品
+    for item in valid_items:
+        if item["type"] != "stone":
+            sql_message.update_back_j(user_id, item["id"], num=item["quantity"])
+    
+    # 扣除灵石并更新额度
+    if total_stone > 0:
+        sql_message.update_ls(user_id, total_stone, 2)
+        stone_limit.update_send_limit(user_id, total_stone)
+    
+    # 创建仙缘记录
+    xiangyuan_data = get_xiangyuan_data(group_id)
+    xiangyuan_id = xiangyuan_data["last_id"]
+    xiangyuan_data["last_id"] += 1
+    
+    xiangyuan_data["gifts"][str(xiangyuan_id)] = {
+        "id": xiangyuan_id,
+        "giver_id": user_id,
+        "giver_name": user_info["user_name"],
+        "items": valid_items,
+        "receiver_count": receiver_count,
+        "received": 0,
+        "receivers": {},
+        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    save_xiangyuan_data(group_id, xiangyuan_data)
+    
+    # 构建消息
+    msg = f"【{user_info['user_name']}】送出仙缘 #{xiangyuan_id}：\n"
+    for item in valid_items:
+        if item["type"] == "stone":
+            msg += f"{item['name']} x{number_to(item['quantity'])}\n"
+        else:
+            msg += f"{item['name']} x{item['quantity']}\n"
+    msg += f"可领取人数：{receiver_count}\n"
+    msg += "同群道友可发送【抢仙缘】获取仙缘"
+    
+    await handle_send(bot, event, msg)
+    await give_xiangyuan.finish()
+
+@get_xiangyuan.handle(parameterless=[Cooldown(at_sender=False)])
+async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
+    """抢仙缘"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await get_xiangyuan.finish()
+    
+    user_id = user_info["user_id"]
+    group_id = str(event.group_id)
+    
+    # 获取仙缘数据
+    xiangyuan_data = get_xiangyuan_data(group_id)
+    if not xiangyuan_data["gifts"]:
+        msg = "当前没有可领取的仙缘！"
+        await handle_send(bot, event, msg)
+        await get_xiangyuan.finish()
+    
+    # 过滤掉自己送的仙缘和已领完的仙缘
+    available_gifts = []
+    for gift_id, gift in xiangyuan_data["gifts"].items():
+        if (gift["giver_id"] != user_id and 
+            gift["received"] < gift["receiver_count"] and
+            str(user_id) not in gift["receivers"]):
+            available_gifts.append((gift_id, gift))
+    
+    if not available_gifts:
+        msg = "没有可领取的仙缘了！"
+        await handle_send(bot, event, msg)
+        await get_xiangyuan.finish()
+    
+    # 随机选择一个仙缘
+    selected_gift_id, selected_gift = random.choice(available_gifts)
+    
+    # 计算当前是第几个领取者
+    current_receiver_num = selected_gift["received"] + 1
+    total_receivers = selected_gift["receiver_count"]
+    
+    # 计算每个物品的剩余数量
+    items_to_distribute = []
+    for item in selected_gift["items"]:
+        # 计算已领取数量
+        received = sum(
+            v.get(item["name"], 0) for v in selected_gift["receivers"].values()
+        )
+        remaining = item["quantity"] - received
+        
+        if remaining > 0:
+            items_to_distribute.append({
+                "item": item,
+                "remaining": remaining
+            })
+    
+    if not items_to_distribute:
+        msg = "这个仙缘的物品已经被领完了！"
+        await handle_send(bot, event, msg)
+        await get_xiangyuan.finish()
+    
+    # 如果是最后一个领取者，分配所有剩余物品
+    if current_receiver_num == total_receivers:
+        rewards = []
+        total_items_count = 0
+        
+        for item_data in items_to_distribute:
+            item = item_data["item"]
+            amount = item_data["remaining"]
+            
+            # 发放奖励
+            if item["name"] == "灵石":
+                sql_message.update_ls(user_id, amount, 1)
+            else:
+                sql_message.send_back(
+                    user_id,
+                    item["id"],
+                    item["name"],
+                    item["type"],
+                    amount,
+                    1
+                )
+            
+            rewards.append(f"{item['name']} x{amount}")
+            total_items_count += amount
+            
+            # 记录领取信息
+            if str(user_id) not in selected_gift["receivers"]:
+                selected_gift["receivers"][str(user_id)] = {}
+            selected_gift["receivers"][str(user_id)][item["name"]] = (
+                selected_gift["receivers"][str(user_id)].get(item["name"], 0) + amount
+            )
+        
+        selected_gift["received"] += 1
+        
+        # 更新数据
+        xiangyuan_data["gifts"][selected_gift_id] = selected_gift
+        save_xiangyuan_data(group_id, xiangyuan_data)
+        
+        # 构建消息 - 大机缘特殊显示
+        msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
+        msg += "✨ " + "、".join(rewards) + " ✨\n"
+        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
+        msg += "💫 最后一个有缘人，获得仙缘全部馈赠！"
+    
+    else:
+        # 非最后一个领取者，按浮动比例分配
+        # 按剩余数量从大到小排序，优先分配剩余数量多的物品
+        items_to_distribute.sort(key=lambda x: x["remaining"], reverse=True)
+        
+        # 选择第一个可分配物品
+        selected = items_to_distribute[0]
+        item = selected["item"]
+        remaining = selected["remaining"]
+        
+        # 计算剩余领取人数
+        remaining_receivers = total_receivers - selected_gift["received"]
+        
+        # 计算基础分配数量（剩余数量除以剩余领取人数）
+        base_amount = max(1, remaining // remaining_receivers)
+        
+        # 添加随机浮动（±20%的浮动范围）
+        min_amount = max(1, int(base_amount * 0.8))
+        max_amount = min(remaining, int(base_amount * 1.2))
+        
+        # 确保浮动后的数量不超过剩余数量
+        max_amount = min(max_amount, remaining - (remaining_receivers - 1))
+        
+        # 随机生成实际分配数量
+        amount = random.randint(min_amount, max_amount)
+        
+        # 如果是灵石且数量较大，确保分配数量合理
+        if item["name"] == "灵石" and amount > 1000:
+            # 确保不会因为浮动导致后续分配出现问题
+            amount = min(amount, remaining - (remaining_receivers - 1) * 1000)
+            amount = max(amount, 1000)  # 至少分配1000灵石
+        
+        # 发放奖励
+        if item["name"] == "灵石":
+            sql_message.update_ls(user_id, amount, 1)
+        else:
+            sql_message.send_back(
+                user_id,
+                item["id"],
+                item["name"],
+                item["type"],
+                amount,
+                1
+            )
+        
+        # 记录领取信息
+        if str(user_id) not in selected_gift["receivers"]:
+            selected_gift["receivers"][str(user_id)] = {}
+        selected_gift["receivers"][str(user_id)][item["name"]] = (
+            selected_gift["receivers"][str(user_id)].get(item["name"], 0) + amount
+        )
+        selected_gift["received"] += 1
+        
+        # 更新数据
+        xiangyuan_data["gifts"][selected_gift_id] = selected_gift
+        save_xiangyuan_data(group_id, xiangyuan_data)
+        
+        # 构建普通消息
+        msg = f"恭喜【{user_info['user_name']}】抢到仙缘：\n"
+        msg += f"{item['name']} x{amount}\n"
+        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}"
+    
+    await handle_send(bot, event, msg)
+    await get_xiangyuan.finish()
+
+@xiangyuan_list.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiangyuan_list_(bot: Bot, event: GroupMessageEvent):
+    """仙缘列表"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await xiangyuan_list.finish()
+    
+    group_id = str(event.group_id)
+    xiangyuan_data = get_xiangyuan_data(group_id)
+    
+    if not xiangyuan_data["gifts"]:
+        msg = "当前没有仙缘可领取！"
+        await handle_send(bot, event, msg)
+        await xiangyuan_list.finish()
+    
+    # 构建消息
+    msg = ["当前可领取的仙缘："]
+    for gift_id, gift in xiangyuan_data["gifts"].items():
+        if gift["received"] >= gift["receiver_count"]:
+            continue
+        
+        item_list = []
+        for item in gift["items"]:
+            received = sum(
+                v.get(item["name"], 0) for v in gift["receivers"].values()
+            )
+            remaining = item["quantity"] - received
+            if remaining > 0:
+                item_list.append(f"{item['name']} (剩{remaining}/{item['quantity']})")
+        
+        if item_list:
+            msg.append(
+                f"\n#{gift_id} 来自：{gift['giver_name']}\n"
+                f"物品：{'、'.join(item_list)}\n"
+                f"进度：{gift['received']}/{gift['receiver_count']}"
+            )
+    
+    if len(msg) == 1:
+        msg = ["所有仙缘都已被领取完毕！"]
+    
+    await handle_send(bot, event, "\n".join(msg))
+    await xiangyuan_list.finish()
+
+@clear_xiangyuan.handle(parameterless=[Cooldown(at_sender=False)])
+async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent):
+    """清空仙缘（管理员）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    group_id = str(event.group_id)
+    
+    # 获取当前仙缘数据
+    xiangyuan_data = get_xiangyuan_data(group_id)
+    if not xiangyuan_data["gifts"]:
+        msg = "当前没有仙缘可清空！"
+        await handle_send(bot, event, msg)
+        await clear_xiangyuan.finish()
+    
+    # 退还未领取的物品
+    refund_count = 0
+    for gift_id, gift in xiangyuan_data["gifts"].items():
+        if gift["received"] < gift["receiver_count"]:
+            # 计算剩余物品
+            for item in gift["items"]:
+                received = sum(
+                    v.get(item["name"], 0) for v in gift["receivers"].values()
+                )
+                remaining = item["quantity"] - received
+                
+                if remaining > 0:
+                    if item["name"] == "灵石":
+                        # 退还灵石
+                        sql_message.update_ls(gift["giver_id"], remaining, 1)
+                    else:
+                        # 退还物品
+                        sql_message.send_back(
+                            gift["giver_id"],
+                            item["id"],
+                            item["name"],
+                            item["type"],
+                            remaining,
+                            1
+                        )
+                    refund_count += 1
+    
+    # 清空数据
+    xiangyuan_data["gifts"] = {}
+    save_xiangyuan_data(group_id, xiangyuan_data)
+    
+    msg = f"已清空所有仙缘，退还了{refund_count}件物品给原主人！"
+    await handle_send(bot, event, msg)
+    await clear_xiangyuan.finish()
+
+@scheduler.scheduled_job("cron", hour=0, minute=0)
+async def reset_xiangyuan_daily():
+    """每日重置仙缘"""
+    for file in XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"):
+        group_id = file.stem.split("_")[1]
+        xiangyuan_data = get_xiangyuan_data(group_id)
+        
+        if not xiangyuan_data["gifts"]:
+            continue
+        
+        # 退还未领取的物品
+        refund_count = 0
+        for gift_id, gift in xiangyuan_data["gifts"].items():
+            if gift["received"] < gift["receiver_count"]:
+                # 计算剩余物品
+                for item in gift["items"]:
+                    received = sum(
+                        v.get(item["name"], 0) for v in gift["receivers"].values()
+                    )
+                    remaining = item["quantity"] - received
+                    
+                    if remaining > 0:
+                        if item["name"] == "灵石":
+                            # 退还灵石
+                            sql_message.update_ls(gift["giver_id"], remaining, 1)
+                        else:
+                            # 退还物品
+                            sql_message.send_back(
+                                gift["giver_id"],
+                                item["id"],
+                                item["name"],
+                                item["type"],
+                                remaining,
+                                1
+                            )
+                        refund_count += 1
+        
+        # 清空数据
+        xiangyuan_data["gifts"] = {}
+        save_xiangyuan_data(group_id, xiangyuan_data)
+        
+        logger.info(f"仙缘系统：已为群{group_id}清空仙缘，退还了{refund_count}件物品")
