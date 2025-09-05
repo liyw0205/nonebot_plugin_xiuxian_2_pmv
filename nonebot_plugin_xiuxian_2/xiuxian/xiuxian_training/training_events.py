@@ -38,7 +38,7 @@ WORLDLY_EVENTS = {
                 ("救治同门修士，对方赠予{}作为谢礼", None),
                 ("在宗门大比中获胜，奖品是{}", None)
             ],
-            "types": ["功法", "神通", "药材", "法器", "防具"],
+            "types": ["功法", "神通", "药材"],
             "rank_offset": 5
         },
         "points": {
@@ -126,7 +126,7 @@ TRANSCENDENT_EVENTS = {
                 ("清理洞府时发现尘封的{}", None),
                 ("帮助山灵解决困难，获赠{}", None)
             ],
-            "types": ["功法", "神通", "药材", "法器", "防具"],
+            "types": ["功法", "神通", "药材"],
             "rank_offset": 6
         },
         "points": {
@@ -273,7 +273,7 @@ class TrainingEvents:
                 item_info = items.get_data_by_item_id(item_id)
                 sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
                 return {
-                    "message": desc_template.format(f"{item_info['level']}:{item_info['name']}"),
+                    "message": desc_template.format(f"{item_info['name']}"),
                     "type": "item",
                     "item_id": item_id,
                     "item_name": item_info["name"]
@@ -334,11 +334,11 @@ class TrainingEvents:
             item_type = random.choice(reward_data["types"])
             
             # 优先匹配相同物品类型
-            same_type_items = [
-                item for item in back_msg 
-                if items.get_data_by_item_id(item["goods_id"])["type"] == item_type
-                and item["goods_num"] > 0
-            ]
+            same_type_items = []
+            for item in back_msg:
+                item_data = items.get_data_by_item_id(item["goods_id"])
+                if item_data.get("type") == item_type and item["goods_num"] > 0:
+                    same_type_items.append(item)
             
             if same_type_items:
                 item = random.choice(same_type_items)
@@ -353,12 +353,14 @@ class TrainingEvents:
             
             # 其次匹配品阶
             user_rank = convert_rank(user_info["level"])[0]
-            min_rank = max(user_rank - 22 - punish_data["rank_offset"], 26)
+            min_rank = max(user_rank - 22 - reward_data["rank_offset"], 26)
             item_rank = min(random.randint(min_rank, min_rank + 20), 55)
-            same_rank_items = [
-                item for item in back_msg 
-                if items.get_data_by_item_id(item["goods_id"])["level"] == item_rank
-            ]
+            same_rank_items = []
+            for item in back_msg:
+                item_data = items.get_data_by_item_id(item["goods_id"])
+                if item_data.get("rank") == item_rank and item["goods_num"] > 0:
+                    same_rank_items.append(item)
+            
             if same_rank_items:
                 item = random.choice(same_rank_items)
                 sql_message.update_back_j(user_id, item["goods_id"], 1)

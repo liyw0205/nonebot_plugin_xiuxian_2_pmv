@@ -365,7 +365,7 @@ class TrainingData:
             user_rank = convert_rank(user_info["level"])[0]
             min_rank = max(user_rank - 16, 16)
             item_rank = random.randint(min_rank, min_rank + 20)
-            item_types = ["功法", "神通", "药材", "法器", "防具"]
+            item_types = ["功法", "神通", "药材"]
             item_type = random.choice(item_types)
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
             

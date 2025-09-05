@@ -506,7 +506,7 @@ def _give_random_item(user_id, user_level):
     item_rank = min(random.randint(min_rank, min_rank + 20), 55)
     
     # 随机选择物品类型
-    item_types = ["功法", "神通", "药材", "法器", "防具"]
+    item_types = ["功法", "神通", "药材"]
     item_type = random.choice(item_types)
     
     # 获取随机物品

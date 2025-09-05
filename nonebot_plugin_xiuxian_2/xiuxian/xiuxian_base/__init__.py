@@ -2384,7 +2384,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     current_receiver_num = selected_gift["received"] + 1
     total_receivers = selected_gift["receiver_count"]
     
-    # 计算每个物品的剩余数量
+    # 计算每个物品的剩余数量和权重
     items_to_distribute = []
     for item in selected_gift["items"]:
         # 计算已领取数量
@@ -2394,9 +2394,21 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         remaining = item["quantity"] - received
         
         if remaining > 0:
+            # 设置基础权重（确保所有物品都有机会被选中）
+            weight = 1
+            
+            # 根据物品类型调整权重（灵石物品权重更高）
+            if item["name"] != "灵石":
+                weight *= 2
+            
+            # 根据剩余比例调整权重（剩余比例越高权重越高）
+            remaining_ratio = remaining / item["quantity"]
+            weight *= (1 + remaining_ratio * 5)  # 放大剩余比例的影响
+            
             items_to_distribute.append({
                 "item": item,
-                "remaining": remaining
+                "remaining": remaining,
+                "weight": weight
             })
     
     if not items_to_distribute:
@@ -2404,63 +2416,19 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         await handle_send(bot, event, msg)
         await get_xiangyuan.finish()
     
-    # 如果是最后一个领取者，分配所有剩余物品
-    if current_receiver_num == total_receivers:
-        rewards = []
-        total_items_count = 0
-        
-        for item_data in items_to_distribute:
-            item = item_data["item"]
-            amount = item_data["remaining"]
-            
-            # 发放奖励
-            if item["name"] == "灵石":
-                sql_message.update_ls(user_id, amount, 1)
-            else:
-                sql_message.send_back(
-                    user_id,
-                    item["id"],
-                    item["name"],
-                    item["type"],
-                    amount,
-                    1
-                )
-            
-            rewards.append(f"{item['name']} x{amount}")
-            total_items_count += amount
-            
-            # 记录领取信息
-            if str(user_id) not in selected_gift["receivers"]:
-                selected_gift["receivers"][str(user_id)] = {}
-            selected_gift["receivers"][str(user_id)][item["name"]] = (
-                selected_gift["receivers"][str(user_id)].get(item["name"], 0) + amount
-            )
-        
-        selected_gift["received"] += 1
-        
-        # 更新数据
-        xiangyuan_data["gifts"][selected_gift_id] = selected_gift
-        save_xiangyuan_data(group_id, xiangyuan_data)
-        
-        # 构建消息 - 大机缘特殊显示
-        msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
-        msg += "✨ " + "、".join(rewards) + " ✨\n"
-        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
-        msg += "💫 最后一个有缘人，获得仙缘全部馈赠！"
+    # 按权重随机选择要分配的物品
+    weights = [item["weight"] for item in items_to_distribute]
+    selected_item_data = random.choices(items_to_distribute, weights=weights, k=1)[0]
+    selected_item = selected_item_data["item"]
+    remaining = selected_item_data["remaining"]
     
+    # 计算剩余领取人数
+    remaining_receivers = total_receivers - selected_gift["received"]
+    
+    # 如果是最后一个领取者，分配所有剩余数量
+    if current_receiver_num == total_receivers:
+        amount = remaining
     else:
-        # 非最后一个领取者，按浮动比例分配
-        # 按剩余数量从大到小排序，优先分配剩余数量多的物品
-        items_to_distribute.sort(key=lambda x: x["remaining"], reverse=True)
-        
-        # 选择第一个可分配物品
-        selected = items_to_distribute[0]
-        item = selected["item"]
-        remaining = selected["remaining"]
-        
-        # 计算剩余领取人数
-        remaining_receivers = total_receivers - selected_gift["received"]
-        
         # 计算基础分配数量（剩余数量除以剩余领取人数）
         base_amount = max(1, remaining // remaining_receivers)
         
@@ -2473,41 +2441,41 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         
         # 随机生成实际分配数量
         amount = random.randint(min_amount, max_amount)
-        
-        # 如果是灵石且数量较大，确保分配数量合理
-        if item["name"] == "灵石" and amount > 1000:
-            # 确保不会因为浮动导致后续分配出现问题
-            amount = min(amount, remaining - (remaining_receivers - 1) * 1000)
-            amount = max(amount, 1000)  # 至少分配1000灵石
-        
-        # 发放奖励
-        if item["name"] == "灵石":
-            sql_message.update_ls(user_id, amount, 1)
-        else:
-            sql_message.send_back(
-                user_id,
-                item["id"],
-                item["name"],
-                item["type"],
-                amount,
-                1
-            )
-        
-        # 记录领取信息
-        if str(user_id) not in selected_gift["receivers"]:
-            selected_gift["receivers"][str(user_id)] = {}
-        selected_gift["receivers"][str(user_id)][item["name"]] = (
-            selected_gift["receivers"][str(user_id)].get(item["name"], 0) + amount
+    
+    # 发放奖励
+    if selected_item["name"] == "灵石":
+        sql_message.update_ls(user_id, amount, 1)
+    else:
+        sql_message.send_back(
+            user_id,
+            selected_item["id"],
+            selected_item["name"],
+            selected_item["type"],
+            amount,
+            1
         )
-        selected_gift["received"] += 1
-        
-        # 更新数据
-        xiangyuan_data["gifts"][selected_gift_id] = selected_gift
-        save_xiangyuan_data(group_id, xiangyuan_data)
-        
-        # 构建普通消息
+    
+    # 记录领取信息
+    if str(user_id) not in selected_gift["receivers"]:
+        selected_gift["receivers"][str(user_id)] = {}
+    selected_gift["receivers"][str(user_id)][selected_item["name"]] = (
+        selected_gift["receivers"][str(user_id)].get(selected_item["name"], 0) + amount
+    )
+    selected_gift["received"] += 1
+    
+    # 更新数据
+    xiangyuan_data["gifts"][selected_gift_id] = selected_gift
+    save_xiangyuan_data(group_id, xiangyuan_data)
+    
+    # 构建消息
+    if current_receiver_num == total_receivers:
+        msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
+        msg += f"{selected_item['name']} x{amount}\n"
+        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
+        msg += "💫💫 最后一个有缘人，获得仙缘全部馈赠！"
+    else:
         msg = f"恭喜【{user_info['user_name']}】抢到仙缘：\n"
-        msg += f"{item['name']} x{amount}\n"
+        msg += f"{selected_item['name']} x{amount}\n"
         msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}"
     
     await handle_send(bot, event, msg)
