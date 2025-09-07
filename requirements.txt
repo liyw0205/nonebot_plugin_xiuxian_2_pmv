@@ -10,3 +10,4 @@ pydantic
 aiofiles
 psutil
 nonebot_plugin_apscheduler 
+ 

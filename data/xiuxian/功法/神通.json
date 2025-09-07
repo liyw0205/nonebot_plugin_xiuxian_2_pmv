@@ -1576,5 +1576,353 @@
       "need_stone": "0",
       "limit": 1
     }
-  }
+  },
+    "8939": {
+        "name": "九幽摄魂幡",
+        "skill_type": 4,
+        "hpcost": 0.15,
+        "mpcost": 0.8,
+        "turncost": 4,
+        "desc": "召唤九幽之力封印敌人魂魄",
+        "rate": 70,
+        "success": 85,
+        "rank": "天阶上品",
+        "level": "26"
+    },
+    "8940": {
+        "name": "阴阳逆乱诀",
+        "skill_type": 3,
+        "bufftype": 1,
+        "buffvalue": 0.35,
+        "hpcost": 0.1,
+        "mpcost": 0.6,
+        "turncost": 3,
+        "desc": "逆转阴阳获得双重增益",
+        "rate": 80,
+        "rank": "天阶上品",
+        "level": "26"
+    },
+    "8941": {
+        "name": "乾坤一掷",
+        "skill_type": 5,
+        "atkvalue": 0.5,
+        "atkvalue2": 15.0,
+        "hpcost": 0.3,
+        "mpcost": 1.2,
+        "turncost": 5,
+        "desc": "赌上全部灵力的致命一击",
+        "rate": 30,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8942": {
+        "name": "三生轮回印",
+        "skill_type": 2,
+        "atkvalue": 2,
+        "hpcost": 0,
+        "mpcost": 0.9,
+        "turncost": 6,
+        "desc": "连续三世轮回的业力攻击",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8943": {
+        "name": "混沌归墟",
+        "skill_type": 1,
+        "atkvalue": [
+            12.0,
+            0.8,
+            0.6
+        ],
+        "hpcost": 0.5,
+        "mpcost": 2.0,
+        "turncost": 7,
+        "desc": "归于混沌的终极湮灭",
+        "rate": 20,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8944": {
+        "name": "天道敕令",
+        "skill_type": 4,
+        "hpcost": 0.4,
+        "mpcost": 1.8,
+        "turncost": 3,
+        "desc": "代天行罚的绝对封印",
+        "rate": 40,
+        "success": 95,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8945": {
+        "name": "星穹裂宇",
+        "skill_type": 5,
+        "atkvalue": 3.0,
+        "atkvalue2": 18.0,
+        "hpcost": 0.05,
+        "mpcost": 1.5,
+        "turncost": 0,
+        "desc": "撕裂星穹的空间风暴",
+        "rate": 100,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8946": {
+        "name": "九转玄功",
+        "skill_type": 3,
+        "bufftype": 1,
+        "buffvalue": 3.0,
+        "hpcost": 0,
+        "mpcost": 4,
+        "turncost": 5,
+        "desc": "九转成圣的玄门秘法",
+        "rate": 90,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8947": {
+        "name": "虚空劫指",
+        "skill_type": 1,
+        "atkvalue": [
+            8.5
+        ],
+        "hpcost": 0.1,
+        "mpcost": 1.2,
+        "turncost": 0,
+        "desc": "洞穿虚空的致命一指",
+        "rate": 60,
+        "rank": "天阶上品",
+        "level": "26"
+    },
+    "8948": {
+        "name": "业火红莲",
+        "skill_type": 2,
+        "atkvalue": 1.8,
+        "hpcost": 0.05,
+        "mpcost": 0.8,
+        "turncost": 5,
+        "desc": "焚烧业障的红莲之火",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8949": {
+        "name": "周天星辰引",
+        "skill_type": 3,
+        "bufftype": 1,
+        "buffvalue": 4,
+        "hpcost": 0,
+        "mpcost": 1.2,
+        "turncost": 4,
+        "desc": "引动周天星力灌注己身",
+        "rate": 85,
+        "rank": "仙阶上品",
+        "level": "22"
+    },
+    "8950": {
+        "name": "黄泉碧落掌",
+        "skill_type": 1,
+        "atkvalue": [
+            7.8
+        ],
+        "hpcost": 0.12,
+        "mpcost": 0.9,
+        "turncost": 0,
+        "desc": "贯通阴阳两界的必杀掌法",
+        "rate": 65,
+        "rank": "天阶上品",
+        "level": "28"
+    },
+    "8951": {
+        "name": "六道轮回印",
+        "skill_type": 2,
+        "atkvalue": 3.2,
+        "hpcost": 0.05,
+        "mpcost": 1.0,
+        "turncost": 5,
+        "desc": "六道轮回之力持续侵蚀",
+        "rate": 95,
+        "rank": "仙阶下品",
+        "level": "20"
+    },
+    "8952": {
+        "name": "乾坤挪移术",
+        "skill_type": 3,
+        "bufftype": 2,
+        "buffvalue": 0.45,
+        "hpcost": 0.15,
+        "mpcost": 0.7,
+        "turncost": 3,
+        "desc": "转移伤害的玄妙秘法",
+        "rate": 75,
+        "rank": "天阶下品",
+        "level": "30"
+    },
+    "8953": {
+        "name": "九天雷动",
+        "skill_type": 5,
+        "atkvalue": 2.0,
+        "atkvalue2": 12.0,
+        "hpcost": 0.08,
+        "mpcost": 1.1,
+        "turncost": 0,
+        "desc": "召唤九天神雷随机轰击",
+        "rate": 100,
+        "rank": "仙阶下品",
+        "level": "18"
+    },
+    "8954": {
+        "name": "八荒寂灭指",
+        "skill_type": 1,
+        "atkvalue": [
+            3.5,
+            3.5
+        ],
+        "hpcost": 0.18,
+        "mpcost": 1.4,
+        "turncost": 2,
+        "desc": "寂灭八荒的毁灭指法",
+        "rate": 70,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8955": {
+        "name": "大日如来咒",
+        "skill_type": 4,
+        "hpcost": 0.25,
+        "mpcost": 1.5,
+        "turncost": 4,
+        "desc": "佛门至高封印秘术",
+        "rate": 45,
+        "success": 90,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8956": {
+        "name": "九幽冥火劫",
+        "skill_type": 6,
+        "bufftype": 1,
+        "buffvalue": 2.8,
+        "hpcost": 0,
+        "mpcost": 1.8,
+        "turncost": 4,
+        "desc": "九幽冥火层层叠加",
+        "rate": 95,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8957": {
+        "name": "虚空破碎刃",
+        "skill_type": 5,
+        "atkvalue": 1.8,
+        "atkvalue2": 16.0,
+        "hpcost": 0.12,
+        "mpcost": 1.3,
+        "turncost": 0,
+        "desc": "撕裂虚空的次元利刃",
+        "rate": 100,
+        "rank": "仙阶上品",
+        "level": "22"
+    },
+    "8958": {
+        "name": "阴阳混沌变",
+        "skill_type": 7,
+        "skill_content": [
+            8940,
+            8941,
+            8949,
+            8952
+        ],
+        "hpcost": 0,
+        "mpcost": 0,
+        "turncost": 1,
+        "desc": "阴阳混沌随机万法",
+        "rate": 100,
+        "rank": "天阶上品",
+        "level": "28"
+    },
+    "8959": {
+        "name": "五行归墟诀",
+        "skill_type": 2,
+        "atkvalue": 4.0,
+        "hpcost": 0.07,
+        "mpcost": 1.2,
+        "turncost": 6,
+        "desc": "五行之力归于虚无",
+        "rate": 100,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8960": {
+        "name": "万法归一剑",
+        "skill_type": 1,
+        "atkvalue": [
+            9.5
+        ],
+        "hpcost": 0.15,
+        "mpcost": 1.6,
+        "turncost": 0,
+        "desc": "万法归一的无上剑道",
+        "rate": 55,
+        "rank": "仙阶极品",
+        "level": "-5"
+    },
+    "8961": {
+        "name": "周天星斗大阵",
+        "skill_type": 3,
+        "bufftype": 1,
+        "buffvalue": 5,
+        "hpcost": 0,
+        "mpcost": 2.0,
+        "turncost": 5,
+        "desc": "引动周天星斗之力",
+        "rate": 80,
+        "rank": "仙阶极品",
+        "level": "16"
+    },
+    "8962": {
+        "name": "神魔俱灭",
+        "skill_type": 5,
+        "atkvalue": 2.5,
+        "atkvalue2": 20.0,
+        "hpcost": 0.35,
+        "mpcost": 2.2,
+        "turncost": 7,
+        "desc": "神魔皆灭的终极一击",
+        "rate": 25,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8963": {
+        "name": "永恒刹那",
+        "skill_type": 4,
+        "hpcost": 0.3,
+        "mpcost": 2.0,
+        "turncost": 3,
+        "desc": "凝固时空的绝对封印",
+        "rate": 35,
+        "success": 99,
+        "rank": "无上",
+        "level": "-5"
+    },
+    "8964": {
+        "name": "乾坤造化诀",
+        "skill_type": 7,
+        "skill_content": [
+            8954,
+            8955,
+            8956,
+            8960,
+            8962,
+            8963
+        ],
+        "hpcost": 0,
+        "mpcost": 0,
+        "turncost": 2,
+        "desc": "执掌乾坤的无上道法",
+        "rate": 100,
+        "rank": "无上",
+        "level": "-5"
+    }
 }
