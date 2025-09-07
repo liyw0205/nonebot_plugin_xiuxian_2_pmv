@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 import re
+import os
 from pathlib import Path
 import random
 import asyncio
@@ -25,6 +26,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, XiuxianJsonDate, OtherSet, 
     UserBuffDate, XIUXIAN_IMPART_BUFF, leave_harm_time
@@ -50,6 +52,7 @@ cache_level1_help = {}
 cache_level2_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 qqq = 144795954
 
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
@@ -90,6 +93,12 @@ give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
 xiangyuan_list = on_command("仙缘列表", priority=5, block=True)
 clear_xiangyuan = on_command("清空仙缘", permission=SUPERUSER, priority=5, block=True)
+tribulation_info = on_command("渡劫", priority=5, block=True)
+start_tribulation = on_command("开始渡劫", priority=6, block=True)
+destiny_tribulation = on_command("天命渡劫", priority=6, block=True)
+heart_devil_tribulation = on_command("渡心魔劫", priority=6, block=True)
+fusion_destiny_tribulation_pill = on_command("融合天命渡劫丹", aliases={"合成天命渡劫丹"}, priority=5, block=True)
+fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"}, priority=5, block=True)
 
 __xiuxian_notes__ = f"""
 【修仙指令】✨
@@ -682,8 +691,597 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await rank.finish()
 
+def get_user_tribulation_info(user_id):
+    """获取用户渡劫信息"""
+    user_id = str(user_id)
+    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
+    
+    default_data = {
+        "current_rate": XiuConfig().tribulation_base_rate,
+        "last_time": None,
+        "next_level": None
+    }
+    
+    if not file_path.exists():
+        os.makedirs(file_path.parent, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(default_data, f, ensure_ascii=False, indent=4)
+        return default_data
+    
+    with open(file_path, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+            # 确保所有字段都存在
+            for key in default_data:
+                if key not in data:
+                    data[key] = default_data[key]
+            return data
+        except:
+            return default_data
 
-@level_up.handle(parameterless=[Cooldown(stamina_cost=12, at_sender=False)])
+def save_user_tribulation_info(user_id, data):
+    """保存用户渡劫信息"""
+    user_id = str(user_id)
+    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
+    
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def clear_user_tribulation_info(user_id):
+    """清空用户渡劫信息(渡劫成功后调用)"""
+    user_id = str(user_id)
+    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
+    
+    if file_path.exists():
+        file_path.unlink()
+
+@tribulation_info.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看渡劫信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await tribulation_info.finish()
+    
+    user_id = user_info['user_id']
+    tribulation_data = get_user_tribulation_info(user_id)
+    
+    # 构建消息
+    msg = "✨【渡劫信息】✨\n"
+    msg += f"当前境界：{user_info['level']}\n"
+    
+    # 检查是否需要渡劫
+    level_name = user_info['level']
+    levels = convert_rank('江湖好手')[1]
+    current_index = levels.index(level_name)
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
+        await handle_send(bot, event, msg)
+        await tribulation_info.finish()
+
+    if current_index == 0:  # 已经是最高境界
+        msg += "道友已是至高境界，无需渡劫！"
+        await handle_send(bot, event, msg)
+        await tribulation_info.finish()
+    else:
+        next_level = levels[current_index + 1]
+        next_level_data = jsondata.level_data()[next_level]
+        current_exp = int(user_info['exp'])
+        required_exp = int(next_level_data['power'])
+        
+        # 检查渡劫条件：境界圆满且修为达到下一境界要求
+        need_tribulation = (
+            level_name.endswith('圆满') and 
+            current_exp >= required_exp
+        )
+        
+        if need_tribulation:
+            msg += (
+                f"下一境界：{next_level}\n"
+                f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
+                f"渡劫成功率：{tribulation_data['current_rate']}%\n"
+                f"════════════\n"
+                f"【开始渡劫】尝试渡劫\n"
+                f"【天命渡劫】使用天命渡劫丹\n"
+                f"【渡心魔劫】挑战心魔\n"
+                f"【融合天命渡劫丹】天命渡劫"
+            )
+        else:
+            if not level_name.endswith('圆满'):
+                msg += f"道友境界尚未圆满，无法渡劫！"
+            else:
+                # 计算还需要多少修为
+                remaining_exp = max(0, required_exp - current_exp)
+                msg += (
+                    f"下一境界：{next_level}\n"
+                    f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
+                    f"还需修为：{number_to(remaining_exp)}\n"
+                    f"════════════\n"
+                    f"请继续修炼，待修为足够后再来渡劫！"
+                )
+    
+    await handle_send(bot, event, msg)
+    await tribulation_info.finish()
+
+@fusion_destiny_pill.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """融合天命丹"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await fusion_destiny_pill.finish()
+    
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().strip()
+    
+    # 解析数量参数
+    try:
+        num = int(args) if args else 2  # 默认2个渡厄丹合成1个天命丹
+        num = max(2, min(num, 50))
+    except ValueError:
+        msg = "请输入有效的数量(2-50)！"
+        await handle_send(bot, event, msg)
+        await fusion_destiny_pill.finish()
+    
+    # 检查渡厄丹数量
+    back_msg = sql_message.get_back_msg(user_id)
+    elixir_count = 0
+    for item in back_msg:
+        if item['goods_id'] == 1999:  # 渡厄丹ID
+            elixir_count = item['goods_num']
+            break
+    
+    if elixir_count < num:
+        msg = f"融合需要{num}个渡厄丹，你只有{elixir_count}个！"
+        await handle_send(bot, event, msg)
+        await fusion_destiny_pill.finish()
+    
+    # 计算成功率（每个渡厄丹2%）
+    success_rate = min(100, num * 2)  # 上限100%
+    roll = random.randint(1, 100)
+    
+    if roll <= success_rate:  # 成功
+        # 扣除渡厄丹
+        sql_message.update_back_j(user_id, 1999, use_key=num)
+        
+        # 获得天命丹
+        destiny_count = 1  # 成功固定获得1个
+        sql_message.send_back(user_id, 1996, "天命丹", "丹药", destiny_count, 1)
+        
+        msg = (
+            f"✨融合成功！消耗{num}个渡厄丹获得1个天命丹✨"
+        )
+    else:  # 失败
+        # 扣除渡厄丹
+        sql_message.update_back_j(user_id, 1999, num)
+        
+        msg = (
+            f"融合失败！消耗了{num}个渡厄丹\n"
+            f"当前成功率：{success_rate}%\n"
+            f"（每颗渡厄丹提供2%成功率，50颗必成功）"
+        )
+    
+    await handle_send(bot, event, msg)
+    await fusion_destiny_pill.finish()
+
+@fusion_destiny_tribulation_pill.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """融合天命渡劫丹"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await fusion_destiny_tribulation_pill.finish()
+    
+    user_id = user_info['user_id']
+    args = args.extract_plain_text().strip()
+    
+    # 解析数量参数
+    try:
+        num = int(args) if args else 2  # 默认2个天命丹合成1个天命渡劫丹
+        num = max(2, min(num, 50))
+    except ValueError:
+        msg = "请输入有效的数量(2-50)！"
+        await handle_send(bot, event, msg)
+        await fusion_destiny_tribulation_pill.finish()
+    
+    # 检查天命丹数量
+    back_msg = sql_message.get_back_msg(user_id)
+    elixir_count = 0
+    for item in back_msg:
+        if item['goods_id'] == 1996:  # 天命丹ID
+            elixir_count = item['goods_num']
+            break
+    
+    if elixir_count < num:
+        msg = f"融合需要{num}个天命丹，你只有{elixir_count}个！\n请发送【融合天命丹】获得"
+        await handle_send(bot, event, msg)
+        await fusion_destiny_tribulation_pill.finish()
+    
+    # 计算成功率（每个天命丹5%）
+    success_rate = min(100, num * 5)  # 上限100%
+    roll = random.randint(1, 100)
+    
+    if roll <= success_rate:  # 成功
+        # 扣除天命丹
+        sql_message.update_back_j(user_id, 1996, use_key=num)
+        
+        # 获得天命渡劫丹
+        destiny_count = 1  # 成功固定获得1个
+        sql_message.send_back(user_id, 1997, "天命渡劫丹", "丹药", destiny_count, 1)
+        
+        msg = (
+            f"✨融合成功！消耗{num}个天命丹获得1个天命渡劫丹✨"
+        )
+    else:  # 失败
+        # 扣除天命丹
+        sql_message.update_back_j(user_id, 1996, num)
+        
+        msg = (
+            f"融合失败！消耗了{num}个天命丹\n"
+            f"当前成功率：{success_rate}%\n"
+            f"（每颗天命丹提供5%成功率，20颗必成功）"
+        )
+    
+    await handle_send(bot, event, msg)
+
+@start_tribulation.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """开始渡劫"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await start_tribulation.finish()
+    
+    user_id = user_info['user_id']
+    tribulation_data = get_user_tribulation_info(user_id)
+    
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < XiuConfig().tribulation_cd:
+            remaining = XiuConfig().tribulation_cd - cd
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await start_tribulation.finish()
+    
+    # 检查境界是否可以渡劫
+    level_name = user_info['level']
+    levels = convert_rank('江湖好手')[1]
+    current_index = levels.index(level_name)
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
+        await handle_send(bot, event, msg)
+        await start_tribulation.finish()
+
+    if current_index == 0:  # 已经是最高境界
+        msg = "道友已是至高境界，无需渡劫！"
+        await handle_send(bot, event, msg)
+        await start_tribulation.finish()
+    
+    next_level = levels[current_index + 1]
+    next_level_data = jsondata.level_data()[next_level]
+    current_exp = int(user_info['exp'])
+    required_exp = int(next_level_data['power'])
+    
+    # 检查渡劫条件：境界圆满且修为达标
+    if not level_name.endswith('圆满'):
+        msg = f"当前境界：{user_info['level']}\n道友境界尚未圆满，无法渡劫！"
+        await handle_send(bot, event, msg)
+        await start_tribulation.finish()
+    if not (current_exp >= required_exp):
+        remaining_exp = max(0, required_exp - current_exp)
+        msg = (
+            f"渡劫条件不足！\n"
+            f"当前境界：{level_name}\n"
+            f"下一境界：{next_level}\n"
+            f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
+            f"还需修为：{number_to(remaining_exp)}\n"
+            f"════════════\n"
+            f"请继续修炼，待修为足够后再来渡劫！"
+        )
+        await handle_send(bot, event, msg)
+        await start_tribulation.finish()
+    
+    # 检查是否有天命丹
+    has_destiny_pill = False
+    back = sql_message.get_back_msg(user_id)
+    for item in back:
+        if item['goods_id'] == 1996:  # 天命丹ID
+            has_destiny_pill = True
+            break
+    
+    # 开始渡劫
+    success_rate = tribulation_data['current_rate']
+    roll = random.randint(1, 100)
+    
+    if roll <= success_rate:  # 渡劫成功
+        sql_message.updata_level(user_id, next_level)
+        sql_message.update_power2(user_id)
+        clear_user_tribulation_info(user_id)
+        
+        msg = (
+            f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
+            f"历经九九雷劫，道友终成{next_level}！\n"
+            f"当前境界：{next_level}"
+        )
+    else:  # 渡劫失败
+        if has_destiny_pill:  # 使用天命丹避免概率降低
+            sql_message.update_back_j(user_id, 1996, use_key=1)
+            msg = (
+                f"渡劫失败！\n"
+                f"雷劫之下，道心受损！\n"
+                f"幸得天命丹护体，下次渡劫成功率保持：{success_rate}%"
+            )
+        else:
+            new_rate = max(
+                success_rate - 10, 
+                XiuConfig().tribulation_base_rate
+            )
+            
+            tribulation_data['current_rate'] = new_rate
+            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            save_user_tribulation_info(user_id, tribulation_data)
+            
+            msg = (
+                f"渡劫失败！\n"
+                f"雷劫之下，道心受损！\n"
+                f"下次渡劫成功率：{new_rate}%"
+            )
+    
+    await handle_send(bot, event, msg)
+    await start_tribulation.finish()
+
+@destiny_tribulation.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """天命渡劫"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+    
+    user_id = user_info['user_id']
+    tribulation_data = get_user_tribulation_info(user_id)
+    
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < XiuConfig().tribulation_cd:
+            hours = (XiuConfig().tribulation_cd - cd) // 3600
+            minutes = ((XiuConfig().tribulation_cd - cd) % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await destiny_tribulation.finish()
+    
+    # 检查是否有天命渡劫丹
+    back = sql_message.get_back_msg(user_id)
+    has_item = False
+    for item in back:
+        if item['goods_id'] == 1997:
+            has_item = True
+            break
+    
+    if not has_item:
+        msg = f"道友天命渡劫丹不足！\n请发送【融合天命渡劫丹】获得"
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+    
+    # 检查境界是否可以渡劫
+    level_name = user_info['level']
+    levels = convert_rank('江湖好手')[1]
+    current_index = levels.index(level_name)
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+
+    if current_index == 0:  # 已经是最高境界
+        msg = "道友已是至高境界，无需渡劫！"
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+    
+    next_level = levels[current_index + 1]
+    next_level_data = jsondata.level_data()[next_level]
+    current_exp = int(user_info['exp'])
+    required_exp = int(next_level_data['power'])
+    
+    # 检查渡劫条件：境界圆满且修为达标
+    if not level_name.endswith('圆满'):
+        msg = f"当前境界：{user_info['level']}\n道友境界尚未圆满，无法渡劫！"
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+    if not (current_exp >= required_exp):
+        remaining_exp = max(0, required_exp - current_exp)
+        msg = (
+            f"渡劫条件不足！\n"
+            f"当前境界：{level_name}\n"
+            f"下一境界：{next_level}\n"
+            f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
+            f"还需修为：{number_to(remaining_exp)}\n"
+            f"════════════\n"
+            f"请继续修炼，待修为足够后再来渡劫！"
+        )
+        await handle_send(bot, event, msg)
+        await destiny_tribulation.finish()
+    
+    # 使用天命渡劫丹
+    sql_message.update_back_j(user_id, XiuConfig().tribulation_item_id, use_key=1)
+    
+    # 必定成功
+    sql_message.updata_level(user_id, next_level)
+    sql_message.update_power2(user_id)
+    clear_user_tribulation_info(user_id)
+    
+    msg = (
+        f"✨天命所归，渡劫成功✨\n"
+        f"借助天命渡劫丹之力，道友轻松突破至{next_level}！\n"
+        f"当前境界：{next_level}"
+    )
+    
+    await handle_send(bot, event, msg)
+    await destiny_tribulation.finish()
+
+@heart_devil_tribulation.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """渡心魔劫"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+    
+    user_id = user_info['user_id']
+    tribulation_data = get_user_tribulation_info(user_id)
+    
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < XiuConfig().tribulation_cd:
+            hours = (XiuConfig().tribulation_cd - cd) // 3600
+            minutes = ((XiuConfig().tribulation_cd - cd) % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await heart_devil_tribulation.finish()
+    
+    # 检查境界是否可以渡劫
+    level_name = user_info['level']
+    levels = convert_rank('江湖好手')[1]
+    current_index = levels.index(level_name)
+   
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+
+    if current_index == 0:  # 已经是最高境界
+        msg = "道友已是至高境界，无需渡劫！"
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+    
+    next_level = levels[current_index + 1]
+    next_level_data = jsondata.level_data()[next_level]
+    current_exp = int(user_info['exp'])
+    required_exp = int(next_level_data['power'])
+    
+    # 检查渡劫条件：境界圆满且修为达标
+    if not (current_exp >= required_exp):
+        remaining_exp = max(0, required_exp - current_exp)
+        msg = (
+            f"渡劫条件不足！\n"
+            f"当前境界：{level_name}\n"
+            f"下一境界：{next_level}\n"
+            f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
+            f"还需修为：{number_to(remaining_exp)}\n"
+            f"════════════\n"
+            f"请继续修炼，待修为足够后再来渡劫！"
+        )
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+    
+    # 心魔类型和属性 - 现在包含正面、负面和中性的描述
+    heart_devil_types = [
+        {"name": "贪欲心魔", "scale": 0.01, 
+         "win_desc": "战胜贪念，道心更加坚定", 
+         "lose_desc": "贪念缠身，欲壑难填"},
+        {"name": "嗔怒心魔", "scale": 0.02, 
+         "win_desc": "化解怒火，心境更加平和", 
+         "lose_desc": "怒火中烧，理智全失"},
+        {"name": "痴妄心魔", "scale": 0.03, 
+         "win_desc": "破除执念，心境更加通透", 
+         "lose_desc": "执念深重，难以自拔"},
+        {"name": "傲慢心魔", "scale": 0.04, 
+         "win_desc": "克服傲慢，更加谦逊有礼", 
+         "lose_desc": "目中无人，狂妄自大"},
+        {"name": "嫉妒心魔", "scale": 0.05, 
+         "win_desc": "消除妒火，心境更加宽广", 
+         "lose_desc": "妒火中烧，心怀怨恨"},
+        {"name": "恐惧心魔", "scale": 0.08, 
+         "win_desc": "战胜恐惧，勇气倍增", 
+         "lose_desc": "畏首畏尾，胆小如鼠"},
+        {"name": "懒惰心魔", "scale": 0.1, 
+         "win_desc": "克服懒惰，更加勤奋", 
+         "lose_desc": "懈怠懒散，不思进取"},
+        {"name": "七情心魔", "scale": 0.15, 
+         "win_desc": "调和七情，心境更加平衡", 
+         "lose_desc": "七情六欲，纷扰不休"},
+        {"name": "六欲心魔", "scale": 0.2, 
+         "win_desc": "超脱欲望，心境更加纯净", 
+         "lose_desc": "欲望缠身，难以解脱"},
+        {"name": "天魔幻象", "scale": 0.25, 
+         "win_desc": "识破幻象，道心更加稳固", 
+         "lose_desc": "天魔入体，幻象丛生"},
+        {"name": "心魔劫主", "scale": 0.3, 
+         "win_desc": "战胜心魔之主，道心大进", 
+         "lose_desc": "心魔之主，万劫之源"}
+    ]
+    
+    # 随机选择心魔类型
+    devil_data = random.choice(heart_devil_types)
+    devil_name = devil_data["name"]
+    scale = devil_data["scale"]
+    
+    # 准备玩家数据
+    player = sql_message.get_player_data(user_id)
+    
+    # 生成心魔属性
+    devil_info = {
+        "气血": int(player['气血'] * 100),
+        "总血量": int(player['气血'] * scale),
+        "真元": int(player['真元'] * scale),
+        "攻击": int(player['攻击'] * scale),
+        "name": devil_name,
+        "jj": "感气境",
+        "desc": devil_data["lose_desc"]  # 默认显示负面描述
+    }
+    
+    # 执行战斗
+    result, victor, _, _ = await Boss_fight(player, devil_info, type_in=1, bot_id=bot.self_id)
+    
+    if victor == "群友赢了":  # 战斗胜利
+        new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)
+        tribulation_data['current_rate'] = new_rate
+        tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        save_user_tribulation_info(user_id, tribulation_data)
+        
+        msg = (
+            f"⚔️战胜{devil_name}，道心升华⚔️\n"
+            f"{devil_data['win_desc']}\n"
+            f"经过艰苦战斗，道友战胜了{devil_name}！\n"
+            f"渡劫成功率提升至{new_rate}%！"
+        )
+    else:  # 战斗失败
+        new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
+        tribulation_data['current_rate'] = new_rate
+        tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        save_user_tribulation_info(user_id, tribulation_data)
+        
+        msg = (
+            f"💀败于{devil_name}，道心受损💀\n"
+            f"{devil_data['lose_desc']}\n"
+            f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
+        )
+    
+    await send_msg_handler(bot, event, result)
+    await handle_send(bot, event, msg)
+    await heart_devil_tribulation.finish()
+
+@level_up.handle(parameterless=[Cooldown(stamina_cost=1, at_sender=False)])
 async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -712,6 +1310,14 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         pass
 
     level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up.finish()
+
     level_rate = jsondata.level_rate_data()[level_name]  # 对应境界突破的概率
     user_backs = sql_message.get_back_msg(user_id)  # list(back)
     items = Items()
@@ -735,7 +1341,6 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"由于检测到背包没有【渡厄丹】，突破已经准备就绪\n请发送，【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
         await handle_send(bot, event, msg)
         await level_up.finish()
-
 
 @level_up_zj.handle(parameterless=[Cooldown(at_sender=False)])
 async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -763,6 +1368,16 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             await level_up_zj.finish()
     else:
         pass
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_zj.finish()
+
     level_name = user_msg['level']  # 用户境界
     exp = user_msg['exp']  # 用户修为
     level_rate = jsondata.level_rate_data()[level_name]  # 对应境界突破的概率
@@ -832,7 +1447,16 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
             sql_message.update_user_stamina(user_id, 6, 1)
             await handle_send(bot, event, msg)
             await level_up_lx.finish()
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
     
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_lx.finish()
+
     level_name = user_msg['level']
     exp = user_msg['exp']
     level_rate = jsondata.level_rate_data()[level_name]
@@ -917,6 +1541,16 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await level_up_drjd.finish()
     else:
         pass
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_drjd.finish()
+
     elixir_name = "渡厄金丹"
     level_name = user_msg['level']  # 用户境界
     exp = user_msg['exp']  # 用户修为
@@ -1016,6 +1650,16 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             await level_up_dr.finish()
     else:
         pass
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_dr.finish()
+
     elixir_name = "渡厄丹"
     level_name = user_msg['level']  # 用户境界
     exp = user_msg['exp']  # 用户修为

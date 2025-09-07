@@ -102,6 +102,10 @@ class XiuConfig:
         self.private_chat_enabled = False # 私聊功能开关，默认关闭
         self.level_up_cd = 0  # 突破CD(分钟)
         self.closing_exp = 100  # 闭关每分钟获取的修为
+        self.tribulation_min_level = "祭道境圆满"  # 最低渡劫境界
+        self.tribulation_base_rate = 30  # 基础渡劫概率30%
+        self.tribulation_max_rate = 90  # 最大渡劫概率90%
+        self.tribulation_cd = 6 * 60 * 60  # 6小时冷却(秒)
         self.sect_min_level = "结丹境圆满" # 创建宗门最低境界
         self.sect_create_cost = 5000000 # 创建宗门消耗
         self.sect_rename_cost = 50000000 # 宗门改名消耗

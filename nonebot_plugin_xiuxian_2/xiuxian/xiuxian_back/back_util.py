@@ -645,7 +645,7 @@ def get_elixir_msg(l_msg, goods_id, goods_num, bind_num):
     """
     item_info = items.get_data_by_item_id(goods_id)
     msg = f"名字：{item_info['name']}"
-    msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
+    msg += f"\n拥有数量：{goods_num}，绑定数量：{bind_num}"
     l_msg.append(msg)
     return l_msg
 

@@ -299,6 +299,32 @@
         "all_num": 100,
         "rank": 20
     },
+    "1996": {
+        "name": "天命丹",
+        "type": "丹药",
+        "buff_type": "level_up",
+        "buff": 0,
+        "price": 100000,
+        "selling": 100,
+        "desc": "渡劫保护失败自动消耗！",
+        "境界": "祭道境",
+        "status": 1,
+        "quantity": 1,
+        "rank": 51
+    },
+    "1997": {
+        "name": "天命渡劫丹",
+        "type": "丹药",
+        "buff_type": "level_up",
+        "buff": 0,
+        "price": 100000,
+        "selling": 100,
+        "desc": "使下一次渡劫必定成功！",
+        "境界": "祭道境",
+        "status": 1,
+        "quantity": 1,
+        "rank": 51
+    },
     "1999": {
         "name": "渡厄丹",
         "type": "丹药",
