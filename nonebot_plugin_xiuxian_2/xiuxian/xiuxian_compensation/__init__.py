@@ -1,6 +1,7 @@
 import random
 import json
 import os
+import string
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
@@ -20,7 +21,6 @@ from nonebot.log import logger
 
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown, CooldownIsolateLevel
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
-from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.utils import (
@@ -114,10 +114,16 @@ def save_claimed_gift_packages(data: Dict[str, List[str]]):
 def parse_duration(duration_str: str) -> timedelta:
     """解析时间持续时间字符串 (支持多种格式)
     支持的格式:
-    - xx天/xx小时 (原有格式)
-    - yymmdd (6位数字，如257011表示2025年7月11日23:59:59)
+    - "无限"或"0": 永不过期
+    - xx天: 当天23:59:59
+    - xx小时: 当前时间加xx小时
+    - yymmdd: 6位数字日期 (如257011表示2025年7月11日23:59:59)
     """
     try:
+        # 处理永不过期情况
+        if duration_str.lower() in ["无限", "0"]:
+            return timedelta.max  # 返回最大时间差，表示永不过期
+        
         # 尝试解析为6位数字日期 (yymmdd)
         if duration_str.isdigit() and len(duration_str) == 6:
             year = int("20" + duration_str[:2])  # 25 -> 2025
@@ -127,7 +133,10 @@ def parse_duration(duration_str: str) -> timedelta:
             return expire_time - datetime.now()
         elif "天" in duration_str:  # xx天
             days = int(duration_str.split("天")[0])
-            return timedelta(days=days)
+            # 计算当天23:59:59
+            today = datetime.now().replace(hour=23, minute=59, second=59)
+            expire_time = today + timedelta(days=days)
+            return expire_time - datetime.now()
         elif "小时" in duration_str:  # xx小时
             hours = int(duration_str.split("小时")[0])
             return timedelta(hours=hours)
@@ -135,6 +144,24 @@ def parse_duration(duration_str: str) -> timedelta:
             raise ValueError("无效的时间格式")
     except Exception as e:
         raise ValueError(f"时间格式错误: {str(e)}")
+
+def generate_unique_id(existing_ids):
+    """生成4-6位随机不重复ID（大写字母+数字）"""    
+    while True:
+        # 决定ID长度（4-6位）
+        length = random.randint(4, 6)
+        
+        # 生成随机字符（大写字母+数字）
+        characters = string.ascii_uppercase + string.digits
+        new_id = ''.join(random.choice(characters) for _ in range(length))
+        
+        # 确保至少包含一个字母和一个数字
+        if not any(c.isalpha() for c in new_id) or not any(c.isdigit() for c in new_id):
+            continue  # 如果不满足条件，重新生成
+        
+        # 检查是否已存在
+        if new_id not in existing_ids:
+            return new_id
 
 def add_compensation(compensation_id: str, duration_str: str, items_str: str, reason: str):
     """新增补偿
@@ -148,8 +175,11 @@ def add_compensation(compensation_id: str, duration_str: str, items_str: str, re
         raise ValueError(f"补偿ID {compensation_id} 已存在")
     
     try:
-        duration = parse_duration(duration_str)
-        expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
+        if duration_str.lower() in ["无限", "0"]:
+            expire_time = "无限"
+        else:
+            duration = parse_duration(duration_str)
+            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError as e:
         raise ValueError(f"时间格式错误: {str(e)}")
     
@@ -218,6 +248,8 @@ def get_compensation_info(compensation_id: str) -> Optional[dict]:
 
 def is_compensation_expired(compensation_info: dict) -> bool:
     """检查补偿是否过期"""
+    if compensation_info["expire_time"] == "无限":
+        return False
     expire_time = datetime.strptime(compensation_info["expire_time"], "%Y-%m-%d %H:%M:%S")
     return datetime.now() > expire_time
 
@@ -316,6 +348,8 @@ __compensation_admin_help__ = f"""
 
 3. 补偿列表 - 查看所有补偿(含过期)
 
+4. 清空补偿 - 清空所有补偿
+
 【参数说明】
 - 时间: 如"3天"或"48小时"
 - 物品: 物品ID或名称,可带数量
@@ -334,22 +368,14 @@ __compensation_admin_help__ = f"""
 async def handle_compensation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """补偿帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__compensation_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __compensation_help__)
+    await handle_send(bot, event, __compensation_help__)
     await compensation_help_cmd.finish()
 
 @compensation_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
 async def handle_compensation_admin_help(bot: Bot, event: MessageEvent):
     """补偿管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__compensation_admin_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __compensation_admin_help__)
+    await handle_send(bot, event, __compensation_admin_help__)
     await compensation_admin_help_cmd.finish()
 
 @list_compensation_cmd.handle()
@@ -431,11 +457,7 @@ async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateM
     
     # 发送合并后的消息
     msg = "\n".join(msg_lines)
-    if XiuConfig().img:
-        pic = await get_msg_pic(msg)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg)
 
 @add_compensation_cmd.handle()
 async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -448,7 +470,9 @@ async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message =
             raise ValueError("参数不足，格式应为: 补偿ID 时间 物品 补偿原因")
         
         comp_id, duration, items_str, reason = parts
-        
+        data = load_compensation_data()
+        if comp_id in ["随机", "0"]:
+            comp_id = generate_unique_id(data)
         if add_compensation(comp_id, duration, items_str, reason):
             # 获取补偿详情用于显示
             comp_info = get_compensation_info(comp_id)
@@ -459,10 +483,9 @@ async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message =
                 else:
                     items_msg.append(f"{item['name']} x{item['quantity']}")
             
-            msg = f"成功新增补偿 {comp_id}\n"
+            msg = f"\n成功新增补偿 {comp_id}\n"
             msg += f"物品: {', '.join(items_msg)}\n"
-            msg += f"原因: {reason}\n"
-            msg += f"有效期: {duration}"
+            msg += f"原因: {reason}"
             await handle_send(bot, event, msg)
         else:
             await handle_send(bot, event, "新增补偿失败")
@@ -539,8 +562,11 @@ def add_gift_package(gift_id: str, duration_str: str, items_str: str, reason: st
         raise ValueError(f"礼包ID {gift_id} 已存在")
     
     try:
-        duration = parse_duration(duration_str)
-        expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
+        if duration_str.lower() in ["无限", "0"]:
+            expire_time = "无限"
+        else:
+            duration = parse_duration(duration_str)
+            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError as e:
         raise ValueError(f"时间格式错误: {str(e)}")
     
@@ -608,6 +634,8 @@ def get_gift_package_info(gift_id: str) -> Optional[dict]:
 
 def is_gift_package_expired(gift_info: dict) -> bool:
     """检查礼包是否过期"""
+    if gift_info["expire_time"] == "无限":
+        return False
     expire_time = datetime.strptime(gift_info["expire_time"], "%Y-%m-%d %H:%M:%S")
     return datetime.now() > expire_time
 
@@ -698,6 +726,8 @@ __gift_package_admin_help__ = f"""
 
 3. 礼包列表 - 查看所有礼包(含过期)
 
+4. 清空礼包 - 清空所有礼包
+
 【参数说明】
 - 时间: 如"7天"或"48小时"
 - 物品: 物品ID或名称,可带数量
@@ -716,22 +746,14 @@ __gift_package_admin_help__ = f"""
 async def handle_gift_package_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """礼包帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__gift_package_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __gift_package_help__)
+    await handle_send(bot, event, __gift_package_help__)
     await gift_package_help_cmd.finish()
 
 @gift_package_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
 async def handle_gift_package_admin_help(bot: Bot, event: MessageEvent):
     """礼包管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__gift_package_admin_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __gift_package_admin_help__)
+    await handle_send(bot, event, __gift_package_admin_help__)
     await gift_package_admin_help_cmd.finish()
 
 @list_gift_packages_cmd.handle()
@@ -805,11 +827,7 @@ async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | Private
     msg_lines.append(f"\n⏱ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     msg = "\n".join(msg_lines)
     
-    if XiuConfig().img:
-        pic = await get_msg_pic(msg)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg)
 
 @add_gift_package_cmd.handle()
 async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -821,7 +839,9 @@ async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message =
             raise ValueError("参数不足，格式应为: 礼包ID 时间 物品 发放原因")
         
         gift_id, duration, items_str, reason = parts
-        
+        data = load_gift_package_data()
+        if gift_id in ["随机", "0"]:
+            gift_id = generate_unique_id(data)
         if add_gift_package(gift_id, duration, items_str, reason):
             gift_info = get_gift_package_info(gift_id)
             items_msg = []
@@ -831,10 +851,9 @@ async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message =
                 else:
                     items_msg.append(f"{item['name']} x{item['quantity']}")
             
-            msg = f"成功新增礼包 {gift_id}\n"
+            msg = f"\n成功新增礼包 {gift_id}\n"
             msg += f"🎁 内容: {', '.join(items_msg)}\n"
-            msg += f"📝 原因: {reason}\n"
-            msg += f"⏰ 有效期: {duration}"
+            msg += f"📝 原因: {reason}"
             await handle_send(bot, event, msg)
         else:
             await handle_send(bot, event, "新增礼包失败")
@@ -946,8 +965,11 @@ def add_redeem_code(redeem_code: str, duration_str: str, items_str: str, usage_l
         raise ValueError(f"兑换码 {redeem_code} 已存在")
     
     try:
-        duration = parse_duration(duration_str)
-        expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
+        if duration_str.lower() in ["无限", "0"]:
+            expire_time = "无限"
+        else:
+            duration = parse_duration(duration_str)
+            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError as e:
         raise ValueError(f"时间格式错误: {str(e)}")
     
@@ -1016,6 +1038,8 @@ def get_redeem_code_info(redeem_code: str) -> Optional[dict]:
 
 def is_redeem_code_expired(redeem_info: dict) -> bool:
     """检查兑换码是否过期"""
+    if redeem_info["expire_time"] == "无限":
+        return False
     expire_time = datetime.strptime(redeem_info["expire_time"], "%Y-%m-%d %H:%M:%S")
     return datetime.now() > expire_time
 
@@ -1128,6 +1152,8 @@ __redeem_code_admin_help__ = f"""
 
 3. 兑换码列表 - 查看所有兑换码(含过期)
 
+4. 清空兑换码 - 清空所有兑换码
+
 【参数说明】
 - 时间: 如"7天"或"48小时"
 - 物品: 物品ID或名称,可带数量
@@ -1147,22 +1173,14 @@ __redeem_code_admin_help__ = f"""
 async def handle_redeem_code_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """兑换码帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__redeem_code_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __redeem_code_help__)
+    await handle_send(bot, event, __redeem_code_help__)
     await redeem_code_help_cmd.finish()
 
 @redeem_code_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
 async def handle_redeem_code_admin_help(bot: Bot, event: MessageEvent):
     """兑换码管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if XiuConfig().img:
-        pic = await get_msg_pic(__redeem_code_admin_help__)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, __redeem_code_admin_help__)
+    await handle_send(bot, event, __redeem_code_admin_help__)
     await redeem_code_admin_help_cmd.finish()
 
 @list_redeem_codes_cmd.handle()
@@ -1240,11 +1258,7 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     msg_lines.append(f"\n⏱⏱⏱ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     msg = "\n".join(msg_lines)
     
-    if XiuConfig().img:
-        pic = await get_msg_pic(msg)
-        await handle_send(bot, event, MessageSegment.image(pic))
-    else:
-        await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg)
 
 @add_redeem_code_cmd.handle()
 async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -1260,7 +1274,9 @@ async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = 
             reason = ""
         else:
             redeem_code, duration, items_str, usage_limit, reason = parts
-        
+        data = load_redeem_code_data()
+        if redeem_code in ["随机", "0"]:
+            redeem_code = generate_unique_id(data)
         try:
             usage_limit = int(usage_limit)
         except ValueError:
@@ -1276,10 +1292,9 @@ async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = 
                     items_msg.append(f"{item['name']} x{item['quantity']}")
             
             usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次"
-            msg = f"成功新增兑换码 {redeem_code}\n"
+            msg = f"\n成功新增兑换码 {redeem_code}\n"
             msg += f"🎁 内容: {', '.join(items_msg)}\n"
             msg += f"🔄 使用限制: {usage_msg}\n"
-            msg += f"⏰ 有效期: {duration}"
             if reason:
                 msg += f"\n📝 备注: {reason}"
             await handle_send(bot, event, msg)
@@ -1327,3 +1342,46 @@ async def handle_delete_redeem_code(bot: Bot, event: MessageEvent, args: Message
     save_claimed_redeem_codes(claimed_data)
     
     await handle_send(bot, event, f"成功删除兑换码 {redeem_code} 及其所有领取记录")
+
+clear_compensation_cmd = on_command("清空补偿", permission=SUPERUSER, priority=5, block=True)
+clear_gift_packages_cmd = on_command("清空礼包", permission=SUPERUSER, priority=5, block=True)
+clear_redeem_codes_cmd = on_command("清空兑换码", permission=SUPERUSER, priority=5, block=True)
+
+@clear_compensation_cmd.handle()
+async def handle_clear_compensation(bot: Bot, event: MessageEvent):
+    """清空所有补偿"""
+    # 清空补偿数据
+    with open(COMPENSATION_RECORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    # 清空领取记录
+    with open(COMPENSATION_CLAIMED_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    await handle_send(bot, event, "已清空所有补偿数据及领取记录")
+
+@clear_gift_packages_cmd.handle()
+async def handle_clear_gift_packages(bot: Bot, event: MessageEvent):
+    """清空所有礼包"""
+    # 清空礼包数据
+    with open(GIFT_PACKAGE_RECORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    # 清空领取记录
+    with open(GIFT_PACKAGE_CLAIMED_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    await handle_send(bot, event, "已清空所有礼包数据及领取记录")
+
+@clear_redeem_codes_cmd.handle()
+async def handle_clear_redeem_codes(bot: Bot, event: MessageEvent):
+    """清空所有兑换码"""
+    # 清空兑换码数据
+    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    # 清空领取记录
+    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+    
+    await handle_send(bot, event, "已清空所有兑换码数据及领取记录")
