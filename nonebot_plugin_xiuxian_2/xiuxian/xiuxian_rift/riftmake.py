@@ -92,7 +92,7 @@ TREASUREMSG_5 = [
 
 STORY = {
     "宝物": {
-        "type_rate": 60,
+        "type_rate": 70,
         "功法": {
             "type_rate": 50,
         },
@@ -183,7 +183,7 @@ STORY = {
         },
     },
     "无事": {
-        "type_rate": 30,
+        "type_rate": 20,
     }
 }
 
@@ -380,7 +380,7 @@ def get_goods_type():
 def get_id_by_rank(dict_data, user_level, rift_rank=0):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
     l_temp = []
-    zx_rank = max(convert_rank(user_level)[0] - 16 - rift_rank, 16)
+    zx_rank = max(convert_rank(user_level)[0] - 22 - rift_rank, 5)
     # 秘境等级会增幅用户等级
     zx_rank = min(random.randint(zx_rank, zx_rank + 20), 55)
     for k, v in dict_data.items():
@@ -420,7 +420,7 @@ def get_main_info(user_level, rift_rank):
     """获取功法的信息"""
     main_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
     main_buff_id_list = skill_data[main_buff_type]['gf_list']
-    init_rate = 60  # 初始概率为60
+    init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
@@ -436,7 +436,7 @@ def get_sec_info(user_level, rift_rank):
     """获取神通的信息"""
     sec_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
     sec_buff_id_list = skill_data[sec_buff_type]['st_list']
-    init_rate = 60  # 初始概率为60
+    init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
@@ -451,7 +451,7 @@ def get_sub_info(user_level, rift_rank):
     """获取辅修功法的信息"""
     sub_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
     sub_buff_id_list = skill_data[sub_buff_type]['fx_list']
-    init_rate = 60  # 初始概率为60
+    init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
@@ -461,8 +461,6 @@ def get_sub_info(user_level, rift_rank):
         sub_buff_id = random.choice(sub_buff_id_list)
         return is_success, sub_buff_id
     return is_success, sub_buff_id
-
-
 
 def get_skill_by_rank(user_level, rift_rank):
     """根据用户等级、秘境等级随机获取一个技能"""
