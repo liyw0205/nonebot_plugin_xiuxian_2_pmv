@@ -131,27 +131,109 @@ def check_equipment_use_msg(user_id, goods_id):
         is_use = True
     return is_use
 
-
 def get_user_main_back_msg(user_id):
     """
-    获取背包内的所有物品信息（优化版）
+    获取背包内的所有物品信息（已装备的装备会显示在前面）
     """
-    l_equipment_msg = []
-    l_skill_msg = []
+    l_msg = []
+    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    if user_backs is None:
+        return l_msg
+    
+    # === 装备分类 ===
+    # 按优先级排序的装备品阶列表（从高到低）
+    equipment_ranks = [
+        "无上",         # 最高品阶
+        "极品仙器",      # 次高品阶
+        "上品仙器",
+        "下品仙器",
+        "上品通天法器",
+        "下品通天法器",
+        "上品纯阳法器",
+        "下品纯阳法器",
+        "上品法器",
+        "下品法器",
+        "上品玄器",
+        "下品玄器",
+        "上品符器",
+        "下品符器"
+    ]
+    
+    # === 技能分类 ===
+    # 按优先级排序的技能品阶列表（从高到低）
+    skill_ranks = [
+        "无上",         # 最高品阶
+        "仙阶极品",
+        "仙阶上品",
+        "仙阶下品",
+        "天阶上品",
+        "天阶下品",
+        "地阶上品",
+        "地阶下品",
+        "玄阶上品",
+        "玄阶下品",
+        "黄阶上品",
+        "黄阶下品",
+        "人阶上品",
+        "人阶下品"       # 最低品阶
+    ]
+    
+    # 已装备的装备列表
+    equipped_items = []
+    # 未装备的装备按品阶分类
+    unequipped_equipment = {rank: [] for rank in equipment_ranks}
+    
+    # 按品阶分类的技能字典
+    sorted_skills = {rank: [] for rank in skill_ranks}
+    
+    # 其他分类保持不变
     l_shenwu_msg = []
     l_xiulianitem_msg = []
     l_special_msg = []
     l_ldl_msg = []
     l_libao_msg = []
-    l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
-    if user_backs is None:
-        return l_msg
+    
     for user_back in user_backs:
+        item_info = items.get_data_by_item_id(user_back['goods_id'])
+        
         if user_back['goods_type'] == "装备":
-            l_equipment_msg = get_equipment_msg(l_equipment_msg, user_id, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
+            # 检查是否已装备
+            is_equipped = check_equipment_use_msg(user_id, user_back['goods_id'])
+            equip_data = {
+                'id': user_back['goods_id'],
+                'name': item_info['name'],
+                'level': item_info['level'],
+                'num': user_back['goods_num'],
+                'bind_num': user_back['bind_num'],
+                'is_use': is_equipped
+            }
+            
+            if is_equipped:
+                equipped_items.append(equip_data)
+            else:
+                # 未装备的按品阶分类
+                level = item_info['level']
+                for rank in equipment_ranks:
+                    if rank in level:  # 检查品阶名称是否在level中
+                        unequipped_equipment[rank].append(equip_data)
+                        break
+        
         elif user_back['goods_type'] == "技能":
-            l_skill_msg = get_skill_msg(l_skill_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
+            # 技能按品阶分类
+            level = item_info['level']
+            for rank in skill_ranks:
+                if rank in level:  # 检查品阶名称是否在level中
+                    sorted_skills[rank].append({
+                        'id': user_back['goods_id'],
+                        'name': item_info['name'],
+                        'type': item_info['item_type'],
+                        'level': level,
+                        'num': user_back['goods_num'],
+                        'bind_num': user_back['bind_num']
+                    })
+                    break
+        
+        # 其他物品类型保持不变
         elif user_back['goods_type'] == "神物":
             l_shenwu_msg = get_shenwu_msg(l_shenwu_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
         elif user_back['goods_type'] == "聚灵旗":
@@ -163,21 +245,54 @@ def get_user_main_back_msg(user_id):
         elif user_back['goods_type'] == "礼包":
             l_libao_msg = get_libao_msg(l_libao_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
     
-    # 保留原有分类展示结构
-    if l_equipment_msg:
+    # === 构建装备消息 ===
+    # 检查是否有装备（已装备或未装备）
+    has_equipment = equipped_items or any(unequipped_equipment.values())
+    
+    if has_equipment:
         l_msg.append("☆------我的装备------☆")
-        for msg in l_equipment_msg:
-            l_msg.append(msg)
-    if l_skill_msg:
+        
+        # 1. 先显示已装备的装备
+        if equipped_items:
+            for equip in equipped_items:
+                msg = f"{equip['level']}-{equip['name']}\n"
+                msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}"
+                msg += "\n※已装备※"
+                l_msg.append(msg)
+        
+        # 2. 显示未装备的装备（按品阶从高到低）
+        for rank in equipment_ranks:
+            equipments = unequipped_equipment[rank]
+            if equipments:
+                for equip in equipments:
+                    msg = f"{equip['level']}-{equip['name']}\n"
+                    msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}"
+                    msg += "\n可装备"
+                    l_msg.append(msg)
+    
+    # === 构建技能消息 ===
+    # 检查是否有技能
+    has_skills = any(sorted_skills.values())
+    
+    if has_skills:
         l_msg.append("☆------拥有技能书------☆")
-        for msg in l_skill_msg:
-            l_msg.append(msg)
+        
+        # 按优先级从高到低显示技能
+        for rank in skill_ranks:
+            skills = sorted_skills[rank]
+            if skills:
+                for skill in skills:
+                    msg = f"{skill['level']}{skill['type']}-{skill['name']}\n"
+                    msg += f"拥有数量：{skill['num']}，绑定数量：{skill['bind_num']}"
+                    l_msg.append(msg)
+    
+    # === 其他物品消息 ===
     if l_shenwu_msg:
         l_msg.append("☆------神物------☆")
         for msg in l_shenwu_msg:
             l_msg.append(msg)
     if l_xiulianitem_msg:
-        l_msg.append("☆------修炼物品------☆")
+        l_msg.append("☆------聚灵旗------☆")
         for msg in l_xiulianitem_msg:
             l_msg.append(msg)
     if l_special_msg:
@@ -191,7 +306,116 @@ def get_user_main_back_msg(user_id):
     if l_libao_msg:
         l_msg.append("☆------礼包------☆")
         for msg in l_libao_msg:
-            l_msg.append(msg)    
+            l_msg.append(msg)
+    
+    return l_msg
+
+def get_user_equipment_msg(user_id):
+    """
+    获取背包内的所有装备及其详细信息
+    """
+    l_msg = []
+    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    if user_backs is None:
+        return l_msg
+    
+    # 装备品阶优先级（从高到低）
+    equipment_ranks = [
+        "无上",
+        "极品仙器",
+        "上品仙器",
+        "下品仙器",
+        "上品通天法器",
+        "下品通天法器",
+        "上品纯阳法器",
+        "下品纯阳法器",
+        "上品法器",
+        "下品法器",
+        "上品玄器",
+        "下品玄器",
+        "上品符器",
+        "下品符器"
+    ]
+    
+    # 分类存储装备（已装备和未装备分开）
+    equipped_weapons = []
+    unequipped_weapons = {rank: [] for rank in equipment_ranks}
+    equipped_armors = []
+    unequipped_armors = {rank: [] for rank in equipment_ranks}
+    
+    for user_back in user_backs:
+        if user_back['goods_type'] == "装备":
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            is_equipped = check_equipment_use_msg(user_id, user_back['goods_id'])
+            equip_data = {
+                'id': user_back['goods_id'],
+                'info': item_info,
+                'num': user_back['goods_num'],
+                'bind_num': user_back['bind_num'],
+                'is_use': is_equipped
+            }
+            
+            if item_info['item_type'] == "法器":
+                if is_equipped:
+                    equipped_weapons.append(equip_data)
+                else:
+                    # 按品阶分类
+                    level = item_info['level']
+                    for rank in equipment_ranks:
+                        if rank in level:
+                            unequipped_weapons[rank].append(equip_data)
+                            break
+            elif item_info['item_type'] == "防具":
+                if is_equipped:
+                    equipped_armors.append(equip_data)
+                else:
+                    # 按品阶分类
+                    level = item_info['level']
+                    for rank in equipment_ranks:
+                        if rank in level:
+                            unequipped_armors[rank].append(equip_data)
+                            break
+    
+    # === 构建法器消息 ===
+    if equipped_weapons or any(unequipped_weapons.values()):
+        l_msg.append("☆------法器------☆")
+        
+        # 1. 先显示已装备的法器
+        for weapon in equipped_weapons:
+            msg = get_weapon_info_msg(weapon['id'], weapon['info'])
+            msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
+            msg += "\n※已装备※"
+            l_msg.append(msg)
+        
+        # 2. 显示未装备的法器（按品阶从高到低）
+        for rank in equipment_ranks:
+            weapons = unequipped_weapons[rank]
+            for weapon in weapons:
+                msg = get_weapon_info_msg(weapon['id'], weapon['info'])
+                msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
+                msg += "\n可装备"
+                l_msg.append(msg)
+    
+    # === 构建防具消息 ===
+    if equipped_armors or any(unequipped_armors.values()):
+        l_msg.append("☆------防具------☆")
+        
+        # 1. 先显示已装备的防具
+        for armor in equipped_armors:
+            msg = get_armor_info_msg(armor['id'], armor['info'])
+            msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
+            msg += "\n※已装备※"
+            l_msg.append(msg)
+        
+        # 2. 显示未装备的防具（按品阶从高到低）
+        for rank in equipment_ranks:
+            armors = unequipped_armors[rank]
+            for armor in armors:
+                msg = get_armor_info_msg(armor['id'], armor['info'])
+                msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
+                msg += "\n可装备"
+                l_msg.append(msg)
+    
     return l_msg
 
 def get_user_danyao_back_msg(user_id):
@@ -313,7 +537,6 @@ def get_libao_msg(l_msg, goods_id, goods_num, bind_num):
     """
     item_info = items.get_data_by_item_id(goods_id)
     msg = f"名字：{item_info['name']}\n"
-    msg += f"包含：{item_info['desc']}\n"    
     msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
     l_msg.append(msg)
     return l_msg
@@ -391,66 +614,6 @@ def get_equipment_msg(l_msg, user_id, goods_id, goods_num, bind_num):
     l_msg.append(msg)
     return l_msg
 
-def get_user_equipment_msg(user_id):
-    """
-    获取背包内的所有装备及其详细信息
-    """
-    l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
-    if user_backs is None:
-        return l_msg
-    
-    # 分类存储装备
-    weapons = []  # 法器
-    armors = []   # 防具
-    
-    for user_back in user_backs:
-        if user_back['goods_type'] == "装备":
-            item_info = items.get_data_by_item_id(user_back['goods_id'])
-            if item_info['item_type'] == "法器":
-                weapons.append({
-                    'id': user_back['goods_id'],
-                    'name': item_info['name'],
-                    'num': user_back['goods_num'],
-                    'bind_num': user_back['bind_num'],
-                    'is_use': check_equipment_use_msg(user_id, user_back['goods_id'])
-                })
-            elif item_info['item_type'] == "防具":
-                armors.append({
-                    'id': user_back['goods_id'],
-                    'name': item_info['name'],
-                    'num': user_back['goods_num'],
-                    'bind_num': user_back['bind_num'],
-                    'is_use': check_equipment_use_msg(user_id, user_back['goods_id'])
-                })
-    
-    # 构建详细消息
-    if weapons:
-        l_msg.append("☆------法器------☆")
-        for weapon in weapons:
-            item_info = items.get_data_by_item_id(weapon['id'])
-            msg = get_weapon_info_msg(weapon['id'], item_info)
-            msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
-            if weapon['is_use']:
-                msg += "\n※已装备※"
-            else:
-                msg += "\n可装备"
-            l_msg.append(msg)
-    
-    if armors:
-        l_msg.append("☆------防具------☆")
-        for armor in armors:
-            item_info = items.get_data_by_item_id(armor['id'])
-            msg = get_armor_info_msg(armor['id'], item_info)
-            msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
-            if armor['is_use']:
-                msg += "\n※已装备※"
-            else:
-                msg += "\n可装备"
-            l_msg.append(msg)
-    
-    return l_msg
-
 def get_skill_msg(l_msg, goods_id, goods_num, bind_num):
     """
     获取背包内的技能信息
@@ -497,7 +660,6 @@ def get_shenwu_msg(l_msg, goods_id, goods_num, bind_num):
         desc = "十分神秘的东西，谁也不知道它的作用"
     
     msg = f"名字：{item_info['name']}\n"
-    msg += f"效果：{desc}\n"
     msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
     l_msg.append(msg)
     return l_msg
@@ -513,7 +675,6 @@ def get_special_msg(l_msg, goods_id, goods_num, bind_num):
         desc = "十分神秘的东西，谁也不知道它的作用"
     
     msg = f"名字：{item_info['name']}\n"
-    msg += f"效果：{desc}\n"
     msg += f"拥有数量：{goods_num}，绑定数量：{bind_num}"
     l_msg.append(msg)
     return l_msg
