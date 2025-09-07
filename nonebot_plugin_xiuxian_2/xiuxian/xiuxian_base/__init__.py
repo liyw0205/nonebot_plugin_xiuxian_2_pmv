@@ -821,9 +821,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 解析数量参数
     try:
         num = int(args) if args else 2  # 默认2个渡厄丹合成1个天命丹
-        num = max(2, min(num, 50))
+        num = max(2, min(num, 20))
     except ValueError:
-        msg = "请输入有效的数量(2-50)！"
+        msg = "请输入有效的数量(2-20)！"
         await handle_send(bot, event, msg)
         await fusion_destiny_pill.finish()
     
@@ -840,8 +840,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await fusion_destiny_pill.finish()
     
-    # 计算成功率（每个渡厄丹2%）
-    success_rate = min(100, num * 2)  # 上限100%
+    # 计算成功率（每个渡厄丹5%）
+    success_rate = min(100, num * 5)  # 上限100%
     roll = random.randint(1, 100)
     
     if roll <= success_rate:  # 成功
@@ -862,7 +862,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = (
             f"融合失败！消耗了{num}个渡厄丹\n"
             f"当前成功率：{success_rate}%\n"
-            f"（每颗渡厄丹提供2%成功率，50颗必成功）"
+            f"（每颗渡厄丹提供5%成功率，20颗必成功）"
         )
     
     await handle_send(bot, event, msg)
@@ -883,9 +883,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 解析数量参数
     try:
         num = int(args) if args else 2  # 默认2个天命丹合成1个天命渡劫丹
-        num = max(2, min(num, 50))
+        num = max(2, min(num, 10))
     except ValueError:
-        msg = "请输入有效的数量(2-50)！"
+        msg = "请输入有效的数量(2-10)！"
         await handle_send(bot, event, msg)
         await fusion_destiny_tribulation_pill.finish()
     
@@ -902,8 +902,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await fusion_destiny_tribulation_pill.finish()
     
-    # 计算成功率（每个天命丹5%）
-    success_rate = min(100, num * 5)  # 上限100%
+    # 计算成功率（每个天命丹10%）
+    success_rate = min(100, num * 10)  # 上限100%
     roll = random.randint(1, 100)
     
     if roll <= success_rate:  # 成功
@@ -924,7 +924,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = (
             f"融合失败！消耗了{num}个天命丹\n"
             f"当前成功率：{success_rate}%\n"
-            f"（每颗天命丹提供5%成功率，20颗必成功）"
+            f"（每颗天命丹提供10%成功率，10颗必成功）"
         )
     
     await handle_send(bot, event, msg)
