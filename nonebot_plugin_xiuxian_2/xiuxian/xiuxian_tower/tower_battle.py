@@ -168,6 +168,7 @@ class TowerBattle:
     async def _continuous_challenge(self, bot, event, user_info, player, start_floor):
         """连续挑战10层"""
         user_id = user_info["user_id"]
+        tower_info = tower_data.get_user_tower_info(user_id)
         max_floor = min(start_floor + 9, start_floor + 100)  # 最多连续挑战100层
         success_floors = []
         failed_floor = None
@@ -189,9 +190,16 @@ class TowerBattle:
                     total_score += self.config["积分奖励"]["每10层额外"]
                     reward_msg = self._give_special_reward(user_id, user_info, floor)
                     reward_msg = f"\n{reward_msg}"
-                
+
+                if floor % 100 == 0:
+                    score += self.config["积分奖励"]["每10层额外"] * 2
+                    total_score += self.config["积分奖励"]["每10层额外"] * 2
+                    item_msg = self._give_random_item(user_id, user_info["level"])
+                    exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
+                    sql_message.update_exp(user_id, exp_reward)
+                    reward_msg += f"\n百层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
+
                 # 更新层数
-                tower_info = tower_data.get_user_tower_info(user_id)
                 tower_info["current_floor"] = floor
                 tower_info["max_floor"] = max(tower_info["max_floor"], floor)
                 tower_info["score"] += score  # 添加积分
@@ -237,6 +245,7 @@ class TowerBattle:
         return player
     
     def _give_floor_reward(self, user_id, user_info, floor):
+        tower_info = tower_data.get_user_tower_info(user_id)
         """给予层数奖励"""
         # 基础奖励
         score = self.config["积分奖励"]["每层基础"]
@@ -275,6 +284,7 @@ class TowerBattle:
         return msg
     
     def _give_special_reward(self, user_id, user_info, floor):
+        tower_info = tower_data.get_user_tower_info(user_id)
         """给予特殊奖励(每10层)"""
         item_msg = self._give_random_item(user_id, user_info["level"])
         exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])

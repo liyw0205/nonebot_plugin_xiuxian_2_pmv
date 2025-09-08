@@ -475,9 +475,10 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     # 消耗秘境钥匙
     sql_message.update_back_j(user_id, rift_key_id)
-    msg = f"道友使用 1 个秘境钥匙，秘境 {rift_info['name']} 已立即结算！\n{result_msg}"
+    msg = f"道友使用 1 个秘境钥匙，秘境 {rift_info['name']} 已立即结算！"
     log_message(user_id, result_msg)
     await handle_send(bot, event, msg)
+    await handle_send(bot, event, result_msg)
     await use_rift_key.finish()
 
 @use_rift_speedup.handle(parameterless=[Cooldown(at_sender=False)])

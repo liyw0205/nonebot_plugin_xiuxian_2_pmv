@@ -91,6 +91,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     msg = f"\n{result}"
     await handle_send(bot, event, msg)
+    log_message(user_id, result)
     await training_start.finish()
 
 @training_status.handle()
