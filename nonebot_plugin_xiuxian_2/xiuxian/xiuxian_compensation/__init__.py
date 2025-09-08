@@ -1294,7 +1294,7 @@ async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = 
             usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次"
             msg = f"\n成功新增兑换码 {redeem_code}\n"
             msg += f"🎁 内容: {', '.join(items_msg)}\n"
-            msg += f"🔄 使用限制: {usage_msg}\n"
+            msg += f"🔄 使用限制: {usage_msg}"
             if reason:
                 msg += f"\n📝 备注: {reason}"
             await handle_send(bot, event, msg)

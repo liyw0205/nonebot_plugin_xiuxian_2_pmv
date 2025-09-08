@@ -42,8 +42,9 @@ do_work = on_regex(
     priority=10,
     block=True
 )
-
-do_work_cz = on_command("悬赏力量", permission=SUPERUSER, priority=6, block=True)
+use_work_order = on_command("道具使用悬赏令", priority=5, block=True)
+use_work_capture_order = on_command("道具使用追捕令", priority=5, block=True)
+do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 
 def calculate_remaining_time(create_time: str, work_name: str = None, user_id: str = None) -> Tuple[int, int, int]:
     """
@@ -122,23 +123,6 @@ def get_user_work_status(user_id: str) -> Tuple[int, Any]:
         return 4, work_info  # 已过期的悬赏令
 
     return 0, None  # 无悬赏
-
-def check_work_expired(create_time: str) -> bool:
-    """检查悬赏令是否过期"""
-    try:
-        # 尝试解析带毫秒的格式
-        try:
-            work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S.%f")
-        except ValueError:
-            # 尝试解析不带毫秒的格式
-            work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S")
-            
-        # 计算时间差（分钟）
-        time_diff = datetime.now() - work_time
-        return time_diff > timedelta(minutes=WORK_EXPIRE_MINUTES)
-    except Exception as e:
-        logger.error(f"解析悬赏令时间失败: {e}, 时间: {create_time}")
-        return True  # 如果解析失败，默认视为过期
 
 async def get_work_status_message(user_id: str, work_data: dict) -> str:
     """获取悬赏令状态消息"""
@@ -620,3 +604,124 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     elif mode == "帮助":
         msg = f"\n{__work_help__}"
         await handle_send(bot, event, msg)
+
+@use_work_order.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """使用悬赏令刷新悬赏"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await use_work_order.finish()
+    
+    user_id = user_info['user_id']
+    
+    # 检查背包中的悬赏令
+    back_msg = sql_message.get_back_msg(user_id)
+    work_order_id = 20014
+    work_order_num = 0
+    for item in back_msg:
+        if item['goods_id'] == work_order_id:
+            work_order_num = item['goods_num']
+            break
+
+    if work_order_num < 1:
+        msg = "道友背包中没有悬赏令，无法使用！"
+        await handle_send(bot, event, msg)
+        await use_work_order.finish()
+    
+    # 检查当前状态
+    is_type, msg = check_user_type(user_id, 0)
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await use_work_order.finish()
+    
+    # 生成新悬赏令
+    work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
+    msg = generate_work_message(work_msg, sql_message.get_work_num(user_id))
+    
+    # 消耗道具
+    sql_message.update_back_j(user_id, work_order_id)
+    
+    await handle_send(bot, event, msg)
+    await use_work_order.finish()
+
+@use_work_capture_order.handle(parameterless=[Cooldown(at_sender=False)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """使用追捕令刷新悬赏"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await use_work_capture_order.finish()
+    
+    user_id = user_info['user_id']
+    
+    # 检查背包中的追捕令
+    back_msg = sql_message.get_back_msg(user_id)
+    capture_order_id = 20015
+    capture_order_num = 0
+    for item in back_msg:
+        if item['goods_id'] == capture_order_id:
+            capture_order_num = item['goods_num']
+            break
+
+    if capture_order_num < 1:
+        msg = "道友背包中没有追捕令，无法使用！"
+        await handle_send(bot, event, msg)
+        await use_work_capture_order.finish()
+    
+    # 检查当前状态
+    is_type, msg = check_user_type(user_id, 0)
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await use_work_capture_order.finish()
+    
+    # 生成新悬赏令
+    work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
+    
+    # 读取当前悬赏令数据
+    work_data = readf(user_id)
+    if not work_data:
+        msg = "悬赏令数据异常，请重新尝试！"
+        await handle_send(bot, event, msg)
+        await use_work_capture_order.finish()
+    
+    # 修改奖励倍率(2-5倍)并更新到数据中
+    reward_multiplier = random.randint(2, 5)
+    for task_name, task_data in work_data["tasks"].items():
+        task_data["award"] = int(task_data["award"] * reward_multiplier)
+    
+    # 保存修改后的数据
+    savef(user_id, work_data)
+    
+    # 更新work_msg显示数据
+    updated_work_msg = []
+    for task_name, task_data in work_data["tasks"].items():
+        updated_work_msg.append([
+            task_name,
+            task_data["rate"],
+            task_data["award"],
+            task_data["time"],
+            task_data["item_id"],
+            task_data["success_msg"],
+            task_data["fail_msg"]
+        ])
+    
+    # 生成显示消息
+    msg = generate_work_message(updated_work_msg, sql_message.get_work_num(user_id))
+    msg += f"\n※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
+    
+    # 消耗道具
+    sql_message.update_back_j(user_id, capture_order_id)
+    
+    await handle_send(bot, event, msg)
+    await use_work_capture_order.finish()
+
+@do_work_cz.handle(parameterless=[Cooldown(at_sender=False)])
+async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置所有用户的悬赏令"""    
+    sql_message.reset_work_num(count)
+    msg = "用户悬赏令刷新次数重置成功"
+    await handle_send(bot, event, msg)
+    await do_work_cz.finish()

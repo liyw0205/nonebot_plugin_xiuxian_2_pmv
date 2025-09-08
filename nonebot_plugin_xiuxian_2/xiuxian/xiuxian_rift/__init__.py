@@ -47,8 +47,8 @@ complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7,
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
 use_rift_key = on_command("道具使用秘境钥匙", priority=5, block=True)
 use_rift_explore = on_command("道具使用秘藏令", priority=5, block=True)
-use_rift_speedup = on_command("道具使用秘境加速卷", priority=5, block=True)
-use_rift_big_speedup = on_command("道具使用秘境大加速卷", priority=5, block=True)
+use_rift_speedup = on_command("道具使用秘境加速券", priority=5, block=True)
+use_rift_big_speedup = on_command("道具使用秘境大加速券", priority=5, block=True)
 
 __rift_help__ = f"""
 【秘境探索系统】🗝️
@@ -65,7 +65,7 @@ __rift_help__ = f"""
 🎁 道具使用：
   • 秘境钥匙 - 立即结算当前秘境
   • 秘藏令 - 获得额外探索机会
-  • 秘境加速卷 - 减少秘境所需探索时间
+  • 秘境加速券 - 减少秘境所需探索时间
 
 ⏰ 秘境刷新：
   • 每日自动生成时间：0点 & 12点
@@ -482,7 +482,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
 @use_rift_speedup.handle(parameterless=[Cooldown(at_sender=False)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """使用秘境加速卷"""
+    """使用秘境加速券"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -497,9 +497,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await use_rift_speedup.finish()
     
-    # 检查背包中的秘境加速卷
+    # 检查背包中的秘境加速券
     back_msg = sql_message.get_back_msg(user_id)
-    speedup_id = 20012  # 秘境加速卷ID
+    speedup_id = 20012  # 秘境加速券ID
     speedup_num = 0
     
     for item in back_msg:
@@ -508,7 +508,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             break
     
     if speedup_num < 1:
-        msg = "道友背包中没有秘境加速卷，无法使用！"
+        msg = "道友背包中没有秘境加速券，无法使用！"
         await handle_send(bot, event, msg)
         await use_rift_speedup.finish()
     
@@ -518,7 +518,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 如果时间已经是1分钟，则不需要使用
     if original_time <= 1:
-        msg = "秘境探索时间已经是1分钟，无需使用加速卷！"
+        msg = "秘境探索时间已经是1分钟，无需使用加速券！"
         await handle_send(bot, event, msg)
         await use_rift_speedup.finish()
     
@@ -530,13 +530,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 消耗道具
     sql_message.update_back_j(user_id, speedup_id)
     
-    msg = f"道友使用了1个秘境加速卷，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"道友使用了1个秘境加速券，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
     await handle_send(bot, event, msg)
     await use_rift_speedup.finish()
 
 @use_rift_big_speedup.handle(parameterless=[Cooldown(at_sender=False)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """使用秘境大加速卷"""
+    """使用秘境大加速券"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -551,9 +551,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await use_rift_big_speedup.finish()
     
-    # 检查背包中的秘境大加速卷
+    # 检查背包中的秘境大加速券
     back_msg = sql_message.get_back_msg(user_id)
-    big_speedup_id = 20013  # 秘境大加速卷ID
+    big_speedup_id = 20013  # 秘境大加速券ID
     big_speedup_num = 0
     
     for item in back_msg:
@@ -562,7 +562,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             break
     
     if big_speedup_num < 1:
-        msg = "道友背包中没有秘境大加速卷，无法使用！"
+        msg = "道友背包中没有秘境大加速券，无法使用！"
         await handle_send(bot, event, msg)
         await use_rift_big_speedup.finish()
     
@@ -572,7 +572,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 如果时间已经是1分钟，则不需要使用
     if original_time <= 1:
-        msg = "秘境探索时间已经是1分钟，无需使用大加速卷！"
+        msg = "秘境探索时间已经是1分钟，无需使用大加速券！"
         await handle_send(bot, event, msg)
         await use_rift_big_speedup.finish()
     
@@ -584,7 +584,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 消耗道具
     sql_message.update_back_j(user_id, big_speedup_id)
     
-    msg = f"道友使用了1个秘境大加速卷，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"道友使用了1个秘境大加速券，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
     await handle_send(bot, event, msg)
     await use_rift_big_speedup.finish()
 

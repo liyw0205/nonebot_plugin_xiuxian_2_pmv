@@ -1924,5 +1924,188 @@
         "rate": 100,
         "rank": "无上",
         "level": "-5"
-    }
+    },
+    "8965": {
+    "name": "寰宇寂灭指",
+    "skill_type": 1,
+    "atkvalue": [
+      8.5
+    ],
+    "hpcost": 0.1,
+    "mpcost": 1.2,
+    "turncost": 0,
+    "desc": "一指寂灭寰宇，万物归墟！",
+    "rate": 70,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8966": {
+    "name": "天照·黑炎灭世",
+    "skill_type": 2,
+    "atkvalue": 4.8,
+    "hpcost": 0.05,
+    "mpcost": 1.0,
+    "turncost": 5,
+    "desc": "不灭黑炎焚烧万物，直至世界尽头！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8967": {
+    "name": "神威·时空绞杀",
+    "skill_type": 1,
+    "atkvalue": [
+      0.8,
+      1.2,
+      0.5,
+      1.5,
+      0.7,
+      1.8,
+      0.9
+    ],
+    "hpcost": 0.15,
+    "mpcost": 1.5,
+    "turncost": 1,
+    "desc": "扭曲时空进行七次致命打击，敌人无处可逃！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8968": {
+    "name": "月牙天冲·终景",
+    "skill_type": 3,
+    "bufftype": 1,
+    "buffvalue": 5.2,
+    "hpcost": 0,
+    "mpcost": 1.8,
+    "turncost": 4,
+    "desc": "斩魄刀终极解放，灵压突破天际！",
+    "rate": 95,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8969": {
+    "name": "无限剑制·诸神黄昏",
+    "skill_type": 5,
+    "atkvalue": 2.0,
+    "atkvalue2": 18.0,
+    "hpcost": 0.1,
+    "mpcost": 1.5,
+    "turncost": 0,
+    "desc": "固有结界全开，万千神剑如雨坠落！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8970": {
+    "name": "轮回天生·涅槃",
+    "skill_type": 6,
+    "bufftype": 1,
+    "buffvalue": 3.0,
+    "hpcost": 0.2,
+    "mpcost": 0.5,
+    "turncost": 3,
+    "desc": "以生命为代价，获得毁灭之力！",
+    "rate": 99,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8971": {
+    "name": "归墟印·生死劫",
+    "skill_type": 1,
+    "atkvalue": [
+      9.0
+    ],
+    "hpcost": 0.12,
+    "mpcost": 1.3,
+    "turncost": 0,
+    "desc": "魂归墟渊，万法寂灭，众生平等，皆入轮回！",
+    "rate": 90,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8972": {
+    "name": "九幽黄泉指",
+    "skill_type": 2,
+    "atkvalue": 5.0,
+    "hpcost": 0.06,
+    "mpcost": 1.1,
+    "turncost": 6,
+    "desc": "九幽黄泉之力侵蚀神魂，永世不得超生！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8973": {
+    "name": "天河卷·星陨瀑",
+    "skill_type": 1,
+    "atkvalue": [
+      1.5,
+      1.5,
+      1.5,
+      1.5
+    ],
+    "hpcost": 0.2,
+    "mpcost": 1.8,
+    "turncost": 1,
+    "desc": "引天河倒卷，化星陨瀑布倾泻而下！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8974": {
+    "name": "太虚神术·不灭",
+    "skill_type": 3,
+    "bufftype": 2,
+    "buffvalue": 0.5,
+    "hpcost": 0,
+    "mpcost": 2.0,
+    "turncost": 5,
+    "desc": "太虚护体，万法不侵！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8975": {
+    "name": "虚空禁锢·万象镇",
+    "skill_type": 4,
+    "hpcost": 0.2,
+    "mpcost": 1.5,
+    "turncost": 4,
+    "desc": "操纵虚空之力，镇压万象众生！",
+    "rate": 50,
+    "success": 90,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8976": {
+    "name": "阴阳逆·乱乾坤",
+    "skill_type": 6,
+    "bufftype": 1,
+    "buffvalue": 3.2,
+    "hpcost": 0,
+    "mpcost": 2.2,
+    "turncost": 3,
+    "desc": "阴阳逆乱，乾坤易位，毁天灭地！",
+    "rate": 98,
+    "rank": "无上",
+    "level": "5"
+  },
+  "8977": {
+    "name": "星爆气流斩",
+    "skill_type": 1,
+    "atkvalue": [
+      0.2, 0.3, 0.4, 0.5,
+      0.6, 0.7, 0.8, 0.9,
+      1.0, 1.1, 1.2, 1.3,
+      1.4, 1.5, 1.6, 1.7
+    ],
+    "hpcost": 0.25,
+    "mpcost": 1.8,
+    "turncost": 1,
+    "desc": "十六连击的终极剑技，如流星般绚烂的致命连斩！",
+    "rate": 100,
+    "rank": "无上",
+    "level": "-5"
+  }
 }
