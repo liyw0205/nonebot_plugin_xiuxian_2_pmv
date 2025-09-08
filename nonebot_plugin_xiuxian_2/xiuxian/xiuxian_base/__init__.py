@@ -46,10 +46,6 @@ items = Items()
 
 # 定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
-cache_help = {}
-cache_level_help = {}
-cache_level1_help = {}
-cache_level2_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
@@ -125,6 +121,7 @@ __xiuxian_notes__ = f"""
 → 炼丹指南:发送"炼丹帮助"
 → 灵田管理:发送"灵田帮助"
 → 传承玩法:发送"传承帮助"
+→ 广结善缘:发送"仙缘帮助"
 ===========
 🎮 特色玩法
 → 世界BOSS:发送"世界boss帮助"👾
@@ -457,82 +454,38 @@ def save_lottery_data(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 @help_in.handle(parameterless=[Cooldown(at_sender=False)])
-async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]
-        await handle_send(bot, event, msg)
-        await help_in.finish()
-    else:
-        font_size = 32
-        title = "修仙帮助"
-        msg = __xiuxian_notes__
-        img = Txt2Img(font_size)
-        if XiuConfig().img:
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
-        await help_in.finish()
+    msg = __xiuxian_notes__
+    await handle_send(bot, event, msg)
+    await help_in.finish()
 
 
 @level_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """灵根帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_level_help:
-        msg = cache_level_help[session_id]
-        await handle_send(bot, event, msg)
-        await level_help.finish()
-    else:
-        font_size = 32
-        title = "灵根帮助"
-        msg = __level_help__
-        img = Txt2Img(font_size)
-        if XiuConfig().img:
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
-        await level_help.finish()
+    msg = __level_help__
+    await handle_send(bot, event, msg)
+    await level_help.finish()
 
         
 @level1_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level1_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def level1_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """品阶帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_level1_help:
-        msg = cache_level1_help[session_id]
-        await handle_send(bot, event, msg)
-        await level1_help.finish()
-    else:
-        font_size = 32
-        title = "品阶帮助"
-        msg = __level1_help__
-        img = Txt2Img(font_size)
-        if XiuConfig().img:
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
-        await level1_help.finish()
+    msg = __level1_help__
+    await handle_send(bot, event, msg)
+    await level1_help.finish()
         
 @level2_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """境界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_level2_help:
-        msg = cache_level2_help[session_id]
-        await handle_send(bot, event, msg)
-        await level2_help.finish()
-    else:
-        font_size = 32
-        title = "境界帮助"
-        msg = __level2_help__
-        img = Txt2Img(font_size)
-        if XiuConfig().img:
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
-        await level2_help.finish()
+    msg = __level2_help__
+    await handle_send(bot, event, msg)
+    await level2_help.finish()
 
 @auto_root.handle()
 async def auto_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -2855,13 +2808,29 @@ def generate_daohao():
 XIANGYUAN_DATA_PATH = Path(__file__).parent / "xiangyuan_data"
 XIANGYUAN_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
-def get_xiangyuan_data(group_id):
-    """获取群仙缘数据"""
+def get_xiangyuan_data(group_id, filter_expired=True):
+    """获取群仙缘数据，可选项过滤过期仙缘"""
     file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
     try:
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                
+                if filter_expired:
+                    # 过滤过期仙缘（创建时间超过24小时）
+                    current_time = datetime.now()
+                    valid_gifts = {}
+                    
+                    for gift_id, gift in data["gifts"].items():
+                        create_time = datetime.strptime(gift["create_time"], "%Y-%m-%d %H:%M:%S")
+                        time_diff = (current_time - create_time).total_seconds()
+                        
+                        if time_diff <= 24 * 3600:  # 24小时内
+                            valid_gifts[gift_id] = gift
+                    
+                    data["gifts"] = valid_gifts
+                
+                return data
     except:
         pass
     return {"gifts": {}, "last_id": 1}
@@ -3037,7 +3006,7 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
         stone_limit.update_send_limit(user_id, total_stone)
     
     # 创建仙缘记录
-    xiangyuan_data = get_xiangyuan_data(group_id)
+    xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=False)
     xiangyuan_id = xiangyuan_data["last_id"]
     xiangyuan_data["last_id"] += 1
     
@@ -3079,8 +3048,9 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     user_id = user_info["user_id"]
     group_id = str(event.group_id)
     
-    # 获取仙缘数据
-    xiangyuan_data = get_xiangyuan_data(group_id)
+    # 获取仙缘数据（自动过滤过期仙缘）
+    xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=True)
+    
     if not xiangyuan_data["gifts"]:
         msg = "当前没有可领取的仙缘！"
         await handle_send(bot, event, msg)
@@ -3106,8 +3076,11 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     current_receiver_num = selected_gift["received"] + 1
     total_receivers = selected_gift["receiver_count"]
     
-    # 计算每个物品的剩余数量和权重
-    items_to_distribute = []
+    # 检查是否是最后一个领取者
+    is_last_receiver = (current_receiver_num == total_receivers)
+    
+    # 获取所有剩余物品
+    remaining_items = []
     for item in selected_gift["items"]:
         # 计算已领取数量
         received = sum(
@@ -3116,6 +3089,65 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         remaining = item["quantity"] - received
         
         if remaining > 0:
+            remaining_items.append({
+                "item": item,
+                "remaining": remaining
+            })
+    
+    if not remaining_items:
+        msg = "这个仙缘的物品已经被领完了！"
+        await handle_send(bot, event, msg)
+        await get_xiangyuan.finish()
+    
+    # 如果是最后一个领取者，获取所有剩余物品
+    if is_last_receiver:
+        received_items = []
+        for item_data in remaining_items:
+            item = item_data["item"]
+            amount = item_data["remaining"]
+            
+            # 发放奖励
+            if item["name"] == "灵石":
+                sql_message.update_ls(user_id, amount, 1)
+            else:
+                sql_message.send_back(
+                    user_id,
+                    item["id"],
+                    item["name"],
+                    item["type"],
+                    amount,
+                    1
+                )
+            
+            received_items.append(f"{item['name']} x{amount}")
+        
+        # 记录领取信息
+        if str(user_id) not in selected_gift["receivers"]:
+            selected_gift["receivers"][str(user_id)] = {}
+        
+        for item_data in remaining_items:
+            item = item_data["item"]
+            amount = item_data["remaining"]
+            selected_gift["receivers"][str(user_id)][item["name"]] = (
+                selected_gift["receivers"][str(user_id)].get(item["name"], 0) + amount
+            )
+        
+        selected_gift["received"] += 1
+        
+        # 构建消息
+        msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
+        msg += "\n".join(received_items)
+        msg += f"\n来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
+        msg += "💫💫 最后一个有缘人，获得仙缘全部馈赠！"
+    
+    else:
+        # 非最后一个领取者，随机选择一个物品分配
+        # 计算每个物品的权重
+        items_to_distribute = []
+        for item_data in remaining_items:
+            item = item_data["item"]
+            remaining = item_data["remaining"]
+            
             # 设置基础权重（确保所有物品都有机会被选中）
             weight = 1
             
@@ -3132,25 +3164,17 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
                 "remaining": remaining,
                 "weight": weight
             })
-    
-    if not items_to_distribute:
-        msg = "这个仙缘的物品已经被领完了！"
-        await handle_send(bot, event, msg)
-        await get_xiangyuan.finish()
-    
-    # 按权重随机选择要分配的物品
-    weights = [item["weight"] for item in items_to_distribute]
-    selected_item_data = random.choices(items_to_distribute, weights=weights, k=1)[0]
-    selected_item = selected_item_data["item"]
-    remaining = selected_item_data["remaining"]
-    
-    # 计算剩余领取人数
-    remaining_receivers = total_receivers - selected_gift["received"]
-    
-    # 计算分配数量
-    if current_receiver_num == total_receivers:
-        amount = remaining
-    else:
+        
+        # 按权重随机选择要分配的物品
+        weights = [item["weight"] for item in items_to_distribute]
+        selected_item_data = random.choices(items_to_distribute, weights=weights, k=1)[0]
+        selected_item = selected_item_data["item"]
+        remaining = selected_item_data["remaining"]
+        
+        # 计算剩余领取人数
+        remaining_receivers = total_receivers - selected_gift["received"]
+        
+        # 计算分配数量
         # 确保至少分配1个
         base_amount = max(1, remaining // remaining_receivers)
         
@@ -3167,42 +3191,37 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
             amount = min_amount
         else:
             amount = random.randint(min_amount, max_amount)
-    
-    # 发放奖励
-    if selected_item["name"] == "灵石":
-        sql_message.update_ls(user_id, amount, 1)
-    else:
-        sql_message.send_back(
-            user_id,
-            selected_item["id"],
-            selected_item["name"],
-            selected_item["type"],
-            amount,
-            1
+        
+        # 发放奖励
+        if selected_item["name"] == "灵石":
+            sql_message.update_ls(user_id, amount, 1)
+        else:
+            sql_message.send_back(
+                user_id,
+                selected_item["id"],
+                selected_item["name"],
+                selected_item["type"],
+                amount,
+                1
+            )
+        
+        # 记录领取信息
+        if str(user_id) not in selected_gift["receivers"]:
+            selected_gift["receivers"][str(user_id)] = {}
+        
+        selected_gift["receivers"][str(user_id)][selected_item["name"]] = (
+            selected_gift["receivers"][str(user_id)].get(selected_item["name"], 0) + amount
         )
-    
-    # 记录领取信息
-    if str(user_id) not in selected_gift["receivers"]:
-        selected_gift["receivers"][str(user_id)] = {}
-    selected_gift["receivers"][str(user_id)][selected_item["name"]] = (
-        selected_gift["receivers"][str(user_id)].get(selected_item["name"], 0) + amount
-    )
-    selected_gift["received"] += 1
+        selected_gift["received"] += 1
+        
+        # 构建消息
+        msg = f"恭喜【{user_info['user_name']}】抢到仙缘：\n"
+        msg += f"{selected_item['name']} x{amount}\n"
+        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}"
     
     # 更新数据
     xiangyuan_data["gifts"][selected_gift_id] = selected_gift
     save_xiangyuan_data(group_id, xiangyuan_data)
-    
-    # 构建消息
-    if current_receiver_num == total_receivers:
-        msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
-        msg += f"{selected_item['name']} x{amount}\n"
-        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
-        msg += "💫 最后一个有缘人，获得仙缘全部馈赠！"
-    else:
-        msg = f"恭喜【{user_info['user_name']}】抢到仙缘：\n"
-        msg += f"{selected_item['name']} x{amount}\n"
-        msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}"
     
     await handle_send(bot, event, msg)
     await get_xiangyuan.finish()
@@ -3217,7 +3236,7 @@ async def xiangyuan_list_(bot: Bot, event: GroupMessageEvent):
         await xiangyuan_list.finish()
     
     group_id = str(event.group_id)
-    xiangyuan_data = get_xiangyuan_data(group_id)
+    xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=True)
     
     if not xiangyuan_data["gifts"]:
         msg = "当前没有仙缘可领取！"
@@ -3259,7 +3278,7 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     group_id = str(event.group_id)
     
     # 获取当前仙缘数据
-    xiangyuan_data = get_xiangyuan_data(group_id)
+    xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=False)
     if not xiangyuan_data["gifts"]:
         msg = "当前没有仙缘可清空！"
         await handle_send(bot, event, msg)
@@ -3287,8 +3306,7 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent):
                             item["id"],
                             item["name"],
                             item["type"],
-                            remaining,
-                            1
+                            remaining
                         )
                     refund_count += 1
     
@@ -3302,43 +3320,94 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent):
 
 @scheduler.scheduled_job("cron", hour=0, minute=0)
 async def reset_xiangyuan_daily():
-    """每日重置仙缘"""
+    """每日0点清理所有过期仙缘（24小时制）"""
     for file in XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"):
         group_id = file.stem.split("_")[1]
-        xiangyuan_data = get_xiangyuan_data(group_id)
+        xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=False)
         
         if not xiangyuan_data["gifts"]:
             continue
         
-        # 退还未领取的物品
+        current_time = datetime.now()
         refund_count = 0
-        for gift_id, gift in xiangyuan_data["gifts"].items():
-            if gift["received"] < gift["receiver_count"]:
-                # 计算剩余物品
-                for item in gift["items"]:
-                    received = sum(
-                        v.get(item["name"], 0) for v in gift["receivers"].values()
-                    )
-                    remaining = item["quantity"] - received
-                    
-                    if remaining > 0:
-                        if item["name"] == "灵石":
-                            # 退还灵石
-                            sql_message.update_ls(gift["giver_id"], remaining, 1)
-                        else:
-                            # 退还物品
-                            sql_message.send_back(
-                                gift["giver_id"],
-                                item["id"],
-                                item["name"],
-                                item["type"],
-                                remaining,
-                                1
-                            )
-                        refund_count += 1
         
-        # 清空数据
-        xiangyuan_data["gifts"] = {}
+        # 遍历所有仙缘，处理过期的
+        expired_gifts = []
+        for gift_id, gift in xiangyuan_data["gifts"].items():
+            create_time = datetime.strptime(gift["create_time"], "%Y-%m-%d %H:%M:%S")
+            time_diff = (current_time - create_time).total_seconds()
+            
+            if time_diff > 24 * 3600:  # 超过24小时
+                expired_gifts.append(gift_id)
+                
+                # 退还未领取的物品
+                if gift["received"] < gift["receiver_count"]:
+                    # 计算剩余物品
+                    for item in gift["items"]:
+                        received = sum(
+                            v.get(item["name"], 0) for v in gift["receivers"].values()
+                        )
+                        remaining = item["quantity"] - received
+                        
+                        if remaining > 0:
+                            if item["name"] == "灵石":
+                                # 退还灵石
+                                sql_message.update_ls(gift["giver_id"], remaining, 1)
+                            else:
+                                # 退还物品
+                                sql_message.send_back(
+                                    gift["giver_id"],
+                                    item["id"],
+                                    item["name"],
+                                    item["type"],
+                                    remaining
+                                )
+                            refund_count += 1
+        
+        # 删除过期仙缘
+        for gift_id in expired_gifts:
+            del xiangyuan_data["gifts"][gift_id]
+        
+        # 保存更新后的数据
         save_xiangyuan_data(group_id, xiangyuan_data)
         
-        logger.info(f"仙缘系统：已为群{group_id}清空仙缘，退还了{refund_count}件物品")
+        logger.info(f"仙缘系统：已为群{group_id}清理过期仙缘，退还了{refund_count}件物品")
+
+xiangyuan_help = on_command("仙缘帮助", priority=15, block=True)
+
+__xiangyuan_notes__ = f"""
+【仙缘系统】✨
+===========
+🌟 核心功能
+→ 赠送仙缘:发送"送仙缘 物品1x数量,物品2x数量 [人数]"
+→ 领取仙缘:发送"抢仙缘"
+→ 查看仙缘:发送"仙缘列表"
+→ 清空仙缘:发送"清空仙缘"(管理员)
+
+🌟 使用示例
+1. 赠送灵石:
+   送仙缘 灵石x1000000 5
+   → 赠送100万灵石，5人可领取
+
+2. 赠送物品:
+   送仙缘 两仪心经x1,筑基丹x3
+   → 赠送1本两仪心经和3个筑基丹
+
+🌟 规则说明
+1. 仙缘有效期为24小时
+2. 最后一位领取者将获得剩余全部物品
+3. 过期未领取的仙缘会自动退还
+
+🌟 温馨提示
+1. 赠送前请确认物品充足
+2. 领取前请查看仙缘列表
+3. 珍惜仙缘，广结善缘
+""".strip()
+
+@xiangyuan_help.handle(parameterless=[Cooldown(at_sender=False)])
+async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """仙缘帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg = __xiangyuan_notes__
+    await handle_send(bot, event, msg)
+    await xiangyuan_help.finish()

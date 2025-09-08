@@ -188,8 +188,10 @@ class TowerBattle:
                 if floor % 10 == 0 and floor > tower_info["max_floor"]:
                     score += self.config["积分奖励"]["每10层额外"]
                     total_score += self.config["积分奖励"]["每10层额外"]
-                    reward_msg = self._give_special_reward(user_id, user_info, floor)
-                    reward_msg = f"\n{reward_msg}"
+                    item_msg = self._give_random_item(user_id, user_info["level"])
+                    exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
+                    sql_message.update_exp(user_id, exp_reward)
+                    reward_msg = f"\n通关第{floor}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
 
                 if floor % 100 == 0:
                     score += self.config["积分奖励"]["每10层额外"] * 2
@@ -282,15 +284,6 @@ class TowerBattle:
         sql_message.update_ls(user_id, stone, 1)
     
         return msg
-    
-    def _give_special_reward(self, user_id, user_info, floor):
-        tower_info = tower_data.get_user_tower_info(user_id)
-        """给予特殊奖励(每10层)"""
-        item_msg = self._give_random_item(user_id, user_info["level"])
-        exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
-        sql_message.update_exp(user_id, exp_reward)
-        
-        return f"通关第{floor}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
     
     def _give_random_item(self, user_id, user_level):
         """给予随机物品奖励"""
