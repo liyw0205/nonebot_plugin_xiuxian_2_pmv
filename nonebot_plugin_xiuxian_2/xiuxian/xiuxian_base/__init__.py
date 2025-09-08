@@ -698,6 +698,7 @@ def get_user_tribulation_info(user_id):
     
     default_data = {
         "current_rate": XiuConfig().tribulation_base_rate,
+        "heart_devil_count": 0,
         "last_time": None,
         "next_level": None
     }
@@ -1147,6 +1148,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     tribulation_data = get_user_tribulation_info(user_id)
     
+    # 检查渡劫概率是否已达上限
+    if tribulation_data['current_rate'] >= XiuConfig().tribulation_max_rate:
+        msg = random.choice([
+            "道友道心已臻至完美，无需再渡心魔劫！",
+            "心魔已消，道友道心澄明如镜！",
+            "恭喜道友，心魔已无法侵扰你的道心！"
+        ])
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+    
+    # 检查心魔劫次数
+    heart_devil_count = tribulation_data.get('heart_devil_count', 0)
+    if heart_devil_count >= 5:
+        msg = "道友已无需渡心魔劫！"
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+    
+    # 更新心魔劫次数
+    tribulation_data['heart_devil_count'] = heart_devil_count + 1
+    save_user_tribulation_info(user_id, tribulation_data)
+    
     # 检查冷却时间
     if tribulation_data['last_time']:
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
@@ -1194,92 +1216,148 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await heart_devil_tribulation.finish()
     
-    # 心魔类型和属性 - 现在包含正面、负面和中性的描述
-    heart_devil_types = [
-        {"name": "贪欲心魔", "scale": 0.01, 
-         "win_desc": "战胜贪念，道心更加坚定", 
-         "lose_desc": "贪念缠身，欲壑难填"},
-        {"name": "嗔怒心魔", "scale": 0.02, 
-         "win_desc": "化解怒火，心境更加平和", 
-         "lose_desc": "怒火中烧，理智全失"},
-        {"name": "痴妄心魔", "scale": 0.03, 
-         "win_desc": "破除执念，心境更加通透", 
-         "lose_desc": "执念深重，难以自拔"},
-        {"name": "傲慢心魔", "scale": 0.04, 
-         "win_desc": "克服傲慢，更加谦逊有礼", 
-         "lose_desc": "目中无人，狂妄自大"},
-        {"name": "嫉妒心魔", "scale": 0.05, 
-         "win_desc": "消除妒火，心境更加宽广", 
-         "lose_desc": "妒火中烧，心怀怨恨"},
-        {"name": "恐惧心魔", "scale": 0.08, 
-         "win_desc": "战胜恐惧，勇气倍增", 
-         "lose_desc": "畏首畏尾，胆小如鼠"},
-        {"name": "懒惰心魔", "scale": 0.1, 
-         "win_desc": "克服懒惰，更加勤奋", 
-         "lose_desc": "懈怠懒散，不思进取"},
-        {"name": "七情心魔", "scale": 0.15, 
-         "win_desc": "调和七情，心境更加平衡", 
-         "lose_desc": "七情六欲，纷扰不休"},
-        {"name": "六欲心魔", "scale": 0.2, 
-         "win_desc": "超脱欲望，心境更加纯净", 
-         "lose_desc": "欲望缠身，难以解脱"},
-        {"name": "天魔幻象", "scale": 0.25, 
-         "win_desc": "识破幻象，道心更加稳固", 
-         "lose_desc": "天魔入体，幻象丛生"},
-        {"name": "心魔劫主", "scale": 0.3, 
-         "win_desc": "战胜心魔之主，道心大进", 
-         "lose_desc": "心魔之主，万劫之源"}
-    ]
+    # 检查是否有天命丹
+    back = sql_message.get_back_msg(user_id)
+    has_destiny_pill = False
+    for item in back:
+        if item['goods_id'] == 1996:  # 天命丹ID
+            has_destiny_pill = True
+            break
     
-    # 随机选择心魔类型
-    devil_data = random.choice(heart_devil_types)
-    devil_name = devil_data["name"]
-    scale = devil_data["scale"]
+    # 随机决定渡劫类型 (1:直接成功, 2:直接失败, 3:战斗判断)
+    tribulation_type = random.choices([1, 2, 3], weights=[0.2, 0.2, 0.6])[0]
     
-    # 准备玩家数据
-    player = sql_message.get_player_data(user_id)
-    
-    # 生成心魔属性
-    devil_info = {
-        "气血": int(player['气血'] * 100),
-        "总血量": int(player['气血'] * scale),
-        "真元": int(player['真元'] * scale),
-        "攻击": int(player['攻击'] * scale),
-        "name": devil_name,
-        "jj": "感气境",
-        "desc": devil_data["lose_desc"]  # 默认显示负面描述
-    }
-    
-    # 执行战斗
-    result, victor, _, _ = await Boss_fight(player, devil_info, type_in=1, bot_id=bot.self_id)
-    
-    if victor == "群友赢了":  # 战斗胜利
+    if tribulation_type == 1:  # 直接成功
         new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)
         tribulation_data['current_rate'] = new_rate
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)
         
         msg = (
-            f"⚔️战胜{devil_name}，道心升华⚔️\n"
-            f"{devil_data['win_desc']}\n"
-            f"经过艰苦战斗，道友战胜了{devil_name}！\n"
+            f"✨天赐良机，直接渡劫成功✨\n"
+            f"道友福缘深厚，直接渡过了心魔劫！\n"
             f"渡劫成功率提升至{new_rate}%！"
         )
-    else:  # 战斗失败
-        new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
-        tribulation_data['current_rate'] = new_rate
-        tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-        save_user_tribulation_info(user_id, tribulation_data)
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
         
-        msg = (
-            f"💀败于{devil_name}，道心受损💀\n"
-            f"{devil_data['lose_desc']}\n"
-            f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
-        )
-    
-    await send_msg_handler(bot, event, result)
-    await handle_send(bot, event, msg)
-    await heart_devil_tribulation.finish()
+    elif tribulation_type == 2:  # 直接失败
+        if has_destiny_pill:  # 使用天命丹避免概率降低
+            sql_message.update_back_j(user_id, 1996, use_key=1)
+            msg = (
+                f"💀直接渡劫失败💀\n"
+                f"心魔突然爆发，道心受损！\n"
+                f"幸得天命丹护体，下次渡劫成功率保持：{tribulation_data['current_rate']}%"
+            )
+        else:
+            new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
+            tribulation_data['current_rate'] = new_rate
+            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            save_user_tribulation_info(user_id, tribulation_data)
+            
+            msg = (
+                f"💀直接渡劫失败💀\n"
+                f"心魔突然爆发，道心受损！\n"
+                f"下次渡劫成功率降低至{new_rate}%！"
+            )
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
+        
+    else:  # 战斗判断
+        # 心魔类型和属性
+        heart_devil_types = [
+            {"name": "贪欲心魔", "scale": 0.01, 
+             "win_desc": "战胜贪念，道心更加坚定", 
+             "lose_desc": "贪念缠身，欲壑难填"},
+            {"name": "嗔怒心魔", "scale": 0.02, 
+             "win_desc": "化解怒火，心境更加平和", 
+             "lose_desc": "怒火中烧，理智全失"},
+            {"name": "痴妄心魔", "scale": 0.03, 
+             "win_desc": "破除执念，心境更加通透", 
+             "lose_desc": "执念深重，难以自拔"},
+            {"name": "傲慢心魔", "scale": 0.04, 
+             "win_desc": "克服傲慢，更加谦逊有礼", 
+             "lose_desc": "目中无人，狂妄自大"},
+            {"name": "嫉妒心魔", "scale": 0.05, 
+             "win_desc": "消除妒火，心境更加宽广", 
+             "lose_desc": "妒火中烧，心怀怨恨"},
+            {"name": "恐惧心魔", "scale": 0.08, 
+             "win_desc": "战胜恐惧，勇气倍增", 
+             "lose_desc": "畏首畏尾，胆小如鼠"},
+            {"name": "懒惰心魔", "scale": 0.1, 
+             "win_desc": "克服懒惰，更加勤奋", 
+             "lose_desc": "懈怠懒散，不思进取"},
+            {"name": "七情心魔", "scale": 0.15, 
+             "win_desc": "调和七情，心境更加平衡", 
+             "lose_desc": "七情六欲，纷扰不休"},
+            {"name": "六欲心魔", "scale": 0.2, 
+             "win_desc": "超脱欲望，心境更加纯净", 
+             "lose_desc": "欲望缠身，难以解脱"},
+            {"name": "天魔幻象", "scale": 0.25, 
+             "win_desc": "识破幻象，道心更加稳固", 
+             "lose_desc": "天魔入体，幻象丛生"},
+            {"name": "心魔劫主", "scale": 0.3, 
+             "win_desc": "战胜心魔之主，道心大进", 
+             "lose_desc": "心魔之主，万劫之源"}
+        ]
+        
+        # 随机选择心魔类型
+        devil_data = random.choice(heart_devil_types)
+        devil_name = devil_data["name"]
+        scale = devil_data["scale"]
+        
+        # 准备玩家数据
+        player = sql_message.get_player_data(user_id)
+        
+        # 生成心魔属性
+        devil_info = {
+            "气血": int(player['气血'] * 100),
+            "总血量": int(player['气血'] * scale),
+            "真元": int(player['真元'] * scale),
+            "攻击": int(player['攻击'] * scale),
+            "name": devil_name,
+            "jj": "感气境",
+            "desc": devil_data["lose_desc"]  # 默认显示负面描述
+        }
+        
+        # 执行战斗
+        result, victor, _, _ = await Boss_fight(player, devil_info, type_in=1, bot_id=bot.self_id)
+        
+        if victor == "群友赢了":  # 战斗胜利
+            new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)
+            tribulation_data['current_rate'] = new_rate
+            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            save_user_tribulation_info(user_id, tribulation_data)
+            
+            msg = (
+                f"⚔️战胜{devil_name}，道心升华⚔️\n"
+                f"{devil_data['win_desc']}\n"
+                f"经过艰苦战斗，道友战胜了{devil_name}！\n"
+                f"渡劫成功率提升至{new_rate}%！"
+            )
+        else:  # 战斗失败
+            if has_destiny_pill:  # 使用天命丹避免概率降低
+                sql_message.update_back_j(user_id, 1996, use_key=1)
+                msg = (
+                    f"💀败于{devil_name}，道心受损💀\n"
+                    f"{devil_data['lose_desc']}\n"
+                    f"幸得天命丹护体，下次渡劫成功率保持：{tribulation_data['current_rate']}%"
+                )
+            else:
+                new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
+                tribulation_data['current_rate'] = new_rate
+                tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+                save_user_tribulation_info(user_id, tribulation_data)
+                
+                msg = (
+                    f"💀败于{devil_name}，道心受损💀\n"
+                    f"{devil_data['lose_desc']}\n"
+                    f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
+                )
+        
+        await send_msg_handler(bot, event, result)
+        await handle_send(bot, event, msg)
+        await heart_devil_tribulation.finish()
 
 @level_up.handle(parameterless=[Cooldown(stamina_cost=1, at_sender=False)])
 async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -3041,7 +3119,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
             # 设置基础权重（确保所有物品都有机会被选中）
             weight = 1
             
-            # 根据物品类型调整权重（灵石物品权重更高）
+            # 根据物品类型调整权重（非灵石物品权重更高）
             if item["name"] != "灵石":
                 weight *= 2
             
@@ -3069,22 +3147,26 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     # 计算剩余领取人数
     remaining_receivers = total_receivers - selected_gift["received"]
     
-    # 如果是最后一个领取者，分配所有剩余数量
+    # 计算分配数量
     if current_receiver_num == total_receivers:
         amount = remaining
     else:
-        # 计算基础分配数量（剩余数量除以剩余领取人数）
+        # 确保至少分配1个
         base_amount = max(1, remaining // remaining_receivers)
         
-        # 添加随机浮动（±20%的浮动范围）
-        min_amount = max(1, int(base_amount * 0.8))
-        max_amount = min(remaining, int(base_amount * 1.2))
+        # 计算浮动范围（确保min_amount <= max_amount）
+        min_amount = max(1, min(base_amount, remaining - (remaining_receivers - 1)))
+        max_amount = min(remaining, max(base_amount, min_amount))
         
-        # 确保浮动后的数量不超过剩余数量
-        max_amount = min(max_amount, remaining - (remaining_receivers - 1))
+        # 确保min_amount <= max_amount
+        if min_amount > max_amount:
+            min_amount, max_amount = max_amount, min_amount
         
         # 随机生成实际分配数量
-        amount = random.randint(min_amount, max_amount)
+        if min_amount == max_amount:
+            amount = min_amount
+        else:
+            amount = random.randint(min_amount, max_amount)
     
     # 发放奖励
     if selected_item["name"] == "灵石":
@@ -3116,7 +3198,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         msg = f"恭喜【{user_info['user_name']}】获得大机缘：\n"
         msg += f"{selected_item['name']} x{amount}\n"
         msg += f"来自：{selected_gift['giver_name']}的仙缘 #{selected_gift['id']}\n"
-        msg += "💫💫 最后一个有缘人，获得仙缘全部馈赠！"
+        msg += "💫 最后一个有缘人，获得仙缘全部馈赠！"
     else:
         msg = f"恭喜【{user_info['user_name']}】抢到仙缘：\n"
         msg += f"{selected_item['name']} x{amount}\n"
