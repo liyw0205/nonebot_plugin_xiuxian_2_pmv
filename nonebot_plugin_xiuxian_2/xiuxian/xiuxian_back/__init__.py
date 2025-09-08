@@ -5268,10 +5268,11 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     goods_info = items.get_data_by_item_id(goods_id)
     user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank("江湖好手")[1]
-    if goods_info['rank'] == -5:
+    goods_rank = goods_info.get('rank', 1)
+    if goods_rank == -5:
         goods_rank = 23
     else:
-        goods_rank = int(goods_info['rank']) + 19
+        goods_rank = int(goods_rank) + 19
     if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
         goods_rank = goods_rank + 3
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
