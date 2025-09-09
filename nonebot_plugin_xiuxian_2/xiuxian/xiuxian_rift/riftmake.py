@@ -315,7 +315,7 @@ def get_treasure_info(user_info, rift_rank):
             sql_message.send_back(user_info['user_id'], sec_buff_id, sec_buff['name'], sec_buff['type'], 1, 0)
             # 背包sql
         else:
-            msg = '道友在秘境中获得一本书籍，翻开一看居然是金瓶梅...'
+            msg = '道友在秘境中获得一本书籍，翻开一看居然是戏书...'
 
     elif rift_type == "辅修功法":
         give_sub_info = get_sub_info(user_info['level'], rift_rank)
