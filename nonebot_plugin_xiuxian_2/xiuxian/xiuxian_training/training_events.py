@@ -480,29 +480,8 @@ class TrainingEvents:
                     "item_name": item["goods_name"],
                     "lost": True
                 }
-            
-            # 其次匹配品阶
-            user_rank = convert_rank(user_info["level"])[0]
-            min_rank = max(user_rank - 22 - reward_data["rank_offset"], 26)
-            item_rank = min(random.randint(min_rank, min_rank + 20), 55)
-            same_rank_items = []
-            for item in back_msg:
-                item_data = items.get_data_by_item_id(item["goods_id"])
-                if item_data.get("rank") == item_rank and item["goods_num"] > 0:
-                    same_rank_items.append(item)
-            
-            if same_rank_items:
-                item = random.choice(same_rank_items)
-                sql_message.update_back_j(user_id, item["goods_id"], 1)
-                return {
-                    "message": desc_template.format(item["goods_name"]),
-                    "type": "item",
-                    "item_id": item["goods_id"],
-                    "item_name": item["goods_name"],
-                    "lost": True
-                }
-            
-            # 都没有则扣灵石
+                        
+            # 没有则扣灵石
             amount = 5000000
             sql_message.update_ls(user_id, amount, 2)
             return {
