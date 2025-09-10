@@ -95,6 +95,7 @@ class XiuConfig:
         self.layout_bot_dict = {}
         # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
         # "123456":"123456",
+        self.qqq = 144795954 # 官群设置
         self.level = convert_rank('江湖好手')[1] # 境界列表，别动
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
@@ -105,7 +106,7 @@ class XiuConfig:
         self.tribulation_min_level = "祭道境圆满"  # 最低渡劫境界
         self.tribulation_base_rate = 30  # 基础渡劫概率30%
         self.tribulation_max_rate = 90  # 最大渡劫概率90%
-        self.tribulation_cd = 6 * 60 * 60  # 6小时冷却(秒)
+        self.tribulation_cd = 360  # 6小时冷却(分钟)
         self.sect_min_level = "结丹境圆满" # 创建宗门最低境界
         self.sect_create_cost = 5000000 # 创建宗门消耗
         self.sect_rename_cost = 50000000 # 宗门改名消耗
@@ -122,7 +123,7 @@ class XiuConfig:
         self.beg_lingshi_lower_limit = 2000000  # 仙途奇缘灵石下限
         self.beg_lingshi_upper_limit = 5000000  # 仙途奇缘灵石上限
         self.tou = 100000  # 偷灵石惩罚
-        self.dufang_cd = 10  # 金银阁cd/秒
+        self.banned_unseal_ids = ["779151826"]  # 鉴石禁止群
         self.tou_lower_limit = 0.01  # 偷灵石下限(百分比)
         self.tou_upper_limit = 0.50  # 偷灵石上限(百分比)
         self.auto_select_root = True  # 默认开启自动选择最佳灵根
@@ -137,6 +138,10 @@ class XiuConfig:
         self.del_boss_id = []  # 支持非管理员和超管天罚boss
         self.gen_boss_id = []  # 支持非管理员和超管生成boss
         self.merge_forward_send = 1 # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
+        self.message_optimization = True  # 是否开启信息优化
+        # 群聊消息：如果开头没有换行则添加一个换行
+        # 私聊消息：如果开头有换行则删除一个换行
+        # 所有消息：如果结尾有换行则删除一个换行
         self.img_compression_limit = 90 # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
         self.img_type = "webp" # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
         self.img_send_type = "io" # 图片发送类型，官方bot建议base64

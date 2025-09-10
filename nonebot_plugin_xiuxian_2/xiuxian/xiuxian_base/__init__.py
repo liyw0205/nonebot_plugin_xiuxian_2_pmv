@@ -49,8 +49,8 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
-qqq = 144795954
-
+qqq = XiuConfig().qqq
+tribulation_cd = XiuConfig().tribulation_cd * 60
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_fullmatch("重入仙途", priority=7, block=True)
@@ -72,6 +72,7 @@ gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, bloc
 ccll_command = on_command("传承力量", permission=SUPERUSER, priority=10, block=True)
 zaohua_xiuxian = on_command('造化力量', permission=SUPERUSER, priority=15,block=True)
 cz = on_command('创造力量', permission=SUPERUSER, priority=15,block=True)
+hmll = on_command("毁灭力量", priority=5, permission=SUPERUSER, block=True)
 rob_stone = on_command("抢灵石", aliases={"抢劫"}, priority=5, permission=GROUP, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
@@ -79,8 +80,9 @@ set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能
 auto_root = on_command("自动选择灵根", aliases={'开启自动选择灵根', '关闭自动选择灵根'}, permission=SUPERUSER, priority=5, block=True)
 user_leveluprate = on_command('我的突破概率', aliases={"突破概率", "概率"}, priority=5, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)
-xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, permission=GROUP, block=True)
+xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, block=True)
 xiuxian_uodata_data = on_fullmatch('更新记录', priority=15, permission=GROUP, block=True)
+super_help = on_command("修仙手册", aliases={"修仙管理"}, priority=15, block=True)
 level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, block=True)
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
@@ -96,120 +98,54 @@ heart_devil_tribulation = on_command("渡心魔劫", priority=6, block=True)
 fusion_destiny_tribulation_pill = on_command("融合天命渡劫丹", aliases={"合成天命渡劫丹"}, priority=5, block=True)
 fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"}, priority=5, block=True)
 
-__xiuxian_notes__ = f"""
-【修仙指令】✨
-===========
-🌟 核心功能
-→ 启程修仙:发送"我要修仙"🏃
-→ 状态查询:发送"我的修仙信息"📊
-→ 每日签到:发送"修仙签到"📅
-→ 突破境界:发送"突破"🚀
-*支持"连续突破"五次
-→ 灵石交互:送/偷/抢灵石+道号+数量💰
-===========
-🌈 角色养成
-→ 修炼方式:闭关/出关/灵石出关/灵石修炼/双修🧘
-→ 灵根重置:发送"重入仙途"（需10万灵石）💎
-→ 功法体系:发送"境界/品阶/灵根帮助"📚
-→ 轮回重修:发送"轮回重修帮助"🌀
-===========
-🏯 系统功能
-→ 交易功能:发送"交易帮助"
-→ 宗门体系:发送"宗门帮助"
-→ 灵庄系统:发送"灵庄帮助"
-→ 秘境探索:发送"秘境帮助"
-→ 炼丹指南:发送"炼丹帮助"
-→ 灵田管理:发送"灵田帮助"
-→ 传承玩法:发送"传承帮助"
-→ 广结善缘:发送"仙缘帮助"
-===========
-🎮 特色玩法
-→ 世界BOSS:发送"世界boss帮助"👾
-→ 无限爬塔:发送"通天塔帮助"🏯
-→ 明我心志:发送"幻境寻心"🌀
-→ 历练之旅:发送"历练帮助"🌀
-→ 仙缘奇遇:发送"仙途奇缘帮助"🌈
-→ 物品合成:发送"合成帮助"🔧
-→ 批量祈愿:发送"传承祈愿 1000"🙏
-===========
-⚙️ 系统设置
-→ 修改道号:发送"修仙改名+道号"✏️
-→ 悬赏任务:发送"悬赏令帮助"📜
-→ 状态查看:发送"我的状态"📝
-→ 加入官群:发送"官群"🎁
-===========
-🏆 排行榜单
-修仙/灵石/战力/宗门/轮回/虚神界/通天塔/历练排行榜
+__level_help__ = """
+【灵根体系】🌿
+===========================
+🌌 至高道果：
+   ▪ 命运道果
+   ▪ 永恒道果
+   ▪ 轮回道果
+   ▪ 异界道果
+
+⚡ 特殊灵根：
+   ▪ 机械灵根
+   ▪ 混沌灵根
+   ▪ 融合灵根
+
+✨ 普通灵根：
+   ▪ 超品灵根
+   ▪ 龙灵根
+   ▪ 天灵根
+   ▪ 异灵根
+   ▪ 真灵根
+   ▪ 伪灵根
+===========================
+注：灵根品质影响修炼速度和突破成功率
 """.strip()
 
 
+__level1_help__ = """
+【功法与法器品阶】📜⚔
+================================
+🌟 功法品阶体系：
+   ▪ 至高：无上
+   ▪ 仙阶：极品 / 上品 / 下品
+   ▪ 天阶：上品 / 下品
+   ▪ 地阶：上品 / 下品
+   ▪ 玄阶：上品 / 下品
+   ▪ 黄阶：上品 / 下品
+   ▪ 人阶：上品 / 下品
 
-__xiuxian_updata_data__ = f"""
-详情：
-#更新2023.6.14
-1.修复已知bug
-2.增强了Boss，现在的BOSS会掉落物品了
-3.增加了全新物品
-4.悬赏令刷新需要的灵石会随着等级增加
-5.减少了讨伐Boss的cd（减半）
-6.世界商店上新
-7.增加了闭关获取的经验（翻倍）
-#更新2023.6.16
-1.增加了仙器合成
-2.再次增加了闭关获取的经验（翻倍）
-3.上调了Boss的掉落率
-4.修复了悬赏令无法刷新的bug
-5.修复了突破CD为60分钟的问题
-6.略微上调Boss使用神通的概率
-7.尝试修复丹药无法使用的bug
-#更新2024.3.18
-1.修复了三个模块循环导入的问题
-2.合并read_bfff,xn_xiuxian_impart到dandle中
-#更新2024.4.05（后面的改动一次性加进来）
-1.增加了金银阁功能(调试中)
-2.坊市上架，购买可以自定义数量
-3.生成指定境界boss可以指定boss名字了
-4.替换base64为io（可选），支持转发消息类型设置，支持图片压缩率设置
-5.适配Pydantic,Pillow,更换失效的图片api
-6.替换数据库元组为字典返回，替换USERRANK为convert_rank函数
-7.群拍卖会可以依次拍卖多个物品了
-8.支持用户提交拍卖品了，拍卖时优先拍卖用户的拍卖品
-9.实现简单的体力系统
-10.重构合成系统
-""".strip()
-
-__level_help__ = f"""
-详情:
-        --灵根帮助--
-           命运道果
-永恒道果—轮回道果—异界
-  机械——混沌——融合
- 超—龙—天—异—真—伪
-""".strip()
-
-
-
-__level1_help__ = f"""
-详情:
-       --功法品阶--
-              无上
-           仙阶极品
-仙阶上品——仙阶下品
-天阶上品——天阶下品
-地阶上品——地阶下品
-玄阶上品——玄阶下品
-黄阶上品——黄阶下品
-人阶上品——人阶下品
-
-       --法器品阶--
-              无上
-           极品仙器
-上品仙器——下品仙器
-上品通天——下品通天
-上品纯阳——下品纯阳
-上品玄器——下品玄器
-上品法器——下品法器
-上品符器——下品符器
+✨ 法器品阶体系：
+   ▪ 至高：无上
+   ▪ 仙器：极品 / 上品 / 下品
+   ▪ 通天：上品 / 下品
+   ▪ 纯阳：上品 / 下品
+   ▪ 玄器：上品 / 下品
+   ▪ 法器：上品 / 下品
+   ▪ 符器：上品 / 下品
+================================
+注：品阶越高，效果越强
 """.strip()
 
 __level2_help__ = f"""
@@ -246,14 +182,6 @@ async def reset_lottery_participants():
 async def reset_stone_limits():
     stone_limit.reset_limits()
     logger.opt(colors=True).info(f"<green>每日灵石赠送额度已重置！</green>")
-    
-@xiuxian_uodata_data.handle(parameterless=[Cooldown(at_sender=False)])
-async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent):
-    """更新记录"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = __xiuxian_updata_data__
-    await handle_send(bot, event, msg)
-    await xiuxian_uodata_data.finish() 
 
 @gfqq.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def gfqq_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -454,13 +382,90 @@ def save_lottery_data(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 @help_in.handle(parameterless=[Cooldown(at_sender=False)])
-async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = __xiuxian_notes__
+    
+    # 解析页码参数
+    page_input = args.extract_plain_text().strip()
+    try:
+        page = int(page_input) if page_input else 1
+    except ValueError:
+        page = 1
+    
+    help_pages = [
+        # 第1页：核心功能
+        """【修仙指令】✨第1页/共4页
+======================
+🌟 核心功能
+→ 启程修仙:发送"我要修仙"🏃
+→ 状态查询:发送"我的修仙信息"📊
+→ 每日签到:发送"修仙签到"📅
+→ 突破境界:发送"突破"🚀
+*支持"连续突破"五次
+→ 灵石交互:送/偷/抢灵石+道号+数量💰
+→ 修改道号:发送"修仙改名+道号"✏️
+→ 加入官群:发送"官群"🎁
+→ 查看帮助:发送"修仙帮助 [页码]"📖
+======================
+发送"修仙帮助 2"查看下一页""",
+
+        # 第2页：角色养成
+        """【修仙指令】✨第2页/共4页
+======================
+🌈 角色养成
+→ 修炼方式:闭关/出关/灵石出关/灵石修炼/双修🧘
+→ 灵根重置:发送"重入仙途"（需10万灵石）💎
+→ 功法体系:发送"境界/品阶/灵根帮助"📚
+→ 轮回重修:发送"轮回重修帮助"🌀
+→ 渡劫系统:发送"渡劫"查看渡劫信息⚡
+→ 天命渡劫:使用"天命渡劫丹"必定成功✨
+→ 心魔挑战:发送"渡心魔劫"提升成功率❤️
+======================
+发送"修仙帮助 3"查看下一页""",
+
+        # 第3页：系统功能
+        """【修仙指令】✨第3页/共4页
+======================
+🏯 系统功能
+→ 交易功能:发送"交易帮助"
+→ 宗门体系:发送"宗门帮助"
+→ 灵庄系统:发送"灵庄帮助"
+→ 秘境探索:发送"秘境帮助"
+→ 炼丹指南:发送"炼丹帮助"
+→ 灵田管理:发送"灵田帮助"
+→ 传承玩法:发送"传承帮助"
+→ 仙缘系统:发送"仙缘帮助"结善缘
+======================
+发送"修仙帮助 4"查看下一页""",
+
+        # 第4页：特色玩法
+        """【修仙指令】✨第4页/共4页
+======================
+🎮 特色玩法
+→ 世界BOSS:发送"世界boss帮助"👾
+→ 无限爬塔:发送"通天塔帮助"🏯
+→ 明我心志:发送"幻境寻心"🌀
+→ 历练之旅:发送"历练帮助"🌀
+→ 仙缘奇遇:发送"仙途奇缘帮助"🌈
+→ 物品合成:发送"合成帮助"🔧
+→ 批量祈愿:发送"传承祈愿 1000"🙏
+→ 悬赏任务:发送"悬赏令帮助"📜
+======================
+🏆 排行榜单
+修仙/灵石/战力/宗门/轮回/虚神界/通天塔/历练排行榜"""
+    ]
+    
+    # 确保页码在有效范围内
+    total_pages = len(help_pages)
+    if page < 1:
+        page = 1
+    elif page > total_pages:
+        page = total_pages
+    
+    msg = help_pages[page - 1]
     await handle_send(bot, event, msg)
     await help_in.finish()
-
 
 @level_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -899,8 +904,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if tribulation_data['last_time']:
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
         cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < XiuConfig().tribulation_cd:
-            remaining = XiuConfig().tribulation_cd - cd
+        if cd < tribulation_cd:
+            remaining = tribulation_cd - cd
             hours = remaining // 3600
             minutes = (remaining % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
@@ -1012,9 +1017,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if tribulation_data['last_time']:
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
         cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < XiuConfig().tribulation_cd:
-            hours = (XiuConfig().tribulation_cd - cd) // 3600
-            minutes = ((XiuConfig().tribulation_cd - cd) % 3600) // 60
+        if cd < tribulation_cd:
+            hours = (tribulation_cd - cd) // 3600
+            minutes = ((tribulation_cd - cd) % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
             await handle_send(bot, event, msg)
             await destiny_tribulation.finish()
@@ -1126,9 +1131,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if tribulation_data['last_time']:
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
         cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < XiuConfig().tribulation_cd:
-            hours = (XiuConfig().tribulation_cd - cd) // 3600
-            minutes = ((XiuConfig().tribulation_cd - cd) % 3600) // 60
+        if cd < tribulation_cd:
+            hours = (tribulation_cd - cd) // 3600
+            minutes = ((tribulation_cd - cd) % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
             await handle_send(bot, event, msg)
             await heart_devil_tribulation.finish()
@@ -2001,6 +2006,54 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await handle_send(bot, event, msg)
         await steal_stone.finish()
 
+@super_help.handle(parameterless=[Cooldown(at_sender=False)])
+async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """修仙管理帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    help_msg = """
+【修仙管理手册】⚡⚡⚡
+======================
+🌟 管理员专用指令
+
+⚡ 资源管理：
+→ 神秘力量 [数量] - 全服发放灵石
+→ 神秘力量 [道号] [数量] - 给指定用户发灵石
+- 可以负数来扣灵石
+→ 传承力量 [数量] - 全服发放思恋结晶
+→ 传承力量 [道号] [数量] - 给指定用户发思恋结晶
+- 可以负数来扣思恋结晶
+→ 创造力量 [物品ID/名称] [数量] - 给自己发物品
+→ 创造力量 [物品ID/名称] [数量] all - 全服发物品
+→ 创造力量 [道号] [物品ID/名称] [数量] - 给指定用户发物品
+→ 毁灭力量 [物品ID/名称] [数量] - 给自己扣物品
+→ 毁灭力量 [物品ID/名称] [数量] all - 全服扣物品
+→ 毁灭力量 [道号] [物品ID/名称] [数量] - 给指定用户扣物品
+
+⚡ 境界管理：
+→ 造化力量 [道号] [境界] - 修改用户境界
+→ 轮回力量 [道号] [1-9] - 修改用户灵根
+   (1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运)
+
+⚡ 系统管理：
+→ 重置状态 - 重置所有用户状态
+→ 重置状态 [道号] - 重置指定用户状态
+→ 启用修仙功能 - 开启修仙功能（默认全部开启）
+→ 禁用修仙功能 - 关闭修仙功能
+→ 启用私聊功能 - 开启私聊修仙
+→ 禁用私聊功能 - 关闭私聊修仙
+→ 启用自动选择灵根 - 开启自动灵根
+→ 禁用自动选择灵根 - 关闭自动灵根
+
+⚡ 仙缘管理：
+→ 清空仙缘 - 清除所有未领取仙缘
+
+======================
+注：[]表示必填参数，()表示可选参数
+    """
+
+    await handle_send(bot, event, help_msg)
+    await super_help.finish()
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(at_sender=False)])
@@ -2168,95 +2221,194 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent, args: Message = Co
         await handle_send(bot, event, msg)
         await zaohua_xiuxian.finish()
         
-        
 @cz.handle(parameterless=[Cooldown(at_sender=False)])
 async def cz_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """创造力量"""
+    """创造力量 - 给玩家或全服发放物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if len(arg_list) < 2:
-        msg = f"请输入正确指令！例如：创造力量 物品 数量\n创造力量 道号 物品 数量"
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 2:
+        msg = f"请输入正确指令！例如：创造力量 物品名 数量 [玩家名]\n创造力量 物品名 数量 all (全服发放)"
         await handle_send(bot, event, msg)
         await cz.finish()
-        
-    if len(arg_list) < 3:
-        
-        goods_num = arg_list[1]
-        if goods_num.isdigit():
-            goods_num = int(arg_list[1])
-            goods_name = arg_list[0]
-            nick_name = None
-        else:
-            goods_num = 1
-            goods_name = arg_list[1]
-            nick_name = arg_list[0]
-    else:
-        goods_num = int(arg_list[2])
-        goods_name = arg_list[1]
-        nick_name = arg_list[0]
-    goods_id = None
-    goods_type = None
-
-    if goods_name.isdigit():  # 如果是纯数字，视为ID
-        goods_id = int(goods_name)
-        item_info = items.get_data_by_item_id(goods_id)
-        if not item_info:
-            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-    else:  # 视为物品名称
-        for k, v in items.items.items():
-            if goods_name == v['name']:
-                goods_id = k
-                goods_type = v['type']
-                break
-        if goods_id is None:
-            msg = f"物品 {goods_name} 不存在，请检查名称是否正确！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-            
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
-        if give_message:
-            give_qq = give_message['user_id']
-        else:
-            give_qq = "000000"
-    if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
-        if give_user:
-            sql_message.send_back(give_qq, goods_id, goods_name, goods_type, goods_num, 1)
-            msg = f"{give_user['user_name']}道友获得了系统赠送的{goods_num}个{goods_name}！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
     
-    all_users = sql_message.get_all_user_id()
-    for user_id in all_users:
-        sql_message.send_back(user_id, goods_id, goods_name, goods_type, goods_num, 1)  # 给每个用户发送物品
-    msg = f"全服通告：赠送所有用户{goods_num}个{goods_name},请注意查收！"
+    goods_name = args[0]
+    try:
+        quantity = int(args[1])
+        if len(args) > 2:
+            target = args[2]
+        else:
+            target = None
+    except ValueError:
+        msg = "数量必须是整数！"
+        await handle_send(bot, event, msg)
+        await cz.finish()
+    
+    # 查找物品ID
+    goods_id = None
+    for item_id, item_info in items.items.items():
+        if goods_name == item_info['name']:
+            goods_id = item_id
+            break
+    
+    if not goods_id:
+        msg = f"物品 {goods_name} 不存在！"
+        await handle_send(bot, event, msg)
+        await cz.finish()
+    
+    # 获取物品类型
+    item_info = items.get_data_by_item_id(goods_id)
+    goods_type = item_info['type']
+    
+    # 处理发放目标
+    if target and target.lower() == 'all':
+        # 全服发放
+        all_users = sql_message.get_all_user_id()
+        success_count = 0
+        
+        for user_id in all_users:
+            try:
+                sql_message.send_back(user_id, goods_id, goods_name, goods_type, quantity, 1)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"给用户 {user_id} 发放物品失败: {e}")
+        
+        msg = f"全服发放成功！共向 {success_count} 名玩家发放了 {goods_name} x{quantity}"
+        
+    elif target:
+        # 指定玩家发放
+        user_info = sql_message.get_user_info_with_name(target)
+        if not user_info:
+            msg = f"玩家 {target} 不存在！"
+            await handle_send(bot, event, msg)
+            await cz.finish()
+        
+        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity, 1)
+        msg = f"成功向 {target} 发放 {goods_name} x{quantity}"
+    
+    else:
+        # 默认给发送者
+        is_user, user_info, _ = check_user(event)
+        if not is_user:
+            msg = "您尚未加入修仙界！"
+            await handle_send(bot, event, msg)
+            await cz.finish()
+        
+        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity, 1)
+        msg = f"成功向您发放 {goods_name} x{quantity}"
+    
     await handle_send(bot, event, msg)
-    enabled_groups = JsonConfig().get_enabled_groups()
-    for group_id in enabled_groups:
-        bot = get_bot()
-        if int(group_id) == event.group_id:
-                continue
-        try:
-            if XiuConfig().img:
-                pic = await get_msg_pic(msg)
-                await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-            else:
-                await bot.send_group_msg(group_id=int(group_id), message=msg)
-        except ActionFailed:  # 发送群消息失败
-            continue
     await cz.finish()
 
+@hmll.handle(parameterless=[Cooldown(at_sender=False)])
+async def hmll_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """毁灭力量 - 扣除玩家或全服的物品"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    args = args.extract_plain_text().split()
+    
+    if len(args) < 2:
+        msg = f"请输入正确指令！例如：毁灭力量 物品名 数量 [玩家名]\n毁灭力量 物品名 数量 all (全服扣除)"
+        await handle_send(bot, event, msg)
+        await hmll.finish()
+    
+    goods_name = args[0]
+    try:
+        quantity = int(args[1])
+        if len(args) > 2:
+            target = args[2]
+        else:
+            target = None
+    except ValueError:
+        msg = "数量必须是整数！"
+        await handle_send(bot, event, msg)
+        await hmll.finish()
+    
+    # 查找物品ID
+    goods_id = None
+    for item_id, item_info in items.items.items():
+        if goods_name == item_info['name']:
+            goods_id = item_id
+            break
+    
+    if not goods_id:
+        msg = f"物品 {goods_name} 不存在！"
+        await handle_send(bot, event, msg)
+        await hmll.finish()
+    
+    # 处理扣除目标
+    if target and target.lower() == 'all':
+        # 全服扣除
+        all_users = sql_message.get_all_user_id()
+        success_count = 0
+        
+        for user_id in all_users:
+            try:
+                # 检查玩家是否有该物品
+                back_msg = sql_message.get_back_msg(user_id)
+                has_item = False
+                for item in back_msg:
+                    if item['goods_name'] == goods_name:
+                        has_item = True
+                        break
+                
+                if has_item:
+                    sql_message.update_back_j(user_id, goods_id, num=quantity)
+                    success_count += 1
+            except Exception as e:
+                logger.error(f"扣除用户 {user_id} 物品失败: {e}")
+        
+        msg = f"全服扣除成功！共从 {success_count} 名玩家扣除了 {goods_name} x{quantity}"
+    
+    elif target:
+        # 指定玩家扣除
+        user_info = sql_message.get_user_info_with_name(target)
+        if not user_info:
+            msg = f"玩家 {target} 不存在！"
+            await handle_send(bot, event, msg)
+            await hmll.finish()
+        
+        # 检查玩家是否有该物品
+        back_msg = sql_message.get_back_msg(user_info['user_id'])
+        has_item = False
+        for item in back_msg:
+            if item['goods_name'] == goods_name:
+                has_item = True
+                break
+        
+        if not has_item:
+            msg = f"玩家 {target} 没有 {goods_name}！"
+            await handle_send(bot, event, msg)
+            await hmll.finish()
+        
+        sql_message.update_back_j(user_info['user_id'], goods_id, num=quantity)
+        msg = f"成功从 {target} 扣除 {goods_name} x{quantity}"
+    
+    else:
+        # 默认扣除发送者
+        is_user, user_info, _ = check_user(event)
+        if not is_user:
+            msg = "您尚未加入修仙界！"
+            await handle_send(bot, event, msg)
+            await hmll.finish()
+        
+        # 检查是否有该物品
+        back_msg = sql_message.get_back_msg(user_info['user_id'])
+        has_item = False
+        for item in back_msg:
+            if item['goods_name'] == goods_name:
+                has_item = True
+                break
+        
+        if not has_item:
+            msg = f"您没有 {goods_name}！"
+            await handle_send(bot, event, msg)
+            await hmll.finish()
+        
+        sql_message.update_back_j(user_info['user_id'], goods_id, num=quantity)
+        msg = f"成功从您这里扣除 {goods_name} x{quantity}"
+    
+    await handle_send(bot, event, msg)
+    await hmll.finish()
 
 #GM改灵根
 @gmm_command.handle(parameterless=[Cooldown(at_sender=False)])
@@ -2601,35 +2753,42 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
 @xiuxian_updata_level.handle(parameterless=[Cooldown(at_sender=False)])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
-    """将修仙1的境界适配到修仙2"""
+    """将修仙2的境界适配到修仙2魔改"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await xiuxian_updata_level.finish()
-    level_dict={
-        "搬血境":"感气境",
-        "洞天境":"练气境",
-        "化灵境":"筑基境",
-        "铭纹境":"结丹境",
-        "列阵境":"金丹境",
-        "尊者境":"元神境",
-        "神火境":"化神境",
-        "真一境":"炼神境",
-        "圣祭境":"返虚境",
-        "天神境":"大乘境",
+    
+    level_dict = {
+        "搬血境": "感气境",
+        "洞天境": "练气境",
+        "化灵境": "筑基境",
+        "铭纹境": "结丹境",
+        "列阵境": "金丹境",
+        "尊者境": "元神境",
+        "神火境": "化神境",
+        "真一境": "炼神境",
+        "圣祭境": "返虚境",
+        "天神境": "大乘境",
+        "真仙境": "微光境",
+        "仙王境": "星芒境",
+        "准帝境": "月华境",
+        "仙帝境": "耀日境"
     }
-    level = user_info['level']
+    
     user_id = user_info['user_id']
-    if level == "至高":
-        level = "至高"
+    old_level = user_info['level']
+    base_level = old_level[:-2]
+    stage = old_level[-2:]
+        
+    if base_level in level_dict:
+        new_level = level_dict[base_level] + stage
     else:
-        try:
-            level = level_dict.get(level[:3]) + level[-2:]
-        except:
-            level = level
-    sql_message.updata_level(user_id=user_id,level_name=level)
-    msg = '境界适配成功成功！'
+        new_level = old_level
+    
+    sql_message.updata_level(user_id=user_id, level_name=new_level)
+    msg = f'境界适配成功！从【{old_level}】适配为【{new_level}】'
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
 
@@ -3377,7 +3536,7 @@ xiangyuan_help = on_command("仙缘帮助", priority=15, block=True)
 
 __xiangyuan_notes__ = f"""
 【仙缘系统】✨
-===========
+======================
 🌟 核心功能
 → 赠送仙缘:发送"送仙缘 物品1x数量,物品2x数量 [人数]"
 → 领取仙缘:发送"抢仙缘"

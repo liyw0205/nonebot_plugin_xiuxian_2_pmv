@@ -579,6 +579,10 @@ async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     img_list = impart_data_json.data_all_keys()
     img_name = str(args.extract_plain_text().strip())
+    if not img_name:
+        msg = "请输入正确格式：传承卡图 卡图名"
+        await handle_send(bot, event, msg)
+        await impart_img.finish()
     if img_name in img_list:
         img = get_image_representation(img_name)
         await handle_pic_send(bot, event, img)

@@ -605,6 +605,29 @@ async def handle_pagination(
     
     return final_msg
 
+def optimize_message(msg: str, is_group: bool) -> str:
+    """
+    优化消息格式
+    :param msg: 原始消息
+    :param is_group: 是否为群聊消息
+    :return: 优化后的消息
+    """
+    if not msg:
+        return msg
+    
+    # 处理开头换行
+    if is_group:
+        if not msg.startswith('\n'):
+            msg = '\n' + msg
+    else:
+        if msg.startswith('\n'):
+            msg = msg[1:]
+    
+    # 处理结尾换行
+    if msg.endswith('\n'):
+        msg = msg[:-1]
+    
+    return msg
 
 async def send_msg_handler(bot, event, *args):
     """
@@ -617,15 +640,19 @@ async def send_msg_handler(bot, event, *args):
     :param messages: 合并转发的消息列表（字典格式）
     :param msg_type: 关键字参数，可用于传递特定命名参数
     """
-
+    is_group = isinstance(event, GroupMessageEvent)
+    
     if XiuConfig().merge_forward_send == 1:
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
+            # 在合并后应用信息优化
+            if XiuConfig().message_optimization:
+                msg = optimize_message(msg, is_group)
             messages = [
                 {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
             ]
-            if isinstance(event, GroupMessageEvent):
+            if is_group:
                 await bot.call_api(
                     "send_group_forward_msg", group_id=event.group_id, messages=messages
                 )
@@ -636,13 +663,16 @@ async def send_msg_handler(bot, event, *args):
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
+            # 在合并后应用信息优化
+            if XiuConfig().message_optimization:
+                merged_content = optimize_message(merged_content, is_group)
             first_msg = args[0][0] if args[0] else None
             name = first_msg["data"]["name"] if first_msg else "系统"
             uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
             messages = [
                 {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
             ]
-            if isinstance(event, GroupMessageEvent):
+            if is_group:
                 await bot.call_api(
                     "send_group_forward_msg", group_id=event.group_id, messages=messages
                 )
@@ -716,12 +746,19 @@ async def send_msg_handler(bot, event, *args):
         else:
             raise ValueError("参数数量或类型不匹配")
 
-
 async def handle_send(bot, event, msg: str):
-    """处理文本，根据配置发送文本或者图片消息"""    
+    """处理文本，根据配置发送文本或者图片消息"""
+    is_group = isinstance(event, GroupMessageEvent)
+    
+    # 应用信息优化
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, is_group)
+    
     if XiuConfig().img:
-        pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg)
-        if isinstance(event, GroupMessageEvent):
+        # 处理昵称为空的情况
+        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname is not None else msg
+        pic = await get_msg_pic(pic_msg)
+        if is_group:
             await bot.send_group_msg(
                 group_id=event.group_id, message=MessageSegment.image(pic)
             )
@@ -730,7 +767,7 @@ async def handle_send(bot, event, msg: str):
                 user_id=event.user_id, message=MessageSegment.image(pic)
             )
     else:
-        if isinstance(event, GroupMessageEvent):
+        if is_group:
             await bot.send_group_msg(
                 group_id=event.group_id, message=msg
             )

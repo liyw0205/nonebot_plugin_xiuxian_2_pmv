@@ -16,13 +16,14 @@ from nonebot.adapters.onebot.v11 import (
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message
+from ..xiuxian_config import XiuConfig
 
 sql_message = XiuxianDateManage()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 # 共享用户数据文件路径
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
-BANNED_UNSEAL_IDS = ["779151826"]  # 禁止鉴石的群
+BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
 
 # 初始化共享数据文件
 if not SHARING_DATA_PATH.exists():
@@ -296,7 +297,6 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
         f"\n※※ {event_data['title']} ※※",
         event_data['desc'],
         f"\n共享倍率: +{int(cost_bonus*100)}%",
-        f"\n最终影响: {number_to(effect_amount)}灵石",
         f"\n受影响道友: {', '.join(affected_users)}"
     ]
     

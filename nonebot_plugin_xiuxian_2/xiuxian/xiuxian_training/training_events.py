@@ -60,7 +60,7 @@ WORLDLY_EVENTS = {
                 ("完成宗门试炼，奖励{}", None),
                 ("在拍卖行低价拍得稀世{}", None)
             ],
-            "types": ["功法", "神通", "药材"],
+            "types": ["功法", "神通", "药材", "法器", "防具"],
             "rank_offset": 5
         },
         "points": {
@@ -204,7 +204,7 @@ TRANSCENDENT_EVENTS = {
                 ("雷劫过后天降{}", None),
                 ("破解上古机关，获得{}", None)
             ],
-            "types": ["功法", "神通", "药材"],
+            "types": ["功法", "神通", "药材", "法器", "防具"],
             "rank_offset": 6
         },
         "points": {
@@ -463,23 +463,45 @@ class TrainingEvents:
             reward_data = events_pool["reward"]["item"]
             item_type = random.choice(reward_data["types"])
             
-            # 优先匹配相同物品类型
+            # 获取用户当前装备
+            user_buff_info = UserBuffDate(user_id).BuffInfo
+            equipped_items = {
+                '法器': user_buff_info['faqi_buff'],
+                '防具': user_buff_info['armor_buff']
+            }
+            
+            # 优先匹配相同物品类型且未装备的物品
             same_type_items = []
             for item in back_msg:
                 item_data = items.get_data_by_item_id(item["goods_id"])
-                if item_data.get("type") == item_type and item["goods_num"] > 0:
+                if (item_data.get("type") in item_types and 
+                    item["goods_num"] > 0 and
+                    not (item_data.get("type") == "装备" and 
+                         item["goods_id"] in [equipped_items[item_data.get("item_type")]])):
                     same_type_items.append(item)
             
             if same_type_items:
-                item = random.choice(same_type_items)
-                sql_message.update_back_j(user_id, item["goods_id"], 1)
-                return {
-                    "message": desc_template.format(item["goods_name"]),
-                    "type": "item",
-                    "item_id": item["goods_id"],
-                    "item_name": item["goods_name"],
-                    "lost": True
-                }
+                # 进一步筛选符合rank要求的物品
+                user_rank = convert_rank(user_info["level"])[0]
+                min_rank = max(user_rank - 22 - reward_data["rank_offset"], 26)
+                
+                valid_items = []
+                for item in same_type_items:
+                    item_data = items.get_data_by_item_id(item["goods_id"])
+                    item_rank = get_item_msg_rank(item["goods_id"])
+                    if item_rank >= min_rank:
+                        valid_items.append(item)
+                
+                if valid_items:
+                    item = random.choice(valid_items)
+                    sql_message.update_back_j(user_id, item["goods_id"], 1)
+                    return {
+                        "message": desc_template.format(item["goods_name"]),
+                        "type": "item",
+                        "item_id": item["goods_id"],
+                        "item_name": item["goods_name"],
+                        "lost": True
+                    }
                         
             # 没有则扣灵石
             amount = 5000000
