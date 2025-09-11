@@ -33,7 +33,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, 
     send_msg_handler, CommandObjectID,
-    Txt2Img, number_to, handle_send, handle_pagination
+    Txt2Img, number_to, handle_send
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_weapon_info_msg, get_armor_info_msg,
@@ -4381,8 +4381,8 @@ def remove_player_auction(user_id, item_name):
     return True, "下架成功！"
 
 def place_bid(user_id, user_name, auction_id, bid_price):
-    """参与竞拍（每次加价不得少于100万灵石）"""
-    MIN_INCREMENT = 1000000  # 最低加价100万
+    """参与竞拍（首次出价需≥起拍价，后续加价需≥当前价10%或100万灵石）"""
+    ABSOLUTE_MIN_INCREMENT = 1000000  # 绝对最低加价100万
     
     current_auctions = get_current_auctions()
     if not current_auctions or "items" not in current_auctions:
@@ -4393,18 +4393,30 @@ def place_bid(user_id, user_name, auction_id, bid_price):
     
     item = current_auctions["items"][auction_id]
     
-    # 检查最低加价
-    required_min_bid = item["current_price"] + MIN_INCREMENT
-    if bid_price < required_min_bid:
-        return False, (
-            f"每次加价不得少于100万灵石！\n"
-            f"当前价: {number_to(item['current_price'])}\n"
-            f"最低出价: {number_to(required_min_bid)}"
+    # 检查是否是首次出价
+    if not item["bids"]:
+        # 首次出价必须≥起拍价
+        if bid_price < item["start_price"]:
+            return False, (
+                f"首次出价不得低于起拍价！\n"
+                f"起拍价: {number_to(item['start_price'])}\n"
+                f"你的出价: {number_to(bid_price)}"
+            )
+    else:
+        # 计算最低加价（当前价格的10%，但不低于100万）
+        min_increment = max(
+            int(item["current_price"] * 0.1),
+            ABSOLUTE_MIN_INCREMENT
         )
-    
-    # 检查是否是自己的拍卖品
-    #if str(user_id) == str(item["seller_id"]):
-    #    return False, "不能竞拍自己上架的物品！"
+        required_min_bid = item["current_price"] + min_increment
+        
+        if bid_price < required_min_bid:
+            return False, (
+                f"每次加价不得少于当前价格的10%或100万灵石！\n"
+                f"当前价: {number_to(item['current_price'])}\n"
+                f"最低出价: {number_to(required_min_bid)}\n"
+                f"你的出价: {number_to(bid_price)}"
+            )
     
     # 获取用户当前灵石
     user_info = sql_message.get_user_info_with_id(user_id)
@@ -4454,7 +4466,9 @@ def place_bid(user_id, user_name, auction_id, bid_price):
         prev_winner = sql_message.get_user_info_with_id(prev_winner_id)
         msg.append(f"已退还 {prev_winner['user_name']} 的 {number_to(prev_price)} 灵石")
     
-    msg.append(f"\n下次最低加价: {number_to(bid_price + MIN_INCREMENT)}灵石")
+    # 计算下次最低加价
+    next_min_increment = max(int(bid_price * 0.1), ABSOLUTE_MIN_INCREMENT)
+    msg.append(f"\n下次最低加价: {number_to(next_min_increment)}灵石 (当前价的10%或100万)")
     
     return True, "\n".join(msg)
 
@@ -5272,7 +5286,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     if goods_rank == -5:
         goods_rank = 23
     else:
-        goods_rank = int(goods_rank) + 19
+        goods_rank = int(goods_rank) + 21
     if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
         goods_rank = goods_rank + 3
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
@@ -5384,7 +5398,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     elif goods_type == "神物":
         user_info = sql_message.get_user_info_with_id(user_id)
         user_rank = convert_rank(user_info['level'])[0]
-        goods_rank = goods_info['rank']
+        goods_rank = goods_info['rank'] + 19
         goods_name = goods_info['name']
         if goods_rank < user_rank:
             msg = f"神物：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
@@ -5397,7 +5411,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             sql_message.update_power2(user_id)
             sql_message.update_user_attribute(user_id, user_hp, user_mp, user_atk)
             sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-            msg = f"道友成功使用神物：{goods_name} {num} 个，修为增加 {exp} 点！"
+            msg = f"道友成功使用神物：{goods_name} {num} 个，修为增加 {number_to(exp)}！"
 
     elif goods_type == "聚灵旗":
         msg = get_use_jlq_msg(user_id, goods_id)
@@ -5408,7 +5422,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     # 发送结果消息
     await handle_send(bot, event, msg)
     await use.finish()
-
 
 @chakan_wupin.handle(parameterless=[Cooldown(at_sender=False)])
 async def chakan_wupin_(
@@ -5421,7 +5434,7 @@ async def chakan_wupin_(
     args_str = args.extract_plain_text().strip()
     
     # 支持的类型列表
-    valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具", "特殊物品"]
+    valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具", "特殊物品", "神物"]
     
     # 解析类型和页码
     item_type = None
@@ -5444,7 +5457,7 @@ async def chakan_wupin_(
         elif args_str in valid_types:  # 仅类型，无页码
             item_type = args_str
         else:
-            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|特殊物品】！！！"
+            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|特殊物品|神物】！！！"
             await handle_send(bot, event, msg)
             await chakan_wupin.finish()
     
@@ -5466,9 +5479,14 @@ async def chakan_wupin_(
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":
             if item_info['type'] == "聚灵旗":
-                msg = f"ID：{item_id}\n名字：{name}\n效果：{item_info['desc']}\n修炼速度：{item_info['修炼速度'] * 100}%\n药材速度：{item_info['药材速度'] * 100}%"
+                msg = f"名字：{name}\n效果：{item_info['desc']}\n修炼速度：{item_info['修炼速度'] * 100}%\n药材速度：{item_info['药材速度'] * 100}%\n"
             else:  # 特殊道具
-                msg = f"ID：{item_id}\n名字：{name}\n效果：{item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}"
+                msg = f"名字：{name}\n效果：{item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}\n"
+        elif item_type == "神物":
+            rank = item_info.get('境界', '')
+            desc = item_info.get('desc', '')
+            buff = item_info.get('buff', '')
+            msg = f"※名字:{name}\n效果：{desc}\n境界：{rank}\n增加{number_to(buff)}修为\n"
         else:  # 丹药、合成丹药
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
@@ -5476,19 +5494,25 @@ async def chakan_wupin_(
         msg_list.append(msg)
     
     # 分页处理
-    title = f"修仙界物品列表-{item_type}"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page, 
-        title=title, 
-        empty_msg=f"修仙界暂无{item_type}类物品"
-    )
+    per_page = 15  # 每页显示15条
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
     
-    if isinstance(msgs, str):  # 空提示消息
-        await handle_send(bot, event, msgs)
-    else:  # 分页消息列表
-        await send_msg_handler(bot, event, title, bot.self_id, msgs)
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
     
+    title = f"{item_type}列表"
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"查看{item_type}{current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, title, bot.self_id, final_msg)
     await chakan_wupin.finish()
 
 @main_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
@@ -5509,51 +5533,31 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     user_id = user_info['user_id']
     msg_list = get_user_main_back_msg(user_id)
     title = f"{user_info['user_name']}的背包"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page,
-        title=title,
-        empty_msg="道友的背包空空如也！"
-    )
     
-    if isinstance(msgs, str):
-        await handle_send(bot, event, msgs)
-    else:
-        await send_msg_handler(bot, event, '背包', bot.self_id, msgs)
+    # 分页处理
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
     
+    if not msg_list:
+        await handle_send(bot, event, "道友的背包空空如也！")
+        await main_back.finish()
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+    
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"我的背包 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, '背包', bot.self_id, final_msg)
     await main_back.finish()
-
-@my_equipment.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """查看我的装备及其详细信息"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await my_equipment.finish()
-    
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except:
-        current_page = 1
-    
-    user_id = user_info['user_id']
-    msg_list = get_user_equipment_msg(user_id)
-    title = f"{user_info['user_name']}的装备"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page,
-        title=title,
-        empty_msg="道友的背包中没有装备！"
-    )
-    
-    if isinstance(msgs, str):
-        await handle_send(bot, event, msgs)
-    else:
-        await send_msg_handler(bot, event, '我的装备', bot.self_id, msgs)
-    
-    await my_equipment.finish()
 
 @yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
 async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -5573,51 +5577,31 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
     msg_list = get_user_yaocai_back_msg(user_id)
     title = f"{user_info['user_name']}的药材背包"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page,
-        title=title,
-        empty_msg="道友的药材背包空空如也！"
-    )
     
-    if isinstance(msgs, str):
-        await handle_send(bot, event, msgs)
-    else:
-        await send_msg_handler(bot, event, '药材背包', bot.self_id, msgs)
+    # 分页处理
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
     
+    if not msg_list:
+        await handle_send(bot, event, "道友的药材背包空空如也！")
+        await yaocai_back.finish()
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+    
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"药材背包 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg)
     await yaocai_back.finish()
-
-@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
-async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """药材背包详情版"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await yaocai_detail_back.finish()
-    
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except:
-        current_page = 1
-    
-    user_id = user_info['user_id']
-    msg_list = get_user_yaocai_detail_back_msg(user_id)
-    title = f"{user_info['user_name']}的药材背包详情"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page,
-        title=title,
-        empty_msg="道友的药材背包空空如也！"
-    )
-    
-    if isinstance(msgs, str):
-        await handle_send(bot, event, msgs)
-    else:
-        await send_msg_handler(bot, event, '药材背包详情', bot.self_id, msgs)
-    
-    await yaocai_detail_back.finish()
 
 @danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
 async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -5637,19 +5621,119 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
     msg_list = get_user_danyao_back_msg(user_id)
     title = f"{user_info['user_name']}的丹药背包"
-    msgs = await handle_pagination(
-        msg_list, 
-        current_page,
-        title=title,
-        empty_msg="道友的丹药背包空空如也！"
-    )
     
-    if isinstance(msgs, str):
-        await handle_send(bot, event, msgs)
-    else:
-        await send_msg_handler(bot, event, '丹药背包', bot.self_id, msgs)
+    # 分页处理
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
     
+    if not msg_list:
+        await handle_send(bot, event, "道友的丹药背包空空如也！")
+        await danyao_back.finish()
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+    
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"丹药背包 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg)
     await danyao_back.finish()
+
+@my_equipment.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看我的装备及其详细信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await my_equipment.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_equipment_msg(user_id)
+    title = f"{user_info['user_name']}的装备"
+    
+    # 分页处理
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
+    
+    if not msg_list:
+        await handle_send(bot, event, "道友的背包中没有装备！")
+        await my_equipment.finish()
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+    
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"我的装备 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg)
+    await my_equipment.finish()
+
+@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """药材背包详情版"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await yaocai_detail_back.finish()
+    
+    # 获取页码
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except:
+        current_page = 1
+    
+    user_id = user_info['user_id']
+    msg_list = get_user_yaocai_detail_back_msg(user_id)
+    title = f"{user_info['user_name']}的药材背包详情"
+    
+    # 分页处理
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
+    
+    if not msg_list:
+        await handle_send(bot, event, "道友的药材背包空空如也！")
+        await yaocai_detail_back.finish()
+    
+    # 构建消息
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+    
+    final_msg = [f"\n☆------{title}------☆"]
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+    
+    if total_pages > 1:
+        next_page_cmd = f"药材背包详情 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    
+    await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg)
+    await yaocai_detail_back.finish()
 
 def reset_dict_num(dict_):
     i = 1
@@ -5700,35 +5784,3 @@ def get_auction_price_by_id(id):
 
 def is_in_groups(event: GroupMessageEvent):
     return str(event.group_id) in groups
-
-
-def get_auction_msg(auction_id):
-    item_info = items.get_data_by_item_id(auction_id)
-    _type = item_info['type']
-    msg = None
-    if _type == "装备":
-        if item_info['item_type'] == "防具":
-            msg = get_armor_info_msg(auction_id, item_info)
-        if item_info['item_type'] == '法器':
-            msg = get_weapon_info_msg(auction_id, item_info)
-
-    if _type == "技能":
-        if item_info['item_type'] == '神通':
-            msg = f"{item_info['level']}-{item_info['name']}:\n"
-            msg += f"效果：{get_sec_msg(item_info)}"
-        if item_info['item_type'] == '功法':
-            msg = f"{item_info['level']}-{item_info['name']}\n"
-            msg += f"效果：{get_main_info_msg(auction_id)[1]}"
-        if item_info['item_type'] == '辅修功法': #辅修功法10
-            msg = f"{item_info['level']}-{item_info['name']}\n"
-            msg += f"效果：{get_sub_info_msg(auction_id)[1]}"
-            
-    if _type == "神物":
-        msg = f"{item_info['name']}\n"
-        msg += f"效果：{item_info['desc']}"
-
-    if _type == "丹药":
-        msg = f"{item_info['name']}\n"
-        msg += f"效果：{item_info['desc']}"
-
-    return msg

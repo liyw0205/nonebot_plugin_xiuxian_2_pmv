@@ -688,7 +688,7 @@ def get_item_msg(goods_id):
     if item_info['rank'] == -5:
         goods_rank = 23
     else:
-        goods_rank = int(item_info['rank']) + 19
+        goods_rank = int(item_info['rank']) + 21
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
     msg = ''
     if item_info['type'] == '丹药':

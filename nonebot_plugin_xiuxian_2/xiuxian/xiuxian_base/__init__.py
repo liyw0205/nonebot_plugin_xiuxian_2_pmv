@@ -2045,6 +2045,9 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 启用自动选择灵根 - 开启自动灵根
 → 禁用自动选择灵根 - 关闭自动灵根
 
+⚡交易管理：
+→  - 清除所有未领取仙缘
+
 ⚡ 仙缘管理：
 → 清空仙缘 - 清除所有未领取仙缘
 

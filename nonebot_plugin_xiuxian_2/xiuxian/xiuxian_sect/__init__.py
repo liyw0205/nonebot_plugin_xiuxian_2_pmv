@@ -25,7 +25,7 @@ from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig
 from .sectconfig import get_config
 from ..xiuxian_utils.utils import (
     check_user, number_to,
-    get_msg_pic, send_msg_handler, CommandObjectID, handle_send, handle_pagination,
+    get_msg_pic, send_msg_handler, CommandObjectID, handle_send,
     Txt2Img
 )
 from ..xiuxian_utils.item_json import Items
@@ -1080,7 +1080,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
         await sect_users.finish()
     
-    # 获取页码
+    # 获取页码，默认为1
     try:
         current_page = int(args.extract_plain_text().strip())
     except:
@@ -1092,26 +1092,50 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             sect_info = sql_message.get_sect_info(sect_id)
             userlist = sql_message.get_all_users_by_sect_id(sect_id)
             
+            if not userlist:
+                msg = "宗门目前没有成员！"
+                await handle_send(bot, event, msg)
+                await sect_users.finish()
+            
+            # 按职位排序：宗主(0) > 长老(1) > 亲传(2) > 内门(3) > 外门(4)
+            sorted_users = sorted(userlist, key=lambda x: x['sect_position'])
+            
             # 构建成员信息列表
             msg_list = []
-            for idx, user in enumerate(userlist, 1):
+            for idx, user in enumerate(sorted_users, 1):
                 msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
                 msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
                 msg += f"宗门贡献度:{user['sect_contribution']}"
                 msg_list.append(msg)
             
-            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
-            msgs = await handle_pagination(
-                msg_list, 
-                current_page,
-                title=title,
-                empty_msg="宗门目前没有成员！"
-            )
+            # 每15条消息为一页
+            page_size = 15
+            total_pages = (len(msg_list) + page_size - 1) // page_size
+            current_page = max(1, min(current_page, total_pages))
             
-            if isinstance(msgs, str):
-                await handle_send(bot, event, msgs)
-            else:
-                await send_msg_handler(bot, event, '宗门成员', bot.self_id, msgs)
+            # 获取当前页的消息
+            start_idx = (current_page - 1) * page_size
+            end_idx = start_idx + page_size
+            current_msgs = msg_list[start_idx:end_idx]
+            
+            # 添加页眉页脚
+            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
+            header = f"{title}（第{current_page}/{total_pages}页）"
+            footer = f"发送'宗门成员查看 页码'查看其他页"
+            
+            # 发送消息
+            try:
+                await send_msg_handler(
+                    bot, 
+                    event, 
+                    '宗门成员', 
+                    bot.self_id, 
+                    [header] + current_msgs + [footer]
+                )
+            except ActionFailed:
+                # 如果转发消息失败，改为普通消息发送
+                combined_msg = "\n".join([header] + current_msgs + [footer])
+                await handle_send(bot, event, combined_msg)
         else:
             msg = "一介散修，莫要再问。"
     else:
@@ -1119,7 +1143,6 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
     
     await sect_users.finish()
-
 
 @sect_task.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
