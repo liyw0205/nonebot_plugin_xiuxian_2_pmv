@@ -68,6 +68,7 @@ level_up_lx = on_command("连续突破", aliases={"快速突破"}, priority=7, b
 give_stone = on_command("送灵石", priority=5, permission=GROUP, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, permission=GROUP, block=True)
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
+adjust_exp_command = on_command("修为调整", permission=SUPERUSER, priority=10, block=True)
 gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, block=True)
 ccll_command = on_command("传承力量", permission=SUPERUSER, priority=10, block=True)
 zaohua_xiuxian = on_command('造化力量', permission=SUPERUSER, priority=15,block=True)
@@ -80,9 +81,8 @@ set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能
 auto_root = on_command("自动选择灵根", aliases={'开启自动选择灵根', '关闭自动选择灵根'}, permission=SUPERUSER, priority=5, block=True)
 user_leveluprate = on_command('我的突破概率', aliases={"突破概率", "概率"}, priority=5, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)
-xiuxian_updata_level = on_fullmatch('修仙适配', priority=15, block=True)
-xiuxian_uodata_data = on_fullmatch('更新记录', priority=15, permission=GROUP, block=True)
-super_help = on_command("修仙手册", aliases={"修仙管理"}, priority=15, block=True)
+xiuxian_updata_level = on_fullmatch('修仙适配', permission=SUPERUSER, priority=15, block=True)
+super_help = on_command("修仙手册", aliases={"修仙管理"}, permission=SUPERUSER, priority=15, block=True)
 level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, block=True)
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
@@ -805,7 +805,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     if roll <= success_rate:  # 成功
         # 扣除渡厄丹
-        sql_message.update_back_j(user_id, 1999, use_key=num)
+        sql_message.update_back_j(user_id, 1999, num)
         
         # 获得天命丹
         destiny_count = 1  # 成功固定获得1个
@@ -867,7 +867,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     if roll <= success_rate:  # 成功
         # 扣除天命丹
-        sql_message.update_back_j(user_id, 1996, use_key=num)
+        sql_message.update_back_j(user_id, 1996, num)
         
         # 获得天命渡劫丹
         destiny_count = 1  # 成功固定获得1个
@@ -2034,10 +2034,40 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 造化力量 [道号] [境界] - 修改用户境界
 → 轮回力量 [道号] [1-9] - 修改用户灵根
    (1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运)
+→ 修为调整 [修为数] - 全服发修为
+→ 修为调整 [道号] [修为数] - 给指定用户发修为
+- 可以负数来扣修为
+
+⚡ 世界BOSS管理：
+→ 世界BOSS生成 [数量] - 生成随机境界BOSS
+→ 世界BOSS指定生成 [境界] [名称] - 生成指定BOSS
+→ 世界BOSS全部生成 - 一键生成所有境界BOSS
+→ 天罚世界BOSS [编号] - 删除指定BOSS
+→ 天罚全部世界BOSS - 清空所有BOSS
+→ 世界BOSS设置 开启/关闭 - 管理群通知
+
+⚡ 补偿系统管理：
+→ 新增补偿 [ID] [时间] [物品] [原因] - 创建新补偿
+→ 删除补偿 [ID] - 删除指定补偿
+→ 补偿列表 - 查看所有补偿
+→ 清空补偿 - 清空所有补偿数据
+
+⚡ 礼包系统管理：
+→ 新增礼包 [ID] [时间] [物品] [原因] - 创建新礼包
+→ 删除礼包 [ID] - 删除指定礼包
+→ 礼包列表 - 查看所有礼包
+→ 清空礼包 - 清空所有礼包数据
+
+⚡ 兑换码系统管理：
+→ 新增兑换码 [兑换码] [时间] [物品] [使用次数] - 创建新兑换码
+→ 删除兑换码 [兑换码] - 删除指定兑换码
+→ 兑换码列表 - 查看所有兑换码
+→ 清空兑换码 - 清空所有兑换码数据
 
 ⚡ 系统管理：
 → 重置状态 - 重置所有用户状态
 → 重置状态 [道号] - 重置指定用户状态
+→ 修仙适配 - 适配修仙2的境界到修仙2魔改版
 → 启用修仙功能 - 开启修仙功能（默认全部开启）
 → 禁用修仙功能 - 关闭修仙功能
 → 启用私聊功能 - 开启私聊修仙
@@ -2045,8 +2075,19 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 启用自动选择灵根 - 开启自动灵根
 → 禁用自动选择灵根 - 关闭自动灵根
 
-⚡交易管理：
-→  - 清除所有未领取仙缘
+⚡ 交易管理：
+→ 系统仙肆上架 物品名称 [价格] [数量] - 不带数量为无限
+→ 系统仙肆下架 [物品ID/名称] [数量] - 不带数量为1个
+→ 系统坊市上架 物品名称 [价格] [数量] - 不带数量为无限
+→ 系统坊市下架 [物品ID/名称] [数量] - 不带数量为1个
+→ 系统仙肆上架 物品名称 [价格] [数量] - 不带数量为无限
+→ 清空仙肆 - 清空所有道友的物品并退回
+→ 清空坊市 - 清空所有道友的物品并退回
+→ 清空鬼市 - 清空所有道友的摆摊和求购
+→ 开启拍卖 - 开启拍卖
+→ 结束拍卖 - 结束拍卖
+→ 封闭拍卖 - 禁止自动开启拍卖
+→ 解封拍卖 - 取消禁止
 
 ⚡ 仙缘管理：
 → 清空仙缘 - 清除所有未领取仙缘
@@ -2057,6 +2098,66 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(bot, event, help_msg)
     await super_help.finish()
+
+@adjust_exp_command.handle(parameterless=[Cooldown(at_sender=False)])
+async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """修为调整 - 增加或减少玩家修为"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    give_qq = None  # 艾特的时候存到这里
+    arg_list = args.extract_plain_text().split()
+    
+    if not args or len(arg_list) < 2:
+        msg = f"请输入正确指令！例如：修为调整 道号 修为"
+        await handle_send(bot, event, msg)
+        await adjust_exp_command.finish()
+        
+    if len(arg_list) < 2:
+        exp_num = str(arg_list[0])  # 修为数量
+        nick_name = None
+    else:
+        exp_num = arg_list[1]  # 修为数量
+        nick_name = arg_list[0]  # 道号
+
+    # 解析修为数量（支持正负数）
+    try:
+        give_exp_num = int(exp_num)
+    except ValueError:
+        msg = f"请输入有效的修为数量！"
+        await handle_send(bot, event, msg)
+        await adjust_exp_command.finish()
+
+    # 遍历Message对象，寻找艾特信息
+    for arg in args:
+        if arg.type == "at":
+            give_qq = arg.data["qq"]
+    
+    if nick_name:
+        give_message = sql_message.get_user_info_with_name(nick_name)
+        if give_message:
+            give_qq = give_message['user_id']
+        else:
+            give_qq = "000000"
+    
+    if give_qq:
+        give_user = sql_message.get_user_info_with_id(give_qq)
+        if give_user:
+            current_exp = give_user['exp']
+            
+            # 更新用户修为
+            if give_exp_num > 0:
+                sql_message.update_exp(give_qq, give_exp_num)
+                msg = f"共增加{number_to(give_exp_num)}修为给{give_user['user_name']}道友！"
+            else:
+                sql_message.update_j_exp(give_qq, abs(give_exp_num))
+                msg = f"共减少{number_to(abs(give_exp_num))}修为给{give_user['user_name']}道友！"
+            
+            await handle_send(bot, event, msg)
+            await adjust_exp_command.finish()
+        else:
+            msg = f"对方未踏入修仙界，不可操作！"
+            await handle_send(bot, event, msg)
+            await adjust_exp_command.finish()    
+    await adjust_exp_command.finish()
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(at_sender=False)])
@@ -2756,12 +2857,8 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
 @xiuxian_updata_level.handle(parameterless=[Cooldown(at_sender=False)])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
-    """将修仙2的境界适配到修仙2魔改"""
+    """将修仙2的境界适配到修仙2魔改（管理员专用）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await xiuxian_updata_level.finish()
     
     level_dict = {
         "搬血境": "感气境",
@@ -2780,18 +2877,51 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent):
         "仙帝境": "耀日境"
     }
     
-    user_id = user_info['user_id']
-    old_level = user_info['level']
-    base_level = old_level[:-2]
-    stage = old_level[-2:]
-        
-    if base_level in level_dict:
-        new_level = level_dict[base_level] + stage
-    else:
-        new_level = old_level
+    # 获取所有用户
+    all_users = sql_message.get_all_user_id()
+    adapted_count = 0
+    success_count = 0
+    failed_count = 0
     
-    sql_message.updata_level(user_id=user_id, level_name=new_level)
-    msg = f'境界适配成功！从【{old_level}】适配为【{new_level}】'
+    for user in all_users:
+        user_info = sql_message.get_user_info_with_id(user)
+        user_id = user_info['user_id']
+        old_level = user_info['level']
+        try:
+            
+            if old_level.endswith(('初期', '中期', '圆满')):
+                base_level = old_level[:-2]
+                stage = old_level[-2:]
+            else:
+                base_level = old_level
+                stage = ""
+            
+            # 进行境界适配
+            if base_level in level_dict:
+                new_level = level_dict[base_level] + stage
+                sql_message.updata_level(user_id=user_id, level_name=new_level)
+                adapted_count += 1
+                
+                # 记录适配日志
+                logger.info(f"境界适配成功：用户 {user_id} 从【{old_level}】适配为【{new_level}】")
+                
+            else:
+                # 如果不在适配字典中，跳过
+                success_count += 1
+                logger.info(f"境界无需适配：用户 {user_id} 境界【{old_level}】不在适配范围内")
+                
+        except Exception as e:
+            failed_count += 1
+            logger.error(f"境界适配失败：用户 {user_id} 错误：{str(e)}")
+    
+    # 构建结果消息
+    msg = f'境界适配完成！\n成功适配：{adapted_count} 个用户\n适配失败：{failed_count} 个用户\n无需适配：{success_count} 个用户'
+    
+    if adapted_count >= 0:
+        msg += f'\n\n适配规则：\n'
+        for old, new in level_dict.items():
+            msg += f"{old} → {new}\n"
+    
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
 
