@@ -27,7 +27,8 @@ from .back_util import (
     get_use_equipment_sql, get_shop_data, save_shop,
     get_item_msg, get_item_msg_rank, check_use_elixir,
     get_use_jlq_msg, get_no_use_equipment_sql,
-    get_user_equipment_msg
+    get_user_equipment_msg,
+    check_equipment_use_msg
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
@@ -271,7 +272,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
             await handle_send(bot, event, msg)
             await check_item_effect.finish()
-    item_msg = get_item_msg(goods_id)
+    item_msg = get_item_msg(goods_id, user_info['user_id'])
     if goods_id == 15053 or input_str == "补偿":
         await check_item_effect.finish()
     # 构造返回消息
@@ -646,7 +647,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    # 检查背包是否有该物品（需要接入您的背包系统）
+    # 检查背包是否有该物品
     back_msg = sql_message.get_back_msg(user_id)
     goods_info = None
     for item in back_msg:
@@ -665,10 +666,23 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
+    # 对于装备类型，检查是否已被使用
+    if goods_info['goods_type'] == "装备":
+        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
+        if is_equipped:
+            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
+        else:
+            # 如果未装备，可上架数量 = 总数量 - 绑定数量
+            available_num = goods_info['goods_num'] - goods_info['bind_num']
+    else:
+        # 非装备物品，正常计算
+        available_num = goods_info['goods_num'] - goods_info['bind_num']
+    
     # 检查可上架数量
-    available_num = goods_info['goods_num'] - goods_info['bind_num']
     if quantity > available_num:
-        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），最多可上架{available_num}个"
+        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
+            msg = f"可上架数量不足！\n最多可上架{available_num}个"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
@@ -678,6 +692,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
+    
     # 检查禁止交易的物品
     if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
         msg = f"物品 {goods_name} 禁止在仙肆交易！"
@@ -1206,19 +1221,19 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     quantity = max(1, min(quantity, MAX_QUANTITY))
     
     if item_type not in type_mapping:
-        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
     if rank_name not in rank_map:
-        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
 
     # 获取背包物品
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼💼 道友的背包空空如也！"
+        msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
@@ -1240,7 +1255,19 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
-            available_num = item['goods_num'] - item['bind_num']
+            # 对于装备类型，检查是否已被使用
+            if item['goods_type'] == "装备":
+                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
+                if is_equipped:
+                    # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+                    available_num = item['goods_num'] - item['bind_num'] - 1
+                else:
+                    # 如果未装备，可上架数量 = 总数量 - 绑定数量
+                    available_num = item['goods_num'] - item['bind_num']
+            else:
+                # 非装备物品，正常计算
+                available_num = item['goods_num'] - item['bind_num']
+            
             if available_num > 0:
                 items_to_add.append({
                     'id': item['goods_id'],
@@ -1251,7 +1278,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 })
     
     if not items_to_add:
-        msg = f"🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await xianshi_auto_add.finish()
     
@@ -1357,7 +1384,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = [
         f"\n✨ 成功上架 {success_count} 件物品",
         *result_msg[:10],  # 最多显示10条
-        f"💎💎 总手续费: {number_to(total_fee)}灵石"
+        f"💎 总手续费: {number_to(total_fee)}灵石"
     ]
     
     if len(result_msg) > 10:
@@ -1407,12 +1434,25 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
+    # 对于装备类型，检查是否已被使用
+    if goods_info['goods_type'] == "装备":
+        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
+        if is_equipped:
+            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
+        else:
+            # 如果未装备，可上架数量 = 总数量 - 绑定数量
+            available_num = goods_info['goods_num'] - goods_info['bind_num']
+    else:
+        # 非装备物品，正常计算
+        available_num = goods_info['goods_num'] - goods_info['bind_num']
+    
     # 检查可上架数量（固定为10或背包中全部数量）
-    available_num = goods_info['goods_num'] - goods_info['bind_num']
     quantity = min(10, available_num)  # 最多10个
     
     if quantity <= 0:
-        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），没有可上架数量"
+        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
+            msg = f"可上架数量不足！"
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
@@ -1847,10 +1887,23 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
+    # 对于装备类型，检查是否已被使用
+    if goods_info['goods_type'] == "装备":
+        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
+        if is_equipped:
+            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
+        else:
+            # 如果未装备，可上架数量 = 总数量 - 绑定数量
+            available_num = goods_info['goods_num'] - goods_info['bind_num']
+    else:
+        # 非装备物品，正常计算
+        available_num = goods_info['goods_num'] - goods_info['bind_num']
+    
     # 检查可上架数量
-    available_num = goods_info['goods_num'] - goods_info['bind_num']
     if quantity > available_num:
-        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），最多可上架{available_num}个"
+        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
+            msg = f"可上架数量不足！\n最多可上架{available_num}个"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
@@ -1860,11 +1913,13 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         msg = "只能上架药材、装备、丹药或技能类物品！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
+    
     # 检查禁止交易的物品
     if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
         msg = f"物品 {goods_name} 禁止在坊市交易！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
+    
     # 计算总手续费
     total_price = price * quantity
     if total_price <= 6000000:
@@ -1928,7 +1983,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
 
 @fangshi_auto_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
 async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """坊市自动上架（批量优化版）"""
+    """坊市自动上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1955,19 +2010,19 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
 
 
     if item_type not in type_mapping:
-        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
     if rank_name not in rank_map:
-        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
 
     # 获取背包物品
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
-        msg = "💼💼 道友的背包空空如也！"
+        msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
@@ -1989,7 +2044,19 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
-            available_num = item['goods_num'] - item['bind_num']
+            # 对于装备类型，检查是否已被使用
+            if item['goods_type'] == "装备":
+                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
+                if is_equipped:
+                    # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+                    available_num = item['goods_num'] - item['bind_num'] - 1
+                else:
+                    # 如果未装备，可上架数量 = 总数量 - 绑定数量
+                    available_num = item['goods_num'] - item['bind_num']
+            else:
+                # 非装备物品，正常计算
+                available_num = item['goods_num'] - item['bind_num']
+            
             if available_num > 0:
                 items_to_add.append({
                     'id': item['goods_id'],
@@ -2000,7 +2067,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
                 })
     
     if not items_to_add:
-        msg = f"🔍🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
+        msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
         await handle_send(bot, event, msg)
         await fangshi_auto_add.finish()
     
@@ -2099,7 +2166,7 @@ async def fangshi_auto_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     msg = [
         f"\n✨ 成功上架 {success_count} 件物品",
         *result_msg[:10],
-        f"💎💎 总手续费: {number_to(total_fee)}灵石"
+        f"💎 总手续费: {number_to(total_fee)}灵石"
     ]
     
     if len(result_msg) > 10:
@@ -2150,12 +2217,25 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
         await handle_send(bot, event, msg)
         await fangshi_fast_add.finish()
     
+    # 对于装备类型，检查是否已被使用
+    if goods_info['goods_type'] == "装备":
+        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
+        if is_equipped:
+            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
+            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
+        else:
+            # 如果未装备，可上架数量 = 总数量 - 绑定数量
+            available_num = goods_info['goods_num'] - goods_info['bind_num']
+    else:
+        # 非装备物品，正常计算
+        available_num = goods_info['goods_num'] - goods_info['bind_num']
+    
     # 检查可上架数量（固定为10或背包中全部数量）
-    available_num = goods_info['goods_num'] - goods_info['bind_num']
     quantity = min(10, available_num)  # 最多10个
     
     if quantity <= 0:
-        msg = f"可上架数量不足！背包有{goods_info['goods_num']}个（{goods_info['bind_num']}个绑定），没有可上架数量"
+        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
+            msg = f"可上架数量不足！"
         await handle_send(bot, event, msg)
         await fangshi_fast_add.finish()
     
@@ -3661,9 +3741,23 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
+    # 对于装备类型，检查是否已被使用
+    if goods_info['goods_type'] == "装备":
+        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
+        if is_equipped:
+            # 如果装备已被使用，可上架数量 = 总数量 - 1（已装备的）
+            available_num = goods_info['goods_num'] - 1
+        else:
+            # 如果未装备，可上架数量 = 总数量
+            available_num = goods_info['goods_num']
+    else:
+        # 非装备物品，正常计算
+        available_num = goods_info['goods_num']
+    
     # 检查物品总数量
-    if goods_info['goods_num'] < quantity:
-        msg = f"数量不足！背包仅有 {goods_info['goods_num']} 个 {goods_name}"
+    if available_num < quantity:
+        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
+            msg = f"可上架数量不足！\n最多可摆摊{available_num}个"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
@@ -4668,6 +4762,16 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 await handle_send(bot, event, msg)
                 return
             
+            # 对于装备类型，检查是否已被使用
+            if item['goods_type'] == "装备":
+                is_equipped = check_equipment_use_msg(user_info['user_id'], item['goods_id'])
+                if is_equipped:
+                    # 如果装备已被使用，需要至少有一个未装备的才能上架
+                    if item['goods_num'] - item['bind_num'] <= 1:
+                        msg = "该装备已被装备，没有多余的可上架！"
+                        await handle_send(bot, event, msg)
+                        return
+            
             # 检查物品类型是否允许
             goods_type = get_item_type_by_id(item['goods_id'])
             if goods_type not in ITEM_TYPES:
@@ -4677,6 +4781,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 
             item_data = item
             break
+    
     # 检查禁止交易的物品
     if str(item['goods_id']) in BANNED_ITEM_IDS:
         msg = f"物品 {item_name} 禁止拍卖！"
@@ -5084,12 +5189,12 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     rank_name = " ".join(args[1:]) if len(args) > 1 else "全部"  # 品阶
     
     if item_type not in type_mapping:
-        msg = f"❌❌❌❌❌❌❌❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
+        msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     
     if rank_name not in rank_map:
-        msg = f"❌❌❌❌❌❌❌❌ 无效品阶！输入'品阶帮助'查看完整列表"
+        msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
         await handle_send(bot, event, msg)
         await fast_alchemy.finish()
     

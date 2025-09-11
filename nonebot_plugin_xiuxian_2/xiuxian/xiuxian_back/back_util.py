@@ -679,7 +679,7 @@ def get_special_msg(l_msg, goods_id, goods_num, bind_num):
     l_msg.append(msg)
     return l_msg
 
-def get_item_msg(goods_id):
+def get_item_msg(goods_id, user_id=None):
     """
     获取单个物品的消息
     """
@@ -694,6 +694,10 @@ def get_item_msg(goods_id):
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
+        if item_info['buff_type'] == 'level_up_big':
+            back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+            goods_all_num = back['all_num'] if back is not None else 0
+            msg += f"\n耐药性：{goods_all_num}/{item_info['all_num']}"
     elif item_info['item_type'] == '神物':
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
