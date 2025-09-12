@@ -34,6 +34,8 @@ tower_rank = on_command("通天塔排行", priority=5, block=True)
 tower_shop = on_command("通天塔商店", priority=5, block=True)
 tower_buy = on_command("通天塔兑换", priority=5, block=True)
 tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
+tower_help = on_command("通天塔帮助", priority=5, block=True)
+tower_boss_info = on_command("查看通天塔BOSS", aliases={"通天塔BOSS", "查看通天塔boss", "通天塔boss"}, priority=5, block=True)
 
 # 每周一0点重置通天塔层数
 @scheduler.scheduled_job("cron", day_of_week="mon", hour=0, minute=0)
@@ -47,7 +49,37 @@ async def reset_shop_limits():
     tower_data.reset_weekly_limits()
     logger.opt(colors=True).info("<green>通天塔商店限购已重置</green>")
 
-tower_help = on_command("通天塔帮助", priority=5, block=True)
+@tower_boss_info.handle()
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看当前要挑战层数的BOSS属性"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await tower_boss_info.finish()
+    
+    user_id = user_info["user_id"]
+    tower_info_data = tower_data.get_user_tower_info(user_id)
+    current_floor = tower_info_data["current_floor"]
+    next_floor = current_floor + 1
+    
+    # 生成BOSS信息
+    boss_info = tower_battle.generate_tower_boss(next_floor)
+    
+    msg = (
+        f"════════════\n"
+        f"下一层：{next_floor}\n"        
+        f"境界：{boss_info['jj']}\n"
+        f"气血：{number_to(boss_info['气血'])}\n"
+        f"真元：{number_to(boss_info['真元'])}\n"
+        f"攻击：{number_to(boss_info['攻击'])}\n"
+        f"════════════\n"
+        f"当前层数：{current_floor}\n"
+        f"输入【挑战通天塔】开始挑战！"
+    )
+    
+    await handle_send(bot, event, msg)
+    await tower_boss_info.finish()
 
 @tower_help.handle()
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -57,8 +89,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = (
         "\n═══  通天塔帮助  ═════\n"
         "【挑战通天塔】 - 挑战通天塔下一层\n"
-        "【速通通天塔】 - 连续挑战10层通天塔\n"
+        "【速通通天塔】 - 连续挑战10层通天塔，可指定层数\n"
         "【通天塔信息】 - 查看当前通天塔进度\n"
+        "【通天塔BOSS】 - 查看下层BOSS属性\n"
         "【通天塔排行】 - 查看通天塔排行榜\n"
         "【通天塔商店】 - 查看通天塔商店商品\n"
         "【通天塔兑换+编号】 - 兑换商店商品\n"
@@ -108,18 +141,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await tower_challenge.finish()
 
 @tower_continuous.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["连续爬塔"], at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """连续爬塔10层"""
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """连续爬塔，可指定层数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
         await tower_continuous.finish()
+    
     user_id = user_info["user_id"]
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg)
-        await battle.finish()
+        await tower_continuous.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
         sql_message.update_user_hp(user_id)
@@ -130,8 +164,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
         await handle_send(bot, event, msg)
-        await tower_challenge.finish()
-    success, msg = await tower_battle.challenge_floor(bot, event, user_id, continuous=True)
+        await tower_continuous.finish()
+    
+    # 解析层数参数
+    floor_input = args.extract_plain_text().strip()
+    if floor_input:
+        try:
+            target_floors = int(floor_input)
+            # 限制最大层数为100
+            target_floors = min(max(target_floors, 1), 100)
+        except ValueError:
+            target_floors = 10
+    else:
+        target_floors = 10  # 默认10层
+    
+    success, msg = await tower_battle.challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
     
     await handle_send(bot, event, msg)
     log_message(user_id, msg)
