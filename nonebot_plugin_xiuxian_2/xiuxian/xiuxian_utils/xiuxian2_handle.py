@@ -1455,7 +1455,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             if bind_flag == 1:
                 bind_num = back['bind_num'] + goods_num
             else:
-                bind_num = back['bind_num']
+                bind_num = min(back['bind_num'], back['goods_num'])
             goods_nums = back['goods_num'] + goods_num
             sql = f"UPDATE back set goods_num=?,update_time=?,bind_num={bind_num} WHERE user_id=? and goods_id=?"
             cur.execute(sql, (goods_nums, now_time, user_id, goods_id))
@@ -2111,28 +2111,6 @@ class XIUXIAN_IMPART_BUFF:
         cur.execute(sql, (impart_num, user_id))
         self.conn.commit()
         return True
-
-    def convert_stone_to_wishing_stone(self, user_id):
-        """将思恋结晶转换为祈愿石（100:1），多余废弃"""
-        cur = self.conn.cursor()
-        # 获取当前思恋结晶数量
-        sql = "SELECT stone_num FROM xiuxian_impart WHERE user_id=?"
-        cur.execute(sql, (user_id,))
-        result = cur.fetchone()
-        if result is None:
-            return  # 用户不存在
-        
-        stone_num = result[0]
-        if stone_num < 100:
-            return  # 不足100，无法转换
-        
-        # 计算可转换的祈愿石数量
-        wishing_stone_num = stone_num // 100
-        sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=?"
-        cur.execute(sql_update, (user_id,))
-        self.conn.commit()
-        
-        sql_message.send_back(user_id, 20005, "祈愿石", "特殊道具", wishing_stone_num, 1)
 
     def update_stone_num(self, impart_num, user_id, type_):
         """更新结晶数量"""

@@ -282,14 +282,14 @@ def get_treasure_info(user_info, rift_rank):
     msg = None
     if rift_type == "法器":
         weapon_info = get_weapon(user_info, rift_rank)
-        temp_msg = f"{weapon_info[1]['level']}:{weapon_info[1]['name']}!"
+        temp_msg = f"{weapon_info[1]['name']}!"
         msg = random.choice(TREASUREMSG).format(temp_msg)
         sql_message.send_back(user_info['user_id'], weapon_info[0], weapon_info[1]['name'], weapon_info[1]['type'], 1, 0)
         # 背包sql
 
     elif rift_type == "防具":  # todo
         armor_info = get_armor(user_info, rift_rank)
-        temp_msg = f"{armor_info[1]['level']}防具：{armor_info[1]['name']}!"
+        temp_msg = f"{armor_info[1]['name']}!"
         msg = random.choice(TREASUREMSG_1).format(temp_msg)
         sql_message.send_back(user_info['user_id'], armor_info[0], armor_info[1]['name'], armor_info[1]['type'], 1, 0)
         # 背包sql
@@ -299,7 +299,7 @@ def get_treasure_info(user_info, rift_rank):
         if give_main_info[0]:  # 获得了
             main_buff_id = give_main_info[1]
             main_buff = items.get_data_by_item_id(main_buff_id)
-            temp_msg = f"{main_buff['level']}功法：{main_buff['name']}"
+            temp_msg = f"{main_buff['name']}"
             msg = random.choice(TREASUREMSG_2).format(temp_msg)
             sql_message.send_back(user_info['user_id'], main_buff_id, main_buff['name'], main_buff['type'], 1, 0)
         else:
@@ -310,7 +310,7 @@ def get_treasure_info(user_info, rift_rank):
         if give_sec_info[0]:  # 获得了
             sec_buff_id = give_sec_info[1]
             sec_buff = items.get_data_by_item_id(sec_buff_id)
-            temp_msg = f"{sec_buff['level']}神通：{sec_buff['name']}!"
+            temp_msg = f"{sec_buff['name']}!"
             msg = random.choice(TREASUREMSG_3).format(temp_msg)
             sql_message.send_back(user_info['user_id'], sec_buff_id, sec_buff['name'], sec_buff['type'], 1, 0)
             # 背包sql
@@ -322,7 +322,7 @@ def get_treasure_info(user_info, rift_rank):
         if give_sub_info[0]:  # 获得了
             sub_buff_id = give_sub_info[1]
             sub_buff = items.get_data_by_item_id(sub_buff_id)
-            temp_msg = f"{sub_buff['level']}辅修功法：{sub_buff['name']}!"
+            temp_msg = f"{sub_buff['name']}!"
             msg = random.choice(TREASUREMSG_5).format(temp_msg)
             sql_message.send_back(user_info['user_id'], sub_buff_id, sub_buff['name'], sub_buff['type'], 1, 0)
             # 背包sql

@@ -5225,14 +5225,30 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
-            available_num = item['goods_num'] - item['bind_num']
+            # 对于装备类型，检查是否已被使用
+            if item['goods_type'] == "装备":
+                is_equipped = check_user_back_use_msg(user_id, item['goods_id'])
+                if is_equipped:
+                    # 如果装备已被使用，可炼金数量 = 总数量 - 绑定数量 - 1（已装备的）
+                    available_num = item['goods_num'] - item['bind_num'] - 1
+                else:
+                    # 如果未装备，可炼金数量 = 总数量 - 绑定数量
+                    available_num = item['goods_num'] - item['bind_num']
+            else:
+                # 非装备物品，正常计算
+                available_num = item['goods_num'] - item['bind_num']
+            
+            # 确保可用数量不为负
+            available_num = max(0, available_num)
+            
             if available_num > 0:
                 items_to_alchemy.append({
                     'id': item['goods_id'],
                     'name': item['goods_name'],
                     'type': item['goods_type'],
                     'available_num': available_num,
-                    'info': item_info
+                    'info': item_info,
+                    'is_equipped': check_user_back_use_msg(user_id, item['goods_id']) if item['goods_type'] == "装备" else False
                 })
     
     if not items_to_alchemy:
@@ -5263,7 +5279,13 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         success_count += item['available_num']
         total_stone += total_price
-        result_msg.append(f"{item['name']} x{item['available_num']} → {number_to(total_price)}灵石")
+        
+        # 添加装备状态信息到结果消息
+        status_info = ""
+        if item['type'] == "装备" and item['is_equipped']:
+            status_info = " (已装备物品，保留1个)"
+        
+        result_msg.append(f"{item['name']} x{item['available_num']}{status_info} → {number_to(total_price)}灵石")
     
     # 构建结果消息
     msg = [
@@ -5841,52 +5863,126 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg)
     await yaocai_detail_back.finish()
 
-def reset_dict_num(dict_):
-    i = 1
-    temp_dict = {}
-    for k, v in dict_.items():
-        temp_dict[i] = v
-        temp_dict[i]['编号'] = i
-        i += 1
-    return temp_dict
+check_user_equipment = on_fullmatch("装备检测", priority=4, permission=SUPERUSER, block=True)
+@check_user_equipment.handle(parameterless=[Cooldown(at_sender=False)])
+async def check_user_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """管理员装备检测与修复（仅检查已装备物品）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    # 检查权限
+    if not await SUPERUSER(bot, event):
+        msg = "此功能仅限管理员使用！"
+        await handle_send(bot, event, msg)
+        await check_user_equipment.finish()
+    
+    msg = "开始检测用户已装备物品，请稍候..."
+    await handle_send(bot, event, msg)
+    
+    # 获取所有用户
+    all_users = sql_message.get_all_user_id()
+    if not all_users:
+        msg = "未找到任何用户数据！"
+        await handle_send(bot, event, msg)
+        await check_user_equipment.finish()
+    
+    fixed_count = 0
+    checked_users = 0
+    problem_users = []
+    
+    for user_id in all_users:
+        checked_users += 1
+        user_info = sql_message.get_user_info_with_id(user_id)
+        if not user_info:
+            continue
+        
+        # 获取用户buff信息中的已装备物品
+        user_buff_info = UserBuffDate(user_id).BuffInfo
+        equipped_items = []
+        
+        # 检查法器
+        if user_buff_info['faqi_buff'] != 0:
+            equipped_items.append({
+                'type': '法器',
+                'id': user_buff_info['faqi_buff']
+            })
+        
+        # 检查防具
+        if user_buff_info['armor_buff'] != 0:
+            equipped_items.append({
+                'type': '防具',
+                'id': user_buff_info['armor_buff']
+            })
+        
+        for equipped_item in equipped_items:
+            item_id = equipped_item['id']
+            item_type = equipped_item['type']
 
-
-def get_user_auction_id_list():
-    user_auctions = config['user_auctions']
-    user_auction_id_list = []
-    for auction in user_auctions:
-        for k, v in auction.items():
-            user_auction_id_list.append(v['id'])
-    return user_auction_id_list
-
-def get_auction_id_list():
-    auctions = config['auctions']
-    auction_id_list = []
-    for k, v in auctions.items():
-        auction_id_list.append(v['id'])
-    return auction_id_list
-
-def get_user_auction_price_by_id(id):
-    user_auctions = config['user_auctions']
-    user_auction_info = None
-    for auction in user_auctions:
-        for k, v in auction.items():
-            if int(v['id']) == int(id):
-                user_auction_info = v
-                break
-        if user_auction_info:
-            break
-    return user_auction_info
-
-def get_auction_price_by_id(id):
-    auctions = config['auctions']
-    auction_info = None
-    for k, v in auctions.items():
-        if int(v['id']) == int(id):
-            auction_info = v
-            break
-    return auction_info
-
-
-def is_in_groups(event: GroupMessageEvent):
-    return str(event.group_id) in groups
+            item_data = sql_message.get_item_by_good_id_and_user_id(user_id, item_id)
+            item_info = items.get_data_by_item_id(item_id)
+            
+            if not item_data:
+                sql_message.send_back(
+                    user_id,
+                    item_id,
+                    item_info['name'],
+                    "装备",
+                    1,
+                    1
+                )
+                
+                problem_users.append({
+                    'user_id': user_id,
+                    'user_name': user_info['user_name'],
+                    'item_name': item_info['name'],
+                    'issue': f"已装备{item_type}但背包中不存在",
+                    'fixed': "已重新添加到背包"
+                })
+                fixed_count += 1
+            else:
+                # 检查装备数量是否为0或负数
+                if item_data['goods_num'] <= 0:
+                    # 修复数量为1
+                    new_num = 1 + abs(item_data['goods_num'])
+                    sql_message.send_back(
+                        user_id,
+                        item_id,
+                        item_data['goods_name'],
+                        "装备",
+                        new_num,
+                        1
+                    )
+                    
+                    problem_users.append({
+                        'user_id': user_id,
+                        'user_name': user_info['user_name'],
+                        'item_name': item_data['goods_name'],
+                        'issue': f"已装备{item_type}但数量异常({item_data['goods_num']})",
+                        'fixed': f"数量修复为{new_num}"
+                    })
+                    fixed_count += 1
+    
+    # 构建结果消息
+    result_msg = [
+        f"☆------装备检测完成------☆",
+        f"检测用户数: {checked_users}",
+        f"修复问题数: {fixed_count}"
+    ]
+    
+    if problem_users:
+        result_msg.append("\n☆------修复详情------☆")
+        for i, problem in enumerate(problem_users[:10]):  # 最多显示10条详情
+            result_msg.append(
+                f"{i+1}. {problem['user_name']}的{problem['item_name']}: "
+                f"{problem['issue']} → {problem['fixed']}"
+            )
+        
+        if len(problem_users) > 10:
+            result_msg.append(f"...等共{len(problem_users)}个问题")
+    
+    result_msg.append("\n☆------说明------☆")
+    result_msg.append("1. 仅检测用户已装备的物品")
+    result_msg.append("2. 修复了装备不存在或数量异常的问题")
+    result_msg.append("3. 修复了绑定数量异常的问题")
+    
+    await send_msg_handler(bot, event, '装备检测', bot.self_id, result_msg)
+    await check_user_equipment.finish()
