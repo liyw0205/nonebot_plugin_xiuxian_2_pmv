@@ -5570,8 +5570,9 @@ async def chakan_wupin_(
     if item_type == "特殊物品":
         # 特殊物品包括聚灵旗和特殊道具
         jlq_data = items.get_data_by_item_type(["聚灵旗"])
+        ldl_data = items.get_data_by_item_type(["炼丹炉"])
         special_data = items.get_data_by_item_type(["特殊物品"])
-        item_data = {**jlq_data, **special_data}
+        item_data = {**jlq_data, **ldl_data, **special_data}
     else:
         item_data = items.get_data_by_item_type([item_type])
     

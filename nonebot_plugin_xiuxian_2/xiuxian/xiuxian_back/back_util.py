@@ -697,10 +697,11 @@ def get_item_msg(goods_id, user_id=None):
         if item_info['buff_type'] == 'level_up_big':
             back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
             goods_all_num = back['all_num'] if back is not None else 0
-            msg += f"\n耐药性：{goods_all_num}/{item_info['all_num']}"
+            rank = item_info.get('境界', '')
+            msg += f"\n境界：{rank}\n耐药性：{goods_all_num}/{item_info['all_num']}"
     elif item_info['item_type'] == '神物':
         msg = f"名字：{item_info['name']}\n"
-        msg += f"效果：{item_info['desc']}"
+        msg += f"效果：{item_info['desc']}\n境界：{item_info['境界']}\n增加{number_to(item_info['buff'])}修为"
     elif item_info['item_type'] == '神通':
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
