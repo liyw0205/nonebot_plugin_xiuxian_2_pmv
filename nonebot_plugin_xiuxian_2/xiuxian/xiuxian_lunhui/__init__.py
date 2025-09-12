@@ -131,6 +131,8 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         #重置用户虚神界修炼时间
         xiuxian_impart.update_impart_lv(user_id, 0)
         #重置虚神界等级
+        xiuxian_impart.convert_stone_to_wishing_stone(user_id)
+        #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 6) #更换灵根
@@ -196,6 +198,8 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         #重置用户虚神界修炼时间
         xiuxian_impart.update_impart_lv(user_id, 0)
         #重置虚神界等级
+        xiuxian_impart.convert_stone_to_wishing_stone(user_id)
+        #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 7) #更换灵根
@@ -275,6 +279,8 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         #重置用户虚神界修炼时间
         xiuxian_impart.update_impart_lv(user_id, 0)
         #重置虚神界等级
+        xiuxian_impart.convert_stone_to_wishing_stone(user_id)
+        #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
         #重置用户灵石
         sql_message.update_root(user_id, 8) #更换灵根
@@ -330,6 +336,8 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
+        xiuxian_impart.convert_stone_to_wishing_stone(user_id)
+        #转换思恋结晶
         sql_message.update_root(user_id, 9) #更换灵根
         sql_message.updata_root_level(user_id, 1) #更新轮回等级
         msg = f"超越永恒，超脱命运，执掌因果轮回！恭喜大能{user_name}突破命运桎梏，成就无上命运道果！"
