@@ -129,7 +129,7 @@ class XiuConfig:
         self.auto_select_root = True  # 默认开启自动选择最佳灵根
         self.remake = 100000  # 重入仙途的消费
         self.remaname = 10000000  # 修仙改名的消费
-        self.max_stamina = 240 # 体力上限
+        self.max_stamina = 500 # 体力上限
         self.stamina_recovery_points = 2 # 体力恢复点数/分钟
         self.lunhui_min_level = "至尊境初期" # 千世轮回最低境界
         self.twolun_min_level = "星芒境初期" # 万世轮回最低境界

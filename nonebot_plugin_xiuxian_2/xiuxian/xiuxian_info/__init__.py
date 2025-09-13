@@ -13,8 +13,8 @@ from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to
 from ..xiuxian_config import XiuConfig
 
-xiuxian_message = on_command("我的修仙信息", aliases={"我的存档"}, priority=23, block=True)
-xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版"}, priority=23, block=True)
+xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
+xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 sql_message = XiuxianDateManage()  # sql类
 
 async def get_user_xiuxian_info(user_id):
@@ -140,7 +140,8 @@ ID：{user_id}
 防具: {armor_name}
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
-灵石排行: 第{int(user_stone)}位"""
+灵石排行: 第{int(user_stone)}位
+\n【我的修仙信息图片版】"""
     
     return DETAIL_MAP, text_msg
 

@@ -245,6 +245,8 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     # 处理共享用户的损失/收益
     affected_users = []
+    effect_amount_all = 0
+    actual_shared_loss_all = 0
     for target_id in sharing_users:
         target_info = sql_message.get_user_info_with_id(target_id)
         if not target_info:
@@ -258,6 +260,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
             # 增加灵石
             sql_message.update_ls(target_id, effect_amount, 1)
             target_data["sharing_info"]["received_profit"] += effect_amount
+            effect_amount_all += effect_amount
             affected_users.append(f"{target_name}(+{number_to(effect_amount)})")
             
             log_message(target_id, 
@@ -271,6 +274,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if actual_shared_loss > 0:
                 sql_message.update_ls(target_id, actual_shared_loss, 2)
                 target_data["sharing_info"]["received_loss"] += actual_shared_loss
+                actual_shared_loss_all += actual_shared_loss
                 affected_users.append(f"{target_name}(-{number_to(actual_shared_loss)})")
                 
                 log_message(target_id,
@@ -282,15 +286,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
         save_unseal_data(target_id, target_data)
     
     if not affected_users:
-        return None
-    
-    # 更新共享者数据
-    sharer_data = get_unseal_data(user_id)
-    if event_type == "profit":
-        sharer_data["sharing_info"]["shared_profit"] += effect_amount
-    else:
-        sharer_data["sharing_info"]["shared_loss"] += effect_amount
-    save_unseal_data(user_id, sharer_data)
+        return None, None
     
     # 构建消息
     msg = [
@@ -300,7 +296,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
         f"\n受影响道友: {', '.join(affected_users)}"
     ]
     
-    return "\n".join(msg)
+    return "\n".join(msg), amount
 
 # 鉴石信息
 @unseal_message.handle()
@@ -439,7 +435,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if is_sharing_user(user_id):
         # 负面结果有20%概率触发共享，大失败100%触发
         if (result in ["failure", "critical_failure"] and random.random() < 0.2) or result == "critical_failure":
-            shared_event_msg = await handle_shared_event(
+            shared_event_msg, amount = await handle_shared_event(
                 bot, event, 
                 user_id=user_id,
                 current_cost=cost,          # 本次鉴石消耗
@@ -448,9 +444,10 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             )
             if shared_event_msg:
                 await handle_send(bot, event, shared_event_msg)
+                unseal_data["unseal_info"]["shared_loss"] += amount
         # 正面结果有10%概率触发共享，大成功100%触发
         elif (result == "success" and random.random() < 0.1) or (result == "great_success"):
-            shared_event_msg = await handle_shared_event(
+            shared_event_msg, amount = await handle_shared_event(
                 bot, event,
                 user_id=user_id,
                 current_cost=cost,          # 本次鉴石消耗
@@ -459,6 +456,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             )
             if shared_event_msg:
                 await handle_send(bot, event, shared_event_msg)
+                unseal_data["unseal_info"]["shared_profit"] += amount
     
     # 保存鉴石数据
     save_unseal_data(user_id, unseal_data)
