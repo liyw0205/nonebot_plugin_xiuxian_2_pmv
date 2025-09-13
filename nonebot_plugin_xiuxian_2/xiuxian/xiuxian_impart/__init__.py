@@ -73,6 +73,7 @@ impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
 )
 use_wishing_stone = on_command("道具使用祈愿石", priority=5, block=True)
+use_love_sand = on_command("道具使用思恋流沙", priority=5, block=True)
 
 __impart_help__ = f"""
 【虚神界传承系统】✨
@@ -397,7 +398,7 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             break
 
     if wishing_stone_total < stone_num:
-        msg = f"道友背包中没有足够的祈愿石，无法使用！你当前有 {wishing_stone_total} 个祈愿石，但需要 {stone_num} 个。"
+        msg = f"道友背包中没有足够的祈愿石，无法使用！"
         await handle_send(bot, event, msg)
         await use_wishing_stone.finish()
         
@@ -451,6 +452,68 @@ async def use_wishing_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     except ActionFailed:
         await handle_send(bot, event, "获取祈愿石结果失败！")
     await use_wishing_stone.finish()
+
+@use_love_sand.handle(parameterless=[Cooldown(at_sender=False)])
+async def use_love_sand_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """使用思恋流沙"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    user_id = user_info["user_id"]
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await use_love_sand.finish()
+        
+    # 解析思恋流沙数量
+    msg_text = args.extract_plain_text().strip()
+    try:
+        if msg_text:
+            sand_num = int(msg_text.split()[0])
+            sand_num = max(1, min(sand_num, 100))  # 限制最大使用100个
+        else:
+            sand_num = 1  # 默认使用1个思恋流沙
+    except (IndexError, ValueError):
+        await handle_send(bot, event, "请输入有效的思恋流沙数量（如：道具使用思恋流沙 5）")
+        await use_love_sand.finish()
+
+    # 检查背包中的思恋流沙数量
+    back_msg = sql_message.get_back_msg(user_id)
+    love_sand_id = 20016  # 思恋流沙的物品ID
+    love_sand_total = 0
+    for item in back_msg:
+        if item['goods_id'] == love_sand_id:
+            love_sand_total = item['goods_num']
+            break
+
+    if love_sand_total < sand_num:
+        msg = f"道友背包中没有足够的思恋流沙，无法使用！"
+        await handle_send(bot, event, msg)
+        await use_love_sand.finish()
+        
+    # 获取当前思恋结晶数量
+    impart_data_draw = await impart_check(user_id)
+    if impart_data_draw is None:
+        await handle_send(bot, event, "发生未知错误！")
+        await use_love_sand.finish()
+    
+    current_stones = impart_data_draw["stone_num"]
+    
+    # 使用思恋流沙，随机获得思恋结晶
+    total_gained = sum(random.choice([10, 20, 30]) for _ in range(sand_num))
+    
+    # 更新思恋结晶数量
+    xiuxian_impart.update_stone_num(total_gained, user_id, 1)
+    
+    # 批量消耗思恋流沙
+    sql_message.update_back_j(user_id, love_sand_id, num=sand_num)
+    
+    # 构建结果消息
+    final_msg = f"道友使用了 {sand_num} 个思恋流沙，获得思恋结晶 {total_gained} 颗\n当前思恋结晶：{current_stones + total_gained}颗"
+    
+    try:
+        await handle_send(bot, event, final_msg)
+    except ActionFailed:
+        await handle_send(bot, event, "使用思恋流沙结果发送失败！")
+    await use_love_sand.finish()
 
 @impart_back.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

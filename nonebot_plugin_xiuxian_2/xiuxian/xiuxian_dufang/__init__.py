@@ -71,34 +71,6 @@ def get_random_sharing_users(user_id, count=3):
     count = min(count, len(users))
     return random.sample(users, count)
 
-# 共享事件类型
-SHARING_EVENTS = [
-    {
-        "title": "劫修团伙",
-        "desc": "你解封时引发的灵气波动引来了劫修团伙！",
-        "effect": lambda cost: int(cost * random.uniform(0.4, 0.6)),  # 40%-60%损失
-        "message": "这群劫修顺着灵气波动又袭击了附近的其他道友！"
-    },
-    {
-        "title": "灵气污染",
-        "desc": "解封过程中产生了危险的灵气污染！",
-        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%损失
-        "message": "污染的灵气扩散开来，影响了附近修炼的其他道友！"
-    },
-    {
-        "title": "诅咒蔓延",
-        "desc": "物品上的古老诅咒开始向外扩散！",
-        "effect": lambda cost: int(cost * random.uniform(0.35, 0.55)),  # 35%-55%损失
-        "message": "诅咒之力蔓延，不幸波及了附近的其他道友！"
-    },
-    {
-        "title": "福泽共享",
-        "desc": "解封产生的祥瑞之气扩散开来！",
-        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%收益
-        "message": "祥瑞之气惠及了附近的其他道友！"
-    }
-]
-
 # 鉴石数据管理
 # 修改默认数据格式
 def get_unseal_data(user_id):
@@ -212,12 +184,12 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     """
     sharing_users = get_random_sharing_users(user_id, random.randint(1, 3))
     if not sharing_users:
-        return None
+        return None, None
     
     # 获取当前用户信息
     user_info = sql_message.get_user_info_with_id(user_id)
     if not user_info:
-        return None
+        return None, None
     
     user_name = user_info['user_name']
     
@@ -239,7 +211,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
         eligible_events = [e for e in SHARING_EVENTS if "福泽" not in e["title"]]
     
     if not eligible_events:
-        return None
+        return None, None
     
     event_data = random.choice(eligible_events)
     
@@ -261,6 +233,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_ls(target_id, effect_amount, 1)
             target_data["sharing_info"]["received_profit"] += effect_amount
             effect_amount_all += effect_amount
+            amount = effect_amount_all
             affected_users.append(f"{target_name}(+{number_to(effect_amount)})")
             
             log_message(target_id, 
@@ -275,6 +248,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sql_message.update_ls(target_id, actual_shared_loss, 2)
                 target_data["sharing_info"]["received_loss"] += actual_shared_loss
                 actual_shared_loss_all += actual_shared_loss
+                amount = actual_shared_loss_all
                 affected_users.append(f"{target_name}(-{number_to(actual_shared_loss)})")
                 
                 log_message(target_id,
@@ -444,7 +418,11 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             )
             if shared_event_msg:
                 await handle_send(bot, event, shared_event_msg)
-                unseal_data["unseal_info"]["shared_loss"] += amount
+                # 根据结果类型更新统计
+                if result in ["great_success", "success"]:
+                    unseal_data["sharing_info"]["shared_profit"] += amount
+                else:
+                    unseal_data["sharing_info"]["shared_loss"] += amount
         # 正面结果有10%概率触发共享，大成功100%触发
         elif (result == "success" and random.random() < 0.1) or (result == "great_success"):
             shared_event_msg, amount = await handle_shared_event(
@@ -456,7 +434,11 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             )
             if shared_event_msg:
                 await handle_send(bot, event, shared_event_msg)
-                unseal_data["unseal_info"]["shared_profit"] += amount
+                # 根据结果类型更新统计
+                if result in ["great_success", "success"]:
+                    unseal_data["sharing_info"]["shared_profit"] += amount
+                else:
+                    unseal_data["sharing_info"]["shared_loss"] += amount
     
     # 保存鉴石数据
     save_unseal_data(user_id, unseal_data)
