@@ -47,7 +47,7 @@ stone_exp = on_command("灵石修仙", aliases={"灵石修炼"}, priority=5, blo
 two_exp = on_command("双修", priority=5, block=True)
 mind_state = on_fullmatch("我的状态", priority=7, block=True)
 qc = on_command("切磋", priority=6, block=True)
-buff_help = on_command("功法帮助", aliases={"灵田帮助"}, priority=5, block=True)
+buff_help = on_command("功法帮助", aliases={"灵田帮助", "洞天福地帮助"}, priority=5, block=True)
 blessed_spot_creat = on_fullmatch("洞天福地购买", priority=10, block=True)
 blessed_spot_info = on_fullmatch("洞天福地查看", priority=11, block=True)
 blessed_spot_rename = on_command("洞天福地改名", priority=7, block=True)
@@ -154,7 +154,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         blessed_spot_name = user_info['blessed_spot_name']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     msg += f"名字：{blessed_spot_name}\n"
-    msg += f"修炼速度：增加{int(user_buff_data['blessed_spot'] * 0.5) * 100}%\n"
+    msg += f"修炼速度：增加{user_buff_data['blessed_spot'] * 0.5 * 100}%\n"
     msg += f"药材速度：增加{mix_elixir_info['药材速度'] * 100}%\n"
     msg += f"灵田数量：{mix_elixir_info['灵田数量']}"
     await handle_send(bot, event, msg)
@@ -900,7 +900,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 元血修炼:{user_msg['hppractice']}级(提升气血{user_msg['hppractice'] * 8}%)
 灵海修炼:{user_msg['mppractice']}级(提升真元{user_msg['mppractice'] * 5}%)
 修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
-会心:{crit_buff + int(impart_know_per * 100) + armor_crit_buff + main_crit_buff}%
+会心:{int(crit_buff + int(impart_know_per * 100) + armor_crit_buff + main_crit_buff)}%
 减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%
 会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
