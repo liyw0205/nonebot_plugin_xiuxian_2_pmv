@@ -5409,7 +5409,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     goods_info = items.get_data_by_item_id(goods_id)
     user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank("江湖好手")[1]
-    goods_rank = goods_info.get('rank', 1)
+    goods_rank = int(goods_info.get('rank', 1))
     if goods_rank == -5:
         goods_rank = 23
     else:

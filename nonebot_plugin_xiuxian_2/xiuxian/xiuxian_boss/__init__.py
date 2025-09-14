@@ -373,7 +373,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     # 设置每日上限
     integral_limit = 6000
-    stone_limit = 1000000000
+    stone_limit = 300000000
     
     if boss_now_hp <= 0:  # BOSS被击杀
         victor = "群友赢了"
@@ -942,8 +942,10 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         shop_items = list(boss_integral_shop.items())[start_index:end_index]
         
         for k, v in shop_items:
+            item_info = items.get_data_by_item_id(v['id'])
             msg = f"编号:{k}\n"
-            msg += f"描述：{v['desc']}\n"
+            msg += f"名字：{item_info['name']}\n"
+            msg += f"描述：{item_info.get('desc', '暂无描述')}\n"
             msg += f"所需世界积分：{v['cost']}点\n"
             msg += f"每周限购：{v.get('weekly_limit', 1)}个\n"
             msg += f"════════════"
@@ -976,7 +978,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     # 设置每日上限
     integral_limit = 6000
-    stone_limit = 1000000000
+    stone_limit = 300000000
     
     # 构建消息
     msg = f"""

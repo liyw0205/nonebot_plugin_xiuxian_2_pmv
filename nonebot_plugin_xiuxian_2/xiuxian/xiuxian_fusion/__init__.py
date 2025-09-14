@@ -144,90 +144,161 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await fusion_help.finish()
 
-@fusion.handle(parameterless=[Cooldown(at_sender=False)])
-async def fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-
-    user_id = user_info['user_id']
-    args_str = args.extract_plain_text().strip()
-    
-    if not args_str:
-        msg = fusion_help_text
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
-    if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-    
-    # 检查是否是必定成功ID，如果是则跳过福缘石检测
-    if int(equipment_id) not in FIXED_SUCCESS_IDS:
-        # 检查是否有福缘石
-        back_msg = sql_message.get_back_msg(user_id)
-        has_protection = False
-        for back in back_msg:
-            if back['goods_id'] == 20006 and back['goods_num'] > 0:
-                has_protection = True
-                break
-        
-        if not has_protection:
-            msg = "道友没有福缘石，合成失败可能会损失材料！\n使用【强行合成】命令确认操作。"
-            await handle_send(bot, event, msg)
-            await fusion.finish()
-    
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
-    await fusion.finish()
-
-@force_fusion.handle(parameterless=[Cooldown(at_sender=False)])
-async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await force_fusion.finish()
-
-    user_id = user_info['user_id']
-    args_str = args.extract_plain_text().strip()
-    
-    if not args_str:
-        msg = fusion_help_text
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
-    if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
-        await force_fusion.finish()
-    
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
-    await force_fusion.finish()
-
 @available_fusion.handle(parameterless=[Cooldown(at_sender=False)])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     args_str = args.extract_plain_text().strip()
-
-    if args_str:
-        equipment_id, equipment = items.get_data_by_item_name(args_str)
-        if equipment and 'fusion' in equipment:
-            msg = get_item_msg(int(equipment_id))
-        else:
-            msg = f"未找到可合成的物品：{args_str}"
+    
+    # 获取所有可合成物品
+    all_fusion_items = []
+    for item_id, item_info in items.items.items():
+        if 'fusion' in item_info:
+            all_fusion_items.append({
+                'id': item_id,
+                'name': item_info['name'],
+                'type': item_info.get('type', '未知'),
+                'item_type': item_info.get('item_type', '未知'),
+                'info': item_info
+            })
+    
+    if not all_fusion_items:
+        msg = "目前没有可合成的物品。"
+        await handle_send(bot, event, msg)
+        await available_fusion.finish()
+    
+    # 检查参数是否为数字（分页请求）
+    is_page_request = args_str.isdigit()
+    page_num = int(args_str) if is_page_request else 1
+    
+    # 无参数或参数为数字：显示分页列表
+    if not args_str or is_page_request:
+        # 按类型分组，优先使用item_type，不存在时使用type
+        items_by_type = {}
+        for item in all_fusion_items:
+            # 优先使用item_type，不存在时使用type
+            category = item['item_type'] if item['item_type'] != '未知' else item['type']
+            if category not in items_by_type:
+                items_by_type[category] = []
+            items_by_type[category].append(item)
+        
+        # 按类型名称排序
+        sorted_categories = sorted(items_by_type.keys())
+        total_pages = (len(sorted_categories) + 1) // 2  # 每页2个类型
+        
+        # 检查请求的页数是否有效
+        if page_num < 1 or page_num > total_pages:
+            msg = f"页码无效，请输入1-{total_pages}之间的数字"
+            await handle_send(bot, event, msg)
+            await available_fusion.finish()
+        
+        # 获取当前页的类型
+        start_idx = (page_num - 1) * 2
+        end_idx = start_idx + 2
+        current_categories = sorted_categories[start_idx:end_idx]
+        
+        # 构建消息
+        msg_parts = [f"☆------(第{page_num}/{total_pages}页)------☆"]
+        
+        for category in current_categories:
+            msg_parts.append(f"\n【{category}】")
+            for item in items_by_type[category]:
+                msg_parts.append(f"• {item['name']}")
+        
+        msg_parts.append("\n【查看可合成物品 页数】")
+        msg_parts.append("【查看可合成物品 物品名/类型】")
+        
+        await handle_send(bot, event, "\n".join(msg_parts))
+        await available_fusion.finish()
+    
+    # 有参数且不是数字：匹配物品名、类型和物品类型
+    matched_items = []
+    for item in all_fusion_items:
+        # 检查是否匹配物品名、类型或物品类型
+        if (args_str.lower() in item['name'].lower() or 
+            args_str.lower() == item['type'].lower() or 
+            args_str.lower() == item['item_type'].lower()):
+            matched_items.append(item)
+    
+    if not matched_items:
+        msg = f"未找到匹配【{args_str}】的可合成物品"
+        await handle_send(bot, event, msg)
+        await available_fusion.finish()
+    
+    # 如果匹配的是类型，显示该类型下的所有物品
+    if any(args_str.lower() == item['type'].lower() or 
+           args_str.lower() == item['item_type'].lower() 
+           for item in matched_items):
+        # 构建类型筛选结果消息
+        type_name = args_str
+        msg_parts = [f"☆------【{type_name}】------☆"]
+        
+        for item in matched_items:
+            fusion_info = item['info']['fusion']            
+            msg_parts.append(f"\n• {item['name']}")
+        
+        msg_parts.append("\n【查看可合成物品 物品名】")
+        
+        await handle_send(bot, event, "\n".join(msg_parts))
+        await available_fusion.finish()
+    
+    # 如果匹配多个物品名，显示列表
+    if len(matched_items) > 1:
+        msg_parts = [f"☆------找到多个匹配【{args_str}】的物品------☆"]
+        for item in matched_items:
+            msg_parts.append(f"• {item['name']}")
+        msg_parts.append("\n请使用更精确的名称查看详细信息")
+        
+        await handle_send(bot, event, "\n".join(msg_parts))
+        await available_fusion.finish()
+    
+    # 显示单个物品的详细信息
+    item = matched_items[0]
+    item_id = item['id']
+    fusion_info = item['info']['fusion']
+    
+    # 构建详细信息
+    msg_parts = [f"☆------{item['name']} 合成信息------☆"]
+    msg_parts.append(f"物品ID: {item_id}")
+    msg_parts.append(f"类型: {item['type']}")
+    if item.get('item_type') and item['item_type'] != '未知':
+        msg_parts.append(f"物品类型: {item['item_type']}")
+    
+    # 合成要求
+    msg_parts.append("\n【合成要求】")
+    need_rank = fusion_info.get('need_rank', '无要求')
+    need_exp = number_to(int(fusion_info.get('need_exp', 0)))
+    need_stone = number_to(int(fusion_info.get('need_stone', 0)))
+    
+    msg_parts.append(f"境界: {need_rank}")
+    if int(fusion_info.get('need_exp', 0)) > 0:
+        msg_parts.append(f"修为: {need_exp}")
+    if int(fusion_info.get('need_stone', 0)) > 0:
+        msg_parts.append(f"灵石: {need_stone}")
+    
+    # 材料要求
+    need_items = fusion_info.get('need_item', {})
+    if need_items:
+        msg_parts.append("\n【所需材料】")
+        for material_id, amount in need_items.items():
+            material_info = items.get_data_by_item_id(int(material_id))
+            if material_info:
+                msg_parts.append(f"• {material_info['name']} x{amount}")
+    
+    # 数量限制
+    limit = fusion_info.get('limit')
+    if limit:
+        msg_parts.append(f"\n【数量限制】")
+        msg_parts.append(f"最多可合成: {limit}个")
+    
+    # 成功率信息
+    if int(item_id) in FIXED_SUCCESS_IDS:
+        msg_parts.append("\n【成功率】")
+        msg_parts.append("必定成功")
     else:
-        fusion_items = items.get_fusion_items()
-        if not fusion_items:
-            msg = "目前没有可合成的物品。"
-        else:
-            msg = "可合成的物品如下：\n" + "\n".join(fusion_items)
-
-    await handle_send(bot, event, msg)
+        msg_parts.append("\n【成功率】")
+        msg_parts.append("30%成功率")
+        msg_parts.append("(失败会消耗材料，使用福缘石可避免损失)")
+    
+    await handle_send(bot, event, "\n".join(msg_parts))
     await available_fusion.finish()
+

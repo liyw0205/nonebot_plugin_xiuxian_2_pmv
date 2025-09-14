@@ -123,7 +123,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg)
-        await battle.finish()
+        await tower_challenge.finish()
     if user_info['hp'] is None or user_info['hp'] == 0:
         sql_message.update_user_hp(user_id)
 
@@ -234,7 +234,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看通天塔商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    shop_items = tower_data.config["商店商品"]
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
@@ -242,6 +241,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     user_id = user_info["user_id"]
     tower_info = tower_data.get_user_tower_info(user_id)
+    shop_items = tower_data.config["商店商品"]
     
     if not shop_items:
         msg = "通天塔商店暂无商品！"
@@ -268,15 +268,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     msg_list = [f"\n道友目前拥有的通天塔积分：{tower_info['score']}点"]
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
     for item_id, item_data in current_page_items:
+        item_info = items.get_data_by_item_id(item_data["id"])
         msg_list.append(
             f"编号：{item_id}\n"
-            f"名称：{item_data['desc']}\n"
+            f"名称：{item_info['name']}\n"
+            f"描述：{item_info.get('desc', '暂无描述')}\n"
             f"价格：{item_data['cost']}积分\n"
             f"每周限购：{item_data['weekly_limit']}个\n"
             f"════════════"
         )
     
-    # 添加分页导航提示
     if total_pages > 1:
         msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
     

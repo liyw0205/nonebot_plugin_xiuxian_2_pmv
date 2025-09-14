@@ -685,7 +685,7 @@ def get_item_msg(goods_id, user_id=None):
     """
     item_info = items.get_data_by_item_id(goods_id)
     rank_name_list = convert_rank("江湖好手")[1]
-    if item_info['rank'] == -5:
+    if int(item_info['rank']) == -5:
         goods_rank = 23
     else:
         goods_rank = int(item_info['rank']) + 21
