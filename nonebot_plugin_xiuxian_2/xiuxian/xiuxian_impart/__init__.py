@@ -542,8 +542,8 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     except ValueError:
         page = 1
     
-    # 按卡名排序
-    sorted_cards = sorted(card_dict.items(), key=lambda x: x[0])
+    # 按数量从多到少排序，数量相同的按卡名排序
+    sorted_cards = sorted(card_dict.items(), key=lambda x: (-x[1], x[0]))
     
     # 分页设置
     cards_per_page = 30
