@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>数据库管理</h2>
+        
+        <div style="margin-top: 20px;">
+            <h3>选择数据库</h3>
+            
+            {% for db_name, db_info in tables.items() %}
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>
+                        <a href="javascript:void(0)" onclick="toggleDatabase('{{ db_name }}')" class="db-toggle">
+                            {{ db_name }} ▼
+                        </a>
+                    </h3>
+                    <p>路径: {{ db_info.path }}</p>
+                    
+                    <div id="{{ db_name }}_tables" class="database-tables" style="display: none; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
+                        {% for table_name, table_info in db_info.tables.items() %}
+                            <div class="card" style="background-color: #f9f9f9;">
+                                <h4>{{ table_info.name }}</h4>
+                                <p>表名: {{ table_name }}</p>
+                                <p>字段数: {{ table_info.fields|length }}</p>
+                                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">查看数据</a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <script>
+        function toggleDatabase(dbName) {
+            const tableContainer = document.getElementById(dbName + '_tables');
+            const toggleLink = document.querySelector(`a[onclick="toggleDatabase('${dbName}')"]`);
+            
+            if (tableContainer.style.display === 'none') {
+                tableContainer.style.display = 'grid';
+                toggleLink.innerHTML = `${dbName} ▲`;
+            } else {
+                tableContainer.style.display = 'none';
+                toggleLink.innerHTML = `${dbName} ▼`;
+            }
+        }
+    </script>
+    
+    <style>
+        .db-toggle {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .db-toggle:hover {
+            text-decoration: underline;
+        }
+        .database-tables {
+            display: none;
+        }
+    </style>
+{% endblock %}

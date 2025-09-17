@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>{{ table_info.name }} 数据</h2>
+        
+        <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
+            <select name="search_field">
+                <option value="">选择搜索字段</option>
+                {% for field in table_info.fields %}
+                    <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="search_value" placeholder="搜索内容" value="{{ search_value or '' }}">
+            <button type="submit" class="btn">搜索</button>
+            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">重置</a>
+        </form>
+        
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        {% for field in table_info.fields %}
+                            <th>{{ field }}</th>
+                        {% endfor %}
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data.data %}
+                        <tr>
+                            {% for field in table_info.fields %}
+                                <td>
+                                    {% if field in row %}
+                                        {{ row[field] }}
+                                    {% else %}
+                                        NULL
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            <td>
+                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn">编辑</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="pagination">
+            {% set current_page = data.page %}
+            {% set total_pages = data.total_pages %}
+            
+            {# 第一页 #}
+            {% if current_page > 1 %}
+                <a href="{{ url_for('table_view', table_name=table_name, page=1, search_field=search_field, search_value=search_value) }}">1</a>
+            {% endif %}
+            
+            {# 前省略号 #}
+            {% if current_page > 4 %}
+                <span>...</span>
+            {% endif %}
+            
+            {# 当前页的前3页 #}
+            {% for p in range([1, current_page-3]|max, current_page) %}
+                {% if p > 1 %}
+                    <a href="{{ url_for('table_view', table_name=table_name, page=p, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            
+            {# 当前页 #}
+            <a href="{{ url_for('table_view', table_name=table_name, page=current_page, search_field=search_field, search_value=search_value) }}" class="active">{{ current_page }}</a>
+            
+            {# 当前页的后3页 #}
+            {% for p in range(current_page+1, [current_page+4, total_pages+1]|min) %}
+                <a href="{{ url_for('table_view', table_name=table_name, page=p, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+            {% endfor %}
+            
+            {# 后省略号 #}
+            {% if total_pages > current_page + 3 %}
+                <span>...</span>
+            {% endif %}
+            
+            {# 最后一页 #}
+            {% if total_pages > 1 and current_page < total_pages %}
+                <a href="{{ url_for('table_view', table_name=table_name, page=total_pages, search_field=search_field, search_value=search_value) }}">{{ total_pages }}</a>
+            {% endif %}
+        </div>
+        
+        <div>
+            显示 {{ (data.page - 1) * data.per_page + 1 }} - {{ [data.page * data.per_page, data.total]|min }} 条，共 {{ data.total }} 条
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>欢迎, 管理员 {{ admin_id }}</h2>
+        
+        <div style="margin-top: 20px;">
+            <h3>快捷操作</h3>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <a href="{{ url_for('database') }}" class="btn">数据库管理</a>
+                <a href="{{ url_for('commands') }}" class="btn">管理员指令</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}

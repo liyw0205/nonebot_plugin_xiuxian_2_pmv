@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>编辑 {{ table_info.name }} 数据</h2>
+        
+        <form id="editForm" method="post">
+            {% for field in table_info.fields %}
+                <div class="form-group">
+                    <label for="{{ field }}">{{ field }}</label>
+                    {% if field == primary_key %}
+                        <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
+                    {% else %}
+                        <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}">
+                    {% endif %}
+                </div>
+            {% endfor %}
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button type="button" onclick="submitForm('update')" class="btn btn-success">保存</button>
+                <button type="button" onclick="confirmDelete()" class="btn btn-danger">删除</button>
+                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">返回</a>
+            </div>
+            
+            <input type="hidden" name="action" id="action" value="">
+        </form>
+    </div>
+    
+    <script>
+        function submitForm(action) {
+            document.getElementById('action').value = action;
+            fetch("{{ url_for('row_edit', table_name=table_name, row_id=row_data[primary_key]) }}", {
+                method: 'POST',
+                body: new FormData(document.getElementById('editForm'))
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    window.location.href = "{{ url_for('table_view', table_name=table_name) }}";
+                } else {
+                    alert('错误: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('发生错误');
+            });
+        }
+        
+        function confirmDelete() {
+            if (confirm('确定要删除这条记录吗？此操作不可撤销！')) {
+                submitForm('delete');
+            }
+        }
+    </script>
+{% endblock %}
