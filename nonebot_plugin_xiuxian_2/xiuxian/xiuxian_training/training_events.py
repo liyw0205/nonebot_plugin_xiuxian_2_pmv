@@ -1,5 +1,5 @@
 import random
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 from ..xiuxian_config import convert_rank

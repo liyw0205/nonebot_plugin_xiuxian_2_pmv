@@ -265,7 +265,6 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg)
     await boss_delete_all.finish()
 
-
 @battle.handle(parameterless=[Cooldown(stamina_cost=config['讨伐世界Boss体力消耗'], at_sender=False)])
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
@@ -375,6 +374,25 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     integral_limit = 6000
     stone_limit = 300000000
     
+    # 初始化奖励变量
+    boss_integral = 0
+    get_stone = 0
+    
+    rank_penalty = 1.0
+    
+    # 检查境界压制（用户境界高于BOSS）
+    if user_info['root'] != "凡人" and user_rank < boss_rank:
+        # 境界差越大，衰减越严重
+        rank_diff = user_rank - boss_rank
+        if rank_diff == 1:
+            rank_penalty = 0.9  # 高1个小境界，衰减10%
+        elif rank_diff == 2:
+            rank_penalty = 0.8  # 高2个小境界，衰减20%
+        elif rank_diff == 3:
+            rank_penalty = 0.5  # 高3个小境界，衰减50%
+        else:  # rank_diff >= 4
+            rank_penalty = 0.3  # 高4个及以上小境界，衰减70%
+    
     if boss_now_hp <= 0:  # BOSS被击杀
         victor = "群友赢了"
         # 击杀奖励（50%）
@@ -383,33 +401,38 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             integral_msg = "今日积分已达上限，无法获得更多积分！"
         else:
             boss_integral = 1000
+            # 应用境界压制衰减
+            boss_integral = int(boss_integral * rank_penalty)
             boss_integral = min(boss_integral, integral_limit - today_integral)
-            integral_msg = f"获得世界积分：{boss_integral}点"
             
         if today_stone >= stone_limit:
             get_stone = 0
             stone_msg = "今日灵石已达上限，无法获得更多灵石！"
         else:
             get_stone = int(boss_max_stone * 0.50)
+            # 应用境界压制衰减
+            get_stone = int(get_stone * rank_penalty)
             get_stone = min(get_stone, stone_limit - today_stone)
-            stone_msg = f"获得灵石{get_stone}枚"
+        
+        # 凡人境界加成（只有在没有境界压制时才应用）
+        if user_info['root'] == "凡人" and rank_penalty == 1.0:
+            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
+            points_bonus = int(80 * (user_rank - boss_rank))
+            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
         
         # 应用灵石加成
         stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
         get_stone = int(get_stone * (1 + stone_buff))
         
-        if user_info['root'] == "凡人":
-            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
-            points_bonus = int(80 * (user_rank - boss_rank))
-            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
+        if boss_integral > 0:
+            integral_msg = f"获得世界积分：{boss_integral}点"
         else:
-            if boss_rank - user_rank > 2:
-                boss_integral = int(boss_integral // 2)
-                get_stone = int(get_stone // 2)
-                more_msg = f"道友的境界超过boss太多了,不齿！"
-            if boss_rank - user_rank > 3:
-                boss_integral = int(boss_integral // 5)
-                get_stone = int(get_stone // 5)
+            integral_msg = "今日积分已达上限，无法获得更多积分！"
+            
+        if get_stone > 0:
+            stone_msg = f"获得灵石{get_stone}枚"
+        else:
+            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
         
         # 修为奖励
         exp_msg = ""
@@ -437,7 +460,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         boss_limit.update_integral(user_id, boss_integral)
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         
-        # 构建消息
+        # 构建消息（使用调整后的最终值）
         msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}!{exp_msg}"
         if drops_msg:
             msg += f"\n{drops_msg}"
@@ -461,29 +484,41 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             integral_msg = "今日积分已达上限，无法获得更多积分！"
         else:
             boss_integral = max(int(damage_ratio * 1500), 1)
+            # 应用境界压制衰减
+            boss_integral = int(boss_integral * rank_penalty)
             boss_integral = min(boss_integral, integral_limit - today_integral)
-            integral_msg = f"获得世界积分：{boss_integral}点"
-        
+            
         # 计算灵石奖励
         if today_stone >= stone_limit:
             get_stone = 0
             stone_msg = "今日灵石已达上限，无法获得更多灵石！"
         else:
             get_stone = int(boss_max_stone * damage_ratio)
+            # 应用境界压制衰减
+            get_stone = int(get_stone * rank_penalty)
             get_stone = min(get_stone, stone_limit - today_stone)
-            stone_msg = f"获得灵石{get_stone}枚"
+        
+        # 凡人境界加成（只有在没有境界压制时才应用）
+        if user_info['root'] == "凡人" and rank_penalty == 1.0:
+            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
+            points_bonus = int(80 * (user_rank - boss_rank))
+            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
         
         # 应用灵石加成
         stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
         get_stone = int(get_stone * (1 + stone_buff))
         get_stone = max(get_stone, 1)  # 至少获得1灵石
+        
+        if boss_integral > 0:
+            integral_msg = f"获得世界积分：{boss_integral}点"
+        else:
+            integral_msg = "今日积分已达上限，无法获得更多积分！"
             
-        # 凡人境界加成
-        if user_info['root'] == "凡人":
-            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
-            points_bonus = int(80 * (user_rank - boss_rank))
-            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
-
+        if get_stone > 0:
+            stone_msg = f"获得灵石{get_stone}枚"
+        else:
+            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
+            
         # 修为奖励
         exp_msg = ""
         if exp_buff > 0 and user_info['root'] != "凡人":
@@ -503,7 +538,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         boss_limit.update_integral(user_id, boss_integral)
         save_user_boss_fight_info(user_id, user_boss_fight_info)
         
-        # 构建消息
+        # 构建消息（使用调整后的最终值）
         msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
         if user_info['root'] == "凡人" and boss_integral < 0:
             msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"

@@ -23,7 +23,12 @@ items = Items()
 sql_message = XiuxianDateManage()
 
 # 合成必定成功ID列表
-FIXED_SUCCESS_IDS = [7084, 1002, 1003]
+FIXED_SUCCESS_IDS = [7084]
+
+fusion = on_command('合成', priority=15, block=True)
+force_fusion = on_command('强行合成', priority=15, block=True)
+fusion_help = on_command("合成帮助", priority=15, block=True)
+available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=15, block=True)
 
 fusion_help_text = f"""
 合成帮助:
@@ -130,12 +135,6 @@ async def general_fusion(user_id, equipment_id, equipment):
                 sql_message.update_back_j(user_id, int(item_id), amount_needed)  # 扣道具
             
             return False, f"合成失败！材料已消耗。"
-
-# 命令处理器
-fusion = on_command('合成', priority=15, block=True)
-force_fusion = on_command('强行合成', priority=15, block=True)
-fusion_help = on_command("合成帮助", priority=15, block=True)
-available_fusion = on_command('查看可合成物品', priority=15, block=True)
 
 @fusion_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
