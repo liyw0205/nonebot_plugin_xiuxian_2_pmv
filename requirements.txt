@@ -9,5 +9,6 @@ aiohttp
 pydantic
 aiofiles
 psutil
+flask
 nonebot_plugin_apscheduler 
  
