@@ -427,7 +427,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     get_stone = max(get_stone, 1)  # 至少获得1灵石
     
     if boss_integral > 0:
-        integral_msg = f"获得世界积分：{boss_integral}点{boss_rank}-{user_rank}-{rank_penalty}"
+        integral_msg = f"获得世界积分：{boss_integral}点{boss_rank}"
     else:
         integral_msg = "今日积分已达上限，无法获得更多积分！"
         
