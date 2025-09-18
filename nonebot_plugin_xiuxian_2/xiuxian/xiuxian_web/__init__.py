@@ -185,6 +185,7 @@ def execute_sql(db_path, sql, params=None):
     finally:
         conn.close()
 
+# 在get_table_data函数中添加多值搜索支持
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None):
     """获取表数据（分页和搜索）"""
     offset = (page - 1) * per_page
@@ -198,10 +199,19 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     sql = f"SELECT * FROM {table_name}"
     params = []
     
-    # 添加搜索条件
+    # 添加搜索条件 - 支持多值搜索
     if search_field and search_value:
-        sql += f" WHERE {search_field} LIKE ?"
-        params.append(f"%{search_value}%")
+        # 分割搜索值为多个条件
+        values = search_value.split()
+        if len(values) > 1:
+            # 多个值使用OR连接
+            placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+            sql += f" WHERE ({placeholders})"
+            params.extend([f"%{value}%" for value in values])
+        else:
+            # 单个值
+            sql += f" WHERE {search_field} LIKE ?"
+            params.append(f"%{search_value}%")
     
     # 添加分页
     sql += f" LIMIT ? OFFSET ?"
@@ -213,9 +223,19 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     # 获取总数
     count_sql = f"SELECT COUNT(*) FROM {table_name}"
     if search_field and search_value:
-        count_sql += f" WHERE {search_field} LIKE ?"
+        values = search_value.split()
+        if len(values) > 1:
+            placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+            count_sql += f" WHERE ({placeholders})"
+            count_params = [f"%{value}%" for value in values]
+        else:
+            count_sql += f" WHERE {search_field} LIKE ?"
+            count_params = [f"%{search_value}%"]
+    else:
+        count_params = None
     
-    total = execute_sql(db_path, count_sql, params[:1] if search_field and search_value else None)[0]['COUNT(*)']
+    total_result = execute_sql(db_path, count_sql, count_params)
+    total = total_result[0]['COUNT(*)'] if total_result else 0
     
     return {
         "data": data,
@@ -399,6 +419,67 @@ def row_edit(table_name, row_id):
         row_data=display_data,
         primary_key=primary_key
     )
+
+@app.route('/batch_edit/<table_name>', methods=['POST'])
+def batch_edit(table_name):
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    # 获取表单数据
+    search_field = request.form.get('search_field')
+    search_value = request.form.get('search_value')
+    batch_field = request.form.get('batch_field')
+    operation = request.form.get('operation')
+    value = request.form.get('value')
+    apply_to_all = request.form.get('apply_to_all') == 'on'
+    
+    if not all([batch_field, operation, value]):
+        return jsonify({"success": False, "error": "参数不完整"})
+    
+    # 确定数据库路径
+    db_path = IMPART_DB if table_name in get_database_tables(IMPART_DB) else DATABASE
+    
+    try:
+        # 构建更新语句
+        if operation == "set":
+            sql = f"UPDATE {table_name} SET {batch_field} = ?"
+            params = [value]
+        elif operation == "add":
+            sql = f"UPDATE {table_name} SET {batch_field} = {batch_field} + ?"
+            params = [value]
+        elif operation == "subtract":
+            sql = f"UPDATE {table_name} SET {batch_field} = {batch_field} - ?"
+            params = [value]
+        else:
+            return jsonify({"success": False, "error": "无效的操作类型"})
+        
+        # 添加WHERE条件（如果不应用到整张表且有搜索条件）
+        if not apply_to_all and search_field and search_value:
+            values = search_value.split()
+            if len(values) > 1:
+                condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                sql += f" WHERE ({condition})"
+                params.extend([f"%{v}%" for v in values])
+            else:
+                sql += f" WHERE {search_field} LIKE ?"
+                params.append(f"%{search_value}%")
+        
+        # 执行更新
+        result = execute_sql(db_path, sql, params)
+        
+        if 'error' in result:
+            return jsonify({"success": False, "error": result['error']})
+        
+        # 获取受影响的行数
+        affected_rows = result.get('affected_rows', 0)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"成功更新 {affected_rows} 条记录"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"执行错误: {str(e)}"})
 
 @app.route('/commands')
 def commands():

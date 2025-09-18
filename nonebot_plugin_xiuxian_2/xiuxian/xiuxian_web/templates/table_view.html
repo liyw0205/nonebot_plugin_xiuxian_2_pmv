@@ -11,12 +11,57 @@
                     <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
                 {% endfor %}
             </select>
-            <input type="text" name="search_value" placeholder="搜索内容" value="{{ search_value or '' }}">
+            <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
             <button type="submit" class="btn">搜索</button>
-            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">重置</a>
+            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">重置搜索</a>
         </form>
         
-        <div style="overflow-x: auto;">
+        <!-- 批量操作表单 - 始终显示 -->
+        <div class="card" style="margin-top: 20px; background-color: #f8f9fa;">
+            <h3>批量修改</h3>
+            <form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
+                <input type="hidden" name="search_field" value="{{ search_field or '' }}">
+                <input type="hidden" name="search_value" value="{{ search_value or '' }}">
+                
+                <div class="form-group">
+                    <label for="batch_field">选择字段</label>
+                    <select id="batch_field" name="batch_field" required>
+                        <option value="">选择要修改的字段</option>
+                        {% for field in table_info.fields %}
+                            {% if field != table_info.primary_key %}
+                                <option value="{{ field }}">{{ field }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="operation">操作类型</label>
+                    <select id="operation" name="operation" required>
+                        <option value="set">替换为</option>
+                        <option value="add">增加</option>
+                        <option value="subtract">减少</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="value">值</label>
+                    <input type="text" id="value" name="value" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="apply_to_all" name="apply_to_all">
+                        应用到整张表（忽略搜索条件）
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-success">执行批量操作</button>
+                <span id="batchResult" style="margin-left: 15px;"></span>
+            </form>
+        </div>
+        
+        <div style="overflow-x: auto; margin-top: 20px;">
             <table>
                 <thead>
                     <tr>
@@ -47,6 +92,7 @@
             </table>
         </div>
         
+        <!-- 分页导航 -->
         <div class="pagination">
             {% set current_page = data.page %}
             {% set total_pages = data.total_pages %}
@@ -87,8 +133,167 @@
             {% endif %}
         </div>
         
-        <div>
+        <div style="margin-top: 10px;">
             显示 {{ (data.page - 1) * data.per_page + 1 }} - {{ [data.page * data.per_page, data.total]|min }} 条，共 {{ data.total }} 条
         </div>
     </div>
+
+    <script>
+        // 批量操作表单提交
+        document.getElementById('batchForm')?.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const applyToAll = document.getElementById('apply_to_all').checked;
+            const batchField = document.getElementById('batch_field').value;
+            const operation = document.getElementById('operation').value;
+            const value = document.getElementById('value').value;
+            
+            let message = `确定要执行批量操作吗？\n字段: ${batchField}\n操作: ${operation}\n值: ${value}`;
+            
+            if (applyToAll) {
+                message += "\n\n⚠️ 警告：此操作将应用到整张表的所有记录！";
+            }
+            
+            if (!confirm(message)) {
+                return;
+            }
+            
+            const formData = new FormData(this);
+            const resultSpan = document.getElementById('batchResult');
+            resultSpan.innerHTML = '<span style="color: blue;">处理中...</span>';
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resultSpan.innerHTML = `<span style="color: green;">${data.message}</span>`;
+                    // 刷新页面以显示更新后的数据
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    resultSpan.innerHTML = `<span style="color: red;">错误: ${data.error}</span>`;
+                }
+            })
+            .catch(error => {
+                resultSpan.innerHTML = `<span style="color: red;">请求失败: ${error}</span>`;
+            });
+        });
+        
+        // 当选择应用到整张表时，禁用搜索相关字段
+        document.getElementById('apply_to_all')?.addEventListener('change', function() {
+            const searchField = document.querySelector('input[name="search_field"]');
+            const searchValue = document.querySelector('input[name="search_value"]');
+            
+            if (searchField && searchValue) {
+                searchField.disabled = this.checked;
+                searchValue.disabled = this.checked;
+            }
+        });
+    </script>
+
+    <style>
+        /* 基础样式 */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        h2, h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        select, input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 8px 15px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn:hover {
+            opacity: 0.9;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .pagination {
+            display: flex;
+            gap: 5px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            text-decoration: none;
+            color: #007bff;
+        }
+        
+        .pagination a:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .pagination .active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+    </style>
 {% endblock %}
