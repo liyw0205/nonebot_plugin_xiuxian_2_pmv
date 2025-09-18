@@ -359,12 +359,12 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     # 计算实际造成的伤害（不超过BOSS最大生命值的20%）
     max_single_damage = boss_all_hp * 0.2  # 单次最大伤害限制
+    total_damage = boss_old_hp - bossinfo_new['气血']
     actual_damage = min(boss_old_hp - bossinfo_new['气血'], max_single_damage)
     
     # 更新BOSS血量
     boss_now_hp = max(boss_old_hp - actual_damage, 0)
     bossinfo_new['气血'] = boss_now_hp
-    total_damage = boss_old_hp - boss_now_hp
     
     # 获取今日已获得的积分和灵石
     today_integral = boss_limit.get_integral(user_id)
@@ -535,7 +535,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
-    result, victor, bossinfo_new, get_stone = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
+    result, victor, bossinfo_new, _ = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
     # 打之后的血量
     boss_now_hp = bossinfo_new['气血']
     # 计算总伤害
@@ -625,7 +625,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
-    result, victor, bossinfo_new, get_stone = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
+    result, victor, bossinfo_new, _ = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
     # 打之后的血量
     boss_now_hp = bossinfo_new['气血']
     # 计算总伤害
