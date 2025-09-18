@@ -461,7 +461,7 @@ class TrainingEvents:
             
             # 获取奖励事件中的物品类型列表
             reward_data = events_pool["reward"]["item"]
-            item_type = random.choice(reward_data["types"])
+            item_types = random.choice(reward_data["types"])
             
             # 获取用户当前装备
             user_buff_info = UserBuffDate(user_id).BuffInfo
@@ -488,7 +488,7 @@ class TrainingEvents:
                 valid_items = []
                 for item in same_type_items:
                     item_data = items.get_data_by_item_id(item["goods_id"])
-                    item_rank = get_item_msg_rank(item["goods_id"])
+                    item_rank = item_data["rank"]
                     if item_rank >= min_rank:
                         valid_items.append(item)
                 

@@ -249,13 +249,19 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def update_user_stamina(self, user_id, stamina_change, key):
         """更新用户体力值 1为增加，2为减少"""
         cur = self.conn.cursor()
+        max_stamina = XiuConfig().max_stamina
 
-        if key == 1:
-            sql = f"UPDATE user_xiuxian SET user_stamina=user_stamina+? WHERE user_id=?"
-            cur.execute(sql, (stamina_change, user_id))
-            self.conn.commit()
-        elif key == 2:
-            sql = f"UPDATE user_xiuxian SET user_stamina=user_stamina-? WHERE user_id=?"
+        if key == 1:  # 增加体力
+            cur.execute("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+            current_stamina = cur.fetchone()[0]
+            new_stamina = min(current_stamina + stamina_change, max_stamina)
+            if current_stamina < max_stamina:
+                sql = "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?"
+                cur.execute(sql, (new_stamina, user_id))
+                self.conn.commit()
+                
+        elif key == 2:  # 减少体力
+            sql = "UPDATE user_xiuxian SET user_stamina=MAX(user_stamina-?, 0) WHERE user_id=?"
             cur.execute(sql, (stamina_change, user_id))
             self.conn.commit()
  

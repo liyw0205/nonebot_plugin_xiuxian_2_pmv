@@ -2737,6 +2737,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
             give_qq = arg.data.get("qq", "")
     if not args:
         sql_message.restate()
+        sql_message.update_all_users_stamina(XiuConfig().max_stamina, XiuConfig().max_stamina)
         msg = f"所有用户信息重置成功！"
         await handle_send(bot, event, msg)
         await restate.finish()
@@ -2750,11 +2751,12 @@ async def restate_(bot: Bot, event: GroupMessageEvent, args: Message = CommandAr
             give_qq = "000000"
     if give_qq:
         sql_message.restate(give_qq)
+        sql_message.update_user_stamina(give_qq, XiuConfig().max_stamina, 1)  # 增加体力
         msg = f"{give_qq}用户信息重置成功！"
         await handle_send(bot, event, msg)
         await restate.finish()
     else:
-        msg = f"对方未踏入修仙界，不可抢劫！"
+        msg = f"对方未踏入修仙界！"
         await handle_send(bot, event, msg)
         await restate.finish()
 

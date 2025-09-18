@@ -383,168 +383,101 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 检查境界压制（用户境界高于BOSS）
     if user_info['root'] != "凡人" and user_rank < boss_rank:
         # 境界差越大，衰减越严重
-        rank_diff = user_rank - boss_rank
+        rank_diff = boss_rank - user_rank
         if rank_diff == 1:
-            rank_penalty = 0.9  # 高1个小境界，衰减10%
+            rank_penalty = 0.95  # 高1个小境界，衰减5%
         elif rank_diff == 2:
-            rank_penalty = 0.8  # 高2个小境界，衰减20%
+            rank_penalty = 0.9  # 高2个小境界，衰减10%
         elif rank_diff == 3:
-            rank_penalty = 0.5  # 高3个小境界，衰减50%
+            rank_penalty = 0.8  # 高3个小境界，衰减20%
         else:  # rank_diff >= 4
-            rank_penalty = 0.3  # 高4个及以上小境界，衰减70%
+            rank_penalty = 0.5  # 高4个及以上小境界，衰减50%
     
-    if boss_now_hp <= 0:  # BOSS被击杀
-        victor = "群友赢了"
-        # 击杀奖励（50%）
-        if today_integral >= integral_limit:
-            boss_integral = 0
-            integral_msg = "今日积分已达上限，无法获得更多积分！"
-        else:
-            boss_integral = 1000
-            # 应用境界压制衰减
-            boss_integral = int(boss_integral * rank_penalty)
-            boss_integral = min(boss_integral, integral_limit - today_integral)
-            
-        if today_stone >= stone_limit:
-            get_stone = 0
-            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-        else:
-            get_stone = int(boss_max_stone * 0.50)
-            # 应用境界压制衰减
-            get_stone = int(get_stone * rank_penalty)
-            get_stone = min(get_stone, stone_limit - today_stone)
+    damage_ratio = min(total_damage / boss_all_hp, 0.20)
+    
+    # 计算积分奖励
+    if today_integral >= integral_limit:
+        boss_integral = 0
+        integral_msg = "今日积分已达上限，无法获得更多积分！"
+    else:
+        boss_integral = max(int(damage_ratio * 3000), 1)
+        # 应用境界压制衰减
+        boss_integral = int(boss_integral * rank_penalty)
+        boss_integral = min(boss_integral, integral_limit - today_integral)
         
-        # 凡人境界加成（只有在没有境界压制时才应用）
-        if user_info['root'] == "凡人" and rank_penalty == 1.0:
-            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
-            points_bonus = int(80 * (user_rank - boss_rank))
-            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
+    # 计算灵石奖励
+    if today_stone >= stone_limit:
+        get_stone = 0
+        stone_msg = "今日灵石已达上限，无法获得更多灵石！"
+    else:
+        get_stone = int(boss_max_stone * damage_ratio)
+        # 应用境界压制衰减
+        get_stone = int(get_stone * rank_penalty)
+        get_stone = min(get_stone, stone_limit - today_stone)
+    
+    # 凡人境界加成（只有在没有境界压制时才应用）
+    if user_info['root'] == "凡人" and rank_penalty == 1.0:
+        boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
+        points_bonus = int(80 * (user_rank - boss_rank))
+        more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
+    
+    # 应用灵石加成
+    stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
+    get_stone = int(get_stone * (1 + stone_buff))
+    get_stone = max(get_stone, 1)  # 至少获得1灵石
+    
+    if boss_integral > 0:
+        integral_msg = f"获得世界积分：{boss_integral}点{boss_rank}-{user_rank}-{rank_penalty}"
+    else:
+        integral_msg = "今日积分已达上限，无法获得更多积分！"
         
-        # 应用灵石加成
-        stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
-        get_stone = int(get_stone * (1 + stone_buff))
+    if get_stone > 0:
+        stone_msg = f"获得灵石{number_to(get_stone)}枚"
+    else:
+        stone_msg = "今日灵石已达上限，无法获得更多灵石！"
         
-        if boss_integral > 0:
-            integral_msg = f"获得世界积分：{boss_integral}点"
-        else:
-            integral_msg = "今日积分已达上限，无法获得更多积分！"
-            
-        if get_stone > 0:
-            stone_msg = f"获得灵石{get_stone}枚"
-        else:
-            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-        
-        # 修为奖励
-        exp_msg = ""
-        top_user_info = sql_message.get_top1_user()
-        if exp_buff > 0 and user_info['root'] != "凡人":
-            now_exp = int(((top_user_info['exp'] * 0.1) / user_info['exp']) / (exp_buff * (1 / (user_rank + 1))))
-            if now_exp > 1000000:
-                now_exp = int(1000000 / random.randint(5, 10))
-            sql_message.update_exp(user_id, now_exp)
-            exp_msg = f"，获得修为{now_exp}点！"
-        
-        # 掉落物品
-        drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
-        drops_msg = ""
-        if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
-            drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
-            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
-        
-        # 更新数据
-        sql_message.update_ls(user_id, get_stone, 1)
-        boss_limit.update_stone(user_id, get_stone)
-        
-        user_boss_fight_info = get_user_boss_fight_info(user_id)
-        user_boss_fight_info['boss_integral'] += boss_integral
-        boss_limit.update_integral(user_id, boss_integral)
-        save_user_boss_fight_info(user_id, user_boss_fight_info)
-        
-        # 构建消息（使用调整后的最终值）
-        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}!{exp_msg}"
-        if drops_msg:
-            msg += f"\n{drops_msg}"
-        if user_info['root'] == "凡人" and boss_integral < 0:
-            msg += f"\n如果出现负积分，说明你这凡人境界太高了(如果总世界积分为负数，会帮你重置成0)，玩凡人就不要那么高境界了！！！"
-        
+    # 修为奖励
+    exp_msg = ""
+    if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
+        now_exp = int((user_info['exp']) * exp_buff / 10000 * (0.1 * user_rank))
+        sql_message.update_exp(user_id, now_exp)
+        exp_msg = f"，获得修为{number_to(now_exp)}点！"
+    
+    # 掉落物品
+    drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
+    drops_msg = ""
+    
+    # 更新数据
+    sql_message.update_ls(user_id, get_stone, 1)
+    boss_limit.update_stone(user_id, get_stone)
+    
+    user_boss_fight_info = get_user_boss_fight_info(user_id)
+    user_boss_fight_info['boss_integral'] += boss_integral
+    boss_limit.update_integral(user_id, boss_integral)
+    save_user_boss_fight_info(user_id, user_boss_fight_info)
+    
+    if victor == "群友赢了":
+        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
         # 移除并生成新BOSS
         group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
         new_boss = createboss_jj(bossinfo['jj'])
         if new_boss:  
             group_boss[group_id].append(new_boss)
-            
-    else:  # BOSS未被击杀
-        victor = "Boss赢了"
-        # 伤害奖励（最多20%）
-        damage_ratio = min(total_damage / boss_all_hp, 0.20)
-        
-        # 计算积分奖励
-        if today_integral >= integral_limit:
-            boss_integral = 0
-            integral_msg = "今日积分已达上限，无法获得更多积分！"
-        else:
-            boss_integral = max(int(damage_ratio * 1500), 1)
-            # 应用境界压制衰减
-            boss_integral = int(boss_integral * rank_penalty)
-            boss_integral = min(boss_integral, integral_limit - today_integral)
-            
-        # 计算灵石奖励
-        if today_stone >= stone_limit:
-            get_stone = 0
-            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-        else:
-            get_stone = int(boss_max_stone * damage_ratio)
-            # 应用境界压制衰减
-            get_stone = int(get_stone * rank_penalty)
-            get_stone = min(get_stone, stone_limit - today_stone)
-        
-        # 凡人境界加成（只有在没有境界压制时才应用）
-        if user_info['root'] == "凡人" and rank_penalty == 1.0:
-            boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
-            points_bonus = int(80 * (user_rank - boss_rank))
-            more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
-        
-        # 应用灵石加成
-        stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
-        get_stone = int(get_stone * (1 + stone_buff))
-        get_stone = max(get_stone, 1)  # 至少获得1灵石
-        
-        if boss_integral > 0:
-            integral_msg = f"获得世界积分：{boss_integral}点"
-        else:
-            integral_msg = "今日积分已达上限，无法获得更多积分！"
-            
-        if get_stone > 0:
-            stone_msg = f"获得灵石{get_stone}枚"
-        else:
-            stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-            
-        # 修为奖励
-        exp_msg = ""
-        if exp_buff > 0 and user_info['root'] != "凡人":
-            top_user_info = sql_message.get_top1_user()
-            now_exp = int(((top_user_info['exp'] * 0.1) / user_info['exp']) / (exp_buff * (1 / (user_rank + 1))))
-            if now_exp > 1000000:
-                now_exp = int(1000000 / random.randint(5, 10))
-            sql_message.update_exp(user_id, now_exp)
-            exp_msg = f"，获得修为{now_exp}点！"
-        
-        # 更新数据
-        sql_message.update_ls(user_id, get_stone, 1)
-        boss_limit.update_stone(user_id, get_stone)
-        
-        user_boss_fight_info = get_user_boss_fight_info(user_id)
-        user_boss_fight_info['boss_integral'] += boss_integral
-        boss_limit.update_integral(user_id, boss_integral)
-        save_user_boss_fight_info(user_id, user_boss_fight_info)
-        
-        # 构建消息（使用调整后的最终值）
-        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
-        if user_info['root'] == "凡人" and boss_integral < 0:
-            msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
-        
+        if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
+            drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
+            msg += f"\n{drops_msg}"
+            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
+    else:
+        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}"
         # 更新BOSS状态（不扣除灵石）
         group_boss[group_id][boss_num - 1] = bossinfo_new
+        if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
+            drops_msg = f"路上好像有什么东西，凑近一看居然是{drops_info['name']}！"
+            msg += f"\n{drops_msg}"
+            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
+    
+    if user_info['root'] == "凡人" and boss_integral < 0:
+        msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
     
     old_boss_info.save_boss(group_boss)
     battle_flag[group_id] = False
@@ -1218,14 +1151,14 @@ class BossDrops:
             return None, None
             
         # 计算适合用户等级的掉落物范围
-        user_rank = convert_rank(user_level)[0]
-        min_rank = max(convert_rank(user_level)[0] - 22, 8)
-        max_rank = min(random.randint(min_rank, min_rank + 30), 55)
-        
+        zx_rank = max(convert_rank(user_level)[0] - 22, 5)
+        zx_rank = min(random.randint(zx_rank, zx_rank + 25), 55)
+        if zx_rank == 5 and random.randint(1, 100) != 100:
+            zx_rank = 16
         # 筛选符合条件的掉落物
         eligible_drops = []
         for drop_id, drop_info in self.drops_data.items():
-            if min_rank <= drop_info.get('rank', 0) <= max_rank:
+            if drop_info.get('rank', 0) >= zx_rank:
                 eligible_drops.append((drop_id, drop_info))
                 
         if not eligible_drops:
@@ -1244,13 +1177,16 @@ def boss_drops(user_rank, boss_rank, boss, user_info):
     """
     drops_system = BossDrops()
     
-    # 基础掉落概率检查(30%)
-    if random.random() > 0.3:
+    # 基础掉落概率检查(10%)
+    roll = random.randint(1, 100)
+    if roll >= 10: 
         return None, None
         
     # 境界差距过大时极低概率掉落(5%)
-    if user_rank - boss_rank >= 4 and random.random() > 0.05:
-        return None, None
+    if boss_rank - user_rank >= 4 or user_rank - boss_rank >= 4:
+        roll = random.randint(1, 100)
+        if roll >= 5: 
+            return None, None
         
     # 获取随机掉落物
     drop_id, drop_info = drops_system.get_random_drop(user_info['level'])
