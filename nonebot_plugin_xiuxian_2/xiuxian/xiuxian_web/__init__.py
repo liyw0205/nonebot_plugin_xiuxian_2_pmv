@@ -625,11 +625,11 @@ def execute_command():
             
             # 获取境界所需的最大修为
             sql_level = "SELECT power FROM level_data WHERE level = ?"
-            level_data = execute_sql(DATABASE, sql_level, (level,))
+            level_data = jsondata.level_data()
             if not level_data:
                 return jsonify({"success": False, "error": f"无法获取境界 {level} 的数据"})
             
-            max_exp = int(level_data[0]['power'])
+            max_exp = int(level_data[level]['power'])
             
             # 重置用户修为到刚好满足境界要求
             sql = "UPDATE user_xiuxian SET exp = ?, level = ? WHERE user_id = ?"
