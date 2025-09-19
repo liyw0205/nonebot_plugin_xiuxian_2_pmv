@@ -1177,9 +1177,9 @@ def boss_drops(user_rank, boss_rank, boss, user_info):
     """
     drops_system = BossDrops()
     
-    # 基础掉落概率检查(30%)
+    # 基础掉落概率检查(10%)
     roll = random.randint(1, 100)
-    if roll >= 30: 
+    if roll >= 10: 
         return None, None
         
     # 境界差距过大时极低概率掉落(5%)

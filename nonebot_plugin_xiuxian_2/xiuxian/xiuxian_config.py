@@ -101,6 +101,8 @@ class XiuConfig:
         self.user_info_image = False # 是否使用图片发送个人信息
         self.xiuxian_info_img = False # 开启则使用网络背景图
         self.private_chat_enabled = False # 私聊功能开关，默认关闭
+        self.web_port = 5888 # 修仙管理面板端口
+        self.web_host = "0.0.0.0" # 修仙管理面板IP
         self.level_up_cd = 0  # 突破CD(分钟)
         self.closing_exp = 100  # 闭关每分钟获取的修为
         self.tribulation_min_level = "祭道境圆满"  # 最低渡劫境界

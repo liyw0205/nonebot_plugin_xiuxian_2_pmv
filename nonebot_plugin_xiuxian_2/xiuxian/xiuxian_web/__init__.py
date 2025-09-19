@@ -5,10 +5,9 @@ from pathlib import Path
 from datetime import datetime
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
-from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 
 items = Items()
@@ -21,8 +20,8 @@ app.secret_key = 'your_secret_key_here'  # 用于会话加密
 DATABASE = Path() / "data" / "xiuxian" / "xiuxian.db"
 IMPART_DB = Path() / "data" / "xiuxian" / "xiuxian_impart.db"
 ADMIN_IDS = get_driver().config.superusers
-PORT = 5888
-HOST = '0.0.0.0'
+PORT = XiuConfig().web_port
+HOST = XiuConfig().web_host
 
 # 境界和灵根预设
 LEVELS = convert_rank('江湖好手')[1]
