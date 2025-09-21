@@ -17,7 +17,8 @@ class BossLimit:
             default_data = {
                 "boss_integral": {},   # 每日BOSS积分记录
                 "boss_stone": {},      # 每日BOSS灵石记录
-                "weekly_purchases": {} # 每周商品购买记录
+                "weekly_purchases": {}, # 每周商品购买记录
+                "boss_battle_count": {} # 每日讨伐次数记录
             }
             self._save_data(default_data)
 
@@ -45,6 +46,11 @@ class BossLimit:
         data = self._load_data()
         return data["boss_stone"].get(str(user_id), 0)
 
+    def get_battle_count(self, user_id):
+        """获取用户今日讨伐次数"""
+        data = self._load_data()
+        return data["boss_battle_count"].get(str(user_id), 0)
+
     def update_integral(self, user_id, amount):
         """更新用户今日BOSS积分"""
         data = self._load_data()
@@ -57,6 +63,14 @@ class BossLimit:
         data = self._load_data()
         user_id = str(user_id)
         data["boss_stone"][user_id] = data["boss_stone"].get(user_id, 0) + amount
+        self._save_data(data)
+
+    def update_battle_count(self, user_id):
+        """更新用户今日讨伐次数"""
+        data = self._load_data()
+        user_id = str(user_id)
+        current_count = data["boss_battle_count"].get(user_id, 0)
+        data["boss_battle_count"][user_id] = current_count + 1
         self._save_data(data)
 
     def get_weekly_purchases(self, user_id, item_id):
@@ -84,6 +98,7 @@ class BossLimit:
         data = self._load_data()
         data["boss_integral"] = {}
         data["boss_stone"] = {}
+        data["boss_battle_count"] = {}  # 重置讨伐次数
         self._save_data(data)
 
     def reset_weekly_limits(self):

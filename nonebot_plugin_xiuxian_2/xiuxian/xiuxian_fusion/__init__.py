@@ -143,6 +143,63 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await fusion_help.finish()
 
+@fusion.handle(parameterless=[Cooldown(at_sender=False)])
+async def fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await fusion.finish()
+
+    user_id = user_info['user_id']
+    args_str = args.extract_plain_text().strip()
+    
+    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    if equipment is None:
+        msg = f"未找到可合成的物品：{args_str}"
+        await handle_send(bot, event, msg)
+        await fusion.finish()
+    
+    # 检查是否是必定成功ID，如果是则跳过福缘石检测
+    if int(equipment_id) not in FIXED_SUCCESS_IDS:
+        # 检查是否有福缘石
+        back_msg = sql_message.get_back_msg(user_id)
+        has_protection = False
+        for back in back_msg:
+            if back['goods_id'] == 20006 and back['goods_num'] > 0:
+                has_protection = True
+                break
+        
+        if not has_protection:
+            msg = "道友没有福缘石，合成失败可能会损失材料！\n使用【强行合成】命令确认操作。"
+            await handle_send(bot, event, msg)
+            await fusion.finish()
+    
+    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    await handle_send(bot, event, msg)
+    await fusion.finish()
+
+@force_fusion.handle(parameterless=[Cooldown(at_sender=False)])
+async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await force_fusion.finish()
+
+    user_id = user_info['user_id']
+    args_str = args.extract_plain_text().strip()
+    
+    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    if equipment is None:
+        msg = f"未找到可合成的物品：{args_str}"
+        await handle_send(bot, event, msg)
+        await force_fusion.finish()
+    
+    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    await handle_send(bot, event, msg)
+    await force_fusion.finish()
+
 @available_fusion.handle(parameterless=[Cooldown(at_sender=False)])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)

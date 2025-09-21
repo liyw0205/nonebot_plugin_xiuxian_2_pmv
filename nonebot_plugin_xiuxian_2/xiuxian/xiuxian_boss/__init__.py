@@ -277,6 +277,15 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     user_id = user_info['user_id']
+    
+    # 检查每日讨伐次数限制
+    today_battle_count = boss_limit.get_battle_count(user_id)
+    battle_count = 30
+    if today_battle_count >= battle_count:
+        msg = f"今日讨伐次数已达上限（{battle_count}次），请明日再来！"
+        await handle_send(bot, event, msg)
+        await battle.finish()
+    
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg)
@@ -481,6 +490,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     old_boss_info.save_boss(group_boss)
     battle_flag[group_id] = False
+    # 更新讨伐次数
+    boss_limit.update_battle_count(user_id)
     try:
         await send_msg_handler(bot, event, result)
     except ActionFailed:
@@ -940,13 +951,15 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info['user_id']    
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     
-    # 获取今日已获得的积分和灵石
+    # 获取今日已获得的积分和灵石和讨伐次数
     today_integral = boss_limit.get_integral(user_id)
     today_stone = boss_limit.get_stone(user_id)
+    today_battle_count = boss_limit.get_battle_count(user_id)
     
     # 设置每日上限
     integral_limit = 6000
     stone_limit = 300000000
+    battle_count = 30
     
     # 构建消息
     msg = f"""
@@ -956,6 +969,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 当前世界积分：{user_boss_fight_info['boss_integral']}点
 今日已获积分：{today_integral}/{integral_limit}点
 今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚
+今日讨伐次数：{today_battle_count}/{battle_count}次
 ════════════
 提示：每日0点重置获取上限
 """.strip()
