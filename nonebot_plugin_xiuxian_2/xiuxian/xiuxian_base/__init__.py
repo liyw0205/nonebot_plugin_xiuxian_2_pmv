@@ -2571,13 +2571,19 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
                 sql_message.update_ls(user_id, steal_user_stone, 1)  # 增加偷到的灵石
                 sql_message.update_ls(steal_qq, steal_user_stone, 2)  # 减少被偷的人的灵石
                 msg = f"{steal_user['user_name']}道友已经被榨干了~"
+                msg2 = f"灵石被{user_id['user_name']}道友榨干了~"
                 await handle_send(bot, event, msg)
+                log_message(user_id, msg)
+                log_message(steal_qq, msg2)
                 await steal_stone.finish()
             else:
                 sql_message.update_ls(user_id, get_stone, 1)  # 增加偷到的灵石
                 sql_message.update_ls(steal_qq, get_stone, 2)  # 减少被偷的人的灵石
                 msg = f"共偷取{steal_user['user_name']}道友{number_to(get_stone)}枚灵石！"
+                msg2 = f"被{user_id['user_name']}道友偷取{number_to(get_stone)}枚灵石！"
                 await handle_send(bot, event, msg)
+                log_message(user_id, msg)
+                log_message(steal_qq, msg2)
                 await steal_stone.finish()
         else:
             msg = result
@@ -2725,18 +2731,22 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         
                         sql_message.update_ls(user_id, robbed_amount, 1)
                         sql_message.update_ls(give_qq, robbed_amount, 2)
-                        exps = int(user_2['exp'] * 0.0005)
-                        sql_message.update_exp(user_id, exps)
-                        sql_message.update_j_exp(give_qq, exps / 2)
-                        msg = f"大战一番，战胜对手，获取灵石{number_to(robbed_amount)}枚，修为增加{number_to(exps)}，对手修为减少{number_to(exps / 2)}"
+                        
+                        # 记录日志（去掉修为变化）
+                        msg = f"大战一番，战胜对手，获取灵石{number_to(robbed_amount)}枚！"
+                        msg2 = f"被{user_info['user_name']}道友抢走{number_to(robbed_amount)}枚灵石！"
+                        
                         await handle_send(bot, event, msg)
+                        log_message(user_id, msg)
+                        log_message(give_qq, msg2)
                         await rob_stone.finish()
                     else:
-                        exps = int(user_2['exp'] * 0.0005)
-                        sql_message.update_exp(user_id, exps)
-                        sql_message.update_j_exp(give_qq, exps / 2)
-                        msg = f"大战一番，战胜对手，结果对方是个穷光蛋，修为增加{number_to(exps)}，对手修为减少{number_to(exps / 2)}"
+                        msg = f"大战一番，战胜对手，结果对方是个穷光蛋，一无所获！"
+                        msg2 = f"成功抵御了{user_info['user_name']}道友的抢劫，毫发无损！"
+                        
                         await handle_send(bot, event, msg)
+                        log_message(user_id, msg)
+                        log_message(give_qq, msg2)
                         await rob_stone.finish()
 
                 elif victor == player2['道号']:
@@ -2749,18 +2759,21 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         
                         sql_message.update_ls(user_id, lost_amount, 2)
                         sql_message.update_ls(give_qq, lost_amount, 1)
-                        exps = int(user_info['exp'] * 0.0005)
-                        sql_message.update_j_exp(user_id, exps)
-                        sql_message.update_exp(give_qq, exps / 2)
-                        msg = f"大战一番，被对手反杀，损失灵石{number_to(lost_amount)}枚，修为减少{number_to(exps)}，对手获取灵石{number_to(lost_amount)}枚，修为增加{number_to(exps / 2)}"
+                        
+                        msg = f"大战一番，被对手反杀，损失灵石{number_to(lost_amount)}枚！"
+                        msg2 = f"成功反杀{user_info['user_name']}道友，获得{number_to(lost_amount)}枚灵石战利品！"
+                        
                         await handle_send(bot, event, msg)
+                        log_message(user_id, msg)
+                        log_message(give_qq, msg2)
                         await rob_stone.finish()
                     else:
-                        exps = int(user_info['exp'] * 0.0005)
-                        sql_message.update_j_exp(user_id, exps)
-                        sql_message.update_exp(give_qq, exps / 2)
-                        msg = f"大战一番，被对手反杀，修为减少{number_to(exps)}，对手修为增加{number_to(exps / 2)}"
+                        msg = f"大战一番，被对手反杀，幸好身无分文，没有损失！"
+                        msg2 = f"成功反杀{user_info['user_name']}道友，可惜对方是个穷光蛋，一无所获！"
+                        
                         await handle_send(bot, event, msg)
+                        log_message(user_id, msg)
+                        log_message(give_qq, msg2)
                         await rob_stone.finish()
 
                 else:
