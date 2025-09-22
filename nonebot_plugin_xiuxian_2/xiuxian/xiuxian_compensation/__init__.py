@@ -317,7 +317,6 @@ async def claim_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessage
     save_claimed_data(claimed_data)
     return True
 
-# 命令处理器
 add_compensation_cmd = on_command("新增补偿", permission=SUPERUSER, priority=5, block=True)
 delete_compensation_cmd = on_command("删除补偿", permission=SUPERUSER, priority=5, block=True)
 list_compensation_cmd = on_command("补偿列表", priority=5, block=True)
@@ -695,7 +694,6 @@ async def claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessage
     save_claimed_gift_packages(claimed_data)
     return True
 
-# 礼包命令处理器
 add_gift_package_cmd = on_command("新增礼包", permission=SUPERUSER, priority=5, block=True)
 delete_gift_package_cmd = on_command("删除礼包", permission=SUPERUSER, priority=5, block=True)
 list_gift_packages_cmd = on_command("礼包列表", priority=5, block=True)
@@ -1120,7 +1118,6 @@ async def claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     return True
 
-# 兑换码命令处理器
 add_redeem_code_cmd = on_command("新增兑换码", permission=SUPERUSER, priority=5, block=True)
 delete_redeem_code_cmd = on_command("删除兑换码", permission=SUPERUSER, priority=5, block=True)
 list_redeem_codes_cmd = on_command("兑换码列表", permission=SUPERUSER, priority=5, block=True)
@@ -1385,3 +1382,566 @@ async def handle_clear_redeem_codes(bot: Bot, event: MessageEvent):
         json.dump({}, f, ensure_ascii=False, indent=4)
     
     await handle_send(bot, event, "已清空所有兑换码数据及领取记录")
+
+INVITATION_DATA_PATH = Path(__file__).parent / "invitation_data"
+INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
+INVITATION_RECORDS_FILE = INVITATION_DATA_PATH / "invitation_records.json"
+INVITATION_CLAIMED_FILE = INVITATION_DATA_PATH / "invitation_claimed.json"
+
+# 确保目录存在
+INVITATION_DATA_PATH.mkdir(exist_ok=True)
+
+# 初始化邀请奖励文件
+if not INVITATION_REWARDS_FILE.exists():
+    with open(INVITATION_REWARDS_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+
+# 初始化邀请记录文件
+if not INVITATION_RECORDS_FILE.exists():
+    with open(INVITATION_RECORDS_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+
+# 初始化领取记录文件
+if not INVITATION_CLAIMED_FILE.exists():
+    with open(INVITATION_CLAIMED_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=4)
+        
+def load_invitation_rewards():
+    """加载邀请奖励配置"""
+    with open(INVITATION_REWARDS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_invitation_rewards(data):
+    """保存邀请奖励配置"""
+    with open(INVITATION_REWARDS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_invitation_records():
+    """加载邀请记录"""
+    with open(INVITATION_RECORDS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_invitation_records(data):
+    """保存邀请记录"""
+    with open(INVITATION_RECORDS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_claimed_records():
+    """加载领取记录"""
+    with open(INVITATION_CLAIMED_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_claimed_records(data):
+    """保存领取记录"""
+    with open(INVITATION_CLAIMED_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def get_user_invitation_count(inviter_id):
+    """获取用户的邀请数量"""
+    records = load_invitation_records()
+    return len(records.get(str(inviter_id), []))
+
+def add_invitation_record(inviter_id, invited_id):
+    """添加邀请记录"""
+    records = load_invitation_records()
+    if str(inviter_id) not in records:
+        records[str(inviter_id)] = []
+    
+    # 检查是否已经邀请过该用户
+    if str(invited_id) not in records[str(inviter_id)]:
+        records[str(inviter_id)].append(str(invited_id))
+        save_invitation_records(records)
+        return True
+    return False
+
+def has_invitation_code(user_id):
+    """检查用户是否已经填写过邀请码"""
+    records = load_invitation_records()
+    for inviter_id, invited_list in records.items():
+        if str(user_id) in invited_list:
+            return True
+    return False
+
+def get_inviter_id(user_id):
+    """获取用户的邀请人ID"""
+    records = load_invitation_records()
+    for inviter_id, invited_list in records.items():
+        if str(user_id) in invited_list:
+            return inviter_id
+    return None
+
+def has_claimed_reward(user_id, threshold):
+    """检查用户是否已经领取过某个门槛的奖励"""
+    claimed = load_claimed_records()
+    if str(user_id) not in claimed:
+        return False
+    return str(threshold) in claimed[str(user_id)]
+
+def mark_reward_claimed(user_id, threshold):
+    """标记奖励已领取"""
+    claimed = load_claimed_records()
+    if str(user_id) not in claimed:
+        claimed[str(user_id)] = []
+    claimed[str(user_id)].append(str(threshold))
+    save_claimed_records(claimed)
+    
+invitation_set_reward = on_command("邀请奖励设置", permission=SUPERUSER, priority=5, block=True)
+invitation_use = on_command("邀请码", priority=5, block=True)
+invitation_check = on_command("邀请人", priority=5, block=True)
+invitation_claim = on_command("邀请奖励领取", priority=5, block=True)
+invitation_info = on_command("我的邀请", priority=5, block=True)
+
+@invitation_set_reward.handle()
+async def handle_invitation_set_reward(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+    """设置邀请奖励"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    arg_str = args.extract_plain_text().strip()
+    parts = arg_str.split(maxsplit=1)
+    
+    if len(parts) < 2:
+        msg = "格式错误！正确格式：邀请奖励设置 [门槛人数] [奖励物品]\n示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000"
+        await handle_send(bot, event, msg)
+        return
+    
+    try:
+        threshold = int(parts[0])
+        if threshold <= 0:
+            raise ValueError
+    except ValueError:
+        msg = "门槛人数必须是正整数！"
+        await handle_send(bot, event, msg)
+        return
+    
+    items_str = parts[1]
+    
+    # 解析物品字符串
+    items_list = []
+    for item_part in items_str.split(','):
+        item_part = item_part.strip()
+        if 'x' in item_part:
+            item_id_or_name, quantity = item_part.split('x', 1)
+            quantity = int(quantity)
+        else:
+            item_id_or_name = item_part
+            quantity = 1
+        
+        # 处理灵石特殊物品
+        if item_id_or_name == "灵石":
+            items_list.append({
+                "type": "stone",
+                "id": "stone",
+                "name": "灵石",
+                "quantity": quantity if quantity > 0 else 1000000,
+                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
+            })
+            continue
+        
+        # 尝试转换为物品ID
+        goods_id = None
+        if item_id_or_name.isdigit():
+            goods_id = int(item_id_or_name)
+            item_info = items.get_data_by_item_id(goods_id)
+            if not item_info:
+                msg = f"物品ID {goods_id} 不存在"
+                await handle_send(bot, event, msg)
+                return
+        else:
+            for k, v in items.items.items():
+                if item_id_or_name == v['name']:
+                    goods_id = k
+                    break
+            if not goods_id:
+                msg = f"物品 {item_id_or_name} 不存在"
+                await handle_send(bot, event, msg)
+                return
+        
+        item_info = items.get_data_by_item_id(goods_id)
+        items_list.append({
+            "type": item_info['type'],
+            "id": goods_id,
+            "name": item_info['name'],
+            "quantity": quantity,
+            "desc": item_info['desc']
+        })
+    
+    if not items_list:
+        msg = "未指定有效的奖励物品！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 保存奖励配置
+    rewards = load_invitation_rewards()
+    rewards[str(threshold)] = items_list
+    save_invitation_rewards(rewards)
+    
+    # 构建奖励描述
+    items_msg = []
+    for item in items_list:
+        if item["type"] == "stone":
+            items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+        else:
+            items_msg.append(f"{item['name']} x{item['quantity']}")
+    
+    msg = f"成功设置邀请{threshold}人的奖励：\n{', '.join(items_msg)}"
+    await handle_send(bot, event, msg)
+
+@invitation_use.handle()
+async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """使用邀请码"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    inviter_id = args.extract_plain_text().strip()
+    
+    if not inviter_id:
+        msg = "请输入邀请人的ID！格式：邀请码 [邀请人ID]"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查是否已经填写过邀请码
+    if has_invitation_code(user_id):
+        msg = "您已经填写过邀请码，无法再次填写或更改！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查邀请人ID是否有效
+    if not inviter_id.isdigit():
+        msg = "邀请人ID必须是数字！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查不能邀请自己
+    if str(user_id) == inviter_id:
+        msg = "不能邀请自己！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查邀请人是否存在
+    inviter_info = sql_message.get_user_info_with_id(inviter_id)
+    if not inviter_info:
+        msg = "邀请人不存在！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 添加邀请记录
+    success = add_invitation_record(inviter_id, user_id)
+    if not success:
+        msg = "邀请记录添加失败，可能已经邀请过该用户！"
+        await handle_send(bot, event, msg)
+        return
+    
+    msg = f"成功绑定邀请人！您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
+    await handle_send(bot, event, msg)
+
+@invitation_check.handle()
+async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看邀请人信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    
+    # 获取邀请人ID
+    inviter_id = get_inviter_id(user_id)
+    if not inviter_id:
+        msg = "您还没有填写邀请码！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 获取邀请人信息
+    inviter_info = sql_message.get_user_info_with_id(inviter_id)
+    if not inviter_info:
+        msg = "邀请人信息不存在！"
+        await handle_send(bot, event, msg)
+        return
+    
+    msg = f"您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
+    await handle_send(bot, event, msg)
+
+@invitation_info.handle()
+async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看我的邀请信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    
+    # 获取邀请数量
+    count = get_user_invitation_count(user_id)
+    
+    # 获取可领取的奖励
+    rewards = load_invitation_rewards()
+    claimed = load_claimed_records().get(str(user_id), [])
+    
+    available_rewards = []
+    for threshold_str in sorted(rewards.keys(), key=lambda x: int(x)):
+        threshold = int(threshold_str)
+        if count >= threshold and threshold_str not in claimed:
+            available_rewards.append(threshold)
+    
+    msg = [
+        f"☆------我的邀请信息------☆",
+        f"邀请人数：{count}人",
+        f"可领取奖励：{', '.join(map(str, available_rewards)) if available_rewards else '无'}"
+    ]
+    
+    await handle_send(bot, event, "\n".join(msg))
+
+@invitation_claim.handle()
+async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """领取邀请奖励"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        return
+    
+    user_id = user_info['user_id']
+    arg = args.extract_plain_text().strip()
+    
+    # 获取邀请数量
+    count = get_user_invitation_count(user_id)
+    
+    # 获取奖励配置
+    rewards_config = load_invitation_rewards()
+    if not rewards_config:
+        msg = "目前没有设置任何邀请奖励！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 如果没有指定门槛，自动领取所有可领取的奖励
+    if not arg:
+        claimed_any = False
+        reward_msgs = []
+        
+        # 按门槛从小到大排序
+        for threshold_str in sorted(rewards_config.keys(), key=lambda x: int(x)):
+            threshold = int(threshold_str)
+            if count >= threshold and not has_claimed_reward(user_id, threshold):
+                # 发放奖励
+                reward_items = rewards_config[threshold_str]
+                for item in reward_items:
+                    if item["type"] == "stone":
+                        sql_message.update_ls(user_id, item["quantity"], 1)
+                    else:
+                        goods_id = item["id"]
+                        goods_name = item["name"]
+                        goods_type = item["type"]
+                        quantity = item["quantity"]
+                        
+                        if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
+                            goods_type_item = "技能"
+                        elif goods_type in ["法器", "防具"]:
+                            goods_type_item = "装备"
+                        else:
+                            goods_type_item = goods_type
+                        
+                        sql_message.send_back(
+                            user_id,
+                            goods_id,
+                            goods_name,
+                            goods_type_item,
+                            quantity,
+                            1
+                        )
+                
+                # 标记已领取
+                mark_reward_claimed(user_id, threshold)
+                claimed_any = True
+                
+                # 记录奖励信息
+                items_msg = []
+                for item in reward_items:
+                    if item["type"] == "stone":
+                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+                    else:
+                        items_msg.append(f"{item['name']} x{item['quantity']}")
+                
+                reward_msgs.append(f"邀请{threshold}人奖励：{', '.join(items_msg)}")
+        
+        if claimed_any:
+            msg = f"成功领取以下奖励：\n" + "\n".join(reward_msgs)
+        else:
+            msg = "没有可领取的奖励！"
+        
+        await handle_send(bot, event, msg)
+        return
+    
+    # 如果指定了具体门槛
+    try:
+        threshold = int(arg)
+        if threshold <= 0:
+            raise ValueError
+    except ValueError:
+        msg = "门槛人数必须是正整数！"
+        await handle_send(bot, event, msg)
+        return
+    
+    if str(threshold) not in rewards_config:
+        msg = f"没有设置邀请{threshold}人的奖励！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查是否满足条件
+    if count < threshold:
+        msg = f"您的邀请人数不足{threshold}人，当前只有{count}人！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查是否已经领取
+    if has_claimed_reward(user_id, threshold):
+        msg = f"您已经领取过邀请{threshold}人的奖励！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 发放奖励
+    reward_items = rewards_config[str(threshold)]
+    for item in reward_items:
+        if item["type"] == "stone":
+            sql_message.update_ls(user_id, item["quantity"], 1)
+        else:
+            goods_id = item["id"]
+            goods_name = item["name"]
+            goods_type = item["type"]
+            quantity = item["quantity"]
+            
+            if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
+                goods_type_item = "技能"
+            elif goods_type in ["法器", "防具"]:
+                goods_type_item = "装备"
+            else:
+                goods_type_item = goods_type
+            
+            sql_message.send_back(
+                user_id,
+                goods_id,
+                goods_name,
+                goods_type_item,
+                quantity,
+                1
+            )
+    
+    # 标记已领取
+    mark_reward_claimed(user_id, threshold)
+    
+    # 构建奖励消息
+    items_msg = []
+    for item in reward_items:
+        if item["type"] == "stone":
+            items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+        else:
+            items_msg.append(f"{item['name']} x{item['quantity']}")
+    
+    msg = f"成功领取邀请{threshold}人奖励：\n{', '.join(items_msg)}"
+    await handle_send(bot, event, msg)
+    
+invitation_reward_list_cmd = on_command("邀请奖励列表", priority=5, block=True)
+
+@invitation_reward_list_cmd.handle()
+async def handle_invitation_reward_list(bot: Bot, event: MessageEvent):
+    """查看邀请奖励列表"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    # 加载奖励配置
+    rewards = load_invitation_rewards()
+    if not rewards:
+        msg = "当前没有设置任何邀请奖励"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 构建消息内容
+    msg_lines = [
+        "🎁 邀请奖励列表 🎁",
+        "====================",
+    ]
+    
+    # 按门槛从小到大排序
+    sorted_thresholds = sorted([int(k) for k in rewards.keys()])
+    
+    for threshold in sorted_thresholds:
+        threshold_str = str(threshold)
+        reward_items = rewards[threshold_str]
+        
+        items_msg = []
+        for item in reward_items:
+            if item["type"] == "stone":
+                items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+            else:
+                items_msg.append(f"{item['name']} x{item['quantity']}")
+        
+        msg_lines.extend([
+            f"🎯 门槛: 邀请{threshold}人",
+            f"🎁 奖励内容: {', '.join(items_msg)}",
+            "------------------"
+        ])
+
+    msg = "\n".join(msg_lines)
+    
+    await handle_send(bot, event, msg)
+
+__invitation_help__ = f"""
+🤝 邀请系统帮助 🤝
+═════════════
+1. 邀请码 [ID] - 填写邀请人的ID
+2. 邀请人 - 查看自己的邀请人信息
+3. 我的邀请 - 查看自己的邀请信息
+4. 邀请奖励列表 - 查看所有邀请奖励设置
+5. 邀请奖励领取 [门槛] - 领取邀请奖励
+   - 不填门槛：领取所有可领取的奖励
+   - 填写门槛：领取指定门槛的奖励
+
+【注意事项】
+- 每个用户只能填写一次邀请码，无法更改
+- 邀请人数达到指定门槛即可领取奖励
+- 奖励只能领取一次
+═════════════
+""".strip()
+
+__invitation_admin_help__ = f"""
+🤝 邀请管理 🤝 
+═════════════
+1. 邀请奖励设置 [门槛] [物品] - 设置邀请奖励
+   - 示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000
+2. 邀请奖励列表 - 查看所有邀请奖励设置
+
+【参数说明】
+- 门槛：邀请人数要求
+- 物品：物品ID或名称，可带数量
+   - 示例1: 1001,1002
+   - 示例2: 灵石x1000000
+   - 示例3: 渡厄丹x1,两仪心经x1
+
+【注意事项】
+- 奖励设置后立即生效
+- 玩家可以领取所有满足条件的奖励
+═════════════
+""".strip()
+
+# 添加帮助命令
+invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
+invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
+
+@invitation_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+async def handle_invitation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """邀请帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    await handle_send(bot, event, __invitation_help__)
+    await invitation_help_cmd.finish()
+
+@invitation_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+async def handle_invitation_admin_help(bot: Bot, event: MessageEvent):
+    """邀请管理帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    await handle_send(bot, event, __invitation_admin_help__)
+    await invitation_admin_help_cmd.finish()
