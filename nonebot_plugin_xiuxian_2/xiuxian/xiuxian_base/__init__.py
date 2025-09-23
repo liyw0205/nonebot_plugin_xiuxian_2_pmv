@@ -36,7 +36,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler, handle_send, get_logs, log_message
+    Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import BANNED_ITEM_IDS
@@ -87,6 +87,7 @@ level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, b
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
 view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
+view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", "查数据", "数据记录"}, priority=5, block=True)
 give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
 xiangyuan_list = on_command("仙缘列表", priority=5, block=True)
@@ -305,6 +306,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     try:
         log_message(user_id, msg)
+        update_statistics_value(user_id, "修仙签到")
         await handle_send(bot, event, msg)
         await sign_in.finish()
     except ActionFailed:
@@ -2732,10 +2734,10 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         sql_message.update_ls(user_id, robbed_amount, 1)
                         sql_message.update_ls(give_qq, robbed_amount, 2)
                         
-                        # 记录日志（去掉修为变化）
                         msg = f"大战一番，战胜对手，获取灵石{number_to(robbed_amount)}枚！"
                         msg2 = f"被{user_info['user_name']}道友抢走{number_to(robbed_amount)}枚灵石！"
-                        
+                        update_statistics_value(user_id, "抢灵石成功")
+                        update_statistics_value(give_qq, "抢灵石失败")
                         await handle_send(bot, event, msg)
                         log_message(user_id, msg)
                         log_message(give_qq, msg2)
@@ -2743,7 +2745,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                     else:
                         msg = f"大战一番，战胜对手，结果对方是个穷光蛋，一无所获！"
                         msg2 = f"成功抵御了{user_info['user_name']}道友的抢劫，毫发无损！"
-                        
+                        update_statistics_value(user_id, "抢灵石成功")
                         await handle_send(bot, event, msg)
                         log_message(user_id, msg)
                         log_message(give_qq, msg2)
@@ -2762,6 +2764,8 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         
                         msg = f"大战一番，被对手反杀，损失灵石{number_to(lost_amount)}枚！"
                         msg2 = f"成功反杀{user_info['user_name']}道友，获得{number_to(lost_amount)}枚灵石战利品！"
+                        update_statistics_value(user_id, "抢灵石失败")
+                        update_statistics_value(give_qq, "抢灵石成功")
                         
                         await handle_send(bot, event, msg)
                         log_message(user_id, msg)
@@ -2774,6 +2778,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                         await handle_send(bot, event, msg)
                         log_message(user_id, msg)
                         log_message(give_qq, msg2)
+                        update_statistics_value(give_qq, "抢灵石成功")
                         await rob_stone.finish()
 
                 else:
@@ -2863,6 +2868,28 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     
     await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg)
     await view_logs.finish()
+
+@view_data.handle(parameterless=[Cooldown(at_sender=False)])
+async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看修仙数据"""
+    user_id = event.get_user_id()
+    stats_data = get_statistics_data(user_id)
+    
+    if not stats_data:
+        msg = "暂无统计数据"
+        await handle_send(bot, event, msg)
+        await view_data.finish()
+    
+    sorted_keys = sorted(stats_data.keys())
+    stats_message = "═══ 修仙统计数据 ════\n"
+    for key in sorted_keys:
+        value = stats_data[key]
+        formatted_value = str(value)
+        stats_message += f"{key}: {formatted_value}\n"
+    
+    msg = stats_message
+    await handle_send(bot, event, msg)
+    await view_data.finish()
 
 @set_xiuxian.handle()
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent):

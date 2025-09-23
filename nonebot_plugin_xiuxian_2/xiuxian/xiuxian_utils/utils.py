@@ -1074,3 +1074,92 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "current_page": page,
             "error": f"获取日志失败: {e}"
         }
+
+def get_statistics_data(user_id: str, key: str = None):
+    """
+    获取用户的统计数据
+    
+    参数:
+        user_id: 用户ID
+        key: 可选参数，指定要获取的统计项键名
+        
+    返回:
+        如果指定key，返回该键对应的值（不存在则返回None）
+        如果不指定key，返回整个统计数据字典
+    """
+    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    try:
+        # 确保用户文件夹存在
+        user_dir = PLAYERSDATA / str(user_id)
+        if not user_dir.exists():
+            os.makedirs(user_dir)
+        
+        # 统计文件路径
+        stats_file = user_dir / "statistics.json"
+        
+        # 如果文件不存在，返回None或空字典
+        if not stats_file.exists():
+            return None if key else {}
+        
+        # 读取统计数据
+        with open(stats_file, "r", encoding="utf-8") as f:
+            stats_data = json.load(f)
+            
+        # 如果指定了key，返回对应的值
+        if key:
+            return stats_data.get(key)
+            
+        return stats_data
+            
+    except Exception as e:
+        logger.error(f"获取统计数据失败: {e}")
+        return None if key else {}
+
+def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
+    """
+    更新统计数据的参数值
+    
+    参数:
+        user_id: 用户ID
+        key: 要更新的参数键名
+        value: 要设置的具体值（如果提供，则直接设置为此值）
+        increment: 增量值（默认为1，当value为None时使用）
+        
+    返回:
+        更新后的统计数据字典
+    """
+    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    try:
+        # 确保用户文件夹存在
+        user_dir = PLAYERSDATA / str(user_id)
+        if not user_dir.exists():
+            os.makedirs(user_dir)
+        
+        # 统计文件路径
+        stats_file = user_dir / "statistics.json"
+        
+        # 读取现有数据或创建新数据
+        if stats_file.exists():
+            with open(stats_file, "r", encoding="utf-8") as f:
+                stats_data = json.load(f)
+        else:
+            stats_data = {}
+        
+        # 更新指定键的值
+        if value is not None:
+            # 直接设置具体值
+            stats_data[key] = value
+        else:
+            # 增量更新（如果键不存在则初始化为0）
+            current_value = stats_data.get(key, 0)
+            stats_data[key] = current_value + increment
+        
+        # 保存更新后的数据
+        with open(stats_file, "w", encoding="utf-8") as f:
+            json.dump(stats_data, f, ensure_ascii=False, indent=4)
+        
+        return stats_data
+            
+    except Exception as e:
+        logger.error(f"更新统计数据失败: {e}")
+        return {}

@@ -1858,7 +1858,6 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
-    # 原有价格限制逻辑
     if price < MIN_PRICE:  # 最低60万灵石
         msg = "坊市最低价格为60万灵石！"
         await handle_send(bot, event, msg)
@@ -3494,6 +3493,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_name = args[0]
     try:
         price = int(args[1])
+        price = max(price, MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = min(quantity, GUISHI_MAX_QUANTITY)
     except ValueError:
@@ -3698,6 +3698,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_name = args[0]
     try:
         price = int(args[1])
+        price = max(price, MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = min(quantity, GUISHI_MAX_QUANTITY)
     except ValueError:
@@ -4747,6 +4748,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     item_name, price = args[0], args[1]
     try:
         price = int(price)
+        price = max(price, MIN_PRICE)
     except ValueError:
         msg = "价格必须是整数！"
         await handle_send(bot, event, msg)

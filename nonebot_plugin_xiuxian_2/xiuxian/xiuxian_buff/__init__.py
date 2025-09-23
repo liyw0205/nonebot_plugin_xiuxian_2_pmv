@@ -24,7 +24,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.utils import (
     number_to, check_user, send_msg_handler,
-    check_user_type, get_msg_pic, CommandObjectID, handle_send, log_message
+    check_user_type, get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from .two_exp_cd import two_exp_cd
@@ -270,7 +270,8 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await qc.finish()
     else:
         arg = args.extract_plain_text().strip()
-        give_qq = sql_message.get_user_info_with_name(str(arg))['user_id']
+        give_info = sql_message.get_user_info_with_name(str(arg))
+        give_qq = give_info.get('user_id')
     
     user2 = sql_message.get_user_real_info(give_qq)
     
@@ -349,6 +350,12 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         result, victor = Player_fight(player1, player2, 1, bot.self_id)
         await send_msg_handler(bot, event, result)
         msg = f"获胜的是{victor}"
+        if victor == player1['道号']:
+            update_statistics_value(player1['user_id'], "切磋胜利")
+            update_statistics_value(player2['user_id'], "切磋失败")
+        else:
+            update_statistics_value(player2['user_id'], "切磋胜利")
+            update_statistics_value(player1['user_id'], "切磋失败")
         await handle_send(bot, event, msg)
         await qc.finish()
     else:
@@ -464,6 +471,9 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     two_exp_cd.add_user(user_1['user_id'])
                     two_exp_cd.add_user(user_2['user_id'])
                     
+                    update_statistics_value(user_1['user_id'], "双修次数")
+                    update_statistics_value(user_2['user_id'], "双修次数")
+                    
                     msg = f"\n{event_desc}\n{random.choice(special_events)}\n"
                     msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
@@ -487,7 +497,9 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     
                     two_exp_cd.add_user(user_1['user_id'])
                     two_exp_cd.add_user(user_2['user_id'])
-                    
+
+                    update_statistics_value(user_1['user_id'], "双修次数")
+                    update_statistics_value(user_2['user_id'], "双修次数")
                     msg = f"\n{event_desc}\n"
                     msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
                     msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
@@ -757,6 +769,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
+            update_statistics_value(user_id, "闭关时长", increment=exp_time)
             await handle_send(bot, event, msg)
             await out_closing.finish()
         else:
@@ -776,6 +789,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{int(exp / 2)}枚{result_msg[0]}{result_msg[1]}"
+                    update_statistics_value(user_id, "闭关时长", increment=exp_time)
                     await handle_send(bot, event, msg)
                     await out_closing.finish()
                 else:
@@ -788,6 +802,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}"
+                    update_statistics_value(user_id, "闭关时长", increment=exp_time)
                     await handle_send(bot, event, msg)
                     await out_closing.finish()
             else:
@@ -797,6 +812,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
                 sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
                 msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
+                update_statistics_value(user_id, "闭关时长", increment=exp_time)
                 await handle_send(bot, event, msg)
                 await out_closing.finish()
 
