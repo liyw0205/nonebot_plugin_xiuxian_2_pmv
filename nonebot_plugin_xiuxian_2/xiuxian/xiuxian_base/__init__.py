@@ -87,7 +87,7 @@ level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, b
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
 view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
-view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", "查数据", "数据记录"}, priority=5, block=True)
+view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", "查数据", "数据记录", "统计信息"}, priority=5, block=True)
 give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
 xiangyuan_list = on_command("仙缘列表", priority=5, block=True)
@@ -2885,7 +2885,7 @@ async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     for key in sorted_keys:
         value = stats_data[key]
         formatted_value = str(value)
-        stats_message += f"{key}: {formatted_value}\n"
+        stats_message += f"◈ {key}: {number_to(formatted_value)}\n"
     
     msg = stats_message
     await handle_send(bot, event, msg)

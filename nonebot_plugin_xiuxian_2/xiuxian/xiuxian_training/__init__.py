@@ -8,7 +8,7 @@ from nonebot.params import CommandArg, RegexGroup
 from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.item_json import Items
 from .training_data import training_data, PLAYERSDATA
@@ -92,6 +92,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"\n{result}"
     await handle_send(bot, event, msg)
     log_message(user_id, result)
+    update_statistics_value(user_id, "历练次数")
     await training_start.finish()
 
 @training_status.handle()

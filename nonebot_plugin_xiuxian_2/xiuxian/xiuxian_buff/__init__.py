@@ -288,74 +288,21 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
         
     if user1 and user2:
-        player1 = {"user_id": None, "道号": None, "气血": None,
-                   "攻击": None, "真元": None, '会心': None, '防御': 0, 'exp': 0}
-        player2 = {"user_id": None, "道号": None, "气血": None,
-                   "攻击": None, "真元": None, '会心': None, '防御': 0, 'exp': 0}
-        
-
-        user1_weapon_data = UserBuffDate(user_id).get_user_weapon_data() #玩家1武器会心
-        user1_armor_crit_buff = UserBuffDate(user_id).get_user_armor_buff_data() #玩家1防具会心
-        user1_main_data = UserBuffDate(user_id).get_user_main_buff_data() #玩家1功法会心
-        
-        if  user1_main_data != None: #玩家1功法会心
-            main_crit_buff = user1_main_data['crit_buff']
-        else:
-            main_crit_buff = 0
-        
-        if user1_armor_crit_buff is not None: #玩家1防具会心
-            armor_crit_buff = user1_armor_crit_buff['crit_buff']
-        else:
-            armor_crit_buff = 0
-            
-        if user1_weapon_data is not None: #玩家1武器会心
-            player1['会心'] = int(((user1_weapon_data['crit_buff']) + (armor_crit_buff) + (main_crit_buff))* 100)
-        else:
-            player1['会心'] = (armor_crit_buff + main_crit_buff) * 100
-
-        
-        user2_weapon_data = UserBuffDate(user2['user_id']).get_user_weapon_data() #玩家2武器会心
-        user2_armor_crit_buff = UserBuffDate(user2['user_id']).get_user_armor_buff_data() #玩家2防具会心
-        user2_main_data = UserBuffDate(user2['user_id']).get_user_main_buff_data() #玩家2功法会心
-        
-        if  user2_main_data != None: #玩家2功法会心
-            main_crit_buff2 = user2_main_data['crit_buff']
-        else:
-            main_crit_buff2 = 0
-        
-        if user2_armor_crit_buff is not None: #玩家2防具会心
-            armor_crit_buff2 = user2_armor_crit_buff['crit_buff']
-        else:
-            armor_crit_buff2 = 0
-            
-        if user2_weapon_data is not None: #玩家2武器会心
-            player2['会心'] = int(((user2_weapon_data['crit_buff']) + (armor_crit_buff2) + (main_crit_buff2) * 100))
-        else:
-            player2['会心'] = (armor_crit_buff2 + main_crit_buff2) * 100
-
-        player1['user_id'] = user1['user_id']
-        player1['道号'] = user1['user_name']
-        player1['气血'] = user1['hp']
-        player1['攻击'] = user1['atk']
-        player1['真元'] = user1['mp']
-        player1['exp'] = user1['exp']
-
-        player2['user_id'] = user2['user_id']
-        player2['道号'] = user2['user_name']
-        player2['气血'] = user2['hp']
-        player2['攻击'] = user2['atk']
-        player2['真元'] = user2['mp']
-        player2['exp'] = user2['exp']
+        player1 = sql_message.get_player_data(user1['user_id'])
+        player2 = sql_message.get_player_data(user2['user_id'])
 
         result, victor = Player_fight(player1, player2, 1, bot.self_id)
         await send_msg_handler(bot, event, result)
         msg = f"获胜的是{victor}"
-        if victor == player1['道号']:
-            update_statistics_value(player1['user_id'], "切磋胜利")
-            update_statistics_value(player2['user_id'], "切磋失败")
+        if victor == "没有人":
+            msg = f"{victor}获胜"
         else:
-            update_statistics_value(player2['user_id'], "切磋胜利")
-            update_statistics_value(player1['user_id'], "切磋失败")
+            if victor == player1['道号']:
+                update_statistics_value(player1['user_id'], "切磋胜利")
+                update_statistics_value(player2['user_id'], "切磋失败")
+            else:
+                update_statistics_value(player2['user_id'], "切磋胜利")
+                update_statistics_value(player1['user_id'], "切磋失败")
         await handle_send(bot, event, msg)
         await qc.finish()
     else:
@@ -601,6 +548,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
+        update_statistics_value(user_id, "修炼次数")
         user_type = 0  # 状态0为无事件
         if exp >= user_get_exp_max:
             # 用户获取的修为到达上限
@@ -669,6 +617,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         sql_message.update_power2(user_id)  # 更新战力
         msg = f"修炼结束，本次修炼到达上限，共增加修为：{user_get_exp_max},消耗灵石：{user_get_exp_max * 10}"
         sql_message.update_ls(user_id, int(user_get_exp_max * 10), 2)
+        update_statistics_value(user_id, "灵石修炼", increment=user_get_exp_max * 10)
         await handle_send(bot, event, msg)
         await stone_exp.finish()
     else:
@@ -676,6 +625,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         sql_message.update_power2(user_id)  # 更新战力
         msg = f"修炼结束，本次修炼共增加修为：{exp},消耗灵石：{stone_num}"
         sql_message.update_ls(user_id, int(stone_num), 2)
+        update_statistics_value(user_id, "灵石修炼", increment=stone_num)
         await handle_send(bot, event, msg)
         await stone_exp.finish()
 

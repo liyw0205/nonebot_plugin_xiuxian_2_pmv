@@ -2195,6 +2195,24 @@ class XIUXIAN_IMPART_BUFF:
     
         self.conn.commit()
 
+    def convert_stone_to_wishing_stone(self, user_id):
+        """将思恋结晶转换为祈愿石（100:1），多余废弃"""
+        cur = self.conn.cursor()
+        # 获取当前思恋结晶数量
+        sql = "SELECT stone_num FROM xiuxian_impart WHERE user_id=?"
+        cur.execute(sql, (user_id,))
+        result = cur.fetchone()
+        if result is None:
+            return # 用户不存在
+        stone_num = result[0]
+        if stone_num < 100:
+            return # 不足100，无法转换
+        # 计算可转换的祈愿石数量
+        wishing_stone_num = stone_num // 100
+        sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=?"
+        cur.execute(sql_update, (user_id,))
+        self.conn.commit()
+        sql_message.send_back(user_id, 20005, "祈愿石", "特殊道具", wishing_stone_num, 1)
 
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""

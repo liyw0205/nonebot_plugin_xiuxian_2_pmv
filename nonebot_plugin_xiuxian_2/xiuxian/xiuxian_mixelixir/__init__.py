@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler, 
-    get_msg_pic, CommandObjectID, handle_send, log_message
+    get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict
@@ -35,7 +35,7 @@ mix_make = on_command("配方", priority=5, block=True)
 elixir_help = on_fullmatch("炼丹帮助", priority=7, block=True)
 mix_elixir_help = on_fullmatch("炼丹配方帮助", priority=7, block=True)
 yaocai_get = on_command("灵田收取", aliases={"灵田结算"}, priority=8, block=True)
-my_mix_elixir_info = on_fullmatch("我的炼丹信息", priority=6, block=True)
+my_mix_elixir_info = on_command("我的炼丹信息", aliases={"炼丹信息"}, priority=6, block=True)
 mix_elixir_sqdj_up = on_fullmatch("升级收取等级", priority=6, block=True)
 mix_elixir_dykh_up = on_fullmatch("升级丹药控火", priority=6, block=True)
 
@@ -249,7 +249,7 @@ user_ldl_dict = {}
 user_ldl_flag = {}
 
 
-@mix_elixir.handle(parameterless=[Cooldown(cd_time=30, at_sender=False)])
+@mix_elixir.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """炼丹,用来生成配方"""
     global user_ldl_dict, user_ldl_flag
@@ -291,30 +291,26 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
     yaocai_dict = await make_dict(yaocai_dict)
-    finall_mix_elixir_msg = await get_mix_elixir_msg(yaocai_dict)
-    if finall_mix_elixir_msg == {}:
+    mix_elixir_msg = await get_mix_elixir_msg(yaocai_dict)
+    if mix_elixir_msg == {}:
         msg = "系统未检测到丹方，道友背包内的药材不满足！"
         await handle_send(bot, event, msg)
         await mix_elixir.finish()
     else:
         ldl_name = sorted(user_ldl_dict[user_id].items(), key=lambda x: x[0], reverse=False)[0][1]
-        l_msg = []
-        for k, v in finall_mix_elixir_msg.items():
-            goods_info = items.get_data_by_item_id(v['id'])
-            msg = f"名字：{goods_info['name']}\n"
-            msg += f"效果：{goods_info['desc']}\n"
-            msg += f"配方：{v['配方']['配方简写']}丹炉{ldl_name}\n"
-            msg += f"\n☆------药材清单------☆\n"
-            msg += f"主药：{v['配方']['主药']},{v['配方']['主药_level']}，数量：{v['配方']['主药_num']}\n"
-            msg += f"药引：{v['配方']['药引']},{v['配方']['药引_level']}，数量：{v['配方']['药引_num']}\n"
-            if v['配方']['辅药_num'] != 0:
-                msg += f"辅药：{v['配方']['辅药']},{v['配方']['辅药_level']}，数量：{v['配方']['辅药_num']}\n"
-            l_msg.append(msg)
-        if len(l_msg) > 51:
-            l_msg = l_msg[:50]
-        await send_msg_handler(bot, event, '配方', bot.self_id, l_msg)
+        
+        goods_info = items.get_data_by_item_id(mix_elixir_msg['id'])
+        msg = f"名字：{goods_info['name']}\n"
+        msg += f"效果：{goods_info['desc']}\n"
+        msg += f"配方：{mix_elixir_msg['配方简写']}丹炉{ldl_name}\n"
+        msg += f"\n☆------药材清单------☆\n"
+        msg += f"主药：{mix_elixir_msg['主药']},{mix_elixir_msg['主药_level']}，数量：{mix_elixir_msg['主药_num']}\n"
+        msg += f"药引：{mix_elixir_msg['药引']},{mix_elixir_msg['药引_level']}，数量：{mix_elixir_msg['药引_num']}\n"
+        if mix_elixir_msg['辅药_num'] != 0:
+            msg += f"辅药：{mix_elixir_msg['辅药']},{mix_elixir_msg['辅药_level']}，数量：{mix_elixir_msg['辅药_num']}\n"
+        
+        await handle_send(bot, event, msg)
         await mix_elixir.finish()
-
 
 # 配方
 @mix_make.handle(parameterless=[Cooldown(at_sender=False)])
@@ -411,6 +407,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 sql_message.update_back_j(user_id, zhuyao_goods_id, zhuyao_num) #将消耗的药材从背包中减去
                 sql_message.update_back_j(user_id, fuyao_goods_id, fuyao_num)
                 sql_message.update_back_j(user_id, yaoyin_goods_id, yaoyin_num)
+                update_statistics_value(user_id, "炼丹次数")
                 try:
                     var = mix_elixir_info['炼丹记录'][id]
                     now_num = mix_elixir_info['炼丹记录'][id]['num'] #now_num 已经炼制的丹药数量

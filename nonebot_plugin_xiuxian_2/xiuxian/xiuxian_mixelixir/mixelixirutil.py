@@ -55,39 +55,32 @@ async def check_mix(elixir_config):
 
 
 async def get_mix_elixir_msg(yaocai):
-    mix_elixir_msg = {}
-    num = 0
+    """只生成一个配方，找到第一个有效配方就返回"""
     for k, v in yaocai.items():  # 这里是用户所有的药材dict
         i = 1
         while i <= v['num'] and i <= 5:  # 尝试第一个药材为主药
-            # _zhuyao = v['主药']['h_a_c']['type'] * v['主药']['h_a_c']['power'] * i
             for kk, vv in yaocai.items():
                 if kk == k:  # 相同的药材不能同时做药引
                     continue
                 o = 1
                 while o <= vv['num'] and o <= 5:
-                    # _yaoyin = vv['药引']['h_a_c']['type'] * vv['药引']['h_a_c']['power'] * o
                     if await tiaohe(v, i, vv, o):  # 调和失败
-                        # if await absolute(_zhuyao + _yaoyin) > yonhudenji:#调和失败
                         o += 1
                         continue
                     else:
-                        elixir_config = {}
-                        zhuyao_type = str(v['主药']['type'])
-                        zhuyao_power = v['主药']['power'] * i
-                        elixir_config[zhuyao_type] = zhuyao_power
                         for kkk, vvv in yaocai.items():
                             p = 1
                             # 尝试加入辅药
                             while p <= vvv['num'] and p <= 5:
-                                fuyao_type = str(vvv['辅药']['type'])
-                                fuyao_power = vvv['辅药']['power'] * p
                                 elixir_config = {}
                                 zhuyao_type = str(v['主药']['type'])
                                 zhuyao_power = v['主药']['power'] * i
                                 elixir_config[zhuyao_type] = zhuyao_power
+                                
+                                fuyao_type = str(vvv['辅药']['type'])
+                                fuyao_power = vvv['辅药']['power'] * p
                                 elixir_config[fuyao_type] = fuyao_power
-                                # print(elixir_config)         
+                                
                                 is_mix, id_ = await check_mix(elixir_config)
                                 if is_mix:  # 有可以合成的
                                     if i + o + p <= Llandudno_info["max_num"]:
@@ -98,54 +91,30 @@ async def get_mix_elixir_msg(yaocai):
                                                 p += 1
                                                 continue
 
-                                        mix_elixir_msg[num] = {}
-                                        mix_elixir_msg[num]['id'] = id_
-                                        mix_elixir_msg[num]['配方'] = elixir_config
-                                        mix_elixir_msg[num][
-                                            '配方简写'] = f"主药{v['name']}{i}药引{vv['name']}{o}辅药{vvv['name']}{p}"
-                                        mix_elixir_msg[num]['主药'] = v['name']
-                                        mix_elixir_msg[num]['主药_num'] = i
-                                        mix_elixir_msg[num]['主药_level'] = v['level']
-                                        mix_elixir_msg[num]['药引'] = vv['name']
-                                        mix_elixir_msg[num]['药引_num'] = o
-                                        mix_elixir_msg[num]['药引_level'] = vv['level']
-                                        mix_elixir_msg[num]['辅药'] = vvv['name']
-                                        mix_elixir_msg[num]['辅药_num'] = p
-                                        mix_elixir_msg[num]['辅药_level'] = vvv['level']
-                                        num += 1
-                                        p += 1
-                                        continue
+                                        # 找到第一个有效配方，直接返回
+                                        mix_elixir_msg = {}
+                                        mix_elixir_msg['id'] = id_
+                                        mix_elixir_msg['配方'] = elixir_config
+                                        mix_elixir_msg['配方简写'] = f"主药{v['name']}{i}药引{vv['name']}{o}辅药{vvv['name']}{p}"
+                                        mix_elixir_msg['主药'] = v['name']
+                                        mix_elixir_msg['主药_num'] = i
+                                        mix_elixir_msg['主药_level'] = v['level']
+                                        mix_elixir_msg['药引'] = vv['name']
+                                        mix_elixir_msg['药引_num'] = o
+                                        mix_elixir_msg['药引_level'] = vv['level']
+                                        mix_elixir_msg['辅药'] = vvv['name']
+                                        mix_elixir_msg['辅药_num'] = p
+                                        mix_elixir_msg['辅药_level'] = vvv['level']
+                                        return mix_elixir_msg
                                     else:
                                         p += 1
                                         continue
                                 else:
                                     p += 1
                                     continue
-                            continue
                     o += 1
             i += 1
-    temp_dict = {}
-    temp_id_list = []
-    finall_mix_elixir_msg = {}
-    if mix_elixir_msg == {}:
-        return finall_mix_elixir_msg
-    for k, v in mix_elixir_msg.items():
-        temp_id_list.append(v['id'])
-    temp_id_list = set(temp_id_list)
-    for id_ in temp_id_list:
-        temp_dict[id_] = {}
-        for k, v in mix_elixir_msg.items():
-            if id_ == v['id']:
-                temp_dict[id_][k] = v['主药_num'] + v['药引_num'] + v['辅药_num']
-            else:
-                continue
-        id_ = sorted(temp_dict[id_].items(), key=lambda x: x[1])[0][0]
-        finall_mix_elixir_msg[id_] = {}
-        finall_mix_elixir_msg[id_]['id'] = mix_elixir_msg[id_]['id']
-        finall_mix_elixir_msg[id_]['配方'] = mix_elixir_msg[id_]
-
-    return finall_mix_elixir_msg
-
+    return {}  # 没有找到任何配方
 
 async def absolute(x):
     if x >= 0:

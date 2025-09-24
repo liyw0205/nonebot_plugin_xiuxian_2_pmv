@@ -20,7 +20,7 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    send_msg_handler, get_msg_pic, CommandObjectID, log_message, handle_send
+    send_msg_handler, get_msg_pic, CommandObjectID, log_message, handle_send, update_statistics_value
 )
 from .riftconfig import get_rift_config, savef_rift
 from .jsondata import save_rift_data, read_rift_data
@@ -212,6 +212,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
+        update_statistics_value(user_id, "秘境次数")
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
         await explore_rift.finish()
@@ -274,6 +275,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
         sql_message.update_back_j(user_id, rift_explore_id)
+        update_statistics_value(user_id, "秘境次数")
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
         await use_rift_explore.finish()
@@ -336,6 +338,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     await send_msg_handler(bot, event, result)
                     await handle_send(bot, event, msg)
                     log_message(user_id, msg)
+                    update_statistics_value(user_id, "秘境打怪")
                     await complete_rift.finish()
             elif rift_type == "宝物":
                 msg = get_treasure_info(user_info, rift_rank)
@@ -469,6 +472,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             result_msg = get_dxsj_info("掉血事件", user_info)
         elif battle_type == "Boss战斗":
             result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
+            update_statistics_value(user_id, "秘境打怪")
             await send_msg_handler(bot, event, result)
     elif rift_type == "宝物":
         result_msg = get_treasure_info(user_info, rift_rank)

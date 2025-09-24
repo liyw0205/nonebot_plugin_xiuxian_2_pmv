@@ -14,7 +14,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
 from datetime import datetime
-from ..xiuxian_utils.utils import check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to
+from ..xiuxian_utils.utils import check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to, update_statistics_value
 from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
@@ -378,6 +378,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 计算修炼效率百分比
     efficiency_percent = int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)
     msg = f"虚神界修炼结束，共修炼{round(impaer_exp_time)}分钟，本次增加修为：{number_to(exp)}（修炼效率：{efficiency_percent}%）"
+    update_statistics_value(user_id, "虚神界修炼", increment=impaer_exp_time)
     await handle_send(bot, event, msg)
     await impart_pk_exp.finish()
 
@@ -694,6 +695,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     sql_message.update_user_attribute(
         user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10)
     )
+    update_statistics_value(user_id, "虚神界闭关时长", increment=exp_time)
 
     # 构造返回消息
     if total_exp >= user_get_exp_max:

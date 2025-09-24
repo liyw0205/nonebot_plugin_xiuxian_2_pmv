@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from .work_handle import workhandle
 from datetime import datetime, timedelta
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA, readf, savef, delete_work_file, has_unaccepted_work
 from ..xiuxian_utils.item_json import Items
@@ -236,6 +236,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"获得修为：{number_to(gain_exp)}"
         )
     log_message(user_id, msg)
+    update_statistics_value(user_id, "悬赏令结算次数")
     await handle_send(bot, event, msg)
     return msg
 

@@ -26,7 +26,7 @@ from .sectconfig import get_config
 from ..xiuxian_utils.utils import (
     check_user, number_to,
     get_msg_pic, send_msg_handler, CommandObjectID, handle_send,
-    Txt2Img
+    Txt2Img, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 
@@ -62,7 +62,7 @@ my_sect = on_command("我的宗门", aliases={"宗门信息"}, priority=5, block
 create_sect = on_command("创建宗门", priority=5, block=True)
 join_sect = on_command("加入宗门", priority=5, block=True)
 sect_position_update = on_command("宗门职位变更", priority=5, block=True)
-sect_donate = on_command("宗门捐献", priority=5, block=True)
+sect_donate = on_command("宗门捐献", aliases={"宗门贡献"}, priority=5, block=True)
 sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
 sect_owner_change = on_command("宗主传位", priority=5, block=True)
@@ -862,13 +862,22 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - useratkpractice)
-        if sect_position == 4 or sect_position == 3:
+        if sect_position == 4:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upatkpractice.finish()
+        elif sect_position == 3:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
+        else:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
 
         if useratkpractice >= sect_level:
-            msg = f"道友的攻击修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
+            msg = f"道友的攻击修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请继续捐献灵石提升宗门建设度吧！"
+            await handle_send(bot, event, msg)
+            await upatkpractice.finish()
+
+        if useratkpractice + level_up_count > sect_contribution_level:
+            msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
             await handle_send(bot, event, msg)
             await upatkpractice.finish()
 
@@ -927,13 +936,22 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - userhppractice)
-        if sect_position == 4 or sect_position == 3:
+        if sect_position == 4:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await uphppractice.finish()
+        elif sect_position == 3:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
+        else:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
 
         if userhppractice >= sect_level:
             msg = f"道友的元血修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
+            await handle_send(bot, event, msg)
+            await uphppractice.finish()
+
+        if userhppractice + level_up_count > sect_contribution_level:
+            msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
             await handle_send(bot, event, msg)
             await uphppractice.finish()
 
@@ -992,13 +1010,22 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - usermppractice)
-        if sect_position == 4 or sect_position == 3:
+        if sect_position == 4:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upmppractice.finish()
+        elif sect_position == 3:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
+        else:
+            sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
 
         if usermppractice >= sect_level:
             msg = f"道友的灵海修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
+            await handle_send(bot, event, msg)
+            await upmppractice.finish()
+
+        if usermppractice + level_up_count > sect_contribution_level:
+            msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
             await handle_send(bot, event, msg)
             await upmppractice.finish()
 
@@ -1224,6 +1251,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
             msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{sect_stone}，资材增加：{sect_stone * 10}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
+            update_statistics_value(user_id, "宗门任务")
             await handle_send(bot, event, msg)
             await sect_task_complete.finish()
 
@@ -1259,6 +1287,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
             msg = f"道友为了完成任务购买宝物消耗灵石：{costls}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{sect_stone}，资材增加：{sect_stone * 10}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
+            update_statistics_value(user_id, "宗门任务")
             await handle_send(bot, event, msg)
             await sect_task_complete.finish()
     else:
@@ -2199,6 +2228,9 @@ def get_sectbufftxt(sect_scale, config_):
 def get_sect_level(sect_id):
     sect = sql_message.get_sect_info(sect_id)
     return divmod(sect['sect_scale'], config["等级建设度"])
+
+def get_sect_contribution_level(sect_contribution):
+    return divmod(sect_contribution, config["等级建设度"])
 
 def generate_random_sect_name(count: int = 1) -> List[str]:
     """随机生成多样化的宗门名称（包含正邪佛魔妖鬼等各类宗门）"""

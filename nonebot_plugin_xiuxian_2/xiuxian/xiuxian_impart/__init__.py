@@ -23,7 +23,8 @@ from ..xiuxian_utils.utils import (
     get_msg_pic,
     handle_send,
     send_msg_handler,
-    handle_pic_send
+    handle_pic_send,
+    update_statistics_value
 )
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -235,6 +236,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     xiuxian_impart.update_impart_wish(current_wish, user_id)
     await update_user_impart_data(user_id, total_seclusion_time)
     impart_data_draw = await impart_check(user_id)
+    update_statistics_value(user_id, "传承祈愿", increment=times)
 
     # 计算实际抽卡概率
     actual_wish = current_wish % 90  # 显示当前概率计数（0-89）
@@ -349,6 +351,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     sql_message.update_ls(user_id, required_crystals, 2)
     xiuxian_impart.update_impart_wish(current_wish, user_id)
     impart_data_draw = await impart_check(user_id)
+    update_statistics_value(user_id, "传承抽卡", increment=times)
 
     # 计算实际抽卡概率
     actual_wish = current_wish % 90  # 显示当前概率计数（0-89）

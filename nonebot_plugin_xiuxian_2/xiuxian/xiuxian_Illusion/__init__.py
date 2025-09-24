@@ -18,7 +18,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
     check_user, check_user_type, 
     get_msg_pic, log_message, handle_send, 
-    number_to, send_msg_handler
+    number_to, send_msg_handler, update_statistics_value
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
@@ -472,7 +472,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"════════════\n"
         f"每日8点重置，请明日再来！"
     )
-    
+    update_statistics_value(user_id, "寻心次数")
     await handle_send(bot, event, msg)
     await illusion_heart.finish()
 

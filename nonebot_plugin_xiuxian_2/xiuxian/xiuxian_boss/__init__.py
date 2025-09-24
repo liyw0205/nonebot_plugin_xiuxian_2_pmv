@@ -38,7 +38,7 @@ items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic, CommandObjectID,
-    pic_msg_format, send_msg_handler, log_message, handle_send
+    pic_msg_format, send_msg_handler, log_message, handle_send, update_statistics_value
 )
 from .boss_limit import boss_limit
 from .. import DRIVER
@@ -492,6 +492,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     battle_flag[group_id] = False
     # 更新讨伐次数
     boss_limit.update_battle_count(user_id)
+    update_statistics_value(user_id, "讨伐世界BOSS")
     try:
         await send_msg_handler(bot, event, result)
     except ActionFailed:

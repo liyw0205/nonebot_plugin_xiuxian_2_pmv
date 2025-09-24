@@ -210,19 +210,6 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         msg = f"道友境界未达要求，万世轮回的最低境界为{XiuConfig().twolun_min_level}！"
         await handle_send(bot, event, msg)
         await twolun.finish()
-        
-@resetting.handle(parameterless=[Cooldown(at_sender=False)])
-async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await resetting.finish()
-        
-    user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id) 
-    user_name = user_msg['user_name']
-
 
 @threelun.handle(parameterless=[Cooldown(at_sender=False)])
 async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
