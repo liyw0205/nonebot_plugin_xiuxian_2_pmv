@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     get_user_buff, get_sec_msg, get_sub_info_msg, get_effect_info_msg,
     XIUXIAN_IMPART_BUFF, leave_harm_time
 )
-from ..xiuxian_config import XiuConfig
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.params import CommandArg
 from ..xiuxian_utils.player_fight import Player_fight
@@ -343,6 +343,8 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if user_2:
             exp_1 = user_1['exp']
             exp_2 = user_2['exp']
+            user1_rank = convert_rank(user_1['level'])[0]
+            user2_rank = convert_rank(user_2['level'])[0]
             if exp_2 > exp_1:
                 msg = "修仙大能看了看你，不屑一顾，扬长而去！"
                 await handle_send(bot, event, msg)
@@ -371,8 +373,8 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     await handle_send(bot, event, msg)
                     await two_exp.finish()
                 
-                max_exp_1 = int(exp_1 * 0.01)  # 最大获得修为为当前修为的1%
-                max_exp_2 = int(exp_2 * 0.01)
+                max_exp_1 = int(exp_1 * 0.01 * min(0.1 * user1_rank, 1))  # 最大获得修为为当前修为的1%同时境界越高获得比例越少
+                max_exp_2 = int(exp_2 * 0.01 * min(0.1 * user1_rank, 1))
                 
                 # 随机事件描述
                 event_descriptions = [
