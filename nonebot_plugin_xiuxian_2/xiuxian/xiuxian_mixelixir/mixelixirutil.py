@@ -1,6 +1,7 @@
 from ..xiuxian_utils.item_json import Items
 from random import shuffle
 from collections import Counter
+from typing import Dict, List, Tuple, Set
 
 mix_config = Items().get_data_by_item_type(['合成丹药'])
 mix_configs = {}
@@ -13,129 +14,199 @@ Llandudno_info = {
     "rank": 20
 }
 
+# 预计算配方类型组合的映射，避免重复计算
+_formula_type_cache = {}
+for elixir_id, formula in mix_configs.items():
+    type_tuple = tuple(sorted(formula.keys()))
+    if type_tuple not in _formula_type_cache:
+        _formula_type_cache[type_tuple] = []
+    _formula_type_cache[type_tuple].append((elixir_id, formula))
 
-async def check_mix(elixir_config):
-    is_mix = False
-    l_id = []
-    # mix_configs = await get_mix_config()
-    for k, v in mix_configs.items():  # 这里是丹药配方
-        type_list = []
-        for ek, ev in elixir_config.items():  # 这是传入的值判断
-            # 传入的丹药config
-            type_list.append(ek)
-        formula_list = []
-        for vk, vv in v.items():  # 这里是每个配方的值
-            formula_list.append(vk)
-        if sorted(type_list) == sorted(formula_list):  # key满足了
-            flag = False
-            for typek in type_list:
-                if elixir_config[typek] >= v[typek]:
-                    flag = True
-                    continue
-                else:
-                    flag = False
-                    break
-            if flag:
-                l_id.append(k)
-
-            continue
-        else:
-            continue
-    id = 0
-    if l_id:
-        is_mix = True
-        id_config = {}
-        for id in l_id:
-            for k, v in mix_configs[id].items():
-                id_config[id] = v
+async def check_mix(elixir_config: Dict[str, int]) -> Tuple[bool, int]:
+    """
+    检查药材组合是否能合成丹药，返回最优解
+    """
+    input_types = tuple(sorted(elixir_config.keys()))
+    
+    # 快速检查类型匹配
+    if input_types not in _formula_type_cache:
+        return False, 0
+    
+    candidate_ids = []
+    
+    for elixir_id, formula in _formula_type_cache[input_types]:
+        # 检查每种类型的数值是否满足要求
+        meets_requirements = True
+        for type_key, required_value in formula.items():
+            if elixir_config[type_key] < required_value:
+                meets_requirements = False
                 break
-        id = sorted(id_config.items(), key=lambda x: x[1], reverse=True)[0][0]  # 选出最优解
+        
+        if meets_requirements:
+            # 计算总功率作为优先级指标
+            total_power = sum(formula.values())
+            candidate_ids.append((elixir_id, total_power))
+    
+    if not candidate_ids:
+        return False, 0
+    
+    # 选择总功率最高的配方
+    best_id = max(candidate_ids, key=lambda x: x[1])[0]
+    return True, best_id
 
-    return is_mix, id
-
-
-async def get_mix_elixir_msg(yaocai):
-    """只生成一个配方，找到第一个有效配方就返回"""
-    for k, v in yaocai.items():  # 这里是用户所有的药材dict
-        i = 1
-        while i <= v['num'] and i <= 5:  # 尝试第一个药材为主药
-            for kk, vv in yaocai.items():
-                if kk == k:  # 相同的药材不能同时做药引
+async def get_mix_elixir_msg(yaocai: Dict) -> List[Dict]:
+    """
+    生成最多5个有效配方，保持随机性
+    """
+    recipes = []
+    seen_ids: Set[int] = set()
+    
+    # 随机打乱药材顺序，增加随机性
+    yaocai_list = list(yaocai.values())
+    shuffle(yaocai_list)
+    
+    # 预处理药材类型分类
+    zhuyao_candidates = [y for y in yaocai_list if y.get('主药')]
+    yaoyin_candidates = [y for y in yaocai_list if y.get('药引')]
+    fuyao_candidates = [y for y in yaocai_list if y.get('辅药')]
+    
+    # 进一步打乱各类药材的顺序
+    shuffle(zhuyao_candidates)
+    shuffle(yaoyin_candidates)
+    shuffle(fuyao_candidates)
+    
+    # 限制循环次数，避免性能问题
+    max_candidates = min(8, len(zhuyao_candidates), len(yaoyin_candidates), len(fuyao_candidates))
+    
+    # 收集所有可能的配方
+    all_possible_recipes = []
+    
+    for zhuyao in zhuyao_candidates[:max_candidates]:
+        zhuyao_max = min(zhuyao['num'], 5)
+        
+        for yaoyin in yaoyin_candidates[:max_candidates]:
+            if yaoyin['name'] == zhuyao['name']:
+                continue
+                
+            yaoyin_max = min(yaoyin['num'], 5)
+            
+            # 提前检查调和可能性
+            if await _check_tiaohe_early(zhuyao, yaoyin, zhuyao_max, yaoyin_max):
+                continue
+                
+            for fuyao in fuyao_candidates[:max_candidates]:
+                if fuyao['name'] in [zhuyao['name'], yaoyin['name']]:
                     continue
-                o = 1
-                while o <= vv['num'] and o <= 5:
-                    if await tiaohe(v, i, vv, o):  # 调和失败
-                        o += 1
+                    
+                fuyao_max = min(fuyao['num'], 5)
+                
+                # 尝试不同的数量组合（随机顺序）
+                quantities = []
+                for i in range(1, zhuyao_max + 1):
+                    for o in range(1, yaoyin_max + 1):
+                        for p in range(1, fuyao_max + 1):
+                            if i + o + p <= Llandudno_info["max_num"]:
+                                quantities.append((i, o, p))
+                
+                # 打乱数量组合的顺序
+                shuffle(quantities)
+                
+                for i, o, p in quantities[:10]:  # 每种组合最多尝试10种数量
+                    # 检查调和
+                    if await tiaohe(zhuyao, i, yaoyin, o):
                         continue
-                    else:
-                        for kkk, vvv in yaocai.items():
-                            p = 1
-                            # 尝试加入辅药
-                            while p <= vvv['num'] and p <= 5:
-                                elixir_config = {}
-                                zhuyao_type = str(v['主药']['type'])
-                                zhuyao_power = v['主药']['power'] * i
-                                elixir_config[zhuyao_type] = zhuyao_power
-                                
-                                fuyao_type = str(vvv['辅药']['type'])
-                                fuyao_power = vvv['辅药']['power'] * p
-                                elixir_config[fuyao_type] = fuyao_power
-                                
-                                is_mix, id_ = await check_mix(elixir_config)
-                                if is_mix:  # 有可以合成的
-                                    if i + o + p <= Llandudno_info["max_num"]:
-                                        # 判断背包里药材是否足够(同个药材多种类型)
-                                        if len({v["name"], vv["name"], vvv["name"]}) != 3:
-                                            num_dict = Counter([*[v["name"]]*i, *[vv["name"]]*o, *[vvv["name"]]*p])
-                                            if any(num_dict[yao["name"]] > yao["num"] for yao in [v, vv, vvv]):
-                                                p += 1
-                                                continue
+                        
+                    # 检查药材数量是否足够
+                    required_counts = {
+                        zhuyao['name']: i,
+                        yaoyin['name']: o, 
+                        fuyao['name']: p
+                    }
+                    
+                    if not await _check_yaocai_sufficient(yaocai, required_counts):
+                        continue
+                        
+                    # 构建配方配置
+                    elixir_config = {
+                        str(zhuyao['主药']['type']): zhuyao['主药']['power'] * i,
+                        str(fuyao['辅药']['type']): fuyao['辅药']['power'] * p
+                    }
+                    
+                    is_mix, elixir_id = await check_mix(elixir_config)
+                    if is_mix:
+                        recipe = await _create_recipe(
+                            elixir_id, zhuyao, i, yaoyin, o, fuyao, p
+                        )
+                        # 避免重复配方
+                        if elixir_id not in seen_ids:
+                            all_possible_recipes.append(recipe)
+                            seen_ids.add(elixir_id)
+    
+    # 随机选择最多10个配方
+    shuffle(all_possible_recipes)
+    return all_possible_recipes[:10]
 
-                                        # 找到第一个有效配方，直接返回
-                                        mix_elixir_msg = {}
-                                        mix_elixir_msg['id'] = id_
-                                        mix_elixir_msg['配方'] = elixir_config
-                                        mix_elixir_msg['配方简写'] = f"主药{v['name']}{i}药引{vv['name']}{o}辅药{vvv['name']}{p}"
-                                        mix_elixir_msg['主药'] = v['name']
-                                        mix_elixir_msg['主药_num'] = i
-                                        mix_elixir_msg['主药_level'] = v['level']
-                                        mix_elixir_msg['药引'] = vv['name']
-                                        mix_elixir_msg['药引_num'] = o
-                                        mix_elixir_msg['药引_level'] = vv['level']
-                                        mix_elixir_msg['辅药'] = vvv['name']
-                                        mix_elixir_msg['辅药_num'] = p
-                                        mix_elixir_msg['辅药_level'] = vvv['level']
-                                        return mix_elixir_msg
-                                    else:
-                                        p += 1
-                                        continue
-                                else:
-                                    p += 1
-                                    continue
-                    o += 1
-            i += 1
-    return {}  # 没有找到任何配方
+async def _check_tiaohe_early(zhuyao: Dict, yaoyin: Dict, zhuyao_max: int, yaoyin_max: int) -> bool:
+    """
+    提前检查调和可能性，避免深入循环
+    """
+    # 检查最大数量下是否能调和
+    max_zhuyao_power = zhuyao['主药']['h_a_c']['type'] * zhuyao['主药']['h_a_c']['power'] * zhuyao_max
+    max_yaoyin_power = yaoyin['药引']['h_a_c']['type'] * yaoyin['药引']['h_a_c']['power'] * yaoyin_max
+    return await absolute(max_zhuyao_power + max_yaoyin_power) > yonhudenji
 
-async def absolute(x):
-    if x >= 0:
-        return x
-    else:
-        return -x
+async def _check_yaocai_sufficient(yaocai: Dict, required_counts: Dict[str, int]) -> bool:
+    """
+    检查药材数量是否足够
+    """
+    for name, required in required_counts.items():
+        for yao in yaocai.values():
+            if yao['name'] == name and yao['num'] < required:
+                return False
+    return True
 
+async def _create_recipe(elixir_id: int, zhuyao: Dict, zhuyao_num: int, 
+                         yaoyin: Dict, yaoyin_num: int, fuyao: Dict, fuyao_num: int) -> Dict:
+    """
+    创建配方信息字典
+    """
+    goods_info = Items().get_data_by_item_id(elixir_id)
+    
+    return {
+        'id': elixir_id,
+        '配方简写': f"主药{zhuyao['name']}{zhuyao_num}药引{yaoyin['name']}{yaoyin_num}辅药{fuyao['name']}{fuyao_num}",
+        '主药': zhuyao['name'],
+        '主药_num': zhuyao_num,
+        '主药_level': zhuyao['level'],
+        '药引': yaoyin['name'],
+        '药引_num': yaoyin_num,
+        '药引_level': yaoyin['level'],
+        '辅药': fuyao['name'],
+        '辅药_num': fuyao_num,
+        '辅药_level': fuyao['level']
+    }
 
-async def tiaohe(zhuyao_info, zhuyao_num, yaoyin_info, yaoyin_num):
-    _zhuyao = zhuyao_info['主药']['h_a_c']['type'] * zhuyao_info['主药']['h_a_c']['power'] * zhuyao_num
-    _yaoyin = yaoyin_info['药引']['h_a_c']['type'] * yaoyin_info['药引']['h_a_c']['power'] * yaoyin_num
+async def absolute(x: float) -> float:
+    """绝对值函数"""
+    return abs(x)
 
-    return await absolute(_zhuyao + _yaoyin) > yonhudenji
+async def tiaohe(zhuyao_info: Dict, zhuyao_num: int, yaoyin_info: Dict, yaoyin_num: int) -> bool:
+    """
+    检查冷热调和
+    """
+    zhuyao_power = zhuyao_info['主药']['h_a_c']['type'] * zhuyao_info['主药']['h_a_c']['power'] * zhuyao_num
+    yaoyin_power = yaoyin_info['药引']['h_a_c']['type'] * yaoyin_info['药引']['h_a_c']['power'] * yaoyin_num
+    
+    return await absolute(zhuyao_power + yaoyin_power) > yonhudenji
 
-
-async def make_dict(old_dict):
-    old_dict_key = list(old_dict.keys())
-    shuffle(old_dict_key)
-    if len(old_dict_key) >= 25:
-        old_dict_key = old_dict_key[:25]
-    new_dic = {}
-    for key in old_dict_key:
-        new_dic[key] = old_dict.get(key)
-    return new_dic
+async def make_dict(old_dict: Dict) -> Dict:
+    """
+    随机选择最多25种药材
+    """
+    keys = list(old_dict.keys())
+    shuffle(keys)
+    
+    if len(keys) > 25:
+        keys = keys[:25]
+    
+    return {key: old_dict[key] for key in keys}

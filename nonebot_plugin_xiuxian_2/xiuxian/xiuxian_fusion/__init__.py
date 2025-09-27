@@ -17,6 +17,7 @@ from ..xiuxian_back.back_util import get_item_msg
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, number_to, handle_send
 )
+from ..xiuxian_back.back_util import check_equipment_use_msg
 import random
 
 items = Items()
@@ -25,7 +26,7 @@ sql_message = XiuxianDateManage()
 # 合成必定成功ID列表
 FIXED_SUCCESS_IDS = [7084]
 
-fusion = on_command('合成', priority=15, block=True)
+fusion_item = on_command('合成', priority=16, block=True)
 force_fusion = on_command('强行合成', priority=15, block=True)
 fusion_help = on_command("合成帮助", priority=15, block=True)
 available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=15, block=True)
@@ -36,7 +37,76 @@ fusion_help_text = f"""
 2.查看可合成物品 [物品名可选] 可以查看当前可合成的所有物品以及相关信息。
 """.strip()
 
-# 合成函数
+@fusion_help.handle(parameterless=[Cooldown(at_sender=False)])
+async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await fusion_help.finish()
+        
+    msg = fusion_help_text
+
+    await handle_send(bot, event, msg)
+    await fusion_help.finish()
+
+@fusion_item.handle(parameterless=[Cooldown(at_sender=False)])
+async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await fusion_item.finish()
+
+    user_id = user_info['user_id']
+    args_str = args.extract_plain_text().strip()
+    
+    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    if equipment is None:
+        msg = f"未找到可合成的物品：{args_str}"
+        await handle_send(bot, event, msg)
+        await fusion_item.finish()
+    
+    # 检查是否是必定成功ID，如果是则跳过福缘石检测
+    if int(equipment_id) not in FIXED_SUCCESS_IDS:
+        # 检查是否有福缘石
+        back_msg = sql_message.get_back_msg(user_id)
+        has_protection = False
+        for back in back_msg:
+            if back['goods_id'] == 20006 and back['goods_num'] > 0:
+                has_protection = True
+                break
+        
+        if not has_protection:
+            msg = "道友没有福缘石，合成失败可能会损失材料！\n使用【强行合成】命令确认操作。"
+            await handle_send(bot, event, msg)
+            await fusion_item.finish()
+    
+    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    await handle_send(bot, event, msg)
+    await fusion_item.finish()
+
+@force_fusion.handle(parameterless=[Cooldown(at_sender=False)])
+async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await force_fusion.finish()
+
+    user_id = user_info['user_id']
+    args_str = args.extract_plain_text().strip()
+    
+    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    if equipment is None:
+        msg = f"未找到可合成的物品：{args_str}"
+        await handle_send(bot, event, msg)
+        await force_fusion.finish()
+    
+    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    await handle_send(bot, event, msg)
+    await force_fusion.finish()
+
 async def general_fusion(user_id, equipment_id, equipment):
     """
     合成函数
@@ -83,7 +153,21 @@ async def general_fusion(user_id, equipment_id, equipment):
         total_amount = 0
         for back in back_msg:
             if back['goods_id'] == int(item_id):
-                total_amount += back['goods_num']
+                # 对于装备类型，检查是否已被使用
+                if back['goods_type'] == "装备":
+                    is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
+                    if is_equipped:
+                        # 如果装备已被使用
+                        available_num = back['goods_num'] - back['bind_num'] - 1
+                    else:
+                        # 如果未装备
+                        available_num = back['goods_num'] - back['bind_num']
+                else:
+                    # 非装备物品，正常计算
+                    available_num = back['goods_num'] - back['bind_num']
+                
+                total_amount += max(0, available_num)  # 确保不为负数
+        
         if total_amount < amount_needed:
             missing_items.append((item_id, amount_needed - total_amount))
     
@@ -135,70 +219,6 @@ async def general_fusion(user_id, equipment_id, equipment):
                 sql_message.update_back_j(user_id, int(item_id), amount_needed)  # 扣道具
             
             return False, f"合成失败！材料已消耗。"
-
-@fusion_help.handle(parameterless=[Cooldown(at_sender=False)])
-async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = fusion_help_text
-    await handle_send(bot, event, msg)
-    await fusion_help.finish()
-
-@fusion.handle(parameterless=[Cooldown(at_sender=False)])
-async def fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-
-    user_id = user_info['user_id']
-    args_str = args.extract_plain_text().strip()
-    
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
-    if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
-        await fusion.finish()
-    
-    # 检查是否是必定成功ID，如果是则跳过福缘石检测
-    if int(equipment_id) not in FIXED_SUCCESS_IDS:
-        # 检查是否有福缘石
-        back_msg = sql_message.get_back_msg(user_id)
-        has_protection = False
-        for back in back_msg:
-            if back['goods_id'] == 20006 and back['goods_num'] > 0:
-                has_protection = True
-                break
-        
-        if not has_protection:
-            msg = "道友没有福缘石，合成失败可能会损失材料！\n使用【强行合成】命令确认操作。"
-            await handle_send(bot, event, msg)
-            await fusion.finish()
-    
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
-    await fusion.finish()
-
-@force_fusion.handle(parameterless=[Cooldown(at_sender=False)])
-async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg)
-        await force_fusion.finish()
-
-    user_id = user_info['user_id']
-    args_str = args.extract_plain_text().strip()
-    
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
-    if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
-        await force_fusion.finish()
-    
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
-    await force_fusion.finish()
 
 @available_fusion.handle(parameterless=[Cooldown(at_sender=False)])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
