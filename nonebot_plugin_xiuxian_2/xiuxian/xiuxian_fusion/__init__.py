@@ -172,8 +172,35 @@ async def general_fusion(user_id, equipment_id, equipment):
             missing_items.append((item_id, amount_needed - total_amount))
     
     if missing_items:
-        missing_names = [f"{amount_needed} 个 {items.get_data_by_item_id(int(item_id))['name']}" for item_id, amount_needed in missing_items]
-        return False, "道友还缺少：\n" + "\n".join(missing_names)
+        missing_names = []
+        for item_id, amount_needed in missing_items:
+            material_info = items.get_data_by_item_id(int(item_id))
+            if material_info:
+                # 计算实际缺少的数量（所需数量 - 已有数量）
+                actual_missing = amount_needed
+                for back in back_msg:
+                    if back['goods_id'] == int(item_id):
+                        # 对于装备类型，检查是否已被使用
+                        if back['goods_type'] == "装备":
+                            is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
+                            if is_equipped:
+                                # 如果装备已被使用，可用数量减少1
+                                available_num = back['goods_num'] - 1
+                            else:
+                                # 如果未装备
+                                available_num = back['goods_num']
+                        else:
+                            # 非装备物品，正常计算
+                            available_num = back['goods_num']
+                        
+                        actual_missing = max(0, amount_needed - available_num)  # 计算实际缺少的数量
+                        break
+                
+                if actual_missing > 0:
+                    missing_names.append(f"{actual_missing} 个 {material_info['name']}")
+        
+        if missing_names:
+            return False, "道友还缺少：\n" + "\n".join(missing_names)
     
     # 检查是否必定成功
     if int(equipment_id) in FIXED_SUCCESS_IDS:
