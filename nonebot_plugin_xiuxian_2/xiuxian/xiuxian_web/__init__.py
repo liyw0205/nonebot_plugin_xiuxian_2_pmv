@@ -9,6 +9,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.xiuxian2_handle import config_impart
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -105,8 +106,81 @@ ADMIN_COMMANDS = {
     }
 }
 
+# 从配置类获取表结构信息
+def get_config_tables():
+    """从预设配置类获取表结构信息"""
+    tables = {
+        "主数据库": {
+            "path": DATABASE,
+            "tables": get_config_table_structure(XiuConfig())
+        },
+        "虚神界数据库": {
+            "path": IMPART_DB,
+            "tables": get_impart_table_structure(config_impart)
+        }
+    }
+    return tables
+
+def get_config_table_structure(config):
+    """从XiuConfig获取表结构"""
+    tables = {}
+    
+    # 主用户表
+    tables["user_xiuxian"] = {
+        "name": "用户修仙信息",
+        "fields": config.sql_user_xiuxian,
+        "primary_key": "id"
+    }
+    
+    # CD表
+    tables["user_cd"] = {
+        "name": "用户CD信息",
+        "fields": config.sql_user_cd,
+        "primary_key": "user_id"
+    }
+    
+    # 宗门表
+    tables["sects"] = {
+        "name": "宗门信息",
+        "fields": config.sql_sects,
+        "primary_key": "sect_id"
+    }
+    
+    # 背包表
+    tables["back"] = {
+        "name": "用户背包",
+        "fields": config.sql_back,
+        "primary_key": "id"
+    }
+    
+    # Buff信息表
+    tables["BuffInfo"] = {
+        "name": "Buff信息",
+        "fields": config.sql_buff,
+        "primary_key": "id"
+    }
+    
+    return tables
+
+def get_impart_table_structure(config):
+    """从IMPART_BUFF_CONFIG获取表结构"""
+    tables = {}
+    
+    # 虚神界表
+    tables["xiuxian_impart"] = {
+        "name": "虚神界信息",
+        "fields": config.sql_table_impart_buff,
+        "primary_key": "id"
+    }
+    
+    return tables
+
+def get_tables():
+    """获取所有数据库的表结构，按数据库分组（使用预设配置）"""
+    return get_config_tables()
+
 def get_database_tables(db_path):
-    """动态获取数据库中的所有表及其字段信息，包括主键"""
+    """动态获取数据库中的所有表及其字段信息，包括主键（备用函数）"""
     tables = {}
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -135,24 +209,6 @@ def get_database_tables(db_path):
         }
     
     conn.close()
-    return tables
-
-def get_tables():
-    """获取所有数据库的表结构，按数据库分组"""
-    databases = {
-        "主数据库": DATABASE,
-        "虚神界数据库": IMPART_DB
-    }
-    
-    tables = {}
-    for db_name, db_path in databases.items():
-        # 获取数据库的表结构
-        db_tables = get_database_tables(db_path)
-        tables[db_name] = {
-            "path": db_path,
-            "tables": db_tables
-        }
-    
     return tables
 
 def get_db_connection(db_path):

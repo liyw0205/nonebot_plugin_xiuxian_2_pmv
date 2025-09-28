@@ -67,6 +67,7 @@ sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
 sect_owner_change = on_command("宗主传位", priority=5, block=True)
 sect_list = on_fullmatch("宗门列表", priority=5, block=True)
+sect_power_top = on_fullmatch("宗门战力排行", priority=5, block=True)
 sect_help = on_fullmatch("宗门帮助", priority=5, block=True)
 sect_task = on_command("宗门任务接取", aliases={"我的宗门任务"}, priority=7, block=True)
 sect_task_complete = on_fullmatch("宗门任务完成", priority=7, block=True)
@@ -97,6 +98,7 @@ __sect_help__ = f"""
   • 宗门列表 - 浏览全服宗门
   • 创建宗门 - 消耗{XiuConfig().sect_create_cost}灵石（需境界{XiuConfig().sect_min_level}）
   • 加入宗门 [ID] - 申请加入指定宗门
+  • 宗门战力排行 - 查看战力前50的宗门
 
 👑👑 宗主专属：
   • 宗门职位变更 [道号] [0-4] - 调整成员职位
@@ -144,9 +146,10 @@ async def materialsupdate_():
     all_sects = sql_message.get_all_sects_id_scale()
     for s in all_sects:
         sql_message.update_sect_materials(sect_id=s[0], sect_materials=s[1] * config["发放宗门资材"]["倍率"], key=1)
+        # 更新宗门战力
+        sql_message.update_sect_combat_power(s[0])
 
-    logger.opt(colors=True).info(f"<green>已更新所有宗门的资材</green>")
-
+    logger.opt(colors=True).info(f"<green>已更新所有宗门的资材和战力</green>")
 
 # 每日8点重置用户宗门任务次数、宗门丹药领取次数
 @resetusertask.scheduled_job("cron", hour=8, minute=0)
@@ -1826,6 +1829,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         # 获取宗门状态
         join_status = "开放加入" if sect_info['join_open'] else "关闭加入"
         closed_status = "（封闭山门）" if sect_info['closed'] else ""
+        sect_power = sect_info.get('combat_power', 0)
         
         msg = f"""
 {user_name}所在宗门
@@ -1839,6 +1843,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗门位面排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
 宗门拥有资材：{number_to(sect_info['sect_materials'])}
 宗门贡献度：{number_to(user_info['sect_contribution'])}
+宗门战力：{number_to(sect_power)}
 宗门丹房：{elixir_room_name}
 """
         if sect_position == owner_position:
@@ -2087,6 +2092,20 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     await handle_send(bot, event, msg)
     await sect_disband2.finish()
+
+@sect_power_top.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_power_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门战力排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    top_list = sql_message.combat_power_top()
+    
+    msg_list = ["☆------宗门战力排行------☆"]
+    for i, (sect_id, sect_name, power) in enumerate(top_list, 1):
+        msg_list.append(f"{i}. {sect_name} - 战力：{number_to(power)}")
+    
+    await send_msg_handler(bot, event, '宗门战力排行', bot.self_id, msg_list)
+    await sect_power_top.finish()
 
 def create_user_sect_task(user_id):
     tasklist = config["宗门任务"]

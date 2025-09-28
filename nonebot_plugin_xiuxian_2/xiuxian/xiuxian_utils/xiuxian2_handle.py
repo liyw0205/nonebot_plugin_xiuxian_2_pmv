@@ -108,6 +108,7 @@ class XiuxianDateManage:
   "sect_used_stone" integer,
   "join_open" integer DEFAULT 1,
   "closed" integer DEFAULT 0,
+  "combat_power" integer DEFAULT 0,
   "sect_fairyland" integer
 );""")
             elif i == "back":
@@ -686,7 +687,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :param sect_name:宗门名称
         :return:
         """
-        sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone, join_open, closed) VALUES (?,?,0,0,1,0)"
+        sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone, join_open, closed, combat_power) VALUES (?,?,0,0,1,0,0)"
         cur = self.conn.cursor()
         cur.execute(sql, (sect_name, user_id))
         self.conn.commit()
@@ -727,6 +728,42 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             return sect_onwer_dict
         else:
             return None
+
+    def calculate_sect_combat_power(self, sect_id):
+        """
+        计算宗门战力（所有成员战力总和）
+        :param sect_id: 宗门ID
+        :return: 宗门总战力
+        """
+        members = self.get_all_users_by_sect_id(sect_id)
+        total_power = 0
+        
+        for member in members:
+            user_real_info = self.get_user_real_info(member['user_id'])
+            if user_real_info and 'power' in user_real_info:
+                total_power += user_real_info['power']
+        
+        return total_power
+
+    def update_sect_combat_power(self, sect_id):
+        """
+        更新宗门战力
+        :param sect_id: 宗门ID
+        """
+        total_power = self.calculate_sect_combat_power(sect_id)
+        sql = "UPDATE sects SET combat_power = ? WHERE sect_id = ?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (total_power, sect_id))
+        self.conn.commit()
+        return total_power
+
+    def combat_power_top(self):
+        """宗门战力排行榜"""
+        sql = f"SELECT sect_id, sect_name, combat_power FROM sects WHERE sect_owner is NOT NULL ORDER BY combat_power DESC LIMIT 50"
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        result = cur.fetchall()
+        return result
 
     def get_sect_info_by_id(self, sect_id):
         """

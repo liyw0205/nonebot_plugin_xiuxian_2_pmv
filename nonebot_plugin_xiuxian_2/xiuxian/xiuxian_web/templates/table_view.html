@@ -3,6 +3,7 @@
 {% block content %}
     <div class="card">
         <h2>{{ table_info.name }} 数据</h2>
+        <p>{{ table_name }}</p>
         
         <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
             <select name="search_field">
@@ -16,7 +17,7 @@
             <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">重置搜索</a>
         </form>
         
-        <!-- 批量操作表单 - 始终显示 -->
+        <!-- 批量操作表单 -->
         <div class="card" style="margin-top: 20px; background-color: #f8f9fa;">
             <h3>批量修改</h3>
             <form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
@@ -66,7 +67,7 @@
                 <thead>
                     <tr>
                         {% for field in table_info.fields %}
-                            <th>{{ field }}</th>
+                            <th>{{ field }}{% if field == primary_key %} 🔑{% endif %}</th>
                         {% endfor %}
                         <th>操作</th>
                     </tr>
@@ -192,108 +193,4 @@
             }
         });
     </script>
-
-    <style>
-        /* 基础样式 */
-        .card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        h2, h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        
-        .search-form {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            align-items: center;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        
-        select, input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 8px 15px;
-            background: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-        }
-        
-        .btn-success {
-            background: #28a745;
-        }
-        
-        .btn:hover {
-            opacity: 0.9;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        
-        th {
-            background-color: #f8f9fa;
-            font-weight: bold;
-        }
-        
-        tr:hover {
-            background-color: #f5f5f5;
-        }
-        
-        .pagination {
-            display: flex;
-            gap: 5px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .pagination a, .pagination span {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            text-decoration: none;
-            color: #007bff;
-        }
-        
-        .pagination a:hover {
-            background-color: #f8f9fa;
-        }
-        
-        .pagination .active {
-            background-color: #007bff;
-            color: white;
-            border-color: #007bff;
-        }
-    </style>
 {% endblock %}

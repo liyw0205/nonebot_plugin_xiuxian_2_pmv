@@ -68,7 +68,7 @@ class XiuConfig:
         ]
         self.sql_sects = [
             "sect_id", "sect_name", "sect_owner", "sect_scale", "sect_used_stone", "join_open", "closed", "sect_fairyland",
-            "sect_materials", "mainbuff", "secbuff", "elixir_room_level"
+            "sect_materials", "mainbuff", "secbuff", "elixir_room_level", "combat_power"
         ]
         self.sql_buff = [
             "id", "user_id", "main_buff", "sec_buff", "effect1_buff", "effect2_buff", "faqi_buff", 
@@ -78,7 +78,6 @@ class XiuConfig:
             "user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
             "remake", "day_num", "all_num", "action_time", "state", "bind_num"
         ]
-        self.sql_user_auctions = [""]
         # 上面是数据库校验,不知道做什么的话别动
         self.put_bot = []  
         # ["123456"]

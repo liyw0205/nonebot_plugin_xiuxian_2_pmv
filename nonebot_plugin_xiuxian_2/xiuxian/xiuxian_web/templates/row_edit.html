@@ -5,6 +5,7 @@
         <h2>编辑 {{ table_info.name }} 数据</h2>
         
         <form id="editForm" method="post">
+            {# 按照预设的字段顺序显示 #}
             {% for field in table_info.fields %}
                 <div class="form-group">
                     <label for="{{ field }}">{{ field }}</label>
