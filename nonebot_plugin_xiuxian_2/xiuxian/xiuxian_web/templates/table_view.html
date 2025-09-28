@@ -13,8 +13,8 @@
                 {% endfor %}
             </select>
             <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
-            <button type="submit" class="btn">搜索</button>
-            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">重置搜索</a>
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">重置搜索</a>
         </form>
         
         <!-- 批量操作表单 -->
@@ -85,7 +85,7 @@
                                 </td>
                             {% endfor %}
                             <td>
-                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn">编辑</a>
+                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn btn-primary">编辑</a>
                             </td>
                         </tr>
                     {% endfor %}

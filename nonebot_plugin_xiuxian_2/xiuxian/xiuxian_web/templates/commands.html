@@ -1,112 +1,330 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="card">
-        <h2>管理员指令</h2>
-        
-        <div style="margin-top: 20px;">
-            {% for cmd_name, cmd_info in commands.items() %}
-                <div class="card command-form" style="margin-bottom: 20px;">
-                    <h3>{{ cmd_info.name }}</h3>
-                    <p>{{ cmd_info.description }}</p>
-                    
-                    <form class="command-execute-form" data-command="{{ cmd_name }}">
-                        {% for param in cmd_info.params %}
-                            {% if param.type == "select" %}
-                                <div class="form-group">
-                                    <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
-                                    <select id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" class="param-select" 
-                                        {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
-                                        {% for option in param.options %}
-                                            {% if param.options is mapping %}
-                                                <option value="{{ option }}">{{ param.options[option] }}</option>
-                                            {% else %}
-                                                <option value="{{ option }}">{{ option }}</option>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            {% else %}
-                                <div class="form-group" 
-                                    {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
-                                    <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
-                                    <input type="{{ param.type }}" id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" 
-                                        {% if param.required %}required{% endif %}>
-                                </div>
-                            {% endif %}
-                        {% endfor %}
-                        
-                        <button type="button" onclick="executeCommand('{{ cmd_name }}')" class="btn">执行</button>
-                    </form>
-                    
-                    <div id="{{ cmd_name }}_result" class="command-result" style="display: none;"></div>
-                </div>
-            {% endfor %}
-        </div>
+<div class="card">
+    <h2>管理员指令</h2>
+    
+    <!-- 标签导航 -->
+    <div class="tab-nav">
+        {% for cmd_name, cmd_info in commands.items() %}
+        <button class="tab-link {% if loop.first %}active{% endif %}" data-tab="{{ cmd_name }}">
+            <i class="{{ get_command_icon(cmd_name) }}"></i>
+            {{ cmd_info.name }}
+        </button>
+        {% endfor %}
     </div>
     
-    <script>
-        // 动态显示/隐藏表单字段
-        document.querySelectorAll('.param-select').forEach(select => {
-            select.addEventListener('change', function() {
-                const showIf = this.dataset.showIf;
-                if (showIf) {
-                    const conditions = JSON.parse(showIf);
-                    const parentForm = this.closest('.command-execute-form');
+    <!-- 指令内容 -->
+    <div class="tab-content">
+        {% for cmd_name, cmd_info in commands.items() %}
+        <div id="{{ cmd_name }}" class="tab-pane {% if loop.first %}active{% endif %}">
+            <div class="command-card">
+                <div class="command-header">
+                    <div class="command-icon">
+                        <i class="{{ get_command_icon(cmd_name) }}"></i>
+                    </div>
+                    <div>
+                        <h3>{{ cmd_info.name }}</h3>
+                        <p class="command-description">{{ cmd_info.description }}</p>
+                    </div>
+                </div>
+                
+                <form class="command-execute-form" data-command="{{ cmd_name }}">
+                    {% for param in cmd_info.params %}
+                        {% if param.type == "select" %}
+                            <div class="form-group">
+                                <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
+                                <select id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" class="param-select" 
+                                    {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
+                                    {% for option in param.options %}
+                                        {% if param.options is mapping %}
+                                            <option value="{{ option }}">{{ param.options[option] }}</option>
+                                        {% else %}
+                                            <option value="{{ option }}">{{ option }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        {% else %}
+                            <div class="form-group" 
+                                {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
+                                <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
+                                <input type="{{ param.type }}" id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" 
+                                    {% if param.required %}required{% endif %} placeholder="{{ param.get('placeholder', '') }}">
+                            </div>
+                        {% endif %}
+                    {% endfor %}
                     
-                    Object.keys(conditions).forEach(key => {
-                        const value = conditions[key];
-                        const shouldShow = this.value === value;
-                        
-                        parentForm.querySelectorAll(`[data-show-if*="${key}"]`).forEach(el => {
-                            if (el !== this) {
-                                el.style.display = shouldShow ? 'block' : 'none';
-                                if (!shouldShow) {
-                                    el.querySelector('input, select').value = '';
-                                }
-                            }
-                        });
-                    });
-                }
-            });
-            
-            // 触发初始状态
-            select.dispatchEvent(new Event('change'));
-        });
+                    <div class="form-actions">
+                        <button type="button" onclick="executeCommand('{{ cmd_name }}')" class="btn btn-primary">
+                            <i class="fas fa-play-circle"></i> 执行指令
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="{{ cmd_name }}_result" class="command-result" style="display: none;"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+/* 标签导航样式 */
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+}
+
+.tab-link {
+    background: rgba(30, 136, 229, 0.1);
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: var(--transition);
+    color: var(--text);
+    font-weight: 500;
+}
+
+.tab-link:hover {
+    background: rgba(30, 136, 229, 0.2);
+    transform: translateY(-2px);
+}
+
+.tab-link.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(30, 136, 229, 0.3);
+}
+
+.tab-content {
+    margin-top: 20px;
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.command-card {
+    background: var(--bg-card);
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 20px;
+    border-left: 4px solid var(--primary);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    transition: var(--transition);
+}
+
+.command-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+}
+
+.command-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.command-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: white;
+    flex-shrink: 0;
+}
+
+.command-description {
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-top: 5px;
+}
+
+.command-execute-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.form-actions {
+    grid-column: 1 / -1;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.command-result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    animation: slideIn 0.3s ease;
+}
+
+.command-result .success {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--success);
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid var(--success);
+}
+
+.command-result .error {
+    background: rgba(244, 67, 54, 0.15);
+    color: var(--danger);
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid var(--danger);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .tab-nav {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 5px;
+    }
+    
+    .tab-link {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    .command-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .command-execute-form {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+        justify-content: center;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
+
+<script>
+// 标签切换功能
+document.querySelectorAll('.tab-link').forEach(tab => {
+    tab.addEventListener('click', function() {
+        // 移除所有活动状态
+        document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         
-        // 执行命令
-        function executeCommand(cmdName) {
-            const form = document.querySelector(`.command-execute-form[data-command="${cmdName}"]`);
-            const resultDiv = document.getElementById(`${cmdName}_result`);
-            const formData = new FormData(form);
-            const data = {command_name: cmdName};
+        // 添加当前活动状态
+        this.classList.add('active');
+        const tabId = this.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+    });
+});
+
+// 动态显示/隐藏表单字段
+document.querySelectorAll('.param-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const showIf = this.dataset.showIf;
+        if (showIf) {
+            const conditions = JSON.parse(showIf);
+            const parentForm = this.closest('.command-execute-form');
             
-            formData.forEach((value, key) => {
-                data[key] = value;
-            });
-            
-            resultDiv.style.display = 'none';
-            
-            fetch("{{ url_for('execute_command') }}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(result => {
-                resultDiv.style.display = 'block';
-                if (result.success) {
-                    resultDiv.innerHTML = `<div class="success">${result.message}</div>`;
-                } else {
-                    resultDiv.innerHTML = `<div class="error">${result.error}</div>`;
-                }
-            })
-            .catch(error => {
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = `<div class="error">请求失败: ${error}</div>`;
+            Object.keys(conditions).forEach(key => {
+                const value = conditions[key];
+                const shouldShow = this.value === value;
+                
+                parentForm.querySelectorAll(`[data-show-if*="${key}"]`).forEach(el => {
+                    if (el !== this) {
+                        el.style.display = shouldShow ? 'block' : 'none';
+                        if (!shouldShow) {
+                            el.querySelector('input, select').value = '';
+                        }
+                    }
+                });
             });
         }
-    </script>
+    });
+    
+    // 触发初始状态
+    select.dispatchEvent(new Event('change'));
+});
+
+// 执行命令
+function executeCommand(cmdName) {
+    const form = document.querySelector(`.command-execute-form[data-command="${cmdName}"]`);
+    const resultDiv = document.getElementById(`${cmdName}_result`);
+    const formData = new FormData(form);
+    const data = {command_name: cmdName};
+    
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+    
+    resultDiv.style.display = 'none';
+    
+    // 显示加载状态
+    const executeBtn = form.querySelector('button');
+    const originalText = executeBtn.innerHTML;
+    executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行中...';
+    executeBtn.disabled = true;
+    
+    fetch("{{ url_for('execute_command') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        resultDiv.style.display = 'block';
+        if (result.success) {
+            resultDiv.innerHTML = `<div class="success">✅ ${result.message}</div>`;
+        } else {
+            resultDiv.innerHTML = `<div class="error">❌ ${result.error}</div>`;
+        }
+    })
+    .catch(error => {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<div class="error">❌ 请求失败: ${error}</div>`;
+    })
+    .finally(() => {
+        executeBtn.innerHTML = originalText;
+        executeBtn.disabled = false;
+    });
+}
+</script>
 {% endblock %}

@@ -20,7 +20,7 @@
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button type="button" onclick="submitForm('update')" class="btn btn-success">保存</button>
                 <button type="button" onclick="confirmDelete()" class="btn btn-danger">删除</button>
-                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn">返回</a>
+                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">返回</a>
             </div>
             
             <input type="hidden" name="action" id="action" value="">

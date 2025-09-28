@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import json
+import re
+import inspect
 from pathlib import Path
 from datetime import datetime
 from nonebot import get_driver
@@ -939,6 +941,446 @@ def execute_command():
     except Exception as e:
         return jsonify({"success": False, "error": f"执行错误: {str(e)}"})
 
+CONFIG_EDITABLE_FIELDS = {
+    "put_bot": {
+        "name": "接收消息QQ",
+        "description": "负责接收消息的QQ号列表",
+        "type": "list[int]",
+        "category": "基础设置"
+    },
+    "main_bo": {
+        "name": "主QQ",
+        "description": "负责发送消息的QQ号列表",
+        "type": "list[int]",
+        "category": "基础设置"
+    },
+    "shield_group": {
+        "name": "屏蔽群聊",
+        "description": "屏蔽的群聊ID列表",
+        "type": "list[int]",
+        "category": "群聊设置"
+    },
+    "response_group": {
+        "name": "反转屏蔽",
+        "description": "是否反转屏蔽的群聊（仅响应这些群的消息）",
+        "type": "bool",
+        "category": "群聊设置"
+    },
+    "shield_private": {
+        "name": "屏蔽私聊",
+        "description": "是否屏蔽私聊消息",
+        "type": "bool",
+        "category": "私聊设置"
+    },
+    "admin_debug": {
+        "name": "管理员调试模式",
+        "description": "开启后只响应超管指令",
+        "type": "bool",
+        "category": "调试设置"
+    },
+    "img": {
+        "name": "图片发送",
+        "description": "是否使用图片发送消息",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "user_info_image": {
+        "name": "个人信息图片",
+        "description": "是否使用图片发送个人信息",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "xiuxian_info_img": {
+        "name": "网络背景图",
+        "description": "开启则使用网络背景图",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "private_chat_enabled": {
+        "name": "私聊功能",
+        "description": "私聊功能开关",
+        "type": "bool",
+        "category": "私聊设置"
+    },
+    "web_port": {
+        "name": "管理面板端口",
+        "description": "修仙管理面板端口号",
+        "type": "int",
+        "category": "Web设置"
+    },
+    "web_host": {
+        "name": "管理面板IP",
+        "description": "修仙管理面板IP地址",
+        "type": "str",
+        "category": "Web设置"
+    },
+    "level_up_cd": {
+        "name": "突破CD",
+        "description": "突破CD（分钟）",
+        "type": "int",
+        "category": "修炼设置"
+    },
+    "closing_exp": {
+        "name": "闭关修为",
+        "description": "闭关每分钟获取的修为",
+        "type": "int",
+        "category": "修炼设置"
+    },
+    "tribulation_min_level": {
+        "name": "最低渡劫境界",
+        "description": "最低渡劫境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "渡劫设置"
+    },
+    "tribulation_base_rate": {
+        "name": "基础渡劫概率",
+        "description": "基础渡劫概率（百分比）",
+        "type": "int",
+        "category": "渡劫设置"
+    },
+    "tribulation_max_rate": {
+        "name": "最大渡劫概率",
+        "description": "最大渡劫概率（百分比）",
+        "type": "int",
+        "category": "渡劫设置"
+    },
+    "tribulation_cd": {
+        "name": "渡劫CD",
+        "description": "渡劫冷却时间（分钟）",
+        "type": "int",
+        "category": "渡劫设置"
+    },
+    "sect_min_level": {
+        "name": "创建宗门境界",
+        "description": "创建宗门最低境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "宗门设置"
+    },
+    "sect_create_cost": {
+        "name": "创建宗门消耗",
+        "description": "创建宗门消耗灵石",
+        "type": "int",
+        "category": "宗门设置"
+    },
+    "sect_rename_cost": {
+        "name": "宗门改名消耗",
+        "description": "宗门改名消耗灵石",
+        "type": "int",
+        "category": "宗门设置"
+    },
+    "sect_rename_cd": {
+        "name": "宗门改名CD",
+        "description": "宗门改名冷却时间（天）",
+        "type": "int",
+        "category": "宗门设置"
+    },
+    "auto_change_sect_owner_cd": {
+        "name": "自动换宗主CD",
+        "description": "自动换长时间不玩宗主CD（天）",
+        "type": "int",
+        "category": "宗门设置"
+    },
+    "closing_exp_upper_limit": {
+        "name": "闭关修为上限",
+        "description": "闭关获取修为上限倍数",
+        "type": "float",
+        "category": "修炼设置"
+    },
+    "level_punishment_floor": {
+        "name": "突破失败惩罚下限",
+        "description": "突破失败扣除修为惩罚下限（百分比）",
+        "type": "int",
+        "category": "修炼设置"
+    },
+    "level_punishment_limit": {
+        "name": "突破失败惩罚上限",
+        "description": "突破失败扣除修为惩罚上限（百分比）",
+        "type": "int",
+        "category": "修炼设置"
+    },
+    "level_up_probability": {
+        "name": "失败增加概率",
+        "description": "突破失败增加当前境界突破概率的比例",
+        "type": "float",
+        "category": "修炼设置"
+    },
+    "sign_in_lingshi_lower_limit": {
+        "name": "签到灵石下限",
+        "description": "每日签到灵石下限",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "sign_in_lingshi_upper_limit": {
+        "name": "签到灵石上限",
+        "description": "每日签到灵石上限",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "beg_max_level": {
+        "name": "奇缘最高境界",
+        "description": "仙途奇缘能领灵石最高境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "经济设置"
+    },
+    "beg_max_days": {
+        "name": "奇缘最多天数",
+        "description": "仙途奇缘能领灵石最多天数",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "beg_lingshi_lower_limit": {
+        "name": "奇缘灵石下限",
+        "description": "仙途奇缘灵石下限",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "beg_lingshi_upper_limit": {
+        "name": "奇缘灵石上限",
+        "description": "仙途奇缘灵石上限",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "tou": {
+        "name": "偷灵石惩罚",
+        "description": "偷灵石惩罚金额",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "tou_lower_limit": {
+        "name": "偷灵石下限",
+        "description": "偷灵石下限（百分比）",
+        "type": "float",
+        "category": "经济设置"
+    },
+    "tou_upper_limit": {
+        "name": "偷灵石上限",
+        "description": "偷灵石上限（百分比）",
+        "type": "float",
+        "category": "经济设置"
+    },
+    "auto_select_root": {
+        "name": "自动选择灵根",
+        "description": "默认开启自动选择最佳灵根",
+        "type": "bool",
+        "category": "灵根设置"
+    },
+    "remake": {
+        "name": "重入仙途消费",
+        "description": "重入仙途的消费灵石",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "remaname": {
+        "name": "修仙改名消费",
+        "description": "修仙改名的消费灵石",
+        "type": "int",
+        "category": "经济设置"
+    },
+    "max_stamina": {
+        "name": "体力上限",
+        "description": "体力上限值",
+        "type": "int",
+        "category": "体力设置"
+    },
+    "stamina_recovery_points": {
+        "name": "体力恢复",
+        "description": "体力恢复点数/分钟",
+        "type": "int",
+        "category": "体力设置"
+    },
+    "lunhui_min_level": {
+        "name": "千世轮回境界",
+        "description": "千世轮回最低境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "轮回设置"
+    },
+    "twolun_min_level": {
+        "name": "万世轮回境界",
+        "description": "万世轮回最低境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "轮回设置"
+    },
+    "threelun_min_level": {
+        "name": "永恒轮回境界",
+        "description": "永恒轮回最低境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "轮回设置"
+    },
+    "Infinite_reincarnation_min_level": {
+        "name": "无限轮回境界",
+        "description": "无限轮回最低境界",
+        "type": "select",
+        "options": LEVELS,
+        "category": "轮回设置"
+    },
+    "merge_forward_send": {
+        "name": "消息发送方式",
+        "description": "1=长文本,2=合并转发,3=合并转长图",
+        "type": "int",
+        "category": "消息设置"
+    },
+    "message_optimization": {
+        "name": "消息优化",
+        "description": "是否开启信息优化",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "img_compression_limit": {
+        "name": "图片压缩率",
+        "description": "图片压缩率（0-100）",
+        "type": "int",
+        "category": "消息设置"
+    },
+    "img_type": {
+        "name": "图片类型",
+        "description": "webp或者jpeg",
+        "type": "str",
+        "category": "消息设置"
+    },
+    "img_send_type": {
+        "name": "图片发送类型",
+        "description": "io或base64",
+        "type": "str",
+        "category": "消息设置"
+    }
+}
+
+# 排除数据库相关的配置字段
+EXCLUDED_CONFIG_FIELDS = [
+    'sql_table', 'sql_user_xiuxian', 'sql_user_cd', 'sql_sects', 
+    'sql_buff', 'sql_back', 'level', 'version'
+]
+
+def get_config_values():
+    """获取当前配置值"""
+    config = XiuConfig()
+    values = {}
+    
+    for field_name, field_info in CONFIG_EDITABLE_FIELDS.items():
+        if hasattr(config, field_name):
+            value = getattr(config, field_name)
+            values[field_name] = value
+    
+    return values
+
+def save_config_values(new_values):
+    """保存配置到文件"""
+    config_file_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_config.py"
+    
+    if not config_file_path.exists():
+        return False, "配置文件不存在"
+    
+    try:
+        # 读取原文件内容
+        with open(config_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 更新配置值
+        for field_name, new_value in new_values.items():
+            if field_name in CONFIG_EDITABLE_FIELDS:
+                field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
+                
+                # 根据类型格式化值
+                if field_type == "list[int]":
+                    if isinstance(new_value, str):
+                        if new_value.strip():
+                            formatted_value = f"[{', '.join([x.strip() for x in new_value.split(',')])}]"
+                        else:
+                            formatted_value = "[]"
+                    else:
+                        formatted_value = str(new_value)
+                elif field_type == "bool":
+                    formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
+                elif field_type == "select":
+                    formatted_value = f'"{new_value}"'
+                elif field_type == "int":
+                    formatted_value = str(int(new_value))
+                elif field_type == "float":
+                    formatted_value = str(float(new_value))
+                else:
+                    formatted_value = f'"{new_value}"'
+                
+                # 在文件中查找并替换配置项
+                pattern = rf"self\.{field_name}\s*=\s*.+"
+                replacement = f"self.{field_name} = {formatted_value}"
+                content = re.sub(pattern, replacement, content)
+        
+        # 写入新内容
+        with open(config_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return True, "配置保存成功"
+    
+    except Exception as e:
+        return False, f"保存配置时出错: {str(e)}"
+
+# 配置管理路由
+@app.route('/config')
+def config_management():
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    
+    current_config = get_config_values()
+    
+    # 按分类分组配置项
+    config_by_category = {}
+    for field_name, field_info in CONFIG_EDITABLE_FIELDS.items():
+        category = field_info["category"]
+        if category not in config_by_category:
+            config_by_category[category] = []
+        
+        config_item = {
+            "field_name": field_name,
+            "name": field_info["name"],
+            "description": field_info["description"],
+            "type": field_info["type"],
+            "value": current_config.get(field_name, "")
+        }
+        
+        if field_info["type"] == "select" and "options" in field_info:
+            config_item["options"] = field_info["options"]
+        
+        config_by_category[category].append(config_item)
+    
+    return render_template('config.html', config_by_category=config_by_category)
+
+@app.route('/save_config', methods=['POST'])
+def save_config():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        config_data = request.get_json()
+        if not config_data:
+            return jsonify({"success": False, "error": "无效的配置数据"})
+        
+        success, message = save_config_values(config_data)
+        return jsonify({"success": success, "message": message})
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": f"保存配置时出错: {str(e)}"})
+
+@app.context_processor
+def inject_navigation():
+    """注入导航栏状态和辅助函数到所有模板"""
+    def is_active(endpoint):
+        """检查当前路由是否匹配给定的端点"""
+        if isinstance(endpoint, (list, tuple)):
+            return request.endpoint in endpoint
+        return request.endpoint == endpoint
+    
+    return dict(
+        get_command_icon=get_command_icon,
+        get_config_category_icon=get_config_category_icon,
+        is_active=is_active
+    )
+
 def get_root_rate(root_type, user_id):
     """获取灵根倍率（完整版本，参考原版实现）"""
     # 获取灵根数据
@@ -966,6 +1408,38 @@ def get_root_rate(root_type, user_id):
         else:
             # 如果找不到对应的灵根类型，返回默认值
             return 1.0
+
+def get_command_icon(command_name):
+    """获取命令对应的图标"""
+    icon_map = {
+        "gm_command": "fas fa-gem",
+        "adjust_exp_command": "fas fa-fire",
+        "gmm_command": "fas fa-recycle",
+        "zaohua_xiuxian": "fas fa-mountain",
+        "cz": "fas fa-gift",
+        "hmll": "fas fa-trash",
+        "ccll_command": "fas fa-history"
+    }
+    return icon_map.get(command_name, "fas fa-cog")
+
+def get_config_category_icon(category):
+    """获取配置分类对应的图标"""
+    icon_map = {
+        "基础设置": "fas fa-cube",
+        "群聊设置": "fas fa-users",
+        "私聊设置": "fas fa-user",
+        "调试设置": "fas fa-bug",
+        "消息设置": "fas fa-comment",
+        "Web设置": "fas fa-globe",
+        "修炼设置": "fas fa-medal",
+        "渡劫设置": "fas fa-bolt",
+        "宗门设置": "fas fa-landmark",
+        "经济设置": "fas fa-coins",
+        "灵根设置": "fas fa-seedling",
+        "体力设置": "fas fa-heart",
+        "轮回设置": "fas fa-infinity"
+    }
+    return icon_map.get(category, "fas fa-cog")
 
 @app.route('/search_users')
 def search_users():

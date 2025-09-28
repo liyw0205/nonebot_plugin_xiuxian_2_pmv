@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2>修仙配置管理</h2>
+    <p>修改修仙插件的基本配置，修改后需要重启生效</p>
+    
+    <!-- 标签导航 -->
+    <div class="tab-nav">
+        {% for category in config_by_category.keys() %}
+        <button class="tab-link {% if loop.first %}active{% endif %}" data-tab="{{ category|replace(' ', '_') }}">
+            <i class="{{ get_config_category_icon(category) }}"></i>
+            {{ category }}
+        </button>
+        {% endfor %}
+    </div>
+    
+    <!-- 配置内容 -->
+    <div class="tab-content">
+        {% for category, configs in config_by_category.items() %}
+        <div id="{{ category|replace(' ', '_') }}" class="tab-pane {% if loop.first %}active{% endif %}">
+            <form class="config-form">
+                {% for config in configs %}
+                <div class="form-group">
+                    <label for="{{ config.field_name }}" title="{{ config.description }}">
+                        {{ config.name }}
+                        <small style="color: #666; font-style: italic;">({{ config.type }})</small>
+                    </label>
+                    
+                    {% if config.type == 'bool' %}
+                    <select id="{{ config.field_name }}" name="{{ config.field_name }}">
+                        <option value="true" {% if config.value == True %}selected{% endif %}>是</option>
+                        <option value="false" {% if config.value == False %}selected{% endif %}>否</option>
+                    </select>
+                    
+                    {% elif config.type == 'select' and config.options %}
+                    <select id="{{ config.field_name }}" name="{{ config.field_name }}">
+                        {% for option in config.options %}
+                            <option value="{{ option }}" {% if config.value == option %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    
+                    {% elif config.type == 'list[int]' %}
+                    <input type="text" id="{{ config.field_name }}" name="{{ config.field_name }}" 
+                           value="{% if config.value %}{{ config.value|replace('[', '')|replace(']', '')|replace(' ', '') }}{% endif %}"
+                           placeholder="用逗号分隔，如: 123,456,789">
+                    
+                    {% elif config.type == 'int' or config.type == 'float' %}
+                    <input type="number" id="{{ config.field_name }}" name="{{ config.field_name }}" 
+                           value="{{ config.value }}" step="{% if config.type == 'float' %}0.1{% else %}1{% endif %}">
+                    
+                    {% else %}
+                    <input type="text" id="{{ config.field_name }}" name="{{ config.field_name }}" 
+                           value="{{ config.value }}">
+                    {% endif %}
+                    
+                    <small style="color: #666; display: block; margin-top: 5px;">{{ config.description }}</small>
+                </div>
+                {% endfor %}
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="form-actions">
+        <button type="button" onclick="saveConfig()" class="btn btn-success">
+            <i class="fas fa-save"></i> 保存所有配置
+        </button>
+        <div id="saveResult" style="margin-left: 15px;"></div>
+    </div>
+</div>
+
+<script>
+// 标签切换功能
+document.querySelectorAll('.tab-link').forEach(tab => {
+    tab.addEventListener('click', function() {
+        // 移除所有活动状态
+        document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        
+        // 添加当前活动状态
+        this.classList.add('active');
+        const tabId = this.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+    });
+});
+
+function saveConfig() {
+    // 收集所有表单数据
+    const configData = {};
+    document.querySelectorAll('.config-form').forEach(form => {
+        const formData = new FormData(form);
+        formData.forEach((value, key) => {
+            configData[key] = value;
+        });
+    });
+    
+    const resultDiv = document.getElementById('saveResult');
+    resultDiv.innerHTML = '<span style="color: blue;"><i class="fas fa-spinner fa-spin"></i> 保存中...</span>';
+    
+    fetch("{{ url_for('save_config') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(configData)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            resultDiv.innerHTML = `<span style="color: green;"><i class="fas fa-check-circle"></i> ${result.message}</span>`;
+        } else {
+            resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 错误: ${result.error}</span>`;
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 请求失败: ${error}</span>`;
+    });
+}
+</script>
+
+<style>
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+}
+
+.tab-link {
+    background: rgba(30, 136, 229, 0.1);
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: var(--transition);
+    color: var(--text);
+    font-weight: 500;
+}
+
+.tab-link:hover {
+    background: rgba(30, 136, 229, 0.2);
+    transform: translateY(-2px);
+}
+
+.tab-link.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(30, 136, 229, 0.3);
+}
+
+.tab-content {
+    margin-top: 20px;
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.form-actions {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+}
+
+.form-group {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+}
+
+.form-group label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    background: white;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .tab-nav {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 5px;
+    }
+    
+    .tab-link {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+</style>
+{% endblock %}
