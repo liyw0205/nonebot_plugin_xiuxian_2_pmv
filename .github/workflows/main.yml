@@ -54,11 +54,8 @@ jobs:
         body: |
           ## Release Notes
 
-          This release includes the following changes:
-
           - ${{ steps.commit_message.outputs.COMMIT_MSG }}
 
-          For more details, please check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.tag.outputs.TAGNAME }}).
         draft: false
         prerelease: false
 
