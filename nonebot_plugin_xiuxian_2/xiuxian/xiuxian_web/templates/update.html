@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2><i class="fas fa-sync-alt"></i> 检测更新</h2>
+    
+    <div id="update-status">
+        <div class="loading">检查更新中...</div>
+    </div>
+    
+    <div id="releases-list" style="display: none; margin-top: 20px;">
+        <h3>最近更新</h3>
+        <div class="releases-container"></div>
+    </div>
+    
+    <div class="form-actions">
+        <button onclick="checkForUpdates()" class="btn btn-primary">
+            <i class="fas fa-sync"></i> 检查更新
+        </button>
+        <button onclick="viewAllReleases()" class="btn btn-info">
+            <i class="fas fa-list"></i> 查看所有版本
+        </button>
+    </div>
+</div>
+
+<script>
+async function checkForUpdates() {
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = '<div class="loading">检查更新中...</div>';
+    
+    try {
+        const response = await fetch('/check_update');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.update_available) {
+                statusDiv.innerHTML = `
+                    <div class="update-available">
+                        <h3 style="color: #4CAF50;">🎉🎉 发现新版本！</h3>
+                        <p>当前版本: ${data.current_version}</p>
+                        <p>最新版本: <strong>${data.latest_version}</strong></p>
+                        <p>发布时间: ${new Date(data.published_at).toLocaleString()}</p>
+                        <div class="changelog">
+                            <h4>更新内容:</h4>
+                            <pre>${data.changelog}</pre>
+                        </div>
+                        <button onclick="performUpdate('${data.latest_version}')" class="btn btn-success">
+                            <i class="fas fa-download"></i> 立即更新
+                        </button>
+                    </div>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="no-update">
+                        <h3 style="color: #666;">✅ 当前已是最新版本</h3>
+                        <p>当前版本: ${data.current_version}</p>
+                    </div>
+                `;
+            }
+        } else {
+            statusDiv.innerHTML = `<div class="error">❌❌ 检查更新失败: ${data.error}</div>`;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<div class="error">❌❌ 请求失败: ${error}</div>`;
+    }
+}
+
+async function viewAllReleases() {
+    const releasesDiv = document.getElementById('releases-list');
+    const container = releasesDiv.querySelector('.releases-container');
+    container.innerHTML = '<div class="loading">加载中...</div>';
+    releasesDiv.style.display = 'block';
+    
+    try {
+        const response = await fetch('/get_releases');
+        const data = await response.json();
+        
+        if (data.success) {
+            let html = '';
+            data.releases.forEach(release => {
+                const isCurrent = release.tag_name === data.current_version;
+                html += `
+                    <div class="release-card ${isCurrent ? 'current-release' : ''}">
+                        <h4>${release.name} <span class="tag">${release.tag_name}</span></h4>
+                        <p class="release-date">${new Date(release.published_at).toLocaleString()}</p>
+                        <div class="release-notes">${release.body}</div>
+                        ${!isCurrent ? `
+                        <button onclick="performUpdate('${release.tag_name}')" class="btn btn-sm btn-success">
+                            更新到此版本
+                        </button>
+                        ` : '<span class="current-badge">当前版本</span>'}
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+        }
+    } catch (error) {
+        container.innerHTML = `<div class="error">请求失败: ${error}</div>`;
+    }
+}
+
+async function performUpdate(releaseTag) {
+    if (!confirm(`确定要更新到版本 ${releaseTag} 吗？建议先备份数据。`)) {
+        return;
+    }
+    
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = '<div class="loading">更新中，请查看终端日志...</div>';
+    
+    try {
+        const response = await fetch('/perform_update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ release_tag: releaseTag })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div class="success">
+                    <h3 style="color: #4CAF50;">✅ 更新成功！</h3>
+                    <p>${data.message}</p>
+                    <p>请重启机器人使更新生效</p>
+                </div>
+            `;
+        } else {
+            statusDiv.innerHTML = `
+                <div class="error">
+                    <h3 style="color: #F44336;">❌❌ 更新失败</h3>
+                    <p>${data.message}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div class="error">
+                <h3 style="color: #F44336;">❌❌ 更新请求失败</h3>
+                <p>${error}</p>
+            </div>
+        `;
+    }
+}
+
+// 页面加载时自动检查更新
+document.addEventListener('DOMContentLoaded', function() {
+    checkForUpdates();
+});
+</script>
+
+<style>
+.update-available, .no-update, .error {
+    padding: 20px;
+    border-radius: 8px;
+    margin: 15px 0;
+}
+
+.update-available {
+    background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+    border: 1px solid #4CAF50;
+}
+
+.no-update {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.error {
+    background: #ffebee;
+    border: 1px solid #F44336;
+}
+
+.changelog pre {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+.release-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.release-card.current-release {
+    border-color: #4CAF50;
+    background: #e8f5e8;
+}
+
+.tag {
+    background: #2196F3;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+}
+
+.current-badge {
+    background: #4CAF50;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.release-date {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.release-notes {
+    margin: 10px 0;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    max-height: 100px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}

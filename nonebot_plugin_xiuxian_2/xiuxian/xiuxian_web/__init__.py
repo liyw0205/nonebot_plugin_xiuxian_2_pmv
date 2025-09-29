@@ -2,20 +2,21 @@ import sqlite3
 import os
 import json
 import re
-import inspect
+import platform
+import psutil
+import time
 from pathlib import Path
 from datetime import datetime
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart
 
 items = Items()
-sql_message = XiuxianDateManage()
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
+update_manager = UpdateManager()
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # 用于会话加密
 
@@ -339,6 +340,81 @@ def login():
 def logout():
     session.pop('admin_id', None)
     return redirect(url_for('login'))
+
+@app.route('/update')
+def update():
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('update.html')
+
+@app.route('/check_update')
+def check_update():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        latest_release, message = update_manager.check_update()
+        
+        if latest_release:
+            return jsonify({
+                "success": True,
+                "update_available": True,
+                "current_version": update_manager.current_version,
+                "latest_version": latest_release['tag_name'],
+                "release_name": latest_release['name'],
+                "published_at": latest_release['published_at'],
+                "changelog": latest_release['body'],
+                "message": message
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "update_available": False,
+                "current_version": update_manager.current_version,
+                "message": message
+            })
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/get_releases')
+def get_releases():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        releases = update_manager.get_latest_releases(5)
+        
+        return jsonify({
+            "success": True,
+            "releases": releases,
+            "current_version": update_manager.current_version
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/perform_update', methods=['POST'])
+def perform_update():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        release_tag = data.get('release_tag')
+        
+        if not release_tag:
+            return jsonify({"success": False, "error": "未指定release标签"})
+        
+        success, message = update_manager.perform_update(release_tag)
+        
+        return jsonify({
+            "success": success,
+            "message": message
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/database')
 def database():
@@ -1440,6 +1516,179 @@ def get_config_category_icon(category):
         "轮回设置": "fas fa-infinity"
     }
     return icon_map.get(category, "fas fa-cog")
+
+@app.route('/get_stats')
+def get_stats():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        # 获取总用户数
+        total_users_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM user_xiuxian")
+        total_users = total_users_result[0]['COUNT(*)'] if total_users_result else 0
+        
+        # 获取宗门数量
+        total_sects_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM sects WHERE sect_owner IS NOT NULL")
+        total_sects = total_sects_result[0]['COUNT(*)'] if total_sects_result else 0
+        
+        # 获取今日活跃用户数（今天有操作记录的用户）
+        today = datetime.now().strftime('%Y-%m-%d')
+        active_users_result = execute_sql(DATABASE, 
+            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (today,))
+        active_users = active_users_result[0]['COUNT(DISTINCT user_id)'] if active_users_result else 0
+        
+        return jsonify({
+            "success": True,
+            "total_users": total_users,
+            "total_sects": total_sects,
+            "active_users": active_users
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/get_system_info')
+def get_system_info():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        
+        # 获取CPU使用率
+        cpu_usage = psutil.cpu_percent(interval=1)
+        
+        # 获取内存使用率
+        memory = psutil.virtual_memory()
+        memory_usage = memory.percent
+        
+        # 获取磁盘使用率
+        disk = psutil.disk_usage('/')
+        disk_usage = disk.percent
+        
+        return jsonify({
+            "success": True,
+            "cpu_usage": round(cpu_usage, 1),
+            "memory_usage": round(memory_usage, 1),
+            "disk_usage": round(disk_usage, 1)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/get_system_info_extended')
+def get_system_info_extended():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        
+        # 获取系统信息
+        system_info = {
+            "平台": platform.platform(),
+            "系统": platform.system(),
+            "版本": platform.version(),
+            "机器": platform.machine(),
+            "处理器": platform.processor(),
+            "Python版本": platform.python_version(),
+        }
+        
+        # 获取CPU信息
+        try:
+            cpu_info = {
+                "物理核心数": psutil.cpu_count(logical=False),
+                "逻辑核心数": psutil.cpu_count(logical=True),
+                "CPU使用率": f"{psutil.cpu_percent()}%",
+                "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") else "未知"
+            }
+        except Exception:
+            cpu_info = {"CPU信息": "获取失败"}
+        
+        # 获取内存信息
+        try:
+            mem = psutil.virtual_memory()
+            mem_info = {
+                "总内存": f"{mem.total / (1024**3):.2f}GB",
+                "已用内存": f"{mem.used / (1024**3):.2f}GB",
+                "内存使用率": f"{mem.percent}%"
+            }
+        except Exception:
+            mem_info = {"内存信息": "获取失败"}
+        
+        # 获取磁盘信息
+        try:
+            disk = psutil.disk_usage('/')
+            disk_info = {
+                "总磁盘空间": f"{disk.total / (1024**3):.2f}GB",
+                "已用空间": f"{disk.used / (1024**3):.2f}GB",
+                "磁盘使用率": f"{disk.percent}%"
+            }
+        except Exception:
+            disk_info = {"磁盘信息": "获取失败"}
+        
+        # 获取系统启动时间
+        try:
+            boot_time = psutil.boot_time()
+            current_time = time.time()
+            uptime_seconds = current_time - boot_time
+            
+            system_uptime_info = {
+                "系统启动时间": f"{datetime.fromtimestamp(boot_time):%Y-%m-%d %H:%M:%S}",
+                "系统运行时间": format_time(uptime_seconds)
+            }
+        except Exception:
+            system_uptime_info = {"系统运行时间": "获取失败"}
+        
+        return jsonify({
+            "success": True,
+            "system_info": system_info,
+            "cpu_info": cpu_info,
+            "mem_info": mem_info,
+            "disk_info": disk_info,
+            "system_uptime": system_uptime_info
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取系统信息失败: {str(e)}"})
+
+@app.route('/get_process_info')
+def get_process_info():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent', 'create_time']):
+            try:
+                memory_mb = proc.memory_info().rss / 1024 / 1024
+                create_time = datetime.fromtimestamp(proc.create_time())
+                run_time = datetime.now() - create_time
+                
+                processes.append({
+                    "name": proc.name(),
+                    "memory": f"{memory_mb:.1f}MB",
+                    "time": str(run_time).split('.')[0]  # 去除毫秒部分
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 按内存使用排序并取前5
+        processes.sort(key=lambda x: float(x['memory'].replace('MB', '')), reverse=True)
+        top_processes = processes[:5]
+        
+        return jsonify({
+            "success": True,
+            "processes": top_processes
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取进程信息失败: {str(e)}"})
+
+def format_time(seconds: float) -> str:
+    """将秒数格式化为 'X天X小时X分X秒'"""
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
 
 @app.route('/search_users')
 def search_users():

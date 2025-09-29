@@ -1,61 +1,116 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="card">
-        <h2>数据库管理</h2>
-        
-        <div style="margin-top: 20px;">
-            <h3>选择数据库</h3>
-            
-            {% for db_name, db_info in tables.items() %}
-                <div class="card" style="margin-bottom: 20px;">
-                    <h3>
-                        <a href="javascript:void(0)" onclick="toggleDatabase('{{ db_name }}')" class="db-toggle">
-                            {{ db_name }} ▼
-                        </a>
-                    </h3>
-                    <p>路径: {{ db_info.path }}</p>
-                    
-                    <div id="{{ db_name }}_tables" class="database-tables" style="display: none; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
-                        {% for table_name, table_info in db_info.tables.items() %}
-                            <div class="card" style="background-color: #f9f9f9;">
-                                <h4>{{ table_info.name }}</h4>
-                                <p>{{ table_name }}</p>
-                                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-primary">查看数据</a>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
+<div class="card animate-in">
+    <div class="card-header">
+        <h2 class="card-title"><i class="fas fa-database"></i> 数据库管理</h2>
+        <p>管理修仙系统的数据库和表格数据</p>
     </div>
     
-    <script>
-        function toggleDatabase(dbName) {
-            const tableContainer = document.getElementById(dbName + '_tables');
-            const toggleLink = document.querySelector(`a[onclick="toggleDatabase('${dbName}')"]`);
+    <div class="stats-grid">
+        <div class="stat-card animate-in delay-1">
+            <div class="stat-icon" style="background: linear-gradient(45deg, #2196F3, #64B5F6);">
+                <i class="fas fa-database"></i>
+            </div>
+            <div class="stat-content">
+                <h3>{{ tables|length }}</h3>
+                <p>数据库数量</p>
+            </div>
+        </div>
+        
+        {% set total_tables = [] %}
+        {% for db_name, db_info in tables.items() %}
+            {% set _ = total_tables.append(db_info.tables|length) %}
+        {% endfor %}
+        
+        <div class="stat-card animate-in delay-2">
+            <div class="stat-icon" style="background: linear-gradient(45deg, #4CAF50, #81C784);">
+                <i class="fas fa-table"></i>
+            </div>
+            <div class="stat-content">
+                <h3>{{ total_tables|sum }}</h3>
+                <p>数据表总数</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="database-list">
+        <h3><i class="fas fa-list"></i> 数据库列表</h3>
+        
+        {% for db_name, db_info in tables.items() %}
+        <div class="database-card card animate-in delay-{{ loop.index + 2 }}">
+            <!-- 修改这里：将整个数据库头部区域设置为可点击 -->
+            <div class="database-header" onclick="toggleDatabase('{{ db_name }}')" style="cursor: pointer;">
+                <div class="database-info">
+                    <h4>
+                        <a href="javascript:void(0)" class="db-toggle">
+                            <i class="fas fa-chevron-right"></i> {{ db_name }}
+                        </a>
+                    </h4>
+                    <p class="database-path"><i class="fas fa-folder"></i> {{ db_info.path }}</p>
+                </div>
+                <span class="table-count">{{ db_info.tables|length }} 张表</span>
+            </div>
             
-            if (tableContainer.style.display === 'none') {
-                tableContainer.style.display = 'grid';
-                toggleLink.innerHTML = `${dbName} ▲`;
-            } else {
-                tableContainer.style.display = 'none';
-                toggleLink.innerHTML = `${dbName} ▼`;
-            }
-        }
-    </script>
+            <div id="{{ db_name }}_tables" class="database-tables" style="display: none;">
+                <div class="tables-grid">
+                    {% for table_name, table_info in db_info.tables.items() %}
+                    <div class="table-card">
+                        <div class="table-icon">
+                            <i class="fas fa-table"></i>
+                        </div>
+                        <div class="table-info">
+                            <h5>{{ table_info.name }}</h5>
+                            <p>{{ table_name }}</p>
+                        </div>
+                        <div class="table-actions">
+                            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-eye"></i> 查看数据
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function toggleDatabase(dbName) {
+    const tableContainer = document.getElementById(dbName + '_tables');
+    const toggleIcon = document.querySelector(`#${dbName}_tables`).previousElementSibling
+        .querySelector('.db-toggle i');
     
-    <style>
-        .db-toggle {
-            color: #007bff;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .db-toggle:hover {
-            text-decoration: underline;
-        }
-        .database-tables {
-            display: none;
-        }
-    </style>
+    if (tableContainer.style.display === 'none') {
+        tableContainer.style.display = 'block';
+        toggleIcon.className = 'fas fa-chevron-down';
+        // 添加展开动画
+        tableContainer.style.animation = 'slideIn 0.3s ease';
+    } else {
+        tableContainer.style.display = 'none';
+        toggleIcon.className = 'fas fa-chevron-right';
+    }
+}
+
+// 添加悬停效果
+document.querySelectorAll('.database-card').forEach(card => {
+    card.addEventListener('mouseenter', function() {
+        this.style.boxShadow = '0 8px 25px rgba(30, 136, 229, 0.15)';
+    });
+    
+    card.addEventListener('mouseleave', function() {
+        this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+    });
+});
+
+// 页面加载时的动画
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.database-card');
+    cards.forEach((card, index) => {
+        card.style.animationDelay = `${index * 0.1}s`;
+    });
+});
+</script>
 {% endblock %}

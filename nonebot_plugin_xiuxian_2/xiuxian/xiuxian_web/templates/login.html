@@ -1,20 +1,28 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="card" style="max-width: 400px; margin: 50px auto;">
-        <h2>管理员登录</h2>
-        
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
-        
-        <form method="POST" action="{{ url_for('login') }}">
-            <div class="form-group">
-                <label for="admin_id">管理员ID</label>
-                <input type="text" id="admin_id" name="admin_id" required>
-            </div>
-            
-            <button type="submit" class="btn">登录</button>
-        </form>
+
+<div class="card" style="max-width: 400px; margin: 50px auto;">
+
+<h2>管理员登录</h2>
+
+{% if error %}
+    <div class="error">{{ error }}</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('login') }}">
+    <div class="form-group">
+        <label for="admin_id">管理员ID</label>
+        <input type="text" id="admin_id" name="admin_id" required>
     </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-sign-in-alt"></i> 登录
+        </button>
+    </div>
+</form>
+
+</div>
+
 {% endblock %}

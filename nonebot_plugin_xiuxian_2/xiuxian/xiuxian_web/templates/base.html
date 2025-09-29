@@ -7,21 +7,17 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary: #1e88e5;
-            --primary-dark: #1565c0;
-            --secondary: #64b5f6;
-            --accent: #42a5f5;
-            --text: #263238;
-            --text-muted: #546e7a;
-            --bg-dark: #f5f7fa;
-            --bg-card: rgba(255, 255, 255, 0.95);
-            --bg-card-hover: rgba(255, 255, 255, 1);
-            --success: #4caf50;
-            --warning: #ff9800;
-            --danger: #f44336;
-            --info: #2196f3;
-            --border: rgba(30, 136, 229, 0.3);
-            --transition: all 0.3s ease;
+            --primary-color: #e6f7ff;
+            --secondary-color: #b3e0ff;
+            --accent-color: #66b3ff;
+            --text-color: #333;
+            --light-text: #666;
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --header-bg: rgba(230, 247, 255, 0.95);
+            --success-color: #4CAF50;
+            --error-color: #F44336;
+            --warning-color: #FF9800;
+            --info-color: #2196F3;
         }
 
         * {
@@ -32,10 +28,10 @@
         }
 
         body {
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb, #90caf9);
-            color: var(--text);
+            background: linear-gradient(135deg, #e6f7ff 0%, #b3e0ff 100%);
+            color: var(--text-color);
             min-height: 100vh;
-            overflow-x: hidden;
+            line-height: 1.6;
         }
 
         #particles-js {
@@ -45,456 +41,579 @@
             z-index: -1;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* 导航栏样式 */
         header {
-            background: rgba(255, 255, 255, 0.95);
+            background: var(--header-bg);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            padding: 15px 30px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            padding: 1rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(30, 136, 229, 0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
         .logo {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
 
         .logo-icon {
-            font-size: 28px;
-            color: var(--primary);
+            width: 40px;
+            height: 40px;
+            background: var(--accent-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
         }
 
         .logo-text {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(to right, #1565c0, #42a5f5);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-color);
         }
 
         .menu-toggle {
             display: none;
             background: none;
             border: none;
-            color: var(--text);
             font-size: 1.5rem;
+            color: var(--text-color);
             cursor: pointer;
         }
 
         nav ul {
             display: flex;
             list-style: none;
-            gap: 25px;
+            gap: 1.5rem;
         }
 
-        nav ul li a {
-            color: var(--text);
+        nav a {
             text-decoration: none;
+            color: var(--text-color);
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            border-radius: 50px;
-            transition: var(--transition);
-            font-weight: 500;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: all 0.3s ease;
         }
 
-        nav ul li a:hover, nav ul li a.active {
-            background: rgba(30, 136, 229, 0.1);
-            transform: translateY(-2px);
-            color: var(--primary);
+        nav a:hover, nav a.active {
+            background: var(--secondary-color);
+            color: var(--accent-color);
         }
 
-        nav ul li a i {
-            font-size: 18px;
+        .container {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
-        /* 卡片样式 */
         .card {
-            background: var(--bg-card);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 8px 32px rgba(30, 136, 229, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border);
-            transition: var(--transition);
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(30, 136, 229, 0.15);
-            background: var(--bg-card-hover);
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(179, 224, 255, 0.4);
         }
 
         .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--secondary-color);
         }
 
         .card-title {
-            font-size: 22px;
-            font-weight: 600;
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
             display: flex;
             align-items: center;
             gap: 10px;
-            color: var(--primary);
         }
 
-        .card-title i {
-            color: var(--primary);
+        h2, h3, h4, h5 {
+            margin-bottom: 1rem;
+            color: var(--text-color);
         }
 
-        /* 按钮样式 */
-        .btn {
-            display: inline-flex;
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            display: flex;
             align-items: center;
-            justify-content: center;
             gap: 8px;
-            padding: 12px 24px;
-            border-radius: 50px;
+        }
+
+        h4 {
+            font-size: 1.2rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--light-text);
+        }
+
+        /* 标签导航 */
+        .tab-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+
+        .tab-link {
+            background: transparent;
             border: none;
+            padding: 0.8rem 1.2rem;
             cursor: pointer;
-            font-weight: 500;
-            transition: var(--transition);
-            text-decoration: none;
+            border-radius: 5px 5px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            color: var(--light-text);
         }
 
-        .btn-primary {
-            background: linear-gradient(45deg, var(--primary), var(--secondary));
-            color: white;
+        .tab-link:hover {
+            background: rgba(179, 224, 255, 0.3);
         }
 
-        .btn-primary:hover {
-            background: linear-gradient(45deg, var(--primary-dark), var(--secondary));
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(30, 136, 229, 0.3);
+        .tab-link.active {
+            background: var(--secondary-color);
+            color: var(--text-color);
+            font-weight: bold;
         }
 
-        .btn-sm {
-            padding: 8px 16px;
-            font-size: 14px;
+        .tab-content {
+            margin-top: 1rem;
         }
 
-        .btn-success {
-            background: var(--success);
-            color: white;
+        .tab-pane {
+            display: none;
         }
 
-        .btn-success:hover {
-            background: #43a047;
-            color: white;
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #e53935;
-            color: white;
-        }
-
-        .btn-info {
-            background: var(--info);
-            color: white;
-        }
-
-        .btn-info:hover {
-            background: #1e88e5;
-            color: white;
-        }
-
-        /* 表格样式 */
-        .table-responsive {
-            overflow-x: auto;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(30, 136, 229, 0.1);
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            background: rgba(30, 136, 229, 0.1);
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        tr:hover {
-            background: rgba(30, 136, 229, 0.05);
+        .tab-pane.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
         }
 
         /* 表单样式 */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.2rem;
         }
 
-        .form-label {
+        label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 0.5rem;
             font-weight: 500;
-            color: var(--text-muted);
         }
 
-        .form-control {
+        input, select, textarea {
             width: 100%;
-            padding: 14px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            background: rgba(255, 255, 255, 0.8);
-            color: var(--text);
-            transition: var(--transition);
+            padding: 0.8rem;
+            border: 1px solid var(--secondary-color);
+            border-radius: 5px;
+            background: white;
+            transition: all 0.3s ease;
         }
 
-        .form-control:focus {
+        input:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.2);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(102, 179, 255, 0.2);
         }
 
-        /* 分页样式 */
-        .pagination {
+        .form-actions {
+            margin-top: 1.5rem;
             display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            margin: 2rem 0 1rem;
+            gap: 1rem;
         }
 
-        .pagination a, 
-        .pagination span {
+        /* 按钮样式 */
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            min-width: 2.5rem;
-            height: 2.5rem;
-            padding: 0 0.5rem;
-            border-radius: 10px;
-            border: 1px solid var(--border);
+            gap: 0.5rem;
+            transition: all 0.3s ease;
             text-decoration: none;
-            color: var(--text);
-            transition: var(--transition);
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
+            color: white;
+            box-shadow: 0 3px 8px rgba(102, 179, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #4d94ff, #70b8ff);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 12px rgba(102, 179, 255, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-info {
+            background: var(--info-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--error-color);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* 统计卡片 */
+        .stats-grid, .monitor-grid, .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card, .monitor-card, .action-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(230, 247, 255, 0.7) 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(179, 224, 255, 0.4);
+        }
+
+        .action-card {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .stat-card:hover, .monitor-card:hover, .action-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(102, 179, 255, 0.15);
+        }
+
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: white;
+            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
+        }
+
+        .stat-content h3 {
+            font-size: 2rem;
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .stat-content p {
+            color: var(--light-text);
+            margin: 0;
+        }
+
+        /* 数据库卡片 */
+        .database-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 249, 255, 0.8) 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(179, 224, 255, 0.4);
+        }
+
+        .database-card:hover {
+            box-shadow: 0 8px 20px rgba(102, 179, 255, 0.15);
+        }
+
+        .database-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(179, 224, 255, 0.5);
+        }
+
+        .database-info h4 {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .database-info h4 a {
+            color: var(--text-color);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .database-info h4 a:hover {
+            color: var(--accent-color);
+        }
+
+        .database-path {
+            color: var(--light-text);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .table-count {
+            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* 表格网格 */
+        .tables-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.2rem;
+        }
+
+        .table-card {
             background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            padding: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(179, 224, 255, 0.4);
+        }
+
+        .table-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(102, 179, 255, 0.15);
+        }
+
+        .table-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
+        }
+
+        .table-info h5 {
+            margin-bottom: 0.3rem;
+            font-size: 1rem;
+        }
+
+        .table-info p {
+            color: var(--light-text);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .table-actions {
+            margin-left: auto;
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            height: 10px;
+            background: rgba(179, 224, 255, 0.3);
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+
+        th {
+            background: rgba(179, 224, 255, 0.3);
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: rgba(179, 224, 255, 0.1);
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1.5rem 0;
+            flex-wrap: wrap;
+        }
+
+        .pagination a, .pagination span {
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            text-decoration: none;
+            color: var(--text-color);
+            border: 1px solid var(--secondary-color);
         }
 
         .pagination a:hover {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
+            background: var(--secondary-color);
         }
 
         .pagination a.active {
-            background: var(--primary);
+            background: var(--accent-color);
             color: white;
-            border-color: var(--primary);
+            border-color: var(--accent-color);
         }
 
-        /* 状态消息样式 */
-        .alert {
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
-            background: rgba(255, 255, 255, 0.8);
-            border-left: 4px solid;
+        /* 动画效果 */
+        .animate-in {
+            animation: fadeInUp 0.6s ease;
         }
 
-        .alert-success {
-            background-color: rgba(76, 175, 80, 0.15);
-            color: var(--success);
-            border-left-color: var(--success);
+        .delay-1 {
+            animation-delay: 0.1s;
         }
 
-        .alert-error {
-            background-color: rgba(244, 67, 54, 0.15);
-            color: var(--danger);
-            border-left-color: var(--danger);
+        .delay-2 {
+            animation-delay: 0.2s;
         }
 
-        .alert-info {
-            background-color: rgba(33, 150, 243, 0.15);
-            color: var(--info);
-            border-left-color: var(--info);
+        .delay-3 {
+            animation-delay: 0.3s;
         }
 
-        /* 命令卡片样式 */
-        .command-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-            margin-top: 25px;
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        .command-card {
-            background: var(--bg-card);
-            border-radius: 15px;
-            padding: 20px;
-            border-left: 4px solid var(--primary);
-            transition: var(--transition);
-        }
-
-        .command-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(30, 136, 229, 0.1);
-        }
-
-        .command-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 15px;
-        }
-
-        .command-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            background: linear-gradient(45deg, var(--primary), var(--secondary));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: white;
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* 响应式设计 */
-        @media (max-width: 992px) {
-            nav ul {
-                gap: 15px;
-            }
-            
-            nav ul li a span {
-                display: none;
-            }
-            
-            nav ul li a i {
-                font-size: 20px;
-            }
-        }
-
         @media (max-width: 768px) {
             header {
-                flex-direction: column;
-                gap: 15px;
-                padding: 15px;
+                padding: 1rem;
             }
             
             .menu-toggle {
                 display: block;
-                position: absolute;
-                top: 1.5rem;
-                right: 1.5rem;
             }
             
             nav {
-                width: 100%;
-                display: none;
+                position: fixed;
+                top: 70px;
+                left: -100%;
+                width: 80%;
+                height: calc(100vh - 70px);
+                background: var(--header-bg);
+                backdrop-filter: blur(10px);
+                transition: left 0.3s ease;
+                z-index: 99;
             }
             
             nav.active {
-                display: block;
+                left: 0;
             }
             
             nav ul {
                 flex-direction: column;
-                gap: 0.5rem;
-            }
-            
-            nav ul li a {
-                justify-content: center;
-                padding: 0.75rem;
-            }
-            
-            nav ul li a span {
-                display: inline;
+                padding: 1rem;
             }
             
             .container {
-                padding: 0 1rem;
+                padding: 1rem;
             }
             
-            .command-grid {
+            .stats-grid, .monitor-grid, .action-grid {
                 grid-template-columns: 1fr;
             }
-        }
-
-        /* 动画效果 */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .animate-in {
-            animation: fadeIn 0.5s ease forwards;
-        }
-
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
-        .delay-3 { animation-delay: 0.3s; }
-        .delay-4 { animation-delay: 0.4s; }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-
-        .float-animation {
-            animation: float 5s ease-in-out infinite;
-        }
-        
-        /* 登录页面样式 */
-        .login-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .login-card {
-            width: 100%;
-            max-width: 450px;
-            background: var(--bg-card);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 15px 35px rgba(30, 136, 229, 0.2);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border);
+            
+            .database-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .tables-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-card {
+                flex-direction: column;
+                text-align: center;
+                gap: 0.8rem;
+            }
+            
+            .table-actions {
+                margin-left: 0;
+                margin-top: 0.5rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <div id="particles-js"></div>
     
@@ -516,6 +635,7 @@
         <li><a href="{{ url_for('database') }}" {% if is_active(['database', 'table_view', 'row_edit', 'batch_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i> <span>数据库管理</span></a></li>
         <li><a href="{{ url_for('commands') }}" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-terminal"></i> <span>管理员指令</span></a></li>
         <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
+        <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
         <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
     </ul>
 </nav>
@@ -568,14 +688,38 @@
             retina_detect: true
         });
         
-        // 添加浮动动画到卡片
-        document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.card');
-            cards.forEach((card, index) => {
-                card.style.animationDelay = `${index * 0.1}s`;
-                card.classList.add('float-animation');
+        // 看板娘脚本
+        (function() {
+            const w = window;
+            w.kbn_setting0 = 1;        /*人物ID*/
+            w.kbn_setting1 = 2;        /*衣服ID*/
+            w.kbn_setting2 = true;     /*是否显示关闭按钮*/
+            w.kbn_setting3 = '180x170';/*人物大小*/
+            w.kbn_setting4 = 'left:0'; /*停靠侧:到侧边距离*/
+            w.kbn_setting5 = '160x50'; /*提示框大小*/
+            w.kbn_setting6 = '12px';   /*提示框字体大小*/
+            w.kbn_setting7 = '-20px';  /*提示框Y轴偏移*/
+            w.kbn_setting8 = '21px';   /*工具栏图标大小*/
+            w.kbn_setting9 = '36px';   /*工具栏行高*/
+            w.kbn_setting10 = 'hitokoto.cn'; /*一言API*/
+            
+            // 创建看板娘容器
+            const kbnContainer = document.getElementById('kbn-container');
+            
+            // 加载看板娘脚本
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/gh/IlysvlVEizbr/Live2D@1.9/kbn.js';
+            script.defer = true;
+            document.body.appendChild(script);
+            
+            // 添加浮动动画到卡片
+            document.addEventListener('DOMContentLoaded', function() {
+                const cards = document.querySelectorAll('.card');
+                cards.forEach((card, index) => {
+                    card.style.animationDelay = `${index * 0.1}s`;
+                });
             });
-        });
+        })();
     </script>
 </body>
 </html>

@@ -4,8 +4,115 @@
 <div class="card">
     <h2>欢迎, 管理员 {{ admin_id }}</h2>
     
-    <div class="quick-actions">
-        <h3>快捷操作</h3>
+    <!-- 统计数据 -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(45deg, #4CAF50, #81C784);">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="total-users">加载中...</h3>
+                <p>总用户数</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(45deg, #2196F3, #64B5F6);">
+                <i class="fas fa-landmark"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="total-sects">加载中...</h3>
+                <p>宗门数量</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(45deg, #FF9800, #FFB74D);">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="active-users">加载中...</h3>
+                <p>今日活跃用户</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 系统监控 -->
+    <div class="card" style="margin-top: 20px;">
+        <h3><i class="fas fa-chart-pie"></i> 系统监控</h3>
+        <div class="monitor-grid">
+            <!-- CPU监控 -->
+            <div class="monitor-card">
+                <h4><i class="fas fa-microchip"></i> CPU使用率</h4>
+                <div class="monitor-content">
+                    <div class="circular-progress" data-percent="0" data-color="#4CAF50">
+                        <div class="progress-circle">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45" 
+                                        style="stroke-dashoffset: 283;"></circle>
+                            </svg>
+                            <div class="progress-text">
+                                <span id="cpu-percent">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cpu-history-chart" id="cpu-history">
+                        <div class="chart-title">最近5次CPU变化</div>
+                        <div class="chart-bars"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 内存监控 -->
+            <div class="monitor-card">
+                <h4><i class="fas fa-memory"></i> 内存使用</h4>
+                <div class="monitor-content">
+                    <div class="circular-progress" data-percent="0" data-color="#2196F3">
+                        <div class="progress-circle">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45" 
+                                        style="stroke-dashoffset: 283;"></circle>
+                            </svg>
+                            <div class="progress-text">
+                                <span id="memory-percent">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="process-list" id="memory-processes">
+                        <div class="process-title">内存占用前5进程</div>
+                        <div class="process-items">
+                            <div class="loading">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 磁盘监控 -->
+            <div class="monitor-card">
+                <h4><i class="fas fa-hdd"></i> 磁盘使用</h4>
+                <div class="monitor-content">
+                    <div class="circular-progress" data-percent="0" data-color="#FF9800">
+                        <div class="progress-circle">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45" 
+                                        style="stroke-dashoffset: 283;"></circle>
+                            </svg>
+                            <div class="progress-text">
+                                <span id="disk-percent">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 快捷操作 -->
+    <div class="card" style="margin-top: 20px;">
+        <h3><i class="fas fa-bolt"></i> 快捷操作</h3>
         <div class="action-grid">
             <a href="{{ url_for('database') }}" class="action-card">
                 <div class="action-icon">
@@ -36,80 +143,520 @@
                     <p>修改配置</p>
                 </div>
             </a>
+
+            <a href="{{ url_for('update') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-sync-alt"></i>
+                </div>
+                <div class="action-content">
+                    <h4>检测更新</h4>
+                    <p>插件更新</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    
+    <!-- 系统信息 -->
+    <div class="card" style="margin-top: 20px;">
+        <h3><i class="fas fa-server"></i> 系统信息</h3>
+        <div id="system-info" class="info-grid">
+            <div class="loading">加载中...</div>
         </div>
     </div>
 </div>
 
 <style>
-.quick-actions {
-    margin-top: 25px;
+/* 圆形进度条样式 */
+.circular-progress {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 15px;
 }
 
-.action-grid {
+.progress-circle {
+    width: 100%;
+    height: 100%;
+}
+
+.progress-circle svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.progress-bg {
+    fill: none;
+    stroke: #f0f0f0;
+    stroke-width: 8;
+}
+
+.progress-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.progress-text span {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+}
+
+/* 监控卡片内容布局 */
+.monitor-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+}
+
+/* CPU历史图表样式 */
+.cpu-history-chart {
+    width: 100%;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.chart-title {
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #666;
+    text-align: center;
+}
+
+.chart-bars {
+    display: flex;
+    height: 50px;
+    align-items: flex-end;
+    gap: 6px;
+    justify-content: space-between;
+    padding: 0 5px;
+}
+
+.chart-bar {
+    flex: 1;
+    min-width: 30px;
+    background: linear-gradient(to top, #4CAF50, #8BC34A);
+    border-radius: 3px 3px 0 0;
+    min-height: 5px;
+    transition: height 0.3s ease;
+    position: relative;
+    max-width: 18%;
+}
+
+/* 柱子上的百分比标签 */
+.chart-bar::after {
+    content: attr(data-percent);
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: bold;
+    color: #333;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 4px;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 空柱子样式 - 无数据时显示 */
+.chart-bar.empty {
+    background: #e9ecef;
+    height: 5px !important;
+}
+
+.chart-bar.empty::after {
+    content: "";
+    display: none;
+}
+
+/* 进程列表样式 */
+.process-list {
+    width: 100%;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.process-title {
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #666;
+    text-align: center;
+}
+
+.process-items {
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.process-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 0.75rem;
+}
+
+.process-item:last-child {
+    border-bottom: none;
+}
+
+.process-name {
+    color: #333;
+    flex: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.process-memory {
+    color: #666;
+    flex: 1;
+    text-align: right;
+    font-weight: bold;
+}
+
+.process-time {
+    color: #999;
+    flex: 1;
+    text-align: right;
+    font-size: 0.7rem;
+}
+
+/* 监控网格布局 */
+.monitor-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
-    margin-top: 20px;
+    margin-top: 15px;
 }
 
-.action-card {
-    display: flex;
-    align-items: center;
+.monitor-card {
+    background: #fff;
+    border-radius: 12px;
     padding: 20px;
-    background: var(--bg-card);
-    border-radius: 12px;
-    text-decoration: none;
-    color: var(--text);
-    transition: var(--transition);
-    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    height: fit-content;
+    min-height: 300px;
 }
 
-.action-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px rgba(30, 136, 229, 0.15);
-    background: var(--bg-card-hover);
-    color: var(--text);
-}
-
-.action-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
-    background: linear-gradient(45deg, var(--primary), var(--secondary));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 20px;
-    font-size: 24px;
-    color: white;
-}
-
-.action-content h4 {
-    margin-bottom: 5px;
-    font-weight: 600;
-}
-
-.action-content p {
-    color: var(--text-muted);
-    font-size: 14px;
-    margin: 0;
+.monitor-card h4 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 1.1rem;
+    text-align: center;
 }
 
 /* 响应式调整 */
+@media (max-width: 1024px) {
+    .monitor-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 15px;
+    }
+}
+
 @media (max-width: 768px) {
-    .action-grid {
+    .monitor-grid {
         grid-template-columns: 1fr;
+        gap: 15px;
     }
     
-    .action-card {
-        flex-direction: column;
-        text-align: center;
+    .monitor-card {
+        min-height: 280px;
+        padding: 15px;
     }
     
-    .action-icon {
-        margin-right: 0;
-        margin-bottom: 15px;
+    .circular-progress {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 12px;
+    }
+    
+    .progress-text span {
+        font-size: 1.2rem;
+    }
+    
+    .chart-bars {
+        height: 40px;
+        gap: 4px;
+    }
+    
+    .chart-bar {
+        min-width: 25px;
+    }
+    
+    .chart-bar::after {
+        font-size: 9px;
+        top: -18px;
+        padding: 1px 3px;
+    }
+    
+    .cpu-history-chart,
+    .process-list {
+        padding: 8px;
+    }
+    
+    .process-item {
+        font-size: 0.7rem;
+        padding: 3px 0;
+    }
+    
+    .process-items {
+        max-height: 100px;
+    }
+}
+
+@media (max-width: 480px) {
+    .monitor-card {
+        min-height: 260px;
+        padding: 12px;
+    }
+    
+    .circular-progress {
+        width: 90px;
+        height: 90px;
+        margin-bottom: 10px;
+    }
+    
+    .chart-bars {
+        height: 35px;
+    }
+    
+    .process-items {
+        max-height: 90px;
     }
 }
 </style>
+
+<script>
+// 获取统计信息
+async function loadStats() {
+    try {
+        const response = await fetch('/get_stats');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('total-users').textContent = data.total_users.toLocaleString();
+            document.getElementById('total-sects').textContent = data.total_sects.toLocaleString();
+            document.getElementById('active-users').textContent = data.active_users.toLocaleString();
+        }
+    } catch (error) {
+        console.error('获取统计信息失败:', error);
+    }
+}
+
+// 更新圆形进度条
+function updateCircularProgress(elementId, percent) {
+    const progressElement = document.querySelector(`#${elementId}`).closest('.circular-progress');
+    const fillElement = progressElement.querySelector('.progress-fill');
+    const textElement = progressElement.querySelector('.progress-text span');
+    const color = progressElement.dataset.color;
+    
+    // 根据百分比设置颜色（白>绿>红）
+    let strokeColor;
+    if (percent < 30) {
+        strokeColor = '#4CAF50'; // 绿色
+    } else if (percent < 70) {
+        strokeColor = '#FF9800'; // 橙色
+    } else {
+        strokeColor = '#F44336'; // 红色
+    }
+    
+    // 计算进度
+    const circumference = 2 * Math.PI * 45;
+    const offset = circumference - (percent / 100 * circumference);
+    
+    // 更新进度
+    fillElement.style.strokeDashoffset = offset;
+    fillElement.style.stroke = strokeColor;
+    textElement.textContent = `${percent}%`;
+}
+
+// CPU历史数据
+let cpuHistoryData = [];
+
+// 更新CPU历史图表
+function updateCpuHistoryChart() {
+    const chartBars = document.querySelector('.chart-bars');
+    chartBars.innerHTML = '';
+    
+    // 确保有5个柱子
+    const displayData = [...cpuHistoryData];
+    
+    for (let i = 0; i < 5; i++) {
+        const value = displayData[i] || 0; // 如果没有数据则为0
+        const bar = document.createElement('div');
+        bar.className = 'chart-bar';
+        
+        if (value === 0) {
+            bar.classList.add('empty'); // 添加空柱子样式
+            bar.style.height = '5px'; // 最小高度
+        } else {
+            bar.style.height = `${value}%`;
+            bar.setAttribute('data-percent', `${Math.round(value)}%`);
+        }
+        
+        bar.title = value === 0 ? '无数据' : `${Math.round(value)}%`;
+        chartBars.appendChild(bar);
+    }
+}
+
+// 获取系统监控信息
+async function loadSystemMonitor() {
+    try {
+        const response = await fetch('/get_system_info_extended');
+        const data = await response.json();
+        
+        if (data.success) {
+            // 更新CPU
+            const cpuUsage = parseFloat(data.cpu_info['CPU使用率'].replace('%', ''));
+            updateCircularProgress('cpu-percent', cpuUsage);
+            
+            // 更新CPU历史数据（保留最近5次）
+            // 只有当有实际数据时才添加到历史记录
+            if (!isNaN(cpuUsage) && cpuUsage > 0) {
+                cpuHistoryData.push(cpuUsage);
+            }
+            
+            if (cpuHistoryData.length > 5) {
+                cpuHistoryData.shift(); // 移除最旧的数据
+            }
+            updateCpuHistoryChart();
+            
+            // 更新内存
+            const memoryUsage = parseFloat(data.mem_info['内存使用率'].replace('%', ''));
+            updateCircularProgress('memory-percent', memoryUsage);
+            
+            // 更新磁盘
+            const diskUsage = parseFloat(data.disk_info['磁盘使用率'].replace('%', ''));
+            updateCircularProgress('disk-percent', diskUsage);
+        }
+    } catch (error) {
+        console.error('获取系统监控信息失败:', error);
+    }
+}
+
+// 获取进程信息
+async function getProcessInfo() {
+    try {
+        const response = await fetch('/get_process_info');
+        const data = await response.json();
+        
+        if (data.success) {
+            const processContainer = document.querySelector('.process-items');
+            processContainer.innerHTML = '';
+            
+            data.processes.forEach(process => {
+                const item = document.createElement('div');
+                item.className = 'process-item';
+                item.innerHTML = `
+                    <div class="process-name" title="${process.name}">${process.name}</div>
+                    <div class="process-memory">${process.memory}</div>
+                    <div class="process-time">${process.time}</div>
+                `;
+                processContainer.appendChild(item);
+            });
+        }
+    } catch (error) {
+        console.error('获取进程信息失败:', error);
+    }
+}
+
+// 获取系统信息
+async function loadSystemInfo() {
+    try {
+        const response = await fetch('/get_system_info_extended');
+        const data = await response.json();
+        
+        if (data.success) {
+            const systemInfoDiv = document.getElementById('system-info');
+            let html = '';
+            
+            // 系统基本信息
+            html += '<div class="info-item">';
+            html += '<h4>💻💻 系统信息</h4>';
+            for (const [key, value] of Object.entries(data.system_info)) {
+                html += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            html += '</div>';
+            
+            // CPU信息
+            html += '<div class="info-item">';
+            html += '<h4>⚡⚡ CPU信息</h4>';
+            for (const [key, value] of Object.entries(data.cpu_info)) {
+                html += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            html += '</div>';
+            
+            // 内存信息
+            html += '<div class="info-item">';
+            html += '<h4>🧠🧠 内存信息</h4>';
+            for (const [key, value] of Object.entries(data.mem_info)) {
+                html += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            html += '</div>';
+            
+            // 磁盘信息
+            html += '<div class="info-item">';
+            html += '<h4>💾💾 磁盘信息</h4>';
+            for (const [key, value] of Object.entries(data.disk_info)) {
+                html += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            html += '</div>';
+            
+            // 系统运行时间
+            html += '<div class="info-item">';
+            html += '<h4>⏱⏱⏱ 系统运行时间</h4>';
+            for (const [key, value] of Object.entries(data.system_uptime)) {
+                html += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            html += '</div>';
+            
+            systemInfoDiv.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('获取系统信息失败:', error);
+    }
+}
+
+// 页面加载时获取数据
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化空的历史数据
+    cpuHistoryData = [];
+    updateCpuHistoryChart(); // 先显示空图表
+    
+    loadStats();
+    loadSystemMonitor();
+    loadSystemInfo();
+    getProcessInfo();
+    
+    // 定时刷新
+    setInterval(loadStats, 10000);
+    setInterval(loadSystemMonitor, 2000);
+    setInterval(getProcessInfo, 5000);
+    setInterval(loadSystemInfo, 10000);
+});
+</script>
 {% endblock %}
