@@ -178,16 +178,6 @@ async def set_boss_limits_reset():
         minute=0,
         id="daily_boss_limit_reset"
     )
-    
-    # 每周一0点重置商品限购
-    scheduler.add_job(
-        boss_limit.reset_weekly_limits,
-        'cron',
-        day_of_week='mon',
-        hour=0,
-        minute=0,
-        id="weekly_boss_shop_reset"
-    )
 
 @boss_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):

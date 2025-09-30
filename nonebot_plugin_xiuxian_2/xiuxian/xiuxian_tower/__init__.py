@@ -43,12 +43,6 @@ async def reset_tower_floors():
     tower_data.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
 
-# 每周一0点重置商店限购
-@scheduler.scheduled_job("cron", day_of_week="mon", hour=0, minute=0)
-async def reset_shop_limits():
-    tower_data.reset_weekly_limits()
-    logger.opt(colors=True).info("<green>通天塔商店限购已重置</green>")
-
 @tower_boss_info.handle()
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看当前要挑战层数的BOSS属性"""

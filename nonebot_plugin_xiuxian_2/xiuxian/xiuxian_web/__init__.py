@@ -383,7 +383,7 @@ def get_releases():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        releases = update_manager.get_latest_releases(5)
+        releases = update_manager.get_latest_releases(10)
         
         return jsonify({
             "success": True,
@@ -406,7 +406,7 @@ def perform_update():
         if not release_tag:
             return jsonify({"success": False, "error": "未指定release标签"})
         
-        success, message = update_manager.perform_update(release_tag)
+        success, message = update_manager.perform_update_with_backup(release_tag)
         
         return jsonify({
             "success": success,
@@ -415,6 +415,232 @@ def perform_update():
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@app.route('/get_backups')
+def get_backups():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        backups = update_manager.get_backups()
+        return jsonify({
+            "success": True,
+            "backups": backups
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/restore_backup', methods=['POST'])
+def restore_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        backup_filename = data.get('backup_filename')
+        
+        if not backup_filename:
+            return jsonify({"success": False, "error": "未指定备份文件"})
+        
+        # 执行恢复操作
+        success, message = update_manager.restore_backup(backup_filename)
+        
+        return jsonify({
+            "success": success,
+            "message": message
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 配置导入导出路由
+@app.route('/export_config', methods=['POST'])
+def export_config():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        selected_fields = data.get('selected_fields', [])
+        export_all = data.get('export_all', False)
+        
+        config_values = get_config_values()
+        
+        # 如果选择全部导出或者没有选择任何字段，则导出所有配置
+        if export_all or not selected_fields:
+            export_data = config_values
+        else:
+            # 只导出选中的字段
+            export_data = {field: config_values[field] for field in selected_fields if field in config_values}
+        
+        # 添加元数据
+        export_data['_metadata'] = {
+            'export_time': datetime.now().isoformat(),
+            'exported_fields': list(export_data.keys()) if export_all else selected_fields,
+            'version': update_manager.current_version
+        }
+        
+        return jsonify({
+            "success": True,
+            "data": export_data,
+            "filename": f"xiuxian_config_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"导出配置失败: {str(e)}"})
+
+@app.route('/import_config', methods=['POST'])
+def import_config():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        if 'config_file' not in request.files:
+            return jsonify({"success": False, "error": "没有上传文件"})
+        
+        file = request.files['config_file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "没有选择文件"})
+        
+        if not file.filename.endswith('.json'):
+            return jsonify({"success": False, "error": "只支持JSON格式文件"})
+        
+        # 读取并解析JSON文件
+        file_content = file.read().decode('utf-8')
+        config_data = json.loads(file_content)
+        
+        # 移除元数据字段
+        if '_metadata' in config_data:
+            del config_data['_metadata']
+        
+        return jsonify({
+            "success": True,
+            "data": config_data,
+            "message": "配置导入成功，请点击保存按钮应用配置"
+        })
+        
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "文件格式错误，不是有效的JSON"})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"导入配置失败: {str(e)}"})
+
+@app.route('/backup_config', methods=['POST'])
+def backup_config():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        selected_fields = data.get('selected_fields', [])
+        backup_all = data.get('backup_all', False)
+        
+        config_values = get_config_values()
+        
+        # 如果选择全部备份或者没有选择任何字段，则备份所有配置
+        if backup_all or not selected_fields:
+            backup_data = config_values
+        else:
+            # 只备份选中的字段
+            backup_data = {field: config_values[field] for field in selected_fields if field in config_values}
+        
+        # 创建备份目录
+        backup_dir = Path() / "data" / "config_backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成备份文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"config_backup_{timestamp}.json"
+        backup_path = backup_dir / backup_filename
+        
+        # 添加元数据
+        backup_data['_metadata'] = {
+            'backup_time': datetime.now().isoformat(),
+            'backup_fields': list(backup_data.keys()) if backup_all else selected_fields,
+            'version': update_manager.current_version,
+            'type': 'config_backup'
+        }
+        
+        # 保存备份文件
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            json.dump(backup_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({
+            "success": True,
+            "message": f"配置备份成功: {backup_filename}",
+            "backup_path": str(backup_path)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"备份配置失败: {str(e)}"})
+
+@app.route('/get_config_backups')
+def get_config_backups():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        backup_dir = Path() / "data" / "config_backups"
+        backups = []
+        
+        if backup_dir.exists():
+            for file in backup_dir.glob("config_backup_*.json"):
+                try:
+                    with open(file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f).get('_metadata', {})
+                    
+                    backups.append({
+                        'filename': file.name,
+                        'path': str(file),
+                        'backup_time': metadata.get('backup_time', ''),
+                        'version': metadata.get('version', 'unknown'),
+                        'size': file.stat().st_size,
+                        'created_at': datetime.fromtimestamp(file.stat().st_ctime).isoformat()
+                    })
+                except:
+                    continue
+        
+        # 按创建时间倒序排列
+        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        return jsonify({
+            "success": True,
+            "backups": backups
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取备份列表失败: {str(e)}"})
+
+@app.route('/restore_config_backup', methods=['POST'])
+def restore_config_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        backup_filename = data.get('backup_filename')
+        
+        if not backup_filename:
+            return jsonify({"success": False, "error": "未指定备份文件"})
+        
+        backup_path = Path() / "data" / "config_backups" / backup_filename
+        
+        if not backup_path.exists():
+            return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
+        
+        # 读取备份文件
+        with open(backup_path, 'r', encoding='utf-8') as f:
+            backup_data = json.load(f)
+        
+        # 移除元数据字段
+        if '_metadata' in backup_data:
+            del backup_data['_metadata']
+        
+        return jsonify({
+            "success": True,
+            "data": backup_data,
+            "message": "配置恢复成功，请点击保存按钮应用配置"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"恢复配置失败: {str(e)}"})
 
 @app.route('/database')
 def database():

@@ -68,7 +68,488 @@
         </button>
         <div id="saveResult" style="margin-left: 15px;"></div>
     </div>
+    
+    <!-- 导入导出操作按钮 -->
+    <div class="form-actions" style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+        <button type="button" onclick="showExportModal()" class="btn btn-info">
+            <i class="fas fa-download"></i> 导出配置
+        </button>
+        <button type="button" onclick="showImportModal()" class="btn btn-warning">
+            <i class="fas fa-upload"></i> 导入配置
+        </button>
+        <button type="button" onclick="showBackupModal()" class="btn btn-secondary">
+            <i class="fas fa-copy"></i> 备份配置
+        </button>
+        <button type="button" onclick="showRestoreModal()" class="btn btn-primary">
+            <i class="fas fa-history"></i> 恢复配置
+        </button>
+    </div>
 </div>
+
+<!-- 导出配置模态框 -->
+<div id="exportModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>导出配置</h3>
+            <span class="close" onclick="closeModal('exportModal')">×</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="exportAll" checked onchange="toggleExportSelection()">
+                    导出所有配置
+                </label>
+            </div>
+            
+            <div id="exportSelection" style="display: none; max-height: 300px; overflow-y: auto; margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <h4>选择要导出的配置项：</h4>
+                {% for category, configs in config_by_category.items() %}
+                <div style="margin-bottom: 15px;">
+                    <h5>{{ category }}</h5>
+                    {% for config in configs %}
+                    <label style="display: block; margin: 5px 0;">
+                        <input type="checkbox" name="export_fields" value="{{ config.field_name }}" checked>
+                        {{ config.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="modal-actions">
+                <button onclick="exportConfig()" class="btn btn-success">导出配置</button>
+                <button onclick="closeModal('exportModal')" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入配置模态框 -->
+<div id="importModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>导入配置</h3>
+            <span class="close" onclick="closeModal('importModal')">×</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="importFile">选择配置文件 (JSON格式)</label>
+                <input type="file" id="importFile" accept=".json" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100%;">
+            </div>
+            
+            <div id="importResult" style="margin: 15px 0;"></div>
+            
+            <div class="modal-actions">
+                <button onclick="importConfig()" class="btn btn-success">导入配置</button>
+                <button onclick="closeModal('importModal')" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 备份配置模态框 -->
+<div id="backupModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>备份配置</h3>
+            <span class="close" onclick="closeModal('backupModal')">×</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="backupAll" checked onchange="toggleBackupSelection()">
+                    备份所有配置
+                </label>
+            </div>
+            
+            <div id="backupSelection" style="display: none; max-height: 300px; overflow-y: auto; margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <h4>选择要备份的配置项：</h4>
+                {% for category, configs in config_by_category.items() %}
+                <div style="margin-bottom: 15px;">
+                    <h5>{{ category }}</h5>
+                    {% for config in configs %}
+                    <label style="display: block; margin: 5px 0;">
+                        <input type="checkbox" name="backup_fields" value="{{ config.field_name }}" checked>
+                        {{ config.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div id="backupResult" style="margin: 15px 0;"></div>
+            
+            <div class="modal-actions">
+                <button onclick="backupConfig()" class="btn btn-success">备份配置</button>
+                <button onclick="closeModal('backupModal')" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 恢复配置模态框 -->
+<div id="restoreModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>恢复配置</h3>
+            <span class="close" onclick="closeModal('restoreModal')">×</span>
+        </div>
+        <div class="modal-body">
+            <div id="backupList">
+                <div class="loading">加载备份列表...</div>
+            </div>
+            
+            <div id="restoreResult" style="margin: 15px 0;"></div>
+            
+            <div class="modal-actions">
+                <button onclick="restoreConfig()" class="btn btn-success">恢复配置</button>
+                <button onclick="closeModal('restoreModal')" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* 确保按钮组不超出范围 */
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 30px;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.form-actions .btn {
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 文件信息样式 */
+.file-info {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #2196F3;
+    margin: 10px 0;
+}
+
+.file-info p {
+    margin: 5px 0;
+    color: #333;
+}
+
+.file-info strong {
+    color: #666;
+    min-width: 80px;
+    display: inline-block;
+}
+
+.import-confirm, .restore-confirm {
+    background: #e8f5e8;
+    border: 1px solid #4CAF50;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.import-actions, .restore-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* 模态框样式 */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #333;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+/* 备份列表样式 */
+.backup-item {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.backup-item:hover {
+    border-color: #66b3ff;
+    box-shadow: 0 2px 8px rgba(102, 179, 255, 0.2);
+}
+
+.backup-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.backup-details {
+    color: #666;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .form-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        max-width: 300px;
+        margin-bottom: 10px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+    }
+    
+    .import-actions, .restore-actions {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .form-actions .btn {
+        font-size: 14px;
+        padding: 10px 15px;
+    }
+    
+    .form-actions .btn i {
+        margin-right: 5px;
+    }
+    
+    .modal-header {
+        padding: 15px;
+    }
+    
+    .modal-body {
+        padding: 15px;
+    }
+    
+    .file-info {
+        padding: 10px;
+    }
+}
+
+/* 标签导航样式 */
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+.tab-link {
+    background: transparent;
+    border: none;
+    padding: 0.8rem 1.2rem;
+    cursor: pointer;
+    border-radius: 5px 5px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    color: var(--light-text);
+}
+
+.tab-link:hover {
+    background: rgba(179, 224, 255, 0.3);
+}
+
+.tab-link.active {
+    background: var(--secondary-color);
+    color: var(--text-color);
+    font-weight: bold;
+}
+
+.tab-content {
+    margin-top: 1rem;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+    animation: fadeIn 0.5s ease;
+}
+
+/* 表单样式 */
+.form-group {
+    margin-bottom: 1.2rem;
+    padding: 10px;
+    border-radius: 8px;
+    background: #f9f9f9;
+    border-left: 3px solid var(--accent-color);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid var(--secondary-color);
+    border-radius: 5px;
+    background: white;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(102, 179, 255, 0.2);
+}
+
+/* 按钮样式 */
+.btn {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, var(--accent-color), #8ecfff);
+    color: white;
+    box-shadow: 0 3px 8px rgba(102, 179, 255, 0.3);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(45deg, #4d94ff, #70b8ff);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(102, 179, 255, 0.4);
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-info {
+    background: var(--info-color);
+    color: white;
+}
+
+.btn-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-danger {
+    background: var(--error-color);
+    color: white;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+</style>
 
 <script>
 // 标签切换功能
@@ -117,6 +598,633 @@ function saveConfig() {
         resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 请求失败: ${error}</span>`;
     });
 }
-</script>
 
+// 模态框控制函数
+function showExportModal() {
+    document.getElementById('exportModal').style.display = 'flex';
+}
+
+function showImportModal() {
+    document.getElementById('importModal').style.display = 'flex';
+    document.getElementById('importResult').innerHTML = '';
+}
+
+function showBackupModal() {
+    document.getElementById('backupModal').style.display = 'flex';
+    document.getElementById('backupResult').innerHTML = '';
+}
+
+function showRestoreModal() {
+    document.getElementById('restoreModal').style.display = 'flex';
+    loadBackupList();
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+function toggleExportSelection() {
+    const exportAll = document.getElementById('exportAll').checked;
+    const exportSelection = document.getElementById('exportSelection');
+    exportSelection.style.display = exportAll ? 'none' : 'block';
+}
+
+function toggleBackupSelection() {
+    const backupAll = document.getElementById('backupAll').checked;
+    const backupSelection = document.getElementById('backupSelection');
+    backupSelection.style.display = backupAll ? 'none' : 'block';
+}
+
+// 文件读取辅助函数
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = e => reject(e);
+        reader.readAsText(file);
+    });
+}
+
+// 导出配置函数
+async function exportConfig() {
+    const exportAll = document.getElementById('exportAll').checked;
+    let selectedFields = [];
+    
+    if (!exportAll) {
+        const checkboxes = document.querySelectorAll('input[name="export_fields"]:checked');
+        selectedFields = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedFields.length === 0) {
+            alert('请至少选择一个配置项');
+            return;
+        }
+    }
+    
+    try {
+        const response = await fetch('/export_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                selected_fields: selectedFields,
+                export_all: exportAll
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // 创建下载链接
+            const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            closeModal('exportModal');
+        } else {
+            alert('导出失败: ' + data.error);
+        }
+    } catch (error) {
+        alert('导出失败: ' + error);
+    }
+}
+
+// 导入配置函数
+async function importConfig() {
+    const fileInput = document.getElementById('importFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('请选择要导入的配置文件');
+        return;
+    }
+    
+    try {
+        const fileContent = await readFileAsText(file);
+        const configData = JSON.parse(fileContent);
+        
+        // 显示文件信息供用户确认
+        const metadata = configData._metadata || {};
+        const importResult = document.getElementById('importResult');
+        
+        importResult.innerHTML = `
+            <div class="import-confirm">
+                <h4>📋 配置文件信息</h4>
+                <div class="file-info">
+                    <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
+                    <p><strong>导出时间:</strong> ${metadata.export_time ? new Date(metadata.export_time).toLocaleString() : '未知'}</p>
+                    <p><strong>包含字段:</strong> ${metadata.exported_fields ? metadata.exported_fields.length + ' 个配置项' : '未知'}</p>
+                </div>
+                <div class="import-actions">
+                    <button onclick="confirmImport(${JSON.stringify(configData).replace(/"/g, '&quot;')})" 
+                            class="btn btn-success">
+                        <i class="fas fa-check"></i> 确认导入
+                    </button>
+                    <button onclick="cancelImport()" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                </div>
+            </div>
+        `;
+        
+    } catch (error) {
+        document.getElementById('importResult').innerHTML = 
+            `<div style="color: red;">❌❌ 文件读取失败: ${error}</div>`;
+    }
+}
+
+// 确认导入
+function confirmImport(configData) {
+    // 移除元数据字段
+    if (configData._metadata) {
+        delete configData._metadata;
+    }
+    
+    // 将导入的数据填充到表单中
+    fillFormWithImportedData(configData);
+    
+    document.getElementById('importResult').innerHTML = 
+        '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
+    closeModal('importModal');
+}
+
+// 取消导入
+function cancelImport() {
+    document.getElementById('importResult').innerHTML = '';
+    document.getElementById('importFile').value = '';
+}
+
+// 备份配置函数
+async function backupConfig() {
+    const backupAll = document.getElementById('backupAll').checked;
+    let selectedFields = [];
+    
+    if (!backupAll) {
+        const checkboxes = document.querySelectorAll('input[name="backup_fields"]:checked');
+        selectedFields = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedFields.length === 0) {
+            alert('请至少选择一个配置项');
+            return;
+        }
+    }
+    
+    try {
+        const response = await fetch('/backup_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                selected_fields: selectedFields,
+                backup_all: backupAll
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('backupResult').innerHTML = 
+                '<div style="color: green;">✅ ' + data.message + '</div>';
+        } else {
+            document.getElementById('backupResult').innerHTML = 
+                '<div style="color: red;">❌❌ ' + data.error + '</div>';
+        }
+    } catch (error) {
+        document.getElementById('backupResult').innerHTML = 
+            '<div style="color: red;">❌❌ 备份失败: ' + error + '</div>';
+    }
+}
+
+// 加载备份列表函数
+async function loadBackupList() {
+    const backupListDiv = document.getElementById('backupList');
+    backupListDiv.innerHTML = '<div class="loading">加载备份列表中...</div>';
+    
+    try {
+        const response = await fetch('/get_config_backups');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.backups.length > 0) {
+                let html = '<div style="max-height: 300px; overflow-y: auto;">';
+                html += '<h4>选择要恢复的备份：</h4>';
+                
+                data.backups.forEach(backup => {
+                    const date = new Date(backup.created_at);
+                    const sizeMB = (backup.size / (1024 * 1024)).toFixed(2);
+                    
+                    html += `
+                        <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                            <label style="display: block;">
+                                <input type="radio" name="restore_backup" value="${backup.filename}">
+                                <strong>${backup.filename}</strong><br>
+                                <span style="font-size: 0.9em; color: #666;">
+                                    版本: ${backup.version} | 
+                                    大小: ${sizeMB} MB | 
+                                    ${date.toLocaleString()}
+                                </span>
+                            </label>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                backupListDiv.innerHTML = html;
+            } else {
+                backupListDiv.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">暂无备份文件</div>';
+            }
+        } else {
+            backupListDiv.innerHTML = '<div style="color: red;">加载失败: ' + data.error + '</div>';
+        }
+    } catch (error) {
+        backupListDiv.innerHTML = '<div style="color: red;">请求失败: ' + error + '</div>';
+    }
+}
+
+// 恢复配置函数
+async function restoreConfig() {
+    const selectedBackup = document.querySelector('input[name="restore_backup"]:checked');
+    
+    if (!selectedBackup) {
+        alert('请选择一个备份文件');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/restore_config_backup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                backup_filename: selectedBackup.value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const restoreResult = document.getElementById('restoreResult');
+            const metadata = data.data._metadata || {};
+            
+            restoreResult.innerHTML = `
+                <div class="restore-confirm">
+                    <h4>📋 备份文件信息</h4>
+                    <div class="file-info">
+                        <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
+                        <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
+                        <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
+                    </div>
+                    <div class="restore-actions">
+                        <button onclick="confirmRestore(${JSON.stringify(data.data).replace(/"/g, '&quot;')})" 
+                                class="btn btn-success">
+                            <i class="fas fa-check"></i> 确认恢复
+                        </button>
+                        <button onclick="cancelRestore()" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else {
+            document.getElementById('restoreResult').innerHTML = 
+                `<div style="color: red;">❌❌ ${data.error}</div>`;
+        }
+    } catch (error) {
+        document.getElementById('restoreResult').innerHTML = 
+            `<div style="color: red;">❌❌ 恢复失败: ${error}</div>`;
+    }
+}
+
+// 确认恢复
+function confirmRestore(backupData) {
+    // 移除元数据字段
+    if (backupData._metadata) {
+        delete backupData._metadata;
+    }
+    
+    // 将恢复的数据填充到表单中
+    fillFormWithImportedData(backupData);
+    
+    document.getElementById('restoreResult').innerHTML = 
+        '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
+    closeModal('restoreModal');
+}
+
+// 取消恢复
+function cancelRestore() {
+    document.getElementById('restoreResult').innerHTML = '';
+}
+
+// 用导入的数据填充表单
+function fillFormWithImportedData(importedData) {
+    for (const [fieldName, value] of Object.entries(importedData)) {
+        const input = document.getElementById(fieldName);
+        if (input) {
+            if (input.type === 'checkbox') {
+                input.checked = Boolean(value);
+            } else {
+                input.value = value;
+            }
+        }
+    }
+}
+
+// 添加全局点击事件关闭模态框
+document.addEventListener('click', function(event) {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 触发初始标签状态
+    const firstTab = document.querySelector('.tab-link.active');
+    if (firstTab) {
+        const tabId = firstTab.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+    }
+    
+    // 为所有下拉菜单添加事件监听
+    document.querySelectorAll('select').forEach(select => {
+        select.addEventListener('change', function() {
+            const showIf = this.dataset.showIf;
+            if (showIf) {
+                const conditions = JSON.parse(showIf);
+                const parentForm = this.closest('form');
+                
+                Object.keys(conditions).forEach(key => {
+                    const value = conditions[key];
+                    const shouldShow = this.value === value;
+                    
+                    parentForm.querySelectorAll(`[data-show-if*="${key}"]`).forEach(el => {
+                        if (el !== this) {
+                            el.style.display = shouldShow ? 'block' : 'none';
+                            if (!shouldShow) {
+                                el.querySelector('input, select').value = '';
+                            }
+                        }
+                    });
+                });
+            }
+        });
+        
+        // 触发初始状态
+        select.dispatchEvent(new Event('change'));
+    });
+});
+
+// 添加键盘快捷键支持
+document.addEventListener('keydown', function(e) {
+    // Ctrl + S 保存配置
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveConfig();
+    }
+    
+    // ESC 关闭模态框
+    if (e.key === 'Escape') {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        });
+    }
+});
+
+// 添加表单验证
+function validateForm() {
+    const forms = document.querySelectorAll('.config-form');
+    let isValid = true;
+    
+    forms.forEach(form => {
+        const requiredInputs = form.querySelectorAll('[required]');
+        requiredInputs.forEach(input => {
+            if (!input.value.trim()) {
+                input.style.borderColor = 'red';
+                isValid = false;
+            } else {
+                input.style.borderColor = '';
+            }
+        });
+    });
+    
+    return isValid;
+}
+
+// 添加配置项搜索功能
+function searchConfigItems() {
+    const searchTerm = document.getElementById('configSearch').value.toLowerCase();
+    const formGroups = document.querySelectorAll('.form-group');
+    
+    formGroups.forEach(group => {
+        const label = group.querySelector('label');
+        const description = group.querySelector('small');
+        const text = (label.textContent + ' ' + (description?.textContent || '')).toLowerCase();
+        
+        if (text.includes(searchTerm)) {
+            group.style.display = 'block';
+            group.style.backgroundColor = '#ffffcc';
+        } else {
+            group.style.display = 'none';
+        }
+    });
+}
+
+// 添加配置项过滤功能
+function filterConfigByCategory(category) {
+    const formGroups = document.querySelectorAll('.form-group');
+    
+    formGroups.forEach(group => {
+        if (category === 'all') {
+            group.style.display = 'block';
+            group.style.backgroundColor = '';
+        } else {
+            // 这里需要根据实际情况实现分类过滤
+            group.style.display = 'none';
+        }
+    });
+}
+
+// 添加配置重置功能
+function resetConfigToDefault() {
+    if (confirm('确定要重置所有配置为默认值吗？此操作不可撤销！')) {
+        fetch('/reset_config', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('配置已重置为默认值');
+                location.reload();
+            } else {
+                alert('重置失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('重置失败: ' + error);
+        });
+    }
+}
+
+// 添加配置历史记录功能
+function showConfigHistory() {
+    fetch('/get_config_history')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 显示配置历史记录
+            const historyModal = document.createElement('div');
+            historyModal.className = 'modal';
+            historyModal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>配置修改历史</h3>
+                        <span class="close" onclick="this.parentElement.parentElement.style.display='none'">×</span>
+                    </div>
+                    <div class="modal-body">
+                        ${data.history.map(item => `
+                            <div class="history-item">
+                                <strong>${new Date(item.timestamp).toLocaleString()}</strong>
+                                <p>${item.message}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(historyModal);
+            historyModal.style.display = 'flex';
+        }
+    });
+}
+
+// 添加配置导出预览功能
+function previewExport() {
+    const exportAll = document.getElementById('exportAll').checked;
+    let selectedFields = [];
+    
+    if (!exportAll) {
+        const checkboxes = document.querySelectorAll('input[name="export_fields"]:checked');
+        selectedFields = Array.from(checkboxes).map(cb => cb.value);
+    }
+    
+    fetch('/preview_export', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            selected_fields: selectedFields,
+            export_all: exportAll
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 显示预览
+            const previewModal = document.createElement('div');
+            previewModal.className = 'modal';
+            previewModal.innerHTML = `
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3>导出预览</h3>
+                        <span class="close" onclick="this.parentElement.parentElement.style.display='none'">×</span>
+                    </div>
+                    <div class="modal-body">
+                        <pre style="max-height: 400px; overflow: auto; background: #f5f5f5; padding: 10px; border-radius: 5px;">
+${JSON.stringify(data.preview, null, 2)}
+                        </pre>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(previewModal);
+            previewModal.style.display = 'flex';
+        }
+    });
+}
+
+// 添加配置比较功能
+function compareConfigs() {
+    // 这里可以实现配置比较功能
+    alert('配置比较功能正在开发中...');
+}
+
+// 添加配置备份自动清理功能
+function cleanupOldBackups() {
+    if (confirm('确定要清理30天前的旧备份吗？此操作不可撤销！')) {
+        fetch('/cleanup_backups', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`已清理 ${data.deleted_count} 个旧备份文件`);
+                loadBackupList();
+            } else {
+                alert('清理失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('清理失败: ' + error);
+        });
+    }
+}
+
+// 添加配置导入验证功能
+function validateConfigFile(file) {
+    // 这里可以实现配置文件验证逻辑
+    return true;
+}
+
+// 添加配置批量操作功能
+function batchUpdateConfig() {
+    const field = document.getElementById('batchField').value;
+    const operation = document.getElementById('batchOperation').value;
+    const value = document.getElementById('batchValue').value;
+    
+    if (!field || !operation || !value) {
+        alert('请填写完整的批量操作信息');
+        return;
+    }
+    
+    if (confirm(`确定要对所有配置项的 ${field} 字段执行 ${operation} 操作吗？`)) {
+        // 执行批量操作
+        fetch('/batch_update_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                field: field,
+                operation: operation,
+                value: value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('批量操作成功');
+                location.reload();
+            } else {
+                alert('批量操作失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('批量操作失败: ' + error);
+        });
+    }
+}
+</script>
 {% endblock %}

@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 from pathlib import Path
+from datetime import datetime
 import os
 
 class BossLimit:
@@ -78,6 +79,25 @@ class BossLimit:
         data = self._load_data()
         user_id = str(user_id)
         item_id = str(item_id)
+        
+        if user_id in data["weekly_purchases"]:
+            user_data = data["weekly_purchases"][user_id]
+            if "_last_reset" in user_data:
+                last_reset = datetime.strptime(user_data["_last_reset"], "%Y-%m-%d")
+                current_week = datetime.now().isocalendar()[1]
+                last_week = last_reset.isocalendar()[1]
+                current_year = datetime.now().year
+                last_year = last_reset.year
+                
+                if current_week != last_week or current_year != last_year:
+                    data["weekly_purchases"][user_id] = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
+                    self._save_data(data)
+                    return 0
+            else:
+                data["weekly_purchases"][user_id] = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
+                self._save_data(data)
+                return 0
+        
         return data["weekly_purchases"].get(user_id, {}).get(item_id, 0)
 
     def update_weekly_purchase(self, user_id, item_id, quantity):
@@ -87,10 +107,11 @@ class BossLimit:
         item_id = str(item_id)
         
         if user_id not in data["weekly_purchases"]:
-            data["weekly_purchases"][user_id] = {}
+            data["weekly_purchases"][user_id] = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
         
         current = data["weekly_purchases"][user_id].get(item_id, 0)
         data["weekly_purchases"][user_id][item_id] = current + quantity
+        
         self._save_data(data)
 
     def reset_limits(self):
@@ -100,12 +121,5 @@ class BossLimit:
         data["boss_stone"] = {}
         data["boss_battle_count"] = {}  # 重置讨伐次数
         self._save_data(data)
-
-    def reset_weekly_limits(self):
-        """重置所有每周商品购买限制"""
-        data = self._load_data()
-        data["weekly_purchases"] = {}
-        self._save_data(data)
-
 
 boss_limit = BossLimit()

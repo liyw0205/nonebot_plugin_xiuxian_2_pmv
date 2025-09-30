@@ -1,4 +1,5 @@
 import os
+import re
 import zipfile
 import tarfile
 import wget
@@ -68,7 +69,7 @@ class UpdateManager:
         self.repo_name = "nonebot_plugin_xiuxian_2_pmv"
         self.api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases"
         self.current_version = self.get_current_version()
-        
+    
     def get_current_version(self):
         """获取当前版本"""
         version_file = Path() / "data" / "xiuxian" / "version.txt"
@@ -80,14 +81,13 @@ class UpdateManager:
                 pass
         return "unknown"
     
-    def get_latest_releases(self, count=5):
+    def get_latest_releases(self, count=10):
         """获取最近的release信息"""
         try:
             response = requests.get(self.api_url, timeout=10)
             response.raise_for_status()
             releases = response.json()
             
-            # 获取前count个release
             recent_releases = []
             for release in releases[:count]:
                 recent_releases.append({
@@ -123,7 +123,7 @@ class UpdateManager:
             return latest_release, f"发现新版本 {latest_version}，当前版本 {self.current_version}"
         else:
             return None, "当前已是最新版本"
-    
+
     def download_release(self, release_tag, asset_name="project.tar.gz"):
         """下载指定的release资源"""
         try:
@@ -158,7 +158,7 @@ class UpdateManager:
             
         except Exception as e:
             return False, f"下载失败: {str(e)}"
-    
+
     def _merge_directories(self, source_dir, target_dir):
         """合并两个目录，保留目标目录中的现有文件，用源目录中的文件覆盖同名文件"""
         if not target_dir.exists():
@@ -176,7 +176,7 @@ class UpdateManager:
                 if target_item.exists():
                     os.remove(target_item)
                 shutil.copy2(item, target_item)
-    
+
     def extract_update(self, archive_path, backup=True):
         """解压更新文件"""
         extract_temp = None
@@ -234,42 +234,7 @@ class UpdateManager:
                     shutil.rmtree(extract_temp)
             except:
                 pass
-    
-    def backup_current_version(self):
-        """备份当前版本"""
-        try:
-            backup_dir = Path() / "data" / "backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = backup_dir / f"backup_{timestamp}_{self.current_version}.zip"
-            
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # 备份data目录
-                data_dir = Path() / "data"
-                if data_dir.exists():
-                    for root, dirs, files in os.walk(data_dir):
-                        for file in files:
-                            if "backups" not in root:  # 不备份备份文件本身
-                                file_path = Path(root) / file
-                                arcname = file_path.relative_to(data_dir.parent)
-                                zipf.write(file_path, arcname)
-                
-                # 备份插件目录
-                plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
-                if plugin_dir.exists():
-                    for root, dirs, files in os.walk(plugin_dir):
-                        for file in files:
-                            file_path = Path(root) / file
-                            arcname = file_path.relative_to(plugin_dir.parent.parent.parent)
-                            zipf.write(file_path, arcname)
-            
-            logger.info(f"备份完成: {backup_path}")
-            return True, backup_path
-        except Exception as e:
-            logger.error(f"备份失败: {e}")
-            return False, str(e)
-    
+
     def update_version_file(self):
         """更新版本文件"""
         try:
@@ -285,13 +250,108 @@ class UpdateManager:
                 logger.info(f"版本文件更新为: {latest_version}")
         except Exception as e:
             logger.error(f"更新版本文件失败: {e}")
-    
-    def perform_update(self, release_tag):
-        """执行完整的更新流程"""
+
+    def enhanced_backup_current_version(self):
+        """备份当前版本"""
+        try:
+            backup_dir = Path() / "data" / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"backup_{timestamp}_{self.current_version}.zip"
+            
+            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # 备份data目录（排除backups目录本身）
+                data_dir = Path() / "data"
+                if data_dir.exists():
+                    for root, dirs, files in os.walk(data_dir):
+                        if "backups" in root.split(os.sep) or "config_backups" in root.split(os.sep):
+                            continue
+                        
+                        for file in files:
+                            file_path = Path(root) / file
+                            try:
+                                arcname = file_path.relative_to(data_dir.parent)
+                                zipf.write(file_path, arcname)
+                            except Exception as e:
+                                logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
+                
+                # 备份插件目录
+                plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+                if plugin_dir.exists():
+                    for root, dirs, files in os.walk(plugin_dir):
+                        for file in files:
+                            file_path = Path(root) / file
+                            try:
+                                arcname = file_path.relative_to(plugin_dir.parent.parent.parent)
+                                zipf.write(file_path, arcname)
+                            except Exception as e:
+                                logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
+            
+            logger.info(f"备份完成: {backup_path}")
+            return True, backup_path
+        except Exception as e:
+            logger.error(f"备份失败: {e}")
+            return False, str(e)
+
+    def backup_all_configs(self):
+        """备份所有配置（全选）"""
+        try:
+            
+            # 获取当前配置值
+            config = XiuConfig()
+            config_values = {}
+            from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
+            
+            # 获取所有可编辑配置字段
+            for field_name in CONFIG_EDITABLE_FIELDS.keys():
+                if hasattr(config, field_name):
+                    value = getattr(config, field_name)
+                    config_values[field_name] = value
+            
+            # 创建备份目录
+            backup_dir = Path() / "data" / "config_backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 生成备份文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"config_backup_{timestamp}.json"
+            backup_path = backup_dir / backup_filename
+            
+            # 添加元数据
+            config_values['_metadata'] = {
+                'backup_time': datetime.now().isoformat(),
+                'backup_fields': list(config_values.keys()),
+                'version': self.current_version,
+                'type': 'config_backup',
+                'backup_type': 'full'  # 标记为全选备份
+            }
+            
+            # 保存备份文件
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                json.dump(config_values, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"全选配置备份完成: {backup_filename}")
+            return True, backup_path
+            
+        except Exception as e:
+            logger.error(f"配置备份失败: {str(e)}")
+            return False, f"配置备份失败: {str(e)}"
+
+    def perform_update_with_backup(self, release_tag):
+        """执行完整的更新流程（带自动备份）"""
         try:
             logger.info(f"开始更新到版本: {release_tag}")
             
-            # 1. 下载release
+            # 自动创建插件备份
+            logger.info("创建自动插件备份...")
+            self.enhanced_backup_current_version()
+
+            # 自动创建配置备份
+            logger.info("创建自动配置备份...")
+            self.backup_all_configs()
+
+            # 下载release
             logger.info("下载更新包...")
             success, result = self.download_release(release_tag)
             if not success:
@@ -300,14 +360,13 @@ class UpdateManager:
             archive_path = result
             logger.info(f"下载完成: {archive_path}")
             
-            # 2. 解压更新
+            # 解压更新
             logger.info("解压更新包...")
-            success, result = self.extract_update(archive_path)
+            success, result = self.extract_update(archive_path, backup=False)
             
-            # 3. 清理临时文件
+            # 清理临时文件
             try:
                 if archive_path.exists():
-                    # 删除临时目录及其内容
                     temp_dir = archive_path.parent
                     if temp_dir.exists():
                         shutil.rmtree(temp_dir)
@@ -324,3 +383,82 @@ class UpdateManager:
         except Exception as e:
             logger.error(f"更新过程中出现错误: {str(e)}")
             return False, f"更新过程中出现错误: {str(e)}"
+
+    def _restore_files_from_backup(self, backup_root):
+        """从备份根目录恢复文件"""
+        # 恢复data目录
+        data_backup_path = backup_root / "data"
+        if data_backup_path.exists():
+            target_data_dir = Path() / "data"
+            self._merge_directories(data_backup_path, target_data_dir)
+        
+        # 恢复插件目录
+        plugin_backup_path = backup_root / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+        if plugin_backup_path.exists():
+            target_plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+            self._merge_directories(plugin_backup_path, target_plugin_dir)
+
+    def get_backups(self):
+        """获取所有备份文件"""
+        backup_dir = Path() / "data" / "backups"
+        backups = []
+        
+        if backup_dir.exists():
+            for file in backup_dir.glob("backup_*.zip"):
+                filename = file.name
+                parts = file.stem.split('_')
+                if len(parts) >= 4:
+                    timestamp = f"{parts[1]}_{parts[2]}"
+                    version = '_'.join(parts[3:])
+                    
+                    backups.append({
+                        'filename': filename,
+                        'path': str(file),
+                        'timestamp': timestamp,
+                        'version': version,
+                        'size': file.stat().st_size,
+                        'created_at': datetime.fromtimestamp(file.stat().st_ctime).isoformat()
+                    })
+        
+        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        return backups
+    
+    def restore_backup(self, backup_filename):
+        """从备份恢复"""
+        try:
+            backup_dir = Path() / "data" / "backups"
+            backup_path = backup_dir / backup_filename
+            
+            if not backup_path.exists():
+                return False, f"备份文件不存在: {backup_filename}"
+            
+            logger.info(f"开始从备份恢复: {backup_filename}")
+            
+            # 创建临时目录用于解压
+            temp_dir = Path(tempfile.mkdtemp())
+            
+            # 解压备份文件
+            with zipfile.ZipFile(backup_path, 'r') as zipf:
+                zipf.extractall(temp_dir)
+            
+            # 恢复文件
+            self._restore_files_from_backup(temp_dir)
+            
+            # 清理临时文件
+            shutil.rmtree(temp_dir)
+            
+            # 更新版本信息
+            version_match = re.search(r'backup_.*_(v?[\d.]+)\.zip', backup_filename)
+            if version_match:
+                version = version_match.group(1)
+                version_file = Path() / "data" / "xiuxian" / "version.txt"
+                version_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(version_file, 'w', encoding='utf-8') as f:
+                    f.write(version)
+            
+            logger.info(f"备份恢复完成: {backup_filename}")
+            return True, f"成功从备份 {backup_filename} 恢复"
+            
+        except Exception as e:
+            logger.error(f"恢复备份失败: {str(e)}")
+            return False, f"恢复备份失败: {str(e)}"
