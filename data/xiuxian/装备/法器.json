@@ -397,13 +397,13 @@
     },
     "11001": {
         "name": "归墟剑",
-        "atk_buff": 0.6,
-        "crit_buff": 0.1,
+        "atk_buff": 0.5,
+        "crit_buff": 0.2,
         "def_buff": 0,
-        "critatk": 0.4,
+        "critatk": 0.3,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -427,7 +427,7 @@
         "critatk": 0.4,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 13,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -439,7 +439,7 @@
         "critatk": 0.7,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 13,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -451,7 +451,7 @@
         "critatk": 0.4,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -463,7 +463,7 @@
         "critatk": 0.5,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -475,7 +475,7 @@
         "critatk": 0.4,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -487,7 +487,7 @@
         "critatk": 0.2,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -499,7 +499,7 @@
         "critatk": 0.45,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -511,7 +511,7 @@
         "critatk": 0.4,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -523,43 +523,43 @@
         "critatk": 0.4,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 11,
         "level": "极品仙器",
         "type": "装备"
     },
     "11012": {
         "name": "誓约胜利之剑",
-        "atk_buff": 0.7,
-        "crit_buff": 0.4,
+        "atk_buff": 0.65,
+        "crit_buff": 0.35,
         "def_buff": 0,
         "critatk": 0,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 5,
         "level": "极品仙器",
         "type": "装备"
     },
     "11013": {
         "name": "金钟罩",
-        "atk_buff": 0.7,
-        "crit_buff": 0.4,
-        "def_buff": 0,
+        "atk_buff": 0.4,
+        "crit_buff": 0.2,
+        "def_buff": 0.5,
         "critatk": 0,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 8,
         "level": "极品仙器",
         "type": "装备"
     },
     "11014": {
         "name": "灵魄玉",
-        "atk_buff": 0.7,
-        "crit_buff": 0.4,
+        "atk_buff": 0.3,
+        "crit_buff": 0.3,
         "def_buff": 0,
         "critatk": 0,
         "zw": 0,
-        "mp_buff": 0,
-        "rank": -5,
+        "mp_buff": 0.6,
+        "rank": 8,
         "level": "极品仙器",
         "type": "装备"
     },
@@ -589,13 +589,13 @@
     },
     "13001": {
         "name": "轩辕剑",
-        "atk_buff": 0.4,
-        "crit_buff": 0.7,
+        "atk_buff": 0.45,
+        "crit_buff": 0.75,
         "def_buff": 0,
-        "critatk": 0.5,
+        "critatk": 0.55,
         "zw": 0,
         "mp_buff": 0,
-        "rank": -5,
+        "rank": 5,
         "level": "无上",
         "type": "装备"
     },
@@ -685,13 +685,12 @@
         "fusion": {
             "need_item": {
                 "7098": 1,
-                "7099": 1,
-                "20002": 1
+                "7099": 1
             },
             "need_rank": "微光境圆满",
             "need_exp": "0",
             "need_stone": "0",
-            "limit": 1
+            "limit": 2
         }
     },
     "7085": {
