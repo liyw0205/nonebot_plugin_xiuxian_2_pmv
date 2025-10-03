@@ -680,6 +680,9 @@ async function loadBackups() {
                                 <button onclick="confirmRestore('${backup.filename}')" class="btn btn-warning">
                                     <i class="fas fa-undo"></i> 恢复到此版本
                                 </button>
+                                <button onclick="confirmDeleteBackup('${backup.filename}')" class="btn btn-danger">
+                                    <i class="fas fa-trash"></i> 删除
+                                </button>
                             </div>
                         </div>
                     `;
@@ -740,6 +743,34 @@ async function confirmRestore(backupFilename) {
                 <p>${error}</p>
             </div>
         `;
+    }
+}
+
+// 确认删除备份函数
+async function confirmDeleteBackup(backupFilename) {
+    if (!confirm(`确定要删除备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/delete_backup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ backup_filename: backupFilename })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ 备份文件删除成功');
+            loadBackups(); // 重新加载备份列表
+        } else {
+            alert(`❌❌ 删除失败: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`❌❌ 请求失败: ${error}`);
     }
 }
 

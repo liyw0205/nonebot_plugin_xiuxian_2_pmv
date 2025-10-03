@@ -42,9 +42,14 @@
                     
                     {% elif config.type == 'list[int]' %}
                     <input type="text" id="{{ config.field_name }}" name="{{ config.field_name }}" 
-                           value="{% if config.value %}{{ config.value|replace('[', '')|replace(']', '')|replace(' ', '') }}{% endif %}"
+                           value="{{ config.value }}"
                            placeholder="用逗号分隔，如: 123,456,789">
-                    
+
+                    {% elif config.type == 'list[str]' %}
+                    <input type="text" id="{{ config.field_name }}" name="{{ config.field_name }}" 
+                           value="{{ config.value }}"
+                           placeholder="用逗号分隔，如: 123,456,789">
+                  
                     {% elif config.type == 'int' or config.type == 'float' %}
                     <input type="number" id="{{ config.field_name }}" name="{{ config.field_name }}" 
                            value="{{ config.value }}" step="{% if config.type == 'float' %}0.1{% else %}1{% endif %}">
@@ -203,6 +208,7 @@
             
             <div class="modal-actions">
                 <button onclick="restoreConfig()" class="btn btn-success">恢复配置</button>
+                <button onclick="deleteConfigBackup()" class="btn btn-danger">删除配置</button>
                 <button onclick="closeModal('restoreModal')" class="btn btn-secondary">取消</button>
             </div>
         </div>
@@ -718,8 +724,8 @@ async function importConfig() {
                 <h4>📋 配置文件信息</h4>
                 <div class="file-info">
                     <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
-                    <p><strong>导出时间:</strong> ${metadata.export_time ? new Date(metadata.export_time).toLocaleString() : '未知'}</p>
-                    <p><strong>包含字段:</strong> ${metadata.exported_fields ? metadata.exported_fields.length + ' 个配置项' : '未知'}</p>
+                    <p><strong>导出时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
+                    <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
                 </div>
                 <div class="import-actions">
                     <button onclick="confirmImport(${JSON.stringify(configData).replace(/"/g, '&quot;')})" 
@@ -735,7 +741,7 @@ async function importConfig() {
         
     } catch (error) {
         document.getElementById('importResult').innerHTML = 
-            `<div style="color: red;">❌❌ 文件读取失败: ${error}</div>`;
+            `<div style="color: red;">❌ 文件读取失败: ${error}</div>`;
     }
 }
 
@@ -794,11 +800,11 @@ async function backupConfig() {
                 '<div style="color: green;">✅ ' + data.message + '</div>';
         } else {
             document.getElementById('backupResult').innerHTML = 
-                '<div style="color: red;">❌❌ ' + data.error + '</div>';
+                '<div style="color: red;">❌ ' + data.error + '</div>';
         }
     } catch (error) {
         document.getElementById('backupResult').innerHTML = 
-            '<div style="color: red;">❌❌ 备份失败: ' + error + '</div>';
+            '<div style="color: red;">❌ 备份失败: ' + error + '</div>';
     }
 }
 
@@ -868,38 +874,37 @@ async function restoreConfig() {
             })
         });
         
-        const data = await response.json();
-        
-        if (data.success) {
-            const restoreResult = document.getElementById('restoreResult');
-            const metadata = data.data._metadata || {};
-            
-            restoreResult.innerHTML = `
-                <div class="restore-confirm">
-                    <h4>📋 备份文件信息</h4>
-                    <div class="file-info">
-                        <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
-                        <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
-                        <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
-                    </div>
-                    <div class="restore-actions">
-                        <button onclick="confirmRestore(${JSON.stringify(data.data).replace(/"/g, '&quot;')})" 
-                                class="btn btn-success">
-                            <i class="fas fa-check"></i> 确认恢复
-                        </button>
-                        <button onclick="cancelRestore()" class="btn btn-secondary">
-                            <i class="fas fa-times"></i> 取消
-                        </button>
-                    </div>
+    const data = await response.json();
+    
+    if (data.success) {
+        const restoreResult = document.getElementById('restoreResult');
+        const metadata = data.metadata || {};
+        restoreResult.innerHTML = `
+            <div class="restore-confirm">
+                <h4>📋📋 备份文件信息</h4>
+                <div class="file-info">
+                    <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
+                    <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
+                    <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
                 </div>
-            `;
-        } else {
+                <div class="restore-actions">
+                    <button onclick="confirmRestore(${JSON.stringify(data.data).replace(/"/g, '&quot;')})" 
+                            class="btn btn-success">
+                        <i class="fas fa-check"></i> 确认恢复
+                    </button>
+                    <button onclick="cancelRestore()" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
             document.getElementById('restoreResult').innerHTML = 
-                `<div style="color: red;">❌❌ ${data.error}</div>`;
+                `<div style="color: red;">❌ ${data.error}</div>`;
         }
     } catch (error) {
         document.getElementById('restoreResult').innerHTML = 
-            `<div style="color: red;">❌❌ 恢复失败: ${error}</div>`;
+            `<div style="color: red;">❌ 恢复失败: ${error}</div>`;
     }
 }
 
@@ -916,6 +921,40 @@ function confirmRestore(backupData) {
     document.getElementById('restoreResult').innerHTML = 
         '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
     closeModal('restoreModal');
+}
+
+// 删除配置备份函数
+async function deleteConfigBackup() {
+    const selectedBackup = document.querySelector('input[name="restore_backup"]:checked');
+    
+    if (!selectedBackup) {
+        alert('请选择一个备份文件');
+        return;
+    }
+
+    const backupFilename = selectedBackup.value;
+    
+    if (!confirm(`确定要删除配置备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) {
+        return;
+    }
+    
+    const response = await fetch('/delete_config_backup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+       },
+        body: JSON.stringify({ backup_filename: backupFilename })
+    });
+             const data = await response.json();
+        
+    if (data.success) {
+        alert(`✅ ${data.message}`);
+        closeModal('restoreModal');
+        // 重新加载备份列表
+        loadBackups();
+    } else {
+        alert(`❌ ${data.error}`);
+    }
 }
 
 // 取消恢复
@@ -984,247 +1023,5 @@ document.addEventListener('DOMContentLoaded', function() {
         select.dispatchEvent(new Event('change'));
     });
 });
-
-// 添加键盘快捷键支持
-document.addEventListener('keydown', function(e) {
-    // Ctrl + S 保存配置
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        saveConfig();
-    }
-    
-    // ESC 关闭模态框
-    if (e.key === 'Escape') {
-        const modals = document.querySelectorAll('.modal');
-        modals.forEach(modal => {
-            if (modal.style.display === 'flex') {
-                modal.style.display = 'none';
-            }
-        });
-    }
-});
-
-// 添加表单验证
-function validateForm() {
-    const forms = document.querySelectorAll('.config-form');
-    let isValid = true;
-    
-    forms.forEach(form => {
-        const requiredInputs = form.querySelectorAll('[required]');
-        requiredInputs.forEach(input => {
-            if (!input.value.trim()) {
-                input.style.borderColor = 'red';
-                isValid = false;
-            } else {
-                input.style.borderColor = '';
-            }
-        });
-    });
-    
-    return isValid;
-}
-
-// 添加配置项搜索功能
-function searchConfigItems() {
-    const searchTerm = document.getElementById('configSearch').value.toLowerCase();
-    const formGroups = document.querySelectorAll('.form-group');
-    
-    formGroups.forEach(group => {
-        const label = group.querySelector('label');
-        const description = group.querySelector('small');
-        const text = (label.textContent + ' ' + (description?.textContent || '')).toLowerCase();
-        
-        if (text.includes(searchTerm)) {
-            group.style.display = 'block';
-            group.style.backgroundColor = '#ffffcc';
-        } else {
-            group.style.display = 'none';
-        }
-    });
-}
-
-// 添加配置项过滤功能
-function filterConfigByCategory(category) {
-    const formGroups = document.querySelectorAll('.form-group');
-    
-    formGroups.forEach(group => {
-        if (category === 'all') {
-            group.style.display = 'block';
-            group.style.backgroundColor = '';
-        } else {
-            // 这里需要根据实际情况实现分类过滤
-            group.style.display = 'none';
-        }
-    });
-}
-
-// 添加配置重置功能
-function resetConfigToDefault() {
-    if (confirm('确定要重置所有配置为默认值吗？此操作不可撤销！')) {
-        fetch('/reset_config', {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('配置已重置为默认值');
-                location.reload();
-            } else {
-                alert('重置失败: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('重置失败: ' + error);
-        });
-    }
-}
-
-// 添加配置历史记录功能
-function showConfigHistory() {
-    fetch('/get_config_history')
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // 显示配置历史记录
-            const historyModal = document.createElement('div');
-            historyModal.className = 'modal';
-            historyModal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>配置修改历史</h3>
-                        <span class="close" onclick="this.parentElement.parentElement.style.display='none'">×</span>
-                    </div>
-                    <div class="modal-body">
-                        ${data.history.map(item => `
-                            <div class="history-item">
-                                <strong>${new Date(item.timestamp).toLocaleString()}</strong>
-                                <p>${item.message}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(historyModal);
-            historyModal.style.display = 'flex';
-        }
-    });
-}
-
-// 添加配置导出预览功能
-function previewExport() {
-    const exportAll = document.getElementById('exportAll').checked;
-    let selectedFields = [];
-    
-    if (!exportAll) {
-        const checkboxes = document.querySelectorAll('input[name="export_fields"]:checked');
-        selectedFields = Array.from(checkboxes).map(cb => cb.value);
-    }
-    
-    fetch('/preview_export', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            selected_fields: selectedFields,
-            export_all: exportAll
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // 显示预览
-            const previewModal = document.createElement('div');
-            previewModal.className = 'modal';
-            previewModal.innerHTML = `
-                <div class="modal-content" style="max-width: 800px;">
-                    <div class="modal-header">
-                        <h3>导出预览</h3>
-                        <span class="close" onclick="this.parentElement.parentElement.style.display='none'">×</span>
-                    </div>
-                    <div class="modal-body">
-                        <pre style="max-height: 400px; overflow: auto; background: #f5f5f5; padding: 10px; border-radius: 5px;">
-${JSON.stringify(data.preview, null, 2)}
-                        </pre>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(previewModal);
-            previewModal.style.display = 'flex';
-        }
-    });
-}
-
-// 添加配置比较功能
-function compareConfigs() {
-    // 这里可以实现配置比较功能
-    alert('配置比较功能正在开发中...');
-}
-
-// 添加配置备份自动清理功能
-function cleanupOldBackups() {
-    if (confirm('确定要清理30天前的旧备份吗？此操作不可撤销！')) {
-        fetch('/cleanup_backups', {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(`已清理 ${data.deleted_count} 个旧备份文件`);
-                loadBackupList();
-            } else {
-                alert('清理失败: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('清理失败: ' + error);
-        });
-    }
-}
-
-// 添加配置导入验证功能
-function validateConfigFile(file) {
-    // 这里可以实现配置文件验证逻辑
-    return true;
-}
-
-// 添加配置批量操作功能
-function batchUpdateConfig() {
-    const field = document.getElementById('batchField').value;
-    const operation = document.getElementById('batchOperation').value;
-    const value = document.getElementById('batchValue').value;
-    
-    if (!field || !operation || !value) {
-        alert('请填写完整的批量操作信息');
-        return;
-    }
-    
-    if (confirm(`确定要对所有配置项的 ${field} 字段执行 ${operation} 操作吗？`)) {
-        // 执行批量操作
-        fetch('/batch_update_config', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                field: field,
-                operation: operation,
-                value: value
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('批量操作成功');
-                location.reload();
-            } else {
-                alert('批量操作失败: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('批量操作失败: ' + error);
-        });
-    }
-}
 </script>
 {% endblock %}

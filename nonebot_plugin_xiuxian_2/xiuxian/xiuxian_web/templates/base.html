@@ -451,21 +451,6 @@
             margin-left: auto;
         }
 
-        /* 进度条 */
-        .progress-bar {
-            height: 10px;
-            background: rgba(179, 224, 255, 0.3);
-            border-radius: 5px;
-            overflow: hidden;
-            margin: 0.5rem 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            border-radius: 5px;
-            transition: width 0.5s ease;
-        }
-
         /* 表格样式 */
         table {
             width: 100%;
@@ -492,47 +477,9 @@
             background: rgba(179, 224, 255, 0.1);
         }
 
-        /* 分页 */
-        .pagination {
-            display: flex;
-            gap: 0.5rem;
-            margin: 1.5rem 0;
-            flex-wrap: wrap;
-        }
-
-        .pagination a, .pagination span {
-            padding: 0.5rem 1rem;
-            border-radius: 5px;
-            text-decoration: none;
-            color: var(--text-color);
-            border: 1px solid var(--secondary-color);
-        }
-
-        .pagination a:hover {
-            background: var(--secondary-color);
-        }
-
-        .pagination a.active {
-            background: var(--accent-color);
-            color: white;
-            border-color: var(--accent-color);
-        }
-
         /* 动画效果 */
         .animate-in {
             animation: fadeInUp 0.6s ease;
-        }
-
-        .delay-1 {
-            animation-delay: 0.1s;
-        }
-
-        .delay-2 {
-            animation-delay: 0.2s;
-        }
-
-        .delay-3 {
-            animation-delay: 0.3s;
         }
 
         @keyframes fadeIn {

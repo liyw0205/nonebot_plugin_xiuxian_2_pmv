@@ -6,6 +6,7 @@ import platform
 import psutil
 import time
 from pathlib import Path
+from nonebot.log import logger
 from datetime import datetime
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -475,8 +476,8 @@ def export_config():
         
         # 添加元数据
         export_data['_metadata'] = {
-            'export_time': datetime.now().isoformat(),
-            'exported_fields': list(export_data.keys()) if export_all else selected_fields,
+            'backup_time': datetime.now().isoformat(),
+            'backup_fields': list(export_data.keys()) if export_all else selected_fields,
             'version': update_manager.current_version
         }
         
@@ -556,8 +557,7 @@ def backup_config():
         backup_data['_metadata'] = {
             'backup_time': datetime.now().isoformat(),
             'backup_fields': list(backup_data.keys()) if backup_all else selected_fields,
-            'version': update_manager.current_version,
-            'type': 'config_backup'
+            'version': update_manager.current_version
         }
         
         # 保存备份文件
@@ -629,6 +629,9 @@ def restore_config_backup():
         with open(backup_path, 'r', encoding='utf-8') as f:
             backup_data = json.load(f)
         
+        # 保存元数据
+        metadata = backup_data.get('_metadata', {})
+        
         # 移除元数据字段
         if '_metadata' in backup_data:
             del backup_data['_metadata']
@@ -636,11 +639,67 @@ def restore_config_backup():
         return jsonify({
             "success": True,
             "data": backup_data,
+            "metadata": metadata,
             "message": "配置恢复成功，请点击保存按钮应用配置"
         })
         
     except Exception as e:
         return jsonify({"success": False, "error": f"恢复配置失败: {str(e)}"})
+
+@app.route('/delete_backup', methods=['POST'])
+def delete_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        backup_filename = data.get('backup_filename')
+        
+        if not backup_filename:
+            return jsonify({"success": False, "error": "未指定备份文件"})
+        
+        backup_path = Path() / "data" / "backups" / backup_filename
+        
+        if not backup_path.exists():
+            return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
+        
+        # 删除备份文件
+        backup_path.unlink()
+        
+        return jsonify({
+            "success": True,
+            "message": f"备份文件 {backup_filename} 删除成功"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": f"删除备份失败: {str(e)}"})
+
+@app.route('/delete_config_backup', methods=['POST'])
+def delete_config_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        data = request.get_json()
+        backup_filename = data.get('backup_filename')
+        
+        if not backup_filename:
+            return jsonify({"success": False, "error": "未指定备份文件"})
+
+        backup_path = Path() / "data" / "config_backups" / backup_filename
+        
+        if not backup_path.exists():
+            return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
+        
+        # 删除文件
+        backup_path.unlink()
+        
+        logger.info(f"配置备份文件已删除: {backup_filename}")
+        return jsonify({"success": True, "message": f"配置备份文件删除成功: {backup_filename}"})
+        
+    except Exception as e:
+        logger.error(f"删除配置备份失败: {str(e)}")
+        return jsonify({"success": False, "error": f"删除配置备份失败: {str(e)}"})
 
 @app.route('/database')
 def database():
@@ -1247,19 +1306,19 @@ CONFIG_EDITABLE_FIELDS = {
     "put_bot": {
         "name": "接收消息QQ",
         "description": "负责接收消息的QQ号列表",
-        "type": "list[int]",
+        "type": "list[str]",
         "category": "基础设置"
     },
     "main_bo": {
         "name": "主QQ",
         "description": "负责发送消息的QQ号列表",
-        "type": "list[int]",
+        "type": "list[str]",
         "category": "基础设置"
     },
     "shield_group": {
         "name": "屏蔽群聊",
         "description": "屏蔽的群聊ID列表",
-        "type": "list[int]",
+        "type": "list[str]",
         "category": "群聊设置"
     },
     "response_group": {
@@ -1590,23 +1649,64 @@ def save_config_values(new_values):
                 
                 # 根据类型格式化值
                 if field_type == "list[int]":
+                    # 清理输入：移除所有非数字字符（除了逗号和空格）
                     if isinstance(new_value, str):
-                        if new_value.strip():
-                            formatted_value = f"[{', '.join([x.strip() for x in new_value.split(',')])}]"
+                        # 移除方括号、引号等字符
+                        cleaned_value = re.sub(r'[\[\]\'"\s]', '', new_value)
+                        if cleaned_value:
+                            # 分割并转换为整数列表
+                            try:
+                                int_list = [int(x.strip()) for x in cleaned_value.split(',') if x.strip()]
+                                formatted_value = f"[{', '.join(map(str, int_list))}]"
+                            except ValueError:
+                                formatted_value = "[]"
                         else:
                             formatted_value = "[]"
                     else:
                         formatted_value = str(new_value)
+                
+                elif field_type == "list[str]":
+                    # 清理输入：移除方括号和多余的引号
+                    if isinstance(new_value, str):
+                        # 移除方括号
+                        cleaned_value = re.sub(r'[\[\]]', '', new_value)
+                        # 分割并清理每个元素
+                        str_list = []
+                        for item in cleaned_value.split(','):
+                            item = item.strip()
+                            # 移除两端的引号（单引号或双引号）
+                            item = re.sub(r'^[\'"]|[\'"]$', '', item)
+                            if item:
+                                str_list.append(f'"{item}"')
+                        formatted_value = f"[{', '.join(str_list)}]"
+                    else:
+                        formatted_value = str(new_value)
+                
                 elif field_type == "bool":
                     formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
+                
                 elif field_type == "select":
                     formatted_value = f'"{new_value}"'
+                
                 elif field_type == "int":
-                    formatted_value = str(int(new_value))
+                    try:
+                        formatted_value = str(int(new_value))
+                    except (ValueError, TypeError):
+                        formatted_value = "0"
+                
                 elif field_type == "float":
-                    formatted_value = str(float(new_value))
+                    try:
+                        formatted_value = str(float(new_value))
+                    except (ValueError, TypeError):
+                        formatted_value = "0.0"
+                
                 else:
-                    formatted_value = f'"{new_value}"'
+                    # 字符串类型：确保有引号包围
+                    if not (new_value.startswith('"') and new_value.endswith('"')) and \
+                       not (new_value.startswith("'") and new_value.endswith("'")):
+                        formatted_value = f'"{new_value}"'
+                    else:
+                        formatted_value = new_value
                 
                 # 在文件中查找并替换配置项
                 pattern = rf"self\.{field_name}\s*=\s*.+"
@@ -1630,6 +1730,14 @@ def config_management():
     
     current_config = get_config_values()
     
+    # 预处理列表值用于显示
+    for field_name, value in current_config.items():
+        if field_name in CONFIG_EDITABLE_FIELDS:
+            field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
+            if field_type in ['list[int]', 'list[str]']:
+                # 格式化列表值用于显示
+                current_config[field_name] = format_list_value_for_display(value, field_type)
+    
     # 按分类分组配置项
     config_by_category = {}
     for field_name, field_info in CONFIG_EDITABLE_FIELDS.items():
@@ -1651,6 +1759,28 @@ def config_management():
         config_by_category[category].append(config_item)
     
     return render_template('config.html', config_by_category=config_by_category)
+
+def format_list_value_for_display(value, field_type):
+    """格式化列表值用于显示"""
+    if not value:
+        return ''
+    
+    try:
+        if isinstance(value, str):
+            import ast
+            value = ast.literal_eval(value)
+        
+        if isinstance(value, (list, tuple)):
+            if field_type == 'list[int]':
+                return ', '.join(str(x) for x in value)
+            else:
+                return ', '.join(str(x).strip('"\'') for x in value)
+        else:
+            return str(value)
+    except (ValueError, SyntaxError):
+        # 如果解析失败，返回清理后的值
+        cleaned = str(value).replace('[', '').replace(']', '').replace('"', '').replace("'", '')
+        return cleaned
 
 @app.route('/save_config', methods=['POST'])
 def save_config():
