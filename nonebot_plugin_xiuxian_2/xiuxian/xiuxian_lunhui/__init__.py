@@ -259,6 +259,7 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
         sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
@@ -321,6 +322,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
         xiuxian_impart.convert_stone_to_wishing_stone(user_id)
