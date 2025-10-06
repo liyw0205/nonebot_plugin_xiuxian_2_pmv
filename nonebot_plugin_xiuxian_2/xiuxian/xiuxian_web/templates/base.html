@@ -595,7 +595,6 @@
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
         // 移动端菜单切换
-        document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('mainNav').classList.toggle('active');
         });
         
@@ -634,30 +633,6 @@
             },
             retina_detect: true
         });
-        
-        // 看板娘脚本
-        (function() {
-            const w = window;
-            w.kbn_setting0 = 1;        /*人物ID*/
-            w.kbn_setting1 = 2;        /*衣服ID*/
-            w.kbn_setting2 = true;     /*是否显示关闭按钮*/
-            w.kbn_setting3 = '180x170';/*人物大小*/
-            w.kbn_setting4 = 'left:0'; /*停靠侧:到侧边距离*/
-            w.kbn_setting5 = '160x50'; /*提示框大小*/
-            w.kbn_setting6 = '12px';   /*提示框字体大小*/
-            w.kbn_setting7 = '-20px';  /*提示框Y轴偏移*/
-            w.kbn_setting8 = '21px';   /*工具栏图标大小*/
-            w.kbn_setting9 = '36px';   /*工具栏行高*/
-            w.kbn_setting10 = 'hitokoto.cn'; /*一言API*/
-            
-            // 创建看板娘容器
-            const kbnContainer = document.getElementById('kbn-container');
-            
-            // 加载看板娘脚本
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/gh/IlysvlVEizbr/Live2D@1.9/kbn.js';
-            script.defer = true;
-            document.body.appendChild(script);
             
             // 添加浮动动画到卡片
             document.addEventListener('DOMContentLoaded', function() {

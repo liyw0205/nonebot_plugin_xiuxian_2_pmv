@@ -5,15 +5,21 @@
         <h2>{{ table_info.name }} 数据</h2>
         <p>{{ table_name }}</p>
         
+        <div style="margin-bottom: 20px;">
+            <a href="{{ url_for('database') }}" class="btn btn-info">
+                <i class="fas fa-arrow-left"></i> 返回
+            </a>
+        </div>
+        
         <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
-            <select name="search_field">
-                <option value="">选择搜索字段</option>
+            <select name="search_field" id="searchFieldSelect">
+                <option value="">全字段搜索</option>
                 {% for field in table_info.fields %}
                     <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
                 {% endfor %}
             </select>
             <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
-            <button type="submit" class="btn btn-primary">搜索</button>
+            <button type="submit" class="btn btn-info">搜索</button>
             <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">重置搜索</a>
         </form>
         
@@ -23,44 +29,55 @@
             <form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
                 <input type="hidden" name="search_field" value="{{ search_field or '' }}">
                 <input type="hidden" name="search_value" value="{{ search_value or '' }}">
-                
+        
                 <div class="form-group">
                     <label for="batch_field">选择字段</label>
                     <select id="batch_field" name="batch_field" required>
-                        <option value="">选择要修改的字段</option>
+                        <option value="">请选择要修改的字段</option>
                         {% for field in table_info.fields %}
                             {% if field != table_info.primary_key %}
-                                <option value="{{ field }}">{{ field }}</option>
+                                <option value="{{ field }}" 
+                                        {% if search_field and search_field != '' and search_field == field %}selected{% endif %}>
+                                    {{ field }}
+                                </option>
                             {% endif %}
                         {% endfor %}
                     </select>
+                    <small id="batchFieldHelp" class="form-text text-muted">
+                        {% if search_field and search_field != '' %}
+                            已自动选择搜索字段: <strong>{{ search_field }}</strong>
+                        {% else %}
+                            请选择要批量修改的字段
+                        {% endif %}
+                    </small>
                 </div>
-                
-                <div class="form-group">
-                    <label for="operation">操作类型</label>
-                    <select id="operation" name="operation" required>
-                        <option value="set">替换为</option>
-                        <option value="add">增加</option>
-                        <option value="subtract">减少</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="value">值</label>
-                    <input type="text" id="value" name="value" required>
-                </div>
-                
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="apply_to_all" name="apply_to_all">
-                        应用到整张表（忽略搜索条件）
-                    </label>
-                </div>
-                
-                <button type="submit" class="btn btn-success">执行批量操作</button>
-                <span id="batchResult" style="margin-left: 15px;"></span>
-            </form>
+        
+        <!-- 其他表单字段保持不变 -->
+        <div class="form-group">
+            <label for="operation">操作类型</label>
+            <select id="operation" name="operation" required>
+                <option value="set">替换为</option>
+                <option value="add">增加</option>
+                <option value="subtract">减少</option>
+            </select>
         </div>
+        
+        <div class="form-group">
+            <label for="value">值</label>
+            <input type="text" id="value" name="value" required>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="apply_to_all" name="apply_to_all">
+                应用到整张表（忽略搜索条件）
+            </label>
+        </div>
+        
+        <button type="submit" class="btn btn-success">执行批量操作</button>
+        <span id="batchResult" style="margin-left: 15px;"></span>
+    </form>
+</div>
         
         <div style="overflow-x: auto; margin-top: 20px;">
             <table>
@@ -192,5 +209,68 @@
                 searchValue.disabled = this.checked;
             }
         });
+
+// 页面加载时初始化批量修改字段
+document.addEventListener('DOMContentLoaded', function() {
+    const searchField = "{{ search_field or '' }}";
+    const batchFieldSelect = document.getElementById('batch_field');
+    const batchFieldHelp = document.getElementById('batchFieldHelp');
+    
+    // 如果有搜索字段且不是全字段搜索，自动选择对应的批量修改字段
+    if (searchField && searchField !== '') {
+        const option = batchFieldSelect.querySelector(`option[value="${searchField}"]`);
+        if (option) {
+            option.selected = true;
+            batchFieldHelp.innerHTML = `已自动选择搜索字段: <strong>${searchField}</strong>`;
+        }
+    }
+    
+    // 当选择"应用到整张表"时，检查是否需要选择批量修改字段
+    document.getElementById('apply_to_all')?.addEventListener('change', function() {
+        if (this.checked && batchFieldSelect.value === '') {
+            alert('请先选择要批量修改的字段');
+            this.checked = false;
+        }
+    });
+    
+    // 表单提交前的验证
+    document.getElementById('batchForm')?.addEventListener('submit', function(e) {
+        const applyToAll = document.getElementById('apply_to_all').checked;
+        const batchField = document.getElementById('batch_field').value;
+        const searchField = "{{ search_field or '' }}";
+        
+        // 如果是全字段搜索且没有选择批量修改字段，阻止提交
+        if ((!searchField || searchField === '') && batchField === '') {
+            e.preventDefault();
+            alert('全字段搜索时，请选择要批量修改的字段');
+            return false;
+        }
+        
+        // 如果应用到整张表但未选择批量修改字段，阻止提交
+        if (applyToAll && batchField === '') {
+            e.preventDefault();
+            alert('应用到整张表时，请选择要批量修改的字段');
+            return false;
+        }
+    });
+});
+
+// 搜索字段选择变化时更新帮助文本
+document.getElementById('searchFieldSelect')?.addEventListener('change', function() {
+    const batchFieldSelect = document.getElementById('batch_field');
+    const batchFieldHelp = document.getElementById('batchFieldHelp');
+    
+    if (this.value && this.value !== '') {
+        // 自动选择对应的批量修改字段
+        const option = batchFieldSelect.querySelector(`option[value="${this.value}"]`);
+        if (option) {
+            option.selected = true;
+            batchFieldHelp.innerHTML = `已自动选择搜索字段: <strong>${this.value}</strong>`;
+        }
+    } else {
+        // 全字段搜索时重置帮助文本
+        batchFieldHelp.innerHTML = '请选择要批量修改的字段';
+    }
+});
     </script>
 {% endblock %}

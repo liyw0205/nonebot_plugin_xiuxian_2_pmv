@@ -244,7 +244,6 @@ def execute_sql(db_path, sql, params=None):
     finally:
         conn.close()
 
-# 在get_table_data函数中添加多值搜索支持
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None):
     """获取表数据（分页和搜索）"""
     offset = (page - 1) * per_page
@@ -260,17 +259,39 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     
     # 添加搜索条件 - 支持多值搜索
     if search_field and search_value:
-        # 分割搜索值为多个条件
+        # 单字段搜索逻辑（保持不变）
         values = search_value.split()
         if len(values) > 1:
-            # 多个值使用OR连接
             placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
             sql += f" WHERE ({placeholders})"
             params.extend([f"%{value}%" for value in values])
         else:
-            # 单个值
             sql += f" WHERE {search_field} LIKE ?"
             params.append(f"%{search_value}%")
+    
+    elif search_value:  # 全字段搜索
+        # 获取所有字段
+        tables = get_database_tables(db_path)
+        table_fields = tables.get(table_name, {}).get('fields', [])
+        
+        if table_fields:
+            conditions = []
+            search_params = []
+            
+            # 对每个字段添加LIKE条件
+            for field in table_fields:
+                # 排除主键字段（可选）
+                if field != tables[table_name].get('primary_key'):
+                    conditions.append(f"{field} LIKE ?")
+                    search_params.append(f"%{search_value}%")
+            
+            # 只有当有搜索条件时才添加WHERE子句
+            if conditions:
+                sql += f" WHERE ({' OR '.join(conditions)})"
+                params.extend(search_params)
+            else:
+                # 如果没有可搜索的字段，返回空结果
+                sql += " WHERE 1=0"  # 确保不返回任何结果
     
     # 添加分页
     sql += f" LIMIT ? OFFSET ?"
@@ -279,9 +300,12 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     # 执行查询
     data = execute_sql(db_path, sql, params)
     
-    # 获取总数
+    # 获取总数（需要相应修改）
     count_sql = f"SELECT COUNT(*) FROM {table_name}"
+    count_params = []
+    
     if search_field and search_value:
+        # 单字段搜索的计数逻辑
         values = search_value.split()
         if len(values) > 1:
             placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
@@ -290,8 +314,23 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         else:
             count_sql += f" WHERE {search_field} LIKE ?"
             count_params = [f"%{search_value}%"]
-    else:
-        count_params = None
+    
+    elif search_value:
+        # 全字段搜索的计数逻辑
+        tables = get_database_tables(db_path)
+        table_fields = tables.get(table_name, {}).get('fields', [])
+        
+        if table_fields:
+            conditions = []
+            for field in table_fields:
+                if field != tables[table_name].get('primary_key'):
+                    conditions.append(f"{field} LIKE ?")
+                    count_params.append(f"%{search_value}%")
+            
+            if conditions:
+                count_sql += f" WHERE ({' OR '.join(conditions)})"
+            else:
+                count_sql += " WHERE 1=0"
     
     total_result = execute_sql(db_path, count_sql, count_params)
     total = total_result[0]['COUNT(*)'] if total_result else 0
@@ -851,8 +890,13 @@ def batch_edit(table_name):
     value = request.form.get('value')
     apply_to_all = request.form.get('apply_to_all') == 'on'
     
+    # 验证参数
     if not all([batch_field, operation, value]):
         return jsonify({"success": False, "error": "参数不完整"})
+    
+    # 如果是全字段搜索但未选择批量修改字段
+    if (not search_field or search_field == '') and not batch_field:
+        return jsonify({"success": False, "error": "全字段搜索时请选择要修改的字段"})
     
     # 确定数据库路径
     db_path = IMPART_DB if table_name in get_database_tables(IMPART_DB) else DATABASE
@@ -870,17 +914,36 @@ def batch_edit(table_name):
             params = [value]
         else:
             return jsonify({"success": False, "error": "无效的操作类型"})
-        
-        # 添加WHERE条件（如果不应用到整张表且有搜索条件）
-        if not apply_to_all and search_field and search_value:
-            values = search_value.split()
-            if len(values) > 1:
-                condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
-                sql += f" WHERE ({condition})"
-                params.extend([f"%{v}%" for v in values])
-            else:
-                sql += f" WHERE {search_field} LIKE ?"
-                params.append(f"%{search_value}%")
+    
+    # 添加WHERE条件
+        if not apply_to_all:
+            if search_field and search_value:  # 指定字段搜索
+                values = search_value.split()
+                if len(values) > 1:
+                    condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                    sql += f" WHERE ({condition})"
+                    params.extend([f"%{v}%" for v in values])
+                else:
+                    sql += f" WHERE {search_field} LIKE ?"
+                    params.append(f"%{search_value}%")
+            elif search_value:  # 全字段搜索
+                # 获取所有字段
+                tables = get_database_tables(db_path)
+                table_fields = tables.get(table_name, {}).get('fields', [])
+            
+                if table_fields:
+                    conditions = []
+                    for field in table_fields:
+                        if field != tables[table_name].get('primary_key'):
+                            conditions.append(f"{field} LIKE ?")
+                            params.append(f"%{search_value}%")
+                
+                    # 确保有搜索条件时才添加WHERE
+                    if conditions:
+                        sql += f" WHERE ({' OR '.join(conditions)})"
+                    else:
+                        # 如果没有可搜索的字段，不执行任何操作
+                        return jsonify({"success": False, "error": "没有可搜索的字段"})
         
         # 执行更新
         result = execute_sql(db_path, sql, params)
@@ -888,7 +951,6 @@ def batch_edit(table_name):
         if 'error' in result:
             return jsonify({"success": False, "error": result['error']})
         
-        # 获取受影响的行数
         affected_rows = result.get('affected_rows', 0)
         
         return jsonify({
