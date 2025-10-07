@@ -373,8 +373,8 @@ async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                     await handle_send(bot, event, msg)
                     await two_exp.finish()
                 
-                max_exp_1 = int(exp_1 * 0.01 * min(0.1 * user1_rank, 1))  # 最大获得修为为当前修为的1%同时境界越高获得比例越少
-                max_exp_2 = int(exp_2 * 0.01 * min(0.1 * user1_rank, 1))
+                max_exp_1 = int(exp_1 * 0.001 * min(0.1 * user1_rank, 1))  # 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
+                max_exp_2 = int(exp_2 * 0.001 * min(0.1 * user1_rank, 1))
                 
                 # 随机事件描述
                 event_descriptions = [

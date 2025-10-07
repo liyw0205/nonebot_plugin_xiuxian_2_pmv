@@ -1,6 +1,7 @@
 import random
 import asyncio
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
+from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.utils import number_to, check_user, check_user_type, send_msg_handler
 from ..xiuxian_config import convert_rank
@@ -25,27 +26,33 @@ TOWER_BOSS_CONFIG = {
     }
 }
 
-JINGJIEEXP = {
-    "感气境": [954, 1923, 2917],
-    "练气境": [5832, 7634, 9712],
-    "筑基境": [29145, 58217, 87324],
-    "结丹境": [140112, 155712, 171072],
-    "金丹境": [276288, 342528, 404992],
-    "元神境": [809664, 872448, 935232],
-    "化神境": [1868160, 1992960, 2117760],
-    "炼神境": [4235520, 4485120, 4734720],
-    "返虚境": [9467520, 12003840, 14564160],
-    "大乘境": [30130800, 34987200, 39843600],
-    "虚道境": [59343600, 69093600, 78843600],
-    "斩我境": [117741600, 137341600, 156941600],
-    "遁一境": [313483680, 438691440, 563929200],
-    "至尊境": [1128355200, 1578996000, 2030659200],
-    "微光境": [4061980800, 5685177600, 7308374400],
-    "星芒境": [14619744000, 20457600000, 26295456000],
-    "月华境": [52570860000, 73636980000, 94703100000],
-    "耀日境": [189330000000, 362156000000, 535112000000],
-    "祭道境": [2647500000000, 4742000000000, 13200300000000]
-}
+jinjie_list = [
+    "感气境",
+    "练气境",
+    "筑基境",
+    "结丹境",
+    "金丹境",
+    "元神境",
+    "化神境",
+    "炼神境",
+    "返虚境",
+    "大乘境",
+    "虚道境",
+    "斩我境",
+    "遁一境",
+    "至尊境",
+    "微光境",
+    "星芒境",
+    "月华境",
+    "耀日境",
+    "祭道境",
+    "自在境",
+    "破虚境",
+    "无界境",
+    "混元境",
+    "造化境",
+    "永恒境"
+]
 
 class TowerBattle:
     def __init__(self):
@@ -58,12 +65,13 @@ class TowerBattle:
         
         base_floor = (floor - 1) % 10 + 1
         jj_index = (floor - 1) // 10
-        jj_list = list(JINGJIEEXP.keys())
+        jj_list = jinjie_list
+        exp_rate = random.randint(8, 12)
 
         if jj_index >= len(jj_list) - 1:
             exceed_floor = floor - (len(jj_list) - 1) * 10
             jj = "祭道境"
-            base_exp = JINGJIEEXP[jj][2]
+            base_exp = int(jsondata.level_data()["祭道境圆满"]["power"])
             hundred_layers = exceed_floor // 100
             base_scale = 1.0 + hundred_layers * 0.5
             current_hundred_floor = exceed_floor % 100
@@ -72,14 +80,13 @@ class TowerBattle:
         else:
             jj = jj_list[min(jj_index, len(jj_list) - 1)]
             if base_floor <= 3:
-                stage = "前期"
-                exp = JINGJIEEXP[jj][0]
+                stage = "初期"
             elif base_floor <= 6:
                 stage = "中期"
-                exp = JINGJIEEXP[jj][1]
             else:
                 stage = "圆满"
-                exp = JINGJIEEXP[jj][2]
+            level = f"{jj}{stage}"
+            exp = int(jsondata.level_data()[level]["power"])
             scale = 1.0
 
         boss_info = {

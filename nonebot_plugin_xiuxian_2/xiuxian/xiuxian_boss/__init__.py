@@ -65,6 +65,7 @@ boss_info2 = on_command("世界BOSS列表", aliases={"世界boss列表", "世界
 set_group_boss = on_command("世界BOSS设置", aliases={"世界boss设置", "世界Boss设置", "设置世界BOSS", "设置世界boss", "设置世界Boss"}, priority=13, permission=SUPERUSER, block=True)
 battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐", "讨伐世界BOSS", "讨伐世界boss", "讨伐世界Boss"}, priority=6, block=True)
 boss_help = on_command("世界BOSS帮助", aliases={"世界boss帮助", "世界Boss帮助"}, priority=5, block=True)
+boss_admin = on_command("世界BOSS管理", aliases={"世界boss管理", "世界Boss管理"}, priority=5, block=True)
 boss_delete = on_command("世界BOSS天罚", aliases={"世界boss天罚", "世界Boss天罚", "天罚世界BOSS", "天罚世界boss", "天罚世界Boss"}, permission=SUPERUSER, priority=7, block=True)
 boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全部天罚", "世界Boss全部天罚", "天罚全部世界BOSS", "天罚全部世界boss", "天罚全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
 boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
@@ -74,13 +75,7 @@ challenge_scarecrow = on_command("挑战稻草人", aliases={"挑战稻草人", 
 challenge_training_puppet = on_command("挑战训练傀儡", aliases={"挑战训练傀儡", "挑战训练傀儡"}, priority=6, block=True)
 
 __boss_help__ = f"""
-世界BOSS系统帮助          
-
-【指令大全】
-🔹🔹 生成指令：
-  ▶ 世界BOSS生成 [数量] - 生成随机境界BOSS（超管权限）
-  ▶ 世界BOSS指定生成 [境界] [名称] - 生成指定BOSS（超管权限）
-  ▶ 世界BOSS全部生成 - 一键生成所有境界BOSS（超管权限）
+世界BOSS系统帮助
 
 🔹🔹 查询指令：
   ▶ 查询世界BOSS - 查看全服BOSS列表
@@ -92,11 +87,6 @@ __boss_help__ = f"""
   ▶ 讨伐世界BOSS [编号] - 挑战指定BOSS
   ▶ 挑战稻草人 - 练习战斗技巧（无消耗）
   ▶ 挑战训练傀儡 [境界] [名称] - 自定义训练对手
-
-🔹🔹 管理指令：
-  ▶ 天罚世界BOSS [编号] - 删除指定BOSS（超管权限）
-  ▶ 天罚全部世界BOSS - 清空所有BOSS（超管权限）
-  ▶ 世界BOSS设置 开启/关闭 - 管理群通知（管理员权限）
 
 【特色功能】
 🌟 境界压制系统：高境界打低境界BOSS收益降低
@@ -110,6 +100,20 @@ __boss_help__ = f"""
 ⚠ 世界积分可永久保存，请合理使用
 
 输入具体指令查看详细用法，祝道友斩妖除魔，早日得道！
+""".strip()
+
+__boss_help__2 = f"""
+世界BOSS系统管理
+
+🔹🔹 生成指令：
+  ▶ 世界BOSS生成 [数量] - 生成随机境界BOSS
+  ▶ 世界BOSS指定生成 [境界] [名称] - 生成指定BOSS
+  ▶ 世界BOSS全部生成 - 一键生成所有境界BOSS
+
+🔹🔹 管理指令：
+  ▶ 天罚世界BOSS [编号] - 删除指定BOSS
+  ▶ 天罚全部世界BOSS - 清空所有BOSS
+  ▶ 世界BOSS设置 开启/关闭 - 管理群通知
 """.strip()
 
 @DRIVER.on_startup
@@ -186,7 +190,13 @@ async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
     await handle_send(bot, event, msg)
     await boss_help.finish()
 
-
+@boss_admin.handle(parameterless=[Cooldown(at_sender=False)])
+async def boss_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg = __boss_help__2 
+    await handle_send(bot, event, msg)
+    await boss_admin.finish()
+    
 @boss_delete.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """天罚世界boss"""
@@ -861,11 +871,6 @@ async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg = f"已为本群关闭世界Boss通知!"
         else:
             msg = f"本群未开启世界Boss通知!"
-        await handle_send(bot, event, msg)
-        await set_group_boss.finish()
-        
-    elif mode == '帮助':
-        msg = __boss_help__
         await handle_send(bot, event, msg)
         await set_group_boss.finish()
 

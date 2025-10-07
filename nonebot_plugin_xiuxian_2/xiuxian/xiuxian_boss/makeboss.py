@@ -1,39 +1,39 @@
 import random
+import json
 from pathlib import Path
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.data_source import jsondata
 from .bossconfig import get_boss_config
-import json
 
 config = get_boss_config()
-JINGJIEEXP = {  # 数值为中期和圆满的平均值±5%的随机值
-    "感气境": [954, 1923, 2917],
-    "练气境": [5832, 7634, 9712],
-    "筑基境": [29145, 58217, 87324],
-    "结丹境": [140112, 155712, 171072],
-    "金丹境": [276288, 342528, 404992],
-    "元神境": [809664, 872448, 935232],
-    "化神境": [1868160, 1992960, 2117760],
-    "炼神境": [4235520, 4485120, 4734720],
-    "返虚境": [9467520, 12003840, 14564160],
-    "大乘境": [30130800, 34987200, 39843600],
-    "虚道境": [59343600, 69093600, 78843600],
-    "斩我境": [117741600, 137341600, 156941600],
-    "遁一境": [313483680, 438691440, 563929200],
-    "至尊境": [1128355200, 1578996000, 2030659200],
-    "微光境": [4061980800, 5685177600, 7308374400],
-    "星芒境": [14619744000, 20457600000, 26295456000],
-    "月华境": [52570860000, 73636980000, 94703100000],
-    "耀日境": [189330000000, 362156000000, 535112000000],
-    "祭道境": [2647500000000, 4742000000000, 13200300000000],
-    "自在境": [37227500000000, 44048200000000, 80224700000000],
-    "破虚境": [89340000000000, 159376000000000, 218654000000000],
-    "无界境": [307518000000000, 509738000000000, 664267000000000],
-    "混元境": [893400000000000, 1331790000000000, 2603380000000000],
-    "造化境": [3075180000000000, 4404820000000000, 8022470000000000],
-    "永恒境": [8934000000000000, 13317900000000000, 21865400000000000]
-}
+jinjie_list = [
+    "感气境",
+    "练气境",
+    "筑基境",
+    "结丹境",
+    "金丹境",
+    "元神境",
+    "化神境",
+    "炼神境",
+    "返虚境",
+    "大乘境",
+    "虚道境",
+    "斩我境",
+    "遁一境",
+    "至尊境",
+    "微光境",
+    "星芒境",
+    "月华境",
+    "耀日境",
+    "祭道境",
+    "自在境",
+    "破虚境",
+    "无界境",
+    "混元境",
+    "造化境",
+    "永恒境"
+]
 
-jinjie_list = [k for k, v in JINGJIEEXP.items()]
 sql_message = XiuxianDateManage()  # sql类
 
 def get_boss_jinjie_dict():
@@ -48,8 +48,12 @@ def get_boss_jinjie_dict():
 
 
 def get_boss_exp(boss_jj):
-    if boss_jj in JINGJIEEXP:
-        bossexp = random.choice(JINGJIEEXP[boss_jj])
+    if boss_jj in jinjie_list:
+        stages = random.choice(["初期", "中期", "圆满"])
+        level = f"{boss_jj}{stages}"
+        exp_rate = random.randint(8, 12)
+        exp = int(jsondata.level_data()[level]["power"])
+        bossexp = int(exp * (0.1 * exp_rate))
         bossinfo = {
             '气血': bossexp * config["Boss倍率"]["气血"],
             '总血量': bossexp * config["Boss倍率"]["气血"],
@@ -59,7 +63,6 @@ def get_boss_exp(boss_jj):
         return bossinfo
     else:
         return None
-
 
 def createboss():
     top_user_info = sql_message.get_realm_top1_user() # 改成了境界第一
@@ -111,7 +114,7 @@ def create_all_bosses(max_jj: str = None) -> list:
     
     # 获取所有不超过 max_jj 的境界
     all_jj = [
-        jj for jj in JINGJIEEXP.keys() 
+        jj for jj in jinjie_list
         if jinjie_list.index(jj) <= jinjie_list.index(max_jj)
     ]
     

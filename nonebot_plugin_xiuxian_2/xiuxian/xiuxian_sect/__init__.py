@@ -1252,7 +1252,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_sect_materials(sect_id, sect_stone * 10, 1)
             sql_message.update_user_sect_task(user_id, 1)
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
-            msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{sect_stone}，资材增加：{sect_stone * 10}, 宗门贡献度增加：{int(sect_stone)}"
+            msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
             await handle_send(bot, event, msg)
@@ -1263,7 +1263,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
             if costls > int(user_info['stone']):
                 msg = (
-                    f"道友兴高采烈的出门做任务，结果发现灵石带少了，当前任务所需灵石：{costls},"
+                    f"道友兴高采烈的出门做任务，结果发现灵石带少了，当前任务所需灵石：{number_to(costls)},"
                     f"道友只好原路返回，浪费了一次出门机会，看你这么可怜，就不扣你任务次数了！")
                 await handle_send(bot, event, msg)
                 await sect_task_complete.finish()
@@ -1288,7 +1288,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_sect_materials(sect_id, sect_stone * 10, 1)
             sql_message.update_user_sect_task(user_id, 1)
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
-            msg = f"道友为了完成任务购买宝物消耗灵石：{costls}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{sect_stone}，资材增加：{sect_stone * 10}, 宗门贡献度增加：{int(sect_stone)}"
+            msg = f"道友为了完成任务购买宝物消耗灵石：{number_to(costls)}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
             await handle_send(bot, event, msg)
