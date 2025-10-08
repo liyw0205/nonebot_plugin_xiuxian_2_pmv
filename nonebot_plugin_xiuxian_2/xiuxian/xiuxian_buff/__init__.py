@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.log import logger
 from datetime import datetime
-from nonebot import on_command, on_fullmatch, require
+from nonebot import on_command, on_fullmatch
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
     save_player_info,UserBuffDate, get_main_info_msg, 
@@ -35,8 +35,6 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 two_exp_limit = 3 # 默认双修次数上限，修仙之人一天3次也不奇怪（
-
-two_exp_cd_up = require("nonebot_plugin_apscheduler").scheduler
 
 buffinfo = on_fullmatch("我的功法", priority=25, block=True)
 out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=True)
@@ -80,11 +78,7 @@ __buff_help__ = f"""
   2. 灵田每23小时可收获
 """.strip()
 
-
-
-# 每日0点重置用户宗门任务次数、宗门丹药领取次数
-@two_exp_cd_up.scheduled_job("cron", hour=0, minute=0)
-async def two_exp_cd_up_():
+async def two_exp_cd_up():
     two_exp_cd.re_data()
     logger.opt(colors=True).info(f"<green>双修次数已更新！</green>")
 

@@ -1,4 +1,4 @@
-from nonebot import on_command, require, on_fullmatch
+from nonebot import on_command, on_fullmatch
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -25,9 +25,6 @@ from nonebot.log import logger
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
-impart_re = require("nonebot_plugin_apscheduler").scheduler
-impart_relv = require("nonebot_plugin_apscheduler").scheduler
-
 impart_pk_project = on_fullmatch("投影虚神界", priority=6, block=True)
 impart_pk_go = on_fullmatch("探索虚神界", priority=6, block=True)
 impart_pk_info = on_fullmatch("虚神界信息", priority=6, block=True)
@@ -38,15 +35,12 @@ impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
 impart_top = on_command("虚神界排行榜", priority=8, block=True)
 
-# 每日0点重置用虚神界次数
-@impart_re.scheduled_job("cron", hour=0, minute=0)
-async def impart_re_():
+async def impart_re():
     impart_pk.re_data()
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
 
-@impart_relv.scheduled_job("cron", day_of_week=0, hour=0, minute=0)  # 每周一0点
-async def impart_relv_():
+async def impart_lv():
     """每周调整虚神界等级"""
     logger.opt(colors=True).info(f"<green>开始执行虚神界等级批量调整...</green>")
     

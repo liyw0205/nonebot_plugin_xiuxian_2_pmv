@@ -25,8 +25,6 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
 
-# 定时任务
-resetrefreshnum = require("nonebot_plugin_apscheduler").scheduler
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -275,8 +273,7 @@ def get_work_msg(work_):
     )
 
 # 重置悬赏令刷新次数
-@resetrefreshnum.scheduled_job("cron", hour=0, minute=0)
-async def resetrefreshnum_():
+async def resetrefreshnum():
     sql_message.reset_work_num(count)
     logger.opt(colors=True).info(f"用户悬赏令刷新次数重置成功")
 

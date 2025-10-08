@@ -169,22 +169,6 @@ __level2_help__ = f"""
                  至高
 """.strip()
 
-# 重置每日签到
-@scheduler.scheduled_job("cron", hour=0, minute=0)
-async def xiuxian_sing_():
-    sql_message.sign_remake()
-    logger.opt(colors=True).info(f"<green>每日修仙签到重置成功！</green>")
-
-@scheduler.scheduled_job("cron", hour=0, minute=0)
-async def reset_lottery_participants():
-    lottery_pool.reset_daily()
-    logger.opt(colors=True).info(f"<green>每日借运参与者已重置！</green>")
-    
-@scheduler.scheduled_job("cron", hour=0, minute=0)
-async def reset_stone_limits():
-    stone_limit.reset_limits()
-    logger.opt(colors=True).info(f"<green>每日灵石赠送额度已重置！</green>")
-
 @gfqq.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def gfqq_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3650,44 +3634,6 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await clear_xiangyuan.finish()
 
-@scheduler.scheduled_job("cron", hour=0, minute=0)
-async def reset_xiangyuan_daily():
-    """每日0点清理所有过期仙缘（24小时制）"""
-    for file in XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"):
-        group_id = file.stem.split("_")[1]
-        xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=False)
-        
-        if not xiangyuan_data["gifts"]:
-            continue
-        
-        current_time = datetime.now()
-        refund_count = 0
-        total_refund = 0
-        
-        # 遍历所有仙缘，处理过期的
-        expired_gifts = []
-        for gift_id, gift in xiangyuan_data["gifts"].items():
-            create_time = datetime.strptime(gift["create_time"], "%Y-%m-%d %H:%M:%S")
-            time_diff = (current_time - create_time).total_seconds()
-            
-            if time_diff > 24 * 3600:  # 超过24小时
-                expired_gifts.append(gift_id)
-                
-                # 退还未领取的灵石
-                if gift["remaining_stone"] > 0:
-                    sql_message.update_ls(gift["giver_id"], gift["remaining_stone"], 1)
-                    total_refund += gift["remaining_stone"]
-                    refund_count += 1
-        
-        # 删除过期仙缘
-        for gift_id in expired_gifts:
-            del xiangyuan_data["gifts"][gift_id]
-        
-        # 保存更新后的数据
-        save_xiangyuan_data(group_id, xiangyuan_data)
-        
-        logger.info(f"仙缘系统：已为群{group_id}清理{len(expired_gifts)}个过期仙缘，退还了{number_to(total_refund)}灵石")
-
 __xiangyuan_notes__ = f"""
 【仙缘系统】✨
 ======================
@@ -3724,3 +3670,48 @@ async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg = __xiangyuan_notes__
     await handle_send(bot, event, msg)
     await xiangyuan_help.finish()
+
+async def reset_lottery_participants():
+    lottery_pool.reset_daily()
+    logger.opt(colors=True).info(f"<green>每日借运参与者已重置！</green>")
+    
+async def reset_stone_limits():
+    stone_limit.reset_limits()
+    logger.opt(colors=True).info(f"<green>每日灵石赠送额度已重置！</green>")
+    
+async def reset_xiangyuan_daily():
+    """每日0点清理所有过期仙缘（24小时制）"""
+    for file in XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"):
+        group_id = file.stem.split("_")[1]
+        xiangyuan_data = get_xiangyuan_data(group_id, filter_expired=False)
+        
+        if not xiangyuan_data["gifts"]:
+            continue
+        
+        current_time = datetime.now()
+        refund_count = 0
+        total_refund = 0
+        
+        # 遍历所有仙缘，处理过期的
+        expired_gifts = []
+        for gift_id, gift in xiangyuan_data["gifts"].items():
+            create_time = datetime.strptime(gift["create_time"], "%Y-%m-%d %H:%M:%S")
+            time_diff = (current_time - create_time).total_seconds()
+            
+            if time_diff > 24 * 3600:  # 超过24小时
+                expired_gifts.append(gift_id)
+                
+                # 退还未领取的灵石
+                if gift["remaining_stone"] > 0:
+                    sql_message.update_ls(gift["giver_id"], gift["remaining_stone"], 1)
+                    total_refund += gift["remaining_stone"]
+                    refund_count += 1
+        
+        # 删除过期仙缘
+        for gift_id in expired_gifts:
+            del xiangyuan_data["gifts"][gift_id]
+        
+        # 保存更新后的数据
+        save_xiangyuan_data(group_id, xiangyuan_data)
+        
+        logger.info(f"仙缘系统：已为群{group_id}清理{len(expired_gifts)}个过期仙缘，退还了{number_to(total_refund)}灵石")

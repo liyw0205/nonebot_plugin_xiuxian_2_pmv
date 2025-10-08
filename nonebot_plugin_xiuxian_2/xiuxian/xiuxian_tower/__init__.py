@@ -1,7 +1,6 @@
 import re
 import asyncio
 import json
-from nonebot_plugin_apscheduler import scheduler
 from datetime import datetime
 from nonebot import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
@@ -37,8 +36,6 @@ tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, bl
 tower_help = on_command("通天塔帮助", priority=5, block=True)
 tower_boss_info = on_command("查看通天塔BOSS", aliases={"通天塔BOSS", "查看通天塔boss", "通天塔boss"}, priority=5, block=True)
 
-# 每周一0点重置通天塔层数
-@scheduler.scheduled_job("cron", day_of_week="mon", hour=0, minute=0)
 async def reset_tower_floors():
     tower_data.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")

@@ -43,13 +43,11 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, convert_rank
 from datetime import datetime, timedelta
 from .auction_config import *
-from nonebot import require
 
 # 初始化组件
 items = Items()
 sql_message = XiuxianDateManage()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
-reset_day_num_scheduler = require("nonebot_plugin_apscheduler").scheduler
 clear_expired_baitan = require("nonebot_plugin_apscheduler").scheduler
 rebuild_guishi_index = require("nonebot_plugin_apscheduler").scheduler
 
@@ -229,12 +227,6 @@ use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
-
-# 重置丹药每日使用次数
-@reset_day_num_scheduler.scheduled_job("cron", hour=0, minute=0, )
-async def reset_day_num_scheduler_():
-    sql_message.day_num_reset()
-    logger.opt(colors=True).info(f"<green>每日丹药使用次数重置成功！</green>")
 
 @check_item_effect.handle(parameterless=[Cooldown(at_sender=False)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -4018,7 +4010,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await guishi_take_item.finish()
 
 # 索引重建定时任务
-@rebuild_guishi_index.scheduled_job("cron", hour=3)  # 每天凌晨3点重建索引
+@rebuild_guishi_index.scheduled_job("cron", hour=19)  # 每天19点重建索引
 async def rebuild_guishi_index_():
     """重建鬼市索引"""
     logger.info("开始重建鬼市索引...")

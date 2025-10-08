@@ -6,7 +6,6 @@ from datetime import datetime
 from nonebot import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
 from nonebot.log import logger
-from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import (
     Bot,
     Message,
@@ -32,8 +31,6 @@ illusion_heart = on_command("幻境寻心", aliases={"心境试炼"}, priority=5
 illusion_reset = on_command("重置幻境", permission=SUPERUSER, priority=5, block=True)
 illusion_clear = on_command("清空幻境", permission=SUPERUSER, priority=5, block=True)
 
-# 每日8点重置幻境数据（仅清空玩家数据）
-@scheduler.scheduled_job("cron", hour=8, minute=0)
 async def reset_illusion_data():
     IllusionData.reset_player_data_only()
     logger.opt(colors=True).info("<green>幻境寻心玩家数据已重置</green>")

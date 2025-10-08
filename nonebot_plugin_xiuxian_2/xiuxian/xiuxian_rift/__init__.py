@@ -1,6 +1,6 @@
 import random
 from datetime import datetime, timedelta
-from nonebot import get_bots, get_bot, on_command, require, on_fullmatch
+from nonebot import get_bots, get_bot, on_command, on_fullmatch
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -36,8 +36,6 @@ sql_message = XiuxianDateManage()  # sql类
 cache_help = {}
 group_rift = {}  # dict
 groups = config['open']  # list
-# 定时任务
-set_rift = require("nonebot_plugin_apscheduler").scheduler
 
 set_group_rift = on_command("秘境", priority=4, permission=SUPERUSER, block=True)
 explore_rift = on_fullmatch("探索秘境", priority=5, block=True)
@@ -92,7 +90,6 @@ async def save_rift_():
     logger.opt(colors=True).info(f"<green>rift数据已保存</green>")
 
 # 定时任务生成秘境
-@set_rift.scheduled_job("cron", hour='0,12', minute=0)
 async def scheduled_rift_generation():
     """
     定时任务：每天0,12点触发秘境生成

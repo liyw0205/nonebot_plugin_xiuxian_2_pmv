@@ -53,8 +53,6 @@ buffrankkey = {
 }
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
-resetusertask = require("nonebot_plugin_apscheduler").scheduler
-auto_sect_owner_change = require("nonebot_plugin_apscheduler").scheduler
 upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
 uphppractice = on_command("升级元血修炼", priority=5, block=True)
 upmppractice = on_command("升级灵海修炼", priority=5, block=True)
@@ -91,16 +89,16 @@ sect_disband2 = on_command("确认解散宗门", priority=5, block=True)
 sect_inherit = on_command("继承宗主", priority=5, block=True)
 
 __sect_help__ = f"""
-【宗门系统】🏯🏯
+【宗门系统】🏯
 
-🏛🏛️ 基础指令：
+🏛️ 基础指令：
   • 我的宗门 - 查看当前宗门信息
   • 宗门列表 - 浏览全服宗门
   • 创建宗门 - 消耗{XiuConfig().sect_create_cost}灵石（需境界{XiuConfig().sect_min_level}）
   • 加入宗门 [ID] - 申请加入指定宗门
   • 宗门战力排行 - 查看战力前50的宗门
 
-👑👑 宗主专属：
+👑 宗主专属：
   • 宗门职位变更 [道号] [0-4] - 调整成员职位
     0=宗主 | 1=长老 | 2=亲传 | 3=内门 | 4=外门
   • 宗门改名 [新名称] - 修改宗门名称
@@ -111,33 +109,34 @@ __sect_help__ = f"""
   • 封闭山门 - 关闭宗门并退位为长老(需确认)
   • 解散宗门 - 解散宗门并踢出所有成员(需确认)
 
-📈📈 宗门建设：
+📈 宗门建设：
   • 宗门捐献 - 提升建设度（每{config["等级建设度"]}建设度提升1级修炼上限）
   • 升级攻击/元血/灵海修炼 - 提升对应属性（每级+4%攻/8%血/5%真元）
 
-📚📚 功法传承：
+📚 功法传承：
   • 宗门功法、神通搜寻 - 宗主可消耗资源搜索功法（100次）
   • 学习宗门功法/神通 [名称] - 成员消耗资材学习
   • 宗门功法查看 - 浏览宗门藏书
 
-💊💊 丹房系统：
+💊 丹房系统：
   • 建设宗门丹房 - 开启每日丹药福利
   • 领取宗门丹药 - 获取每日丹药补给
 
-📝📝 宗门任务：
+📝 宗门任务：
   • 宗门任务接取 - 获取任务（每日上限：{config["每日宗门任务次上限"]}次）
   • 宗门任务完成 - 提交任务（CD：{config["宗门任务完成cd"]}秒）
   • 宗门任务刷新 - 更换任务（CD：{config["宗门任务刷新cd"]}秒）
 
-⏰⏰⏰ 自动福利：
+⏰ 福利：
   • 每日{config["发放宗门资材"]["时间"]}点发放{config["发放宗门资材"]["倍率"]}倍建设度资材
   • 职位修为加成：宗主＞长老＞亲传＞内门＞外门＞散修
 
-💡💡 小贴士：
+💡 小贴士：
   1. 外门弟子无法获得修炼资源
   2. 建设度决定宗门整体实力
   3. 每日任务收益随职位提升
   4. 封闭山门后长老可以使用【继承宗主】来继承宗主之位
+  5. 长期不活跃的宗主会降职，长期不活跃宗门自动解散
 """.strip()
 
 # 定时任务每1小时按照宗门贡献度增加资材
@@ -151,9 +150,8 @@ async def materialsupdate_():
 
     logger.opt(colors=True).info(f"<green>已更新所有宗门的资材和战力</green>")
 
-# 每日8点重置用户宗门任务次数、宗门丹药领取次数
-@resetusertask.scheduled_job("cron", hour=8, minute=0)
-async def resetusertask_():
+# 重置用户宗门任务次数、宗门丹药领取次数
+async def resetusertask():
     sql_message.sect_task_reset()
     sql_message.sect_elixir_get_num_reset()
     all_sects = sql_message.get_all_sects_id_scale()
@@ -169,8 +167,7 @@ async def resetusertask_():
                 sql_message.update_sect_materials(sect_id=sect_info['sect_id'], sect_materials=elixir_room_cost, key=2)
     logger.opt(colors=True).info(f"<green>已重置所有宗门任务次数、宗门丹药领取次数，已扣除丹房维护费</green>")
 
-# 定时任务每6小时自动检测并处理宗门状态
-@auto_sect_owner_change.scheduled_job("interval", hours=6)
+# 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
     logger.info("⏳ 开始检测并处理宗门状态")
     
@@ -221,14 +218,23 @@ async def auto_handle_inactive_sect_owners():
                     candidates = [m for m in sorted_members if m['sect_position'] != 0]
                     logger.info(f"符合条件的候选人数量：{len(candidates)}")
                     
-                    if not candidates:
-                        logger.info("没有符合条件的继承人，执行解散操作")
+                    # 检查候选人活跃状态：必须最近30天内有活跃
+                    active_candidates = []
+                    for candidate in candidates:
+                        last_active = sql_message.get_last_check_info_time(candidate['user_id'])
+                        if last_active and (datetime.now() - last_active).days <= 30:
+                            active_candidates.append(candidate)
+                    
+                    logger.info(f"活跃候选人数量：{len(active_candidates)}")
+                    
+                    if not active_candidates:
+                        logger.info("没有活跃的继承人，执行解散操作")
                         sql_message.delete_sect(sect_id)
                         logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
                         continue
                         
-                    # 选择贡献最高的候选人
-                    new_owner = candidates[0]
+                    # 选择贡献最高的活跃候选人
+                    new_owner = active_candidates[0]
                     logger.info(f"选定继承人：{new_owner['user_name']}")
                     
                     # 执行继承
@@ -261,6 +267,17 @@ async def auto_handle_inactive_sect_owners():
                 if offline_days < 30:
                     logger.info("宗主活跃时间在30天内，跳过处理")
                     continue
+                
+                # 获取所有成员
+                members = sql_message.get_all_users_by_sect_id(sect_id)
+                logger.info(f"宗门成员总数：{len(members)}人")
+                
+                # 检查宗门成员数量
+                if len(members) == 1:
+                    logger.info("宗门只有宗主一人，执行解散操作")
+                    sql_message.delete_sect(sect_id)
+                    logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                    continue
                     
                 # 获取宗主信息
                 user_info = sql_message.get_user_info_with_id(owner_id)
@@ -270,7 +287,7 @@ async def auto_handle_inactive_sect_owners():
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
                 
-                # 执行降位处理
+                # 执行降位处理（有多名成员时）
                 sql_message.update_sect_join_status(sect_id, 0)  # 关闭宗门加入
                 sql_message.update_sect_closed_status(sect_id, 1)  # 设置封闭状态
                 sql_message.update_usr_sect(owner_id, sect_id, 1)  # 降为长老
@@ -1095,7 +1112,7 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sect_id, sect_name, sect_scale, user_name, member_count = sect
         if user_name is None:
             user_name = "暂无"
-        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门建设度：{number_to(sect_scale)}\n成员数：{member_count}")
+        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门建设度：{number_to(sect_scale)}\n成员数：{member_count}\n")
 
     await send_msg_handler(bot, event, '宗门列表', bot.self_id, msg_list)
     await sect_list.finish()

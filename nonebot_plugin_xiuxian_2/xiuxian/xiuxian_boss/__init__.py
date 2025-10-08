@@ -43,8 +43,7 @@ from ..xiuxian_utils.utils import (
 from .boss_limit import boss_limit
 from .. import DRIVER
 # boss定时任务
-require('nonebot_plugin_apscheduler')
-from nonebot_plugin_apscheduler import scheduler
+scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 conf_data = JsonConfig().read_data()
 config = get_boss_config()
@@ -172,16 +171,9 @@ async def save_boss_():
     old_boss_info.save_boss(group_boss)
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
-@DRIVER.on_startup
 async def set_boss_limits_reset():
-    # 每日0点重置积分和灵石上限
-    scheduler.add_job(
-        boss_limit.reset_limits,
-        'cron',
-        hour=0,
-        minute=0,
-        id="daily_boss_limit_reset"
-    )
+    boss_limit.reset_limits()
+    logger.opt(colors=True).info(f"<green>仙途奇缘重置成功！</green>")
 
 @boss_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
