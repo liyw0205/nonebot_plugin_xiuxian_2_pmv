@@ -250,6 +250,7 @@ crazy_thursday = on_command("疯狂星期四", aliases={"周四", "肯德基", "
 funny_story = on_command("讲个段子", aliases={"段子", "来段搞笑的", "趣事", "幽默"}, priority=30, block=True)
 love_sentence = on_command("土味情话", aliases={"情话", "土味", "表白", "说情话"}, priority=30, block=True)
 fortune_command = on_command("今日运势", aliases={"运势", "占卜", "算命", "卜卦", "求签"}, priority=30, block=True)
+interaction_command = on_command("互动", priority=30, block=True)
 
 # 根据时间获取不同的问候语
 def get_morning_message_by_time(count):
@@ -904,3 +905,56 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     )
     
     await handle_send(bot, event, fortune_message)
+
+@interaction_command.handle()
+async def handle_interaction(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理互动命令，显示所有可用命令"""
+    
+    # 创建命令分类列表
+    command_categories = {
+        "问候类": [
+            "早安 - 开启新的一天修行",
+            "晚安 - 结束一天的修炼",
+            "你好 - 与道友打招呼",
+            "再见 - 与道友道别"
+        ],
+        "日常类": [
+            "吃饭 - 讨论灵食美味",
+            "休息 - 建议适当休憩",
+            "工作 - 谈论劳作修行",
+            "学习 - 探讨修炼心得"
+        ],
+        "娱乐类": [
+            "讲个笑话 - 轻松一笑",
+            "讲个段子 - 幽默趣事",
+            "土味情话 - 修仙版情话",
+            "疯狂星期四 - 修仙者的美食日"
+        ],
+        "查询类": [
+            "时间 - 查看当前时辰",
+            "天气 - 了解天象气候",
+            "今日运势 - 占卜每日运势",
+            "你好吗 - 关心道友近况"
+        ],
+        "情感类": [
+            "可爱 - 夸赞道友可爱",
+            "谢谢 - 表达感谢之情",
+            "加油 - 鼓励道友修炼"
+        ],
+        "帮助类": [
+            "互动 - 查看本帮助信息"
+        ]
+    }
+    
+    # 构建回复消息
+    message = "✨ 可用互动命令列表 ✨\n\n"
+    
+    for category, commands in command_categories.items():
+        message += f"【{category}】\n"
+        for cmd in commands:
+            message += f"  • {cmd}\n"
+        message += "\n"
+    
+    message += "💡 提示：每个命令都有多个别名，如'早安'也可用'早上好''早啊'等触发"
+    
+    await handle_send(bot, event, message)

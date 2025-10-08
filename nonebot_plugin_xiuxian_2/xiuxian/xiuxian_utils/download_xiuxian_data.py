@@ -160,21 +160,18 @@ class UpdateManager:
             return False, f"下载失败: {str(e)}"
 
     def _merge_directories(self, source_dir, target_dir):
-        """合并两个目录，保留目标目录中的现有文件，用源目录中的文件覆盖同名文件"""
+        """安全的目录合并 - 只覆盖同名文件，不删除额外文件"""
         if not target_dir.exists():
             target_dir.mkdir(parents=True, exist_ok=True)
         
         for item in source_dir.iterdir():
             target_item = target_dir / item.name
             if item.is_dir():
-                # 递归处理子目录
+                # 递归处理子目录，但确保目标目录存在
                 self._merge_directories(item, target_item)
             else:
                 # 确保目标目录存在
                 target_item.parent.mkdir(parents=True, exist_ok=True)
-                # 覆盖文件
-                if target_item.exists():
-                    os.remove(target_item)
                 shutil.copy2(item, target_item)
 
     def extract_update(self, archive_path, backup=True):
