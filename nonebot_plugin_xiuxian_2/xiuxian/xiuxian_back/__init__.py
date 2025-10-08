@@ -5641,7 +5641,7 @@ async def chakan_wupin_(
     await send_msg_handler(bot, event, title, bot.self_id, final_msg)
     await chakan_wupin.finish()
 
-@main_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@main_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
 async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """我的背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -5685,7 +5685,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await send_msg_handler(bot, event, '背包', bot.self_id, final_msg)
     await main_back.finish()
 
-@yaocai_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@yaocai_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
 async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """药材背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -5729,7 +5729,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg)
     await yaocai_back.finish()
 
-@danyao_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@danyao_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
 async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """丹药背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -5773,7 +5773,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg)
     await danyao_back.finish()
 
-@my_equipment.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@my_equipment.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
 async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看我的装备及其详细信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -5817,7 +5817,7 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg)
     await my_equipment.finish()
 
-@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
 async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """药材背包详情版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

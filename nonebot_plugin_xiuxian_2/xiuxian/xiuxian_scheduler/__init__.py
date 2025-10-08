@@ -7,6 +7,7 @@ from ..xiuxian_boss import set_boss_limits_reset
 from ..xiuxian_buff import two_exp_cd_up
 from ..xiuxian_Illusion import reset_illusion_data
 from ..xiuxian_impart_pk import impart_re, impart_lv
+from ..xiuxian_Interactive import reset_data_by_time
 from ..xiuxian_rift import scheduled_rift_generation
 from ..xiuxian_sect import resetusertask, auto_handle_inactive_sect_owners
 from ..xiuxian_tower import reset_tower_floors
@@ -56,3 +57,4 @@ async def _():  # 每周一3点
 async def _():  # 每天0/12点5分
     await scheduled_rift_generation()  # 重置秘境
     await auto_handle_inactive_sect_owners()  # 处理宗门状态
+    await reset_data_by_time()  # 处理早/晚数据
