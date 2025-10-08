@@ -6,6 +6,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, List
 from nonebot import on_command, require, on_fullmatch
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -67,6 +68,7 @@ BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
 ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
 MIN_PRICE = 600000
 MAX_QUANTITY = 10
+MERGE_FANGSHI_TO_XIANSHI = True  # 是否启用自动合并
 GUISHI_TYPES = ["药材", "装备", "技能"]
 GUISHI_BAITAN_START_HOUR = 18  # 18点开始
 GUISHI_BAITAN_END_HOUR = 8     # 次日8点结束
@@ -200,6 +202,7 @@ my_shop = on_command("我的坊市", priority=5, permission=GROUP, block=True)
 shop_added_by_admin = on_command("系统坊市上架", priority=5, permission=SUPERUSER, block=True)
 shop_remove_by_admin = on_command("系统坊市下架", priority=5, permission=SUPERUSER, block=True)
 shop_off_all = on_fullmatch("清空坊市", priority=3, permission=SUPERUSER, block=True)
+merge_fangshi_to_xianshi = on_fullmatch("合并坊市", priority=3, permission=SUPERUSER, block=True)
 
 # === 鬼市系统 ===
 # 鬼市命令
@@ -329,6 +332,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔸 坊市购买 编号 [数量] - 购买物品
 🔸 坊市下架 编号 - 下架自己的物品
 🔸 我的坊市 [页码] - 查看自己上架的物品
+  ▶ 合并坊市：每周一3点坊市物品自动合并到仙肆
 """.strip(),
         "鬼市": """
 【鬼市帮助】（匿名交易）
@@ -5980,3 +5984,227 @@ async def check_user_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     await send_msg_handler(bot, event, '装备检测', bot.self_id, result_msg)
     await check_user_equipment.finish()
+
+def get_all_group_fangshi_data() -> Dict[str, Dict]:
+    """获取所有群的坊市数据"""
+    all_fangshi_data = {}
+    
+    # 遍历所有群坊市文件
+    for group_file in FANGSHI_DATA_PATH.glob("坊市索引_*.json"):
+        group_id = group_file.stem.split("_")[1]
+        
+        try:
+            with open(group_file, "r", encoding="utf-8") as f:
+                index_data = json.load(f)
+                
+            # 获取该群的所有类型物品
+            group_items = {}
+            for item_type in ITEM_TYPES:
+                type_file = FANGSHI_DATA_PATH / f"坊市_{group_id}_{item_type}.json"
+                if type_file.exists():
+                    with open(type_file, "r", encoding="utf-8") as f:
+                        type_items = json.load(f)
+                    group_items[item_type] = type_items
+            
+            all_fangshi_data[group_id] = {
+                "index": index_data,
+                "items": group_items
+            }
+            
+        except Exception as e:
+            logger.error(f"读取群 {group_id} 坊市数据失败: {e}")
+    
+    return all_fangshi_data
+
+def merge_fangshi_items_to_xianshi(fangshi_data: Dict[str, Dict]) -> Dict[str, List]:
+    """将坊市物品合并到仙肆，返回合并结果统计"""
+    merge_results = {
+        "success": 0,
+        "failed": 0,
+        "skipped": 0,
+        "details": []
+    }
+    
+    # 获取当前仙肆索引和数据
+    xianshi_index = get_xianshi_index()
+    xianshi_type_data = {}
+    for item_type in ITEM_TYPES:
+        xianshi_type_data[item_type] = get_xianshi_type_data(item_type)
+    
+    # 遍历所有群的物品
+    for group_id, group_data in fangshi_data.items():
+        group_index = group_data["index"]
+        group_items = group_data["items"]
+        
+        for fangshi_id, item_info in group_index.get("items", {}).items():
+            item_type = item_info["type"]
+            
+            # 跳过系统物品（user_id=0）
+            if item_info.get("user_id") == 0:
+                merge_results["skipped"] += 1
+                continue
+            
+            # 获取物品详细信息
+            if item_type not in group_items or fangshi_id not in group_items[item_type]:
+                merge_results["failed"] += 1
+                merge_results["details"].append(f"群{group_id} 物品{fangshi_id}: 数据不完整")
+                continue
+            
+            item_data = group_items[item_type][fangshi_id]
+            
+            # 检查物品类型是否允许
+            if item_type not in ITEM_TYPES:
+                merge_results["skipped"] += 1
+                merge_results["details"].append(f"群{group_id} {item_data['name']}: 类型{item_type}不允许")
+                continue
+            
+            # 检查禁止交易的物品
+            if str(item_data["goods_id"]) in BANNED_ITEM_IDS:
+                merge_results["skipped"] += 1
+                merge_results["details"].append(f"群{group_id} {item_data['name']}: 禁止交易")
+                continue
+            
+            # 生成新的仙肆ID
+            existing_ids = set(xianshi_index["items"].keys())
+            xianshi_id = generate_unique_id(existing_ids)
+            
+            try:
+                # 添加到仙肆索引
+                xianshi_index["items"][xianshi_id] = {
+                    "type": item_type,
+                    "user_id": item_info["user_id"],
+                    "source_group": group_id,
+                    "source_id": fangshi_id
+                }
+                
+                # 添加到仙肆类型数据
+                xianshi_type_data[item_type][xianshi_id] = {
+                    "id": xianshi_id,
+                    "goods_id": item_data["goods_id"],
+                    "name": item_data["name"],
+                    "type": item_type,
+                    "price": item_data["price"],
+                    "quantity": item_data.get("quantity", 1),
+                    "user_id": item_info["user_id"],
+                    "user_name": item_data["user_name"],
+                    "desc": item_data.get("desc", ""),
+                    "source": f"坊市(群{group_id})"
+                }
+                
+                merge_results["success"] += 1
+                merge_results["details"].append(f"群{group_id} {item_data['name']}: 成功合并")
+                
+            except Exception as e:
+                merge_results["failed"] += 1
+                merge_results["details"].append(f"群{group_id} {item_data['name']}: 合并失败 - {str(e)}")
+    
+    # 保存更新后的仙肆数据
+    save_xianshi_index(xianshi_index)
+    for item_type in ITEM_TYPES:
+        save_xianshi_type_data(item_type, xianshi_type_data[item_type])
+    
+    return merge_results
+
+def clear_fangshi_after_merge(fangshi_data: Dict[str, Dict]):
+    """合并后清空坊市数据"""
+    for group_id in fangshi_data.keys():
+        # 清空索引
+        save_fangshi_index(group_id, {"next_id": 1, "items": {}})
+        
+        # 清空所有类型数据
+        for item_type in ITEM_TYPES:
+            save_fangshi_type_data(group_id, item_type, {})
+        
+        logger.info(f"已清空群 {group_id} 的坊市数据")
+
+async def process_fangshi_to_xianshi_merge():
+    """处理坊市到仙肆的合并流程"""
+    if not MERGE_FANGSHI_TO_XIANSHI:
+        return
+    
+    logger.info("开始自动合并坊市到仙肆...")
+    
+    # 获取所有坊市数据
+    all_fangshi_data = get_all_group_fangshi_data()
+    if not all_fangshi_data:
+        logger.info("没有找到任何坊市数据")
+        return
+    
+    # 合并到仙肆
+    merge_results = merge_fangshi_items_to_xianshi(all_fangshi_data)
+    
+    # 清空坊市
+    clear_fangshi_after_merge(all_fangshi_data)
+    
+    # 记录结果
+    logger.info(
+        f"坊市合并完成: 成功{merge_results['success']}, "
+        f"失败{merge_results['failed']}, "
+        f"跳过{merge_results['skipped']}"
+    )
+    
+    if merge_results["success"] > 0:
+        notify_msg = (
+            f"☆------坊市合并完成------☆\n"
+            f"成功合并: {merge_results['success']}件物品\n"
+            f"合并失败: {merge_results['failed']}件\n"
+            f"跳过物品: {merge_results['skipped']}件\n"
+            f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        logger.info(notify_msg)
+
+@merge_fangshi_to_xianshi.handle()
+async def merge_fangshi_to_xianshi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """手动合并坊市到仙肆（管理员命令）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    msg = "开始手动合并所有群坊市到仙肆，请稍候..."
+    await handle_send(bot, event, msg)
+    
+    # 获取所有坊市数据
+    all_fangshi_data = get_all_group_fangshi_data()
+    if not all_fangshi_data:
+        msg = "没有找到任何坊市数据！"
+        await handle_send(bot, event, msg)
+        await merge_fangshi_to_xianshi.finish()
+    
+    # 显示找到的群数量
+    msg = f"找到 {len(all_fangshi_data)} 个群的坊市数据，开始合并..."
+    await handle_send(bot, event, msg)
+    
+    # 合并到仙肆
+    merge_results = merge_fangshi_items_to_xianshi(all_fangshi_data)
+    
+    # 清空坊市
+    clear_fangshi_after_merge(all_fangshi_data)
+    
+    # 构建结果消息
+    result_msg = [
+        f"☆------坊市合并结果------☆",
+        f"成功合并: {merge_results['success']} 件物品",
+        f"合并失败: {merge_results['failed']} 件",
+        f"跳过物品: {merge_results['skipped']} 件",
+        f"涉及群组: {len(all_fangshi_data)} 个"
+    ]
+    
+    # 添加详细结果（最多显示10条）
+    if merge_results['details']:
+        result_msg.append("\n☆------详细结果------☆")
+        for detail in merge_results['details'][:10]:
+            result_msg.append(detail)
+        
+        if len(merge_results['details']) > 10:
+            result_msg.append(f"...等共{len(merge_results['details'])}条记录")
+    
+    result_msg.append("\n☆------说明------☆")
+    result_msg.append("1. 已自动清空所有群的坊市数据")
+    result_msg.append("2. 合并的物品可在仙肆中查看和购买")
+    
+    await send_msg_handler(bot, event, '坊市合并', bot.self_id, result_msg)
+    await merge_fangshi_to_xianshi.finish()
+
+async def auto_merge_fangshi_to_xianshi():
+    """每周一0点自动合并坊市到仙肆"""
+    await process_fangshi_to_xianshi_merge()
+

@@ -1,5 +1,7 @@
 from nonebot import require
+from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_back import auto_merge_fangshi_to_xianshi
 from ..xiuxian_base import reset_lottery_participants, reset_stone_limits, reset_xiangyuan_daily
 from ..xiuxian_boss import set_boss_limits_reset
 from ..xiuxian_buff import two_exp_cd_up
@@ -45,6 +47,10 @@ async def _():  # 每天8点
 async def _():  # 每周一0点
     await impart_lv()  # 深入虚神界
     await reset_tower_floors()  # 重置通天塔层数
+
+@scheduler.scheduled_job("cron", day_of_week=0, hour=3, minute=0)
+async def _():  # 每周一3点
+    await auto_merge_fangshi_to_xianshi()  # 合并坊市到仙肆
     
 @scheduler.scheduled_job("cron", hour='0,12', minute=5)
 async def _():  # 每天0/12点5分
