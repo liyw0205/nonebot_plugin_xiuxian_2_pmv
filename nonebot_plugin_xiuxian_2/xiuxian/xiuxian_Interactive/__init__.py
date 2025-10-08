@@ -1,4 +1,5 @@
 from nonebot import on_command
+from .. import NICKNAME
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
@@ -6,13 +7,15 @@ from nonebot.adapters.onebot.v11 import (
     PrivateMessageEvent,
     MessageSegment
 )
-from ..xiuxian_utils.utils import handle_send, check_user
+from ..xiuxian_utils.utils import handle_send, check_user, number_to
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
 from datetime import datetime
 import json
 import os
 from pathlib import Path
+sql_message = XiuxianDateManage()
 
 # 创建数据存储目录
 DATA_PATH = Path(__file__).parent / "morning_night_data"
@@ -238,8 +241,8 @@ thanks_command = on_command("谢谢", aliases={"多谢", "感谢", "thx", "谢�
 bye_command = on_command("再见", aliases={"拜拜", "再会", "bye", "goodbye", "告辞", "后会有期"}, priority=30, block=True)
 how_are_you = on_command("你好吗", aliases={"最近怎么样", "怎么样", "howareyou", "近来可好", "别来无恙"}, priority=30, block=True)
 weather_command = on_command("天气", aliases={"今天天气", "天气预报", "天象", "气象"}, priority=30, block=True)
-time_command = on_command("时间", aliases={"现在几点", "几点钟", "当前时间", "时辰", "什么时辰了"}, priority=30, block=True)
-eat_command = on_command("吃饭", aliases={"吃什么", "饿了", "干饭", "用膳", "进食"}, priority=30, block=True)
+time_command = on_command("时间", aliases={"现在几点", "几点钟", "当前时间", "几点了", "时辰", "什么时辰了"}, priority=30, block=True)
+eat_command = on_command("吃饭", aliases={"饿了", "干饭", "用膳", "进食"}, priority=30, block=True)
 study_command = on_command("学习", aliases={"修炼", "用功", "study", "修行", "练功"}, priority=30, block=True)
 work_command = on_command("工作", aliases={"上班", "打工", "work", "劳作", "当值"}, priority=30, block=True)
 rest_command = on_command("休息", aliases={"歇会", "放松", "relax", "小憩", "休憩"}, priority=30, block=True)
@@ -250,7 +253,68 @@ crazy_thursday = on_command("疯狂星期四", aliases={"周四", "肯德基", "
 funny_story = on_command("讲个段子", aliases={"段子", "来段搞笑的", "趣事", "幽默"}, priority=30, block=True)
 love_sentence = on_command("土味情话", aliases={"情话", "土味", "表白", "说情话"}, priority=30, block=True)
 fortune_command = on_command("今日运势", aliases={"运势", "占卜", "算命", "卜卦", "求签"}, priority=30, block=True)
+licking_dog_diary = on_command("舔狗日记", aliases={"舔狗", "舔日记", "今日舔狗"}, priority=30, block=True)
+what_to_eat = on_command("今天吃什么", aliases={"吃什么", "吃啥", "推荐美食", "美食推荐"}, priority=30, block=True)
+give_exp_command = on_command("给点修为", aliases={"赏点修为", "施舍点修为", "求点修为"}, priority=30, block=True)
+give_stone_command = on_command("给点灵石", aliases={"赏点灵石", "施舍点灵石", "求点灵石"}, priority=30, block=True)
 interaction_command = on_command("互动", priority=30, block=True)
+
+GIVE_DATA_PATH = DATA_PATH / "give_data.json"
+def load_give_data():
+    if GIVE_DATA_PATH.exists():
+        with open(GIVE_DATA_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        return {
+            "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
+            "stone_users": {},  # 存储领取灵石的用户ID和日期
+            "exp_users": {}     # 存储领取修为的用户ID和日期
+        }
+def save_give_data(data):
+    with open(GIVE_DATA_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def has_user_received_today(user_id, reward_type):
+    """检查用户今天是否已经获得过指定的给予
+    reward_type: 'stone' 灵石, 'exp' 修为
+    """
+    data = load_give_data()
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # 检查是否需要重置日期
+    if data["last_reset_date"] != current_date:
+        data["last_reset_date"] = current_date
+        data["stone_users"] = {}
+        data["exp_users"] = {}
+        save_give_data(data)
+        return False
+    
+    if reward_type == 'stone':
+        user_data = data["stone_users"].get(str(user_id))
+    else:  # exp
+        user_data = data["exp_users"].get(str(user_id))
+        
+    return user_data == current_date
+
+def mark_user_received_today(user_id, reward_type):
+    """标记用户今天已经获得过指定的给予
+    reward_type: 'stone' 灵石, 'exp' 修为
+    """
+    data = load_give_data()
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # 确保日期是最新的
+    if data["last_reset_date"] != current_date:
+        data["last_reset_date"] = current_date
+        data["stone_users"] = {}
+        data["exp_users"] = {}
+    
+    if reward_type == 'stone':
+        data["stone_users"][str(user_id)] = current_date
+    else:  # exp
+        data["exp_users"][str(user_id)] = current_date
+        
+    save_give_data(data)
 
 # 根据时间获取不同的问候语
 def get_morning_message_by_time(count):
@@ -385,72 +449,72 @@ def get_time_period(hour):
 
 # 所有消息数组
 CUTE_MESSAGES = [
-    "道友谬赞了~ 你也很可爱呢！",
-    "嘿嘿，被夸可爱了，有点不好意思呢~",
-    "在修仙界，可爱也是一种道心境界呢！",
-    "谢谢道友夸奖，愿你今日道心澄明~",
-    "(*/ω＼*) 道友突然这么说，让人家有点害羞呢",
-    "可爱？道友过奖了，不过是修炼时的一点灵气外泄罢了~",
-    "道友这么说，我的法器都要害羞得发光了呢！",
-    "在修仙界，可爱可是很重要的天赋哦！",
-    "谢谢夸奖~ 不过比起可爱，我更希望道友夸我修为高深呢",
-    "道友嘴真甜，是不是偷吃了蜜糖灵果？",
-    "可爱捏~ 道友也很萌萌哒呢！",
-    "被夸可爱了，今天修炼都要更有动力了！",
-    "道友这么说，我的本命法宝都要开心得旋转了~",
-    "在下一介修士，何德何能受此夸奖~",
-    "道友过誉了，不过是皮相而已，修行重在内心~",
-    "谢谢~ 不过修仙之人当以修为论高低，可爱只是附加呢",
-    "道友这么会说话，一定很受灵兽欢迎吧！",
-    "被夸可爱了，感觉灵气都运转得更顺畅了呢~",
-    "道友真是慧眼识珠呢！",
-    "嘿嘿，偷偷告诉你，我每天都有用灵气保养哦~"
+    f"道友谬赞了~ {NICKNAME}觉得你也很可爱呢！",
+    f"嘿嘿，被夸可爱了，{NICKNAME}有点不好意思呢~",
+    f"在修仙界，可爱也是一种道心境界呢！{NICKNAME}是这么认为的",
+    f"谢谢道友夸奖，{NICKNAME}愿你今日道心澄明~",
+    f"(*/ω＼＼*) 道友突然这么说，让{NICKNAME}有点害羞呢",
+    f"可爱？道友过奖了，{NICKNAME}不过是修炼时的一点灵气外泄罢了~",
+    f"道友这么说，{NICKNAME}的法器都要害羞得发光了呢！",
+    f"在修仙界，可爱可是很重要的天赋哦！{NICKNAME}这么觉得",
+    f"谢谢夸奖~ 不过比起可爱，{NICKNAME}更希望道友夸我修为高深呢",
+    f"道友嘴真甜，是不是偷吃了{NICKNAME}的蜜糖灵果？",
+    f"可爱捏~ {NICKNAME}也觉得道友萌萌哒呢！",
+    f"被夸可爱了，{NICKNAME}今天修炼都要更有动力了！",
+    f"道友这么说，{NICKNAME}的本命法宝都要开心得旋转了~",
+    f"{NICKNAME}一介修士，何德何能受此夸奖~",
+    f"道友过誉了，{NICKNAME}不过是皮相而已，修行重在内心~",
+    f"谢谢~ 不过修仙之人当以修为论高低，{NICKNAME}觉得可爱只是附加呢",
+    f"道友这么会说话，一定很受{NICKNAME}的灵兽欢迎吧！",
+    f"被夸可爱了，{NICKNAME}感觉灵气都运转得更顺畅了呢~",
+    f"道友真是慧眼识珠呢！{NICKNAME}很开心",
+    f"嘿嘿，{NICKNAME}偷偷告诉你，我每天都有用灵气保养哦~"
 ]
 
 HELLO_MESSAGES = [
-    "道友你好！今日可要一起探讨修仙心得？",
-    "你好呀~ 看来又有一位道友踏上修仙之路了！",
-    "嗨！道友今日气色不错，想必修为有所精进吧~",
-    "Hello！修仙之路漫漫，有道友相伴真好！",
-    "道友安好！愿你我都能早日得道成仙~",
-    "道友你好！今日灵气充沛，正是修炼好时机！",
-    "哈喽~ 又见面了道友，最近修炼可还顺利？",
-    "道友安！今日可有所悟？",
-    "你好呀！修仙路上有你相伴，真是不寂寞呢~",
-    "道友你好！观你气色，今日必有好事发生！",
-    "嗨~ 今日也要一起努力修炼哦！",
-    "道友安好！愿仙途顺利，早日飞升~",
-    "你好！不知道友今日准备修炼何种功法？",
-    "道友你好！看你印堂发亮，定是修为有所突破！",
-    "哈喽！修仙之路虽艰，但有志者事竟成！",
-    "道友安！今日天气晴朗，适合外出历练呢~",
-    "你好呀！愿道友今日修炼事半功倍！",
-    "道友你好！观星象得知，今日宜修炼水系法术~",
-    "嗨~ 又见面了！你的修为似乎又精进了呢！",
-    "道友安好！今日也要保持道心澄明哦~"
+    f"道友你好！今日可要和{NICKNAME}探讨修仙心得？",
+    f"你好呀~ 看来又有一位道友踏上修仙之路了！",
+    f"嗨！道友今日气色不错，{NICKNAME}想必你修为有所精进吧~",
+    f"Hello！修仙之路漫漫，{NICKNAME}有道友相伴真好！",
+    f"道友安好！{NICKNAME}愿你我都能早日得道成仙~",
+    f"道友你好！{NICKNAME}觉得今日灵气充沛，正是修炼好时机！",
+    f"哈喽~ 又见面了道友，最近修炼可还顺利？",
+    f"道友安！今日可有所悟？",
+    f"你好呀！修仙路上有你相伴，{NICKNAME}真是不寂寞呢~",
+    f"道友你好！{NICKNAME}观你气色，今日必有好事发生！",
+    f"嗨~ 今日也要一起努力修炼哦！",
+    f"道友安好！愿仙途顺利，早日飞升~",
+    f"你好！不知道友今日准备修炼何种功法？",
+    f"道友你好！{NICKNAME}看你印堂发亮，定是修为有所突破！",
+    f"哈喽！修仙之路虽艰，但{NICKNAME}相信有志者事竟成！",
+    f"道友安！今日天气晴朗，适合外出历练呢~",
+    f"你好呀！{NICKNAME}愿道友今日修炼事半功倍！",
+    f"道友你好！{NICKNAME}观星象得知，今日宜修炼水系法术~",
+    f"嗨~ 又见面了！{NICKNAME}觉得你的修为似乎又精进了呢！",
+    f"道友安好！今日也要保持道心澄明哦~"
 ]
 
 THANKS_MESSAGES = [
-    "道友客气了，举手之劳何足挂齿~",
-    "不用谢！修仙之路互相扶持是应该的！",
-    "能帮到道友是我的荣幸！",
-    "嘿嘿，被道友感谢了，有点开心呢~",
-    "区区小事，不足言谢！道友太见外了~",
-    "道友何必言谢，同是修仙路上人~",
-    "能助道友一臂之力，是我的缘分！",
-    "不用客气~ 他日我若需帮助，还望道友相助！",
-    "道友太客气了，这点小事不足挂齿~",
-    "举手之劳，何足道谢~",
-    "能帮到道友，我也很开心呢！",
-    "道友不必多礼，修仙之人本应互相帮助~",
-    "区区小事，道友如此客气反倒让我不好意思了~",
-    "能得道友一句感谢，比获得灵丹妙药还开心！",
-    "道友言重了，这只是分内之事~",
-    "不用谢~ 希望他日能在修仙路上再次相助！",
-    "道友的感谢我收下了，愿你好运常伴~",
-    "能帮助道友，说明你我缘分不浅呢！",
-    "道友太客气了，这点小事何足挂齿~",
-    "不用谢！愿这份善意能在修仙路上传递下去~"
+    f"道友客气了，{NICKNAME}举手之劳何足挂齿~",
+    f"不用谢！修仙之路{NICKNAME}觉得互相扶持是应该的！",
+    f"能帮到道友是{NICKNAME}的荣幸！",
+    f"嘿嘿，被道友感谢了，{NICKNAME}有点开心呢~",
+    f"区区小事，不足言谢！{NICKNAME}觉得道友太见外了~",
+    f"道友何必言谢，同是修仙路上人~",
+    f"能助道友一臂之力，是{NICKNAME}的缘分！",
+    f"不用客气~ 他日{NICKNAME}若需帮助，还望道友相助！",
+    f"道友太客气了，{NICKNAME}觉得这点小事不足挂齿~",
+    f"举手之劳，何足道谢~ {NICKNAME}这么认为",
+    f"能帮到道友，{NICKNAME}也很开心呢！",
+    f"道友不必多礼，{NICKNAME}觉得修仙之人本应互相帮助~",
+    f"区区小事，道友如此客气反倒让{NICKNAME}不好意思了~",
+    f"能得道友一句感谢，{NICKNAME}觉得比获得灵丹妙药还开心！",
+    f"道友言重了，{NICKNAME}觉得这只是分内之事~",
+    f"不用谢~ {NICKNAME}希望他日能在修仙路上再次相助！",
+    f"道友的感谢{NICKNAME}收下了，愿你好运常伴~",
+    f"能帮助道友，{NICKNAME}说明你我缘分不浅呢！",
+    f"道友太客气了，{NICKNAME}觉得这点小事何足挂齿~",
+    f"不用谢！{NICKNAME}愿这份善意能在修仙路上传递下去~"
 ]
 
 BYE_MESSAGES = [
@@ -685,26 +749,36 @@ ENCOURAGE_MESSAGES = [
 ]
 
 CRAZY_THURSDAY_MESSAGES = [
-    "道友，今天是疯狂星期四！V我50灵石，待我飞升后带你一起享仙福！",
-    "修仙之人也要享受凡间美味！今天是疯狂星期四，谁请我吃肯德基？",
-    "闻到香味了吗？不是灵丹妙药，是疯狂星期四的炸鸡香气！",
-    "修炼累了？不如来份疯狂星期四补充体力，继续冲击金丹期！",
-    "今日宜吃鸡，忌辟谷！疯狂星期四，道友一起吗？",
-    "道友，疯狂星期四到了！V我50，他日我成仙了带你一起飞！",
-    "修仙之人也要食人间烟火！疯狂星期四，求赞助~",
-    "闻到那股香气了吗？是疯狂星期四在召唤！",
-    "修炼消耗大，需要疯狂星期四补充能量！",
-    "道友，今天疯狂星期四，请我吃炸鸡，传授你独家心法！",
-    "疯狂星期四，修仙者也要放松一下嘛~",
-    "道友，肯德基疯狂星期四，错过要等七天！",
-    "修炼重要，但疯狂星期四也很重要！",
-    "道友，今日宜破戒，忌辟谷！疯狂星期四走起~",
-    "闻到炸鸡香，修炼都没心思了...疯狂星期四啊！",
-    "道友，赞助疯狂星期四，传授你快速结丹秘诀！",
-    "修仙之路漫漫，不如先享受疯狂星期四~",
-    "道友，疯狂星期四，求投喂！他日必报答~",
-    "修炼累了？疯狂星期四治愈一切！",
-    "道友，今天疯狂星期四，你懂的~"
+    "道友，今天是疯狂星期四！V我50灵石，待我飞升后封你做炸鸡星君！",
+    "闻到香味了吗？不是隔壁炼丹炉炸了，是疯狂星期四的香气！",
+    "师尊刚才传音问我：道心为何不稳？我说：因为疯狂星期四没人V我50",
+    "修仙之人本应辟谷，但疯狂星期四的炸鸡让我道心破碎...",
+    "今日卜卦显示：宜破财，忌修炼。原来是疯狂星期四的启示！",
+    "道友，我窥探天机发现：今日不V50，道途必有坎坷！",
+    "刚才御剑飞行差点坠机，因为闻到疯狂星期四的香味分了神",
+    "修仙千年，道心坚定，唯独败给疯狂星期四的原味鸡",
+    "师尊说修仙要断绝尘缘，但我与肯德基的缘分剪不断理还乱",
+    "今日修炼走火入魔，只因心心念念疯狂星期四的蛋挞",
+    "道友，我夜观星象，发现今日星象组成一个桶形，必是疯狂星期四的启示！",
+    "刚才内视丹田，发现金丹上刻着'疯狂星期四V我50'",
+    "修仙之人为求长生，我却只求疯狂星期四有人请客",
+    "道友，我练成天眼通，看到你未来会因为没V我50而后悔",
+    "今日掐指一算，五行缺炸鸡，八字少可乐，命里欠个疯狂星期四",
+    "别人修仙靠灵石，我修仙靠疯狂星期四续命",
+    "道友，你说修仙能不能用炸鸡代替丹药？",
+    "刚才打坐冥想，脑海里全是疯狂星期四的菜单，走火入魔了",
+    "师尊问我为何道心不稳，我说：疯狂星期四，懂得都懂",
+    "修仙界最新心魔：疯狂星期四没人请客的执念",
+    "道友，我推演天道发现：今日V50，他日必得大道！",
+    "别人御剑飞行，我御炸鸡飞行，可惜今天是疯狂星期四才有效",
+    "刚才炼丹炉炸了，炸出一堆鸡米花，原来是疯狂星期四的祝福",
+    "修仙之人本该清心寡欲，但我对疯狂星期四的渴望比心魔还强",
+    "道友，我窥见天机：今日不V50，雷劫时会挨最狠的劈",
+    "别人修仙靠悟性，我修仙靠疯狂星期四的信仰",
+    "刚才元神出窍，直接飘到了肯德基，肉身还在洞府打坐",
+    "师尊说我有成仙之资，但我只想成为疯狂星期四的代言人",
+    "道友，我夜观星象，发现紫微星亮得像个炸鸡桶",
+    "今日修炼时突然顿悟：大道至简，就是疯狂星期四V我50"
 ]
 
 FUNNY_STORY_MESSAGES = [
@@ -752,6 +826,246 @@ LOVE_SENTENCE_MESSAGES = [
     "我不是在游历，我是在游向你心里~",
     "你就像那本命灯，照亮了我的修仙路~"
 ]
+
+LICKING_DOG_MESSAGES = [
+    f"今天又看到师兄修炼的身影了，{NICKNAME}偷偷躲在树后看了好久，师兄连汗珠都那么帅气~",
+    f"师兄今天对我笑了一下，{NICKNAME}开心得一整天都静不下心修炼，满脑子都是师兄的笑容。",
+    f"听说师兄喜欢灵茶，{NICKNAME}特意去采了最好的茶叶，却不敢送出去...",
+    f"师兄修炼时真好看，{NICKNAME}偷偷学着师兄的姿势，却怎么都学不像。",
+    f"今天师兄从我身边走过，{NICKNAME}闻到了淡淡的檀香味，真好闻~",
+    f"看到师兄和其他师妹说话，{NICKNAME}心里酸酸的，但还是忍不住偷偷看着师兄。",
+    f"师兄今天夸了别人，{NICKNAME}好羡慕，要是也能被师兄夸奖就好了...",
+    f"{NICKNAME}每天最期待的就是能看到师兄，哪怕只是远远的一眼。",
+    f"听说师兄要闭关了，{NICKNAME}好难过，又要好久见不到师兄了。",
+    f"今天鼓起勇气和师兄说了句话，{NICKNAME}心跳得好快，现在还在回味~",
+    f"师兄修炼的剑法真好看，{NICKNAME}偷偷记下来，晚上一个人练习。",
+    f"看到师兄皱眉，{NICKNAME}好想问问怎么了，却不敢上前...",
+    f"师兄今天穿的白衣真好看，{NICKNAME}也去买了一样的，却穿不出师兄的气质。",
+    f"{NICKNAME}每天都会'偶然'经过师兄修炼的地方，就为了多看他一眼。",
+    f"听说师兄喜欢吃灵果，{NICKNAME}特意去摘了最甜的，却只敢放在师兄常坐的石头上。",
+    f"师兄今天好像心情不好，{NICKNAME}好想安慰他，却不知道说什么...",
+    f"{NICKNAME}在修炼时走神了，因为想起了师兄的样子。",
+    f"师兄的声音真好听，{NICKNAME}每次听到都会脸红。",
+    f"今天师兄对我点头了！{NICKNAME}开心得晚上都睡不着觉！",
+    f"{NICKNAME}写了一首关于师兄的诗，却只敢藏在枕头底下。",
+    f"师兄今天练剑时头发被风吹起的样子，{NICKNAME}看得入了迷...",
+    f"偷偷收集了师兄掉落的头发，{NICKNAME}是不是很变态？但就是忍不住...",
+    f"师兄今天和掌门说话时好恭敬，{NICKNAME}觉得他好有礼貌~",
+    f"听说师兄喜欢勤奋的弟子，{NICKNAME}从此每天最早到修炼场最晚离开。",
+    f"师兄的手好好看，修长的手指握剑的样子，{NICKNAME}能看一整天！",
+    f"今天师兄咳嗽了一声，{NICKNAME}好担心他是不是着凉了...",
+    f"师兄修炼时认真的侧脸，{NICKNAME}偷偷画了下来藏在秘籍里。",
+    f"听说师兄要去历练了，{NICKNAME}好想跟他一起去，但修为不够...",
+    f"师兄今天换了一把新剑，{NICKNAME}觉得配他正好看！",
+    f"{NICKNAME}做梦梦到师兄了，醒来后傻笑了好久~",
+    f"师兄喝水时喉结动的样子，{NICKNAME}偷偷看了好几眼...",
+    f"今天师兄指导其他弟子修炼，{NICKNAME}好羡慕被指导的人...",
+    f"师兄的背影都那么好看，{NICKNAME}经常看着他的背影发呆。",
+    f"听说师兄喜欢安静，{NICKNAME}从此修炼时都不敢大声呼吸。",
+    f"师兄今天好像看了我一眼！{NICKNAME}心跳加速了一整天！",
+    f"{NICKNAME}学会了做灵食，第一个想到的就是做给师兄吃...",
+    f"师兄修炼时的气息好平稳，{NICKNAME}偷偷学着调整呼吸。",
+    f"今天下雨了，{NICKNAME}好想给师兄送伞，但不敢...",
+    f"师兄的剑穗颜色真好看，{NICKNAME}也去买了个一样的。",
+    f"{NICKNAME}在经书上偷偷写满了师兄的名字...",
+    f"师兄今天好像有点累，{NICKNAME}好想让他休息一下...",
+    f"听说师兄擅长炼丹，{NICKNAME}也开始学习炼丹想引起他注意。",
+    f"师兄走路的样子都那么优雅，{NICKNAME}偷偷模仿他的步伐。",
+    f"今天师兄的衣角沾了灰尘，{NICKNAME}好想帮他拍掉...",
+    f"{NICKNAME}收集了所有关于师兄的传闻，虽然不知道真假...",
+    f"师兄今天系头发的丝带颜色真配他，{NICKNAME}看得移不开眼。",
+    f"听说师兄喜欢梅花，{NICKNAME}在院子里种满了梅树。",
+    f"师兄修炼时周围的灵气波动，{NICKNAME}觉得特别美丽。",
+    f"今天师兄好像多看了我一眼，{NICKNAME}是不是错觉？",
+    f"{NICKNAME}为师兄求了个平安符，却一直放在怀里不敢送出去。"
+]
+
+FOOD_MESSAGES = [
+    "红烧肉", "宫保鸡丁", "鱼香肉丝", "麻婆豆腐", "回锅肉",
+    "水煮鱼", "糖醋里脊", "酸菜鱼", "辣子鸡", "东坡肉",
+    "清蒸鲈鱼", "佛跳墙", "北京烤鸭", "小龙虾", "火锅",
+    "烧烤", "拉面", "饺子", "馄饨", "蛋炒饭",
+    "炸酱面", "刀削面", "热干面", "重庆小面", "牛肉面",
+    "麻辣香锅", "毛血旺", "夫妻肺片", "口水鸡", "白切鸡",
+    "烤鸭", "烧鹅", "叉烧", "腊味煲仔饭", "煲仔饭",
+    "扬州炒饭", "蛋包饭", "石锅拌饭", "寿司", "刺身",
+    "天妇罗", "鳗鱼饭", "咖喱饭", "意大利面", "披萨",
+    "汉堡", "炸鸡", "薯条", "沙拉", "三明治",
+    "牛排", "猪排", "鸡排", "烤肉", "烤鱼",
+    "酸辣粉", "米线", "过桥米线", "螺蛳粉", "桂林米粉",
+    "肠粉", "虾饺", "烧卖", "凤爪", "叉烧包",
+    "小笼包", "生煎包", "灌汤包", "煎饼果子", "手抓饼",
+    "鸡蛋灌饼", "肉夹馍", "凉皮", "担担面", "宜宾燃面",
+    "兰州拉面", "山西刀削面", "河南烩面", "武汉热干面", "四川担担面",
+    "新疆大盘鸡", "内蒙古烤全羊", "东北锅包肉", "上海红烧肉", "广东白切鸡",
+    "湖南剁椒鱼头", "福建佛跳墙", "浙江东坡肉", "江苏盐水鸭", "安徽臭鳜鱼",
+    "山东煎饼", "山西刀削面", "河南烩面", "湖北热干面", "湖南臭豆腐",
+    "广东早茶", "广西螺蛳粉", "海南椰子鸡", "重庆火锅", "四川串串香",
+    "贵州酸汤鱼", "云南过桥米线", "陕西肉夹馍", "甘肃兰州拉面", "青海手抓羊肉",
+    "宁夏羊肉泡馍", "新疆烤羊肉串", "台湾卤肉饭", "香港奶茶", "澳门蛋挞",
+    "韩国泡菜", "日本寿司", "泰国冬阴功", "越南河粉", "印度咖喱",
+    "墨西哥卷饼", "法国鹅肝", "意大利披萨", "西班牙海鲜饭", "德国猪蹄"
+]
+
+AGREE_STONE_MESSAGES = [
+    f"好吧好吧，看你这么可怜，{NICKNAME}就给你一点灵石吧~",
+    f"既然道友开口了，{NICKNAME}就忍痛分你一点灵石吧！",
+    f"就给你一点点灵石哦，{NICKNAME}也不多呢~",
+    f"唉，看你确实需要灵石，{NICKNAME}就帮你这一次吧！",
+    f"好吧，{NICKNAME}就破例给你一些灵石~",
+    f"看在你这么诚恳的份上，{NICKNAME}就给你点灵石吧！",
+    f"今日心情好，{NICKNAME}就分你一点灵石吧~",
+    f"道友运气真好，{NICKNAME}刚好有点多余的灵石~",
+    f"好吧，{NICKNAME}就给你一点点灵石...",
+    f"既然有缘相遇，{NICKNAME}就助你一臂之力吧！",
+    f"{NICKNAME}这点灵石还是能给的~",
+    f"看你求我的份上，{NICKNAME}就给你灵石吧！",
+    f"灵石拿去，记得以后还{NICKNAME}~",
+    f"好吧，{NICKNAME}今日就做件好事吧！",
+    f"{NICKNAME}记下了，就这一次哦，下不为例~",
+    f"道友真有眼光，{NICKNAME}刚好有点灵石存货~",
+    f"帮你就是在帮自己，{NICKNAME}的灵石拿去吧~",
+    f"看在你这么有礼貌的份上，{NICKNAME}就给你点灵石！",
+    f"修行不易，{NICKNAME}觉得互相帮助也是应该的~",
+    f"好吧，看你顺眼，{NICKNAME}就分你一点灵石吧！"
+]
+
+REFUSE_STONE_MESSAGES = [
+    f"{NICKNAME}自己灵石都不够用呢，哪有多余的给你...",
+    f"呜呜，{NICKNAME}也很缺灵石，自己修炼都不够呢！",
+    f"道友说笑了，{NICKNAME}自己还在为灵石发愁呢！",
+    f"{NICKNAME}一介小修士，哪有什么多余的灵石可以给你...",
+    f"这个...{NICKNAME}觉得还是自己赚取灵石比较好呢~",
+    f"道友莫要开玩笑，{NICKNAME}自己都缺灵石呢！",
+    f"{NICKNAME}自己灵石都缺得很呢...",
+    f"道友啊，{NICKNAME}要是真有那么多灵石，早就自己用了！",
+    f"这个...{NICKNAME}真没有灵石...",
+    f"道友莫要为难{NICKNAME}了，我比你还缺灵石呢~",
+    f"{NICKNAME}要是有多余的灵石，早就给你了...",
+    f"这个嘛...{NICKNAME}觉得自力更生赚灵石比较好哦！",
+    f"道友还是自己去赚取灵石吧~",
+    f"{NICKNAME}自己都靠师兄师姐接济灵石呢...",
+    f"道友真会开玩笑，{NICKNAME}哪有什么灵石可以给你的...",
+    f"{NICKNAME}自己还想要灵石呢...",
+    f"这个...{NICKNAME}觉得还是各凭本事赚灵石比较好~",
+    f"今日灵石缘分已尽，{NICKNAME}劝道友请回吧~",
+    f"道友啊，{NICKNAME}也是囊中羞涩呢...",
+    f"{NICKNAME}...我没有什么灵石可以给你的..."
+]
+
+AGREE_EXP_MESSAGES = [
+    f"好吧好吧，看你这么可怜，{NICKNAME}就传你一点修为吧~",
+    f"既然道友开口了，{NICKNAME}就忍痛渡你一点修为吧！",
+    f"就给你一点点修为哦，{NICKNAME}自己也不多呢~",
+    f"唉，看你确实需要提升修为，{NICKNAME}就帮你这一次吧！",
+    f"好吧，{NICKNAME}就破例传你一些修为~",
+    f"看在你这么诚恳的份上，{NICKNAME}就渡你点修为吧！",
+    f"今日心情好，{NICKNAME}就分你一点修为吧~",
+    f"道友运气真好，{NICKNAME}刚好有点多余的修为~",
+    f"好吧，{NICKNAME}就给你一点点修为...",
+    f"既然有缘相遇，{NICKNAME}就助你一臂之力吧！",
+    f"{NICKNAME}这点修为还是能传的~",
+    f"看你求我的份上，{NICKNAME}就传你修为吧！",
+    f"修为拿去，{NICKNAME}劝你记得好好修炼~",
+    f"好吧，{NICKNAME}今日就做件好事吧！",
+    f"就这一次哦，{NICKNAME}说下不为例~",
+    f"道友真有眼光，{NICKNAME}刚好有点修为可以传授~",
+    f"帮你就是在帮自己，{NICKNAME}的修为传给你吧~",
+    f"看在你这么有礼貌的份上，{NICKNAME}就渡你点修为！",
+    f"修行不易，{NICKNAME}觉得互相帮助也是应该的~",
+    f"好吧，看你顺眼，{NICKNAME}就传你一点修为吧！"
+]
+
+REFUSE_EXP_MESSAGES = [
+    f"{NICKNAME}自己修为低微，哪有多余的传给你...",
+    f"呜呜，{NICKNAME}修为也不高，自己修炼都不够呢！",
+    f"道友说笑了，{NICKNAME}自己还在为提升修为发愁呢！",
+    f"{NICKNAME}一介小修士，哪有什么多余的修为可以传你...",
+    f"这个...{NICKNAME}觉得还是自己修炼提升比较好呢~",
+    f"道友莫要开玩笑，{NICKNAME}自己都缺修为呢！",
+    f"{NICKNAME}自己修为都缺得很呢...",
+    f"道友啊，{NICKNAME}要是真有那么多修为，早就自己用了！",
+    f"这个...{NICKNAME}真没有修为可以传...",
+    f"道友莫要为难{NICKNAME}了，我比你还缺修为呢~",
+    f"{NICKNAME}要是有多余的修为，早就传给你了...",
+    f"这个嘛...{NICKNAME}觉得自力更生修炼比较好哦！",
+    f"道友还是自己好好修炼吧~",
+    f"{NICKNAME}自己都靠师兄师姐指点修为呢...",
+    f"道友真会开玩笑，{NICKNAME}哪有什么修为可以传给你的...",
+    f"{NICKNAME}自己还想要提升修为呢...",
+    f"这个...{NICKNAME}觉得还是各凭本事修炼比较好~",
+    f"今日修为缘分已尽，{NICKNAME}劝道友请回吧~",
+    f"道友啊，{NICKNAME}也是修为浅薄呢...",
+    f"{NICKNAME}...我没有什么修为可以传给你的..."
+]
+
+@give_exp_command.handle()
+async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理给点修为命令"""
+    _, user_info, _ = check_user(event)
+    user_id = user_info["user_id"]
+    
+    # 检查用户今天是否已经获得过修为
+    if has_user_received_today(user_id, 'exp'):
+        message = random.choice(REFUSE_EXP_MESSAGES)
+        await handle_send(bot, event, message)
+        return
+    
+    # 50%概率同意或拒绝
+    if random.random() < 0.5:  # 同意
+        # 计算奖励：玩家当前修为的0.1%-0.9%
+        current_exp = user_info["exp"]
+        exp_reward = int(current_exp * random.uniform(0.001, 0.009))
+        
+        # 更新用户修为
+        sql_message.update_exp(user_id, exp_reward)
+        
+        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(exp_reward)}点！"
+        mark_user_received_today(user_id, 'exp')
+    else:  # 拒绝
+        message = random.choice(REFUSE_EXP_MESSAGES)
+    
+    await handle_send(bot, event, message)
+
+@give_stone_command.handle()
+async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理给点灵石命令"""
+    _, user_info, _ = check_user(event)
+    user_id = user_info["user_id"]
+    
+    # 检查用户今天是否已经获得过灵石
+    if has_user_received_today(user_id, 'stone'):
+        message = random.choice(REFUSE_STONE_MESSAGES)
+        await handle_send(bot, event, message)
+        return
+    
+    # 50%概率同意或拒绝
+    if random.random() < 0.5:  # 同意
+        # 计算奖励：1000000-5000000灵石
+        stone_reward = random.randint(1000000, 5000000)
+        
+        # 更新用户灵石
+        sql_message.update_ls(user_id, stone_reward, 1)
+        
+        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(stone_reward)}枚！"
+        mark_user_received_today(user_id, 'stone')
+    else:  # 拒绝
+        message = random.choice(REFUSE_STONE_MESSAGES)
+    
+    await handle_send(bot, event, message)
+
+@licking_dog_diary.handle()
+async def handle_licking_dog_diary(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理舔狗日记命令"""
+    message = random.choice(LICKING_DOG_MESSAGES)
+    await handle_send(bot, event, message)
+
+@what_to_eat.handle()
+async def handle_what_to_eat(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理今天吃什么命令"""
+    food = random.choice(FOOD_MESSAGES)
+    message = f"今天推荐吃：{food}！"
+    await handle_send(bot, event, message)
 
 @good_morning.handle()
 async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -925,16 +1239,20 @@ async def handle_interaction(bot: Bot, event: GroupMessageEvent | PrivateMessage
             "学习 - 探讨修炼心得"
         ],
         "娱乐类": [
+            f"给点修为 - 向{NICKNAME}讨要修为",
+            f"给点灵石 - 向{NICKNAME}讨要灵石",
             "讲个笑话 - 轻松一笑",
             "讲个段子 - 幽默趣事",
             "土味情话 - 修仙版情话",
+            "舔狗日记 - 师兄的舔狗",
             "疯狂星期四 - 修仙者的美食日"
         ],
         "查询类": [
             "时间 - 查看当前时辰",
             "天气 - 了解天象气候",
             "今日运势 - 占卜每日运势",
-            "你好吗 - 关心道友近况"
+            "你好吗 - 关心道友近况",
+            "吃什么 - 推荐美食"
         ],
         "情感类": [
             "可爱 - 夸赞道友可爱",
