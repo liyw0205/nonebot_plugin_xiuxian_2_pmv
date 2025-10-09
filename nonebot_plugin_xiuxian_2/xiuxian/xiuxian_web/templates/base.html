@@ -595,6 +595,7 @@
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
         // 移动端菜单切换
+        document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('mainNav').classList.toggle('active');
         });
         
@@ -633,15 +634,49 @@
             },
             retina_detect: true
         });
+        
+        // 添加浮动动画到卡片
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.1}s`;
+            });
+        });
+
+        // 手机端点击导航栏外部自动关闭
+        document.addEventListener('click', function(event) {
+            const nav = document.getElementById('mainNav');
+            const menuToggle = document.getElementById('menuToggle');
             
-            // 添加浮动动画到卡片
-            document.addEventListener('DOMContentLoaded', function() {
-                const cards = document.querySelectorAll('.card');
-                cards.forEach((card, index) => {
-                    card.style.animationDelay = `${index * 0.1}s`;
+            // 如果是移动端且导航栏已打开
+            if (window.innerWidth <= 768 && nav.classList.contains('active')) {
+                // 检查点击是否在导航栏内部或菜单按钮上
+                const isClickInsideNav = nav.contains(event.target);
+                const isClickOnToggle = menuToggle.contains(event.target);
+                
+                // 如果点击在导航栏外部且不是菜单按钮，则关闭导航栏
+                if (!isClickInsideNav && !isClickOnToggle) {
+                    nav.classList.remove('active');
+                }
+            }
+        });
+
+        // 标签页切换时关闭导航栏（移动端）
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabLinks = document.querySelectorAll('.tab-link');
+            
+            tabLinks.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // 如果是移动端，关闭导航栏
+                    if (window.innerWidth <= 768) {
+                        const nav = document.getElementById('mainNav');
+                        if (nav && nav.classList.contains('active')) {
+                            nav.classList.remove('active');
+                        }
+                    }
                 });
             });
-        })();
+        });
     </script>
 </body>
 </html>
