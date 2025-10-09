@@ -685,6 +685,40 @@ def restore_config_backup():
     except Exception as e:
         return jsonify({"success": False, "error": f"恢复配置失败: {str(e)}"})
 
+@app.route('/manual_backup', methods=['POST'])
+def manual_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    try:
+        # 执行插件备份
+        plugin_success, plugin_result = update_manager.enhanced_backup_current_version()
+        
+        # 执行配置备份
+        config_success, config_result = update_manager.backup_all_configs()
+        
+        if plugin_success and config_success:
+            return jsonify({
+                "success": True,
+                "message": "手动备份成功完成",
+                "plugin_backup": str(plugin_result) if isinstance(plugin_result, Path) else plugin_result,
+                "config_backup": str(config_result) if isinstance(config_result, Path) else config_result
+            })
+        else:
+            error_msg = []
+            if not plugin_success:
+                error_msg.append(f"插件备份失败: {plugin_result}")
+            if not config_success:
+                error_msg.append(f"配置备份失败: {config_result}")
+            
+            return jsonify({
+                "success": False,
+                "error": "; ".join(error_msg)
+            })
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": f"备份过程中出现错误: {str(e)}"})
+
 @app.route('/delete_backup', methods=['POST'])
 def delete_backup():
     if 'admin_id' not in session:

@@ -24,6 +24,9 @@
         <button onclick="viewAllReleases()" class="btn btn-info">
             <i class="fas fa-list"></i> 查看所有版本
         </button>
+        <button onclick="manualBackup()" class="btn btn-info">
+            <i class="fas fa-copy"></i> 手动备份
+        </button>
     </div>
 </div>
 
@@ -746,6 +749,57 @@ async function confirmRestore(backupFilename) {
     }
 }
 
+// 手动备份函数
+async function manualBackup() {
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = '<div class="loading">正在创建手动备份，请稍候...</div>';
+    
+    try {
+        const response = await fetch('/manual_backup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div class="success">
+                    <h3 style="color: #4CAF50;">✅ 手动备份成功！</h3>
+                    <p>${data.message}</p>
+                    <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; 
+                         word-break: break-all; overflow-wrap: break-word;">
+                        <p style="margin: 5px 0; word-break: break-word;"><strong>插件备份:</strong> ${data.plugin_backup}</p>
+                        <p style="margin: 5px 0; word-break: break-word;"><strong>配置备份:</strong> ${data.config_backup}</p>
+                    </div>
+                    <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                        备份文件保存在 data/backups/ 和 data/config_backups/ 目录中
+                    </p>
+                </div>
+            `;
+            
+            // 刷新备份列表
+            loadBackups();
+        } else {
+            statusDiv.innerHTML = `
+                <div class="error">
+                    <h3 style="color: #F44336;">❌❌ 手动备份失败</h3>
+                    <p>${data.error}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div class="error">
+                <h3 style="color: #F44336;">❌❌ 请求失败</h3>
+                <p>${error}</p>
+            </div>
+        `;
+    }
+}
+
 // 确认删除备份函数
 async function confirmDeleteBackup(backupFilename) {
     if (!confirm(`确定要删除备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) {
@@ -767,10 +821,10 @@ async function confirmDeleteBackup(backupFilename) {
             alert('✅ 备份文件删除成功');
             loadBackups(); // 重新加载备份列表
         } else {
-            alert(`❌❌ 删除失败: ${data.error}`);
+            alert(`❌ 删除失败: ${data.error}`);
         }
     } catch (error) {
-        alert(`❌❌ 请求失败: ${error}`);
+        alert(`❌ 请求失败: ${error}`);
     }
 }
 
