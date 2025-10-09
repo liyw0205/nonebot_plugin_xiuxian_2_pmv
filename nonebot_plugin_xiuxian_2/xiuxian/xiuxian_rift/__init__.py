@@ -30,7 +30,6 @@ from .riftmake import (
     get_dxsj_info, get_boss_battle_info, get_treasure_info
 )
 
-
 config = get_rift_config()
 sql_message = XiuxianDateManage()  # sql类
 cache_help = {}
@@ -43,10 +42,6 @@ rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
 create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
-use_rift_key = on_command("道具使用秘境钥匙", priority=5, block=True)
-use_rift_explore = on_command("道具使用秘藏令", priority=5, block=True)
-use_rift_speedup = on_command("道具使用秘境加速券", priority=5, block=True)
-use_rift_big_speedup = on_command("道具使用秘境大加速券", priority=5, block=True)
 
 __rift_help__ = f"""
 【秘境探索系统】🗝️
@@ -59,11 +54,6 @@ __rift_help__ = f"""
   • 探索秘境 - 进入秘境获取随机奖励
   • 秘境结算 - 领取秘境奖励
   • 秘境探索终止 - 放弃当前秘境
-
-🎁 道具使用：
-  • 秘境钥匙 - 立即结算当前秘境
-  • 秘藏令 - 获得额外探索机会
-  • 秘境加速券 - 减少秘境所需探索时间
 
 ⏰ 秘境刷新：
   • 每日自动生成时间：0点 & 12点
@@ -119,8 +109,6 @@ async def generate_rift_for_group():
             continue
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
-
-
 
 @rift_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -200,7 +188,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await explore_rift.finish()
 
         group_rift[group_id].l_user_id.append(user_id)
-        msg = f"道友进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
+        msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
         rift_data = {
             "name": group_rift[group_id].name,
             "time": group_rift[group_id].time,
@@ -214,21 +202,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await explore_rift.finish()
 
-
-@use_rift_explore.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘藏令"""
     group_rift.update(old_rift_info.read_rift_info())
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_rift_explore.finish()
+        return
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg)
-        await use_rift_explore.finish()
+        return
     else:
         group_id = "000000"        
         try:
@@ -237,18 +223,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = '野外秘境尚未生成，请道友耐心等待!'
             await handle_send(bot, event, msg)
             await explore_rift.finish()
-        back_msg = sql_message.get_back_msg(user_id)
-        rift_explore_id = 20007
-        rift_explore_num = 0
-        for item in back_msg:
-            if item['goods_id'] == rift_explore_id:
-                rift_explore_num = item['goods_num']
-                break
-
-        if rift_explore_num < 1:
-            msg = "道友背包中没有秘藏令，无法使用！"
-            await handle_send(bot, event, msg)
-            await use_rift_explore.finish()
         
         user_rank = convert_rank(user_info["level"])[0]
          # 搬血中期 - 秘境rank
@@ -259,10 +233,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             required_rank_name = rank_name_list[len(rank_name_list) - required_rank - 1]
             msg = f"秘境凶险万分，道友的境界不足，无法进入秘境：{group_rift[group_id].name}，请道友提升到{required_rank_name}以上再来！"
             await handle_send(bot, event, msg)
-            await use_rift_explore.finish()
+            return
 
         group_rift[group_id].l_user_id.append(user_id)
-        msg = f"道友使用秘藏令进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
+        msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
         rift_data = {
             "name": group_rift[group_id].name,
             "time": group_rift[group_id].time,
@@ -271,11 +245,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
-        sql_message.update_back_j(user_id, rift_explore_id)
+        sql_message.update_back_j(user_id, item_id)
         update_statistics_value(user_id, "秘境次数")
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
-        await use_rift_explore.finish()
+        return
         
 @complete_rift.handle(parameterless=[Cooldown(at_sender=False)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -408,21 +382,14 @@ async def set_group_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             msg = f"未开启本群秘境通知!"
             await handle_send(bot, event, msg)
             await set_group_rift.finish()
-    
-    elif mode == '帮助':
-        msg = __rift_help__
-        await handle_send(bot, event, msg)
-        await set_group_rift.finish()
 
-
-@use_rift_key.handle(parameterless=[Cooldown(at_sender=False)])
-async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘境钥匙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_rift_key.finish()
+        return
 
     user_id = user_info['user_id']
     group_id = "000000"    
@@ -432,21 +399,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if not is_type:
         msg = "道友当前不在秘境中，无法使用秘境钥匙！"
         await handle_send(bot, event, msg)
-        await use_rift_key.finish()
-
-    # 检查背包中的秘境钥匙
-    back_msg = sql_message.get_back_msg(user_id)
-    rift_key_id = 20001  # 秘境钥匙的 goods_id
-    rift_key_num = 0
-    for item in back_msg:
-        if item['goods_id'] == rift_key_id:
-            rift_key_num = item['goods_num']
-            break
-
-    if rift_key_num < 1:
-        msg = "道友背包中没有秘境钥匙，无法使用！"
-        await handle_send(bot, event, msg)
-        await use_rift_key.finish()
+        return
 
     # 读取秘境信息并立即结算
     try:
@@ -454,7 +407,7 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     except:
         msg = "秘境数据读取失败，请稍后再试！"
         await handle_send(bot, event, msg)
-        await use_rift_key.finish()
+        return
 
     sql_message.do_work(user_id, 0)  # 清除秘境状态
     rift_rank = rift_info["rank"]
@@ -475,21 +428,20 @@ async def use_rift_key_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         result_msg = get_treasure_info(user_info, rift_rank)
 
     # 消耗秘境钥匙
-    sql_message.update_back_j(user_id, rift_key_id)
-    msg = f"道友使用 1 个秘境钥匙，秘境 {rift_info['name']} 已立即结算！"
+    sql_message.update_back_j(user_id, item_id)
+    msg = f"秘境 {rift_info['name']} 已结算！"
     log_message(user_id, result_msg)
     await handle_send(bot, event, msg)
     await handle_send(bot, event, result_msg)
-    await use_rift_key.finish()
+    return
 
-@use_rift_speedup.handle(parameterless=[Cooldown(at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘境加速券"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_rift_speedup.finish()
+        return
     
     user_id = user_info['user_id']
     
@@ -497,22 +449,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_type, msg = check_user_type(user_id, 3)  # 需要正在秘境的用户
     if not is_type:
         await handle_send(bot, event, msg)
-        await use_rift_speedup.finish()
-    
-    # 检查背包中的秘境加速券
-    back_msg = sql_message.get_back_msg(user_id)
-    speedup_id = 20012  # 秘境加速券ID
-    speedup_num = 0
-    
-    for item in back_msg:
-        if item['goods_id'] == speedup_id:
-            speedup_num = item['goods_num']
-            break
-    
-    if speedup_num < 1:
-        msg = "道友背包中没有秘境加速券，无法使用！"
-        await handle_send(bot, event, msg)
-        await use_rift_speedup.finish()
+        return
     
     # 读取秘境信息
     rift_info = read_rift_data(user_id)
@@ -522,7 +459,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if original_time <= 1:
         msg = "秘境探索时间已经是1分钟，无需使用加速券！"
         await handle_send(bot, event, msg)
-        await use_rift_speedup.finish()
+        return
     
     # 计算加速后的时间（最少保留1分钟）
     new_time = max(1, original_time - 30)
@@ -530,20 +467,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     save_rift_data(user_id, rift_info)
     
     # 消耗道具
-    sql_message.update_back_j(user_id, speedup_id)
+    sql_message.update_back_j(user_id, item_id)
     
-    msg = f"道友使用了1个秘境加速券，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
     await handle_send(bot, event, msg)
-    await use_rift_speedup.finish()
+    return
 
-@use_rift_big_speedup.handle(parameterless=[Cooldown(at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def use_rift_big_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘境大加速券"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_rift_big_speedup.finish()
+        return
     
     user_id = user_info['user_id']
     
@@ -551,22 +487,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_type, msg = check_user_type(user_id, 3)  # 需要正在秘境的用户
     if not is_type:
         await handle_send(bot, event, msg)
-        await use_rift_big_speedup.finish()
-    
-    # 检查背包中的秘境大加速券
-    back_msg = sql_message.get_back_msg(user_id)
-    big_speedup_id = 20013  # 秘境大加速券ID
-    big_speedup_num = 0
-    
-    for item in back_msg:
-        if item['goods_id'] == big_speedup_id:
-            big_speedup_num = item['goods_num']
-            break
-    
-    if big_speedup_num < 1:
-        msg = "道友背包中没有秘境大加速券，无法使用！"
-        await handle_send(bot, event, msg)
-        await use_rift_big_speedup.finish()
+        return
     
     # 读取秘境信息
     rift_info = read_rift_data(user_id)
@@ -576,7 +497,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if original_time <= 1:
         msg = "秘境探索时间已经是1分钟，无需使用大加速券！"
         await handle_send(bot, event, msg)
-        await use_rift_big_speedup.finish()
+        return
     
     # 计算大加速后的时间（最少保留1分钟）
     new_time = max(1, original_time - 60)
@@ -584,11 +505,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     save_rift_data(user_id, rift_info)
     
     # 消耗道具
-    sql_message.update_back_j(user_id, big_speedup_id)
+    sql_message.update_back_j(user_id, item_id)
     
-    msg = f"道友使用了1个秘境大加速券，秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
     await handle_send(bot, event, msg)
-    await use_rift_big_speedup.finish()
-
-def is_in_groups(event: GroupMessageEvent | PrivateMessageEvent):
-    return "000000" in groups
+    return

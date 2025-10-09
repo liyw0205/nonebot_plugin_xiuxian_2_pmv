@@ -40,8 +40,6 @@ do_work = on_regex(
     priority=10,
     block=True
 )
-use_work_order = on_command("道具使用悬赏令", priority=5, block=True)
-use_work_capture_order = on_command("道具使用追捕令", priority=5, block=True)
 do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 
 def calculate_remaining_time(create_time: str, work_name: str = None, user_id: str = None) -> Tuple[int, int, int]:
@@ -603,77 +601,47 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         msg = f"\n{__work_help__}"
         await handle_send(bot, event, msg)
 
-@use_work_order.handle(parameterless=[Cooldown(at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用悬赏令刷新悬赏"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_work_order.finish()
+        return
     
     user_id = user_info['user_id']
-    
-    # 检查背包中的悬赏令
-    back_msg = sql_message.get_back_msg(user_id)
-    work_order_id = 20014
-    work_order_num = 0
-    for item in back_msg:
-        if item['goods_id'] == work_order_id:
-            work_order_num = item['goods_num']
-            break
-
-    if work_order_num < 1:
-        msg = "道友背包中没有悬赏令，无法使用！"
-        await handle_send(bot, event, msg)
-        await use_work_order.finish()
     
     # 检查当前状态
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
         await handle_send(bot, event, msg)
-        await use_work_order.finish()
+        return
     
     # 生成新悬赏令
     work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
     msg = generate_work_message(work_msg, sql_message.get_work_num(user_id))
     
     # 消耗道具
-    sql_message.update_back_j(user_id, work_order_id)
+    sql_message.update_back_j(user_id, item_id)
     
     await handle_send(bot, event, msg)
-    await use_work_order.finish()
+    return
 
-@use_work_capture_order.handle(parameterless=[Cooldown(at_sender=False)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用追捕令刷新悬赏"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await use_work_capture_order.finish()
+        return
     
     user_id = user_info['user_id']
-    
-    # 检查背包中的追捕令
-    back_msg = sql_message.get_back_msg(user_id)
-    capture_order_id = 20015
-    capture_order_num = 0
-    for item in back_msg:
-        if item['goods_id'] == capture_order_id:
-            capture_order_num = item['goods_num']
-            break
-
-    if capture_order_num < 1:
-        msg = "道友背包中没有追捕令，无法使用！"
-        await handle_send(bot, event, msg)
-        await use_work_capture_order.finish()
     
     # 检查当前状态
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
         await handle_send(bot, event, msg)
-        await use_work_capture_order.finish()
+        return
     
     # 生成新悬赏令
     work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
@@ -683,7 +651,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not work_data:
         msg = "悬赏令数据异常，请重新尝试！"
         await handle_send(bot, event, msg)
-        await use_work_capture_order.finish()
+        return
     
     # 修改奖励倍率(2-5倍)并更新到数据中
     reward_multiplier = random.randint(2, 5)
@@ -708,13 +676,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 生成显示消息
     msg = generate_work_message(updated_work_msg, sql_message.get_work_num(user_id))
-    msg += f"\n※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
+    msg2 = f"※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
     
     # 消耗道具
-    sql_message.update_back_j(user_id, capture_order_id)
-    
+    sql_message.update_back_j(user_id, item_id)
+    await handle_send(bot, event, msg2)
     await handle_send(bot, event, msg)
-    await use_work_capture_order.finish()
+    return
 
 @do_work_cz.handle(parameterless=[Cooldown(at_sender=False)])
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

@@ -41,6 +41,9 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_weapon_info_msg, get_armor_info_msg,
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
 )
+from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_speedup, use_rift_big_speedup
+from ..xiuxian_impart import use_wishing_stone, use_love_sand
+from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_config import XiuConfig, convert_rank
 from datetime import datetime, timedelta
 from .auction_config import *
@@ -226,6 +229,7 @@ yaocai_back = on_command('药材背包', priority=10, block=True)
 yaocai_detail_back = on_command('药材背包详细', aliases={'药材背包详情'}, priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
 my_equipment = on_command("我的装备", priority=10, block=True)
+use_item = on_command("道具使用", priority=15, block=True)
 use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "坊市帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
@@ -5225,7 +5229,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if type_match and rank_match:
             # 对于装备类型，检查是否已被使用
             if item['goods_type'] == "装备":
-                is_equipped = check_user_back_use_msg(user_id, item['goods_id'])
+                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
                 if is_equipped:
                     # 如果装备已被使用，可炼金数量 = 总数量 - 绑定数量 - 1（已装备的）
                     available_num = item['goods_num'] - item['bind_num'] - 1
@@ -5246,7 +5250,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     'type': item['goods_type'],
                     'available_num': available_num,
                     'info': item_info,
-                    'is_equipped': check_user_back_use_msg(user_id, item['goods_id']) if item['goods_type'] == "装备" else False
+                    'is_equipped': check_equipment_use_msg(user_id, item['goods_id']) if item['goods_type'] == "装备" else False
                 })
     
     if not items_to_alchemy:
@@ -5518,8 +5522,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = check_use_elixir(user_id, goods_id, num)
         
     elif goods_type == "特殊道具":
-        msg = f"请发送:道具使用{goods_info['name']}"
-
+        await use_item_(bot, event, f"{goods_info['name']} {num}")
+        await use.finish()
     elif goods_type == "神物":
         user_info = sql_message.get_user_info_with_id(user_id)
         user_rank = convert_rank(user_info['level'])[0]
@@ -5548,6 +5552,149 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     await handle_send(bot, event, msg)
     await use.finish()
 
+@use_item.handle(parameterless=[Cooldown(at_sender=False)])
+async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """道具使用"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await use_item.finish()
+    
+    user_id = user_info['user_id']
+    if isinstance(args, str):
+        args_text = args.strip()
+    else:
+        # 正常用户调用
+        args_text = args.extract_plain_text().strip()
+    
+    if not args_text:
+        msg = "请输入要使用的道具名称！格式：道具使用 物品名 [数量]"
+        await handle_send(bot, event, msg)
+        await use_item.finish()
+    
+    # 解析物品名和数量
+    parts = args_text.split()
+    item_name = parts[0]
+    quantity = 1
+    
+    if len(parts) > 1:
+        try:
+            quantity = int(parts[1])
+            quantity = max(1, min(quantity, 100))  # 限制使用数量1-10
+        except ValueError:
+            msg = "请输入有效的数量！"
+            await handle_send(bot, event, msg)
+            await use_item.finish()
+    
+    # 查找物品ID
+    item_id = None
+    for item_key, item_data in items.items.items():
+        if item_data['name'] == item_name:
+            item_id = int(item_key)
+            break
+    
+    if not item_id:
+        msg = f"未找到名为 {item_name} 的物品！"
+        await handle_send(bot, event, msg)
+        await use_item.finish()
+    
+    # 检查背包中是否有该物品
+    back_msg = sql_message.get_back_msg(user_id)
+    in_flag = None
+    
+    for back in back_msg:
+        if item_name == back['goods_name']:
+            in_flag = True
+            goods_num = back['goods_num']
+            break
+    
+    if not in_flag:
+        msg = f"背包中没有 {item_name}！"
+        await handle_send(bot, event, msg)
+        await use_item.finish()
+    
+    # 检查数量是否足够
+    if goods_num < quantity:
+        quantity = available_num
+    ITEM_HANDLERS = {
+        20005: use_wishing_stone,
+        20016: use_love_sand,
+        20007: use_rift_explore,
+        20001: use_rift_key,
+        20012: use_rift_speedup,
+        20013: use_rift_big_speedup,
+        20010: use_lottery_talisman,
+        20014: use_work_order,
+        20015: use_work_capture_order
+    }
+    handler_func = ITEM_HANDLERS.get(item_id, None)
+    if handler_func:
+        await handler_func(bot, event, item_id, quantity)
+    else:
+        msg = f"{item_name} 不可直接使用！"
+        await handle_send(bot, event, msg)
+        await use_item.finish()
+
+async def use_lottery_talisman(bot, event, item_id, num):
+    """使用灵签宝箓"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    user_id = user_info["user_id"]
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+        
+    # 批量处理使用灵签宝箓
+    success_count = 0
+    obtained_items = []
+    
+    for _ in range(num):
+        # 50%概率判断成功
+        roll = random.randint(1, 100)
+        if roll <= 50:
+            success_count += 1
+            
+            # 随机选择防具或法器类型
+            item_type = random.choice(["防具", "法器"])
+            zx_rank = random.randint(5, 10)
+            item_rank = min(random.randint(zx_rank, zx_rank + 50), 54)
+            if item_rank == 5 and random.randint(1, 100) != 100:
+                item_rank = 16
+            
+            # 获取随机物品
+            item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+            if item_id_list:
+                item_id = random.choice(item_id_list)
+                item_info = items.get_data_by_item_id(item_id)
+                
+                # 给予物品
+                sql_message.send_back(
+                    user_id, 
+                    item_id, 
+                    item_info["name"], 
+                    item_info["type"], 
+                    1
+                )
+                
+                obtained_items.append(f"{item_info['level']}:{item_info['name']}")
+    
+    # 批量消耗灵签宝箓
+    sql_message.update_back_j(user_id, item_id, num=num)
+    
+    # 构建结果消息
+    if success_count > 0:
+        items_msg = "\n".join(obtained_items)
+        result_msg = f"获得以下物品：\n{items_msg}"
+    else:
+        result_msg = f"未能获得任何物品，运气不佳啊！"
+    
+    try:
+        await handle_send(bot, event, result_msg)
+    except ActionFailed:
+        await handle_send(bot, event, "使用灵签宝箓结果发送失败！")
+    return
+    
 @chakan_wupin.handle(parameterless=[Cooldown(at_sender=False)])
 async def chakan_wupin_(
     bot: Bot, 

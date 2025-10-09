@@ -78,7 +78,7 @@ WORLDLY_EVENTS = {
                 ("修复上古传送阵，获{}成就点", "base_amount + random.randint(300, 700)"),
                 ("在炼丹大会夺冠，赢得{}成就点", "base_amount * 1.2 + random.randint(180, 500)")
             ],
-            "base_amount": 200
+            "base_amount": 50
         }
     },
     "punish": {
@@ -222,7 +222,7 @@ TRANSCENDENT_EVENTS = {
                 ("补全天道法则，得{}成就点", "base_amount * 2 + random.randint(250, 600)"),
                 ("教化山野精怪，功德无量获{}成就点", "base_amount * 1.5 + random.randint(200, 500)")
             ],
-            "base_amount": 200
+            "base_amount": 50
         }
     },
     "punish": {
