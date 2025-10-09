@@ -683,6 +683,9 @@ async function loadBackups() {
                                 <button onclick="confirmRestore('${backup.filename}')" class="btn btn-warning">
                                     <i class="fas fa-undo"></i> 恢复到此版本
                                 </button>
+                                <button onclick="downloadBackup('${backup.filename}')" class="btn btn-info">
+                                    <i class="fas fa-download"></i> 下载
+                                </button>
                                 <button onclick="confirmDeleteBackup('${backup.filename}')" class="btn btn-danger">
                                     <i class="fas fa-trash"></i> 删除
                                 </button>
@@ -785,7 +788,7 @@ async function manualBackup() {
         } else {
             statusDiv.innerHTML = `
                 <div class="error">
-                    <h3 style="color: #F44336;">❌❌ 手动备份失败</h3>
+                    <h3 style="color: #F44336;">❌ 手动备份失败</h3>
                     <p>${data.error}</p>
                 </div>
             `;
@@ -793,11 +796,26 @@ async function manualBackup() {
     } catch (error) {
         statusDiv.innerHTML = `
             <div class="error">
-                <h3 style="color: #F44336;">❌❌ 请求失败</h3>
+                <h3 style="color: #F44336;">❌ 请求失败</h3>
                 <p>${error}</p>
             </div>
         `;
     }
+}
+
+// 下载备份文件函数
+async function downloadBackup(backupFilename) {
+    // 直接在新窗口打开下载链接
+    window.open(`/download_backup/${encodeURIComponent(backupFilename)}`, '_blank');
+    
+    // 显示成功消息
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = `
+        <div class="success">
+            <h3 style="color: #4CAF50;">✅ 下载开始</h3>
+            <p>备份文件 ${backupFilename} 正在下载中...</p>
+        </div>
+    `;
 }
 
 // 确认删除备份函数

@@ -9,7 +9,7 @@ from pathlib import Path
 from nonebot.log import logger
 from datetime import datetime
 from nonebot import get_driver
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -718,6 +718,23 @@ def manual_backup():
             
     except Exception as e:
         return jsonify({"success": False, "error": f"备份过程中出现错误: {str(e)}"})
+
+@app.route('/download_backup/<filename>')
+def download_backup(filename):
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    
+    backup_path = Path() / "data" / "backups" / filename
+    
+    if not backup_path.exists():
+        return "备份文件不存在", 404
+    
+    return send_file(
+        str(backup_path.absolute()),
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/zip'
+    )
 
 @app.route('/delete_backup', methods=['POST'])
 def delete_backup():
