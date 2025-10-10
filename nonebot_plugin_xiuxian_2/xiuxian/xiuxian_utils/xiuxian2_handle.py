@@ -10,7 +10,8 @@ from pathlib import Path
 from nonebot.log import logger
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
-from .. import DRIVER
+# from .. import DRIVER
+from nonebot import get_driver
 from .item_json import Items
 from .xn_xiuxian_impart_config import config_impart
 
@@ -1853,7 +1854,8 @@ def final_user_data(user_data, columns):
     
     return user_dict
 
-@DRIVER.on_shutdown
+driver = get_driver()
+@driver.on_shutdown
 async def close_db():
     XiuxianDateManage().close()
 
@@ -2296,7 +2298,7 @@ async def impart_check(user_id):
     
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
-@DRIVER.on_shutdown
+@driver.on_shutdown
 async def close_db():
     XIUXIAN_IMPART_BUFF().close()
 
