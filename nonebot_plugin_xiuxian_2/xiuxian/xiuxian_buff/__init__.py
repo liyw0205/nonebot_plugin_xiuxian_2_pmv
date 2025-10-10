@@ -352,17 +352,34 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
 
-    # 检查是否有未处理的邀请
+    # 检查是否已经发出过邀请（作为邀请者）
     user_id = user_1['user_id']
+    
+    # 查找当前用户是否已经作为邀请者存在于invite_cache中
+    existing_invite = None
+    for target_id, invite_data in invite_cache.items():
+        if invite_data['inviter'] == user_id:
+            existing_invite = target_id
+            break
+    
+    if existing_invite is not None:
+        # 已经发出过邀请，提示用户等待
+        target_info = sql_message.get_user_real_info(existing_invite)
+        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[existing_invite]['timestamp'])
+        msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
+        await handle_send(bot, event, msg)
+        await two_exp_invite.finish()
+
+    # 检查是否有未处理的邀请（作为被邀请者）
     if str(user_id) in invite_cache:
         # 有未处理的邀请，提示用户
         inviter_id = invite_cache[str(user_id)]['inviter']
         inviter_info = sql_message.get_user_real_info(inviter_id)
-        msg = f"道友已有来自{inviter_info['user_name']}的双修邀请，请先处理！\n发送【同意双修】或【拒绝双修】"
+        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(user_id)]['timestamp'])
+        msg = f"道友已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请先处理！\n发送【同意双修】或【拒绝双修】"
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
 
-    # 原有的双修逻辑，但改为发送邀请
     two_qq = None
     exp_count = 1  # 默认双修次数
     
