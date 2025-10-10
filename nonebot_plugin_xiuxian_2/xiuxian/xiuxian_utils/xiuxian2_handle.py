@@ -412,6 +412,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur = self.conn.cursor()
         cur.execute(sql, (user_id,))
         self.conn.commit()
+        
+    def novice_remake(self):
+        """重置新手礼包"""
+        sql = f"UPDATE user_xiuxian SET is_novice=0"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
+        self.conn.commit()
     
     def get_user_create_time(self, user_id):
         """获取用户创建时间"""

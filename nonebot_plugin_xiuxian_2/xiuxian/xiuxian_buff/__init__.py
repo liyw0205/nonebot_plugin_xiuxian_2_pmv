@@ -45,7 +45,7 @@ out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=T
 in_closing = on_fullmatch("闭关", priority=5, block=True)
 up_exp = on_command("修炼", priority=5, block=True)
 reset_exp = on_command("重置修炼状态", priority=5, block=True)
-stone_exp = on_command("灵石修仙", aliases={"灵石修炼"}, priority=5, block=True)
+stone_exp = on_command("灵石修炼", aliases={"灵石修仙"}, priority=5, block=True)
 two_exp_invite = on_command("双修", priority=5, block=True)
 two_exp_accept = on_fullmatch("同意双修", priority=5, block=True)
 two_exp_reject = on_fullmatch("拒绝双修", priority=5, block=True)
@@ -782,7 +782,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_type, msg = check_user_type(user_id, user_type)
     if not is_type:
         await handle_send(bot, event, msg)
-        await up_exp.finish()
+        await reset_exp.finish()
     msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
     await asyncio.sleep(60)

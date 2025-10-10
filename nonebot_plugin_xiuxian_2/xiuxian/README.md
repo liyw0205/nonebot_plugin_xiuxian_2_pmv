@@ -3,6 +3,7 @@
 - xiuxian_config.py ：配置文件
 - xiuxian_utils ：通用函数
 - xiuxian_web ：WEB管理
+- xiuxian_admin ：管理员命令
 - xiuxian_scheduler ：定时任务
 - xiuxian_status ：BOT信息/系统信息
 - xiuxian_compensation ：补偿/礼包/兑换码/邀请

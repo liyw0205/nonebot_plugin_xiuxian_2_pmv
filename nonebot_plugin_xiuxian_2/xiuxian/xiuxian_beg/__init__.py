@@ -67,8 +67,6 @@ __beg_help__ = f"""
 beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
 novice = on_command("新手礼包", priority=7, block=True)
-xiuxian_novice = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
-
     
 @beg_help.handle(parameterless=[Cooldown(at_sender=False)])
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -230,12 +228,3 @@ async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"道友的新手礼包:\n" + "".join(msg_parts)
     sql_message.save_novice(user_id)
     await handle_send(bot, event, msg)
-
-@xiuxian_novice.handle(parameterless=[Cooldown(at_sender=False)])
-async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """重置新手礼包(管理员命令)"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sql_message.novice_remake()
-    msg = "新手礼包重置成功，所有玩家可以重新领取新手礼包！"
-    await handle_send(bot, event, msg)
-    await xiuxian_novice.finish()

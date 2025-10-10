@@ -15,7 +15,6 @@ from nonebot.adapters.onebot.v11 import (
 from .old_rift_info import old_rift_info
 from .. import DRIVER
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
-from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
@@ -36,19 +35,13 @@ cache_help = {}
 group_rift = {}  # dict
 groups = config['open']  # list
 
-set_group_rift = on_command("秘境", priority=4, permission=SUPERUSER, block=True)
 explore_rift = on_fullmatch("探索秘境", priority=5, block=True)
 rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
-create_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境探索终止", aliases={"终止探索秘境"}, priority=7, block=True)
 
 __rift_help__ = f"""
 【秘境探索系统】🗝️
-
-🔧 管理指令（需管理员权限）：
-  • 秘境开启/关闭 - 控制秘境生成通知
-  • 生成秘境 - 手动生成随机秘境
 
 🔍 探索指令：
   • 探索秘境 - 进入秘境获取随机奖励
@@ -122,21 +115,19 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
         await handle_send(bot, event, msg)
         await rift_help.finish()
 
-
-@create_rift.handle(parameterless=[Cooldown(at_sender=False)])
-async def create_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_id = "000000"
     if group_id not in groups:
         msg = '尚未开启秘境，请联系管理员开启秘境'
         await handle_send(bot, event, msg)
-        await create_rift.finish()
+        return
 
     try:
         msg = f"当前已存在{group_rift[group_id].name}，请诸位道友发送 探索秘境 来加入吧！"
         await handle_send(bot, event, msg)
-        await create_rift.finish()
+        return
     except KeyError:
         rift = Rift()
         rift.name = get_rift_type()
@@ -146,7 +137,7 @@ async def create_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg)
-        await create_rift.finish()
+        return
 
 
 @explore_rift.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
@@ -348,40 +339,6 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"已终止{rift_info['name']}秘境的探索！"
         await handle_send(bot, event, msg)
         await break_rift.finish()
-
-        
-@set_group_rift.handle(parameterless=[Cooldown(at_sender=False)])
-async def set_group_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """秘境开启、关闭"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    mode = args.extract_plain_text().strip()
-    group_id = str(send_group_id)  # 使用实际群号
-    isInGroup = group_id in config['open']  # 检查群号是否在通知列表中
-
-    if mode == '开启':
-        if isInGroup:
-            msg = f"本群已开启秘境通知，请勿重复开启!"
-            await handle_send(bot, event, msg)
-            await set_group_rift.finish()
-
-        else:
-            config['open'].append(group_id)
-            savef_rift(config)
-            msg = f"已开启本群秘境通知!"
-            await handle_send(bot, event, msg)
-            await set_group_rift.finish()
-
-    elif mode == '关闭':
-        if isInGroup:
-            config['open'].remove(group_id)
-            savef_rift(config)
-            msg = f"已关闭本群秘境通知!"
-            await handle_send(bot, event, msg)
-            await set_group_rift.finish()
-        else:
-            msg = f"未开启本群秘境通知!"
-            await handle_send(bot, event, msg)
-            await set_group_rift.finish()
 
 async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘境钥匙"""

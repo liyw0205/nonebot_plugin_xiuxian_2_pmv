@@ -61,7 +61,6 @@ generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部�
 create_appoint = on_command("世界BOSS指定生成", aliases={"世界boss指定生成", "世界Boss指定生成", "指定生成世界BOSS", "指定生成世界boss", "指定生成世界Boss"}, permission=SUPERUSER, priority=5)
 boss_info = on_command("世界BOSS查询", aliases={"世界boss查询", "世界Boss查询", "查询世界BOSS", "查询世界boss", "查询世界Boss"}, priority=6, block=True)
 boss_info2 = on_command("世界BOSS列表", aliases={"世界boss列表", "世界Boss列表"}, priority=6, block=True)
-set_group_boss = on_command("世界BOSS设置", aliases={"世界boss设置", "世界Boss设置", "设置世界BOSS", "设置世界boss", "设置世界Boss"}, priority=13, permission=SUPERUSER, block=True)
 battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐", "讨伐世界BOSS", "讨伐世界boss", "讨伐世界Boss"}, priority=6, block=True)
 boss_help = on_command("世界BOSS帮助", aliases={"世界boss帮助", "世界Boss帮助"}, priority=5, block=True)
 boss_admin = on_command("世界BOSS管理", aliases={"世界boss管理", "世界Boss管理"}, priority=5, block=True)
@@ -112,7 +111,6 @@ __boss_help__2 = f"""
 🔹🔹 管理指令：
   ▶ 天罚世界BOSS [编号] - 删除指定BOSS
   ▶ 天罚全部世界BOSS - 清空所有BOSS
-  ▶ 世界BOSS设置 开启/关闭 - 管理群通知
 """.strip()
 
 @DRIVER.on_startup
@@ -836,35 +834,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
     await handle_send(bot, event, msg)
     await create_appoint.finish()
-    
-@set_group_boss.handle(parameterless=[Cooldown(at_sender=False)])
-async def set_group_boss_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """设置群世界boss通知开关"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    mode = args.extract_plain_text().strip()
-    group_id = str(send_group_id)  # 使用实际群号
-    isInGroup = group_id in config['open']  # 检查群号是否在通知列表中
-
-    if mode == '开启':
-        if isInGroup:
-            msg = f"本群已开启世界Boss通知，请勿重复开启!"
-        else:
-            # 添加群号到通知列表
-            config['open'][group_id] = {}
-            savef_boss(config)
-            msg = f"已为本群开启世界Boss通知!"
-        await handle_send(bot, event, msg)
-        await set_group_boss.finish()
-
-    elif mode == '关闭':
-        if isInGroup:
-            del config['open'][group_id]
-            savef_boss(config)
-            msg = f"已为本群关闭世界Boss通知!"
-        else:
-            msg = f"本群未开启世界Boss通知!"
-        await handle_send(bot, event, msg)
-        await set_group_boss.finish()
 
 @boss_integral_store.handle(parameterless=[Cooldown(at_sender=False)])
 async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

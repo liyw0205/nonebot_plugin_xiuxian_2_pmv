@@ -243,7 +243,7 @@ how_are_you = on_command("你好吗", aliases={"最近怎么样", "怎么样", "
 weather_command = on_command("天气", aliases={"今天天气", "天气预报", "天象", "气象"}, priority=30, block=True)
 time_command = on_command("时间", aliases={"现在几点", "几点钟", "当前时间", "几点了", "时辰", "什么时辰了"}, priority=30, block=True)
 eat_command = on_command("吃饭", aliases={"饿了", "干饭", "用膳", "进食"}, priority=30, block=True)
-study_command = on_command("学习", aliases={"修炼", "用功", "study", "修行", "练功"}, priority=30, block=True)
+study_command = on_command("学习", aliases={"用功", "study", "修行", "练功"}, priority=30, block=True)
 work_command = on_command("工作", aliases={"上班", "打工", "work", "劳作", "当值"}, priority=30, block=True)
 rest_command = on_command("休息", aliases={"歇会", "放松", "relax", "小憩", "休憩"}, priority=30, block=True)
 joke_command = on_command("讲个笑话", aliases={"笑话", "来点乐子", "joke", "搞笑", "逗我笑"}, priority=30, block=True)

@@ -40,7 +40,6 @@ do_work = on_regex(
     priority=10,
     block=True
 )
-do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 
 def calculate_remaining_time(create_time: str, work_name: str = None, user_id: str = None) -> Tuple[int, int, int]:
     """
@@ -293,7 +292,7 @@ __work_help__ = f"""
 
 【规则说明】
 悬赏令有效时间：{WORK_EXPIRE_MINUTES}分钟
-每日0点重置刷新次数
+每日8点重置刷新次数
 高境界可获得更多悬赏奖励
 
 【温馨提示】
@@ -345,7 +344,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if usernums <= 0:
             msg = (
                 f"道友今日的悬赏令刷新次数已用尽\n"
-                f"每日0点重置刷新次数\n"
+                f"每日8点重置刷新次数\n"
                 f"请明日再来！"
             )
             await handle_send(bot, event, msg)
@@ -683,11 +682,3 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     await handle_send(bot, event, msg2)
     await handle_send(bot, event, msg)
     return
-
-@do_work_cz.handle(parameterless=[Cooldown(at_sender=False)])
-async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """重置所有用户的悬赏令"""    
-    sql_message.reset_work_num(count)
-    msg = "用户悬赏令刷新次数重置成功"
-    await handle_send(bot, event, msg)
-    await do_work_cz.finish()
