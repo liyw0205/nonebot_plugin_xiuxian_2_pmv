@@ -1,5 +1,7 @@
 #!usr/bin/env python3
 # -*- coding: utf-8 -*-
+from nonebot.exception import FinishedException
+
 from .xiuxian_utils.download_xiuxian_data import download_xiuxian_data
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
@@ -9,14 +11,16 @@ from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
     PrivateMessageEvent
 )
-from nonebot import get_driver
+from nonebot import get_driver, on_command
 from .xiuxian_config import XiuConfig
 from pathlib import Path
 from pkgutil import iter_modules
 from nonebot.log import logger
 from nonebot import require, load_all_plugins, get_plugin_by_module_name
 from .xiuxian_utils.config import config as _config
-
+from .xiuxian_info.draw_changelog import get_commits, create_changelog_image
+from nonebot.params import CommandArg
+from nonebot.adapters.onebot.v11 import Message, MessageSegment, GroupMessageEvent, Bot
 
 DRIVER = get_driver()
 
@@ -73,6 +77,34 @@ __plugin_meta__ = PluginMetadata(
     }
 )
 
+changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
+
+@changelog.handle()
+async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    """处理更新日志命令"""
+    page_arg = args.extract_plain_text().strip()
+    page = 1
+    if page_arg and page_arg.isdigit():
+        page = int(page_arg)
+
+    if page <= 0:
+        page = 1
+
+    await changelog.send("正在获取更新日志，请稍候...")
+
+    try:
+        commits = get_commits(page=page)
+        if commits:
+            image_path = create_changelog_image(commits, page)
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+            await changelog.finish(MessageSegment.image(image_bytes))
+        else:
+            await changelog.finish("无法获取更新日志，可能已到达最后一页或请求失败。")
+    except FinishedException:
+        raise
+    except Exception as e:
+        await changelog.finish(f"生成更新日志图片时出错: {e}")
 
 @event_preprocessor
 async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

@@ -28,7 +28,12 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from .two_exp_cd import two_exp_cd
+from nonebot.plugin import on_command, on_fullmatch, on_message
+from nonebot.rule import to_me
 
+# 用于存储双修邀请的全局字典
+# 结构: {invited_user_id: {"inviter_id": inviter_user_id, "time": timestamp}}
+two_exp_invitations = {}
 
 cache_help = {}
 sql_message = XiuxianDateManage()  # sql类
@@ -304,156 +309,209 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await handle_send(bot, event, msg)
         await qc.finish()
 
-@two_exp.handle(parameterless=[Cooldown(stamina_cost = 10, at_sender=False)])
-async def two_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """双修"""
+two_exp_invite = on_command("双修", priority=5, block=True)
+two_exp_accept = on_command("同意双修", priority=5, block=True)
+two_exp_reject = on_command("拒绝双修", priority=5, block=True)
+
+@two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10, at_sender=False)])
+async def handle_two_exp_invite(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """处理双修邀请"""
+    global two_exp_invitations
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    global two_exp_limit
+
     isUser, user_1, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await two_exp.finish()
+        await two_exp_invite.finish()
 
-    two_qq = None  # 艾特的时候存到这里
+    user_1_id = str(user_1['user_id'])
+    if user_1_id in two_exp_invitations:
+        inviter_id = two_exp_invitations[user_1_id]["inviter_id"]
+        inviter_info = sql_message.get_user_real_info(inviter_id)
+        if inviter_info:
+            msg = f"你正被道友【{inviter_info['user_name']}】邀请双修，请先处理该邀请！(同意双修/拒绝双修)"
+        else:
+            msg = "你正被他人邀请双修，请先处理该邀请！"
+        await handle_send(bot, event, msg)
+        await two_exp_invite.finish()
+
+    two_qq = None
     for arg in args:
         if arg.type == "at":
             two_qq = arg.data.get("qq", "")
-        else:
-            arg = args.extract_plain_text().strip()
-            two_qq = sql_message.get_user_info_with_name(str(arg))['user_id']
-    
+    if not two_qq:
+        await handle_send(bot, event, "请@一位道友发起双修邀请！")
+        await two_exp_invite.finish()
+
     user_2 = sql_message.get_user_real_info(two_qq)
-    
-    if user_1 and user_2:
-        if two_qq is None:
-            msg = "请at你的道侣,与其一起双修！"
-            await handle_send(bot, event, msg)
-            await two_exp.finish()
+    if not user_2:
+        await handle_send(bot, event, "修仙界没有对方的信息，快邀请对方加入修仙界吧！")
+        await two_exp_invite.finish()
 
-        if int(user_1['user_id']) == int(two_qq):
-            msg = "道友无法与自己双修！"
-            await handle_send(bot, event, msg)
-            await two_exp.finish()
-        if user_2:
-            exp_1 = user_1['exp']
-            exp_2 = user_2['exp']
-            user1_rank = convert_rank(user_1['level'])[0]
-            user2_rank = convert_rank(user_2['level'])[0]
-            if exp_2 > exp_1:
-                msg = "修仙大能看了看你，不屑一顾，扬长而去！"
-                await handle_send(bot, event, msg)
-                await two_exp.finish()
-            else:
-                # 保留双修次数检测
-                limt_1 = two_exp_cd.find_user(user_1['user_id'])
-                limt_2 = two_exp_cd.find_user(user_2['user_id'])
-                sql_message.update_last_check_info_time(user_1['user_id']) # 更新查看修仙信息时间
-                # 加入传承
-                impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_1['user_id'])
-                impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_2['user_id'])
-                impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 is not None else 0
-                impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 is not None else 0
-                
-                main_two_data_1 = UserBuffDate(user_1['user_id']).get_user_main_buff_data()#功法双修次数提升
-                main_two_data_2 = UserBuffDate(user_2['user_id']).get_user_main_buff_data()
-                main_two_1 =  main_two_data_1['two_buff'] if main_two_data_1 is not None else 0
-                main_two_2 =  main_two_data_2['two_buff'] if main_two_data_2 is not None else 0
-                if limt_1 >= two_exp_limit + impart_two_exp_1 + main_two_1:
-                    msg = "道友今天双修次数已经到达上限！"
-                    await handle_send(bot, event, msg)
-                    await two_exp.finish()
-                if limt_2 >= two_exp_limit + impart_two_exp_2 + main_two_2:
-                    msg = "对方今天双修次数已经到达上限！"
-                    await handle_send(bot, event, msg)
-                    await two_exp.finish()
-                
-                max_exp_1 = int(exp_1 * 0.001 * min(0.1 * user1_rank, 1))  # 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
-                max_exp_2 = int(exp_2 * 0.001 * min(0.1 * user1_rank, 1))
-                
-                # 随机事件描述
-                event_descriptions = [
-                    f"月明星稀之夜，{user_1['user_name']}与{user_2['user_name']}在灵山之巅相对而坐，双手相抵，周身灵气环绕如雾。",
-                    f"洞府之中，{user_1['user_name']}与{user_2['user_name']}盘膝对坐，真元交融，形成阴阳鱼图案在两人之间流转。",
-                    f"瀑布之下，{user_1['user_name']}与{user_2['user_name']}沐浴灵泉，水汽蒸腾间功法共鸣，修为精进。",
-                    f"竹林小筑内，{user_1['user_name']}与{user_2['user_name']}共饮灵茶，茶香氤氲中功法相互印证。",
-                    f"云端之上，{user_1['user_name']}与{user_2['user_name']}脚踏飞剑，剑气交织间功法互补，修为大涨。",
-                    f"古树之下，{user_1['user_name']}与{user_2['user_name']}背靠背而坐，树影婆娑间功法相互滋养。",
-                    f"寒潭边上，{user_1['user_name']}与{user_2['user_name']}静坐调息，寒气与真元交融，形成奇妙平衡。",
-                    f"丹房之内，{user_1['user_name']}与{user_2['user_name']}共同炼制丹药，丹火映照下功法相互促进。",
-                    f"剑冢之中，{user_1['user_name']}与{user_2['user_name']}感悟剑意，剑气共鸣间修为水涨船高。",
-                    f"花海中央，{user_1['user_name']}与{user_2['user_name']}漫步其中，花香与真元交织，功法相互印证。"
-                ]
-                
-                special_events = [
-                    f"突然天降异象，七彩祥云笼罩两人，修为大增！",
-                    f"意外发现一处灵脉，两人共同吸收，修为精进！",
-                    f"功法意外产生共鸣，引发天地灵气倒灌！",
-                    f"两人心意相通，功法运转达到完美契合！",
-                    f"顿悟时刻来临，两人同时进入玄妙境界！"
-                ]
-                
-                # 随机选择普通事件描述
-                event_desc = random.choice(event_descriptions)
-                
-                if random.randint(1, 100) in [13, 14, 52, 10, 66]:  # 特殊事件概率
-                    exp = int((exp_1 + exp_2) * 0.0055)
-                    
-                    # 限制获得的修为不超过1%
-                    exp_limit_1 = min(exp, max_exp_1)
-                    exp_limit_2 = min(exp, max_exp_2)
-                    
-                    sql_message.update_exp(user_1['user_id'], exp_limit_1)
-                    sql_message.update_power2(user_1['user_id'])
-                    
-                    sql_message.update_exp(user_2['user_id'], exp_limit_2)
-                    sql_message.update_power2(user_2['user_id'])
-                    
-                    sql_message.update_levelrate(user_1['user_id'], user_1['level_up_rate'] + 2)
-                    sql_message.update_levelrate(user_2['user_id'], user_2['level_up_rate'] + 2)
-                    
-                    two_exp_cd.add_user(user_1['user_id'])
-                    two_exp_cd.add_user(user_2['user_id'])
-                    
-                    update_statistics_value(user_1['user_id'], "双修次数")
-                    update_statistics_value(user_2['user_id'], "双修次数")
-                    
-                    msg = f"\n{event_desc}\n{random.choice(special_events)}\n"
-                    msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
-                    msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
-                    msg += f"离开时双方互相留法宝为对方护道,双方各增加突破概率2%。"
-                    await handle_send(bot, event, msg)
-                    log_message(user_1['user_id'], msg)
-                    log_message(user_2['user_id'], msg)
-                    await two_exp.finish()
-                else:
-                    exp = int((exp_1 + exp_2) * 0.0055)
-                    
-                    # 限制获得的修为不超过1%
-                    exp_limit_1 = min(exp, max_exp_1)
-                    exp_limit_2 = min(exp, max_exp_2)
-                    
-                    sql_message.update_exp(user_1['user_id'], exp_limit_1)
-                    sql_message.update_power2(user_1['user_id'])
-                    
-                    sql_message.update_exp(user_2['user_id'], exp_limit_2)
-                    sql_message.update_power2(user_2['user_id'])
-                    
-                    two_exp_cd.add_user(user_1['user_id'])
-                    two_exp_cd.add_user(user_2['user_id'])
+    if int(user_1['user_id']) == int(two_qq):
+        await handle_send(bot, event, "道友无法与自己双修！")
+        await two_exp_invite.finish()
 
-                    update_statistics_value(user_1['user_id'], "双修次数")
-                    update_statistics_value(user_2['user_id'], "双修次数")
-                    msg = f"\n{event_desc}\n"
-                    msg += f"{user_1['user_name']}增加修为{number_to(exp_limit_1)}。"
-                    msg += f"{user_2['user_name']}增加修为{number_to(exp_limit_2)}。"
-                    await handle_send(bot, event, msg)
-                    log_message(user_1['user_id'], msg)
-                    log_message(user_2['user_id'], msg)
-                    await two_exp.finish()
-    else:
-        msg = "修仙者应一心向道，务要留恋凡人！"
+    if two_qq in two_exp_invitations:
+        await handle_send(bot, event, "对方正在被邀请中，请稍后再试！")
+        await two_exp_invite.finish()
+
+    limt_1 = two_exp_cd.find_user(user_1['user_id'])
+    limt_2 = two_exp_cd.find_user(user_2['user_id'])
+
+    impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_1['user_id'])
+    impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_2['user_id'])
+    impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 else 0
+    impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 else 0
+
+    main_two_data_1 = UserBuffDate(user_1['user_id']).get_user_main_buff_data()
+    main_two_data_2 = UserBuffDate(user_2['user_id']).get_user_main_buff_data()
+    main_two_1 = main_two_data_1['two_buff'] if main_two_data_1 else 0
+    main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 else 0
+
+    total_limit_1 = two_exp_limit + impart_two_exp_1 + main_two_1
+    total_limit_2 = two_exp_limit + impart_two_exp_2 + main_two_2
+
+    if limt_1 >= total_limit_1:
+        await handle_send(bot, event, "道友今天双修次数已经到达上限！")
+        await two_exp_invite.finish()
+
+    if limt_2 >= total_limit_2:
+        await handle_send(bot, event, "对方今天双修次数已经到达上限！")
+        await two_exp_invite.finish()
+
+    now_time = datetime.now()
+    two_exp_invitations[two_qq] = {"inviter_id": user_1_id, "time": now_time}
+
+    await handle_send(bot, event, f"已向道友【{user_2['user_name']}】发送双修邀请，请等待对方回应...")
+
+    msg = MessageSegment.at(
+        two_qq) + f" 道友，【{user_1['user_name']}】想与你双修，增进修为。若同意，请在60秒内发送“同意双修”，否则发送“拒绝双修”。"
+    await handle_send(bot, event, msg)
+
+    await asyncio.sleep(60)
+    if two_qq in two_exp_invitations and two_exp_invitations[two_qq]["inviter_id"] == user_1_id:
+        del two_exp_invitations[two_qq]
+        await handle_send(bot, event, f"对【{user_2['user_name']}】的双修邀请已超时，自动取消。")
+
+
+@two_exp_accept.handle()
+async def handle_two_exp_accept(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理同意双修"""
+    global two_exp_invitations
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    isUser, user_2, msg = check_user(event)
+    if not isUser:
         await handle_send(bot, event, msg)
-        await two_exp.finish()
+        await two_exp_accept.finish()
+
+    user_2_id = str(user_2['user_id'])
+
+    if user_2_id not in two_exp_invitations:
+        await handle_send(bot, event, "当前没有道友向你发起双修邀请。")
+        await two_exp_accept.finish()
+
+    invitation = two_exp_invitations.pop(user_2_id)
+    user_1_id = invitation["inviter_id"]
+    user_1 = sql_message.get_user_real_info(user_1_id)
+
+    exp_1 = user_1['exp']
+    exp_2 = user_2['exp']
+    user1_rank = convert_rank(user_1['level'])[0]
+
+    if exp_2 > exp_1:
+        msg = "对方修为远高于你，似乎不屑于此，双修失败！"
+        await handle_send(bot, event, msg)
+        await two_exp_accept.finish()
+
+    # 基础收益率为2.5%，并确保最低为1点修为
+    base_rate = 0.025
+    exp = max(1, int((exp_1 + exp_2) * base_rate))
+
+    max_exp_1 = max(1, int(exp_1 * 0.001 * min(0.1 * user1_rank, 1)))
+    max_exp_2 = max(1, int(exp_2 * 0.001 * min(0.1 * user1_rank, 1)))
+
+    event_descriptions = [
+        f"月明星稀之夜，{user_1['user_name']}与{user_2['user_name']}在灵山之巅相对而坐，双手相抵，周身灵气环绕如雾。",
+        f"洞府之中，{user_1['user_name']}与{user_2['user_name']}盘膝对坐，真元交融，形成阴阳鱼图案在两人之间流转。",
+    ]
+    special_events = [
+        f"突然天降异象，七彩祥云笼罩两人，修为大增！",
+        f"功法意外产生共鸣，引发天地灵气倒灌！",
+    ]
+
+    event_desc = random.choice(event_descriptions)
+
+    two_exp_cd.add_user(user_1['user_id'])
+    two_exp_cd.add_user(user_2['user_id'])
+    update_statistics_value(user_1['user_id'], "双修次数")
+    update_statistics_value(user_2['user_id'], "双修次数")
+
+    # 特殊事件，收益翻倍
+    if random.randint(1, 100) <= 15:
+        exp = exp * 2  # 收益翻倍
+        exp_limit_1 = min(exp, max_exp_1)
+        exp_limit_2 = min(exp, max_exp_2)
+
+        sql_message.update_exp(user_1['user_id'], exp_limit_1)
+        sql_message.update_exp(user_2['user_id'], exp_limit_2)
+        sql_message.update_levelrate(user_1['user_id'], user_1['level_up_rate'] + 2)
+        sql_message.update_levelrate(user_2['user_id'], user_2['level_up_rate'] + 2)
+
+        msg = (f"你同意了{user_1['user_name']}的双修邀请。\n{event_desc}\n{random.choice(special_events)}\n"
+               f"你增加了修为 {number_to(exp_limit_2)}！\n"
+               f"{user_1['user_name']} 增加了修为 {number_to(exp_limit_1)}！\n"
+               f"双方各增加突破概率2%。")
+    else:
+        exp_limit_1 = min(exp, max_exp_1)
+        exp_limit_2 = min(exp, max_exp_2)
+
+        sql_message.update_exp(user_1['user_id'], exp_limit_1)
+        sql_message.update_exp(user_2['user_id'], exp_limit_2)
+
+        msg = (f"你同意了{user_1['user_name']}的双修邀请。\n{event_desc}\n"
+               f"你增加了修为 {number_to(exp_limit_2)}！\n"
+               f"{user_1['user_name']} 增加了修为 {number_to(exp_limit_1)}！")
+
+    sql_message.update_power2(user_1['user_id'])
+    sql_message.update_power2(user_2['user_id'])
+
+    await handle_send(bot, event, msg)
+    log_message(user_1['user_id'], msg)
+    log_message(user_2['user_id'], msg)
+
+
+@two_exp_reject.handle()
+async def handle_two_exp_reject(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理拒绝双修"""
+    global two_exp_invitations
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await two_exp_reject.finish()
+
+    user_id = str(user_info['user_id'])
+
+    if user_id in two_exp_invitations:
+        invitation = two_exp_invitations.pop(user_id)
+        inviter_id = invitation["inviter_id"]
+        inviter_info = sql_message.get_user_real_info(inviter_id)
+
+        rejection_msg = f"你拒绝了道友【{inviter_info['user_name']}】的双修邀请。"
+        await handle_send(bot, event, rejection_msg)
+
+        # 给邀请者发送一个被拒绝的通知
+        try:
+            await bot.send_private_msg(user_id=int(inviter_id),
+                                       message=f"道友【{user_info['user_name']}】拒绝了你的双修邀请。")
+        except Exception as e:
+            logger.warning(f"无法向 {inviter_id} 发送私聊通知: {e}")
+
+    else:
+        await handle_send(bot, event, "当前没有道友向你发起双修邀请。")
 
 @reset_exp.handle(parameterless=[Cooldown(at_sender=False, cd_time=60)])
 async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
