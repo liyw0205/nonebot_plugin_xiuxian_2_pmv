@@ -63,6 +63,8 @@ level_up_dr = on_fullmatch("渡厄突破", priority=7, block=True)
 level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, block=True)
 level_up_zj = on_command("直接突破", aliases={"破"}, priority=7, block=True)
 level_up_lx = on_command("连续突破", aliases={"快速突破"}, priority=7, block=True)
+level_up_dr_lx = on_command("连续渡厄突破", aliases={"连续渡厄", "快速渡厄突破"}, priority=7, block=True)
+level_up_drjd_lx = on_command("连续渡厄金丹突破", aliases={"连续金丹突破", "快速金丹突破"}, priority=7, block=True)
 give_stone = on_command("送灵石", priority=5, permission=GROUP, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, priority=4, permission=GROUP, block=True)
 rob_stone = on_command("抢灵石", aliases={"抢劫"}, priority=5, permission=GROUP, block=True)
@@ -1734,7 +1736,248 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         msg = le
         await handle_send(bot, event, msg)
         await level_up_dr.finish()
+
+@level_up_dr_lx.handle(parameterless=[Cooldown(stamina_cost=15, at_sender=False)])
+async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """连续渡厄突破5次"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await level_up_dr_lx.finish()
+    
+    user_id = user_info['user_id']
+    if user_info['hp'] is None:
+        sql_message.update_user_hp(user_id)
+    
+    user_msg = sql_message.get_user_info_with_id(user_id)
+    level_cd = user_msg['level_up_cd']
+    
+    # 检查突破CD
+    if level_cd:
+        time_now = datetime.now()
+        cd = OtherSet().date_diff(time_now, level_cd)
+        if cd < XiuConfig().level_up_cd * 60:
+            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            sql_message.update_user_stamina(user_id, 15, 1)
+            await handle_send(bot, event, msg)
+            await level_up_dr_lx.finish()
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_dr_lx.finish()
+
+    level_name = user_msg['level']
+    exp = user_msg['exp']
+    level_rate = jsondata.level_rate_data()[level_name]
+    leveluprate = int(user_msg['level_up_rate'])
+    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    number = main_rate_buff['number'] if main_rate_buff is not None else 0
+    
+    # 检查渡厄丹数量（只需要1个即可开始）
+    user_backs = sql_message.get_back_msg(user_id)
+    dr_pill_count = 0
+    for back in user_backs:
+        if int(back['goods_id']) == 1999:  # 渡厄丹ID
+            dr_pill_count = back['goods_num']
+            break
+    
+    if dr_pill_count < 1:
+        msg = f"渡厄突破至少需要1个！"
+        await handle_send(bot, event, msg)
+        await level_up_dr_lx.finish()
+    
+    success = False
+    result_msg = ""
+    attempts = 0
+    pills_used = 0
+    max_attempts = 5
+    
+    for i in range(max_attempts):
+        attempts += 1
         
+        # 检查是否还有渡厄丹
+        if pills_used >= dr_pill_count:
+            result_msg += f"\n第{attempts}次突破：渡厄丹不足，突破终止！"
+            break
+        
+        le = OtherSet().get_type(exp, level_rate + leveluprate + number, level_name)
+        
+        if isinstance(le, str):
+            if le == "失败":
+                # 突破失败，使用渡厄丹
+                pills_used += 1
+                sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
+                
+                update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
+                    level_rate * XiuConfig().level_up_probability)
+                leveluprate += update_rate
+                sql_message.update_levelrate(user_id, leveluprate)
+                
+                result_msg += f"第{attempts}次突破失败，下次突破成功率增加{update_rate}%\n"
+                
+                # 检查是否还有丹药继续下一次尝试
+                if pills_used >= dr_pill_count and attempts < max_attempts:
+                    result_msg += f"渡厄丹已用完，无法继续突破！"
+                    break
+                    
+            else:
+                # 修为不足或已是最高境界
+                result_msg += f"第{attempts}次突破：{le}\n"
+                break
+        elif isinstance(le, list):
+            # 突破成功
+            pills_used += 1
+            sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
+            sql_message.updata_level(user_id, le[0])
+            sql_message.update_power2(user_id)
+            sql_message.update_levelrate(user_id, 0)
+            sql_message.update_user_hp(user_id)
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！\n"
+            success = True
+            break
+    
+    if not success and attempts == max_attempts and "修为不足以突破" not in result_msg:
+        result_msg += f"连续渡厄突破失败，未能突破成功。"
+    
+    # 更新突破CD
+    sql_message.updata_level_cd(user_id)
+    
+    # 添加消耗统计
+    result_msg += f"\n本次连续突破共消耗{pills_used}个渡厄丹，剩余{dr_pill_count - pills_used}个"
+    
+    await handle_send(bot, event, result_msg)
+    await level_up_dr_lx.finish()
+
+@level_up_drjd_lx.handle(parameterless=[Cooldown(stamina_cost=15, at_sender=False)])
+async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """连续渡厄金丹突破5次"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await level_up_drjd_lx.finish()
+    
+    user_id = user_info['user_id']
+    if user_info['hp'] is None:
+        sql_message.update_user_hp(user_id)
+    
+    user_msg = sql_message.get_user_info_with_id(user_id)
+    level_cd = user_msg['level_up_cd']
+    
+    # 检查突破CD
+    if level_cd:
+        time_now = datetime.now()
+        cd = OtherSet().date_diff(time_now, level_cd)
+        if cd < XiuConfig().level_up_cd * 60:
+            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            sql_message.update_user_stamina(user_id, 15, 1)
+            await handle_send(bot, event, msg)
+            await level_up_drjd_lx.finish()
+
+    level_name = user_msg['level']  # 用户境界
+    levels = convert_rank('江湖好手')[1]
+    
+    # 检查是否需要渡劫
+    if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
+        msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
+        await handle_send(bot, event, msg)
+        await level_up_drjd_lx.finish()
+
+    level_name = user_msg['level']
+    exp = user_msg['exp']
+    level_rate = jsondata.level_rate_data()[level_name]
+    leveluprate = int(user_msg['level_up_rate'])
+    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    number = main_rate_buff['number'] if main_rate_buff is not None else 0
+    
+    # 检查渡厄金丹数量（只需要1个即可开始）
+    user_backs = sql_message.get_back_msg(user_id)
+    drjd_pill_count = 0
+    for back in user_backs:
+        if int(back['goods_id']) == 1998:  # 渡厄金丹ID
+            drjd_pill_count = back['goods_num']
+            break
+    
+    if drjd_pill_count < 1:
+        msg = f"渡厄金丹突破至少需要1个！"
+        await handle_send(bot, event, msg)
+        await level_up_drjd_lx.finish()
+    
+    success = False
+    result_msg = ""
+    attempts = 0
+    pills_used = 0
+    max_attempts = 5
+    
+    for i in range(max_attempts):
+        attempts += 1
+        
+        # 检查是否还有渡厄金丹
+        if pills_used >= drjd_pill_count:
+            result_msg += f"\n第{attempts}次突破：渡厄金丹不足，突破终止！"
+            break
+        
+        le = OtherSet().get_type(exp, level_rate + leveluprate + number, level_name)
+        
+        if isinstance(le, str):
+            if le == "失败":
+                # 突破失败，使用渡厄金丹
+                pills_used += 1
+                sql_message.update_back_j(user_id, 1998, 1)  # 消耗1个渡厄金丹
+                
+                # 失败增加修为（渡厄金丹特性）
+                now_exp = int(int(exp) * 0.1)
+                sql_message.update_exp(user_id, now_exp)
+                
+                update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
+                    level_rate * XiuConfig().level_up_probability)
+                leveluprate += update_rate
+                sql_message.update_levelrate(user_id, leveluprate)
+                
+                result_msg += f"第{attempts}次突破失败，修为增加{number_to(now_exp)}，下次突破成功率增加{update_rate}%\n"
+                
+                # 检查是否还有丹药继续下一次尝试
+                if pills_used >= drjd_pill_count and attempts < max_attempts:
+                    result_msg += f"渡厄金丹已用完，无法继续突破！"
+                    break
+                    
+            else:
+                # 修为不足或已是最高境界
+                result_msg += f"第{attempts}次突破：{le}\n"
+                break
+        elif isinstance(le, list):
+            # 突破成功
+            pills_used += 1
+            sql_message.update_back_j(user_id, 1998, 1)  # 消耗1个渡厄金丹
+            sql_message.updata_level(user_id, le[0])
+            sql_message.update_power2(user_id)
+            sql_message.update_levelrate(user_id, 0)
+            sql_message.update_user_hp(user_id)
+            
+            # 成功增加修为（渡厄金丹特性）
+            now_exp = int(int(exp) * 0.1)
+            sql_message.update_exp(user_id, now_exp)
+            
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！修为增加{number_to(now_exp)}\n"
+            success = True
+            break
+    
+    if not success and attempts == max_attempts and "修为不足以突破" not in result_msg:
+        result_msg += f"连续渡厄金丹突破失败，未能突破成功。"
+    
+    # 更新突破CD
+    sql_message.updata_level_cd(user_id)
+    
+    result_msg += f"\n本次突破共消耗{pills_used}个渡厄金丹，剩余{drjd_pill_count - pills_used}个"
+    
+    await handle_send(bot, event, result_msg)
+    await level_up_drjd_lx.finish()
 
 @user_leveluprate.handle(parameterless=[Cooldown(at_sender=False)])
 async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
