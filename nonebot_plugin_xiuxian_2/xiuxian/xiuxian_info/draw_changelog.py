@@ -73,7 +73,7 @@ def create_changelog_image(commits: list, page: int) -> Path:
               font=footer_font)
 
     # 保存图片
-    output_dir = Path() / "data" / "xiuxian" / "cache"
+    output_dir = Path(__file__).parent / "cache"
     output_dir.mkdir(parents=True, exist_ok=True)
     image_path = output_dir / f"changelog_page_{page}.png"
     img.save(image_path)

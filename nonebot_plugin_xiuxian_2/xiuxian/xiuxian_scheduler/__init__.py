@@ -1,6 +1,6 @@
 from nonebot import require
 from nonebot.log import logger
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, backup_db_files
 from ..xiuxian_back import auto_merge_fangshi_to_xianshi
 from ..xiuxian_base import reset_lottery_participants, reset_stone_limits, reset_xiangyuan_daily
 from ..xiuxian_boss import set_boss_limits_reset
@@ -58,3 +58,12 @@ async def _():  # 每天0/12点5分
     await scheduled_rift_generation()  # 重置秘境
     await auto_handle_inactive_sect_owners()  # 处理宗门状态
     await reset_data_by_time()  # 处理早/晚数据
+
+@scheduler.scheduled_job("cron", hour='*/4')
+async def _():  # 每4小时执行一次
+    """定时备份数据库"""
+    success, message = backup_db_files()
+    if success:
+        logger.opt(colors=True).info(f"<green>{message}</green>")
+    else:
+        logger.opt(colors=True).error(f"<red>{message}</red>")

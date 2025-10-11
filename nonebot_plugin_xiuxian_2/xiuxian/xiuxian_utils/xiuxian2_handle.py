@@ -4,6 +4,7 @@ except ImportError:
     import json
 import os
 import random
+import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -2658,3 +2659,76 @@ def number_count(num):
         return f"{num_val:.2e}"  # 保留2位小数的科学计数法
     else:
         return num_val  # 返回浮点数
+
+def backup_db_files():
+    """
+    备份数据库文件到 Path() / "data" / "db_backup"
+    可以被定时任务调用
+    """
+    try:
+        # 定义源数据库文件路径和目标备份目录
+        db_files = [
+            DATABASE / "xiuxian.db",
+            DATABASE_IMPARTBUFF / "xiuxian_impart.db"
+        ]
+        
+        backup_dir = Path() / "data" / "db_backup"
+        
+        # 创建备份目录（如果不存在）
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成时间戳用于备份文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        backed_up_files = []
+        
+        # 备份每个数据库文件
+        for db_file in db_files:
+            if db_file.exists():
+                # 生成备份文件名（带时间戳）
+                backup_filename = f"{db_file.stem}_{timestamp}{db_file.suffix}"
+                backup_path = backup_dir / backup_filename
+                
+                # 复制文件
+                shutil.copy2(db_file, backup_path)
+                backed_up_files.append(backup_filename)
+                
+                logger.info(f"数据库备份成功: {db_file.name} -> {backup_filename}")
+            else:
+                logger.warning(f"数据库文件不存在，跳过备份: {db_file}")
+        
+        # 清理旧的备份文件（保留最近30天的备份）
+        clean_old_backups(backup_dir)
+        
+        return True, f"数据库备份完成: {', '.join(backed_up_files)}"
+        
+    except Exception as e:
+        error_msg = f"数据库备份失败: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
+
+def clean_old_backups(backup_dir, keep_days=30):
+    """
+    清理旧的备份文件，保留指定天数内的备份
+    """
+    try:
+        current_time = datetime.now()
+        backup_files = list(backup_dir.glob("*.db"))
+        
+        for backup_file in backup_files:
+            filename_parts = backup_file.stem.split('_')
+            if len(filename_parts) >= 3:
+                try:
+                    file_time_str = '_'.join(filename_parts[-2:])  # 获取时间戳部分
+                    file_time = datetime.strptime(file_time_str, "%Y%m%d_%H%M%S")
+                    
+                    age_days = (current_time - file_time).days
+                    
+                    if age_days > keep_days:
+                        backup_file.unlink()
+                        logger.info(f"清理旧备份: {backup_file.name} (已保存 {age_days} 天)")
+                except ValueError:
+                    continue
+                    
+    except Exception as e:
+        logger.warning(f"清理旧备份时出错: {str(e)}")

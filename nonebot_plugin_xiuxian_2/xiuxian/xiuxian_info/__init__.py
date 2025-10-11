@@ -2,6 +2,7 @@ from nonebot import on_command
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
+    Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment
@@ -10,11 +11,17 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send
 from ..xiuxian_config import XiuConfig
+from .draw_changelog import get_commits, create_changelog_image
+from nonebot.log import logger
+from nonebot.params import CommandArg
+from io import BytesIO
 
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
+changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
+
 sql_message = XiuxianDateManage()  # sql类
 
 async def get_user_xiuxian_info(user_id):
@@ -177,3 +184,38 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
     else:
         await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
+
+@changelog.handle()
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """处理更新日志命令"""
+    page_arg = args.extract_plain_text().strip()
+    page = 1
+    if page_arg and page_arg.isdigit():
+        page = int(page_arg)
+
+    if page <= 0:
+        page = 1
+
+    msg = "正在获取更新日志，请稍候..."
+    await handle_send(bot, event, msg)
+    try:
+        commits = get_commits(page=page)
+        if commits:
+            image_path = create_changelog_image(commits, page)
+            
+            await handle_pic_send(bot, event, image_path)
+            
+            try:
+                if image_path.exists():
+                    image_path.unlink()
+            except Exception as e:
+                logger.error(f"删除更新日志图片失败: {e}")
+            
+        else:
+            msg = "无法获取更新日志，可能已到达最后一页或请求失败。"
+            await handle_send(bot, event, msg)
+            await changelog.finish()
+    except Exception as e:
+        msg = f"生成更新日志图片时出错: {e}"
+        await handle_send(bot, event, msg)
+        await changelog.finish()
