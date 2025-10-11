@@ -24,6 +24,8 @@ from wcwidth import wcwidth
 from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage
+from nonebot.internal.adapter import Message
+from typing import Union
 
 sql_message = XiuxianDateManage()  # sql类
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
@@ -636,29 +638,30 @@ async def handle_pagination(
     
     return final_msg
 
-def optimize_message(msg: str, is_group: bool) -> str:
+def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     """
-    优化消息格式
-    :param msg: 原始消息
-    :param is_group: 是否为群聊消息
-    :return: 优化后的消息
-    """
-    if not msg:
-        return msg
+    优化消息格式，确保将传入的 Message 或 str 处理为干净的字符串。
     
-    # 处理开头换行
+    :param msg: 原始消息，可以是 Message 对象或 str。
+    :param is_group: 是否为群聊消息。
+    :return: 优化后的纯文本消息 (str)。
+    """
+    msg_text = str(msg)
+
+    if not msg_text:
+        return ""
+    
     if is_group:
-        if not msg.startswith('\n'):
-            msg = '\n' + msg
+        if not msg_text.startswith('\n'):
+            msg_text = '\n' + msg_text
     else:
-        if msg.startswith('\n'):
-            msg = msg[1:]
+        if msg_text.startswith('\n'):
+            msg_text = msg_text[1:]
     
-    # 处理结尾换行
-    if msg.endswith('\n'):
-        msg = msg[:-1]
-    
-    return msg
+    if msg_text.endswith('\n'):
+        msg_text = msg_text[:-1]
+
+    return msg_text
 
 async def send_msg_handler(bot, event, *args):
     """
