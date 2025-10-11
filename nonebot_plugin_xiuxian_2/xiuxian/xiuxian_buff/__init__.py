@@ -1297,3 +1297,35 @@ async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"道友剩余双修次数{num}次！"
     await handle_send(bot, event, msg)
     await my_exp_num.finish()
+
+async def use_two_exp_token(bot, event, item_id, num):
+    """使用双修令牌增加双修次数"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+        
+    user_id = user_info['user_id']
+    
+    current_count = two_exp_cd.find_user(user_id)    
+    tokens_used = min(num, current_count)
+    if tokens_used > 0:
+        two_exp_cd.remove_user(user_id, tokens_used)
+        
+        # 从背包扣除使用的令牌
+        sql_message.update_back_j(user_id, item_id, tokens_used)
+        
+        # 计算剩余双修次数
+        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+        impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
+        main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
+        main_two = main_two_data['two_buff'] if main_two_data is not None else 0
+        remaining_count = (two_exp_limit + impart_two_exp + main_two) - two_exp_cd.find_user(user_id)
+        
+        msg = f"增加{tokens_used}次双修！\n"
+        msg += f"当前剩余双修次数：{remaining_count}次"
+    else:
+        msg = "当前剩余双修次数已满！"
+    
+    await handle_send(bot, event, msg)

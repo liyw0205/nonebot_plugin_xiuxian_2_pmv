@@ -877,13 +877,13 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         # 获取当前页的商品
         shop_items = list(boss_integral_shop.items())[start_index:end_index]
         
-        for k, v in shop_items:
-            item_info = items.get_data_by_item_id(v['id'])
-            msg = f"编号:{k}\n"
-            msg += f"名字：{item_info['name']}\n"
-            msg += f"描述：{item_info.get('desc', '暂无描述')}\n"
-            msg += f"所需世界积分：{v['cost']}点\n"
-            msg += f"每周限购：{v.get('weekly_limit', 1)}个\n"
+        for item_id, item_info in shop_items:
+            item_data = items.get_data_by_item_id(item_id)
+            msg = f"编号:{item_id}\n"
+            msg += f"名字：{item_data['name']}\n"
+            msg += f"描述：{item_data.get('desc', '暂无描述')}\n"
+            msg += f"所需世界积分：{item_info['cost']}点\n"
+            msg += f"每周限购：{item_info.get('weekly_limit', 1)}个\n"
             msg += f"════════════"
             l_msg.append(msg)
     else:
@@ -962,13 +962,12 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     weekly_limit = None
     
     if boss_integral_shop:
-        for k, v in boss_integral_shop.items():
-            if shop_id == int(k):
-                is_in = True
-                cost = v['cost']
-                item_id = v['id']
-                weekly_limit = v.get('weekly_limit', 1)  # 默认为1
-                break
+        if str(shop_id) in boss_integral_shop:
+            is_in = True
+            item_info = boss_integral_shop[str(shop_id)]
+            cost = item_info['cost']
+            item_id = shop_id
+            weekly_limit = item_info.get('weekly_limit', 1)
     else:
         msg = f"世界积分商店内空空如也！"
         await handle_send(bot, event, msg)

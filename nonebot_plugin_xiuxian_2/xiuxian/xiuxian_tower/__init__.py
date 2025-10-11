@@ -228,7 +228,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await tower_buy.finish()
+        await tower_shop.finish()
     
     user_id = user_info["user_id"]
     tower_info = tower_data.get_user_tower_info(user_id)
@@ -258,16 +258,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     msg_list = [f"\n道友目前拥有的通天塔积分：{tower_info['score']}点"]
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
+    
     for item_id, item_data in current_page_items:
-        item_info = items.get_data_by_item_id(item_data["id"])
-        msg_list.append(
-            f"编号：{item_id}\n"
-            f"名称：{item_info['name']}\n"
-            f"描述：{item_info.get('desc', '暂无描述')}\n"
-            f"价格：{item_data['cost']}积分\n"
-            f"每周限购：{item_data['weekly_limit']}个\n"
-            f"════════════"
-        )
+        item_info = items.get_data_by_item_id(item_id)
+        if item_info:  # 确保物品存在
+            msg_list.append(
+                f"编号：{item_id}\n"
+                f"名称：{item_info['name']}\n"
+                f"描述：{item_info.get('desc', '暂无描述')}\n"
+                f"价格：{item_data['cost']}积分\n"
+                f"每周限购：{item_data['weekly_limit']}个\n"
+                f"════════════"
+            )
     
     if total_pages > 1:
         msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
@@ -289,21 +291,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
     
     if not shop_info:
-        msg = "请输入正确的商品编号！"
+        msg = "请输入正确的物品ID！"
         await handle_send(bot, event, msg)
         await tower_buy.finish()
     
-    shop_id = shop_info[0][0]
+    item_id = shop_info[0][0]
     quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
     
     shop_items = tower_data.config["商店商品"]
-    if shop_id not in shop_items:
-        msg = "没有这个商品编号！"
+    if item_id not in shop_items:
+        msg = "没有这个物品ID！"
         await handle_send(bot, event, msg)
         await tower_buy.finish()
     
-    item_data = shop_items[shop_id]
+    item_data = shop_items[item_id]
     tower_info = tower_data.get_user_tower_info(user_id)
+    
+    # 检查物品是否存在
+    item_info = items.get_data_by_item_id(item_id)
+    if not item_info:
+        msg = "该物品不存在！"
+        await handle_send(bot, event, msg)
+        await tower_buy.finish()
     
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
@@ -313,7 +322,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_buy.finish()
     
     # 检查限购
-    already_purchased = tower_data.get_weekly_purchases(user_id, item_data["id"])
+    already_purchased = tower_data.get_weekly_purchases(user_id, item_id)
     if already_purchased + quantity > item_data["weekly_limit"]:
         msg = (
             f"该商品每周限购{item_data['weekly_limit']}个\n"
@@ -326,13 +335,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 兑换商品
     tower_info["score"] -= total_cost
     tower_data.save_user_tower_info(user_id, tower_info)
-    tower_data.update_weekly_purchase(user_id, item_data["id"], quantity)
+    tower_data.update_weekly_purchase(user_id, item_id, quantity)
     
     # 给予物品
-    item_info = items.get_data_by_item_id(item_data["id"])
     sql_message.send_back(
         user_id, 
-        item_data["id"], 
+        item_id,
         item_info["name"], 
         item_info["type"], 
         quantity,

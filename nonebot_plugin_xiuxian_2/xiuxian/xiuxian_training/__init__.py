@@ -173,16 +173,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     page = max(1, min(page, total_pages))
     
     # 获取当前页的商品
+    sorted_items = sorted(shop_items.items(), key=lambda x: int(x[0]))
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
-    current_page_items = list(shop_items.items())[start_idx:end_idx]
+    current_page_items = sorted_items[start_idx:end_idx]
     
     msg_list = [f"\n道友目前拥有的历练成就点：{training_info['points']}点"]
     msg_list.append(f"════════════\n【历练商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
-        # 动态获取物品信息，而不是使用配置中的desc
-        item_info = items.get_data_by_item_id(item_data["id"])
+        # 动态获取物品信息
+        item_info = items.get_data_by_item_id(item_id)
+        if not item_info:
+            continue
+            
         msg_list.append(
             f"编号：{item_id}\n"
             f"名称：{item_info['name']}\n"
@@ -236,7 +240,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     # 检查限购
-    already_purchased = training_data.get_weekly_purchases(user_id, item_data["id"])
+    already_purchased = training_data.get_weekly_purchases(user_id, shop_id)
     if already_purchased + quantity > item_data["weekly_limit"]:
         msg = (
             f"该商品每周限购{item_data['weekly_limit']}个\n"
@@ -249,13 +253,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 兑换商品
     training_info["points"] -= total_cost
     training_data.save_user_training_info(user_id, training_info)
-    training_data.update_weekly_purchase(user_id, item_data["id"], quantity)
+    training_data.update_weekly_purchase(user_id, shop_id, quantity)
     
     # 给予物品
-    item_info = items.get_data_by_item_id(item_data["id"])
+    item_info = items.get_data_by_item_id(shop_id)
     sql_message.send_back(
         user_id, 
-        item_data["id"], 
+        shop_id, 
         item_info["name"], 
         item_info["type"], 
         quantity,

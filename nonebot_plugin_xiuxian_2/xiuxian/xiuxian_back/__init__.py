@@ -44,6 +44,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_speedup, use_rift_big_speedup
 from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
+from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_config import XiuConfig, convert_rank
 from datetime import datetime, timedelta
 from .auction_config import *
@@ -5626,7 +5627,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20013: use_rift_big_speedup,
         20010: use_lottery_talisman,
         20014: use_work_order,
-        20015: use_work_capture_order
+        20015: use_work_capture_order,
+        20017: use_two_exp_token
     }
     handler_func = ITEM_HANDLERS.get(item_id, None)
     if handler_func:
