@@ -417,6 +417,31 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
 
+    # 检查对方是否已经作为邀请者发出过邀请
+    target_existing_invite = None
+    for target_id, invite_data in invite_cache.items():
+        if invite_data['inviter'] == two_qq:
+            target_existing_invite = target_id
+            break
+    
+    if target_existing_invite is not None:
+        # 对方已经发出过邀请，提示用户
+        target_info = sql_message.get_user_real_info(target_existing_invite)
+        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[target_existing_invite]['timestamp'])
+        msg = f"对方已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后再试！"
+        await handle_send(bot, event, msg)
+        await two_exp_invite.finish()
+
+    # 检查对方是否有未处理的邀请（作为被邀请者）
+    if str(two_qq) in invite_cache:
+        # 对方有未处理的邀请，提示用户
+        inviter_id = invite_cache[str(two_qq)]['inviter']
+        inviter_info = sql_message.get_user_real_info(inviter_id)
+        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(two_qq)]['timestamp'])
+        msg = f"对方已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请稍后再试！"
+        await handle_send(bot, event, msg)
+        await two_exp_invite.finish()
+
     limt_1 = two_exp_cd.find_user(user_id)
     impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 is not None else 0
@@ -429,62 +454,165 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
 
-    # 检查对方双修保护
+    # 检查对方双修保护状态
     user_data = load_player_user(two_qq)
     if user_data is None:
         user_data = {}
+    protection_status = user_data.get('two_exp_protect', False)
+
+    if protection_status == "refusal":
+        msg = "对方已设置拒绝所有双修邀请，无法进行双修！"
+        await handle_send(bot, event, msg)
+        await two_exp_invite.finish()        
+    if protection_status:
+        # 对方开启保护，需要发送邀请
+        # 检查邀请是否已存在（再次确认，防止并发）
+        if str(two_qq) in invite_cache:
+            msg = "对方已有未处理的双修邀请，请稍后再试！"
+            await handle_send(bot, event, msg)
+            await two_exp_invite.finish()
         
-    if user_data.get('two_exp_protect', False):
-        msg = "对方已开启双修保护，无法邀请！"
+        # 检查对方双修次数是否足够
+        limt_2 = two_exp_cd.find_user(two_qq)
+        impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(two_qq)
+        impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 is not None else 0
+        main_two_data_2 = UserBuffDate(two_qq).get_user_main_buff_data()
+        main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 is not None else 0
+        max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
+        
+        if max_count_2 <= 0:
+            msg = "对方今日双修次数已用尽，无法邀请！"
+            await handle_send(bot, event, msg)
+            await two_exp_invite.finish()
+        
+        exp_count = max(exp_count, 1)
+        # 创建邀请
+        invite_id = f"{user_id}_{two_qq}_{datetime.now().timestamp()}"
+        invite_cache[str(two_qq)] = {
+            'inviter': user_id,
+            'count': min(exp_count, max_count_2),  # 取最小值
+            'timestamp': datetime.now().timestamp(),
+            'invite_id': invite_id
+        }
+        
+        # 设置60秒过期
+        asyncio.create_task(expire_invite(two_qq, invite_id, bot, event))
+        
+        user_2_info = sql_message.get_user_real_info(two_qq)
+        msg = f"已向{user_2_info['user_name']}发送双修邀请（{min(exp_count, max_count_2)}次），等待对方回应..."
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
-        
-    # 检查邀请是否已存在
-    if str(two_qq) in invite_cache:
-        msg = "对方已有未处理的双修邀请，请稍后再试！"
-        await handle_send(bot, event, msg)
+    else:
+            # 对方关闭保护，直接双修
+        await direct_two_exp(bot, event, user_id, two_qq, exp_count)
         await two_exp_invite.finish()
+
+async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1):
+    """直接双修"""
+    # 检查双方是否达到修为上限
+    user_1 = sql_message.get_user_info_with_id(user_id_1)
+    user_2 = sql_message.get_user_info_with_id(user_id_2)
     
-    # 检查对方双修次数是否足够
-    limt_2 = two_exp_cd.find_user(two_qq)
-    impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(two_qq)
+    level_1 = user_1['level']
+    level_2 = user_2['level']
+    
+    max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
+    max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
+    
+    if user_1['exp'] >= max_exp_1_limit:
+        msg = f"{user_1['user_name']}修为已达上限，无法双修！"
+        await handle_send(bot, event, msg)
+        return
+        
+    if user_2['exp'] >= max_exp_2_limit:
+        msg = f"{user_2['user_name']}修为已达上限，无法双修！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查次数限制
+    limt_1 = two_exp_cd.find_user(user_id_1)
+    limt_2 = two_exp_cd.find_user(user_id_2)
+    
+    impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_id_1)
+    impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_id_2)
+    impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 is not None else 0
     impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 is not None else 0
-    main_two_data_2 = UserBuffDate(two_qq).get_user_main_buff_data()
+    
+    main_two_data_1 = UserBuffDate(user_id_1).get_user_main_buff_data()
+    main_two_data_2 = UserBuffDate(user_id_2).get_user_main_buff_data()
+    main_two_1 = main_two_data_1['two_buff'] if main_two_data_1 is not None else 0
     main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 is not None else 0
+    
+    max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
     max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
     
+    if max_count_1 <= 0:
+        msg = "你的双修次数不足，无法进行双修！"
+        await handle_send(bot, event, msg)
+        return
+        
     if max_count_2 <= 0:
-        msg = "对方今日双修次数已用尽，无法邀请！"
+        msg = "对方双修次数不足，无法进行双修！"
         await handle_send(bot, event, msg)
-        await two_exp_invite.finish()
-    exp_count = max(exp_count, 1)
-    # 创建邀请
-    invite_id = f"{user_id}_{two_qq}_{datetime.now().timestamp()}"
-    invite_cache[str(two_qq)] = {
-        'inviter': user_id,
-        'count': min(exp_count, max_count_2),  # 取最小值
-        'timestamp': datetime.now().timestamp(),
-        'invite_id': invite_id
-    }
+        return
+        
+    # 取最小可用次数
+    actual_count = min(exp_count, max_count_1, max_count_2)
     
-    # 设置60秒过期
-    asyncio.create_task(expire_invite(two_qq, invite_id, bot, event))
+    # 进行双修
+    total_exp_1 = 0
+    total_exp_2 = 0
+    event_descriptions = []
+    actual_used_count = 0  # 实际消耗的双修次数
     
-    user_2_info = sql_message.get_user_real_info(two_qq)
-    msg = f"已向{user_2_info['user_name']}发送双修邀请（{min(exp_count, max_count_2)}次），等待对方回应..."
-    await handle_send(bot, event, msg)
-    await two_exp_invite.finish()
+    for i in range(actual_count):
+        # 每次双修前检查修为上限
+        user_1_current = sql_message.get_user_info_with_id(user_id_1)
+        user_2_current = sql_message.get_user_info_with_id(user_id_2)
+        
+        max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
+        max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
+        
+        # 如果任意一方达到上限，停止双修
+        if user_1_current['exp'] >= max_exp_1_limit or user_2_current['exp'] >= max_exp_2_limit:
+            if i == 0:  # 第一次就达到上限
+                msg = "修为已达上限，无法进行双修！"
+                await handle_send(bot, event, msg)
+                return
+            break  # 中途达到上限，停止双修
+            
+        exp_1, exp_2, event_desc = await process_two_exp(user_id_1, user_id_2)
+        
+        # 如果双修过程中获得0修为（可能因为其他原因），也视为一次有效双修
+        if exp_1 == 0 and exp_2 == 0:
+            break
+            
+        total_exp_1 += exp_1
+        total_exp_2 += exp_2
+        event_descriptions.append(event_desc)
+        actual_used_count += 1
+        
+        # 只有实际进行了双修才消耗次数
+        two_exp_cd.add_user(user_id_1)
+        two_exp_cd.add_user(user_id_2)
+    
+    user_1_info = sql_message.get_user_real_info(user_id_1)
+    user_2_info = sql_message.get_user_real_info(user_id_2)
+    
+    if actual_used_count == 0:
+        msg = "双修过程中修为已达上限，无法进行双修！"
+    else:
+        msg = f"{random.choice(event_descriptions)}\n"
+        msg += f"{user_1_info['user_name']}获得修为：{number_to(total_exp_1)}\n"
+        msg += f"{user_2_info['user_name']}获得修为：{number_to(total_exp_2)}"
 
-async def expire_invite(user_id, invite_id, bot, event):
-    """邀请过期处理"""
-    await asyncio.sleep(60)
-    if str(user_id) in invite_cache and invite_cache[str(user_id)]['invite_id'] == invite_id:
-        inviter_id = invite_cache[str(user_id)]['inviter']
-        # 发送过期提示
-        msg = f"双修邀请已过期！"
-        await handle_send(bot, event, msg)
-        # 删除过期的邀请
-        del invite_cache[str(user_id)]
+    # 记录实际双修次数
+    update_statistics_value(user_id_1, "双修次数", increment=actual_used_count)
+    update_statistics_value(user_id_2, "双修次数", increment=actual_used_count)
+    log_message(user_id_1, f"与{user_2_info['user_name']}进行双修，获得修为{number_to(total_exp_1)}，共{actual_used_count}次")
+    log_message(user_id_2, f"与{user_1_info['user_name']}进行双修，获得修为{number_to(total_exp_2)}，共{actual_used_count}次")
+    
+    await handle_send(bot, event, msg)
 
 @two_exp_accept.handle(parameterless=[Cooldown(at_sender=False)])
 async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -507,117 +635,22 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     inviter_id = invite_data['inviter']
     exp_count = invite_data['count']
     
-    # 检查双方是否达到修为上限
-    user_1 = sql_message.get_user_info_with_id(inviter_id)
-    user_2 = sql_message.get_user_info_with_id(user_id)
-    
-    level_1 = user_1['level']
-    level_2 = user_2['level']
-    
-    max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
-    max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
-    
-    if user_1['exp'] >= max_exp_1_limit:
-        msg = f"{user_1['user_name']}修为已达上限，无法双修！"
-        del invite_cache[str(user_id)]
-        await handle_send(bot, event, msg)
-        await two_exp_accept.finish()
-        
-    if user_2['exp'] >= max_exp_2_limit:
-        msg = f"{user_2['user_name']}修为已达上限，无法双修！"
-        del invite_cache[str(user_id)]
-        await handle_send(bot, event, msg)
-        await two_exp_accept.finish()
-    
-    # 检查次数限制
-    limt_1 = two_exp_cd.find_user(inviter_id)
-    limt_2 = two_exp_cd.find_user(user_id)
-    
-    impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(inviter_id)
-    impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 is not None else 0
-    impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 is not None else 0
-    
-    main_two_data_1 = UserBuffDate(inviter_id).get_user_main_buff_data()
-    main_two_data_2 = UserBuffDate(user_id).get_user_main_buff_data()
-    main_two_1 = main_two_data_1['two_buff'] if main_two_data_1 is not None else 0
-    main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 is not None else 0
-    
-    max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
-    max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
-    
-    if max_count_1 <= 0:
-        msg = "对方双修次数不足，无法进行双修！"
-        del invite_cache[str(user_id)]
-        await handle_send(bot, event, msg)
-        await two_exp_accept.finish()
-        
-    if max_count_2 <= 0:
-        msg = "你的双修次数不足，无法进行双修！"
-        del invite_cache[str(user_id)]
-        await handle_send(bot, event, msg)
-        await two_exp_accept.finish()
-        
-    # 取最小可用次数
-    actual_count = min(exp_count, max_count_1, max_count_2)
-    
-    # 进行双修
-    total_exp_1 = 0
-    total_exp_2 = 0
-    event_descriptions = []
-    actual_used_count = 0  # 实际消耗的双修次数
-    
-    for i in range(actual_count):
-        # 每次双修前检查修为上限
-        user_1_current = sql_message.get_user_info_with_id(inviter_id)
-        user_2_current = sql_message.get_user_info_with_id(user_id)
-        
-        max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
-        max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
-        
-        # 如果任意一方达到上限，停止双修
-        if user_1_current['exp'] >= max_exp_1_limit or user_2_current['exp'] >= max_exp_2_limit:
-            if i == 0:  # 第一次就达到上限
-                msg = "修为已达上限，无法进行双修！"
-                await handle_send(bot, event, msg)
-                await two_exp_accept.finish()
-            break  # 中途达到上限，停止双修
-            
-        exp_1, exp_2, event_desc = await process_two_exp(inviter_id, user_id)
-        
-        # 如果双修过程中获得0修为（可能因为其他原因），也视为一次有效双修
-        if exp_1 == 0 and exp_2 == 0:
-            break
-            
-        total_exp_1 += exp_1
-        total_exp_2 += exp_2
-        event_descriptions.append(event_desc)
-        actual_used_count += 1
-        
-        # 只有实际进行了双修才消耗次数
-        two_exp_cd.add_user(inviter_id)
-        two_exp_cd.add_user(user_id)
-    
     # 删除邀请
     del invite_cache[str(user_id)]
     
-    inviter_info = sql_message.get_user_real_info(inviter_id)
-    
-    if actual_used_count == 0:
-        msg = "双修过程中修为已达上限，无法进行双修！"
-    else:
-        msg = f"{random.choice(event_descriptions)}\n"
-        msg += f"对方获得修为：{number_to(total_exp_1)}\n"
-        msg += f"你获得修为：{number_to(total_exp_2)}"
-
-    # 记录实际双修次数
-    update_statistics_value(inviter_id, "双修次数", increment=actual_used_count)
-    update_statistics_value(user_id, "双修次数", increment=actual_used_count)
-    log_message(inviter_id, f"与{user_info['user_name']}进行双修，获得修为{number_to(total_exp_1)}，共{actual_used_count}次")
-    log_message(user_id, f"与{inviter_info['user_name']}进行双修，获得修为{number_to(total_exp_2)}，共{actual_used_count}次")
-    
-    await handle_send(bot, event, msg)
+    await direct_two_exp(bot, event, inviter_id, user_id, exp_count)
     await two_exp_accept.finish()
+
+async def expire_invite(user_id, invite_id, bot, event):
+    """邀请过期处理"""
+    await asyncio.sleep(60)
+    if str(user_id) in invite_cache and invite_cache[str(user_id)]['invite_id'] == invite_id:
+        inviter_id = invite_cache[str(user_id)]['inviter']
+        # 发送过期提示
+        msg = f"双修邀请已过期！"
+        await handle_send(bot, event, msg)
+        # 删除过期的邀请
+        del invite_cache[str(user_id)]
 
 async def process_two_exp(user_id_1, user_id_2):
     """处理单次双修逻辑"""
@@ -671,7 +704,7 @@ async def process_two_exp(user_id_1, user_id_2):
     max_exp_2 = int((exp_2 * 0.001) * min(0.1 * user1_rank, 1))
     # 修为相加的0.5%
     exp = int((exp_1 + exp_2) * 0.005)
-    max_two_exp = 100000
+    max_two_exp = 10000000
     
     # 计算实际可获得的修为
     exp_limit_1 = min(exp, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp, remaining_exp_1)
@@ -749,18 +782,27 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     # 默认双修保护状态为关闭
     current_status = user_data.get('two_exp_protect', False)
     
-    if arg in ['开启', 'on', '启用']:
+    if arg in ['开启', 'on']:
         user_data['two_exp_protect'] = True
-        msg = "双修保护已开启！其他玩家将无法向你发送双修邀请。"
-    elif arg in ['关闭', 'off', '禁用']:
+        msg = "双修保护已开启！其他玩家可以向你发送双修邀请。"
+    elif arg in ['关闭', 'off']:
         user_data['two_exp_protect'] = False
-        msg = "双修保护已关闭！其他玩家可以向你发送双修邀请。"
+        msg = "双修保护已关闭！其他玩家可以直接和你双修。"
+    elif arg in ['拒绝', 'refusal']:
+        user_data['two_exp_protect'] = "refusal"
+        msg = "双修保护已设置为拒绝！其他玩家无法与你双修。"
     elif arg in ['状态', 'status']:
-        msg = f"双修保护状态：{'已开启' if current_status else '已关闭'}"
+        status_map = {
+            True: "已开启 (需要邀请)",
+            False: "已关闭 (允许直接双修)", 
+            "refusal": "已拒绝 (拒绝所有双修)"
+        }
+        current_status_display = status_map.get(current_status, "已关闭 (允许直接双修)")
+        msg = f"双修保护状态：{current_status_display}"
         await handle_send(bot, event, msg)
         await two_exp_protect.finish()
     else:
-        msg = "请使用：双修保护 开启/关闭/状态"
+        msg = "请使用：双修保护 开启/关闭/拒绝/状态"
         await handle_send(bot, event, msg)
         await two_exp_protect.finish()
     
@@ -1100,6 +1142,14 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         user_data = {}
     
     current_status = user_data.get('two_exp_protect', False)
+    
+    # 状态映射
+    status_map = {
+        True: "开启",
+        False: "关闭", 
+        "refusal": "拒绝"
+    }
+    current_status_display = status_map.get(current_status, "关闭")
 
     level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
@@ -1195,7 +1245,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%
 会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
-双修保护状态：{'已开启' if current_status else '已关闭'}
+双修保护状态：{current_status_display}
 """
     sql_message.update_last_check_info_time(user_id)
     await handle_send(bot, event, msg)
