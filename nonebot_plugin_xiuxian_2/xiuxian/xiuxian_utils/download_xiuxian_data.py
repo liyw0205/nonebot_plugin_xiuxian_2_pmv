@@ -390,7 +390,7 @@ class UpdateManager:
                 data_dir = Path() / "data"
                 if data_dir.exists():
                     for root, dirs, files in os.walk(data_dir):
-                        if "backups" in root.split(os.sep) or "config_backups" in root.split(os.sep):
+                        if any(x in root.split(os.sep) for x in ["backups", "config_backups", "db_backup", "boss_img", "font", "卡图"]):
                             continue
                         
                         for file in files:
