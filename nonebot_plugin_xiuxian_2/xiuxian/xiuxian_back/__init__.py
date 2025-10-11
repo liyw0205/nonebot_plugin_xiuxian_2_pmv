@@ -5667,13 +5667,13 @@ async def use_lottery_talisman(bot, event, item_id, num):
             # 获取随机物品
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
             if item_id_list:
-                item_id = random.choice(item_id_list)
-                item_info = items.get_data_by_item_id(item_id)
+                rank_id = random.choice(item_id_list)
+                item_info = items.get_data_by_item_id(rank_id)
                 
                 # 给予物品
                 sql_message.send_back(
                     user_id, 
-                    item_id, 
+                    rank_id, 
                     item_info["name"], 
                     item_info["type"], 
                     1
