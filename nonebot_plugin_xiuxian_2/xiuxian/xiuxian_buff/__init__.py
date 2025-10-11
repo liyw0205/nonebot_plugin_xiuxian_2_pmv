@@ -1299,7 +1299,7 @@ async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await my_exp_num.finish()
 
 async def use_two_exp_token(bot, event, item_id, num):
-    """使用双修令牌增加双修次数"""
+    """增加双修次数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1313,7 +1313,6 @@ async def use_two_exp_token(bot, event, item_id, num):
     if tokens_used > 0:
         two_exp_cd.remove_user(user_id, tokens_used)
         
-        # 从背包扣除使用的令牌
         sql_message.update_back_j(user_id, item_id, tokens_used)
         
         # 计算剩余双修次数
