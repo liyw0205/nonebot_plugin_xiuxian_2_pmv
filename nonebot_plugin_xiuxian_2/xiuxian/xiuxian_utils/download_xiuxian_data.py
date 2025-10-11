@@ -125,7 +125,7 @@ class UpdateManager:
             return None, "当前已是最新版本"
 
     def download_release(self, release_tag, asset_name="project.tar.gz"):
-        """下载指定的release资源"""
+        """下载指定的release资源，使用代理加速"""
         try:
             # 获取特定release的assets
             release_url = f"{self.api_url}/tags/{release_tag}"
@@ -147,17 +147,145 @@ class UpdateManager:
             temp_dir = Path(tempfile.mkdtemp())
             download_path = temp_dir / asset_name
             
-            # 使用wget下载文件
-            logger.info(f"开始下载 {asset_name}...")
-            try:
-                wget.download(target_asset['browser_download_url'], out=str(download_path))
-                logger.info(f"\n下载完成: {download_path}")
-                return True, download_path
-            except Exception as e:
-                return False, f"wget下载失败: {str(e)}"
+            # 获取代理列表并测试延迟
+            proxy_list = self.get_proxy_list()
+            working_proxies = self.test_proxies(proxy_list)
             
+            # 如果找到可用的代理，使用延迟最低的3个代理进行下载尝试
+            success = False
+            error_messages = []
+            
+            if working_proxies:
+                logger.info(f"找到 {len(working_proxies)} 个可用代理，尝试使用代理下载...")
+                for proxy in working_proxies[:3]:  # 只尝试延迟最低的3个代理
+                    try:
+                        success, message = self.download_with_proxy(target_asset['browser_download_url'], 
+                                                                   str(download_path), proxy)
+                        if success:
+                            logger.info(f"使用代理 {proxy['url']} 下载成功")
+                            return True, download_path
+                        else:
+                            error_messages.append(f"代理 {proxy['url']} 下载失败: {message}")
+                    except Exception as e:
+                        error_messages.append(f"代理 {proxy['url']} 下载错误: {str(e)}")
+            
+            # 如果所有代理都失败或没有可用代理，使用直接下载
+            if not success:
+                logger.info("代理下载失败，尝试直接下载...")
+                try:
+                    wget.download(target_asset['browser_download_url'], out=str(download_path))
+                    logger.info(f"\n直接下载完成: {download_path}")
+                    return True, download_path
+                except Exception as e:
+                    error_messages.append(f"直接下载失败: {str(e)}")
+                    return False, f"下载失败: {'; '.join(error_messages)}"
+                
         except Exception as e:
             return False, f"下载失败: {str(e)}"
+
+    def get_proxy_list(self):
+        """代理列表"""
+        proxies = [
+            {"url": "https://gh.llkk.cc/", "name": "gh.llkk.cc"},
+            {"url": "https://j.1lin.dpdns.org/", "name": "j.1lin.dpdns.org"},
+            {"url": "https://ghproxy.net/", "name": "ghproxy.net"},
+            {"url": "https://gh-proxy.net/", "name": "gh-proxy.net"},
+            {"url": "https://j.1win.ggff.net/", "name": "j.1win.ggff.net"},
+            {"url": "https://tvv.tw/", "name": "tvv.tw"},
+            {"url": "https://ghf.xn--eqrr82bzpe.top/", "name": "ghf.xn--eqrr82bzpe.top"},
+            {"url": "https://ghproxy.vansour.top/", "name": "ghproxy.vansour.top"},
+            {"url": "https://gh.catmak.name/", "name": "gh.catmak.name"},
+            {"url": "https://gitproxy.127731.xyz/", "name": "gitproxy.127731.xyz"},
+            {"url": "https://gitproxy.click/", "name": "gitproxy.click"},
+            {"url": "https://jiashu.1win.eu.org/", "name": "jiashu.1win.eu.org"},
+            {"url": "https://github.dpik.top/", "name": "github.dpik.top"},
+            {"url": "https://github.tbedu.top/", "name": "github.tbedu.top"},
+            {"url": "https://ghm.078465.xyz/", "name": "ghm.078465.xyz"},
+            {"url": "https://hub.gitmirror.com/", "name": "hub.gitmirror.com"},
+            {"url": "https://ghfile.geekertao.top/", "name": "ghfile.geekertao.top"},
+            {"url": "https://gh.dpik.top/", "name": "gh.dpik.top"},
+            {"url": "https://git.yylx.win/", "name": "git.yylx.win"}
+        ]
+        return proxies
+
+    def test_proxies(self, proxy_list):
+        """测试代理的延迟，返回可用的代理列表（按延迟排序）"""
+        import time
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        def test_proxy(proxy):
+            """测试单个代理的延迟"""
+            try:
+                start_time = time.time()
+                # 简单的连接测试，使用代理的根路径
+                test_url = f"{proxy['url']}https://github.com/robots.txt"
+                response = requests.get(test_url, timeout=5)
+                if response.status_code == 200:
+                    delay = int((time.time() - start_time) * 1000)  # 转换为毫秒
+                    proxy['delay'] = delay
+                    return proxy
+            except Exception as e:
+                logger.debug(f"代理 {proxy['url']} 测试失败: {str(e)}")
+            return None
+        
+        working_proxies = []
+        
+        # 使用线程池并发测试代理
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_proxy = {executor.submit(test_proxy, proxy): proxy for proxy in proxy_list}
+            
+            for future in as_completed(future_to_proxy):
+                proxy = future_to_proxy[future]
+                try:
+                    result = future.result()
+                    if result:
+                        working_proxies.append(result)
+                except Exception as e:
+                    logger.debug(f"代理测试异常: {str(e)}")
+        
+        # 按延迟排序
+        working_proxies.sort(key=lambda x: x.get('delay', 9999))
+        
+        logger.info(f"找到 {len(working_proxies)} 个可用代理，延迟最低的3个: {[(p['name'], p.get('delay', '未知')) for p in working_proxies[:3]]}")
+        
+        return working_proxies
+
+    def download_with_proxy(self, original_url, download_path, proxy):
+        """使用代理下载文件"""
+        try:
+            # 构建代理下载URL
+            proxy_url = f"{proxy['url']}{original_url}"
+            
+            logger.info(f"尝试使用代理 {proxy['name']} 下载: {proxy_url}")
+            
+            # 使用requests下载，支持进度显示
+            response = requests.get(proxy_url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            
+            with open(download_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # 显示下载进度
+                        if total_size > 0:
+                            percent = (downloaded_size / total_size) * 100
+                            print(f"\r下载进度: {percent:.1f}% ({downloaded_size}/{total_size} bytes)", end='')
+            
+            print()  # 换行
+            return True, "下载成功"
+            
+        except requests.exceptions.Timeout:
+            return False, "下载超时"
+        except requests.exceptions.ConnectionError:
+            return False, "连接错误"
+        except Exception as e:
+            return False, f"下载错误: {str(e)}"
 
     def _merge_directories(self, source_dir, target_dir):
         """安全的目录合并 - 只覆盖同名文件，不删除额外文件"""
