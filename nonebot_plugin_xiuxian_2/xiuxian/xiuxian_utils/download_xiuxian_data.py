@@ -464,7 +464,7 @@ class UpdateManager:
             return False, f"配置备份失败: {str(e)}"
 
     def perform_update_with_backup(self, release_tag):
-        """执行完整的更新流程（带自动备份）"""
+        """执行完整的更新流程（带自动备份和恢复配置）"""
         try:
             logger.info(f"开始更新到版本: {release_tag}")
             
@@ -474,7 +474,11 @@ class UpdateManager:
 
             # 自动创建配置备份
             logger.info("创建自动配置备份...")
-            self.backup_all_configs()
+            backup_success, backup_result = self.backup_all_configs()
+            if not backup_success:
+                return False, f"配置备份失败: {backup_result}"
+            
+            config_backup_path = backup_result
 
             # 下载release
             logger.info("下载更新包...")
@@ -488,6 +492,15 @@ class UpdateManager:
             # 解压更新
             logger.info("解压更新包...")
             success, result = self.extract_update(archive_path, backup=False)
+            
+            # 恢复配置
+            if success and backup_success:
+                logger.info("开始恢复配置...")
+                restore_success, restore_message = self.restore_config_from_backup(config_backup_path)
+                if not restore_success:
+                    logger.warning(f"配置恢复失败: {restore_message}")
+                else:
+                    logger.info("配置恢复成功")
             
             # 清理临时文件
             try:
@@ -508,6 +521,120 @@ class UpdateManager:
         except Exception as e:
             logger.error(f"更新过程中出现错误: {str(e)}")
             return False, f"更新过程中出现错误: {str(e)}"
+
+    def restore_config_from_backup(self, backup_path):
+        """从配置备份文件恢复配置"""
+        try:
+            if not backup_path.exists():
+                return False, "备份文件不存在"
+            
+            # 读取备份文件
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            # 移除元数据字段
+            if '_metadata' in backup_data:
+                del backup_data['_metadata']
+            
+            # 保存配置到文件
+            success, message = self.save_config_values(backup_data)
+            if not success:
+                return False, f"保存配置失败: {message}"
+            
+            return True, "配置恢复成功"
+            
+        except Exception as e:
+            return False, f"恢复配置失败: {str(e)}"
+
+    def save_config_values(self, new_values):
+        """保存配置到文件"""
+        config_file_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_config.py"
+        from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
+        
+        if not config_file_path.exists():
+            return False, "配置文件不存在"
+        
+        try:
+            # 读取原文件内容
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 更新配置值
+            for field_name, new_value in new_values.items():
+                if field_name in CONFIG_EDITABLE_FIELDS:
+                    field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
+                    
+                    # 根据类型格式化值
+                    if field_type == "list[int]":
+                        # 处理整数列表
+                        if isinstance(new_value, str):
+                            cleaned_value = re.sub(r'[\[\]\'"\s]', '', new_value)
+                            if cleaned_value:
+                                try:
+                                    int_list = [int(x.strip()) for x in cleaned_value.split(',') if x.strip()]
+                                    formatted_value = f"[{', '.join(map(str, int_list))}]"
+                                except ValueError:
+                                    formatted_value = "[]"
+                            else:
+                                formatted_value = "[]"
+                        else:
+                            formatted_value = str(new_value)
+                    
+                    elif field_type == "list[str]":
+                        # 处理字符串列表
+                        if isinstance(new_value, str):
+                            cleaned_value = re.sub(r'[\[\]]', '', new_value)
+                            str_list = []
+                            for item in cleaned_value.split(','):
+                                item = item.strip()
+                                item = re.sub(r'^[\'"]|[\'"]$', '', item)
+                                if item:
+                                    str_list.append(f'"{item}"')
+                            formatted_value = f"[{', '.join(str_list)}]"
+                        else:
+                            formatted_value = str(new_value)
+                    
+                    elif field_type == "bool":
+                        formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
+                    
+                    elif field_type == "select":
+                        formatted_value = f'"{new_value}"'
+                    
+                    elif field_type == "int":
+                        try:
+                            formatted_value = str(int(new_value))
+                        except (ValueError, TypeError):
+                            formatted_value = "0"
+                    
+                    elif field_type == "float":
+                        try:
+                            formatted_value = str(float(new_value))
+                        except (ValueError, TypeError):
+                            formatted_value = "0.0"
+                    
+                    else:
+                        # 字符串类型
+                        if not (isinstance(new_value, str) and (
+                            (new_value.startswith('"') and new_value.endswith('"')) or 
+                            (new_value.startswith("'") and new_value.endswith("'"))
+                        )):
+                            formatted_value = f'"{new_value}"'
+                        else:
+                            formatted_value = new_value
+                    
+                    # 在文件中查找并替换配置项
+                    pattern = rf"self\.{field_name}\s*=\s*.+"
+                    replacement = f"self.{field_name} = {formatted_value}"
+                    content = re.sub(pattern, replacement, content)
+            
+            # 写入新内容
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            return True, "配置保存成功"
+        
+        except Exception as e:
+            return False, f"保存配置时出错: {str(e)}"
 
     def _restore_files_from_backup(self, backup_root):
         """从备份根目录恢复文件"""
