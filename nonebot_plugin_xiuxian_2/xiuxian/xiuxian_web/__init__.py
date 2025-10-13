@@ -176,6 +176,13 @@ def get_impart_table_structure(config):
         "fields": config.sql_table_impart_buff,
         "primary_key": "id"
     }
+
+    # 传承信息表
+    tables["impart_cards"] = {
+        "name": "传承信息",
+        "fields": ["user_id", "card_name", "quantity"],
+        "primary_key": "id"
+    }
     
     return tables
 

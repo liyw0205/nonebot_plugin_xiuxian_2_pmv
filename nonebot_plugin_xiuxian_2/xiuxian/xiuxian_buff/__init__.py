@@ -1157,8 +1157,17 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
     main_buff_data = user_buff_data.get_user_main_buff_data()
     
-    # 使用player_data中的攻击值，而不是计算后的值
-    user_attack = player_data['攻击']
+    # 获取传承数据
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
+    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
+    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
+    impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
+    impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
+    boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
+    
+    base_attack = player_data['攻击']
+    user_attack = int(base_attack * (1 + impart_atk_per))
     
     # 获取其他buff数据
     user_armor_crit_data = user_buff_data.get_user_armor_buff_data()
@@ -1197,6 +1206,10 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         main_crit_buff = 0
     
+    # 计算会心率（包含传承加成）
+    base_crit_rate = player_data['会心']
+    total_crit_rate = base_crit_rate + (impart_know_per * 100)
+    
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     if list_all == now_index:
@@ -1213,12 +1226,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
     main_hp_buff = main_buff_data['hpbuff'] if main_buff_data is not None else 0
     main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
-    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
-    impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
-    impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
-    boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
+    
     hppractice = user_info['hppractice'] * 0.05 if user_info['hppractice'] is not None else 0
     mppractice = user_info['mppractice'] * 0.05 if user_info['mppractice'] is not None else 0  
     
@@ -1231,17 +1239,20 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     leveluprate = int(user_info['level_up_rate'])
     number = user_main_critatk["number"] if user_main_critatk is not None else 0
     
+    max_hp = int((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice))
+    max_mp = int(user_info['exp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
+    
     msg = f"""
 道号：{player_data['道号']}
-气血:{number_to(player_data['气血'])}/{number_to(int((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice)))}({((player_data['气血'] / ((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice)))) * 100:.2f}%)
-真元:{number_to(player_data['真元'])}/{number_to(user_info['exp'])}({((player_data['真元'] / user_info['exp']) * 100):.2f}%)
+气血:{number_to(player_data['气血'])}/{number_to(max_hp)}({((player_data['气血'] / max_hp) * 100):.2f}%)
+真元:{number_to(player_data['真元'])}/{number_to(max_mp)}({((player_data['真元'] / max_mp) * 100):.2f}%)
 攻击:{number_to(user_attack)}
 突破状态: {exp_meg}(概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%)
 攻击修炼:{user_info['atkpractice']}级(提升攻击力{user_info['atkpractice'] * 4}%)
 元血修炼:{user_info['hppractice']}级(提升气血{user_info['hppractice'] * 8}%)
 灵海修炼:{user_info['mppractice']}级(提升真元{user_info['mppractice'] * 5}%)
 修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
-会心:{player_data['会心']}%
+会心:{total_crit_rate:.1f}%
 减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%
 会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
