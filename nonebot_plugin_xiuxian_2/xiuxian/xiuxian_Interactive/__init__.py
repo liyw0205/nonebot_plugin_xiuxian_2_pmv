@@ -1233,6 +1233,12 @@ REFUSE_EXP_MESSAGES = [
 async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理给点修为命令"""
     _, user_info, _ = check_user(event)
+
+    # 添加对 user_info 的检查
+    if user_info is None:
+        await give_exp_command.finish(f"道友请先发送【我要修仙】踏入仙途！")
+        return
+
     user_id = user_info["user_id"]
     
     # 检查用户今天是否已经获得过修为
@@ -1261,6 +1267,12 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理给点灵石命令"""
     _, user_info, _ = check_user(event)
+
+    # 添加对 user_info 的检查
+    if user_info is None:
+        await give_exp_command.finish(f"道友请先发送【我要修仙】踏入仙途！")
+        return
+
     user_id = user_info["user_id"]
     
     # 检查用户今天是否已经获得过灵石
@@ -1301,6 +1313,11 @@ async def handle_what_to_eat(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理早安命令"""
     _, user_info, _ = check_user(event)
+
+    # 添加对 user_info 的检查
+    if user_info is None:
+        return
+
     user_id = user_info["user_id"]
     
     # 检查用户是否已经触发过
@@ -1320,6 +1337,11 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
 async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理晚安命令"""
     _, user_info, _ = check_user(event)
+
+    # 添加对 user_info 的检查
+    if user_info is None:
+        return
+
     user_id = user_info["user_id"]
     
     # 检查用户是否已经触发过
@@ -1435,6 +1457,12 @@ async def handle_love_sentence(bot: Bot, event: GroupMessageEvent | PrivateMessa
 async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理今日运势命令"""
     _, user_info, _ = check_user(event)
+
+    # 添加对 user_info 的检查
+    if user_info is None:
+        await fortune_command.finish(f"道友请先发送【我要修仙】踏入仙途！")
+        return
+
     user_id = user_info["user_id"]
     
     # 获取用户运势
