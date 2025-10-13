@@ -62,5 +62,15 @@ class TWO_EXP_CD(object):
         self.data = {"two_exp_cd": {}}
         self.__save()
 
+    def remove_user(self, user_id, count=1):
+        """减少用户的CD计数"""
+        user_id = str(user_id)
+        if user_id in self.data["two_exp_cd"]:
+            current_count = self.data["two_exp_cd"][user_id]
+            new_count = max(0, current_count - count)
+            self.data["two_exp_cd"][user_id] = new_count
+            self.__save()
+            return True
+        return False
 
 two_exp_cd = TWO_EXP_CD()

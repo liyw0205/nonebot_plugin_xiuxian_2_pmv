@@ -707,8 +707,8 @@ async def process_two_exp(user_id_1, user_id_2):
     max_two_exp = 10000000
     
     # 计算实际可获得的修为
-    exp_limit_1 = min(exp, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp, remaining_exp_1)
-    exp_limit_2 = min(exp, max_exp_2, remaining_exp_2) if max_exp_2 >= max_two_exp else min(exp, remaining_exp_2)
+    exp_limit_1 = min(exp, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp, remaining_exp_1, exp_1 * 0.1)
+    exp_limit_2 = min(exp, max_exp_2, remaining_exp_2) if max_exp_2 >= max_two_exp else min(exp, min(remaining_exp_2, exp_2 * 0.1))
     
     # 特殊事件加成
     if is_special:
