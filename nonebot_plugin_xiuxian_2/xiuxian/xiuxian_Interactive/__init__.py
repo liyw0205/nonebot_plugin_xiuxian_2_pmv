@@ -1235,7 +1235,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await level_up_lx.finish()
+        return
 
     user_id = user_info["user_id"]
     
@@ -1267,7 +1267,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await level_up_lx.finish()
+        return
 
     user_id = user_info["user_id"]
     
@@ -1311,7 +1311,7 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await level_up_lx.finish()
+        return
 
     user_id = user_info["user_id"]
     
@@ -1334,7 +1334,7 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await level_up_lx.finish()
+        return
 
     user_id = user_info["user_id"]
     
@@ -1453,7 +1453,7 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg)
-        await level_up_lx.finish()
+        return
 
     user_id = user_info["user_id"]
     
