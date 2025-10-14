@@ -185,7 +185,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
 
-@changelog.handle()
+@changelog.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """处理更新日志命令"""
     page_arg = args.extract_plain_text().strip()

@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment
 )
 from ..xiuxian_utils.utils import handle_send, check_user, number_to
+from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
@@ -1229,7 +1230,7 @@ REFUSE_EXP_MESSAGES = [
     f"{NICKNAME}...我没有什么修为可以传给你的..."
 ]
 
-@give_exp_command.handle()
+@give_exp_command.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理给点修为命令"""
     isUser, user_info, msg = check_user(event)
@@ -1261,7 +1262,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     await handle_send(bot, event, message)
 
-@give_stone_command.handle()
+@give_stone_command.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
 async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理给点灵石命令"""
     isUser, user_info, msg = check_user(event)
