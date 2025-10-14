@@ -150,11 +150,12 @@ def get_config_table_structure(config):
         "primary_key": "sect_id"
     }
     
-    # 背包表
+    # 背包表 - 特殊处理复合主键
     tables["back"] = {
         "name": "用户背包",
         "fields": config.sql_back,
-        "primary_key": "id"
+        "primary_key": ["user_id", "goods_id"],  # 改为复合主键
+        "composite_key": True  # 添加标识
     }
     
     # Buff信息表
@@ -868,8 +869,22 @@ def row_edit(table_name, row_id):
     if not db_path:
         return "表不存在", 404
     
-    # 获取主键字段名
-    primary_key = table_info.get('primary_key', 'id')
+    # 处理复合主键（背包表特殊处理）
+    if table_name == "back" and "composite_key" in table_info and table_info["composite_key"]:
+        # 解析复合主键（格式：user_id_goods_id）
+        primary_keys = table_info["primary_key"]
+        key_parts = row_id.split('_')
+        if len(key_parts) != len(primary_keys):
+            return "无效的主键格式", 400
+            
+        # 构建复合主键条件
+        primary_conditions = {}
+        for i, key in enumerate(primary_keys):
+            primary_conditions[key] = key_parts[i]
+    else:
+        # 普通单主键处理
+        primary_key = table_info.get('primary_key', 'id')
+        primary_conditions = {primary_key: row_id}
     
     # 确定数据库路径
     db_path = IMPART_DB if table_name in get_database_tables(IMPART_DB) else DATABASE
@@ -892,10 +907,14 @@ def row_edit(table_name, row_id):
             
             # 构建UPDATE语句
             set_clause = ", ".join([f"{field} = ?" for field in update_data.keys()])
-            sql = f"UPDATE {table_name} SET {set_clause} WHERE {primary_key} = ?"
+            
+            # 构建WHERE条件（支持复合主键）
+            where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+            
+            sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_conditions}"
             
             # 执行更新
-            params = list(update_data.values()) + [row_id]
+            params = list(update_data.values()) + list(primary_conditions.values())
             result = execute_sql(db_path, sql, params)
             
             if 'error' in result:
@@ -904,9 +923,10 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "更新成功"})
         
         elif action == 'delete':
-            # 构建DELETE语句
-            sql = f"DELETE FROM {table_name} WHERE {primary_key} = ?"
-            result = execute_sql(db_path, sql, (row_id,))
+            # 构建DELETE语句（支持复合主键）
+            where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+            sql = f"DELETE FROM {table_name} WHERE {where_conditions}"
+            result = execute_sql(db_path, sql, list(primary_conditions.values()))
             
             if 'error' in result:
                 return jsonify({"success": False, "error": result['error']})
@@ -914,8 +934,9 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "删除成功"})
     
     # GET请求，获取行数据
-    sql = f"SELECT * FROM {table_name} WHERE {primary_key} = ?"
-    row_data = execute_sql(db_path, sql, (row_id,))
+    where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+    sql = f"SELECT * FROM {table_name} WHERE {where_conditions}"
+    row_data = execute_sql(db_path, sql, list(primary_conditions.values()))
     
     if not row_data:
         return "记录不存在", 404
@@ -932,7 +953,7 @@ def row_edit(table_name, row_id):
         table_name=table_name,
         table_info=table_info,
         row_data=display_data,
-        primary_key=primary_key
+        primary_key=primary_conditions  # 传递主键信息给模板
     )
 
 @app.route('/batch_edit/<table_name>', methods=['POST'])

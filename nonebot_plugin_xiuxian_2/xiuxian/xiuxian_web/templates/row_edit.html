@@ -9,7 +9,7 @@
             {% for field in table_info.fields %}
                 <div class="form-group">
                     <label for="{{ field }}">{{ field }}</label>
-                    {% if field == primary_key %}
+                    {% if field in primary_key %}
                         <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
                     {% else %}
                         <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}">
@@ -30,9 +30,13 @@
     <script>
         function submitForm(action) {
             document.getElementById('action').value = action;
-            fetch("{{ url_for('row_edit', table_name=table_name, row_id=row_data[primary_key]) }}", {
+            
+            // 构建表单数据
+            const formData = new FormData(document.getElementById('editForm'));
+            
+            fetch("{{ url_for('row_edit', table_name=table_name, row_id=request.view_args.row_id) }}", {
                 method: 'POST',
-                body: new FormData(document.getElementById('editForm'))
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
