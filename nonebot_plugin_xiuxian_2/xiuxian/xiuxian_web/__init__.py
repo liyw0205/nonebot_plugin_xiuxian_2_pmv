@@ -182,7 +182,8 @@ def get_impart_table_structure(config):
     tables["impart_cards"] = {
         "name": "传承信息",
         "fields": ["user_id", "card_name", "quantity"],
-        "primary_key": "id"
+        "primary_key": ["user_id", "card_name"],  # 复合主键
+        "composite_key": True  # 添加复合主键标识
     }
     
     return tables
@@ -869,15 +870,25 @@ def row_edit(table_name, row_id):
     if not db_path:
         return "表不存在", 404
     
-    # 处理复合主键（背包表特殊处理）
-    if table_name == "back" and "composite_key" in table_info and table_info["composite_key"]:
-        # 解析复合主键（格式：user_id_goods_id）
+    # 特殊处理复合主键表
+    if table_name == "impart_cards":
+        # 解析复合主键（格式：user_id_card_name）
+        key_parts = row_id.split('_')
+        if len(key_parts) < 2:
+            return "无效的主键格式", 400
+            
+        # 构建复合主键条件
+        primary_conditions = {
+            "user_id": key_parts[0],
+            "card_name": "_".join(key_parts[1:])
+        }
+    elif table_name == "back" and "composite_key" in table_info and table_info["composite_key"]:
+        # 其他复合主键表的处理
         primary_keys = table_info["primary_key"]
         key_parts = row_id.split('_')
         if len(key_parts) != len(primary_keys):
             return "无效的主键格式", 400
             
-        # 构建复合主键条件
         primary_conditions = {}
         for i, key in enumerate(primary_keys):
             primary_conditions[key] = key_parts[i]

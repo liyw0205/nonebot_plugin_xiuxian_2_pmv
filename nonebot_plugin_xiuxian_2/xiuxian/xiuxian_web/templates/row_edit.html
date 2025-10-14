@@ -10,7 +10,14 @@
                 <div class="form-group">
                     <label for="{{ field }}">{{ field }}</label>
                     {% if field in primary_key %}
-                        <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
+                        {# 对于复合主键，需要特殊处理 #}
+                        {% if table_name == "impart_cards" %}
+                            {# impart_cards表的复合主键字段设为只读 #}
+                            <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
+                        {% else %}
+                            {# 其他表的单主键 #}
+                            <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
+                        {% endif %}
                     {% else %}
                         <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}">
                     {% endif %}
@@ -34,7 +41,21 @@
             // 构建表单数据
             const formData = new FormData(document.getElementById('editForm'));
             
-            fetch("{{ url_for('row_edit', table_name=table_name, row_id=request.view_args.row_id) }}", {
+            // 对于impart_cards表，需要特殊处理URL
+            let url = "{{ url_for('row_edit', table_name=table_name, row_id=request.view_args.row_id) }}";
+            
+            {% if table_name == "impart_cards" %}
+                // 对于复合主键，row_id是user_id和card_name的组合
+                // 我们需要确保URL正确
+                const user_id = document.getElementById('user_id').value;
+                const card_name = document.getElementById('card_name').value;
+                const compositeKey = `${user_id}_${card_name}`;
+                
+                // 更新URL
+                url = url.replace('{{ request.view_args.row_id }}', compositeKey);
+            {% endif %}
+            
+            fetch(url, {
                 method: 'POST',
                 body: formData
             })

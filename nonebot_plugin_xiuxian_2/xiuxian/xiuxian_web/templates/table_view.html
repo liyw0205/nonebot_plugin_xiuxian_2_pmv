@@ -102,11 +102,16 @@
                                 </td>
                             {% endfor %}
                             <td>
-                                {% if table_name == "back" %}
+                                {% if table_name == "impart_cards" %}
+                                    {# impart_cards表使用复合主键 #}
+                                    {% set composite_key = row['user_id'] ~ '_' ~ row['card_name'] %}
+                                    <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary">编辑</a>
+                                {% elif table_name == "back" %}
                                     {# 背包表使用复合主键 #}
                                     {% set composite_key = row['user_id'] ~ '_' ~ row['goods_id'] %}
                                     <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary">编辑</a>
-                                {% else %}        {# 其他表使用普通主键 #}
+                                {% else %}
+                                    {# 其他表使用普通主键 #}
                                     <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn btn-primary">编辑</a>
                                 {% endif %}
                             </td>

@@ -33,12 +33,13 @@ def workmake(work_level, exp, user_level):
         fail_msg = work_info['fail']
         
         item_type = get_random_item_type()
-        zx_rank = max(convert_rank(user_level)[0] - 22, 5)
+        if item_type in ["法器", "防具", "辅修功法"]:
+            zx_rank = max(convert_rank(user_level)[0] - 22, 16)
+        else:
+            zx_rank = max(convert_rank(user_level)[0] - 22, 5)
         zx_rank = min(random.randint(zx_rank, zx_rank + 35), 54)
         if zx_rank == 5 and random.randint(1, 100) != 100:
-            zx_rank = 16
-        if zx_rank <= 16 and item_type in ["法器", "防具"]:
-            zx_rank = 16
+            zx_rank = 10
         item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)
         if not item_id:
             item_id = 0
