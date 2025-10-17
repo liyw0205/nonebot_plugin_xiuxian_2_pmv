@@ -1236,10 +1236,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         devil_data = random.choice(heart_devil_types)
         devil_name = devil_data["name"]
         scale = devil_data["scale"]
-        
-        # 准备玩家数据
+
         player = sql_message.get_player_data(user_id)
-        
         # 生成心魔属性
         devil_info = {
             "气血": int(player['气血'] * 100),
@@ -1252,7 +1250,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         }
         
         # 执行战斗
-        result, victor, _, _ = await Boss_fight(player, devil_info, type_in=1, bot_id=bot.self_id)
+        result, victor, _ = await Boss_fight(user_id, devil_info, type_in=1, bot_id=bot.self_id)
         
         if victor == "群友赢了":  # 战斗胜利
             new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)

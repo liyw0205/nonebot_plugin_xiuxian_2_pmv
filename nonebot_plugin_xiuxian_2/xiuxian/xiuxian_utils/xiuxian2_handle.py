@@ -281,7 +281,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return None
 
-    def get_player_data(self, user_id):
+    def get_player_data(self, user_id, boss=False):
         """根据USER_ID获取用户信息,获取属性"""
         player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
         userinfo = sql_message.get_user_real_info(user_id)
@@ -289,6 +289,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         boss_atk = impart_data['boss_atk'] if impart_data['boss_atk'] is not None else 0
+        impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
         user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
         user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
         user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
@@ -313,7 +314,10 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         player['user_id'] = userinfo['user_id']
         player['道号'] = userinfo['user_name']
         player['气血'] = userinfo['hp']
-        player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
+        if boss:
+            player['攻击'] = int(userinfo['atk'] * (1 + impart_atk_per + boss_atk))
+        else:
+            player['攻击'] = int(userinfo['atk'] * (1 + impart_atk_per))
         player['真元'] = userinfo['mp']
         player['exp'] = userinfo['exp']
         return player

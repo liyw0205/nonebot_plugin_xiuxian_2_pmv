@@ -127,21 +127,18 @@ class TowerBattle:
         # 生成BOSS
         boss_info = self.generate_tower_boss(floor)
         
-        # 准备玩家数据
-        player = self._prepare_player_data(user_info)
-        
         # 执行战斗
         if continuous:
             # 连续爬塔模式
-            return await self._continuous_challenge(bot, event, user_info, player, floor, target_floors)
+            return await self._continuous_challenge(bot, event, user_info, floor, target_floors)
         else:
             # 单层挑战模式
-            return await self._single_challenge(bot, event, user_info, player, boss_info)
+            return await self._single_challenge(bot, event, user_info, boss_info)
     
-    async def _single_challenge(self, bot, event, user_info, player, boss_info):
+    async def _single_challenge(self, bot, event, user_info, boss_info):
         """单层挑战"""
         user_id = user_info["user_id"]
-        result, victor, bossinfo_new, _ = await Boss_fight(player, boss_info, type_in=1, bot_id=bot.self_id)        
+        result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, type_in=1, bot_id=bot.self_id)        
         await send_msg_handler(bot, event, result)
         if victor == "群友赢了":
             # 挑战成功
@@ -211,7 +208,7 @@ class TowerBattle:
             msg = f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！"
             return False, msg
     
-    async def _continuous_challenge(self, bot, event, user_info, player, start_floor, target_floors=10):
+    async def _continuous_challenge(self, bot, event, user_info, start_floor, target_floors=10):
         """连续挑战指定层数"""
         user_id = user_info["user_id"]
         tower_info = tower_data.get_user_tower_info(user_id)
@@ -229,7 +226,7 @@ class TowerBattle:
 
         for floor in range(start_floor, max_floor + 1):
             boss_info = self.generate_tower_boss(floor)
-            result, victor, bossinfo_new, _ = await Boss_fight(player, boss_info, type_in=1, bot_id=bot.self_id)
+            result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, type_in=1, bot_id=bot.self_id)
             last_result = result  # 始终保存最后一次战斗结果
             
             if victor == "群友赢了":
@@ -297,12 +294,6 @@ class TowerBattle:
         else:
             msg = f"连续挑战完成，成功通关第{max_floor}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
             return True, msg
-    
-    def _prepare_player_data(self, user_info):
-        """准备玩家战斗数据（添加与世界BOSS相同的加成）"""
-        user_id = user_info['user_id']
-        player = sql_message.get_player_data(user_id)
-        return player
     
     def _give_floor_reward(self, user_id, user_info, floor):
         tower_info = tower_data.get_user_tower_info(user_id)

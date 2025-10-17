@@ -296,8 +296,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     if user1 and user2:
         player1 = sql_message.get_player_data(user1['user_id'])
         player2 = sql_message.get_player_data(user2['user_id'])
-
-        result, victor = Player_fight(player1, player2, 1, bot.self_id)
+        result, victor = Player_fight(user1['user_id'], user2['user_id'], 1, bot.self_id)
         await send_msg_handler(bot, event, result)
         msg = f"获胜的是{victor}"
         if victor == "没有人":
@@ -1167,7 +1166,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
     
     base_attack = player_data['攻击']
-    user_attack = int(base_attack * (1 + impart_atk_per))
+    user_attack = int(base_attack)
     
     # 获取其他buff数据
     user_armor_crit_data = user_buff_data.get_user_armor_buff_data()

@@ -325,8 +325,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         sql_message.update_user_stamina(user_id, 20, 1)
         await handle_send(bot, event, msg)
         await battle.finish()
-
-    player = sql_message.get_player_data(user_id)
     
     user1_sub_buff_data = UserBuffDate(user_info['user_id']).get_user_sub_buff_data()
     exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
@@ -354,7 +352,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     boss_max_stone = bossinfo['max_stone']  # 使用最大灵石计算奖励
     
     # 执行战斗并获取结果
-    result, victor, bossinfo_new, _ = await Boss_fight(player, bossinfo, bot_id=bot.self_id)
+    result, victor, bossinfo_new = await Boss_fight(user_id, bossinfo, bot_id=bot.self_id)
     
     # 计算实际造成的伤害（不超过BOSS最大生命值的20%）
     max_single_damage = boss_all_hp * 0.2  # 单次最大伤害限制
@@ -517,8 +515,6 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg)
         await challenge_scarecrow.finish()
 
-    # 获取玩家信息
-    player = sql_message.get_player_data(user_id)
     scarecrow_hp = int(jsondata.level_data()["至高"]["power"]) * 10000
 
     # 定义稻草人属性（固定）
@@ -537,7 +533,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
-    result, victor, bossinfo_new, _ = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
+    result, victor, bossinfo_new = await Boss_fight(user_id, scarecrow_info, type_in=1, bot_id=bot.self_id)      
     # 打之后的血量
     boss_now_hp = bossinfo_new['气血']
     # 计算总伤害
@@ -545,7 +541,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 输出结果并处理奖励
     if victor == "群友赢了":
         msg = f"奇迹！道友击败了稻草人，共造成 {number_to(total_damage)} 伤害！不过它又站起来了，继续等待挑战者！"
-    elif victor == "Boss赢了":
+    else:
         msg = f"道友挑战稻草人，奋力攻击后共造成 {number_to(total_damage)} 伤害，稻草人岿然不动，继续等待挑战者！"
 
     battle_flag[group_id] = False
@@ -584,8 +580,6 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         await handle_send(bot, event, msg)
         await challenge_training_puppet.finish()
 
-    # 获取玩家信息
-    player = sql_message.get_player_data(user_id)
     
     arg_list = args.extract_plain_text().split()
     boss_name = "散发着威压的尸体"
@@ -600,7 +594,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         if len(arg_list) == 2:
             boss_name = arg_list[1]
 
-    
+    player = sql_message.get_player_data(user_id)
     bossinfo = createboss_jj(scarecrow_jj, boss_name)
     if bossinfo is None:
         boss_name = "散发着威压的尸体"
@@ -627,7 +621,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
-    result, victor, bossinfo_new, _ = await Boss_fight(player, scarecrow_info, type_in=1, bot_id=bot.self_id)      
+    result, victor, bossinfo_new = await Boss_fight(user_id, scarecrow_info, type_in=1, bot_id=bot.self_id)      
     # 打之后的血量
     boss_now_hp = bossinfo_new['气血']
     # 计算总伤害
