@@ -358,10 +358,10 @@ class TrainingEvents:
         
         # 根据事件大小调整权重
         weights = {
-            "stone": 40 if is_big_reward else 55,
+            "stone": 60 if is_big_reward else 55,
             "exp": 10 if is_big_reward else 5,
-            "item": 25 if is_big_reward else 20,
-            "points": 25 if is_big_reward else 20
+            "item": 15 if is_big_reward else 20,
+            "points": 15 if is_big_reward else 20
         }
         weights = [weights[t] for t in reward_types]
         
@@ -392,10 +392,12 @@ class TrainingEvents:
             }
         
         elif reward_type == "item":
-            user_rank = convert_rank(user_info["level"])[0]
-            min_rank = max(user_rank - 22 - reward_data["rank_offset"], 16)
-            item_rank = min(random.randint(min_rank, min_rank + 20), 55)
             item_type = random.choice(reward_data["types"])
+            if item_type in ["法器", "防具", "辅修功法"]:
+                zx_rank = max(convert_rank(user_level)[0] - reward_data["rank_offset"], 16)
+            else:
+                zx_rank = max(convert_rank(user_level)[0] - 22 - reward_data["rank_offset"], 5)
+            item_rank = min(random.randint(zx_rank, zx_rank + 20), 54)
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
             
             if item_id_list:
@@ -434,9 +436,9 @@ class TrainingEvents:
         
         # 根据事件大小调整权重
         weights = {
-            "stone": 25 if is_big_punish else 20,
+            "stone": 30 if is_big_punish else 35,
             "exp": 10 if is_big_punish else 5,
-            "item": 25 if is_big_punish else 35,
+            "item": 20 if is_big_punish else 20,
             "hp": 40 if is_big_punish else 40
         }
         weights = [weights[t] for t in punish_types]

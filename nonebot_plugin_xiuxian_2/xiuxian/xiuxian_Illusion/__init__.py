@@ -496,16 +496,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await illusion_clear.finish()
 
 def _give_random_item(user_id, user_level):
-    """给予随机物品奖励"""
-    # 获取用户境界对应的物品等级
-    user_rank = convert_rank(user_level)[0]
-    min_rank = max(user_rank - 22, 16)  # 最低16级物品
-    item_rank = min(random.randint(min_rank, min_rank + 20), 55)
-    
+    """给予随机物品奖励"""    
     # 随机选择物品类型
-    item_types = ["功法", "神通", "药材"]
+    item_types = ["功法", "神通", "药材", "法器", "防具", "身法", "瞳术"]
     item_type = random.choice(item_types)
-    
+    if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
+        zx_rank = max(convert_rank(user_level)[0], 16)
+    else:
+        zx_rank = max(convert_rank(user_level)[0] - 22, 5)
+    item_rank = min(random.randint(zx_rank, zx_rank + 20), 54)
     # 获取随机物品
     item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
     if not item_id_list:
