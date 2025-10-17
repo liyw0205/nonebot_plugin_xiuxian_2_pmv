@@ -6,7 +6,7 @@ from .item_json import Items
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-
+from nonebot.log import logger
 
 class BossBuff:
     def __init__(self):
@@ -616,52 +616,52 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     
     # 处理不同类型的辅修效果
     if buff_type == '4':  # 回血
-        restore_health = max_hp * buff_value // 100
-        player1['气血'] = min(player1['气血'] + restore_health, max_hp)
-        other_msg = f"回复气血:{number_to2(restore_health)}"
+        restore_health = max_hp * buff_value / 100
+        player1['气血'] = min(player1['气血'] + int(restore_health), max_hp)
+        other_msg = f"回复气血:{number_to2(int(restore_health))}"
         
     elif buff_type == '5':  # 回蓝
-        restore_mana = max_mp * buff_value // 100
-        player1['真元'] = min(player1['真元'] + restore_mana, max_mp)
-        other_msg = f"回复真元:{number_to2(restore_mana)}"
+        restore_mana = max_mp * buff_value / 100
+        player1['真元'] = min(player1['真元'] + int(restore_mana), max_mp)
+        other_msg = f"回复真元:{number_to2(int(restore_mana))}"
         
     elif buff_type == '6':  # 吸血
         if damage1 > 0:  # 只有命中才吸血
-            health_stolen = (damage1 * ((buff_value // 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
+            health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
             health_stolen = max(health_stolen, 0)
-            player1['气血'] = min(player1['气血'] + health_stolen, max_hp)
+            player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
             if health_stolen > 0:
-                health_stolen_msg = f"吸取气血:{number_to2(health_stolen)}"
+                health_stolen_msg = f"吸取气血:{number_to2(int(health_stolen))}"
                 
     elif buff_type == '7':  # 吸蓝
         if damage1 > 0:  # 只有命中才吸蓝
-            mana_stolen = (damage1 * buff_value // 100) * (1 - boss_buff.boss_xl)
+            mana_stolen = (damage1 * buff_value / 100) * (1 - boss_buff.boss_xl)
             mana_stolen = max(mana_stolen, 0)
-            player1['真元'] = min(player1['真元'] + mana_stolen, max_mp)
+            player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             if mana_stolen > 0:
-                mana_stolen_msg = f"吸取真元:{number_to2(mana_stolen)}"
+                mana_stolen_msg = f"吸取真元:{number_to2(int(mana_stolen))}"
                 
     elif buff_type == '8':  # 中毒
-        poison_damage = player2['气血'] // 100 * buff_value
-        player2['气血'] = max(player2['气血'] - poison_damage, 0)
+        poison_damage = player2['气血'] / 100 * buff_value
+        player2['气血'] = max(player2['气血'] - int(poison_damage), 0)
         if poison_damage > 0:
-            other_msg = f"对手中毒消耗血量:{number_to2(poison_damage)}"
+            other_msg = f"对手中毒消耗血量:{number_to2(int(poison_damage))}"
             
     elif buff_type == '9':  # 双吸
         if damage1 > 0:  # 只有命中才有效
-            health_stolen = (damage1 * ((buff_value // 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
-            mana_stolen = (damage1 * int(subbuffdata1['buff2']) // 100) * (1 - boss_buff.boss_xl)
+            health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
+            mana_stolen = (damage1 * int(subbuffdata1['buff2']) / 100) * (1 - boss_buff.boss_xl)
             
             health_stolen = max(health_stolen, 0)
             mana_stolen = max(mana_stolen, 0)
             
-            player1['气血'] = min(player1['气血'] + health_stolen, max_hp)
-            player1['真元'] = min(player1['真元'] + mana_stolen, max_mp)
+            player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
+            player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             
             if health_stolen > 0:
-                health_stolen_msg = f"吸取气血:{number_to2(health_stolen)}"
+                health_stolen_msg = f"吸取气血:{number_to2(int(health_stolen))}"
             if mana_stolen > 0:
-                mana_stolen_msg = f"吸取真元:{number_to2(mana_stolen)}"
+                mana_stolen_msg = f"吸取真元:{number_to2(int(mana_stolen))}"
     
     # 组合消息
     if health_stolen_msg and mana_stolen_msg:
