@@ -5091,6 +5091,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = "此类物品不支持！"
         await handle_send(bot, event, msg)
         await goods_re_root.finish()
+    num = 1
     try:
         if 1 <= int(args[1]) <= int(goods_num):
             num = int(args[1])
@@ -5606,8 +5607,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     for back in back_msg:
         if item_name == back['goods_name']:
-            goods_num = back['goods_num']
             in_flag = True
+            goods_num = back['goods_num']
             break
     
     if not in_flag:
@@ -5617,7 +5618,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     # 检查数量是否足够
     if goods_num < quantity:
-        quantity = goods_num
+        quantity = available_num
     ITEM_HANDLERS = {
         20005: use_wishing_stone,
         20016: use_love_sand,

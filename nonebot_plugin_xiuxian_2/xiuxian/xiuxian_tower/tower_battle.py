@@ -71,7 +71,7 @@ class TowerBattle:
         if jj_index >= len(jj_list) - 1:
             exceed_floor = floor - (len(jj_list) - 1) * 10
             jj = "祭道境"
-            base_exp = int(jsondata.level_data()["祭道境圆满"]["power"])
+            base_exp = int(jsondata.level_data()["祭道境初期"]["power"])
             hundred_layers = exceed_floor // 100
             base_scale = 1.0 + hundred_layers * 0.5
             current_hundred_floor = exceed_floor % 100
