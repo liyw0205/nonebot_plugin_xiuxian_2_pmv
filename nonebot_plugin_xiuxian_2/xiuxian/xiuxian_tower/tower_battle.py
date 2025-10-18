@@ -350,12 +350,12 @@ class TowerBattle:
         item_type = random.choice(item_types)
 
         if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
-            zx_rank = max(convert_rank(user_level)[0], 16)
+            base_rank = max(convert_rank(user_level)[0], 16)
         else:
-            zx_rank = max(convert_rank(user_level)[0] - 22, 16)
-        item_rank = min(random.randint(zx_rank, zx_rank + 20), 54)
+            base_rank = max(convert_rank(user_level)[0] - 22, 10)
+        zx_rank = random.randint(base_rank, min(base_rank + 35, 54))
         # 获取随机物品
-        item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+        item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
         if not item_id_list:
             return "无"
         

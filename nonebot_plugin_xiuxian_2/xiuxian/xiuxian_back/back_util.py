@@ -423,17 +423,70 @@ def get_user_danyao_back_msg(user_id):
     获取丹药背包信息
     """
     l_msg = []
-    l_danyao_msg = []    
     user_backs = sql_message.get_back_msg(user_id)  # list(back)
     if user_backs is None:
         return l_msg
+    
+    # 按buff_type分类存储丹药
+    danyao_by_type = {}
+    
     for user_back in user_backs:
         if user_back['goods_type'] == "丹药":
-            l_danyao_msg = get_elixir_msg(l_danyao_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
-    if l_danyao_msg:
-        l_msg.append("☆------丹药背包------☆")
-        for msg in l_danyao_msg:
-            l_msg.append(msg)            
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            buff_type = item_info.get('buff_type', '未知')
+            
+            if buff_type not in danyao_by_type:
+                danyao_by_type[buff_type] = []
+            
+            danyao_by_type[buff_type].append({
+                'id': user_back['goods_id'],
+                'name': item_info['name'],
+                'num': user_back['goods_num'],
+                'bind_num': user_back['bind_num'],
+                'info': item_info
+            })
+    
+    buff_type_order = {
+        'hp': 1,           # 回复状态
+        'all': 2,          # 回满状态
+        'level_up_rate': 3, # 突破概率
+        'level_up_big': 4,  # 大境界突破
+        'atk_buff': 5,     # 永久攻击
+        'exp_up': 6,       # 增加经验
+        'level_up': 7,      # 突破相关
+        '未知': 999        # 未知类型
+    }
+    
+    buff_type_names = {
+        'hp': '气血回复丹药',
+        'all': '全状态回复丹药',
+        'level_up_rate': '突破丹药',
+        'level_up_big': '大境界突破丹药',
+        'atk_buff': '永久攻击丹药',
+        'exp_up': '经验增加丹药',
+        'level_up': '突破辅助丹药',
+        '未知': '未知类型丹药'
+    }
+    
+    # 按定义的顺序排序
+    sorted_buff_types = sorted(danyao_by_type.keys(), 
+                              key=lambda x: buff_type_order.get(x, 999))
+    
+    # 构建排序后的消息
+    for buff_type in sorted_buff_types:
+        danyao_list = danyao_by_type[buff_type]
+        if danyao_list:
+            # 在每个类型内部按丹药名称排序
+            danyao_list.sort(key=lambda x: x['name'])
+            
+            type_name = buff_type_names.get(buff_type, f"{buff_type}类丹药")
+            l_msg.append(f"☆------{type_name}------☆")
+            
+            for danyao in danyao_list:
+                msg = f"名字：{danyao['name']}\n"
+                msg += f"拥有数量：{danyao['num']}，绑定数量：{danyao['bind_num']}"
+                l_msg.append(msg)
+    
     return l_msg
 
 def get_user_yaocai_back_msg(user_id):

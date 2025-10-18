@@ -1115,10 +1115,10 @@ class BossDrops:
             return None, None
             
         # 计算适合用户等级的掉落物范围
-        zx_rank = max(convert_rank(user_level)[0], 5)
-        zx_rank = min(random.randint(zx_rank, zx_rank + 25), 55)
+        base_rank = max(convert_rank(user_level)[0], 5)
+        zx_rank = random.randint(base_rank, min(base_rank + 35, 54))
         if zx_rank == 5 and random.randint(1, 100) != 100:
-            zx_rank = 16
+            zx_rank = 10
         # 筛选符合条件的掉落物
         eligible_drops = []
         for drop_id, drop_info in self.drops_data.items():

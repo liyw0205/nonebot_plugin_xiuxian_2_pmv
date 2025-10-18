@@ -1618,10 +1618,10 @@
         "bufftype": 1,
         "buffvalue": 3.5,
         "hpcost": 0,
-        "mpcost": 4,
+        "mpcost": 1.5,
         "turncost": 5,
         "desc": "九转成圣的玄门秘法",
-        "rate": 90,
+        "rate": 99,
         "rank": "仙阶极品",
         "level": "13"
     },

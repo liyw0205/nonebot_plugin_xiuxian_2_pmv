@@ -33,11 +33,11 @@ def workmake(work_level, exp, user_level):
         fail_msg = work_info['fail']
         
         item_type = get_random_item_type()
-        if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
-            zx_rank = max(convert_rank(user_level)[0], 16)
+        if item_type in ["法器", "防具", "辅修功法"]:
+            base_rank = max(convert_rank(user_level)[0] - 22, 16)
         else:
-            zx_rank = max(convert_rank(user_level)[0] - 22, 5)
-        zx_rank = min(random.randint(zx_rank, zx_rank + 35), 54)
+            base_rank = max(convert_rank(user_level)[0] - 22, 5)
+        zx_rank = random.randint(base_rank, min(base_rank + 35, 54))
         if zx_rank == 5 and random.randint(1, 100) != 100:
             zx_rank = 10
         item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)
@@ -59,14 +59,12 @@ def workmake(work_level, exp, user_level):
 
 def get_random_item_type():
     type_rate = {
-        "功法": {"type_rate": 51},
-        "神通": {"type_rate": 20},
-        "药材": {"type_rate": 20},
+        "功法": {"type_rate": 57},
+        "神通": {"type_rate": 17},
+        "药材": {"type_rate": 17},
         "辅修功法": {"type_rate": 1},
-        "身法": {"type_rate": 1},
-        "瞳术": {"type_rate": 1},
-        "法器": {"type_rate": 3},
-        "防具": {"type_rate": 3}
+        "法器": {"type_rate": 4},
+        "防具": {"type_rate": 4}
     }
     temp_dict = {}
     for i, v in type_rate.items():
