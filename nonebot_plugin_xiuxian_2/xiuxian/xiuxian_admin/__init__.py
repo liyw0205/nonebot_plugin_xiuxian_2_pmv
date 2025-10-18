@@ -699,7 +699,8 @@ async def create_new_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 @do_work_cz.handle(parameterless=[Cooldown(at_sender=False)])
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """重置所有用户的悬赏令"""    
+    """重置所有用户的悬赏令"""
+    from ..xiuxian_work import count
     sql_message.reset_work_num(count)
     msg = "用户悬赏令刷新次数重置成功"
     await handle_send(bot, event, msg)

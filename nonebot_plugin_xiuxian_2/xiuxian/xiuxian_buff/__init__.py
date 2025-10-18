@@ -3,7 +3,7 @@ import asyncio
 import re
 import json
 from nonebot.log import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from nonebot import on_command, on_fullmatch
 from nonebot.adapters.onebot.v11 import (
@@ -29,6 +29,7 @@ from ..xiuxian_utils.utils import (
     check_user_type, get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_work import count
 from .two_exp_cd import two_exp_cd
 
 
@@ -59,6 +60,7 @@ blessed_spot_rename = on_command("洞天福地改名", priority=7, block=True)
 ling_tian_up = on_fullmatch("灵田开垦", priority=5, block=True)
 del_exp_decimal = on_fullmatch("抑制黑暗动乱", priority=9, block=True)
 my_exp_num = on_fullmatch("我的双修次数", priority=9, block=True)
+daily_info = on_fullmatch("日常", priority=9, block=True)
 
 __buff_help__ = f"""
 【修仙功法系统】📜
@@ -1388,3 +1390,56 @@ async def use_two_exp_token(bot, event, item_id, num):
         msg = "当前剩余双修次数已满！"
     
     await handle_send(bot, event, msg)
+
+@daily_info.handle(parameterless=[Cooldown(at_sender=False)])
+async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """日常信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await daily_info.finish()
+    
+    user_id = user_info['user_id']
+    
+    # 1. 获取双修次数信息
+    limt = two_exp_cd.find_user(user_id)
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
+    main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
+    main_two = main_two_data['two_buff'] if main_two_data is not None else 0
+    max_two_exp = two_exp_limit + impart_two_exp + main_two
+    remaining_two_exp = max(max_two_exp - limt, 0)
+    
+    # 2. 获取灵田收取时间信息
+    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
+    if mix_elixir_info and '收取时间' in mix_elixir_info:
+        last_collect_time = datetime.strptime(mix_elixir_info['收取时间'], '%Y-%m-%d %H:%M:%S')
+        next_collect_time = last_collect_time + timedelta(hours=23)
+        now_time = datetime.now()
+        
+        if now_time >= next_collect_time:
+            lingtian_msg = "可收取"
+        else:
+            time_left = next_collect_time - now_time
+            hours_left = time_left.seconds // 3600
+            minutes_left = (time_left.seconds % 3600) // 60
+            lingtian_msg = f"{hours_left}时{minutes_left}分后"
+    else:
+        lingtian_msg = "未开启"
+    
+    # 3. 获取悬赏令次数信息
+    work_nums = sql_message.get_work_num(user_id)
+    max_work_nums = count  # 从文档3中定义的count变量，默认5次
+    work_msg = f"{work_nums}/{max_work_nums}"
+    
+    # 4. 格式化输出
+    msg = f"""
+═══  日常中心  ═══
+双修次数：{remaining_two_exp}/{max_two_exp}
+灵田状态：{lingtian_msg}
+悬赏令：{work_msg}
+════════════
+"""
+    await handle_send(bot, event, msg)
+    await daily_info.finish()
