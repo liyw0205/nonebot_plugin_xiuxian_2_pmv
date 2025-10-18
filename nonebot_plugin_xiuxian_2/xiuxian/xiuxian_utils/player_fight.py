@@ -785,12 +785,12 @@ class BattleEngine:
         if effect2_data and effect2_data['buff_type'] == '2':
             hit_buff = random.uniform(float(effect2_data['buff2']), float(effect2_data['buff']))
             hit += int(hit_buff)
-            self.add_system_message(f"{effect2_data['name']}！增加{int(hit_buff)}%命中！")
+            self.add_system_message(f"{effect2_data['name']}：{effect2_data['desc']}！增加{int(hit_buff)}%命中！")
             
         if effect1_data and effect1_data['buff_type'] == '1':
             dodge_buff = random.uniform(float(effect1_data['buff2']), float(effect1_data['buff']))
             dodge += int(dodge_buff)
-            self.add_system_message(f"{effect1_data['name']}！获得{int(dodge_buff)}%闪避！")
+            self.add_system_message(f"{effect1_data['name']}：{effect1_data['desc']}！获得{int(dodge_buff)}%闪避！")
             
         # 获取技能数据
         skill_data = None

@@ -1669,7 +1669,7 @@
         "crit_buff": 0,
         "def_buff": 0,
         "dan_exp": 0,
-        "dan_buff": 3,
+        "dan_buff": 0,
         "reap_buff": 0,
         "exp_buff": 0.3,
         "critatk": 0.2,

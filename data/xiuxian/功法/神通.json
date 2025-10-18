@@ -984,8 +984,8 @@
     "skill_type": 5,
     "atkvalue": 1,
     "atkvalue2": 11,
-    "hpcost": 0.02,
-    "mpcost": 0.4,
+    "hpcost": 0.05,
+    "mpcost": 1.4,
     "turncost": 0,
     "desc": "召唤玄光之力，凝聚成破影神针，随机射向敌人！",
     "rate": 100,
@@ -1010,8 +1010,8 @@
     "skill_type": 5,
     "atkvalue": 1.5,
     "atkvalue2": 11,
-    "hpcost": 0.02,
-    "mpcost": 0.4,
+    "hpcost": 0.05,
+    "mpcost": 1.4,
     "turncost": 0,
     "desc": "凝聚灵风之力，形成碎空利刃，对敌人造成巨大伤害！",
     "rate": 100,
@@ -1090,8 +1090,8 @@
     "skill_type": 5,
     "atkvalue": 1.5,
     "atkvalue2": 15,
-    "hpcost": 0.01,
-    "mpcost": 0.5,
+    "hpcost": 0.05,
+    "mpcost": 1.9,
     "turncost": 0,
     "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
     "rate": 100,
@@ -1162,21 +1162,7 @@
     "desc": "万剑齐发，归于一宗，势不可挡！万剑归宗！！！",
     "rate": 99,
     "rank": "仙阶极品",
-    "level": "-5",
-    "fusion": {
-      "need_item": {
-        "8004": 1,
-        "8504": 1,
-        "8704": 1,
-        "8804": 1,
-        "20003": 1,
-        "20004": 1
-      },
-      "need_rank": "微光境圆满",
-      "need_exp": "0",
-      "need_stone": "0",
-      "limit": 1
-    }
+    "level": "-5"
   },
   "8921": {
     "name": "华光猎影",
@@ -1188,21 +1174,7 @@
     "desc": "刹诀！华光猎影！！",
     "rate": 100,
     "rank": "仙阶极品",
-    "level": "-5",
-    "fusion": {
-      "need_item": {
-        "8003": 1,
-        "8403": 1,
-        "8603": 1,
-        "8803": 1,
-        "20003": 1,
-        "20004": 1
-      },
-      "need_rank": "微光境圆满",
-      "need_exp": "0",
-      "need_stone": "0",
-      "limit": 1
-    }
+    "level": "-5"
   },
   "8922": {
     "name": "灭剑血胧",
@@ -1216,21 +1188,7 @@
     "desc": "剑出血胧，灭敌无形，血雾弥漫！灭！！！！",
     "rate": 75,
     "rank": "仙阶极品",
-    "level": "-5",
-    "fusion": {
-      "need_item": {
-        "8302": 1,
-        "8502": 1,
-        "8802": 1,
-        "8902": 1,
-        "20003": 1,
-        "20004": 1
-      },
-      "need_rank": "微光境圆满",
-      "need_exp": "0",
-      "need_stone": "0",
-      "limit": 1
-    }
+    "level": "-5"
   },
   "8923": {
     "name": "千慄鬼噬",
@@ -1250,21 +1208,7 @@
     "desc": "鬼神皆惧，千慄吞噬，暗影降临！千慄鬼噬！！！",
     "rate": 100,
     "rank": "仙阶极品",
-    "level": "-5",
-    "fusion": {
-      "need_item": {
-        "8301": 1,
-        "8401": 1,
-        "8501": 1,
-        "8601": 1,
-        "20003": 1,
-        "20004": 1
-      },
-      "need_rank": "微光境圆满",
-      "need_exp": "0",
-      "need_stone": "0",
-      "limit": 1
-    }
+    "level": "-5"
   },
   "8924": {
     "name": "自爆",
@@ -1338,8 +1282,8 @@
     "skill_type": 5,
     "atkvalue": 3,
     "atkvalue2": 15,
-    "hpcost": 0.01,
-    "mpcost": 0.5,
+    "hpcost": 0.05,
+    "mpcost": 2.5,
     "turncost": 0,
     "desc": "双掌汇聚炽热火焰，对大范围敌人造成毁灭性打击！",
     "rate": 100,
@@ -1485,7 +1429,7 @@
       2.5
     ],
     "hpcost": 0.03,
-    "mpcost": 1.5,
+    "mpcost": 2.5,
     "turncost": 1,
     "desc": "冥河之水化作鬼镰，千慄葬世，收割万物生机！鬼镰划破天际，冥气弥漫，敌人灵魂被生生撕裂，坠入无尽深渊！此乃鬼噬之终章，天地同寂！",
     "rate": 100,
@@ -1499,7 +1443,7 @@
       8.8
     ],
     "hpcost": 0.03,
-    "mpcost": 1.75,
+    "mpcost": 2.75,
     "turncost": 0,
     "desc": "血影碎空，胧剑出鞘，剑气化血雾，弥漫战场！敌人陷入血胧之中，剑气纵横，劫难降临，万物皆灭！",
     "rate": 75,
@@ -1512,7 +1456,7 @@
     "bufftype": 1,
     "buffvalue": 5.55,
     "hpcost": 0,
-    "mpcost": 2.5,
+    "mpcost": 3,
     "turncost": 4,
     "desc": "剑御九天，万剑归墟，剑气化九天，剑网笼罩天地！敌人被剑气撕裂，万物归于虚无，此乃剑道极致！",
     "rate": 99,
@@ -1605,27 +1549,27 @@
     "8941": {
         "name": "乾坤一掷",
         "skill_type": 5,
-        "atkvalue": 0.5,
+        "atkvalue": 3.0,
         "atkvalue2": 15.0,
-        "hpcost": 0.3,
-        "mpcost": 1.2,
+        "hpcost": 0.5,
+        "mpcost": 5,
         "turncost": 5,
         "desc": "赌上全部灵力的致命一击",
-        "rate": 30,
+        "rate": 50,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8942": {
         "name": "三生轮回印",
         "skill_type": 2,
-        "atkvalue": 2,
+        "atkvalue": 3,
         "hpcost": 0,
         "mpcost": 0.9,
         "turncost": 6,
         "desc": "连续三世轮回的业力攻击",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8943": {
         "name": "混沌归墟",
@@ -1646,12 +1590,12 @@
     "8944": {
         "name": "天道敕令",
         "skill_type": 4,
-        "hpcost": 0.4,
-        "mpcost": 1.8,
+        "hpcost": 0,
+        "mpcost": 3,
         "turncost": 3,
         "desc": "代天行罚的绝对封印",
-        "rate": 40,
-        "success": 95,
+        "rate": 95,
+        "success": 100,
         "rank": "无上",
         "level": "-5"
     },
@@ -1672,14 +1616,14 @@
         "name": "九转玄功",
         "skill_type": 3,
         "bufftype": 1,
-        "buffvalue": 3.0,
+        "buffvalue": 3.5,
         "hpcost": 0,
         "mpcost": 4,
         "turncost": 5,
         "desc": "九转成圣的玄门秘法",
         "rate": 90,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8947": {
         "name": "虚空劫指",
@@ -1698,14 +1642,14 @@
     "8948": {
         "name": "业火红莲",
         "skill_type": 2,
-        "atkvalue": 1.8,
+        "atkvalue": 3.8,
         "hpcost": 0.05,
         "mpcost": 0.8,
         "turncost": 5,
         "desc": "焚烧业障的红莲之火",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8949": {
         "name": "周天星辰引",
@@ -1764,8 +1708,8 @@
         "skill_type": 5,
         "atkvalue": 2.0,
         "atkvalue2": 12.0,
-        "hpcost": 0.08,
-        "mpcost": 1.1,
+        "hpcost": 0.2,
+        "mpcost": 1.7,
         "turncost": 0,
         "desc": "召唤九天神雷随机轰击",
         "rate": 100,
@@ -1797,7 +1741,7 @@
         "rate": 45,
         "success": 90,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8956": {
         "name": "九幽冥火劫",
@@ -1815,15 +1759,15 @@
     "8957": {
         "name": "虚空破碎刃",
         "skill_type": 5,
-        "atkvalue": 1.8,
-        "atkvalue2": 16.0,
-        "hpcost": 0.12,
-        "mpcost": 1.3,
+        "atkvalue": 3.0,
+        "atkvalue2": 12.0,
+        "hpcost": 0.2,
+        "mpcost": 1.7,
         "turncost": 0,
         "desc": "撕裂虚空的次元利刃",
         "rate": 100,
         "rank": "仙阶上品",
-        "level": "22"
+        "level": "16"
     },
     "8958": {
         "name": "阴阳混沌变",
@@ -1852,7 +1796,7 @@
         "desc": "五行之力归于虚无",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8960": {
         "name": "万法归一剑",
@@ -1879,16 +1823,16 @@
         "desc": "引动周天星斗之力",
         "rate": 80,
         "rank": "仙阶极品",
-        "level": "16"
+        "level": "13"
     },
     "8962": {
         "name": "神魔俱灭",
         "skill_type": 5,
-        "atkvalue": 2.5,
+        "atkvalue": 5,
         "atkvalue2": 20.0,
-        "hpcost": 0.35,
-        "mpcost": 2.2,
-        "turncost": 7,
+        "hpcost": 0.99,
+        "mpcost": 5,
+        "turncost": 20,
         "desc": "神魔皆灭的终极一击",
         "rate": 25,
         "rank": "无上",
