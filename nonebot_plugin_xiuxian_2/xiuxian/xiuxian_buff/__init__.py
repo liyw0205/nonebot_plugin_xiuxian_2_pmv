@@ -30,6 +30,14 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_work import count
+from ..xiuxian_impart_pk.impart_pk_uitls import impart_pk_check
+from ..xiuxian_impart_pk.xu_world import xu_world
+from ..xiuxian_impart_pk.impart_pk import impart_pk
+from ..xiuxian_boss.boss_limit import boss_limit
+from ..xiuxian_sect import isUserTask, userstask
+from ..xiuxian_sect.sectconfig import get_config
+from ..xiuxian_rift import group_rift
+from ..xiuxian_rift.jsondata import read_rift_data
 from .two_exp_cd import two_exp_cd
 
 
@@ -1402,7 +1410,14 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     
-    # 1. 获取双修次数信息
+    # 1. 获取签到状态信息
+    sign_status = sql_message.get_sign(user_id)
+    if sign_status == "贪心的人是不会有好运的！":
+        sign_msg = "今日已签到"
+    else:
+        sign_msg = "今日未签到"
+    
+    # 2. 获取双修次数信息
     limt = two_exp_cd.find_user(user_id)
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
@@ -1411,7 +1426,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     max_two_exp = two_exp_limit + impart_two_exp + main_two
     remaining_two_exp = max(max_two_exp - limt, 0)
     
-    # 2. 获取灵田收取时间信息
+    # 3. 获取灵田收取时间信息
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     if mix_elixir_info and '收取时间' in mix_elixir_info:
         last_collect_time = datetime.strptime(mix_elixir_info['收取时间'], '%Y-%m-%d %H:%M:%S')
@@ -1419,7 +1434,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         now_time = datetime.now()
         
         if now_time >= next_collect_time:
-            lingtian_msg = "可收取"
+            lingtian_msg = "已成熟"
         else:
             time_left = next_collect_time - now_time
             hours_left = time_left.seconds // 3600
@@ -1428,17 +1443,130 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         lingtian_msg = "未开启"
     
-    # 3. 获取悬赏令次数信息
+    # 4. 获取宗门任务信息
+    sect_task_msg = "未加入宗门"
+    if user_info['sect_id']:
+        user_now_num = int(user_info['sect_task'])
+        max_task_num = get_config()["每日宗门任务次上限"]
+        remaining_task = max(max_task_num - user_now_num, 0)
+        
+        # 检查是否有未完成的任务
+        if isUserTask(user_id):
+            task_name = userstask[user_id]['任务名称']
+            sect_task_msg = f"进行中({task_name}) {remaining_task}/{max_task_num}"
+        else:
+            sect_task_msg = f"可接取 {remaining_task}/{max_task_num}"
+    else:
+        sect_task_msg = "未加入宗门"
+    
+    # 5. 获取悬赏令次数信息
     work_nums = sql_message.get_work_num(user_id)
-    max_work_nums = count  # 从文档3中定义的count变量，默认5次
+    max_work_nums = count
     work_msg = f"{work_nums}/{max_work_nums}"
     
-    # 4. 格式化输出
+    # 6. 获取虚神界对决次数信息
+    impart_pk_data = impart_pk.find_user_data(user_id)
+    if impart_pk_data:
+        pk_num = impart_pk_data["pk_num"]
+        max_pk_num = 5
+        pk_msg = f"{pk_num}/{max_pk_num}"
+    else:
+        pk_msg = "0/5"
+    
+    # 7. 获取虚神界探索次数信息
+    if impart_pk_data:
+        impart_num = impart_pk_data["impart_num"]
+        max_impart_num = 10
+        impart_msg = f"{impart_num}/{max_impart_num}"
+    else:
+        impart_msg = "0/10"
+    
+    # 8. 获取宗门丹药信息
+    sect_id = user_info['sect_id']
+    sect_elixir_msg = "未加入宗门"
+    if sect_id:
+        sect_info = sql_message.get_sect_info(sect_id)
+        if sect_info and int(sect_info['elixir_room_level']) > 0:
+            # 检查用户是否已领取今日丹药
+            user_elixir_get = user_info.get('sect_elixir_get', 0)
+            if user_elixir_get == 1:
+                sect_elixir_msg = "已领取"
+            else:
+                # 检查贡献度是否足够
+                if int(user_info['sect_contribution']) >= get_config()['宗门丹房参数']['领取贡献度要求']:
+                    sect_elixir_msg = "可领取"
+                else:
+                    sect_elixir_msg = f"贡献不足(需{get_config()['宗门丹房参数']['领取贡献度要求']})"
+        else:
+            sect_elixir_msg = "无丹房"
+    else:
+        sect_elixir_msg = "未加入宗门"
+
+    # 9. 获取讨伐次数信息
+    today_battle_count = boss_limit.get_battle_count(user_id)
+    battle_msg = f"{today_battle_count}/30"
+
+    # 10. 获取秘境状态信息
+    rift_status = "无秘境"
+    group_id = "000000"
+    
+    # 检查当前是否有秘境
+    try:
+        group_rift_data = group_rift[group_id]
+        rift_exists = True
+    except KeyError:
+        rift_exists = False
+    
+    if rift_exists:
+        # 检查用户是否在秘境中
+        user_cd_data = sql_message.get_user_cd(user_id)
+        user_in_rift = user_cd_data and user_cd_data['type'] == 3  # 状态3表示在秘境中
+        
+        # 检查用户是否已参与当前秘境
+        user_participated = user_id in group_rift_data.l_user_id
+        
+        if user_in_rift:
+            # 检查是否可结算
+            rift_info = read_rift_data(user_id)
+            user_cd_message = sql_message.get_user_cd(user_id)
+            work_time = datetime.strptime(
+                user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
+            )
+            exp_time = (datetime.now() - work_time).seconds // 60
+            time2 = rift_info["time"]
+            
+            if exp_time >= time2:
+                rift_status = "可结算"
+            else:
+                rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
+        elif user_participated:
+            rift_status = "已探索"
+        else:
+            # 检查用户是否符合进入条件
+            user_rank = convert_rank(user_info["level"])[0]
+            required_rank = convert_rank("感气境中期")[0] - group_rift_data.rank
+            
+            if user_rank > required_rank:
+                rank_name_list = convert_rank(user_info["level"])[1]
+                required_rank_name = rank_name_list[len(rank_name_list) - required_rank - 1]
+                rift_status = f"境界不足(需{required_rank_name})"
+            else:
+                rift_status = "可探索"
+    else:
+        rift_status = "无秘境"
+
     msg = f"""
-═══  日常中心  ═══
-双修次数：{remaining_two_exp}/{max_two_exp}
+═══  日常中心  ═════
+修仙签到：{sign_msg}
 灵田状态：{lingtian_msg}
+秘境状态：{rift_status}
+宗门任务：{sect_task_msg}
+宗门丹药：{sect_elixir_msg}
 悬赏令：{work_msg}
+讨伐次数：{battle_msg}
+双修次数：{remaining_two_exp}/{max_two_exp}
+虚神界对决：{pk_msg}
+虚神界探索：{impart_msg}
 ════════════
 """
     await handle_send(bot, event, msg)

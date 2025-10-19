@@ -26,7 +26,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
 impart_pk_project = on_fullmatch("投影虚神界", priority=6, block=True)
-impart_pk_go = on_fullmatch("探索虚神界", priority=6, block=True)
+impart_pk_go = on_command("探索虚神界", aliases={"虚神界探索"}, priority=6, block=True)
 impart_pk_info = on_fullmatch("虚神界信息", priority=6, block=True)
 impart_pk_now = on_command("虚神界对决", priority=15, block=True)
 impart_pk_list = on_fullmatch("虚神界列表", priority=7, block=True)
@@ -150,7 +150,6 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await impart_pk_list.finish()
     await impart_pk_list.finish()
 
-
 @impart_pk_now.handle(parameterless=[Cooldown(stamina_cost=3, at_sender=False)])
 async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界对决"""
@@ -168,7 +167,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await impart_pk_now.finish()
 
-    num = args.extract_plain_text().strip()
+    args_text = args.extract_plain_text().strip()
     user_data = impart_pk.find_user_data(user_info['user_id'])
 
     if user_data["pk_num"] <= 0:
@@ -176,47 +175,104 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await impart_pk_now.finish()
 
+    # 解析参数
+    target_num = None
+    max_loss_count = 1  # 默认最多失败1次
+    
+    if args_text:
+        parts = args_text.split()
+        for part in parts:
+            if part.endswith('次'):
+                try:
+                    # 提取次数部分
+                    count_str = part.replace('次', '')
+                    if count_str.isdigit():
+                        max_loss_count = int(count_str)
+                except:
+                    pass
+            elif part.isdigit():
+                # 纯数字，可能是目标编号
+                target_num = part
+    
+    # 验证失败次数
+    if max_loss_count <= 0:
+        msg = f"失败次数必须大于0！"
+        await handle_send(bot, event, msg)
+        await impart_pk_now.finish()
+    
+    if max_loss_count > user_data["pk_num"]:
+        msg = f"道友今日剩余次数只有{user_data['pk_num']}次，无法承受{max_loss_count}次失败！"
+        await handle_send(bot, event, msg)
+        await impart_pk_now.finish()
+
     player_1_stones = 0
     player_2_stones = 0
+    current_loss_count = 0
+    total_battles = 0
+    total_wins = 0
+    total_losses = 0
     combined_msg = ""
     list_msg = []
 
-    if not num:
-        if user_data["pk_num"] > 0:
+    # 无目标编号的情况（与机器人对决）
+    if not target_num:
+        while current_loss_count < max_loss_count and user_data["pk_num"] > 0:
+            total_battles += 1
             msg, win = await impart_pk_uitls.impart_pk_now_msg_to_bot(user_info['user_name'], NICKNAME)
-            if win == 1:
-                msg += f"战报：道友{user_info['user_name']}获胜,获得思恋结晶20颗\n"
-                impart_pk.update_user_data(user_info['user_id'], True)
+            battle_msg = f"☆--------第{total_battles}场对决--------☆\n{msg}"
+            
+            if win == 1:  # 玩家胜利
+                battle_msg += f"战报：道友{user_info['user_name']}获胜，获得思恋结晶20颗\n"
+                impart_pk.update_user_data(user_info['user_id'], True)  # 胜利不消耗次数
                 xiuxian_impart.update_stone_num(20, user_id, 1)
                 player_1_stones += 20
-            elif win == 2:
-                msg += f"战报：道友{user_info['user_name']}败了,消耗一次次数,获得思恋结晶10颗\n"
-                impart_pk.update_user_data(user_info['user_id'], False)
+                total_wins += 1
+            elif win == 2:  # 玩家失败
+                battle_msg += f"战报：道友{user_info['user_name']}败了，消耗1次次数，获得思恋结晶10颗\n"
+                impart_pk.update_user_data(user_info['user_id'], False)  # 失败消耗次数
                 xiuxian_impart.update_stone_num(10, user_id, 1)
                 player_1_stones += 10
-                if impart_pk.find_user_data(user_id)["pk_num"] <= 0 and xu_world.check_xu_world_user_id(user_id) is True:
-                    msg += "检测到道友次数已用尽，已帮助道友退出虚神界！"
-                    xu_world.del_xu_world(user_id)
+                current_loss_count += 1
+                total_losses += 1
+                
+                # 更新用户数据
+                user_data = impart_pk.find_user_data(user_info['user_id'])
             else:
-                msg = f"挑战失败"
-                combined_msg += f"{msg}\n"
+                battle_msg += f"对决异常，不计结果\n"
 
-            combined_msg += f"☆--------⚔️对决⚔️--------☆\n{msg}\n"
-            user_data = impart_pk.find_user_data(user_info['user_id'])
+            combined_msg += battle_msg + "\n"
+            
+            # 检查次数是否用尽
+            if user_data["pk_num"] <= 0:
+                combined_msg += "道友次数已用尽！\n"
+                if xu_world.check_xu_world_user_id(user_id):
+                    combined_msg += "已帮助道友退出虚神界！\n"
+                    xu_world.del_xu_world(user_id)
+                break
 
-        combined_msg += f"总计：道友{user_info['user_name']}获得思恋结晶{player_1_stones}颗\n"
-        list_msg.append(
-                {"type": "node", "data": {"name": f"虚神界对决", "uin": bot.self_id,
-                                          "content": combined_msg}})
+        combined_msg += f"☆--------对决结束--------☆\n"
+        combined_msg += f"共进行{total_battles}场对决，获胜{total_wins}场，失败{total_losses}场\n"
+        combined_msg += f"总计获得思恋结晶{player_1_stones}颗\n"
+        
+        list_msg.append({
+            "type": "node", 
+            "data": {
+                "name": f"虚神界对决（失败{current_loss_count}/{max_loss_count}次）", 
+                "uin": bot.self_id,
+                "content": combined_msg
+            }
+        })
         await send_msg_handler(bot, event, list_msg)
         await impart_pk_now.finish()
 
-    if not num.isdigit():
+    # 有目标编号的情况（与其他玩家对决）
+    try:
+        num = int(target_num) - 1
+    except:
         msg = f"编号解析异常，应全为数字!"
         await handle_send(bot, event, msg)
         await impart_pk_now.finish()
 
-    num = int(num) - 1
     xu_world_list = xu_world.all_xu_world_user()
 
     if num + 1 > len(xu_world_list) or num < 0:
@@ -226,6 +282,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     player_1 = user_info['user_id']
     player_2 = xu_world_list[num]
+    
     if str(player_1) == str(player_2):
         msg = f"道友不能挑战自己的投影!"
         await handle_send(bot, event, msg)
@@ -234,64 +291,99 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     player_1_name = user_info['user_name']
     player_2_name = sql_message.get_user_info_with_id(player_2)['user_name']
 
-    if user_data["pk_num"] > 0:
-        msg_list, win = await impart_pk_uitls.impart_pk_now_msg(player_1, player_1_name, player_2, player_2_name)
-        if win is None:
-            msg = f"挑战失败"
-            combined_msg += f"{msg}\n"
+    # 检查对方是否还在虚神界
+    if not xu_world.check_xu_world_user_id(player_2):
+        msg = f"道友{player_2_name}已离开虚神界！"
+        await handle_send(bot, event, msg)
+        await impart_pk_now.finish()
 
-        if win == 1:  # 1号玩家胜利 发起者
-            impart_pk.update_user_data(player_1, True)
-            impart_pk.update_user_data(player_2, False)
+    player_1_wins = 0
+    player_2_wins = 0
+    
+    while current_loss_count < max_loss_count and user_data["pk_num"] > 0:
+        total_battles += 1
+        msg_list, win = await impart_pk_uitls.impart_pk_now_msg(player_1, player_1_name, player_2, player_2_name)
+        
+        battle_combined_msg = f"☆--------第{total_battles}场对决--------☆\n"
+        
+        if win is None:
+            battle_combined_msg += f"对决异常，不计结果\n"
+            combined_msg += battle_combined_msg + "\n"
+            continue
+
+        if win == 1:  # 1号玩家胜利
+            impart_pk.update_user_data(player_1, True)  # 胜利不消耗次数
+            impart_pk.update_user_data(player_2, False)  # 失败消耗次数
             xiuxian_impart.update_stone_num(20, player_1, 1)
             xiuxian_impart.update_stone_num(10, player_2, 1)
             player_1_stones += 20
             player_2_stones += 10
-            msg_list.append(
-                {"type": "node", "data": {"name": f"虚神界战报", "uin": bot.self_id,
-                                          "content": f"道友{player_1_name}获得了胜利,获得了思恋结晶20!\n"
-                                                     f"道友{player_2_name}获得败了,消耗一次次数,获得了思恋结晶10颗!"}})
-            if impart_pk.find_user_data(player_2)["pk_num"] <= 0:
-                msg_list.append(
-                    {"type": "node", "data": {"name": f"虚神界变更", "uin": bot.self_id,
-                                              "content": f"道友{player_2_name}次数耗尽，离开了虚神界！"}})
+            player_1_wins += 1
+            total_wins += 1
+            
+            battle_combined_msg += "\n".join([node['data']['content'] for node in msg_list]) + "\n"
+            battle_combined_msg += f"道友{player_1_name}获得了胜利，获得思恋结晶20颗！\n"
+            battle_combined_msg += f"道友{player_2_name}败了，获得思恋结晶10颗！\n"
+            
+            # 检查对方次数是否用尽
+            player_2_data = impart_pk.find_user_data(player_2)
+            if player_2_data["pk_num"] <= 0:
+                battle_combined_msg += f"道友{player_2_name}次数耗尽，离开了虚神界！\n"
                 xu_world.del_xu_world(player_2)
-                combined_msg += "\n".join([node['data']['content'] for node in msg_list])
-        elif win == 2:  # 2号玩家胜利 被挑战者
-            impart_pk.update_user_data(player_2, True)
-            impart_pk.update_user_data(player_1, False)
+                combined_msg += battle_combined_msg
+                break
+                
+        elif win == 2:  # 2号玩家胜利
+            impart_pk.update_user_data(player_2, True)  # 胜利不消耗次数
+            impart_pk.update_user_data(player_1, False)  # 失败消耗次数
             xiuxian_impart.update_stone_num(20, player_2, 1)
             xiuxian_impart.update_stone_num(10, player_1, 1)
             player_2_stones += 20
             player_1_stones += 10
-            msg_list.append(
-                {"type": "node", "data": {"name": f"虚神界战报", "uin": bot.self_id,
-                                          "content": f"道友{player_2_name}获得了胜利,获得了思恋结晶20颗!\n"
-                                                     f"道友{player_1_name}获得败了,消耗一次次数,获得了思恋结晶10颗!"}})
-            if impart_pk.find_user_data(player_1)["pk_num"] <= 0:
-                msg_list.append(
-                    {"type": "node", "data": {"name": f"虚神界变更", "uin": bot.self_id,
-                                              "content": f"道友{player_1_name}次数耗尽，离开了虚神界！"}})
-                xu_world.del_xu_world(player_1)
-                combined_msg += "\n".join([node['data']['content'] for node in msg_list])
+            player_2_wins += 1
+            current_loss_count += 1
+            total_losses += 1
+            
+            battle_combined_msg += "\n".join([node['data']['content'] for node in msg_list]) + "\n"
+            battle_combined_msg += f"道友{player_2_name}获得了胜利，获得思恋结晶20颗！\n"
+            battle_combined_msg += f"道友{player_1_name}败了，获得思恋结晶10颗！\n"
+            
+            # 更新用户数据
+            user_data = impart_pk.find_user_data(player_1)
+            
+            # 检查自己次数是否用尽
+            if user_data["pk_num"] <= 0:
+                battle_combined_msg += f"道友{player_1_name}次数耗尽！\n"
+                if xu_world.check_xu_world_user_id(player_1):
+                    battle_combined_msg += "已帮助道友退出虚神界！\n"
+                    xu_world.del_xu_world(player_1)
+                combined_msg += battle_combined_msg
+                break
+        
+        combined_msg += battle_combined_msg + "\n"
 
-        combined_msg += f"☆--------⚔️对决⚔️--------☆\n" + "\n".join([node['data']['content'] for node in msg_list]) + "\n"
+    combined_msg += f"☆--------对决结束--------☆\n"
+    combined_msg += f"共进行{total_battles}场对决\n"
+    combined_msg += f"{player_1_name}获胜{player_1_wins}场，{player_2_name}获胜{player_2_wins}场\n"
+    combined_msg += f"道友失败{current_loss_count}次（设定上限：{max_loss_count}次）\n"
+    combined_msg += f"{player_1_name}获得思恋结晶{player_1_stones}颗，{player_2_name}获得思恋结晶{player_2_stones}颗\n"
 
-        try:
-            await send_msg_handler(bot, event, msg_list)
-        except ActionFailed:
-            msg = f"未知原因，对决显示失败!"
-            combined_msg += f"{msg}\n"
-
-        user_data = impart_pk.find_user_data(user_info['user_id'])
-
-        combined_msg += f"总计：道友{player_1_name}获得思恋结晶{player_1_stones}颗, 道友{player_2_name}获得思恋结晶{player_2_stones}颗\n"
-
-        list_msg.append(
-                {"type": "node", "data": {"name": f"虚神界对决", "uin": bot.self_id,
-                                          "content": combined_msg}})
+    list_msg.append({
+        "type": "node", 
+        "data": {
+            "name": f"虚神界对决（失败{current_loss_count}/{max_loss_count}次）", 
+            "uin": bot.self_id,
+            "content": combined_msg
+        }
+    })
+    
+    try:
         await send_msg_handler(bot, event, list_msg)
-        await impart_pk_now.finish()
+    except ActionFailed:
+        msg = f"未知原因，对决显示失败!"
+        await handle_send(bot, event, msg)
+        
+    await impart_pk_now.finish()
 
 @impart_pk_exp.handle(parameterless=[Cooldown(at_sender=False)])
 async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -482,7 +574,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」发出共鸣，道友决定停下脚步"
         ]
         msg = random.choice(stay_msgs)
-        xiuxian_impart.use_impart_exp_day(impart_time, user_id)
+        impart_pk.update_user_impart_lv(user_info['user_id'])
         await handle_send(bot, event, msg)
         await impart_pk_go.finish()
     elif 31 <= impart_suc <= 50:
