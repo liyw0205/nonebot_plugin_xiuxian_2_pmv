@@ -25,7 +25,7 @@ from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from .back_util import (
     get_user_main_back_msg, get_user_yaocai_back_msg, get_user_yaocai_detail_back_msg, get_user_danyao_back_msg, check_equipment_can_use,
-    get_use_equipment_sql, get_shop_data, save_shop,
+    get_use_equipment_sql,
     get_item_msg, get_item_msg_rank, check_use_elixir,
     get_use_jlq_msg, get_no_use_equipment_sql,
     get_user_equipment_msg,

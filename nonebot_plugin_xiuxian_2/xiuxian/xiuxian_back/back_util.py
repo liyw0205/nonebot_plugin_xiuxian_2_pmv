@@ -999,39 +999,6 @@ def get_use_jlq_msg(user_id, goods_id):
             msg = f"道友洞天福地的聚灵旗已经替换为：{item_info['name']}"
     return msg
 
-
-def get_shop_data(group_id):
-    try:
-        data = read_shop()
-    except:
-        data = {}
-    # 如果是仙肆，使用固定的 group_id "000000"
-    if group_id == "000000":
-        shop_id = "000000"
-    else:
-        shop_id = group_id
-    try:
-        data[shop_id]
-    except:
-        data[shop_id] = {}
-    save_shop(data)
-    return data
-
-
 PATH = Path(__file__).parent
 FILEPATH = PATH / 'shop.json'
 
-
-def read_shop():
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
-
-
-def save_shop(data):
-    data = json.dumps(data, ensure_ascii=False, indent=4)
-    savemode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=savemode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
-    return True
