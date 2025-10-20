@@ -325,13 +325,12 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
     msg = "☆------宗门职位系统------☆\n"
-    msg += "职位编号 | 职位名称 | 人数限制 | 修为加成\n"
+    msg += "职位编号 | 职位名称 | 人数限制\n"
     msg += "─────────────\n"
     
     for pos_id, pos_data in sorted(jsondata.sect_config_data().items(), key=lambda x: int(x[0])):
         max_count = pos_data.get("max_count", 0)
         count_info = f"限{max_count}人" if max_count > 0 else "不限"
-        speeds = pos_data.get("speeds", "1.0")
         msg += f"{pos_id:2} | {pos_data['title']:6} | {count_info:4}\n"
     
     msg += "\n使用示例：\n"

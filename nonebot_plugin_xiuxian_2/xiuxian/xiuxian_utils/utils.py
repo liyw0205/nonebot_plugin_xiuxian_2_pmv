@@ -65,22 +65,61 @@ def check_user_type(user_id, need_type):
         isType = True
     else:
         if user_type == 1:
-            msg = "道友现在在闭关呢，小心走火入魔！"
+            msg_list = [
+                "道友现在在闭关呢，小心走火入魔！",
+                "闭关中，请勿打扰！",
+                "道友正在潜心修炼，稍后再来吧~",
+                "洞府紧闭，道友正在闭关突破！",
+                "修炼要紧，道友请稍候片刻！"
+            ]
+            msg = random.choice(msg_list)
 
         elif user_type == 2:
-            msg = "道友现在在做悬赏令呢，小心走火入魔！"
+            msg_list = [
+                "道友现在在做悬赏令呢，小心走火入魔！",
+                "悬赏任务进行中，道友请耐心等待！",
+                "道友正在执行悬赏，归来后再叙~",
+                "悬赏令完成前，道友不便分心！"
+            ]
+            msg = random.choice(msg_list)
 
         elif user_type == 3:
-            msg = "道友现在正在秘境中，分身乏术！"
+            msg_list = [
+                "道友现在正在秘境中，分身乏术！",
+                "秘境探索中，生死未卜，请等待！",
+                "道友深陷秘境，暂时无法回应！",
+                "秘境险恶，道友正在艰难前行！",
+                "探索秘境的关键时刻，请勿打扰！"
+            ]
+            msg = random.choice(msg_list)
 
         elif user_type == 4:
-            msg = "道友现在在虚神界闭关呢，小心走火入魔！"
+            msg_list = [
+                "道友现在在虚神界闭关呢，小心走火入魔！",
+                "虚神界修炼中，神识离体，请等待！",
+                "道友神魂游虚神界，暂时无法回应！",
+                "虚神界参悟大道，道友请勿打扰！"
+            ]
+            msg = random.choice(msg_list)
 
         elif user_type == 5:
-            msg = "道友现在在修炼呢，小心走火入魔！"
+            msg_list = [
+                "道友现在在修炼呢，小心走火入魔！",
+                "修炼关键时刻，请勿打扰！",
+                "道友正在运功调息，稍后再来！",
+                "真气运行中，道友请耐心等待！"
+            ]
+            msg = random.choice(msg_list)
 
         elif user_type == 0:
-            msg = "道友现在什么都没干呢~"
+            msg_list = [
+                "道友现在什么都没干呢~",
+                "闲来无事，道友有何指教？",
+                "当前状态：游手好闲中~",
+                "道友此刻正悠闲自在呢！",
+                "无所事事，等待道友吩咐~"
+            ]
+            msg = random.choice(msg_list)
 
     return isType, msg
 
