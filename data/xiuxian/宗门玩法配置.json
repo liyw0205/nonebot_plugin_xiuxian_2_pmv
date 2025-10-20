@@ -2,26 +2,97 @@
     "0": {
         "title": "宗主",
         "speeds": "2",
-        "max_exp": 165000000000
+        "max_exp": 165000000000000,
+        "max_count": 1
     },
     "1": {
-        "title": "长老",
-        "speeds": "1.8",
-        "max_exp": 160000000000
+        "title": "副宗主",
+        "speeds": "1.9",
+        "max_exp": 163000000000000,
+        "max_count": 1
     },
     "2": {
-        "title": "亲传弟子",
-        "speeds": "1.5",
-        "max_exp": 155000000000
+        "title": "长老",
+        "speeds": "1.8",
+        "max_exp": 160000000000000,
+        "max_count": 3
     },
     "3": {
-        "title": "内门弟子",
-        "speeds": "1.2",
-        "max_exp": 150000000000
+        "title": "护法",
+        "speeds": "1.7",
+        "max_exp": 158000000000000,
+        "max_count": 5
     },
     "4": {
+        "title": "执事",
+        "speeds": "1.6",
+        "max_exp": 156000000000000,
+        "max_count": 10
+    },
+    "5": {
+        "title": "亲传弟子",
+        "speeds": "1.5",
+        "max_exp": 155000000000000,
+        "max_count": 15
+    },
+    "6": {
+        "title": "大师兄",
+        "speeds": "1.5",
+        "max_exp": 155000000000000,
+        "max_count": 1
+    },
+    "7": {
+        "title": "大师姐",
+        "speeds": "1.5",
+        "max_exp": 155000000000000,
+        "max_count": 1
+    },
+    "8": {
+        "title": "二师兄",
+        "speeds": "1.45",
+        "max_exp": 153000000000000,
+        "max_count": 1
+    },
+    "9": {
+        "title": "小师弟",
+        "speeds": "1.4",
+        "max_exp": 152000000000000,
+        "max_count": 1
+    },
+    "10": {
+        "title": "小师妹",
+        "speeds": "1.4",
+        "max_exp": 152000000000000,
+        "max_count": 1
+    },
+    "11": {
+        "title": "内门弟子",
+        "speeds": "1.4",
+        "max_exp": 152000000000000,
+        "max_count": 0
+    },
+    "12": {
         "title": "外门弟子",
+        "speeds": "1.2",
+        "max_exp": 150000000000000,
+        "max_count": 0
+    },
+    "13": {
+        "title": "守山弟子",
+        "speeds": "1.2",
+        "max_exp": 150000000000000,
+        "max_count": 5
+    },
+    "14": {
+        "title": "记名弟子",
         "speeds": "1.1",
-        "max_exp": 100000000000
+        "max_exp": 145000000000000,
+        "max_count": 0
+    },
+    "15": {
+        "title": "杂役",
+        "speeds": "1.1",
+        "max_exp": 140000000000000,
+        "max_count": 0
     }
 }

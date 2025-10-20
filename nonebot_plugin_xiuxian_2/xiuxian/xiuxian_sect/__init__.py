@@ -58,8 +58,9 @@ uphppractice = on_command("升级元血修炼", priority=5, block=True)
 upmppractice = on_command("升级灵海修炼", priority=5, block=True)
 my_sect = on_command("我的宗门", aliases={"宗门信息"}, priority=5, block=True)
 create_sect = on_command("创建宗门", priority=5, block=True)
-join_sect = on_command("加入宗门", priority=5, block=True)
+join_sect = on_command("加入宗门", aliases={"宗门加入"}, priority=5, block=True)
 sect_position_update = on_command("宗门职位变更", priority=5, block=True)
+sect_position_help = on_command("宗门职位帮助", priority=5, block=True)
 sect_donate = on_command("宗门捐献", aliases={"宗门贡献"}, priority=5, block=True)
 sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
@@ -99,8 +100,7 @@ __sect_help__ = f"""
   • 宗门战力排行 - 查看战力前50的宗门
 
 👑 宗主专属：
-  • 宗门职位变更 [道号] [0-4] - 调整成员职位
-    0=宗主 | 1=长老 | 2=亲传 | 3=内门 | 4=外门
+  • 宗门职位变更 [道号] [1-15] - 调整成员职位
   • 宗门改名 [新名称] - 修改宗门名称
   • 宗主传位 [道号] - 禅让宗主之位
   • 踢出宗门 [道号] - 移除宗门成员
@@ -208,7 +208,7 @@ async def auto_handle_inactive_sect_owners():
                         logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
                         continue
                         
-                    # 按职位优先级和贡献度排序：长老(1) > 亲传(2) > 内门(3) > 外门(4)
+                    # 按职位优先级和贡献度排序
                     sorted_members = sorted(
                         members,
                         key=lambda x: (x['sect_position'], -x['sect_contribution'])
@@ -290,7 +290,7 @@ async def auto_handle_inactive_sect_owners():
                 # 执行降位处理（有多名成员时）
                 sql_message.update_sect_join_status(sect_id, 0)  # 关闭宗门加入
                 sql_message.update_sect_closed_status(sect_id, 1)  # 设置封闭状态
-                sql_message.update_usr_sect(owner_id, sect_id, 1)  # 降为长老
+                sql_message.update_usr_sect(owner_id, sect_id, 2)  # 降为长老
                 sql_message.update_sect_owner(None, sect_id)  # 清空宗主
                 
                 logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
@@ -319,6 +319,28 @@ async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
         await handle_send(bot, event, msg)
         await sect_help.finish()
 
+@sect_position_help.handle(parameterless=[Cooldown(at_sender=False)])
+async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门职位帮助信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    msg = "☆------宗门职位系统------☆\n"
+    msg += "职位编号 | 职位名称 | 人数限制 | 修为加成\n"
+    msg += "─────────────\n"
+    
+    for pos_id, pos_data in sorted(jsondata.sect_config_data().items(), key=lambda x: int(x[0])):
+        max_count = pos_data.get("max_count", 0)
+        count_info = f"限{max_count}人" if max_count > 0 else "不限"
+        speeds = pos_data.get("speeds", "1.0")
+        msg += f"{pos_id:2} | {pos_data['title']:6} | {count_info:4}\n"
+    
+    msg += "\n使用示例：\n"
+    msg += "• 宗门职位变更 道号 职位编号\n"
+    msg += "• 宗门职位变更 道号 职位名称\n"
+    msg += "• 注意：只有长老职位及以上才能变更"
+    
+    await handle_send(bot, event, msg)
+    await sect_position_help.finish()
 
 @sect_elixir_room_make.handle(parameterless=[Cooldown(stamina_cost=2, at_sender=False)])
 async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -388,7 +410,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     if sect_id:
         sect_position = user_info['sect_position']
         elixir_room_config = config['宗门丹房参数']
-        if sect_position == 4:
+        if sect_position == 15:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]['title']}，不满足领取要求!"""
             await handle_send(bot, event, msg)
             await sect_elixir_get.finish()
@@ -565,7 +587,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
-        if sect_position == 4 or sect_position == 3:
+        if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足学习要求!"""
             await handle_send(bot, event, msg)
             await sect_mainbuff_learn.finish()
@@ -801,7 +823,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     sect_id = user_info['sect_id']
     if sect_id:
         sect_position = user_info['sect_position']
-        if sect_position == 4 or sect_position == 3:
+        if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]['title']}，不满足学习要求!"""
             await handle_send(bot, event, msg)
             await sect_secbuff_learn.finish()
@@ -882,11 +904,11 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - useratkpractice)
-        if sect_position == 4:
+        if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upatkpractice.finish()
-        elif sect_position == 3:
+        elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
         else:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
@@ -956,11 +978,11 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - userhppractice)
-        if sect_position == 4:
+        if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await uphppractice.finish()
-        elif sect_position == 3:
+        elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
         else:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
@@ -1030,11 +1052,11 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
         level_up_count = min(level_up_count, sect_level - usermppractice)
-        if sect_position == 4:
+        if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
             await handle_send(bot, event, msg)
             await upmppractice.finish()
-        elif sect_position == 3:
+        elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
         else:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution'] * 5))[0]
@@ -1087,7 +1109,11 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if sect_id:
         if isUserTask(user_id):
             create_user_sect_task(user_id)
-            msg = f"已刷新，道友当前接取的任务：{userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
+            if userstask[user_id]['任务内容']['type'] == 1:
+                task_type = "⚔️"
+            else:
+                task_type = "💰"
+            msg = f"已刷新，道友当前接取的任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
             await handle_send(bot, event, msg)
             await sect_task_refresh.finish()
         else:
@@ -1103,7 +1129,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
 @sect_list.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """宗门列表：当前为返回转发内容"""
+    """宗门列表：显示宗门人数信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     sect_lists_with_members = sql_message.get_all_sects_with_member_count()
 
@@ -1112,15 +1138,24 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sect_id, sect_name, sect_scale, user_name, member_count = sect
         if user_name is None:
             user_name = "暂无"
-        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门建设度：{number_to(sect_scale)}\n成员数：{member_count}\n")
+        
+        # 计算宗门人数上限
+        base_member_limit = 20
+        additional_members = sect_scale // 50000000
+        max_members = base_member_limit + additional_members
+        
+        # 判断是否可以加入
+        can_join = "可加入" if member_count < max_members else "已满"
+        join_info = f"{member_count}/{max_members} ({can_join})"
+        
+        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n人数：{join_info}\n建设度：{number_to(sect_scale)}\n")
 
     await send_msg_handler(bot, event, '宗门列表', bot.self_id, msg_list)
     await sect_list.finish()
 
-
 @sect_users.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):  
-    """查看所在宗门成员信息"""
+    """查看所在宗门成员信息（第一页显示职位人数统计）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1144,31 +1179,75 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 await handle_send(bot, event, msg)
                 await sect_users.finish()
             
-            # 按职位排序：宗主(0) > 长老(1) > 亲传(2) > 内门(3) > 外门(4)
+            # 按职位排序：宗主(0) > 副宗主(1) > 长老(2) > 护法(3) > 执事(4) > 亲传弟子(5) > 大师兄(6) > 大师姐(7) > 二师兄(8) > 小师弟(9) > 小师妹(10) > 内门弟子(11) > 外门弟子(12) > 守山弟子(13) > 记名弟子(14) > 杂役(15)
             sorted_users = sorted(userlist, key=lambda x: x['sect_position'])
             
             # 构建成员信息列表
             msg_list = []
-            for idx, user in enumerate(sorted_users, 1):
-                msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
-                msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
-                msg += f"宗门贡献度:{user['sect_contribution']}"
-                msg_list.append(msg)
             
-            # 每15条消息为一页
+            # 第一页显示职位人数统计
+            if current_page == 1:
+                # 统计各个职位的人数
+                position_count = {}
+                for user in sorted_users:
+                    position = user['sect_position']
+                    if position not in position_count:
+                        position_count[position] = 0
+                    position_count[position] += 1
+                
+                # 显示职位人数统计
+                msg_list.append("☆------宗门职位统计------☆")
+                
+                # 按职位编号顺序显示
+                for pos_id in sorted(position_count.keys()):
+                    pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                    pos_title = pos_data.get("title", f"未知职位{pos_id}")
+                    max_count = pos_data.get("max_count", 0)
+                    
+                    count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
+                    msg_list.append(f"{pos_title}：{count_info}")
+                
+                msg_list.append("")  # 空行分隔
+            
+            # 构建成员详细信息
+            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
+            header = f"{title}"
+            msg_list.append(header)
+            
+            # 每15条消息为一页（第一页已经显示了统计信息，所以成员信息从第16条开始）
             page_size = 15
-            total_pages = (len(msg_list) + page_size - 1) // page_size
-            current_page = max(1, min(current_page, total_pages))
-            
-            # 获取当前页的消息
             start_idx = (current_page - 1) * page_size
             end_idx = start_idx + page_size
-            current_msgs = msg_list[start_idx:end_idx]
             
-            # 添加页眉页脚
-            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
-            header = f"{title}（第{current_page}/{total_pages}页）"
-            footer = f"发送'宗门成员查看 页码'查看其他页"
+            # 如果是第一页，需要调整显示数量（因为第一页已经显示了统计信息）
+            if current_page == 1:
+                # 第一页显示10个成员信息（为统计信息留出空间）
+                display_size = 10
+                current_msgs = sorted_users[start_idx:start_idx + display_size]
+            else:
+                # 其他页正常显示15个成员
+                current_msgs = sorted_users[start_idx:end_idx]
+            
+            # 添加成员详细信息
+            for idx, user in enumerate(current_msgs, start_idx + 1):
+                msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
+                msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
+                msg += f"宗门贡献度:{number_to(user['sect_contribution'])}\n"
+                msg_list.append(msg)
+            
+            # 计算总页数（考虑第一页的特殊情况）
+            total_members = len(sorted_users)
+            if current_page == 1:
+                # 第一页：统计信息 + 10个成员
+                remaining_members = max(0, total_members - 10)
+                total_pages = 1 + (remaining_members + page_size - 1) // page_size
+            else:
+                # 其他页：每页15个成员
+                total_pages = (total_members + page_size - 1) // page_size
+            
+            # 添加页脚
+            footer = f"发送'宗门成员查看 页码'查看其他页（共{total_pages}页）"
+            msg_list.append(footer)
             
             # 发送消息
             try:
@@ -1177,14 +1256,15 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     event, 
                     '宗门成员', 
                     bot.self_id, 
-                    [header] + current_msgs + [footer]
+                    msg_list
                 )
             except ActionFailed:
                 # 如果转发消息失败，改为普通消息发送
-                combined_msg = "\n".join([header] + current_msgs + [footer])
+                combined_msg = "\n".join(msg_list)
                 await handle_send(bot, event, combined_msg)
         else:
             msg = "一介散修，莫要再问。"
+            await handle_send(bot, event, msg)
     else:
         msg = "未曾踏入修仙世界，输入【我要修仙】加入我们，看破这世间虚妄!"
         await handle_send(bot, event, msg)
@@ -1209,12 +1289,20 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await sect_task.finish()
 
         if isUserTask(user_id):  # 已有任务
-            msg = f"道友当前已接取了任务：{userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
+            if userstask[user_id]['任务内容']['type'] == 1:
+                task_type = "⚔️"
+            else:
+                task_type = "💰"
+            msg = f"道友当前已接取了任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
             await handle_send(bot, event, msg)
             await sect_task.finish()
 
         create_user_sect_task(user_id)
-        msg = f"{userstask[user_id]['任务内容']['desc']}"
+        if userstask[user_id]['任务内容']['type'] == 1:
+            task_type = "⚔️"
+        else:
+            task_type = "💰"
+        msg = f"{task_type} {userstask[user_id]['任务内容']['desc']}"
         await handle_send(bot, event, msg)
         await sect_task.finish()
     else:
@@ -1608,7 +1696,7 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 获取长老职位配置
     position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
-    idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 1
+    idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
     
     # 检查操作者权限
     if user_info['sect_position'] <= idx_position:  # 长老及以上职位
@@ -1690,10 +1778,9 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg)
         await sect_donate.finish()
 
-
 @sect_position_update.handle(parameterless=[Cooldown(at_sender=False)])
 async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """宗门职位变更"""
+    """宗门职位变更（支持职位编号和职位名称）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1702,32 +1789,52 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     user_id = user_info['user_id']
     
-    # 检查权限
+    # 检查权限（长老及以上可以变更职位）
     position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
-    idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 1
+    idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
+    
     if user_info['sect_position'] > idx_position:
         msg = f"""你的宗门职位为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，无权进行职位管理！"""
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
     
-    # 解析参数（支持带空格的格式）
+    # 解析参数
     raw_args = args.extract_plain_text().strip()
     if not raw_args:
-        msg = f"请输入正确指令！例如：宗门职位变更 道号 3"
+        msg = f"请输入正确指令！例如：宗门职位变更 道号 职位编号/职位名称"
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
     
-    # 分割参数（最后一个数字作为职位编号）
+    # 分割参数
     args_list = raw_args.split()
     if len(args_list) < 2:
-        msg = f"参数不足！格式应为：宗门职位变更 道号 职位编号"
+        msg = f"参数不足！格式应为：宗门职位变更 道号 职位编号/职位名称"
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
     
-    # 获取职位编号（取最后一个参数）
-    position_num = args_list[-1]
-    if not position_num.isdigit() or position_num not in jsondata.sect_config_data().keys():
-        msg = f"职位编号解析异常，请输入宗门职位变更帮助，查看支持的编号"
+    # 获取职位参数（最后一个参数）
+    position_arg = args_list[-1]
+    
+    # 解析职位编号或名称
+    position_num = None
+    if position_arg.isdigit() and position_arg in jsondata.sect_config_data().keys():
+        position_num = position_arg
+    else:
+        # 通过职位名称查找编号
+        for pos_id, pos_data in jsondata.sect_config_data().items():
+            if pos_data.get("title", "") == position_arg:
+                position_num = pos_id
+                break
+    
+    if position_num is None:
+        # 构建职位帮助信息
+        position_help = "支持的职位：\n"
+        for pos_id, pos_data in jsondata.sect_config_data().items():
+            max_count = pos_data.get("max_count", 0)
+            count_info = f"（限{max_count}人）" if max_count > 0 else "（不限）"
+            position_help += f"{pos_id}. {pos_data['title']}{count_info}\n"
+        
+        msg = f"职位参数解析异常！请输入有效的职位编号或名称。\n{position_help}"
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
     
@@ -1769,9 +1876,41 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg)
         await sect_position_update.finish()
     
+    # 检查职位人数限制
+    position_data = jsondata.sect_config_data().get(position_num, {})
+    max_count = position_data.get("max_count", 0)
+    
+    if max_count > 0:
+        # 获取当前该职位人数
+        sect_members = sql_message.get_all_users_by_sect_id(user_info['sect_id'])
+        current_count = sum(1 for m in sect_members if m['sect_position'] == int(position_num))
+        
+        if current_count >= max_count:
+            msg = f"{position_data['title']}职位已有{current_count}人，已达到上限{max_count}人，无法再任命！"
+            await handle_send(bot, event, msg)
+            await sect_position_update.finish()
+    
+    # 检查特殊职位限制（如大师兄、大师姐等）
+    special_positions = ["6", "7", "8", "9", "10"]  # 大师兄、大师姐、二师兄、小师弟、小师妹
+    if position_num in special_positions:
+        # 检查是否已经有人担任该职位
+        sect_members = sql_message.get_all_users_by_sect_id(user_info['sect_id'])
+        for member in sect_members:
+            if member['sect_position'] == int(position_num) and member['user_id'] != give_user['user_id']:
+                current_title = jsondata.sect_config_data()[position_num]['title']
+                msg = f"{current_title}职位已由{member['user_name']}担任，无法重复任命！"
+                await handle_send(bot, event, msg)
+                await sect_position_update.finish()
+    
     # 执行职位变更
     sql_message.update_usr_sect(give_user['user_id'], give_user['sect_id'], int(position_num))
-    msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨:即日起{give_user['user_name']}为本宗{jsondata.sect_config_data()[f"{int(position_num)}"]['title']}"""
+    
+    old_title = jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']
+    new_title = jsondata.sect_config_data()[position_num]['title']
+    
+    msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨：
+即日起{give_user['user_name']}由{old_title}晋升为本宗{new_title}"""
+    
     await handle_send(bot, event, msg)
     await sect_position_update.finish()
 
@@ -1803,6 +1942,7 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"申请加入的宗门编号似乎有误，未在宗门名录上发现!"
     else:
         sect_info = sql_message.get_sect_info(int(sect_no))
+        
         # 检查宗门是否封闭
         if sect_info['closed']:
             msg = f"该宗门已封闭山门，暂不接收新成员！"
@@ -1810,11 +1950,22 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         elif not sect_info['join_open']:
             msg = f"该宗门已关闭加入，暂不接收新成员！"
         else:
-            owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
-            owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 4
-            sql_message.update_usr_sect(user_info['user_id'], int(sect_no), owner_position)
-            new_sect = sql_message.get_sect_info_by_id(int(sect_no))
-            msg = f"欢迎{user_info['user_name']}师弟入我{new_sect['sect_name']}，共参天道。"
+            # 检查人数上限
+            base_member_limit = 20
+            additional_members = sect_info['sect_scale'] // 50000000
+            max_members = base_member_limit + additional_members
+            
+            # 获取当前宗门人数
+            current_members = len(sql_message.get_all_users_by_sect_id(int(sect_no)))
+            
+            if current_members >= max_members:
+                msg = f"该宗门人数已满（{current_members}/{max_members}），无法加入！"
+            else:
+                owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
+                owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 12
+                sql_message.update_usr_sect(user_info['user_id'], int(sect_no), owner_position)
+                new_sect = sql_message.get_sect_info_by_id(int(sect_no))
+                msg = f"欢迎{user_info['user_name']}师弟入我{new_sect['sect_name']}，共参天道。当前宗门人数：{current_members + 1}/{max_members}"
     
     await handle_send(bot, event, msg)
     await join_sect.finish()
@@ -1835,6 +1986,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     sect_info = sql_message.get_sect_info(sect_id)
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    
     if sect_id:
         sql_res = sql_message.scale_top()
         top_idx_list = [_[0] for _ in sql_res]
@@ -1848,6 +2000,14 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         closed_status = "（封闭山门）" if sect_info['closed'] else ""
         sect_power = sect_info.get('combat_power', 0)
         
+        # 计算宗门人数上限
+        base_member_limit = 20
+        additional_members = sect_info['sect_scale'] // 50000000
+        max_members = base_member_limit + additional_members
+        
+        # 获取当前宗门人数
+        current_members = len(sql_message.get_all_users_by_sect_id(sect_id))
+        
         msg = f"""
 {user_name}所在宗门
 宗门名讳：{sect_info['sect_name']}
@@ -1855,9 +2015,10 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗   主：{sql_message.get_user_info_with_id(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
 道友职位：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}
 宗门状态：{join_status}{closed_status}
+宗门人数：{current_members}/{max_members}
 宗门建设度：{number_to(sect_info['sect_scale'])}
 洞天福地：{sect_info['sect_fairyland'] if sect_info['sect_fairyland'] else "暂无"}
-宗门位面排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
+宗门排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
 宗门拥有资材：{number_to(sect_info['sect_materials'])}
 宗门贡献度：{number_to(user_info['sect_contribution'])}
 宗门战力：{number_to(sect_power)}
@@ -1981,7 +2142,7 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
         # 2. 设置封闭状态
         sql_message.update_sect_closed_status(sect_id, 1)
         # 3. 宗主退位为长老
-        sql_message.update_usr_sect(user_info['user_id'], sect_id, 1)  # 1是长老职位
+        sql_message.update_usr_sect(user_info['user_id'], sect_id, 2)  # 2是长老职位
         # 4. 清空宗主
         sql_message.update_sect_owner(None, sect_id)
         
@@ -2014,8 +2175,8 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await sect_inherit.finish()
     
     # 检查职位是否符合继承条件
-    if user_info['sect_position'] not in [1, 2, 3]:  # 1=长老, 2=亲传, 3=内门
-        msg = "只有长老、亲传弟子或内门弟子可以继承宗主之位！"
+    if user_info['sect_position'] not in [1, 2, 6, 7]:  # 1=副宗主，2=长老, 6=大师兄，7=大师姐
+        msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
         await handle_send(bot, event, msg)
         await sect_inherit.finish()
     
@@ -2432,3 +2593,30 @@ def generate_random_sect_name(count: int = 1) -> List[str]:
             options.append(name)
     
     return options if count > 1 else options[0]
+
+def get_sect_member_limit(sect_scale):
+    """获取宗门人数上限"""
+    base_member_limit = 20
+    additional_members = sect_scale // 50000000
+    return base_member_limit + additional_members
+
+def can_join_sect(sect_id):
+    """检查宗门是否可以加入"""
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        return False, "宗门不存在"
+    
+    if sect_info['closed']:
+        return False, "宗门已封闭"
+    
+    if not sect_info['join_open']:
+        return False, "宗门关闭加入"
+    
+    # 检查人数上限
+    max_members = get_sect_member_limit(sect_info['sect_scale'])
+    current_members = len(sql_message.get_all_users_by_sect_id(sect_id))
+    
+    if current_members >= max_members:
+        return False, f"人数已满 ({current_members}/{max_members})"
+    
+    return True, f"可加入 ({current_members}/{max_members})"
