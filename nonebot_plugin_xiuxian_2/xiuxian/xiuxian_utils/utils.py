@@ -4,6 +4,7 @@ import io
 import json
 import math
 import os
+import random
 import unicodedata
 from nonebot.log import logger
 from base64 import b64encode

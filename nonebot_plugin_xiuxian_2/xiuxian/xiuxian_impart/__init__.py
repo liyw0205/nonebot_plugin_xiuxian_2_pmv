@@ -347,6 +347,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 更新用户数据
     sql_message.update_ls(user_id, required_crystals, 2)
     xiuxian_impart.update_impart_wish(current_wish, user_id)
+    await re_impart_data(user_id)
     impart_data_draw = await impart_check(user_id)
     update_statistics_value(user_id, "传承抽卡", increment=times)
 
