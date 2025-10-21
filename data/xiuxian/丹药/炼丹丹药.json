@@ -540,6 +540,9 @@
         "day_num": 10,
         "all_num": 100,
         "rank": 14,
+        "mix_need_time": 60,
+        "mix_exp": 10,
+        "mix_all": 100,
         "elixir_config": {
             "2": 9999,
             "6": 9999
