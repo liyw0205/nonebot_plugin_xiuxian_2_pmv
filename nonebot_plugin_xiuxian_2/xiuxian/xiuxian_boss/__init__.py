@@ -463,7 +463,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
-            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
+            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1, 1)
     else:
         msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}"
         # 更新BOSS状态（不扣除灵石）
@@ -471,7 +471,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
             drops_msg = f"路上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
-            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
+            sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1, 1)
     
     if user_info['root'] == "凡人" and boss_integral < 0:
         msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
