@@ -1506,7 +1506,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 9. 获取讨伐次数信息
     today_battle_count = boss_limit.get_battle_count(user_id)
-    battle_msg = f"{today_battle_count}/30"
+    battle_msg = f"{30 - today_battle_count}/30"
 
     # 10. 获取秘境状态信息
     rift_status = "无秘境"
