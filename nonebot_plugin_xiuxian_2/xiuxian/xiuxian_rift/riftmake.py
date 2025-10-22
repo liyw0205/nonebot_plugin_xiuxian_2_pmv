@@ -1,8 +1,8 @@
 import random
 from .riftconfig import get_rift_config
-from ..xiuxian_utils.xiuxian2_handle import OtherSet
+from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF, OtherSet
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
@@ -114,7 +114,7 @@ STORY = {
         }
     },
     "战斗": {
-        "type_rate": 10,
+        "type_rate": 30,
         "Boss战斗": {
             "type_rate": 30,
             "Boss数据": {
@@ -191,57 +191,29 @@ STORY = {
 async def get_boss_battle_info(user_info, rift_rank, bot_id):
     """获取Boss战事件的内容"""
     boss_data = STORY['战斗']['Boss战斗']["Boss数据"]
-    player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
-    userinfo = sql_message.get_user_real_info(user_info['user_id'])
-    user1_weapon_data = UserBuffDate(user_info['user_id']).get_user_weapon_data()
-    user_armor_data = UserBuffDate(user_info['user_id']).get_user_armor_buff_data()#秘境战斗防具会心
-    user_main_crit_data = UserBuffDate(user_info['user_id']).get_user_main_buff_data() #秘境战斗功法会心
-    
-    if user_main_crit_data is not None: #秘境战斗功法会心
-        main_crit_buff = ((user_main_crit_data['crit_buff']) * 100)
-    else:
-        main_crit_buff = 0
-    
-    if  user_armor_data != None: #秘境战斗防具会心
-        armor_crit_buff = user_armor_data['crit_buff']
-    else:
-        armor_crit_buff = 0
-
-    if user1_weapon_data is not None:
-        player['会心'] = int(((user1_weapon_data['crit_buff']) + armor_crit_buff +  main_crit_buff) * 100) 
-    else:
-        player['会心'] = (armor_crit_buff + main_crit_buff) * 100
-
-    player['user_id'] = userinfo['user_id']
-    player['道号'] = userinfo['user_name']
-    player['气血'] = userinfo['hp']
-    player['攻击'] = userinfo['atk']
-    player['真元'] = userinfo['mp']
-    player['exp'] = userinfo['exp']
-
-    base_exp = userinfo['exp']
+    base_exp = user_info['exp']
     boss_info = {
         "name": random.choice(boss_data["name"]),
-        "气血": int(base_exp * random.choice(boss_data["hp"])),
-        "总血量": int(base_exp * random.choice(boss_data["hp"])),
+        "气血": int(base_exp * random.choice(boss_data["hp"]) * 10),
+        "总血量": int(base_exp * random.choice(boss_data["hp"]) * 10),
         "攻击": int(base_exp * random.choice(boss_data["atk"])),
         "真元": base_exp * boss_data["mp"],
-        "jj":"斩我境",
+        "jj":"遁一境",
         'stone': 1
     }
 
 
-    result, victor, bossinfo_new, stone = await Boss_fight(player, boss_info, bot_id=bot_id)  # 未开启，1不写入，2写入
+    result, victor, bossinfo_new = await Boss_fight(user_info['user_id'], boss_info, bot_id=bot_id)
 
     if victor == "群友赢了":  # 获胜
-        user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0] # 60-用户当前等级 原50
+        user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0]
         success_info = STORY['战斗']['Boss战斗']['success']
         msg = random.choice(success_info['desc']).format(boss_info['name'])
         give_exp = int(random.choice(success_info["give"]["exp"]) * user_info['exp'])
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
         sql_message.update_exp(user_info['user_id'], give_exp)
         sql_message.update_ls(user_info['user_id'], give_stone, 1)  # 负数也挺正常
-        msg += f"获得了修为：{give_exp}点，灵石：{give_stone}枚！"
+        msg += f"获得了修为：{number_to(give_exp)}点，灵石：{number_to(give_stone)}枚！"
     else:  # 输了
         fail_info = STORY['战斗']['Boss战斗']["fail"]
         msg = random.choice(fail_info['desc']).format(boss_info['name'])
@@ -262,18 +234,18 @@ def get_dxsj_info(rift_type, user_info):
         nowmp = user_info['mp'] - exp if (user_info['mp'] - exp) > 0 else 1
         sql_message.update_user_hp_mp(user_info['user_id'], nowhp, nowmp)  # 修为掉了，血量、真元也要掉
 
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"修为减少了：{exp}点！")
+        msg = random.choice(battle_data[rift_type]['desc']).format(f"修为减少了：{number_to(exp)}点！")
     elif cost_type == "hp":
         cost_hp = int((user_info['exp'] / 2) * value)
         now_hp = user_info['hp'] - cost_hp
         if now_hp < 0:
             now_hp = 1
         sql_message.update_user_hp_mp(user_info['user_id'], now_hp, user_info['mp'])
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"气血减少了：{cost_hp}点！")
+        msg = random.choice(battle_data[rift_type]['desc']).format(f"气血减少了：{number_to(cost_hp)}点！")
     elif cost_type == "stone":
         cost_stone = value
         sql_message.update_ls(user_info['user_id'], cost_stone, 2)  # 负数也挺正常
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"灵石减少了：{cost_stone}枚！")
+        msg = random.choice(battle_data[rift_type]['desc']).format(f"灵石减少了：{number_to(cost_stone)}枚！")
     return msg
 
 

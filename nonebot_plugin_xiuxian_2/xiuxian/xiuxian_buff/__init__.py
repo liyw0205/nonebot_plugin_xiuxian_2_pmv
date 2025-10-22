@@ -38,6 +38,8 @@ from ..xiuxian_sect import isUserTask, userstask
 from ..xiuxian_sect.sectconfig import get_config
 from ..xiuxian_rift import group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
+from ..xiuxian_training.training_data import training_data
+from ..xiuxian_Illusion import IllusionData
 from .two_exp_cd import two_exp_cd
 
 
@@ -1555,6 +1557,35 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         rift_status = "无秘境"
 
+    # 11. 获取历练状态信息
+    training_info = training_data.get_user_training_info(user_id)
+    now = datetime.now()
+    
+    if training_info["last_time"]:
+        last_time = training_info["last_time"]
+        in_same_hour = last_time.year == now.year and last_time.month == now.month and last_time.day == now.day and last_time.hour == now.hour
+        
+        if in_same_hour:
+            next_time = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            wait_minutes = (next_time - now).seconds // 60
+            training_msg = f"已历练({wait_minutes}分后)"
+        else:
+            training_msg = "可历练"
+    else:
+        training_msg = "可历练"
+    
+    # 12. 获取幻境寻心状态信息
+    illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
+    
+    if illusion_info["today_choice"] is not None:
+        illusion_msg = "已参与"
+    else:
+        # 检查是否需要重置(每天8点)
+        if IllusionData._check_reset(illusion_info.get("last_participate")):
+            illusion_msg = "可参与"
+        else:
+            illusion_msg = "可参与"
+    
     msg = f"""
 ═══  日常中心  ═════
 修仙签到：{sign_msg}
@@ -1567,6 +1598,8 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 双修次数：{remaining_two_exp}/{max_two_exp}
 虚神界对决：{pk_msg}
 虚神界探索：{impart_msg}
+历练状态：{training_msg}
+幻境寻心：{illusion_msg}
 ════════════
 """
     await handle_send(bot, event, msg)
