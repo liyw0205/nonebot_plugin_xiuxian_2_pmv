@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 import os
+import zipfile
 import random
 import shutil
 import sqlite3
@@ -2666,7 +2667,7 @@ def number_count(num):
 
 def backup_db_files():
     """
-    备份数据库文件到 Path() / "data" / "db_backup"
+    备份数据库文件到 Path() / "data" / "db_backup"，并压缩为zip格式
     可以被定时任务调用
     """
     try:
@@ -2684,31 +2685,52 @@ def backup_db_files():
         # 生成时间戳用于备份文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # 创建临时目录用于存放本次备份的文件
+        temp_dir = backup_dir / f"temp_{timestamp}"
+        temp_dir.mkdir(exist_ok=True)
+        
         backed_up_files = []
         
-        # 备份每个数据库文件
+        # 复制每个数据库文件到临时目录
         for db_file in db_files:
             if db_file.exists():
-                # 生成备份文件名（带时间戳）
-                backup_filename = f"{db_file.stem}_{timestamp}{db_file.suffix}"
-                backup_path = backup_dir / backup_filename
+                backup_filename = f"{db_file.name}"
+                backup_path = temp_dir / backup_filename
                 
                 # 复制文件
                 shutil.copy2(db_file, backup_path)
                 backed_up_files.append(backup_filename)
                 
-                logger.info(f"数据库备份成功: {db_file.name} -> {backup_filename}")
+                logger.info(f"数据库文件复制成功: {db_file.name} -> {backup_filename}")
             else:
                 logger.warning(f"数据库文件不存在，跳过备份: {db_file}")
+        
+        # 创建压缩包
+        zip_filename = f"db_backup_{timestamp}.zip"
+        zip_path = backup_dir / zip_filename
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for file in temp_dir.iterdir():
+                zipf.write(file, file.name)
+                logger.info(f"添加到压缩包: {file.name}")
+        
+        # 删除临时目录
+        shutil.rmtree(temp_dir)
         
         # 清理旧的备份文件（保留最近30天的备份）
         clean_old_backups(backup_dir)
         
-        return True, f"数据库备份完成: {', '.join(backed_up_files)}"
+        return True, f"数据库备份完成: {zip_filename}"
         
     except Exception as e:
         error_msg = f"数据库备份失败: {str(e)}"
         logger.error(error_msg)
+        # 确保清理临时目录
+        try:
+            if 'temp_dir' in locals() and temp_dir.exists():
+                shutil.rmtree(temp_dir)
+        except:
+            pass
         return False, error_msg
 
 def clean_old_backups(backup_dir, keep_days=30):
@@ -2717,22 +2739,25 @@ def clean_old_backups(backup_dir, keep_days=30):
     """
     try:
         current_time = datetime.now()
-        backup_files = list(backup_dir.glob("*.db"))
+        backup_files = list(backup_dir.glob("*.zip"))
         
         for backup_file in backup_files:
-            filename_parts = backup_file.stem.split('_')
-            if len(filename_parts) >= 3:
-                try:
-                    file_time_str = '_'.join(filename_parts[-2:])  # 获取时间戳部分
-                    file_time = datetime.strptime(file_time_str, "%Y%m%d_%H%M%S")
+            try:
+                # 从文件名中提取时间戳
+                # 格式: db_backup_YYYYMMDD_HHMMSS.zip
+                filename_parts = backup_file.stem.split('_')
+                if len(filename_parts) >= 3:
+                    time_str = '_'.join(filename_parts[2:4])  # 获取时间戳部分
+                    file_time = datetime.strptime(time_str, "%Y%m%d_%H%M%S")
                     
                     age_days = (current_time - file_time).days
                     
                     if age_days > keep_days:
                         backup_file.unlink()
                         logger.info(f"清理旧备份: {backup_file.name} (已保存 {age_days} 天)")
-                except ValueError:
-                    continue
-                    
+            except ValueError:
+                # 如果文件名格式不匹配，跳过这个文件
+                continue
+                
     except Exception as e:
         logger.warning(f"清理旧备份时出错: {str(e)}")
