@@ -20,6 +20,17 @@
         {% for category, configs in config_by_category.items() %}
         <div id="{{ category|replace(' ', '_') }}" class="tab-pane {% if loop.first %}active{% endif %}">
             <form class="config-form">
+                {% if category == '基础设置' %}
+                <div class="form-group">
+                    <label for="plugin_dir" title="插件的绝对路径 (例如: /app/src/plugins/nonebot_plugin_xiuxian_2)。">
+                        插件目录
+                        <small style="color: #666; font-style: italic;">(str)</small>
+                    </label>
+                    <input type="text" id="plugin_dir" name="plugin_dir" value="{{ current_plugin_dir }}">
+                    <small style="color: #666; display: block; margin-top: 5px;">插件的绝对路径 (例如: /app/src/plugins/nonebot_plugin_xiuxian_2)。</small>
+                </div>
+                {% endif %}
+
                 {% for config in configs %}
                 <div class="form-group">
                     <label for="{{ config.field_name }}" title="{{ config.description }}">

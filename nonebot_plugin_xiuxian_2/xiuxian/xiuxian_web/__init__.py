@@ -15,6 +15,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart
+from ..xiuxian_utils.utils import get_plugin_dir, save_plugin_dir
 
 items = Items()
 update_manager = UpdateManager()
@@ -1909,8 +1910,9 @@ def config_management():
             config_item["options"] = field_info["options"]
         
         config_by_category[category].append(config_item)
-    
-    return render_template('config.html', config_by_category=config_by_category)
+
+    current_plugin_dir = str(get_plugin_dir())
+    return render_template('config.html', config_by_category=config_by_category, current_plugin_dir=current_plugin_dir)
 
 def format_list_value_for_display(value, field_type):
     """格式化列表值用于显示"""
@@ -1941,6 +1943,17 @@ def save_config():
     
     try:
         config_data = request.get_json()
+        # ------------------ 处理插件目录保存 ------------------
+        plugin_dir_value = config_data.get("plugin_dir")
+        if plugin_dir_value is not None:
+            try:
+                save_plugin_dir(plugin_dir_value)
+                logger.opt(colors=True).info(f"<green>插件目录已更新为: {plugin_dir_value}</green>")
+                # 从字典中移除，防止被 save_config_values 处理
+                del config_data["plugin_dir"]
+            except Exception as e:
+                logger.opt(colors=True).error(f"<red>保存插件目录失败: {e}</red>")
+        # ---------------------------------------------------
         if not config_data:
             return jsonify({"success": False, "error": "无效的配置数据"})
         
