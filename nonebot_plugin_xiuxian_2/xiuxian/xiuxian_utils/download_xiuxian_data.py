@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from nonebot.log import logger
-from ..xiuxian_config import XiuConfig
+from ..xiuxian_config import XiuConfig, Xiu_Plugin
 
 def download_xiuxian_data():
     path_data = Path() / "data"
@@ -320,7 +320,7 @@ class UpdateManager:
             
             # 目标目录
             target_data_dir = Path() / "data"
-            target_plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+            target_plugin_dir = Xiu_Plugin
             
             # 确保目标目录存在
             target_data_dir.mkdir(parents=True, exist_ok=True)
@@ -402,7 +402,7 @@ class UpdateManager:
                                 logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
                 
                 # 备份插件目录
-                plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+                plugin_dir = Xiu_Plugin
                 if plugin_dir.exists():
                     for root, dirs, files in os.walk(plugin_dir):
                         for file in files:
@@ -548,7 +548,7 @@ class UpdateManager:
 
     def save_config_values(self, new_values):
         """保存配置到文件"""
-        config_file_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_config.py"
+        config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
         from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
         
         if not config_file_path.exists():
@@ -647,7 +647,7 @@ class UpdateManager:
         # 恢复插件目录
         plugin_backup_path = backup_root / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
         if plugin_backup_path.exists():
-            target_plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+            target_plugin_dir = Xiu_Plugin
             self._merge_directories(plugin_backup_path, target_plugin_dir)
 
     def get_backups(self):

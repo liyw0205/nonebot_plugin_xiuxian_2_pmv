@@ -11,7 +11,7 @@ from datetime import datetime
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart
@@ -1784,7 +1784,7 @@ def get_config_values():
 
 def save_config_values(new_values):
     """保存配置到文件"""
-    config_file_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_config.py"
+    config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
     
     if not config_file_path.exists():
         return False, "配置文件不存在"

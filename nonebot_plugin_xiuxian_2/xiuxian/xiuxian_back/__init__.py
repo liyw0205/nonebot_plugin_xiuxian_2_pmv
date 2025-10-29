@@ -3391,6 +3391,13 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         await guishi_withdraw.finish()
     
+    # 检查是否是周末
+    today = datetime.now().weekday()
+    if today not in [5, 6]:  # 5 是周六，6 是周日
+        msg = "鬼市取灵石功能仅在周六和周日开放！"
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
+    
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
@@ -3953,6 +3960,13 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
+        await handle_send(bot, event, msg)
+        await guishi_take_item.finish()
+    
+    # 检查是否是周末
+    today = datetime.now().weekday()
+    if today not in [5, 6]:  # 5 是周六，6 是周日
+        msg = "鬼市取物品功能仅在周六和周日开放！"
         await handle_send(bot, event, msg)
         await guishi_take_item.finish()
     

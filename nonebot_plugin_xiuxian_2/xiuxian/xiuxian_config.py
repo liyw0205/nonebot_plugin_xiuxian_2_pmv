@@ -6,6 +6,7 @@ from pathlib import Path
 from nonebot.log import logger
 
 DATABASE = Path() / "data" / "xiuxian"
+Xiu_Plugin = Path(__file__).parent.parent
 
 def convert_rank(rank_name):
     """
