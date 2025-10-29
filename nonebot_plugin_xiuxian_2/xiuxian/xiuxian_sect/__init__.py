@@ -22,7 +22,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
 from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig
-from .sectconfig import get_config
+from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
 from ..xiuxian_utils.utils import (
     check_user, number_to,
     get_msg_pic, send_msg_handler, CommandObjectID, handle_send,
@@ -81,6 +81,8 @@ sect_users = on_command("宗门成员查看", aliases={"查看宗门成员"}, pr
 sect_elixir_room_make = on_command("宗门丹房建设", aliases={"建设宗门丹房"}, priority=5, block=True)
 sect_elixir_get = on_command("宗门丹药领取", aliases={"领取宗门丹药"}, priority=5, block=True)
 sect_rename = on_command("宗门改名", priority=5,  block=True)
+sect_shop = on_command("宗门商店", priority=5, block=True)
+sect_buy = on_command("宗门兑换", priority=5, block=True)
 sect_close_join = on_command("关闭宗门加入", priority=5, block=True)
 sect_open_join = on_command("开放宗门加入", priority=5, block=True)
 sect_close_mountain = on_command("封闭山门", priority=5, block=True)
@@ -619,13 +621,14 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             materialscost = mainbuffgear * mainbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
                 sql_message.update_sect_materials(sect_id, materialscost, 2)
+                sql_message.deduct_sect_contribution(user_id, materialscost)
                 sql_message.updata_user_main_buff(user_info['user_id'], mainbuffid)
                 mainbuff, mainbuffmsg = get_main_info_msg(str(mainbuffid))
-                msg = f"本次学习消耗{materialscost}宗门资材，成功学习到本宗{mainbufftype}功法：{mainbuff['name']}\n{mainbuffmsg}"
+                msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{mainbufftype}功法：{mainbuff['name']}\n{mainbuffmsg}"
                 await handle_send(bot, event, msg)
                 await sect_mainbuff_learn.finish()
             else:
-                msg = f"本次学习需要消耗{materialscost}宗门资材，不满足条件！"
+                msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
                 await handle_send(bot, event, msg)
                 await sect_mainbuff_learn.finish()
     else:
@@ -857,13 +860,14 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             materialscost = secbuffgear * secbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
                 sql_message.update_sect_materials(sect_id, materialscost, 2)
+                sql_message.deduct_sect_contribution(user_id, materialscost)
                 sql_message.updata_user_sec_buff(user_info['user_id'], secbuffid)
                 secmsg = get_sec_msg(secbuff)
-                msg = f"本次学习消耗{materialscost}宗门资材，成功学习到本宗{secbufftype}神通：{secbuff['name']}\n{secbuff['name']}：{secmsg}"
+                msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{secbufftype}神通：{secbuff['name']}\n{secbuff['name']}：{secmsg}"
                 await handle_send(bot, event, msg)
                 await sect_secbuff_learn.finish()
             else:
-                msg = f"本次学习需要消耗{materialscost}宗门资材，不满足条件！"
+                msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
                 await handle_send(bot, event, msg)
                 await sect_secbuff_learn.finish()
     else:
@@ -937,8 +941,9 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
+        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_atkpractice(user_id, useratkpractice + level_up_count)
-        msg = f"升级成功，道友当前攻击修炼等级：{useratkpractice + level_up_count}，消耗灵石：{total_stone_cost}枚，消耗宗门资材{total_materials_cost}!"
+        msg = f"升级成功！\n道友当前攻击修炼等级：{useratkpractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await upatkpractice.finish()
     else:
@@ -1011,8 +1016,9 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
+        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_hppractice(user_id, userhppractice + level_up_count)
-        msg = f"升级成功，道友当前元血修炼等级：{userhppractice + level_up_count}，消耗灵石：{total_stone_cost}枚，消耗宗门资材{total_materials_cost}!"
+        msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await uphppractice.finish()
     else:
@@ -1085,8 +1091,9 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
+        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_mppractice(user_id, usermppractice + level_up_count)
-        msg = f"升级成功，道友当前灵海修炼等级：{usermppractice + level_up_count}，消耗灵石：{total_stone_cost}枚，消耗宗门资材{total_materials_cost}!"
+        msg = f"升级成功！\n道友当前灵海修炼等级：{usermppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await upmppractice.finish()
     else:
@@ -2283,6 +2290,158 @@ async def sect_power_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     await send_msg_handler(bot, event, '宗门战力排行', bot.self_id, msg_list)
     await sect_power_top.finish()
+
+@sect_shop.handle()
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看宗门商店"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_shop.finish()
+    
+    user_id = user_info['user_id']
+    sect_id = sql_message.get_user_info_with_id(user_id)['sect_id']
+    if not sect_id:
+        msg = f"道友尚未加入宗门！"
+        await handle_send(bot, event, msg)
+        await sect_shop.finish()
+    
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        msg = "宗门信息不存在！"
+        await handle_send(bot, event, msg)
+        await sect_shop.finish()
+    
+    shop_items = config["商店商品"]
+    if not shop_items:
+        msg = "宗门商店暂无商品！"
+        await handle_send(bot, event, msg)
+        await sect_shop.finish()
+    
+    # 获取页码参数
+    page_input = args.extract_plain_text().strip()
+    try:
+        page = int(page_input) if page_input else 1
+    except ValueError:
+        page = 1
+    
+    # 分页设置
+    items_per_page = 5
+    total_pages = (len(shop_items) + items_per_page - 1) // items_per_page
+    page = max(1, min(page, total_pages))
+    
+    # 获取当前页的商品
+    sorted_items = sorted(shop_items.items(), key=lambda x: int(x[0]))
+    start_idx = (page - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    current_page_items = sorted_items[start_idx:end_idx]
+    
+    msg_list = [f"\n道友目前拥有的宗门贡献度：{number_to(user_info['sect_contribution'])}点"]
+    msg_list.append(f"════════════\n【宗门商店】第{page}/{total_pages}页")
+    
+    for item_id, item_data in current_page_items:
+        item_info = items.get_data_by_item_id(item_id)
+        if not item_info:
+            continue
+        msg_list.append(
+            f"编号：{item_id}\n"
+            f"名称：{item_info['name']}\n"
+            f"描述：{item_info.get('desc', '暂无描述')}\n"
+            f"价格：{number_to(item_data['cost'])}贡献度\n"
+            f"每周限购：{item_data['weekly_limit']}个\n"
+            f"════════════"
+        )
+    
+    if total_pages > 1:
+        msg_list.append(f"提示：发送 宗门商店+页码 查看其他页（共{total_pages}页）")
+    
+    await send_msg_handler(bot, event, "宗门商店", bot.self_id, msg_list)
+    await sect_shop.finish()
+
+@sect_buy.handle()
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """兑换宗门商店物品"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    user_id = user_info["user_id"]
+    msg = args.extract_plain_text().strip()
+    shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
+
+    if not shop_info:
+        msg = "请输入正确的商品编号！"
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    shop_id = shop_info[0][0]
+    quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
+
+    sect_info = sql_message.get_sect_info(sql_message.get_user_info_with_id(user_id)['sect_id'])
+    if not sect_info:
+        msg = "宗门信息不存在！"
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    shop_items = config["商店商品"]
+    if shop_id not in shop_items:
+        msg = "没有这个商品编号！"
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    item_data = shop_items[shop_id]
+    sect_contribution = user_info['sect_contribution']
+
+    # 检查贡献度是否足够
+    total_cost = item_data["cost"] * quantity
+    if sect_contribution < total_cost:
+        msg = f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(sect_contribution)}点"
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    # 检查封锁
+    if sect_info['closed']:
+        msg = "宗门已封闭，无法进行兑换。"
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    # 检查限购
+    already_purchased = get_sect_weekly_purchases(user_id, shop_id)
+    if already_purchased + quantity > item_data["weekly_limit"]:
+        msg = (
+            f"该商品每周限购{item_data['weekly_limit']}个\n"
+            f"本周已购买{already_purchased}个\n"
+            f"无法再购买{quantity}个！"
+        )
+        await handle_send(bot, event, msg)
+        await sect_buy.finish()
+
+    # 兑换商品
+    sect_contribution -= total_cost
+    sql_message.update_sect_materials(user_info['sect_id'], total_cost, 2)
+    sql_message.deduct_sect_contribution(user_id, total_cost)
+
+    # 给予物品
+    item_info = items.get_data_by_item_id(shop_id)
+    sql_message.send_back(
+        user_id, 
+        shop_id, 
+        item_info["name"], 
+        item_info["type"], 
+        quantity,
+        1
+    )
+
+    msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(total_cost)}宗门贡献度！"
+    await handle_send(bot, event, msg)
+
+    # 更新限购记录
+    update_sect_weekly_purchase(user_id, shop_id, quantity)
+
+    await sect_buy.finish()
 
 def create_user_sect_task(user_id):
     tasklist = config["宗门任务"]

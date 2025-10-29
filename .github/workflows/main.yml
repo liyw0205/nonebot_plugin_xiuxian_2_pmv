@@ -21,13 +21,8 @@ jobs:
     - name: Generate tag name
       id: tag
       run: |
-        # If a tag name is provided via workflow_dispatch, use it; otherwise, generate one
-        if [ -z "${{ github.event.inputs.tag_name }}" ]; then
-          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
-          TAGNAME="v$TIMESTAMP"
-        else
-          TAGNAME="${{ github.event.inputs.tag_name }}"
-        fi
+        TIMESTAMP_UTC8=$(date -u -d "+8 hours" +"%Y%m%d%H%M%S")
+        TAGNAME="v$TIMESTAMP_UTC8"
         echo "Tag name is $TAGNAME"
         echo "::set-output name=TAGNAME::$TAGNAME"
 

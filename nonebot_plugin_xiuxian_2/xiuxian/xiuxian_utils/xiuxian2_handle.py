@@ -1204,6 +1204,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, (sect_contribution, user_id))
         self.conn.commit()
 
+    def deduct_sect_contribution(self, user_id, contribution):
+        """扣除用户宗门贡献度"""
+        cur = self.conn.cursor()
+        sql = "UPDATE user_xiuxian SET sect_contribution=sect_contribution-? WHERE user_id=?"
+        cur.execute(sql, (contribution, user_id))
+        self.conn.commit()
+
     def update_user_hp(self, user_id):
         """重置用户hp,mp信息"""
         sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10 WHERE user_id=?"

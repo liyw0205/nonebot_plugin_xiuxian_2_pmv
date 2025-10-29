@@ -5632,7 +5632,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     # 检查数量是否足够
     if goods_num < quantity:
-        quantity = available_num
+        quantity = goods_num
     ITEM_HANDLERS = {
         20005: use_wishing_stone,
         20016: use_love_sand,
