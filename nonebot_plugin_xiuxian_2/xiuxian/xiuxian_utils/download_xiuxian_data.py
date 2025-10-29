@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from nonebot.log import logger
 from ..xiuxian_config import XiuConfig
-from .utils import get_plugin_dir
 
 def download_xiuxian_data():
     path_data = Path() / "data"
@@ -321,7 +320,7 @@ class UpdateManager:
             
             # 目标目录
             target_data_dir = Path() / "data"
-            target_plugin_dir = get_plugin_dir()
+            target_plugin_dir = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
             
             # 确保目标目录存在
             target_data_dir.mkdir(parents=True, exist_ok=True)
@@ -549,7 +548,7 @@ class UpdateManager:
 
     def save_config_values(self, new_values):
         """保存配置到文件"""
-        config_file_path = get_plugin_dir() / "xiuxian" / "xiuxian_config.py"
+        config_file_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_config.py"
         from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
         
         if not config_file_path.exists():

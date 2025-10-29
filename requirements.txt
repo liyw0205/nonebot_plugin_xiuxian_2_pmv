@@ -11,6 +11,5 @@ aiofiles
 psutil
 flask
 requests
-tomlkit
 nonebot_plugin_apscheduler 
  

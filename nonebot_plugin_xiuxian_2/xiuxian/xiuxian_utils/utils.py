@@ -27,7 +27,6 @@ from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage
 from nonebot.internal.adapter import Message
 from typing import Union
-import tomlkit
 
 sql_message = XiuxianDateManage()  # sql类
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
@@ -1207,65 +1206,3 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
         return {}
-
-
-# ------------------ 插件目录配置 ------------------
-
-CONFIG_PATH = Path() / "data" / "xiuxian" / "config.toml"
-DEFAULT_PLUGIN_DIR = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
-
-
-def get_plugin_dir() -> Path:
-    """
-    获取插件目录，从 config.toml 读取，如果不存在则使用默认值。
-    """
-    global DEFAULT_PLUGIN_DIR
-    if not CONFIG_PATH.exists():
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        # 创建一个默认配置
-        save_plugin_dir(str(DEFAULT_PLUGIN_DIR))
-        return DEFAULT_PLUGIN_DIR
-
-    try:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            config_data = tomlkit.load(f)
-
-        plugin_dir = config_data.get("basic_settings", {}).get("plugin_dir")
-        if plugin_dir:
-            return Path(plugin_dir)
-        else:
-            # 如果文件存在但没有这个键，补充写入
-            save_plugin_dir(str(DEFAULT_PLUGIN_DIR))
-            return DEFAULT_PLUGIN_DIR
-
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>读取 config.toml 失败: {e}，将使用默认插件目录。</red>")
-        return DEFAULT_PLUGIN_DIR
-
-
-def save_plugin_dir(plugin_dir_str: str):
-    """
-    保存插件目录到 config.toml。
-    """
-    global CONFIG_PATH
-    config_data = {}
-    if CONFIG_PATH.exists():
-        try:
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                config_data = tomlkit.load(f)
-        except Exception:
-            config_data = {}  # 如果文件损坏，就覆盖
-
-    if "basic_settings" not in config_data:
-        config_data["basic_settings"] = {}
-
-    config_data["basic_settings"]["plugin_dir"] = plugin_dir_str
-
-    try:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-            tomlkit.dump(config_data, f)
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>写入 config.toml 失败: {e}</red>")
-
-# ----------------------------------------------------
