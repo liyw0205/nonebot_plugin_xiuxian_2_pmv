@@ -21,7 +21,7 @@ jobs:
     - name: Generate tag name
       id: tag
       run: |
-        TIMESTAMP_UTC8=$(date -u -d "+8 小时之前" +"%Y%m%d%H%M%S")
+        TIMESTAMP_UTC8=$(date -u -d "+8 hours" +"%Y%m%d%H%M%S")
         TAGNAME="v$TIMESTAMP_UTC8"
         echo "Tag name is $TAGNAME"
         echo "::set-output name=TAGNAME::$TAGNAME"
@@ -47,6 +47,8 @@ jobs:
         tag_name: ${{ steps.tag.outputs.TAGNAME }}
         release_name: Release ${{ steps.tag.outputs.TAGNAME }}
         body: |
+          ## Release Notes
+
           - ${{ steps.commit_message.outputs.COMMIT_MSG }}
 
         draft: false
