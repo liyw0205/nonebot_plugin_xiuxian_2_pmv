@@ -586,6 +586,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await sect_mainbuff_learn.finish()
     msg = args.extract_plain_text().strip()
     sect_id = user_info['sect_id']
+    user_id = user_info['user_id']
     if sect_id:
         sect_position = user_info['sect_position']
         if sect_position in [12, 14, 15]:
@@ -823,6 +824,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await sect_secbuff_learn.finish()
     msg = args.extract_plain_text().strip()
     sect_id = user_info['sect_id']
+    user_id = user_info['user_id']
     if sect_id:
         sect_position = user_info['sect_position']
         if sect_position in [12, 14, 15]:
