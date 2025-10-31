@@ -941,9 +941,8 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_atkpractice(user_id, useratkpractice + level_up_count)
-        msg = f"升级成功！\n道友当前攻击修炼等级：{useratkpractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前攻击修炼等级：{useratkpractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await upatkpractice.finish()
     else:
@@ -1016,9 +1015,8 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_hppractice(user_id, userhppractice + level_up_count)
-        msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await uphppractice.finish()
     else:
@@ -1091,9 +1089,8 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-        sql_message.deduct_sect_contribution(user_id, total_materials_cost)
         sql_message.update_user_mppractice(user_id, usermppractice + level_up_count)
-        msg = f"升级成功！\n道友当前灵海修炼等级：{usermppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}\n消耗宗门贡献度{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前灵海修炼等级：{usermppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg)
         await upmppractice.finish()
     else:

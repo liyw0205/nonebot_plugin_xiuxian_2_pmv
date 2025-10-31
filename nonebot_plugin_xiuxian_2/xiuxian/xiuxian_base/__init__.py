@@ -54,7 +54,7 @@ run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, b
 restart = on_fullmatch("重入仙途", priority=7, block=True)
 sign_in = on_command("修仙签到", priority=13, block=True)
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
-help_in = on_command("修仙帮助", aliases={"菜单", "帮助"}, priority=12, block=True)
+help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
