@@ -622,7 +622,6 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             materialscost = mainbuffgear * mainbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
                 sql_message.update_sect_materials(sect_id, materialscost, 2)
-                sql_message.deduct_sect_contribution(user_id, materialscost)
                 sql_message.updata_user_main_buff(user_info['user_id'], mainbuffid)
                 mainbuff, mainbuffmsg = get_main_info_msg(str(mainbuffid))
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{mainbufftype}功法：{mainbuff['name']}\n{mainbuffmsg}"
@@ -862,7 +861,6 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             materialscost = secbuffgear * secbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
                 sql_message.update_sect_materials(sect_id, materialscost, 2)
-                sql_message.deduct_sect_contribution(user_id, materialscost)
                 sql_message.updata_user_sec_buff(user_info['user_id'], secbuffid)
                 secmsg = get_sec_msg(secbuff)
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{secbufftype}神通：{secbuff['name']}\n{secbuff['name']}：{secmsg}"
