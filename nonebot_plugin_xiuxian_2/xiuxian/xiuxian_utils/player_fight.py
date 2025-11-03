@@ -672,8 +672,11 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     user_info = sql_message.get_user_info_with_id(user_id)
     
     # 计算最大气血和真元
-    max_hp = int(player1['exp'] / 2) * (1 + user1_main_buff_data.get('hpbuff', 0))
-    max_mp = player1['exp'] * (1 + user1_main_buff_data.get('mpbuff', 0))
+    max_hp = int(player1['exp'] / 2)
+    max_mp = int(player1['exp'])
+    if user1_main_buff_data:
+        max_hp = int(player1['exp'] / 2) * (1 + user1_main_buff_data.get('hpbuff', 0))
+        max_mp = player1['exp'] * (1 + user1_main_buff_data.get('mpbuff', 0))
     
     buff_value = int(subbuffdata1['buff'])
     buff_type = subbuffdata1['buff_type']
