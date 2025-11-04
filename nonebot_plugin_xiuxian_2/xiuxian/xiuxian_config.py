@@ -100,6 +100,7 @@ class XiuConfig:
         self.img = False # 是否使用图片发送消息
         self.user_info_image = False # 是否使用图片发送个人信息
         self.xiuxian_info_img = False # 开启则使用网络背景图
+        self.use_network_avatar = False # 开启则使用网络头像（官机请勿打开）
         self.private_chat_enabled = False # 私聊功能开关，默认关闭
         self.web_port = 5888 # 修仙管理面板端口
         self.web_host = "0.0.0.0" # 修仙管理面板IP

@@ -1509,6 +1509,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "use_network_avatar": {
+        "name": "网络头像",
+        "description": "开启则使用网络头像",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "private_chat_enabled": {
         "name": "私聊功能",
         "description": "私聊功能开关",
