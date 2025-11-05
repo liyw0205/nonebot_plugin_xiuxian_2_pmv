@@ -1797,11 +1797,11 @@ class OtherSet(XiuConfig):
 
         msg = []
         hp_mp = []
-
+        from .utils import number_to
         if user_msg['hp'] < max_hp:
             if user_msg['hp'] + hp < max_hp:
                 new_hp = user_msg['hp'] + hp
-                msg.append(f',回复气血：{hp}')
+                msg.append(f',回复气血：{number_to(hp)}')
             else:
                 new_hp = max_hp
                 msg.append(',气血已回满！')
@@ -1812,7 +1812,7 @@ class OtherSet(XiuConfig):
         if user_msg['mp'] < max_mp:
             if user_msg['mp'] + mp < max_mp:
                 new_mp = user_msg['mp'] + mp
-                msg.append(f',回复真元：{mp}')
+                msg.append(f',回复真元：{number_to(mp)}')
             else:
                 new_mp = max_mp
                 msg.append(',真元已回满！')
