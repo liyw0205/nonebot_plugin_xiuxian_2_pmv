@@ -1256,7 +1256,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
 道号：{player_data['道号']}
 气血:{number_to(player_data['气血'])}/{number_to(max_hp)}({((player_data['气血'] / max_hp) * 100):.2f}%)
-真元:{number_to(player_data['真元'])}/{number_to(max_mp)}({((player_data['真元'] / max_mp) * 100):.2f}%)
+真元:{number_to(player_data['真元'])}/{number_to(max_mp)}({((player_data['真元'] / user_info['exp']) * 100):.2f}%)
 攻击:{number_to(user_attack)}
 突破状态: {exp_meg}(概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%)
 攻击修炼:{user_info['atkpractice']}级(提升攻击力{user_info['atkpractice'] * 4}%)
