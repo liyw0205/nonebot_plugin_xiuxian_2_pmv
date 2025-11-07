@@ -975,10 +975,6 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
             # 洞天福地为加法
         )  # 本次闭关获取的修为
-        # 计算传承增益
-        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-        impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
-        exp = int(exp * (1 + impart_exp_up))
         exp_rate = random.uniform(0.9, 1.3)
         exp = int(exp * exp_rate)
         sql_message.in_closing(user_id, user_type)
@@ -1153,11 +1149,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             (exp_time * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
             # 洞天福地为加法
         )  # 本次闭关获取的修为
-        # 计算传承增益
-        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-        impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
-        exp = int(exp * (1 + impart_exp_up))
-        base_exp_rate = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up) * 100)}%"
+        base_exp_rate = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data) * 100)}%"
         if exp >= user_get_exp_max:
             # 用户获取的修为到达上限
             sql_message.in_closing(user_id, user_type)
