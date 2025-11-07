@@ -41,7 +41,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_weapon_info_msg, get_armor_info_msg,
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
 )
-from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_speedup, use_rift_big_speedup
+from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_boss, use_rift_speedup, use_rift_big_speedup
 from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
@@ -5638,6 +5638,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20016: use_love_sand,
         20007: use_rift_explore,
         20001: use_rift_key,
+        20018: use_rift_boss,
         20012: use_rift_speedup,
         20013: use_rift_big_speedup,
         20010: use_lottery_talisman,

@@ -124,20 +124,15 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         return
 
-    try:
-        msg = f"当前已存在{group_rift[group_id].name}，请诸位道友发送 探索秘境 来加入吧！"
-        await handle_send(bot, event, msg)
-        return
-    except KeyError:
-        rift = Rift()
-        rift.name = get_rift_type()
-        rift.rank = config['rift'][rift.name]['rank']
-        rift.time = config['rift'][rift.name]['time']
-        group_rift[group_id] = rift
-        msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
-        old_rift_info.save_rift(group_rift)
-        await handle_send(bot, event, msg)
-        return
+    rift = Rift()
+    rift.name = get_rift_type()
+    rift.rank = config['rift'][rift.name]['rank']
+    rift.time = config['rift'][rift.name]['time']
+    group_rift[group_id] = rift
+    msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
+    old_rift_info.save_rift(group_rift)
+    await handle_send(bot, event, msg)
+    return
 
 
 @explore_rift.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
@@ -385,6 +380,46 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         result_msg = get_treasure_info(user_info, rift_rank)
 
     # 消耗秘境钥匙
+    sql_message.update_back_j(user_id, item_id)
+    msg = f"秘境 {rift_info['name']} 已结算！"
+    log_message(user_id, result_msg)
+    await handle_send(bot, event, msg)
+    await handle_send(bot, event, result_msg)
+    return
+
+async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
+    """使用斩妖令"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        return
+
+    user_id = user_info['user_id']
+    group_id = "000000"    
+
+    # 检查是否在秘境中
+    is_type, _ = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
+    if not is_type:
+        msg = "道友当前不在秘境中，无法使用斩妖令！"
+        await handle_send(bot, event, msg)
+        return
+
+    # 读取秘境信息并立即结算
+    try:
+        rift_info = read_rift_data(user_id)
+    except:
+        msg = "秘境数据读取失败，请稍后再试！"
+        await handle_send(bot, event, msg)
+        return
+
+    sql_message.do_work(user_id, 0)  # 清除秘境状态
+    rift_rank = rift_info["rank"]
+    result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
+    update_statistics_value(user_id, "秘境打怪")
+    await send_msg_handler(bot, event, result)
+
+    # 消耗斩妖令
     sql_message.update_back_j(user_id, item_id)
     msg = f"秘境 {rift_info['name']} 已结算！"
     log_message(user_id, result_msg)
