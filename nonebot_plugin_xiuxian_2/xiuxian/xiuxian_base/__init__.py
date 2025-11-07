@@ -88,7 +88,7 @@ fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"},
 
 __level_help__ = """
 【灵根体系】🌿
-===========================
+======================
 🌌 至高道果：
    ▪ 命运道果
    ▪ 永恒道果
@@ -107,8 +107,8 @@ __level_help__ = """
    ▪ 异灵根
    ▪ 真灵根
    ▪ 伪灵根
-===========================
-注：灵根品质影响修炼速度和突破成功率
+======================
+注：灵根品质影响修炼速度
 """.strip()
 
 
@@ -184,6 +184,8 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             if not sql_message.get_user_info_with_name(user_name):
                 break
         msg = f"你获得了随机道号：{user_name}\n"
+        # 扣除灵石
+        sql_message.update_ls(user_id, XiuConfig().remaname, 2)
     else:            
         # 检查易名符
         has_item = False
@@ -212,8 +214,6 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         
         # 扣除易名符
         sql_message.update_back_j(user_id, 20011, use_key=1)
-    # 扣除灵石
-    sql_message.update_ls(user_id, XiuConfig().remaname, 2)
     result = sql_message.update_user_name(user_id, user_name)
     msg += result
     await handle_send(bot, event, msg)
@@ -272,7 +272,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     lottery_result = await handle_lottery(user_info)
     
     # 3. 组合签到结果和抽奖结果
-    msg = f"{result}\n{lottery_result}"
+    msg = f"{result}\n\n{lottery_result}"
     
     try:
         log_message(user_id, msg)
@@ -281,6 +281,29 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sign_in.finish()
     except ActionFailed:
         await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
+
+@hongyun.handle(parameterless=[Cooldown(at_sender=False)])
+async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看中奖记录和当前奖池"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    # 构建消息
+    msg = "✨【鸿运当头】奖池信息✨\n"
+    msg += f"当前奖池累计：{number_to(lottery_pool.get_pool())}灵石\n"
+    msg += f"本期参与人数：{lottery_pool.get_participants()}位道友\n\n"
+    
+    last_winner = lottery_pool.get_last_winner()
+    if last_winner:
+        msg += "🎉上期中奖记录🎉\n"
+        msg += f"中奖道友：{last_winner['name']}\n"
+        msg += f"中奖时间：{last_winner['time']}\n"
+        msg += f"中奖金额：{number_to(last_winner['amount'])}灵石\n"
+    else:
+        msg += "暂无历史中奖记录，道友快来签到吧！\n"
+    
+    msg += "\n※ 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
+    
+    await handle_send(bot, event, msg)
+    await hongyun.finish()
 
 async def handle_lottery(user_info: dict):
     """处理借运抽奖逻辑"""
@@ -294,46 +317,36 @@ async def handle_lottery(user_info: dict):
     
     # 2. 生成1-100000的随机数，中奖号码为66666,6666,666,66,6
     lottery_number = random.randint(1, 100000)
-    winning_numbers = [66666, 6666, 666, 66, 6]
     
-    if lottery_number in winning_numbers:
-        # 中奖逻辑
-        prize = lottery_pool.get_pool()
-        
-        # 发放奖励
-        sql_message.update_ls(user_id, prize, 1)
-        
-        # 记录中奖信息
+    # 3. 检查用户ID是否包含特等奖的数字序列
+    special_numbers = [6, 66, 666, 6666, 66666]
+    if lottery_number in special_numbers:
+        # 特等奖
+        prize = int(lottery_pool.get_pool())
         lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
-        
-        return f"✨鸿运当头！道友借运成功，获得奖池中全部{number_to(prize)}灵石！✨"
+        return f"✨鸿运当头！恭喜道友获得特等奖！\n中奖号码：{lottery_number}\n获得奖池中{number_to(prize)}灵石！🎉🎉🎉"
     
-    # 3. 未中奖情况
-    return f"本次签到未中奖，奖池继续累积~"
-
-@hongyun.handle(parameterless=[Cooldown(at_sender=False)])
-async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """查看中奖记录和当前奖池"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    # 4. 检查随机数中6的数量
+    count_6 = str(lottery_number).count('6')
     
-    # 构建消息
-    msg = "✨【鸿运当头】奖池信息✨\n"
-    msg += f"当前奖池累计：{number_to(lottery_pool.get_pool())}灵石\n"
-    msg += f"本期参与人数：{lottery_pool.get_participants()}位道友\n\n"
-    
-    last_winner = lottery_pool.get_last_winner()
-    if last_winner:
-        msg += "🎉🎉🎉🎉上期中奖记录🎉🎉🎉🎉\n"
-        msg += f"中奖道友：{last_winner['name']}\n"
-        msg += f"中奖时间：{last_winner['time']}\n"
-        msg += f"中奖金额：{number_to(last_winner['amount'])}灵石\n"
+    if count_6 == 3:
+        # 一等奖
+        prize = int(lottery_pool.get_pool() * 0.1)
+        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
+        return f"🎉恭喜道友获得一等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
+    elif count_6 == 2:
+        # 二等奖
+        prize = int(lottery_pool.get_pool() * 0.01)
+        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
+        return f"🎉恭喜道友获得二等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
+    elif count_6 == 1:
+        # 三等奖
+        prize = int(lottery_pool.get_pool() * 0.001)
+        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
+        return f"🎉恭喜道友获得三等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
     else:
-        msg += "暂无历史中奖记录，道友快来签到吧！\n"
-    
-    msg += "\n※ 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
-    
-    await handle_send(bot, event, msg)
-    await hongyun.finish()
+        # 未中奖
+        return f"本次签到未中奖，奖池继续累积~"
 
 def read_lottery_data():
     """读取奖池数据"""

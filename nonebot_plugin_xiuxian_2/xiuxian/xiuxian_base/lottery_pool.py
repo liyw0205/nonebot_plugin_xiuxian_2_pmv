@@ -4,7 +4,7 @@ except ImportError:
     import json
 from pathlib import Path
 import os
-
+from datetime import datetime
 
 class LOTTERY_POOL(object):
     def __init__(self):
@@ -22,7 +22,6 @@ class LOTTERY_POOL(object):
             data = json.dumps(self.info, ensure_ascii=False, indent=4)
             with open(self.data_path, mode="x", encoding="UTF-8") as f:
                 f.write(data)
-                f.close()
             with open(self.data_path, 'r', encoding='utf-8') as f:
                 self.data = json.load(f)
 
@@ -56,21 +55,23 @@ class LOTTERY_POOL(object):
         self.__save()
 
     def set_winner(self, user_id, user_name, amount, lottery_number):
-        """设置中奖者并清空奖池"""
+        """设置中奖者并从奖池中减去中奖金额"""
+        if amount > self.data["pool"]:
+            amount = self.data["pool"]
+        
+        self.data["pool"] = max(0, self.data["pool"] - amount)
+        
         self.data["last_winner"] = {
             'name': user_name,
             'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'amount': amount,
             'lottery_number': lottery_number
         }
-        self.data["pool"] = 0
-        self.data["participants"] = []
         self.__save()
 
     def reset_daily(self):
         """每日重置参与记录（奖池不清空）"""
         self.data["participants"] = []
         self.__save()
-
 
 lottery_pool = LOTTERY_POOL()
