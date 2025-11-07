@@ -1051,7 +1051,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await destiny_tribulation.finish()
     
     # 使用天命渡劫丹
-    sql_message.update_back_j(user_id, XiuConfig().tribulation_item_id, use_key=1)
+    sql_message.update_back_j(user_id, 1997, use_key=1)
     
     # 必定成功
     sql_message.updata_level(user_id, next_level)
