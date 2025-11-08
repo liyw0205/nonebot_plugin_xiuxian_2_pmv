@@ -642,9 +642,8 @@ def apply_buff(user_battle_buff, subbuffdata, player_sub_open, is_opponent=False
         sub_msg = f"提升{break_buff_desc}%{desc}"
     else:
         sub_msg = f"获得了{desc}！！"
-    prefix = "。对手" if is_opponent else ""
-    return f"{prefix}使用功法{subbuffdata['name']}, {sub_msg}"
-
+    prefix = f"\n对手" if is_opponent else ""
+    return f"{prefix}使用{subbuffdata['name']}, {sub_msg}"
 
 def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date,
                           player2_sub_open, subbuffdata2, user2_battle_buff_date):
@@ -788,12 +787,12 @@ class BattleEngine:
         if effect2_data and effect2_data['buff_type'] == '2':
             hit_buff = random.uniform(float(effect2_data['buff2']), float(effect2_data['buff']))
             hit += int(hit_buff)
-            self.add_system_message(f"{effect2_data['name']}：{effect2_data['desc']}！增加{int(hit_buff)}%命中！")
+            self.add_system_message(f"{user_info['user_name']}{effect2_data['desc']}！增加{int(hit_buff)}%命中！")
             
         if effect1_data and effect1_data['buff_type'] == '1':
             dodge_buff = random.uniform(float(effect1_data['buff2']), float(effect1_data['buff']))
             dodge += int(dodge_buff)
-            self.add_system_message(f"{effect1_data['name']}：{effect1_data['desc']}！获得{int(dodge_buff)}%闪避！")
+            self.add_system_message(f"{user_info['user_name']}{effect1_data['desc']}！获得{int(dodge_buff)}%闪避！")
             
         # 获取技能数据
         skill_data = None

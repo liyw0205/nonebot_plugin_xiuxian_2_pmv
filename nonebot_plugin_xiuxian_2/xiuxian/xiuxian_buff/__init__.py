@@ -624,11 +624,16 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
     max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
     max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
     
-    if max_count_1 <= 0 or max_count_2 <= 0:
+    if max_count_1 <= 0:
         msg = "你的双修次数不足，无法进行双修！"
         await handle_send(bot, event, msg)
         return
-        
+
+    if max_count_2 <= 0:
+        msg = "对方的双修次数不足，无法进行双修！"
+        await handle_send(bot, event, msg)
+        return
+
     # 取最小可用次数
     actual_count = min(exp_count, max_count_1, max_count_2)
     
@@ -747,11 +752,11 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     user2_rank = convert_rank(user_mes_2['level'])[0]
     max_exp_1 = int((user_mes_1['exp'] * 0.001) * min(0.1 * user1_rank, 1))# 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
     max_exp_2 = int((user_mes_2['exp'] * 0.001) * min(0.1 * user2_rank, 1))
-    max_two_exp = 10000000
+    max_two_exp = 100000000
     
     # 计算实际可获得的修为
-    exp_limit_1 = min(exp_limit_1, max_exp_1, remaining_exp_1) if user_mes_1['exp'] >= max_two_exp else min(exp_limit_1, remaining_exp_1, max_exp_1_limit * 0.1)
-    exp_limit_2 = min(exp_limit_2, max_exp_2, remaining_exp_2) if user_mes_2['exp'] >= max_two_exp else min(exp_limit_2, min(remaining_exp_2, max_exp_2_limit * 0.1))
+    exp_limit_1 = min(exp_limit_1, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp_limit_1, remaining_exp_1, max_exp_1_limit * 0.1)
+    exp_limit_2 = min(exp_limit_2, max_exp_2, remaining_exp_2) if max_exp_2 >= max_two_exp else min(exp_limit_2, min(remaining_exp_2, max_exp_2_limit * 0.1))
     
     if is_partner:
         # 如果某方已达到当前境界修为上限，则只给1点
