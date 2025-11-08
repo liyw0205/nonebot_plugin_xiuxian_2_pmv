@@ -319,9 +319,28 @@ ST2 = {
     }
 }
 
+def generate_hp_bar(current_hp, max_hp):
+    """生成血量条显示
+    ⬛️代表有血量，⬜️代表已损失血量
+    每10%血量显示一个方块
+    """
+    if max_hp <= 0:
+        return "⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️ 0%"
+    
+    # 计算当前血量百分比
+    hp_percentage = max(0, min(100, (current_hp / max_hp) * 100))
+    percentage_int = int(hp_percentage)
+    
+    # 计算应该显示多少个⬛️（每10%一个）
+    filled_blocks = int(percentage_int // 10)
+    filled_blocks = max(0, min(10, filled_blocks))  # 限制在0-10之间
+    
+    # 生成血量条字符串
+    hp_bar = "⬛️" * filled_blocks + "⬜️" * (10 - filled_blocks)
+    return f"{hp_bar} {percentage_int}%"
+
 def get_msg_dict(player, player_init_hp, msg):
     player['气血'] = int(round(player['气血']))
-    
     return {
         "type": "node", 
         "data": {
@@ -333,7 +352,6 @@ def get_msg_dict(player, player_init_hp, msg):
 
 def get_boss_dict(boss, boss_init_hp, msg, bot_id):
     boss['气血'] = int(round(boss['气血']))
-    
     return {
         "type": "node",
         "data": {
@@ -925,7 +943,8 @@ class BattleEngine:
             defender['player']['气血'] -= actual_damage
             
             attack_msg = msg.format(attacker_name, number_to2(actual_damage))
-            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}"
+            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
+            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
             
             self.add_message(attacker, attack_msg)
             self.process_after_attack_buffs(attacker, defender, actual_damage)
@@ -976,8 +995,8 @@ class BattleEngine:
             actual_damage = int(calculate_damage(attacker, defender, skill_sh))
             
         defender['player']['气血'] -= actual_damage
-        
-        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}"
+        hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
+        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
         self.process_after_attack_buffs(attacker, defender, actual_damage)
         self.add_message(attacker, hp_msg)
         return True
@@ -1050,9 +1069,9 @@ class BattleEngine:
         defender['player']['气血'] -= actual_damage
         
         msg = "{}发起攻击，造成了{}伤害"
-            
+        hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
         attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
-        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}"
+        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
         
         self.add_message(attacker, attack_msg)
         self.add_message(attacker, hp_msg)
@@ -1074,8 +1093,8 @@ class BattleEngine:
 
             skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to2(attacker['skill_sh'])}伤害，剩余回合：{attacker['turn_cost']}!"
             self.add_message(attacker, skill_msg)
-
-            persistent_hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}"
+            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
+            persistent_hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
             self.add_message(attacker, persistent_hp_msg)
             
         elif skill_type == 3:  # buff类持续效果
@@ -1111,9 +1130,9 @@ class BattleEngine:
             defender['player']['气血'] -= actual_damage
             
             msg = "{}发起攻击，造成了{}伤害"
-                
+            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
             attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
-            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}"
+            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
             
             self.add_message(attacker, attack_msg)
             self.add_message(attacker, f"{attacker['skill_data']['name']}叠伤剩余:{attacker['turn_cost']}回合，当前{round(stack_multiplier, 1)}倍")
@@ -1599,9 +1618,9 @@ def execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_in
             msg = f"{boss['name']}发起攻击，造成了{number_to2(actual_damage)}伤害"
             
         player['气血'] -= actual_damage
-        
+        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的攻击被{player['道号']}闪避了！", boss_init_hp)
 
@@ -1627,9 +1646,9 @@ def execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_i
             msg = f"{boss['name']}：紫玄掌！！紫星河！！！并且发生了会心一击，造成了{number_to2(total_damage)}伤害"
         else:
             msg = f"{boss['name']}：紫玄掌！！紫星河！！！造成了{number_to2(total_damage)}伤害"
-            
+        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
 
@@ -1653,9 +1672,9 @@ def execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_i
             msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！并且发生了会心一击，造成了{number_to2(special_damage)}伤害"
         else:
             msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！造成了{number_to2(special_damage)}伤害"
-            
+        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
 
