@@ -682,8 +682,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 检查可上架数量
     if quantity > available_num:
-        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
-            msg = f"可上架数量不足！\n最多可上架{available_num}个"
+        msg = f"可上架数量不足！\n最多可上架{available_num}个"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
@@ -1452,8 +1451,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     quantity = min(10, available_num)  # 最多10个
     
     if quantity <= 0:
-        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
-            msg = f"可上架数量不足！"
+        msg = f"可上架数量不足！"
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
@@ -1851,28 +1849,13 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     
     goods_name = args[0]
     try:
-        price = int(args[1])
+        price = max(int(args[1]), MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = min(quantity, MAX_QUANTITY)
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await shop_added.finish()
-    
-    if price < MIN_PRICE:  # 最低60万灵石
-        msg = "坊市最低价格为60万灵石！"
-        await handle_send(bot, event, msg)
-        await shop_added.finish()
-    
-    # 检查仙肆最低价
-    xianshi_min_price = get_xianshi_min_price(goods_name)
-    if xianshi_min_price is not None:
-        min_price = max(MIN_PRICE, xianshi_min_price // 2)
-        max_price = xianshi_min_price * 2
-        if price < min_price or price > max_price:
-            msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
-            await handle_send(bot, event, msg)
-            await shop_added.finish()
     
     # 检查背包物品
     back_msg = sql_message.get_back_msg(user_id)
@@ -1887,6 +1870,16 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
+    # 检查仙肆最低价
+    xianshi_min_price = get_xianshi_min_price(goods_name)
+    if xianshi_min_price is not None:
+        min_price = max(MIN_PRICE, xianshi_min_price // 2)
+        max_price = xianshi_min_price * 2
+        if price < min_price or price > max_price:
+            msg = f"该物品在仙肆的最低价格为{xianshi_min_price}，坊市价格限制为{min_price}-{max_price}灵石！"
+            await handle_send(bot, event, msg)
+            await shop_added.finish()
+
     # 对于装备类型，检查是否已被使用
     if goods_info['goods_type'] == "装备":
         is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
@@ -1902,8 +1895,7 @@ async def shop_added_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     
     # 检查可上架数量
     if quantity > available_num:
-        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
-            msg = f"可上架数量不足！\n最多可上架{available_num}个"
+        msg = f"可上架数量不足！\n最多可上架{available_num}个"
         await handle_send(bot, event, msg)
         await shop_added.finish()
     
@@ -2234,8 +2226,7 @@ async def fangshi_fast_add_(bot: Bot, event: GroupMessageEvent, args: Message = 
     quantity = min(10, available_num)  # 最多10个
     
     if quantity <= 0:
-        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
-            msg = f"可上架数量不足！"
+        msg = f"可上架数量不足！"
         await handle_send(bot, event, msg)
         await fangshi_fast_add.finish()
     
@@ -3765,8 +3756,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 检查物品总数量
     if available_num < quantity:
-        if goods_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, goods_info['goods_id']):
-            msg = f"可上架数量不足！\n最多可摆摊{available_num}个"
+        msg = f"可上架数量不足！\n最多可摆摊{available_num}个"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
