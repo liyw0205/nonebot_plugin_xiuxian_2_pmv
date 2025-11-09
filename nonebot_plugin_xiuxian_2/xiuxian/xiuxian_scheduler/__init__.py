@@ -49,10 +49,6 @@ async def _():  # 每周一0点
     await impart_lv()  # 深入虚神界
     await reset_tower_floors()  # 重置通天塔层数
 
-@scheduler.scheduled_job("cron", day_of_week=0, hour=3, minute=0)
-async def _():  # 每周一3点
-    await auto_merge_fangshi_to_xianshi()  # 合并坊市到仙肆
-    
 @scheduler.scheduled_job("cron", hour='0,12', minute=5)
 async def _():  # 每天0/12点5分
     await scheduled_rift_generation()  # 重置秘境
