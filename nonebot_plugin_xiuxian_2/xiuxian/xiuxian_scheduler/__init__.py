@@ -1,7 +1,6 @@
 from nonebot import require
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, backup_db_files
-from ..xiuxian_back import auto_merge_fangshi_to_xianshi
 from ..xiuxian_base import reset_lottery_participants, reset_stone_limits, reset_xiangyuan_daily
 from ..xiuxian_boss import set_boss_limits_reset
 from ..xiuxian_buff import two_exp_cd_up

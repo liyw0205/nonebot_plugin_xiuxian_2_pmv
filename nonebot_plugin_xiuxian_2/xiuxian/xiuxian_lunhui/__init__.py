@@ -129,8 +129,6 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
-        xiuxian_impart.update_impart_lv(user_id, 0)
-        #重置虚神界等级
         xiuxian_impart.convert_stone_to_wishing_stone(user_id)
         #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
@@ -196,8 +194,6 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
-        xiuxian_impart.update_impart_lv(user_id, 0)
-        #重置虚神界等级
         xiuxian_impart.convert_stone_to_wishing_stone(user_id)
         #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
@@ -265,8 +261,6 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
         #重置用户虚神界修炼时间
-        xiuxian_impart.update_impart_lv(user_id, 0)
-        #重置虚神界等级
         xiuxian_impart.convert_stone_to_wishing_stone(user_id)
         #转换思恋结晶
         sql_message.update_ls(user_id, user_info['stone'], 2)
