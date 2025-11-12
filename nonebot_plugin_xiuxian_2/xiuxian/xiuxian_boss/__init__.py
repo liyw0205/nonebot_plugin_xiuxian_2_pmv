@@ -748,7 +748,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     paged_bosses = bosss[start_index:end_index]
     msgs = f"世界BOSS列表"
     header = f"{msgs}（第{current_page}/{total_pages}页）"
-    footer = f"提示：发送 查询世界BOSS列表+页码 查看其他页（共{total_pages}页）"
+    footer = f"提示：发送 世界BOSS列表+页码 查看其他页（共{total_pages}页）"
     paged_msgs = [header]
     for i, boss in enumerate(paged_bosses, start=start_index + 1):
         paged_msgs.append(f"编号{i} \nBoss:{boss['name']} \n境界：{boss['jj']} \n总血量：{number_to(boss['总血量'])} \n剩余血量：{number_to(boss['气血'])} \n攻击：{number_to(boss['攻击'])} \n携带灵石：{number_to(boss['stone'])}")

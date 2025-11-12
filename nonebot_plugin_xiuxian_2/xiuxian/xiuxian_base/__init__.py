@@ -1258,7 +1258,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             "真元": int(player['真元'] * scale),
             "攻击": int(player['攻击'] * scale),
             "name": devil_name,
-            "jj": "感气境",
+            "jj": "祭道境",
             "desc": devil_data["lose_desc"]  # 默认显示负面描述
         }
         
