@@ -204,8 +204,8 @@ async def _check_tiaohe_early(zhuyao: Dict, yaoyin: Dict, zhuyao_num: int, yaoyi
     提前检查调和可能性，避免深入循环
     """
     # 检查指定数量下是否能调和
-    zhuyao_power = zhuyao['主药']['h_a_c']['type'] * zhuyao['主药']['h_a_c']['power'] * zhuyao_num
-    yaoyin_power = yaoyin['药引']['h_a_c']['type'] * yaoyin['药引']['h_a_c']['power'] * yaoyin_num
+    zhuyao_power = zhuyao['主药']['h_a_c'] * zhuyao_num
+    yaoyin_power = yaoyin['药引']['h_a_c'] * yaoyin_num
     return await absolute(zhuyao_power + yaoyin_power) > yonhudenji
 
 async def _check_yaocai_sufficient(yaocai: Dict, required_counts: Dict[str, int]) -> bool:
@@ -247,8 +247,8 @@ async def tiaohe(zhuyao_info: Dict, zhuyao_num: int, yaoyin_info: Dict, yaoyin_n
     """
     检查冷热调和
     """
-    zhuyao_power = zhuyao_info['主药']['h_a_c']['type'] * zhuyao_info['主药']['h_a_c']['power'] * zhuyao_num
-    yaoyin_power = yaoyin_info['药引']['h_a_c']['type'] * yaoyin_info['药引']['h_a_c']['power'] * yaoyin_num
+    zhuyao_power = zhuyao_info['主药']['h_a_c'] * zhuyao_num
+    yaoyin_power = yaoyin_info['药引']['h_a_c'] * yaoyin_num
     
     return await absolute(zhuyao_power + yaoyin_power) > yonhudenji
 
