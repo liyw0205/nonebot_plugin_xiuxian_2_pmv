@@ -5,18 +5,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -31,18 +25,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -57,18 +45,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 2,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 2,
             "power": 2
         },
@@ -83,18 +65,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 2,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 2,
             "power": 2
         },
@@ -109,18 +85,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -135,18 +105,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -161,18 +125,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 2,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 2,
             "power": 4
         },
@@ -187,18 +145,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 2,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 2,
             "power": 4
         },
@@ -213,18 +165,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -239,18 +185,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -265,18 +205,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 2,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 2,
             "power": 8
         },
@@ -291,18 +225,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 2,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 2,
             "power": 8
         },
@@ -317,18 +245,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -343,18 +265,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -369,18 +285,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 2,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 2,
             "power": 16
         },
@@ -395,18 +305,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 2,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 2,
             "power": 16
         },
@@ -421,18 +325,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -447,18 +345,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -473,18 +365,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 2,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 2,
             "power": 32
         },
@@ -499,18 +385,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 2,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 2,
             "power": 32
         },
@@ -525,18 +405,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -551,18 +425,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -577,18 +445,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 2,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 2,
             "power": 64
         },
@@ -603,18 +465,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 2,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 2,
             "power": 64
         },
@@ -629,18 +485,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -655,18 +505,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -681,18 +525,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 2,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 2,
             "power": 128
         },
@@ -707,18 +545,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 2,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 2,
             "power": 128
         },
@@ -733,18 +565,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -759,18 +585,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -785,18 +605,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 2,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 2,
             "power": 256
         },
@@ -811,18 +625,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 2,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 2,
             "power": 256
         },
@@ -837,18 +645,12 @@
         "type": "药材",
         "rank": 24,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -863,18 +665,12 @@
         "type": "药材",
         "rank": 24,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -889,18 +685,12 @@
         "type": "药材",
         "rank": 24,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 2,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 2,
             "power": 512
         },
@@ -915,18 +705,12 @@
         "type": "药材",
         "rank": 24,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 2,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 2,
             "power": 512
         },
@@ -941,18 +725,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -967,18 +745,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -993,18 +765,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 3,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 2,
             "power": 2
         },
@@ -1019,18 +785,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 3,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 2,
             "power": 2
         },
@@ -1045,18 +805,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -1071,18 +825,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -1097,18 +845,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 3,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 2,
             "power": 4
         },
@@ -1123,18 +865,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 3,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 2,
             "power": 4
         },
@@ -1149,18 +885,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -1175,18 +905,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -1201,18 +925,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 3,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 2,
             "power": 8
         },
@@ -1227,18 +945,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 3,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 2,
             "power": 8
         },
@@ -1253,18 +965,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -1279,18 +985,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -1305,18 +1005,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 3,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 2,
             "power": 16
         },
@@ -1331,18 +1025,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 3,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 2,
             "power": 16
         },
@@ -1357,18 +1045,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -1383,18 +1065,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -1409,18 +1085,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 3,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 2,
             "power": 32
         },
@@ -1435,18 +1105,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 3,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 2,
             "power": 32
         },
@@ -1461,18 +1125,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -1487,18 +1145,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -1513,18 +1165,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 3,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 2,
             "power": 64
         },
@@ -1539,18 +1185,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 3,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 2,
             "power": 64
         },
@@ -1565,18 +1205,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -1591,18 +1225,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -1617,18 +1245,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 3,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 2,
             "power": 128
         },
@@ -1643,18 +1265,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 3,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 2,
             "power": 128
         },
@@ -1669,18 +1285,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -1695,18 +1305,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -1721,18 +1325,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 3,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 2,
             "power": 256
         },
@@ -1747,18 +1345,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 3,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 2,
             "power": 256
         },
@@ -1773,18 +1365,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -1799,18 +1385,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 3,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -1825,18 +1405,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 3,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 2,
             "power": 512
         },
@@ -1851,18 +1425,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 3,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 2,
             "power": 512
         },
@@ -1877,18 +1445,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -1903,18 +1465,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 1
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 2
         },
@@ -1929,18 +1485,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 5,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 2,
             "power": 2
         },
@@ -1955,18 +1505,12 @@
         "type": "药材",
         "rank": 54,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 1
-            },
+            "h_a_c": 1,
             "type": 5,
             "power": 2
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 1
-            },
+            "h_a_c": -1,
             "type": 2,
             "power": 2
         },
@@ -1981,18 +1525,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -2007,18 +1545,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 2
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 4
         },
@@ -2033,18 +1565,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 5,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 2,
             "power": 4
         },
@@ -2059,18 +1585,12 @@
         "type": "药材",
         "rank": 48,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 2
-            },
+            "h_a_c": 2,
             "type": 5,
             "power": 4
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 2
-            },
+            "h_a_c": -2,
             "type": 2,
             "power": 4
         },
@@ -2085,18 +1605,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -2111,18 +1625,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 4
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 8
         },
@@ -2137,18 +1645,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 5,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 2,
             "power": 8
         },
@@ -2163,18 +1665,12 @@
         "type": "药材",
         "rank": 45,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 4
-            },
+            "h_a_c": 4,
             "type": 5,
             "power": 8
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 4
-            },
+            "h_a_c": -4,
             "type": 2,
             "power": 8
         },
@@ -2189,18 +1685,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -2215,18 +1705,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 8
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 16
         },
@@ -2241,18 +1725,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 5,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 2,
             "power": 16
         },
@@ -2267,18 +1745,12 @@
         "type": "药材",
         "rank": 42,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 8
-            },
+            "h_a_c": 8,
             "type": 5,
             "power": 16
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 8
-            },
+            "h_a_c": -8,
             "type": 2,
             "power": 16
         },
@@ -2293,18 +1765,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -2319,18 +1785,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 16
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 32
         },
@@ -2345,18 +1805,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 5,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 2,
             "power": 32
         },
@@ -2371,18 +1825,12 @@
         "type": "药材",
         "rank": 39,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 16
-            },
+            "h_a_c": 16,
             "type": 5,
             "power": 32
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 16
-            },
+            "h_a_c": -16,
             "type": 2,
             "power": 32
         },
@@ -2397,18 +1845,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -2423,18 +1865,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 32
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 64
         },
@@ -2449,18 +1885,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 5,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 6,
             "power": 64
         },
@@ -2475,18 +1905,12 @@
         "type": "药材",
         "rank": 36,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 32
-            },
+            "h_a_c": 32,
             "type": 5,
             "power": 64
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 32
-            },
+            "h_a_c": -32,
             "type": 2,
             "power": 64
         },
@@ -2501,18 +1925,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -2527,18 +1945,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 64
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 128
         },
@@ -2553,18 +1965,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 5,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 2,
             "power": 128
         },
@@ -2579,18 +1985,12 @@
         "type": "药材",
         "rank": 33,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 64
-            },
+            "h_a_c": 64,
             "type": 5,
             "power": 128
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 64
-            },
+            "h_a_c": -64,
             "type": 2,
             "power": 128
         },
@@ -2605,18 +2005,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -2631,18 +2025,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 128
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 256
         },
@@ -2657,18 +2045,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 5,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 2,
             "power": 256
         },
@@ -2683,18 +2065,12 @@
         "type": "药材",
         "rank": 30,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 128
-            },
+            "h_a_c": 128,
             "type": 5,
             "power": 256
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 128
-            },
+            "h_a_c": -128,
             "type": 2,
             "power": 256
         },
@@ -2709,18 +2085,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -2735,18 +2105,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 5,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 0,
-                "power": 256
-            },
+            "h_a_c": 0,
             "type": 2,
             "power": 512
         },
@@ -2761,18 +2125,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 5,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 2,
             "power": 512
         },
@@ -2787,18 +2145,12 @@
         "type": "药材",
         "rank": 27,
         "主药": {
-            "h_a_c": {
-                "type": 1,
-                "power": 256
-            },
+            "h_a_c": 256,
             "type": 5,
             "power": 512
         },
         "药引": {
-            "h_a_c": {
-                "type": -1,
-                "power": 256
-            },
+            "h_a_c": -256,
             "type": 2,
             "power": 512
         },

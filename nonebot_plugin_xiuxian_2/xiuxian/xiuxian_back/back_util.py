@@ -18,6 +18,7 @@ from ..xiuxian_config import convert_rank
 items = Items()
 sql_message = XiuxianDateManage()
 
+sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
     "-1": "性寒",
     "0": "性平",
@@ -712,12 +713,14 @@ def get_yaocai_info(yaocai_info):
     """
     获取药材信息
     """
-    msg = f"主药 {YAOCAIINFOMSG[str(yaocai_info['主药']['h_a_c']['type'])]}"
-    msg += f"{yaocai_info['主药']['h_a_c']['power']}"
-    msg += f" {YAOCAIINFOMSG[str(yaocai_info['主药']['type'])]}"
-    msg += f"{yaocai_info['主药']['power']}\n"
-    msg += f"药引 {YAOCAIINFOMSG[str(yaocai_info['药引']['h_a_c']['type'])]}"
-    msg += f"{yaocai_info['药引']['h_a_c']['power']}"
+    msg =  f"主药 {YAOCAIINFOMSG[str(yaocai_info['主药']['type'])]}"
+    msg += f"{yaocai_info['主药']['power']}"
+    msg += f" {YAOCAIINFOMSG[str(sign(yaocai_info['主药']['h_a_c']))]}"
+    msg += f"{abs(yaocai_info['主药']['h_a_c']) or ''}\n"
+    msg += f"药引 {YAOCAIINFOMSG[str(yaocai_info['药引']['type'])]}"
+    msg += f"{yaocai_info['药引']['power']}"
+    msg += f" {YAOCAIINFOMSG[str(sign(yaocai_info['药引']['h_a_c']))]}"
+    msg += f"{abs(yaocai_info['药引']['h_a_c']) or ''}\n"
     msg += f"辅药 {YAOCAIINFOMSG[str(yaocai_info['辅药']['type'])]}"
     msg += f"{yaocai_info['辅药']['power']}"
 

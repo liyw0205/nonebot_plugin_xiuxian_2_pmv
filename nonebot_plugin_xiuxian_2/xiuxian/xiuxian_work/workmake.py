@@ -23,9 +23,8 @@ def workmake(work_level, exp, user_level):
     work_list = [yaocai_data[work_level], ansha_data[work_level], zuoyao_data[work_level]]
     
     for w in work_list:
-        work_name_list = list(w.keys())
-        work_name = random.choice(work_name_list)
-        work_info = w[work_name]
+        work_info = random.choice(w)
+        work_name = work_info['work_name']
         level_price_data = levelpricedata[work_level][work_info['level']]
         rate, isOut = countrate(exp, level_price_data["needexp"])
         
