@@ -1599,8 +1599,8 @@
         "reap_buff": 0,
         "exp_buff": 0,
         "critatk": 0.3,
-        "two_buff": 5,
-        "number": 3,
+        "two_buff": 7,
+        "number": 5,
         "clo_exp": 0,
         "clo_rs": 0,
         "random_buff": 0,
@@ -1610,10 +1610,10 @@
         "level": "-5",
         "fusion": {
             "need_item": {
-                "9002": 1,
-                "9402": 1,
-                "9604": 1,
-                "9704": 1,
+                "9002": 3,
+                "9402": 3,
+                "9604": 3,
+                "9704": 3,
                 "20003": 1,                
                 "20004": 1
             },
@@ -1637,7 +1637,7 @@
         "exp_buff": 0.3,
         "critatk": 0.45,
         "two_buff": 2,
-        "number": 5,
+        "number": 9,
         "clo_exp": 0,
         "clo_rs": 0,
         "random_buff": 0,
@@ -1647,10 +1647,10 @@
         "level": "-5",
         "fusion": {
             "need_item": {
-                "9003": 1,
-                "9600": 1,
-                "9702": 1,
-                "9802": 1,
+                "9003": 3,
+                "9600": 3,
+                "9702": 3,
+                "9802": 3,
                 "20003": 1,                
                 "20004": 1
             },
@@ -1684,7 +1684,7 @@
         "level": "1",
         "fusion": {
             "need_item": {
-                "9925": 1,
+                "9925": 10,
                 "20002": 1,
                 "20003": 1,                
                 "20004": 1
@@ -1995,7 +1995,7 @@
         "level": "1",
         "fusion": {
             "need_item": {
-                "9902": 1,
+                "9902": 10,
                 "20002": 1,
                 "20003": 1,                
                 "20004": 1
@@ -2034,28 +2034,29 @@
         "hpbuff": 1,
         "mpbuff": 1,
         "atkbuff": 1,
-        "ratebuff": 2.3,
+        "ratebuff": 2.5,
         "crit_buff": 0,
         "def_buff": 0.5,
         "dan_exp": 0,
         "dan_buff": 0,
         "reap_buff": 0,
-        "exp_buff": 0.3,
-        "critatk": 3,
+        "exp_buff": 0.5,
+        "critatk": 4.5,
         "two_buff": 3,
         "number": 5,
         "clo_exp": 0,
         "clo_rs": 0,
-        "random_buff": 0,
+        "random_buff": 1,
         "ew": 7084,
         "desc": "",
         "rank": "无上",
         "level": "1",
         "fusion": {
             "need_item": {
+                "7084": 1,
                 "20002": 1,
                 "20003": 1,                
-                "20004": 2
+                "20004": 1
             },
             "need_rank": "微光境圆满",
             "need_exp": "0",
