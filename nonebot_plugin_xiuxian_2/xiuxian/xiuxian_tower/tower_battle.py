@@ -161,7 +161,8 @@ class TowerBattle:
                 total_stone += extra_stone
                 
                 item_msg = self._give_random_item(user_id, user_info["level"])
-                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
+                user_rank = convert_rank(user_info['level'])[0]
+                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * min(0.1 * user_rank, 1))
                 sql_message.update_exp(user_id, exp_reward)
                 
                 reward_msg = f"\n通关第{boss_info['floor']}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
@@ -174,7 +175,8 @@ class TowerBattle:
                 total_stone += extra_stone
                 
                 item_msg = self._give_random_item(user_id, user_info["level"])
-                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
+                user_rank = convert_rank(user_info['level'])[0]
+                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2 * min(0.1 * user_rank, 1))
                 sql_message.update_exp(user_id, exp_reward)
                 
                 reward_msg += f"\n百层奖励：{item_msg}，修为：{number_to(exp_reward)}点"

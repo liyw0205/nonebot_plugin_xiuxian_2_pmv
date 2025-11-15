@@ -5,6 +5,8 @@ except ImportError:
 from pathlib import Path
 import os
 from datetime import datetime
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+sql_message = XiuxianDateManage()  # sql类
 
 class LOTTERY_POOL(object):
     def __init__(self):
@@ -67,6 +69,7 @@ class LOTTERY_POOL(object):
             'amount': amount,
             'lottery_number': lottery_number
         }
+        sql_message.update_ls(user_id, amount, 1)  # 增加用户灵石
         self.__save()
 
     def reset_daily(self):

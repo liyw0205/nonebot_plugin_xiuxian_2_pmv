@@ -1507,7 +1507,11 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 # 检查物品是否已被购买（可能被前一轮购买）
                 if item["id"] not in index_data["items"]:
                     continue
-                
+
+                # 检查是否是自己上架的物品
+                if item["seller_id"] == user_id:
+                    continue
+
                 # 执行购买
                 sql_message.update_ls(user_id, item["price"], 2)  # 扣钱
                 sql_message.update_ls(item["seller_id"], item["price"], 1)  # 给卖家

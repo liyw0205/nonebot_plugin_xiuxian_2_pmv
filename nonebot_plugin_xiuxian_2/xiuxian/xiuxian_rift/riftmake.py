@@ -5,7 +5,8 @@ from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF, OtherSet
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_utils.data_source import jsondata
 
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -114,7 +115,7 @@ STORY = {
         }
     },
     "战斗": {
-        "type_rate": 10,
+        "type_rate": 1000,
         "Boss战斗": {
             "type_rate": 50,
             "Boss数据": {
@@ -209,7 +210,10 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
         user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0]
         success_info = STORY['战斗']['Boss战斗']['success']
         msg = random.choice(success_info['desc']).format(boss_info['name'])
+        level = user_info['level'][:3] + '初期'
+        max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit * 0.1)
         give_exp = int(random.choice(success_info["give"]["exp"]) * user_info['exp'])
+        give_exp = min(give_exp, max_exp)
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
         sql_message.update_exp(user_info['user_id'], give_exp)
         sql_message.update_ls(user_info['user_id'], give_stone, 1)  # 负数也挺正常

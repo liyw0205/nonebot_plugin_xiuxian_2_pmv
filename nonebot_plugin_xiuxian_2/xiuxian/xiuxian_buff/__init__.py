@@ -738,12 +738,6 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     # 基础修为计算
     exp_base = int((user_mes_1['exp'] + user_mes_2['exp']) * 0.005)
 
-    if is_partner:
-        # 道侣双修：基础修为额外提升 20%
-        base_exp = int(exp_base * 1.2)
-    else:
-        base_exp = exp_base
-
     # 获取各种倍率
     exp_limit_1 = int(base_exp * (1 + mainbuffratebuff_1) * (1 + mainbuffcloexp_1) * (1 + user_blessed_spot_data_1))
     exp_limit_2 = int(base_exp * (1 + mainbuffratebuff_2) * (1 + mainbuffcloexp_2) * (1 + user_blessed_spot_data_2))
@@ -764,6 +758,8 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
             exp_limit_1 = 1  # 强制给1点
         if remaining_exp_2 <= 0:
             exp_limit_2 = 1  # 强制给1点
+        exp_limit_1 = int(exp_limit_1 * 1.2)
+        exp_limit_2 = int(exp_limit_2 * 1.2)
     else:
         if remaining_exp_1 <= 0 or remaining_exp_2 <= 0:
             return 0, 0, "修为已达上限，无法继续双修。"

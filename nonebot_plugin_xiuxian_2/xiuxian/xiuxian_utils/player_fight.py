@@ -187,7 +187,7 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
     else:
         # 稻草人特殊消息
         engine.add_system_message("这是一个训练用的稻草人，不会反击，尽情练习吧！")
-    add_special_buffs(engine, player_combatant, bot_id)
+    add_special_buffs(engine, player_combatant, bot_id, si_boss=True, boss_combatant=boss_combatant)
     max_turns = 20
     turn_count = 1
     winner = None
@@ -698,20 +698,32 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     buff_value = int(subbuffdata1['buff'])
     buff_type = subbuffdata1['buff_type']
     
+    # 获取对方辅修功法信息
+    player2_sub_buff_data = UserBuffDate(player2['user_id']).get_user_sub_buff_data() if player2.get('user_id') else None
+    player2_sub_buff_jin = player2_sub_buff_data.get('jin', 0) if player2_sub_buff_data else 0
+
     # 处理不同类型的辅修效果
     if buff_type == '4':  # 回血
         restore_health = max_hp * buff_value / 100
-        player1['气血'] = min(player1['气血'] + int(restore_health), max_hp)
-        other_msg = f"回复气血:{number_to2(int(restore_health))}"
+        if player2_sub_buff_jin > 0:
+            restore_health = 0
+        if restore_health > 0:
+            player1['气血'] = min(player1['气血'] + int(restore_health), max_hp)
+            other_msg = f"回复气血:{number_to2(int(restore_health))}"
         
     elif buff_type == '5':  # 回蓝
         restore_mana = max_mp * buff_value / 100
-        player1['真元'] = min(player1['真元'] + int(restore_mana), max_mp)
-        other_msg = f"回复真元:{number_to2(int(restore_mana))}"
+        if player2_sub_buff_jin > 0:
+            restore_mana = 0
+        if restore_mana > 0:
+            player1['真元'] = min(player1['真元'] + int(restore_mana), max_mp)
+            other_msg = f"回复真元:{number_to2(int(restore_mana))}"
         
     elif buff_type == '6':  # 吸血
         if damage1 > 0:  # 只有命中才吸血
             health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
+            if player2_sub_buff_jin > 0:
+                health_stolen = 0
             health_stolen = max(health_stolen, 0)
             player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
             if health_stolen > 0:
@@ -720,6 +732,8 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     elif buff_type == '7':  # 吸蓝
         if damage1 > 0:  # 只有命中才吸蓝
             mana_stolen = (damage1 * buff_value / 100) * (1 - boss_buff.boss_xl)
+            if player2_sub_buff_jin > 0:
+                mana_stolen = 0
             mana_stolen = max(mana_stolen, 0)
             player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             if mana_stolen > 0:
@@ -735,6 +749,10 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
         if damage1 > 0:  # 只有命中才有效
             health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
             mana_stolen = (damage1 * int(subbuffdata1['buff2']) / 100) * (1 - boss_buff.boss_xl)
+            
+            if player2_sub_buff_jin > 0:
+                health_stolen = 0
+                mana_stolen = 0
             
             health_stolen = max(health_stolen, 0)
             mana_stolen = max(mana_stolen, 0)
@@ -1286,10 +1304,11 @@ def add_boss_special_buffs(engine, boss_combatant, player_combatant, bot_id):
     if boss_cj > 0:
         engine.add_system_message(f"{boss['name']}使用了钉头七箭书,提升了{int(boss_cj * 100)}%穿甲！")
 
-def add_special_buffs(engine, player_combatant, bot_id):
-    """添加玩家随机buff消息"""
+def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_combatant=None):
+    """添加玩家随机buff消息及BOSS特殊buff处理"""
     random_buff = player_combatant.get('random_buff', empty_ussr_random_buff)
     
+    # 处理玩家随机buff消息
     # 玩家穿甲buff消息
     if random_buff.random_break > 0:
         engine.add_system_message(f"{player_combatant['player']['道号']}发动了八九玄功,获得了{int((random_buff.random_break) * 100)}%穿甲！")
@@ -1313,10 +1332,19 @@ def add_special_buffs(engine, player_combatant, bot_id):
         user1_skill_data = player_combatant.get('skill_data', {})
         engine.add_system_message(f"{player_combatant['player']['道号']}发动了{player1_sec_name},{player1_sec_desc}获得了{user1_skill_data.get('name', '')}！")
     
-    # 玩家反咒禁制消息
-    fan_data = player_combatant.get('fan_data', False)
-    if fan_data:
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了辅修功法反咒禁制，无效化了减益！")
+    # 处理BOSS特殊buff消息
+    if si_boss and boss_combatant is not None:
+        boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
+        fan_data = player_combatant.get('sub_buff_data')['fan']
+        
+        if fan_data > 0:
+            # 将BOSS的特定负面Buff设置为0
+            boss_buff.boss_xl = 0
+            boss_buff.boss_jb = 0
+            boss_buff.boss_jh = 0
+            boss_buff.boss_jg = 0
+            boss_buff.boss_xx = 0
+            engine.add_system_message(f"{player_combatant['player']['道号']}发动了反咒禁制，无效化了BOSS的负面效果！")
 
 def init_boss_combatant(boss):
     """初始化BOSS战斗参与者"""

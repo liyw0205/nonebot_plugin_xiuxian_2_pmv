@@ -383,7 +383,8 @@ class TrainingEvents:
         elif reward_type == "exp":
             locals_dict = {"base_percent": reward_data["base_percent"], "random": random}
             percent = eval(calc_rule, {}, locals_dict)
-            exp = int(user_info["exp"] * percent)
+            user_rank = convert_rank(user_info['level'])[0]
+            exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
             sql_message.update_exp(user_id, exp)
             return {
                 "message": desc_template.format(number_to(exp)),
@@ -530,7 +531,8 @@ class TrainingEvents:
             elif punish_type == "exp":
                 locals_dict = {"base_percent": punish_data["base_percent"], "random": random}
                 percent = eval(calc_rule, {}, locals_dict)
-                exp = int(user_info["exp"] * percent)
+                user_rank = convert_rank(user_info['level'])[0]
+                exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
                 sql_message.update_j_exp(user_id, exp)
                 return {
                     "message": desc_template.format(number_to(exp)),

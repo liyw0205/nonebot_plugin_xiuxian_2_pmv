@@ -509,11 +509,14 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await sect_buff_info.finish()
 
+    # 按品阶排序
+    sorted_mainbuff_list = sorted(mainbuff_list, key=lambda x: buffrankkey.get(items.get_data_by_item_id(x)['level'], 999))
+
     # 构建消息
     msg_list = []
     msg_list.append("☆------宗门功法------☆")
     
-    for mainbuff_id in mainbuff_list:
+    for mainbuff_id in sorted_mainbuff_list:
         if not mainbuff_id:  # 跳过空ID
             continue
         mainbuff, mainbuffmsg = get_main_info_msg(mainbuff_id)
@@ -556,11 +559,14 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         await sect_buff_info2.finish()
 
+    # 按品阶排序
+    sorted_secbuff_list = sorted(secbuff_list, key=lambda x: buffrankkey.get(items.get_data_by_item_id(x)['level'], 999))
+
     # 构建消息
     msg_list = []
     msg_list.append("☆------宗门神通------☆")
     
-    for secbuff_id in secbuff_list:
+    for secbuff_id in sorted_secbuff_list:
         if not secbuff_id:  # 跳过空ID
             continue
         secbuff = items.get_data_by_item_id(secbuff_id)
@@ -1142,16 +1148,9 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if user_name is None:
             user_name = "暂无"
         
-        # 计算宗门人数上限
-        base_member_limit = 20
-        additional_members = sect_scale // 50000000
-        max_members = base_member_limit + additional_members
+        can_join, reason = can_join_sect(sect_id)
         
-        # 判断是否可以加入
-        can_join = "可加入" if member_count < max_members else "已满"
-        join_info = f"{member_count}/{max_members} ({can_join})"
-        
-        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n人数：{join_info}\n建设度：{number_to(sect_scale)}\n")
+        msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门状态：{reason}\n建设度：{number_to(sect_scale)}\n")
 
     await send_msg_handler(bot, event, '宗门列表', bot.self_id, msg_list)
     await sect_list.finish()
@@ -1925,13 +1924,12 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if not isUser:
         msg = f"守山弟子：凡人，回去吧，仙途难入，莫要自误！"
         await handle_send(bot, event, msg)
-        await sect_position_update.finish()
+        await join_sect.finish()
     
     # 检查是否已有宗门
     sect_id = user_info['sect_id']
-    sect_info = sql_message.get_sect_info(sect_id)
     if user_info['sect_id']:
-        msg = f"道友已经加入了宗门:{sect_info['sect_name']}，无法再加入其他宗门。"
+        msg = f"道友已经加入了宗门:{sql_message.get_sect_info(sect_id)['sect_name']}，无法再加入其他宗门。"
         await handle_send(bot, event, msg)
         await join_sect.finish()
     
@@ -1945,22 +1943,11 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"申请加入的宗门编号似乎有误，未在宗门名录上发现!"
     else:
         sect_info = sql_message.get_sect_info(int(sect_no))
-        
-        # 检查宗门是否封闭
-        if sect_info['closed']:
-            msg = f"该宗门已封闭山门，暂不接收新成员！"
-        # 检查宗门是否开放加入
-        elif not sect_info['join_open']:
-            msg = f"该宗门已关闭加入，暂不接收新成员！"
-        else:
+        can_join, reason = can_join_sect(sect_info['sect_id'])
+        if can_join:
             # 检查人数上限
-            base_member_limit = 20
-            additional_members = sect_info['sect_scale'] // 50000000
-            max_members = base_member_limit + additional_members
-            
-            # 获取当前宗门人数
+            max_members = get_sect_member_limit(sect_info['sect_scale'])
             current_members = len(sql_message.get_all_users_by_sect_id(int(sect_no)))
-            
             if current_members >= max_members:
                 msg = f"该宗门人数已满（{current_members}/{max_members}），无法加入！"
             else:
@@ -1969,6 +1956,8 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
                 sql_message.update_usr_sect(user_info['user_id'], int(sect_no), owner_position)
                 new_sect = sql_message.get_sect_info_by_id(int(sect_no))
                 msg = f"欢迎{user_info['user_name']}师弟入我{new_sect['sect_name']}，共参天道。当前宗门人数：{current_members + 1}/{max_members}"
+        else:
+            msg = reason
     
     await handle_send(bot, event, msg)
     await join_sect.finish()
@@ -2004,9 +1993,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sect_power = sect_info.get('combat_power', 0)
         
         # 计算宗门人数上限
-        base_member_limit = 20
-        additional_members = sect_info['sect_scale'] // 50000000
-        max_members = base_member_limit + additional_members
+        max_members = get_sect_member_limit(sect_info['sect_scale'])
         
         # 获取当前宗门人数
         current_members = len(sql_message.get_all_users_by_sect_id(sect_id))
@@ -2753,7 +2740,7 @@ def get_sect_member_limit(sect_scale):
     """获取宗门人数上限"""
     base_member_limit = 20
     additional_members = sect_scale // 50000000
-    return base_member_limit + additional_members
+    return min(base_member_limit + additional_members, 100)
 
 def can_join_sect(sect_id):
     """检查宗门是否可以加入"""

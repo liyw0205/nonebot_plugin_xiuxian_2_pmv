@@ -339,7 +339,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         msg = f"道友已是{user_info['level']}之人，妄图抢小辈的Boss，可耻！"
         await handle_send(bot, event, msg)
         await battle.finish()
-    if user_rank - boss_rank >= 4:
+    if user_rank - boss_rank >= 7:
         required_rank_name = rank_name_list[len(rank_name_list) - (boss_rank + 4)]
         msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
         await handle_send(bot, event, msg)
@@ -378,7 +378,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     rank_penalty = 1.0
     
     # 检查境界压制（用户境界高于BOSS）
-    if user_info['root'] != "凡人" and user_rank < boss_rank:
+    if user_rank < boss_rank:
         # 境界差越大，衰减越严重
         rank_diff = boss_rank - user_rank
         if rank_diff == 1:
@@ -412,16 +412,19 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         get_stone = int(get_stone * rank_penalty)
         get_stone = min(get_stone, stone_limit - today_stone)
     
-    # 凡人境界加成（只有在没有境界压制时才应用）
-    if user_info['root'] == "凡人" and rank_penalty == 1.0:
-        boss_integral = int(boss_integral * (1 + (user_rank - boss_rank)))
+    # 境界加成（只有在没有境界压制时才应用）
+    if rank_penalty == 1.0:
+        boss_integral = int(boss_integral * (1 + (0.8 * (user_rank - boss_rank))))
         points_bonus = int(80 * (user_rank - boss_rank))
         more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
     
     # 应用灵石加成
     stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
     get_stone = int(get_stone * (1 + stone_buff))
-    get_stone = max(get_stone, 1)  # 至少获得1灵石
+
+    # 应用积分加成
+    integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
+    boss_integral = int(boss_integral * (1 + integral_buff))
     
     if boss_integral > 0:
         integral_msg = f"获得世界积分：{boss_integral}点"
@@ -436,7 +439,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 修为奖励
     exp_msg = ""
     if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
-        now_exp = int((user_info['exp']) * exp_buff / 10000 * (0.1 * user_rank))
+        now_exp = int((user_info['exp']) * exp_buff / 10000 * min(0.1 * user_rank, 1))
         sql_message.update_exp(user_id, now_exp)
         exp_msg = f"，获得修为{number_to(now_exp)}点！"
     
