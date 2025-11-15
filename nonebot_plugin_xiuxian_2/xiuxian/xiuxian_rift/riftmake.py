@@ -115,7 +115,7 @@ STORY = {
         }
     },
     "战斗": {
-        "type_rate": 1000,
+        "type_rate": 10,
         "Boss战斗": {
             "type_rate": 50,
             "Boss数据": {

@@ -395,10 +395,12 @@ class TrainingEvents:
         elif reward_type == "item":
             item_type = random.choice(reward_data["types"])
             if item_type in ["法器", "防具", "辅修功法"]:
-                base_rank = max(convert_rank(user_info["level"])[0] - reward_data["rank_offset"], 16)
+                base_rank = 16
             else:
-                base_rank = max(convert_rank(user_info["level"])[0] - 22 - reward_data["rank_offset"], 10)
+                base_rank = random.randint(5, 50) - reward_data["rank_offset"]
             zx_rank = random.randint(base_rank, min(base_rank + 20, 54))
+            if zx_rank == 5 and random.randint(1, 100) != 100:
+                zx_rank = 10
             item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
             
             if item_id_list:

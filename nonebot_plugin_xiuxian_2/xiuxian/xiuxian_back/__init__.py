@@ -1447,7 +1447,8 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await xianshi_fast_buy.finish()
     
     # 解析数量列表
-    quantities = args[1].split(",") if len(args) > 1 else [1] * len(goods_names)
+    quantities_input = args[1] if len(args) > 1 else ""
+    quantities = quantities_input.split(",") if quantities_input else ["" for _ in goods_names]
     quantities = [int(q) if q.isdigit() else 1 for q in quantities]
     
     # 确保数量列表长度不超过物品名列表长度
@@ -4344,6 +4345,7 @@ async def use_lottery_talisman(bot, event, item_id, num):
                     rank_id, 
                     item_info["name"], 
                     item_info["type"], 
+                    1,
                     1
                 )
                 
