@@ -107,7 +107,6 @@ class CooldownIsolateLevel(IntEnum):
 
 def Cooldown(
         cd_time: float = 0.5,
-        at_sender: bool = True,
         isolate_level: CooldownIsolateLevel = CooldownIsolateLevel.USER,
         parallel: int = 1,
         stamina_cost: int = 0
@@ -123,7 +122,6 @@ def Cooldown(
 
     参数:
         cd_time: 命令冷却间隔
-        at_sender: 是否at
         isolate_level: 命令冷却的隔离级别, 参考 `CooldownIsolateLevel`
         parallel: 并行执行的命令数量
         stamina_cost: 每次执行命令消耗的体力值
@@ -185,7 +183,7 @@ def Cooldown(
                     event.get_user_id() in bot.config.superusers
             ):
                 bot = await assign_bot_group(group_id=group_id)
-                if at_sender:
+                if XiuConfig().at_sender:
                     await bot.send(event=event, message=MessageSegment.at(event.get_user_id()) + "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
                 else:
                     await bot.send(event=event, message="本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")

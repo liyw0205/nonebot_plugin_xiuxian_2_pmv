@@ -63,7 +63,7 @@ Infinite_reincarnation = on_command('进入无限轮回', priority=15,  block=Tr
 resetting = on_command('自废修为', priority=15,  block=True)
 
 
-@warring_help.handle(parameterless=[Cooldown(at_sender=False)])
+@warring_help.handle(parameterless=[Cooldown()])
 async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """轮回重修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -76,7 +76,7 @@ async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await warring_help.finish()
 
-@lunhui.handle(parameterless=[Cooldown(at_sender=False)])
+@lunhui.handle(parameterless=[Cooldown()])
 async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -142,7 +142,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         await handle_send(bot, event, msg)
         await lunhui.finish()
         
-@twolun.handle(parameterless=[Cooldown(at_sender=False)])
+@twolun.handle(parameterless=[Cooldown()])
 async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -207,7 +207,7 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         await handle_send(bot, event, msg)
         await twolun.finish()
 
-@threelun.handle(parameterless=[Cooldown(at_sender=False)])
+@threelun.handle(parameterless=[Cooldown()])
 async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -274,7 +274,7 @@ async def threelun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, se
         await handle_send(bot, event, msg)
         await threelun.finish()
         
-@Infinite_reincarnation.handle(parameterless=[Cooldown(at_sender=False)])
+@Infinite_reincarnation.handle(parameterless=[Cooldown()])
 async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -331,7 +331,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, msg)
         await Infinite_reincarnation.finish()
         
-@resetting.handle(parameterless=[Cooldown(at_sender=False)])
+@resetting.handle(parameterless=[Cooldown()])
 async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)

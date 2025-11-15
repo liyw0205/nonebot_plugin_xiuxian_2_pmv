@@ -606,7 +606,7 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await set_private_chat.finish()
     
-@xiuxian_updata_level.handle(parameterless=[Cooldown(at_sender=False)])
+@xiuxian_updata_level.handle(parameterless=[Cooldown()])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将修仙2的境界适配到修仙2魔改"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -676,13 +676,13 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
 
-@clear_xiangyuan.handle(parameterless=[Cooldown(at_sender=False)])
+@clear_xiangyuan.handle(parameterless=[Cooldown()])
 async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = await clear_all_xiangyuan()
     await handle_send(bot, event, msg)
     await clear_xiangyuan.finish()
 
-@xiuxian_novice.handle(parameterless=[Cooldown(at_sender=False)])
+@xiuxian_novice.handle(parameterless=[Cooldown()])
 async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置新手礼包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -691,13 +691,13 @@ async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await xiuxian_novice.finish()
 
-@create_new_rift.handle(parameterless=[Cooldown(at_sender=False)])
+@create_new_rift.handle(parameterless=[Cooldown()])
 async def create_new_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await create_rift(bot, event)
 
-@do_work_cz.handle(parameterless=[Cooldown(at_sender=False)])
+@do_work_cz.handle(parameterless=[Cooldown()])
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的悬赏令"""
     from ..xiuxian_work import count
@@ -706,7 +706,7 @@ async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await do_work_cz.finish()
 
-@super_help.handle(parameterless=[Cooldown(at_sender=False)])
+@super_help.handle(parameterless=[Cooldown()])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

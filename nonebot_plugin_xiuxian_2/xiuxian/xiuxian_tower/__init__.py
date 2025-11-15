@@ -102,7 +102,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await tower_help.finish()
 
-@tower_challenge.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["单层爬塔"], at_sender=False)])
+@tower_challenge.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["单层爬塔"])])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """单层爬塔"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -131,7 +131,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     log_message(user_id, msg)
     await tower_challenge.finish()
 
-@tower_continuous.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["连续爬塔"], at_sender=False)])
+@tower_continuous.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["连续爬塔"])])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """连续爬塔，可指定层数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

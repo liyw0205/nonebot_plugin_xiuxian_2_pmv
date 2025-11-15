@@ -103,7 +103,7 @@ async def generate_rift_for_group():
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
-@rift_help.handle(parameterless=[Cooldown(at_sender=False)])
+@rift_help.handle(parameterless=[Cooldown()])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -135,7 +135,7 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     return
 
 
-@explore_rift.handle(parameterless=[Cooldown(stamina_cost=6, at_sender=False)])
+@explore_rift.handle(parameterless=[Cooldown(stamina_cost=6)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索秘境"""
     group_rift.update(old_rift_info.read_rift_info())
@@ -237,7 +237,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         return
         
-@complete_rift.handle(parameterless=[Cooldown(at_sender=False)])
+@complete_rift.handle(parameterless=[Cooldown()])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境结算"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -304,7 +304,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 await complete_rift.finish()
 
 
-@break_rift.handle(parameterless=[Cooldown(at_sender=False)])
+@break_rift.handle(parameterless=[Cooldown()])
 async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """终止探索秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

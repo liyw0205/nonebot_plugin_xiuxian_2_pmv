@@ -300,7 +300,7 @@ async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
 
 # 鉴石主逻辑
-@unseal.handle(parameterless=[Cooldown(at_sender=False, stamina_cost=20)])
+@unseal.handle(parameterless=[Cooldown(stamina_cost=20)])
 async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)

@@ -37,7 +37,7 @@ fusion_help_text = f"""
 2.查看可合成物品 [物品名可选] 可以查看当前可合成的所有物品以及相关信息。
 """.strip()
 
-@fusion_help.handle(parameterless=[Cooldown(at_sender=False)])
+@fusion_help.handle(parameterless=[Cooldown()])
 async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -50,7 +50,7 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await fusion_help.finish()
 
-@fusion_item.handle(parameterless=[Cooldown(at_sender=False)])
+@fusion_item.handle(parameterless=[Cooldown()])
 async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -86,7 +86,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await handle_send(bot, event, msg)
     await fusion_item.finish()
 
-@force_fusion.handle(parameterless=[Cooldown(at_sender=False)])
+@force_fusion.handle(parameterless=[Cooldown()])
 async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -247,7 +247,7 @@ async def general_fusion(user_id, equipment_id, equipment):
             
             return False, f"合成失败！材料已消耗。"
 
-@available_fusion.handle(parameterless=[Cooldown(at_sender=False)])
+@available_fusion.handle(parameterless=[Cooldown()])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     args_str = args.extract_plain_text().strip()

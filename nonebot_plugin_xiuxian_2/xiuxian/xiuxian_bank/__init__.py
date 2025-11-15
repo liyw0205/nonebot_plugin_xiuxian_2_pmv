@@ -54,7 +54,7 @@ __bank_help__ = f"""
 """.strip()
 
 
-@bank.handle(parameterless=[Cooldown(at_sender=False)])
+@bank.handle(parameterless=[Cooldown()])
 async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)

@@ -107,7 +107,7 @@ __impart_pk_help__ = f"""
   • 每日对决次数：5次
 """.strip()
 
-@impart_help.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_help.handle(parameterless=[Cooldown()])
 async def impart_help_(
     bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
 ):
@@ -121,7 +121,7 @@ async def impart_help_(
         await handle_send(bot, event, msg)
         await impart_help.finish()
 
-@impart_pk_help.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_pk_help.handle(parameterless=[Cooldown()])
 async def impart_pk_help_(
     bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
 ):
@@ -135,7 +135,7 @@ async def impart_pk_help_(
         await handle_send(bot, event, msg)
         await impart_pk_help.finish()
 
-@impart_draw.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_draw.handle(parameterless=[Cooldown()])
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承祈愿"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -256,7 +256,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "祈愿结果发送失败！")
     await impart_draw.finish()
 
-@impart_draw2.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_draw2.handle(parameterless=[Cooldown()])
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -465,7 +465,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "使用思恋流沙结果发送失败！")
     return
 
-@impart_back.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_back.handle(parameterless=[Cooldown()])
 async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -529,7 +529,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     await handle_send(bot, event, msg)
 
-@re_impart_load.handle(parameterless=[Cooldown(at_sender=False)])
+@re_impart_load.handle(parameterless=[Cooldown()])
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """加载传承数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -554,7 +554,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
 
 
-@impart_info.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_info.handle(parameterless=[Cooldown()])
 async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -586,7 +586,7 @@ boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
 思恋结晶：{impart_data_draw["stone_num"]}颗"""
     await handle_send(bot, event, msg)
 
-@impart_img.handle(parameterless=[Cooldown(at_sender=False)])
+@impart_img.handle(parameterless=[Cooldown()])
 async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承卡图"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

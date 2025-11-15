@@ -152,7 +152,7 @@ ID：{user_id}
     
     return DETAIL_MAP, text_msg
 
-@xiuxian_message.handle(parameterless=[Cooldown(at_sender=False)])
+@xiuxian_message.handle(parameterless=[Cooldown()])
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """普通文本版修仙信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -164,7 +164,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
     await handle_send(bot, event, text_msg)
 
-@xiuxian_message_img.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
+@xiuxian_message_img.handle(parameterless=[Cooldown(cd_time=30)])
 async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """图片版修仙信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -185,7 +185,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
 
-@changelog.handle(parameterless=[Cooldown(at_sender=False, cd_time=30)])
+@changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """处理更新日志命令"""
     page_arg = args.extract_plain_text().strip()

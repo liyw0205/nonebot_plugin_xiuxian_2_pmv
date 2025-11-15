@@ -363,14 +363,14 @@ __compensation_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@compensation_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@compensation_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_compensation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """补偿帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __compensation_help__)
     await compensation_help_cmd.finish()
 
-@compensation_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@compensation_admin_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_compensation_admin_help(bot: Bot, event: MessageEvent):
     """补偿管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -740,14 +740,14 @@ __gift_package_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@gift_package_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@gift_package_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_gift_package_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """礼包帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __gift_package_help__)
     await gift_package_help_cmd.finish()
 
-@gift_package_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@gift_package_admin_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_gift_package_admin_help(bot: Bot, event: MessageEvent):
     """礼包管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1166,14 +1166,14 @@ __redeem_code_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@redeem_code_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@redeem_code_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_redeem_code_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """兑换码帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __redeem_code_help__)
     await redeem_code_help_cmd.finish()
 
-@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_redeem_code_admin_help(bot: Bot, event: MessageEvent):
     """兑换码管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1932,14 +1932,14 @@ __invitation_admin_help__ = f"""
 invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
 
-@invitation_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@invitation_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_invitation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """邀请帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __invitation_help__)
     await invitation_help_cmd.finish()
 
-@invitation_admin_help_cmd.handle(parameterless=[Cooldown(at_sender=False)])
+@invitation_admin_help_cmd.handle(parameterless=[Cooldown()])
 async def handle_invitation_admin_help(bot: Bot, event: MessageEvent):
     """邀请管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

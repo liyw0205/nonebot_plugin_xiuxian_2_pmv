@@ -62,7 +62,7 @@ https://huggingface.co/spaces/chewing/liandan
 """
 
 
-@mix_elixir_sqdj_up.handle(parameterless=[Cooldown(at_sender=False)])
+@mix_elixir_sqdj_up.handle(parameterless=[Cooldown()])
 async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """收取等级升级"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -95,7 +95,7 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await mix_elixir_sqdj_up.finish()
 
 
-@mix_elixir_dykh_up.handle(parameterless=[Cooldown(at_sender=False)])
+@mix_elixir_dykh_up.handle(parameterless=[Cooldown()])
 async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """丹药控火升级"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -124,7 +124,7 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await mix_elixir_dykh_up.finish()
 
 
-@yaocai_get.handle(parameterless=[Cooldown(stamina_cost = 1, at_sender=False)])
+@yaocai_get.handle(parameterless=[Cooldown(stamina_cost = 1)])
 async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """灵田收取"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -195,7 +195,7 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await yaocai_get.finish()
 
 
-@my_mix_elixir_info.handle(parameterless=[Cooldown(at_sender=False)])
+@my_mix_elixir_info.handle(parameterless=[Cooldown()])
 async def my_mix_elixir_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的炼丹信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -222,7 +222,7 @@ async def my_mix_elixir_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await my_mix_elixir_info.finish()
 
 
-@elixir_help.handle(parameterless=[Cooldown(at_sender=False)])
+@elixir_help.handle(parameterless=[Cooldown()])
 async def elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """炼丹帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -236,7 +236,7 @@ async def elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await elixir_help.finish()
 
 
-@mix_elixir_help.handle(parameterless=[Cooldown(at_sender=False)])
+@mix_elixir_help.handle(parameterless=[Cooldown()])
 async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """炼丹配方帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -249,7 +249,7 @@ user_ldl_dict = {}
 user_ldl_flag = {}
 
 
-@mix_elixir.handle(parameterless=[Cooldown(cd_time=10, at_sender=False)])
+@mix_elixir.handle(parameterless=[Cooldown(cd_time=10)])
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """炼丹,用来生成配方"""
     global user_ldl_dict, user_ldl_flag
@@ -321,7 +321,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mix_elixir.finish()
 
 # 配方
-@mix_make.handle(parameterless=[Cooldown(at_sender=False)])
+@mix_make.handle(parameterless=[Cooldown()])
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
     """配方,用来炼制丹药"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

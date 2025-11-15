@@ -1491,6 +1491,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "调试设置"
     },
+    "at_sender": {
+        "name": "艾特",
+        "description": "发送消息是否艾特",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "img": {
         "name": "图片发送",
         "description": "是否使用图片发送消息",

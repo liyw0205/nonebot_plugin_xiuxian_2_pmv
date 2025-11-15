@@ -221,7 +221,7 @@ no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("交易帮助", aliases={"背包帮助", "仙肆帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
-@check_item_effect.handle(parameterless=[Cooldown(at_sender=False)])
+@check_item_effect.handle(parameterless=[Cooldown()])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看物品效果，支持物品名或ID"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -265,7 +265,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, msg)
     await check_item_effect.finish()
     
-@back_help.handle(parameterless=[Cooldown(at_sender=False)])
+@back_help.handle(parameterless=[Cooldown()])
 async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """交易系统帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -393,7 +393,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, f"\n{msg}")
     await back_help.finish()
 
-@xiuxian_sone.handle(parameterless=[Cooldown(at_sender=False)])
+@xiuxian_sone.handle(parameterless=[Cooldown()])
 async def xiuxian_sone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的灵石信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -496,7 +496,7 @@ def get_xianshi_min_price(goods_name):
     
     return min_price
         
-@xian_shop_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xian_shop_add.handle(parameterless=[Cooldown(1.4)])
 async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -638,7 +638,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await xian_shop_add.finish()
 
-@xian_shop_remove.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xian_shop_remove.handle(parameterless=[Cooldown(1.4)])
 async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -721,7 +721,7 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await xian_shop_remove.finish()
 
-@xiuxian_shop_view.handle(parameterless=[Cooldown(at_sender=False)])
+@xiuxian_shop_view.handle(parameterless=[Cooldown()])
 async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆查看"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -826,7 +826,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list)
     await xiuxian_shop_view.finish()
 
-@my_xian_shop.handle(parameterless=[Cooldown(at_sender=False)])
+@my_xian_shop.handle(parameterless=[Cooldown()])
 async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """我的仙肆"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -888,7 +888,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list)
     await my_xian_shop.finish()
 
-@xian_buy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xian_buy.handle(parameterless=[Cooldown(1.4)])
 async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -991,7 +991,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     await xian_buy.finish()
 
-@xian_shop_added_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xian_shop_added_by_admin.handle(parameterless=[Cooldown(1.4)])
 async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """系统仙肆上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1069,7 +1069,7 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     await handle_send(bot, event, msg)
     await xian_shop_added_by_admin.finish()
 
-@xianshi_auto_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xianshi_auto_add.handle(parameterless=[Cooldown(1.4)])
 async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆自动上架（按类型和品阶批量上架）优化版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1268,7 +1268,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await send_msg_handler(bot, event, '仙肆自动上架', bot.self_id, msg)
     await xianshi_auto_add.finish()
 
-@xianshi_fast_add.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xianshi_fast_add.handle(parameterless=[Cooldown(1.4)])
 async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速上架（按物品名快速上架）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1420,7 +1420,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await xianshi_fast_add.finish()
 
-@xianshi_fast_buy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xianshi_fast_buy.handle(parameterless=[Cooldown(1.4)])
 async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1554,7 +1554,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await xianshi_fast_buy.finish()
     
-@xian_shop_remove_by_admin.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@xian_shop_remove_by_admin.handle(parameterless=[Cooldown(1.4)])
 async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """系统仙肆下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1995,7 +1995,7 @@ async def process_guishi_transactions(user_id):
     return transactions
 
 # === 命令处理 ===
-@guishi_deposit.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_deposit.handle(parameterless=[Cooldown(1.4)])
 async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市存灵石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2035,7 +2035,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await guishi_deposit.finish()
 
-@guishi_withdraw.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_withdraw.handle(parameterless=[Cooldown(1.4)])
 async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市取灵石（收取20%暂存费）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2086,7 +2086,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg)
     await guishi_withdraw.finish()
 
-@guishi_info.handle(parameterless=[Cooldown(at_sender=False)])
+@guishi_info.handle(parameterless=[Cooldown()])
 async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """鬼市信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2134,7 +2134,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await guishi_info.finish()
 
-@guishi_qiugou.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_qiugou.handle(parameterless=[Cooldown(1.4)])
 async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市求购"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2235,7 +2235,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await guishi_qiugou.finish()
 
-@guishi_cancel_qiugou.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_cancel_qiugou.handle(parameterless=[Cooldown(1.4)])
 async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """取消鬼市求购（支持无参数自动取消已完成、指定ID或全部取消）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2317,7 +2317,7 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await handle_send(bot, event, msg)
     await guishi_cancel_qiugou.finish()
 
-@guishi_baitan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_baitan.handle(parameterless=[Cooldown(1.4)])
 async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市摆摊（每天18:00-次日8:00开放）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2514,7 +2514,7 @@ async def clear_expired_baitan_():
     
     logger.info(f"共清空 {expired_count} 个超时摊位")
 
-@guishi_shoutan.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_shoutan.handle(parameterless=[Cooldown(1.4)])
 async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市收摊（支持无参数自动收摊已完成、指定ID或全部收摊）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2606,7 +2606,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await guishi_shoutan.finish()
 
-@guishi_take_item.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@guishi_take_item.handle(parameterless=[Cooldown(1.4)])
 async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """取出暂存在鬼市的物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2732,7 +2732,7 @@ async def rebuild_guishi_index_():
     
     logger.info("鬼市索引重建完成")
 
-@clear_all_guishi.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@clear_all_guishi.handle(parameterless=[Cooldown(1.4)])
 async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空鬼市（管理员命令）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3522,7 +3522,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     await handle_send(bot, event, result)
 
-@my_auction.handle(parameterless=[Cooldown(at_sender=False)])
+@my_auction.handle(parameterless=[Cooldown()])
 async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我上架的拍卖物品（不显示ID）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3698,7 +3698,7 @@ async def check_auction_end():
         if results:
             logger.info(f"拍卖已自动结束，共处理{len(results)}件拍卖品")
 
-@goods_re_root.handle(parameterless=[Cooldown(at_sender=False)])
+@goods_re_root.handle(parameterless=[Cooldown()])
 async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """炼金"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3776,7 +3776,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await goods_re_root.finish()
 
-@fast_alchemy.handle(parameterless=[Cooldown(1.4, at_sender=False)])
+@fast_alchemy.handle(parameterless=[Cooldown(1.4)])
 async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """快速炼金（支持装备/药材/全部类型 + 全部品阶，以及回血丹）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3970,7 +3970,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_msg_handler(bot, event, '快速炼金', bot.self_id, msg)
     await fast_alchemy.finish()
 
-@no_use_zb.handle(parameterless=[Cooldown(at_sender=False)])
+@no_use_zb.handle(parameterless=[Cooldown()])
 async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """卸载物品（只支持装备）
     ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
@@ -4024,7 +4024,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await no_use_zb.finish()
 
-@use.handle(parameterless=[Cooldown(at_sender=False)])
+@use.handle(parameterless=[Cooldown()])
 async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4221,7 +4221,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     await handle_send(bot, event, msg)
     await use.finish()
 
-@use_item.handle(parameterless=[Cooldown(at_sender=False)])
+@use_item.handle(parameterless=[Cooldown()])
 async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """道具使用"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4367,7 +4367,7 @@ async def use_lottery_talisman(bot, event, item_id, num):
         await handle_send(bot, event, "使用灵签宝箓结果发送失败！")
     return
     
-@chakan_wupin.handle(parameterless=[Cooldown(at_sender=False)])
+@chakan_wupin.handle(parameterless=[Cooldown()])
 async def chakan_wupin_(
     bot: Bot, 
     event: GroupMessageEvent | PrivateMessageEvent, 
@@ -4460,7 +4460,7 @@ async def chakan_wupin_(
     await send_msg_handler(bot, event, title, bot.self_id, final_msg)
     await chakan_wupin.finish()
 
-@main_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
+@main_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """我的背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4504,7 +4504,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await send_msg_handler(bot, event, '背包', bot.self_id, final_msg)
     await main_back.finish()
 
-@yaocai_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
+@yaocai_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """药材背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4548,7 +4548,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg)
     await yaocai_back.finish()
 
-@danyao_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
+@danyao_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """丹药背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4592,7 +4592,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg)
     await danyao_back.finish()
 
-@my_equipment.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
+@my_equipment.handle(parameterless=[Cooldown(cd_time=5)])
 async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看我的装备及其详细信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4636,7 +4636,7 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg)
     await my_equipment.finish()
 
-@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=5, at_sender=False)])
+@yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """药材背包详情版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -4681,7 +4681,7 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await yaocai_detail_back.finish()
 
 check_user_equipment = on_fullmatch("装备检测", priority=4, permission=SUPERUSER, block=True)
-@check_user_equipment.handle(parameterless=[Cooldown(at_sender=False)])
+@check_user_equipment.handle(parameterless=[Cooldown()])
 async def check_user_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """管理员装备检测与修复（仅检查已装备物品）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

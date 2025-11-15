@@ -48,7 +48,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await training_help.finish()
 
-@training_start.handle(parameterless=[Cooldown(at_sender=False)])
+@training_start.handle(parameterless=[Cooldown()])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """开始历练"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -301,7 +301,7 @@ __work_help__ = f"""
 3. 过期悬赏令将自动失效
 """.strip()
 
-@do_work.handle(parameterless=[Cooldown(stamina_cost=1, at_sender=False)])        
+@do_work.handle(parameterless=[Cooldown(stamina_cost=1)])        
 async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)    
     isUser, user_info, msg = check_user(event)
