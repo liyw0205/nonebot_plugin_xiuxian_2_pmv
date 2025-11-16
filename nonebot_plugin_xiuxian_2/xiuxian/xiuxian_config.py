@@ -97,8 +97,10 @@ class XiuConfig:
         self.layout_bot_dict = {}
         # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
         # "123456":"123456",
+        self.at_response = True
+        # 艾特响应命令
         self.at_sender = True
-        # 是否艾特
+        # 消息是否艾特
         self.qqq = 144795954 
         # 官群设置
         self.level = convert_rank('江湖好手')[1] 

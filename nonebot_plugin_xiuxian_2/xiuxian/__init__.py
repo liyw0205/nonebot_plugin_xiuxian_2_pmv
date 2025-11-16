@@ -37,7 +37,7 @@ put_bot = XiuConfig().put_bot
 shield_group = XiuConfig().shield_group
 response_group = XiuConfig().response_group
 shield_private = XiuConfig().shield_private
-
+at_response = XiuConfig().at_response
 try:
     put_bot_ = put_bot[0]
 except:
@@ -88,6 +88,10 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 return  # 私聊不受群聊设置影响
             
             # 群聊处理
+            if at_response:
+                if not event.to_me:
+                    raise IgnoredException("不为艾特消息,已忽略")
+                    return
             if response_group:
                 if str(event.group_id) in shield_group:
                     pass

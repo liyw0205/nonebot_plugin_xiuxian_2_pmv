@@ -1491,8 +1491,14 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "调试设置"
     },
+    "at_response": {
+        "name": "艾特响应命令",
+        "description": "是否只接收艾特命令",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "at_sender": {
-        "name": "艾特",
+        "name": "消息是否艾特",
         "description": "发送消息是否艾特",
         "type": "bool",
         "category": "消息设置"
