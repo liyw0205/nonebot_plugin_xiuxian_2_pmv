@@ -47,7 +47,6 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 conf_data = JsonConfig().read_data()
 config = get_boss_config()
-cache_help = {}
 group_boss = {}
 groups = config['open']
 battle_flag = {}

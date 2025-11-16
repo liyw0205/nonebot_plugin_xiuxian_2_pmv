@@ -723,41 +723,14 @@ async def send_msg_handler(bot, event, *args):
             # 在合并后应用信息优化
             if XiuConfig().message_optimization:
                 msg = optimize_message(msg, is_group) 
-                if msg.startswith('\n'):
-                    msg = msg[1:]
-            messages = [
-                {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
-            ]
-            if is_group:
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
-            else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
+            await handle_send(bot, event, msg)
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
-            if msg.startswith('\n'):
-                    msg = msg[1:]
-            first_msg = args[0][0] if args[0] else None
-            name = first_msg["data"]["name"] if first_msg else "系统"
-            uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
-            messages = [
-                {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
-            ]
-            if is_group:
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
-            else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
+            await handle_send(bot, event, merged_content)
         else:
             raise ValueError("参数数量或类型不匹配")
             
