@@ -720,9 +720,6 @@ async def send_msg_handler(bot, event, *args):
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
-            # 在合并后应用信息优化
-            if XiuConfig().message_optimization:
-                msg = optimize_message(msg, is_group)
             messages = [
                 {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
             ]
@@ -737,9 +734,6 @@ async def send_msg_handler(bot, event, *args):
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
-            # 在合并后应用信息优化
-            if XiuConfig().message_optimization:
-                merged_content = optimize_message(merged_content, is_group)
             first_msg = args[0][0] if args[0] else None
             name = first_msg["data"]["name"] if first_msg else "系统"
             uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
