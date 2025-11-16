@@ -694,6 +694,9 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     if is_group:
         if not msg_text.startswith('\n'):
             msg_text = '\n' + msg_text
+        if not XiuConfig().at_sender:
+            if msg_text.startswith('\n'):
+                msg_text = msg_text[1:]
     else:
         if msg_text.startswith('\n'):
             msg_text = msg_text[1:]
