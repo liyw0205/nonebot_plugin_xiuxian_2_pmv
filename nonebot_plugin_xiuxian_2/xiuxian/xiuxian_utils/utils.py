@@ -694,9 +694,6 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     if is_group:
         if not msg_text.startswith('\n'):
             msg_text = '\n' + msg_text
-        if not XiuConfig().at_sender:
-            if msg_text.startswith('\n'):
-                msg_text = msg_text[1:]
     else:
         if msg_text.startswith('\n'):
             msg_text = msg_text[1:]
@@ -833,7 +830,7 @@ async def handle_send(bot, event, msg: str):
     
     if XiuConfig().img:
         # 处理昵称为空的情况
-        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname is not None else msg
+        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname is not None or event.sender.nickname == '' else msg
         pic = await get_msg_pic(pic_msg)
         if is_group:
             await bot.send_group_msg(
@@ -845,9 +842,14 @@ async def handle_send(bot, event, msg: str):
             )
     else:
         if is_group:
-            await bot.send_group_msg(
-                group_id=event.group_id, message=msg
-            )
+            if XiuConfig().at_sender:
+                await bot.send_group_msg(
+                    group_id=event.group_id, message=MessageSegment.at(event.get_user_id()) + msg
+                )
+            else:
+                await bot.send_group_msg(
+                    group_id=event.group_id, message=msg
+                )
         else:
             await bot.send_private_msg(
                 user_id=event.user_id, message=msg
