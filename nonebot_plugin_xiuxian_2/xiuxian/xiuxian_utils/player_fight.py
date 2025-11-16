@@ -1311,19 +1311,19 @@ def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_comb
     # 处理玩家随机buff消息
     # 玩家穿甲buff消息
     if random_buff.random_break > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了八九玄功,获得了{int((random_buff.random_break) * 100)}%穿甲！")
+        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,获得了{int((random_buff.random_break) * 100)}%穿甲！")
     
     # 玩家吸血buff消息
     if random_buff.random_xx > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了八九玄功,提升了{int((random_buff.random_xx) * 100)}%吸血效果！")
+        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,提升了{int((random_buff.random_xx) * 100)}%吸血效果！")
     
     # 玩家会心buff消息
     if random_buff.random_hx > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了八九玄功,提升了{int((random_buff.random_hx) * 100)}%会心率！")
+        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,提升了{int((random_buff.random_hx) * 100)}%会心率！")
     
     # 玩家减伤buff消息
     if random_buff.random_def > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了八九玄功,获得了{int((random_buff.random_def) * 100)}%减伤！")
+        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,获得了{int((random_buff.random_def) * 100)}%减伤！")
     
     # 玩家随机技能消息
     if player_combatant.get('player1_random_sec', 0) > 0:
