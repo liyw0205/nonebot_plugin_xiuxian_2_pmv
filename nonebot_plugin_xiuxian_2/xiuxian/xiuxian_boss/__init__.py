@@ -2,6 +2,7 @@ try:
     import ujson as json
 except ImportError:
     import json
+import tomllib
 import re
 from pathlib import Path
 from datetime import datetime
@@ -51,7 +52,6 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
-BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
 generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部生成", "世界Boss全部生成", "生成全部世界BOSS", "生成全部世界boss", "生成全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -1095,8 +1095,8 @@ class BossDrops:
     def load_drops_data(self):
         """加载掉落物数据"""
         try:
-            with open(BOSSDROPSPATH, "r", encoding="UTF-8") as f:
-                return json.load(f)
+            with open(BOSSDROPSPATH, "rb") as f:
+                return tomllib.load(f)
         except Exception as e:
             print(f"加载BOSS掉落物数据失败: {e}")
             return {}

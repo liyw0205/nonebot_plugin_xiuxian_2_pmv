@@ -2,18 +2,19 @@ try:
     import ujson as json
 except ImportError:
     import json
+import tomllib
 import os
 from pathlib import Path
 from nonebot.log import logger
 
-SKILLPATH = Path() / "data" / "xiuxian" / "功法" / "功法概率设置.json"
+SKILLPATH = Path() / "data" / "xiuxian" / "功法" / "功法概率设置.toml"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 
 def read_f():
-    with open(SKILLPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
+    with open(SKILLPATH, "rb") as f:
+        data = tomllib.load(f)
+    return data
 
 
 def read_rift_data(user_id):

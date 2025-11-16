@@ -2,12 +2,13 @@ try:
     import ujson as json
 except ImportError:
     import json
+import tomllib
 from pathlib import Path
 
 DATABASE = Path() / "data" / "xiuxian"
 
 
-class JsonDate:
+class JsonData:
     """处理基础配置 JSON数据"""
 
     def __init__(self):
@@ -21,40 +22,29 @@ class JsonDate:
         self.BANNER_FILE = DATABASE / "image" / "banner.png"
         self.FONT_FILE = DATABASE / "font" / "SarasaMonoSC-Bold.ttf"
 
+    def _load(self, path:Path):
+        with open(path.with_suffix(".toml"), "rb") as f:
+            return tomllib.load(f)
+
     def level_data(self):
         """境界数据"""
-        with open(self.level_jsonpath, 'r', encoding='utf-8') as e:
-            tp = e.read()
-            data = json.loads(tp)
-            return data
+        return self._load(self.level_jsonpath)
 
     def sect_config_data(self):
         """宗门玩法配置"""
-        with open(self.sect_json_pth, "r", encoding="utf-8") as fp:
-            file = fp.read()
-            config_data = json.loads(file)
-            return config_data
+        return self._load(self.sect_json_pth)
 
     def root_data(self):
         """获取灵根数据"""
-        with open(self.root_jsonpath, 'r', encoding='utf-8') as e:
-            file_data = e.read()
-            data = json.loads(file_data)
-            return data
+        return self._load(self.root_jsonpath)
 
     def level_rate_data(self):
         """获取境界突破概率"""
-        with open(self.level_rate_jsonpath, 'r', encoding='utf-8') as e:
-            file_data = e.read()
-            data = json.loads(file_data)
-            return data
-        
+        return self._load(self.level_rate_jsonpath)
+
     def exercises_level_data(self):
         """获取炼体境界数据"""
-        with open(self.exercises_level_jsonpath, 'r', encoding='utf-8') as e:
-            file_data = e.read()
-            data = json.loads(file_data)
-            return data
+        return self._load(self.exercises_level_jsonpath)
 
 
-jsondata = JsonDate()
+jsondata = JsonData()

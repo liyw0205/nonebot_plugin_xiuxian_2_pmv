@@ -1,0 +1,107 @@
+[14001]
+name = "八步赶蝉"
+buff_type = "1"
+buff = "3"
+buff2 = "1"
+desc = "踏叶疾行如惊鸿掠影"
+rank = "人阶下品"
+level = "55"
+
+[14002]
+name = "雁行功"
+buff_type = "1"
+buff = "5"
+buff2 = "2"
+desc = "长空展翼似孤雁破云"
+rank = "人阶上品"
+level = "50"
+
+[14003]
+name = "游龙步"
+buff_type = "1"
+buff = "7"
+buff2 = "2"
+desc = "龙形步转引风云相随"
+rank = "黄阶下品"
+level = "47"
+
+[14004]
+name = "七星踏月"
+buff_type = "1"
+buff = "9"
+buff2 = "3"
+desc = "步踏星斗引月华"
+rank = "黄阶上品"
+level = "44"
+
+[14005]
+name = "风雷遁"
+buff_type = "1"
+buff = "12"
+buff2 = "4"
+desc = "风雷乍现遁百里山河"
+rank = "玄阶下品"
+level = "41"
+
+[14006]
+name = "缩地成寸"
+buff_type = "1"
+buff = "15"
+buff2 = "5"
+desc = "咫尺天涯"
+rank = "玄阶上品"
+level = "38"
+
+[14007]
+name = "金乌化虹"
+buff_type = "1"
+buff = "18"
+buff2 = "5"
+desc = "虹光贯日越三山五岳"
+rank = "地阶下品"
+level = "35"
+
+[14008]
+name = "虚空大挪移"
+buff_type = "1"
+buff = "21"
+buff2 = "6"
+desc = "破碎虚空掌乾坤倒转"
+rank = "地阶上品"
+level = "32"
+
+[14009]
+name = "周天星斗步"
+buff_type = "1"
+buff = "24"
+buff2 = "7"
+desc = "步衍周天引星河"
+rank = "天阶下品"
+level = "29"
+
+[14010]
+name = "光阴逝水"
+buff_type = "1"
+buff = "27"
+buff2 = "8"
+desc = "踏光阴如御流水行云"
+rank = "天阶上品"
+level = "26"
+
+[14011]
+name = "鲲鹏逍遥游"
+buff_type = "1"
+buff = "35"
+buff2 = "11"
+desc = "振翅九霄越三界"
+rank = "仙阶极品"
+level = "-5"
+
+[14012]
+name = "混沌无相"
+buff_type = "1"
+buff = "45"
+buff2 = "14"
+desc = "身合混沌时空永恒"
+rank = "无上"
+level = "-5"

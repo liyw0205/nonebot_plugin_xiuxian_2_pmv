@@ -2,6 +2,7 @@ try:
     import ujson as json
 except ImportError:
     import json
+import tomllib
 import os
 import zipfile
 import random
@@ -17,10 +18,9 @@ from nonebot import get_driver
 from .item_json import Items
 from .xn_xiuxian_impart_config import config_impart
 
-WORKDATA = Path() / "data" / "xiuxian" / "work"
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 DATABASE = Path() / "data" / "xiuxian"
-DATABASE_IMPARTBUFF = Path() / "data" / "xiuxian"
+DATABASE_IMPARTBUFF = DATABASE
+PLAYERSDATA = DATABASE / "players"
 SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号
@@ -2335,33 +2335,35 @@ class BuffJsonDate:
         self.gfpeizhi_jsonpath = SKILLPATHH / "功法概率设置.json"
         self.weapon_jsonpath = WEAPONPATH / "法器.json"
         self.armor_jsonpath = WEAPONPATH / "防具.json"
-
+    def _load(self, FILEPATH):
+        with open(FILEPATH.with_suffix('.toml'), "rb") as f:
+            return tomllib.load(f)
     def get_main_buff(self, id):
-        return readf(self.mainbuff_jsonpath)[str(id)]
+        return self._load(self.mainbuff_jsonpath)[str(id)]
 
     def get_sec_buff(self, id):
-        return readf(self.secbuff_jsonpath)[str(id)]
+        return self._load(self.secbuff_jsonpath)[str(id)]
         
     def get_effect1_buff(self, id):
-        return readf(self.effect1buff_jsonpath)[str(id)]
+        return self._load(self.effect1buff_jsonpath)[str(id)]
 
     def get_effect2_buff(self, id):
-        return readf(self.effect2buff_jsonpath)[str(id)]
+        return self._load(self.effect2buff_jsonpath)[str(id)]
         
     def get_gfpeizhi(self):
-        return readf(self.gfpeizhi_jsonpath)
+        return self._load(self.gfpeizhi_jsonpath)
 
     def get_weapon_data(self):
-        return readf(self.weapon_jsonpath)
+        return self._load(self.weapon_jsonpath)
 
     def get_weapon_info(self, id):
-        return readf(self.weapon_jsonpath)[str(id)]
+        return self._load(self.weapon_jsonpath)[str(id)]
 
     def get_armor_data(self):
-        return readf(self.armor_jsonpath)
+        return self._load(self.armor_jsonpath)
 
     def get_armor_info(self, id):
-        return readf(self.armor_jsonpath)[str(id)]
+        return self._load(self.armor_jsonpath)[str(id)]
 
 
 class UserBuffDate:

@@ -1,0 +1,503 @@
+["江湖好手"."易"]
+level = "易"
+award = 20
+needexp = 100
+time = 6
+
+["感气境"."易"]
+level = "易"
+award = 100
+needexp = 1000
+time = 6
+
+["感气境"."中"]
+level = "中"
+award = 200
+needexp = 2000
+time = 12
+
+["练气境"."易"]
+level = "易"
+award = 300
+needexp = 6000
+time = 6
+
+["练气境"."中"]
+level = "中"
+award = 400
+needexp = 8000
+time = 12
+
+["筑基境"."易"]
+level = "易"
+award = 450
+needexp = 25000
+time = 6
+
+["筑基境"."中"]
+level = "中"
+award = 600
+needexp = 50000
+time = 12
+
+["筑基境"."难"]
+level = "难"
+award = 900
+needexp = 90000
+time = 18
+
+["结丹境"."易"]
+level = "易"
+award = 900
+needexp = 160000
+time = 6
+
+["结丹境"."中"]
+level = "中"
+award = 1100
+needexp = 200000
+time = 12
+
+["结丹境"."难"]
+level = "难"
+award = 1300
+needexp = 288000
+time = 18
+
+["金丹境"."中"]
+level = "中"
+award = 1600
+needexp = 440000
+time = 12
+
+["金丹境"."难"]
+level = "难"
+award = 1900
+needexp = 550000
+time = 18
+
+["金丹境"."高难"]
+level = "高难"
+award = 2400
+needexp = 700000
+time = 24
+
+["元神境"."中"]
+level = "中"
+award = 8460
+needexp = 1040000
+time = 12
+
+["元神境"."难"]
+level = "难"
+award = 13160
+needexp = 1280000
+time = 18
+
+["元神境"."高难"]
+level = "高难"
+award = 18800
+needexp = 1664000
+time = 24
+
+["化神境"."中"]
+level = "中"
+award = 24000
+needexp = 2400000
+time = 12
+
+["化神境"."难"]
+level = "难"
+award = 29500
+needexp = 2950000
+time = 18
+
+["化神境"."高难"]
+level = "高难"
+award = 38400
+needexp = 3840000
+time = 24
+
+["炼神境"."中"]
+level = "中"
+award = 54400
+needexp = 5440000
+time = 12
+
+["炼神境"."难"]
+level = "难"
+award = 67000
+needexp = 6700000
+time = 18
+
+["炼神境"."高难"]
+level = "高难"
+award = 87000
+needexp = 8700000
+time = 24
+
+["返虚境"."中"]
+level = "中"
+award = 121600
+needexp = 12160000
+time = 12
+
+["返虚境"."难"]
+level = "难"
+award = 150000
+needexp = 15000000
+time = 18
+
+["返虚境"."高难"]
+level = "高难"
+award = 219360
+needexp = 21936000
+time = 24
+
+["大乘境"."中"]
+level = "中"
+award = 359680
+needexp = 35968000
+time = 12
+
+["大乘境"."难"]
+level = "难"
+award = 409680
+needexp = 40968000
+time = 18
+
+["大乘境"."高难"]
+level = "高难"
+award = 609680
+needexp = 60968000
+time = 24
+
+["虚道境"."中"]
+level = "中"
+award = 709680
+needexp = 70968000
+time = 12
+
+["虚道境"."难"]
+level = "难"
+award = 809680
+needexp = 80968000
+time = 18
+
+["虚道境"."高难"]
+level = "高难"
+award = 1209680
+needexp = 120968000
+time = 24
+
+["斩我境"."中"]
+level = "中"
+award = 1309680
+needexp = 130968000
+time = 12
+
+["斩我境"."难"]
+level = "难"
+award = 1409680
+needexp = 140968000
+time = 18
+
+["斩我境"."高难"]
+level = "高难"
+award = 1609680
+needexp = 160968000
+time = 24
+
+["遁一境"."中"]
+level = "中"
+award = 3219360
+needexp = 321936000
+time = 12
+
+["遁一境"."难"]
+level = "难"
+award = 4507104
+needexp = 450710400
+time = 18
+
+["遁一境"."高难"]
+level = "高难"
+award = 5794848
+needexp = 579484800
+time = 24
+
+["至尊境"."中"]
+level = "中"
+award = 11589696
+needexp = 1158969600
+time = 12
+
+["至尊境"."难"]
+level = "难"
+award = 16225574
+needexp = 1622557440
+time = 18
+
+["至尊境"."高难"]
+level = "高难"
+award = 20861452
+needexp = 2086145280
+time = 24
+
+["微光境"."中"]
+level = "中"
+award = 41722905
+needexp = 4172290560
+time = 12
+
+["微光境"."难"]
+level = "难"
+award = 58412067
+needexp = 5841206784
+time = 18
+
+["微光境"."高难"]
+level = "高难"
+award = 75101230
+needexp = 7510123008
+time = 24
+
+["星芒境"."中"]
+level = "中"
+award = 150202460
+needexp = 15020246016
+time = 12
+
+["星芒境"."难"]
+level = "难"
+award = 210283444
+needexp = 21028344422
+time = 18
+
+["星芒境"."高难"]
+level = "高难"
+award = 270364428
+needexp = 27036442828
+time = 24
+
+["星芒境"."超难"]
+level = "超难"
+award = 400364428
+needexp = 40036442828
+time = 24
+
+["月华境"."中"]
+level = "中"
+award = 400364428
+needexp = 40036442828
+time = 12
+
+["月华境"."难"]
+level = "难"
+award = 540728856
+needexp = 54072885657
+time = 18
+
+["月华境"."高难"]
+level = "高难"
+award = 757020399
+needexp = 75702039920
+time = 24
+
+["月华境"."超难"]
+level = "超难"
+award = 973311941
+needexp = 97331194180
+time = 24
+
+["耀日境"."中"]
+level = "中"
+award = 973311941
+needexp = 97331194180
+time = 12
+
+["耀日境"."难"]
+level = "难"
+award = 1946623883
+needexp = 194662388360
+time = 18
+
+["耀日境"."高难"]
+level = "高难"
+award = 3725273437
+needexp = 372527343704
+time = 24
+
+["耀日境"."超难"]
+level = "超难"
+award = 5503922990
+needexp = 550392299048
+time = 24
+
+["祭道境"."中"]
+level = "中"
+award = 2751961495
+needexp = 550392299048
+time = 12
+
+["祭道境"."难"]
+level = "难"
+award = 25435796750
+needexp = 1000000000000
+time = 18
+
+["祭道境"."高难"]
+level = "高难"
+award = 19717898375
+needexp = 8000000000000
+time = 24
+
+["祭道境"."超难"]
+level = "超难"
+award = 63875857682
+needexp = 20000000000000
+time = 24
+
+["自在境"."中"]
+level = "中"
+award = 19717898375
+needexp = 8000000000000
+time = 12
+
+["自在境"."难"]
+level = "难"
+award = 35970343070
+needexp = 35000000000000
+time = 18
+
+["自在境"."高难"]
+level = "高难"
+award = 51266343070
+needexp = 55000000000000
+time = 24
+
+["自在境"."超难"]
+level = "超难"
+award = 97670343070
+needexp = 100000000000000
+time = 24
+
+["破虚境"."中"]
+level = "中"
+award = 51266343070
+needexp = 55000000000000
+time = 12
+
+["破虚境"."难"]
+level = "难"
+award = 203470343070
+needexp = 200000000000000
+time = 18
+
+["破虚境"."高难"]
+level = "高难"
+award = 359470343070
+needexp = 350000000000000
+time = 24
+
+["破虚境"."超难"]
+level = "超难"
+award = 512663503070
+needexp = 550000000000000
+time = 24
+
+["无界境"."中"]
+level = "中"
+award = 359470343070
+needexp = 350000000000000
+time = 12
+
+["无界境"."难"]
+level = "难"
+award = 1017435031806
+needexp = 1000000000000000
+time = 18
+
+["无界境"."高难"]
+level = "高难"
+award = 2034703430712
+needexp = 2000000000000000
+time = 24
+
+["无界境"."超难"]
+level = "超难"
+award = 3594703483070
+needexp = 3500000000000000
+time = 24
+
+["混元境"."中"]
+level = "中"
+award = 2034703430712
+needexp = 2000000000000000
+time = 12
+
+["混元境"."难"]
+level = "难"
+award = 5126635029114
+needexp = 5500000000000000
+time = 18
+
+["混元境"."高难"]
+level = "高难"
+award = 10174350230070
+needexp = 10000000000000000
+time = 24
+
+["混元境"."超难"]
+level = "超难"
+award = 20347034306928
+needexp = 20000000000000000
+time = 24
+
+["造化境"."中"]
+level = "中"
+award = 10174350230070
+needexp = 10000000000000000
+time = 12
+
+["造化境"."难"]
+level = "难"
+award = 35970350318874
+needexp = 35000000000000000
+time = 18
+
+["造化境"."高难"]
+level = "高难"
+award = 51266350318630
+needexp = 55000000000000000
+time = 24
+
+["造化境"."超难"]
+level = "超难"
+award = 101743502302070
+needexp = 100000000000000000
+time = 24
+
+["永恒境"."中"]
+level = "中"
+award = 51266350318630
+needexp = 55000000000000000
+time = 12
+
+["永恒境"."难"]
+level = "难"
+award = 203470343062928
+needexp = 200000000000000000
+time = 18
+
+["永恒境"."高难"]
+level = "高难"
+award = 359703503188714
+needexp = 350000000000000000
+time = 24
+
+["永恒境"."超难"]
+level = "超难"
+award = 512663503086314
+needexp = 550000000000000000
+time = 24

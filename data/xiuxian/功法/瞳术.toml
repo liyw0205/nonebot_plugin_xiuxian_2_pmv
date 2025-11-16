@@ -1,0 +1,107 @@
+[14101]
+name = "异瞳"
+buff_type = "2"
+buff = "3"
+buff2 = "1"
+desc = "目含微光破虚妄"
+rank = "人阶下品"
+level = "55"
+
+[14102]
+name = "鹰视"
+buff_type = "2"
+buff = "5"
+buff2 = "2"
+desc = "锐目如电锁乾坤"
+rank = "人阶上品"
+level = "40"
+
+[14103]
+name = "破障目"
+buff_type = "2"
+buff = "7"
+buff2 = "2"
+desc = "瞳生清辉照迷障"
+rank = "黄阶下品"
+level = "37"
+
+[14104]
+name = "玄光瞳"
+buff_type = "2"
+buff = "9"
+buff2 = "3"
+desc = "玄眸流转预天机"
+rank = "黄阶上品"
+level = "34"
+
+[14105]
+name = "焚邪金瞳"
+buff_type = "2"
+buff = "12"
+buff2 = "4"
+desc = "金瞳燃火焚妖邪"
+rank = "玄阶下品"
+level = "31"
+
+[14106]
+name = "灵韵重瞳"
+buff_type = "2"
+buff = "15"
+buff2 = "5"
+desc = "双瞳叠界观灵韵"
+rank = "玄阶上品"
+level = "28"
+
+[14107]
+name = "三生劫眼"
+buff_type = "2"
+buff = "18"
+buff2 = "5"
+desc = "窥尽三息未来光"
+rank = "地阶下品"
+level = "25"
+
+[14108]
+name = "轮回劫目"
+buff_type = "2"
+buff = "21"
+buff2 = "6"
+desc = "眸映前世今生劫"
+rank = "地阶上品"
+level = "22"
+
+[14109]
+name = "星辰之眸"
+buff_type = "2"
+buff = "24"
+buff2 = "7"
+desc = "眼藏星图定寰宇"
+rank = "天阶下品"
+level = "19"
+
+[14110]
+name = "太虚神瞳"
+buff_type = "2"
+buff = "27"
+buff2 = "8"
+desc = "目光所至皆太虚"
+rank = "天阶上品"
+level = "16"
+
+[14111]
+name = "混沌道眼"
+buff_type = "2"
+buff = "35"
+buff2 = "11"
+desc = "开眼即见万物源"
+rank = "仙阶极品"
+level = "-5"
+
+[14112]
+name = "鸿蒙始瞳"
+buff_type = "2"
+buff = "45"
+buff2 = "14"
+desc = "瞳开鸿蒙定法则"
+rank = "无上"
+level = "-5"

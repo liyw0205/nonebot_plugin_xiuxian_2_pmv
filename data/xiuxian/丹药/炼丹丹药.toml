@@ -1,0 +1,841 @@
+[2000]
+name = "洗髓丹"
+desc = "回复状态的20%，结丹境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.2
+buff_type = "hp"
+all_num = 999999
+rank = 47
+"境界" = "结丹境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2000.elixir_config]
+2 = 6
+3 = 6
+
+[2001]
+name = "养气丹"
+desc = "回复状态的25%，金丹境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.25
+buff_type = "hp"
+all_num = 999999
+rank = 44
+"境界" = "金丹境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2001.elixir_config]
+2 = 12
+3 = 12
+
+[2002]
+name = "九转丹"
+desc = "回复状态的30%，元神境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.3
+buff_type = "hp"
+all_num = 999999
+rank = 41
+"境界" = "元神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2002.elixir_config]
+2 = 24
+3 = 24
+
+[2003]
+name = "易筋丹"
+desc = "回复状态的35%，化神境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.35
+buff_type = "hp"
+all_num = 999999
+rank = 38
+"境界" = "化神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2003.elixir_config]
+2 = 48
+3 = 48
+
+[2004]
+name = "天尘丹"
+desc = "回复状态的40%，炼神境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.4
+buff_type = "hp"
+all_num = 999999
+rank = 35
+"境界" = "炼神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2004.elixir_config]
+2 = 96
+3 = 96
+
+[2005]
+name = "天元神丹"
+desc = "回复状态的45%，返虚境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.45
+buff_type = "hp"
+all_num = 999999
+rank = 32
+"境界" = "返虚境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2005.elixir_config]
+2 = 192
+3 = 192
+
+[2006]
+name = "太乙碧莹丹"
+desc = "回复状态的50%，大乘境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.5
+buff_type = "hp"
+all_num = 999999
+rank = 30
+"境界" = "大乘境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2006.elixir_config]
+2 = 384
+3 = 384
+
+[2007]
+name = "六阳长生丹"
+desc = "回复状态的60%，虚道境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0.6
+buff_type = "hp"
+all_num = 999999
+rank = 26
+"境界" = "虚道境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2007.elixir_config]
+2 = 768
+3 = 768
+
+[2008]
+name = "道源丹"
+desc = "回复全部状态，斩我境以上可以使用,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 0
+buff_type = "all"
+all_num = 999999
+rank = 23
+"境界" = "斩我境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2008.elixir_config]
+2 = 1536
+3 = 1536
+
+[1400]
+name = "聚顶丹"
+type = "丹药"
+rank = 54
+desc = "聚顶丹，冲击练气境必备的丹药，使突破到练气境的概率提升30%，只可使用三颗！"
+"境界" = "感气境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 30
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1400.elixir_config]
+2 = 2
+4 = 2
+
+[1401]
+name = "筑基丹"
+type = "丹药"
+rank = 51
+desc = "筑基丹，冲击筑基境必备的2种丹药之一，使突破到筑基境的概率提升20%，只可使用三颗！"
+"境界" = "练气境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1401.elixir_config]
+2 = 4
+4 = 4
+
+[1402]
+name = "朝元丹"
+type = "丹药"
+rank = 51
+desc = "朝元丹，冲击筑基境必备的2种丹药之一，使突破到筑基境的概率提升20%，只可使用三颗！"
+"境界" = "练气境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1402.elixir_config]
+2 = 8
+4 = 8
+
+[1403]
+name = "锻脉丹"
+type = "丹药"
+rank = 48
+desc = "锻脉丹，冲击结丹境必备的2种丹药之一，使突破到结丹境的概率提升20%，只可使用三颗！"
+"境界" = "筑基境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1403.elixir_config]
+2 = 12
+4 = 12
+
+[1404]
+name = "护脉丹"
+type = "丹药"
+rank = 48
+desc = "护脉丹，冲击结丹境必备的2种丹药之一，使突破到结丹境的概率提升20%，只可使用三颗！"
+"境界" = "筑基境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1404.elixir_config]
+2 = 16
+4 = 16
+
+[1405]
+name = "天命淬体丹"
+type = "丹药"
+rank = 45
+desc = "天命淬体丹，冲击金丹境必备的3种丹药之一，使突破到金丹境的概率提升10%，只可使用三颗！"
+"境界" = "结丹境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1405.elixir_config]
+2 = 20
+4 = 20
+
+[1406]
+name = "澄心塑魂丹"
+type = "丹药"
+rank = 45
+desc = "澄心塑魂丹，冲击金丹境必备的3种丹药之一，使突破到金丹境的概率提升10%，只可使用三颗！"
+"境界" = "结丹境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1406.elixir_config]
+2 = 24
+4 = 24
+
+[1407]
+name = "混元仙体丹"
+type = "丹药"
+rank = 45
+desc = "混元仙体丹，冲击金丹境必备的3种丹药之一，使突破到金丹境的概率提升10%，只可使用三颗！"
+"境界" = "结丹境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1407.elixir_config]
+2 = 32
+4 = 32
+
+[1408]
+name = "黑炎丹"
+type = "丹药"
+rank = 42
+desc = "黑炎丹，冲击元神境必备的2种丹药之一，使突破到元神境的概率提升10%，只可使用三颗！"
+"境界" = "金丹境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1408.elixir_config]
+2 = 48
+4 = 48
+
+[1409]
+name = "金血丸"
+type = "丹药"
+rank = 42
+desc = "金血丸，冲击元神境必备的2种丹药之一，使突破到元神境的概率提升10%，只可使用三颗！"
+"境界" = "金丹境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1409.elixir_config]
+2 = 64
+4 = 64
+
+[1410]
+name = "虚灵丹"
+type = "丹药"
+rank = 39
+desc = "虚灵丹，冲击化神境必备的2种丹药之一，使突破到化神境的概率提升10%，只可使用三颗！"
+"境界" = "元神境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1410.elixir_config]
+2 = 96
+4 = 96
+
+[1411]
+name = "净明丹"
+type = "丹药"
+rank = 39
+desc = "净明丹，冲击化神境必备的2种丹药之一，使突破到化神境的概率提升10%，只可使用三颗！"
+"境界" = "元神境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1411.elixir_config]
+2 = 128
+4 = 128
+
+[1412]
+name = "安神灵液"
+type = "丹药"
+rank = 36
+desc = "安神灵液，冲击炼神境必备的2种丹药之一，使突破到炼神境的概率提升10%，只可使用三颗！"
+"境界" = "化神境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1412.elixir_config]
+2 = 160
+4 = 160
+
+[1413]
+name = "魇龙之血"
+type = "丹药"
+rank = 36
+desc = "魇龙之血，冲击炼神境必备的2种丹药之一，使突破到炼神境的概率提升10%，只可使用三颗！"
+"境界" = "化神境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 10
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1413.elixir_config]
+2 = 192
+4 = 192
+
+[1414]
+name = "化劫丹"
+type = "丹药"
+rank = 33
+desc = "化劫丹，冲击返虚境必备的丹药，使突破到返虚境的概率提升20%，只可使用三颗！"
+"境界" = "炼神境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1414.elixir_config]
+2 = 256
+4 = 256
+
+[1415]
+name = "太上玄门丹"
+type = "丹药"
+rank = 30
+desc = "太上玄门丹，冲击大乘境必备的丹药，使突破到大乘境的概率提升20%，只可使用三颗！"
+"境界" = "返虚境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1415.elixir_config]
+2 = 384
+4 = 384
+
+[1416]
+name = "金仙破厄丹"
+type = "丹药"
+rank = 27
+desc = "金仙破厄丹，冲击虚道境必备的丹药，使突破到虚道境的概率提升20%，只可使用三颗！"
+"境界" = "大乘境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1416.elixir_config]
+2 = 768
+4 = 768
+
+[1417]
+name = "太乙炼髓丹"
+type = "丹药"
+rank = 24
+desc = "太乙炼髓丹，冲击斩我境必备的丹药，使突破到斩我境的概率提升20%，只可使用三颗！"
+"境界" = "虚道境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1417.elixir_config]
+2 = 1536
+4 = 1536
+
+[1418]
+name = "遁一丹"
+type = "丹药"
+rank = 21
+desc = "遁一丹，冲击遁一境必备的丹药，使突破到遁一境的概率提升20%，只可使用三颗！"
+"境界" = "斩我境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1418.elixir_config]
+2 = 2048
+4 = 2048
+
+[1419]
+name = "至尊丹"
+type = "丹药"
+rank = 18
+desc = "至尊丹，冲击至尊境必备的丹药，使突破到至尊境的概率提升20%，只可使用三颗！"
+"境界" = "遁一境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1419.elixir_config]
+2 = 2560
+4 = 2560
+
+[1420]
+name = "极品遁一丹"
+type = "丹药"
+rank = 21
+desc = "极品遁一丹，拍卖行仙品炼丹师炼制，使突破到遁一境的概率提升40%，只可使用三颗！"
+"境界" = "斩我境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 40
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1420.elixir_config]
+2 = 2304
+4 = 2304
+
+[1421]
+name = "极品至尊丹"
+type = "丹药"
+rank = 18
+desc = "极品至尊丹，拍卖行仙品炼丹师炼制，使突破到至尊境的概率提升40%，只可使用3颗！"
+"境界" = "遁一境圆满"
+buff_type = "level_up_big"
+all_num = 3
+buff = 40
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[1421.elixir_config]
+2 = 2816
+4 = 2816
+
+[15151]
+name = "太清玉液丹"
+type = "丹药"
+buff_type = "level_up_rate"
+buff = 2
+price = 100000
+selling = 100
+desc = "使下一次突破成功几率增加2%，至尊境以上可使用"
+"境界" = "星芒境初期"
+status = 1
+quantity = 1
+day_num = 10
+all_num = 100
+rank = 14
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[15151.elixir_config]
+2 = 9999
+6 = 9999
+
+[15152]
+name = "一气鸿蒙丹"
+type = "丹药"
+buff_type = "level_up_rate"
+buff = 3
+price = 100000
+selling = 100
+desc = "使下一次突破成功几率增加3%，星芒境以上可使用"
+"境界" = "月华境初期"
+status = 1
+quantity = 1
+day_num = 10
+all_num = 100
+rank = 11
+
+[15152.elixir_config]
+2 = 9999
+6 = 9999
+
+[15153]
+name = "三纹清灵丹"
+type = "丹药"
+buff_type = "level_up_rate"
+buff = 5
+price = 100000
+selling = 100
+desc = "使下一次突破成功几率增加5%，月华境以上可使用"
+"境界" = "耀日境初期"
+status = 1
+quantity = 1
+day_num = 10
+all_num = 100
+rank = 8
+
+[15153.elixir_config]
+2 = 9999
+6 = 9999
+
+[15100]
+name = "九天蕴仙丹"
+type = "丹药"
+rank = 15
+desc = "九天蕴仙丹，凡道冲击仙道必备的丹药，使突破到微光境的概率提升20%，只可使用两颗！"
+"境界" = "至尊境圆满"
+buff_type = "level_up_big"
+all_num = 2
+buff = 20
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[15100.elixir_config]
+2 = 3072
+4 = 3072
+
+[15101]
+name = "真仙造化丹"
+type = "丹药"
+rank = 12
+desc = "真仙造化丹，冲击王道领域必备的丹药，使突破到星芒境的概率提升15%，只可使用两颗！"
+"境界" = "微光境圆满"
+buff_type = "level_up_big"
+all_num = 2
+buff = 15
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[15101.elixir_config]
+2 = 3328
+4 = 3328
+
+[15102]
+name = "大道归一丹"
+type = "丹药"
+rank = 9
+desc = "大道归一丹，王道向帝道前行必备的丹药，使突破到月华境的概率提升15%，只可使用两颗！"
+"境界" = "星芒境圆满"
+buff_type = "level_up_big"
+all_num = 2
+buff = 15
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[15102.elixir_config]
+2 = 3840
+4 = 3840
+
+[15103]
+name = "菩提证道丹"
+type = "丹药"
+rank = 6
+desc = "菩提证道丹，王道踏入帝道领域必备的丹药，据说其丹方已经彻底失传了...使突破到耀日境的概率提升15%，只可使用两颗！"
+"境界" = "月华境圆满"
+buff_type = "level_up_big"
+all_num = 2
+buff = 15
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[15103.elixir_config]
+2 = 4864
+4 = 4864
+
+[2009]
+name = "摄魂鬼丸"
+desc = "使用后可以永久增加720点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 720
+buff_type = "atk_buff"
+all_num = 999999
+rank = 47
+"境界" = "结丹境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 10
+
+[2009.elixir_config]
+2 = 6
+6 = 6
+
+[2010]
+name = "化煞魔丸"
+desc = "使用后可以永久增加1760点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 1760
+buff_type = "atk_buff"
+all_num = 999999
+rank = 44
+"境界" = "金丹境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2010.elixir_config]
+2 = 12
+6 = 12
+
+[2011]
+name = "素心真丸"
+desc = "使用后可以永久增加4160点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 4160
+buff_type = "atk_buff"
+all_num = 999999
+rank = 41
+"境界" = "元神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2011.elixir_config]
+2 = 24
+6 = 24
+
+[2012]
+name = "灭神古丸"
+desc = "使用后可以永久增加9600点攻击,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 9600
+buff_type = "atk_buff"
+all_num = 999999
+rank = 38
+"境界" = "化神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2012.elixir_config]
+2 = 48
+6 = 48
+
+[2013]
+name = "静禅魔丸"
+desc = "使用后可以永久增加21760点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 21760
+buff_type = "atk_buff"
+all_num = 999999
+rank = 35
+"境界" = "炼神境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2013.elixir_config]
+2 = 96
+6 = 96
+
+[2014]
+name = "地仙玄丸"
+desc = "使用后可以永久增加48640点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 48640
+buff_type = "atk_buff"
+all_num = 999999
+rank = 32
+"境界" = "返虚境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2014.elixir_config]
+2 = 192
+6 = 192
+
+[2015]
+name = "消冰宝丸"
+desc = "使用后可以永久增加104840点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 104840
+buff_type = "atk_buff"
+all_num = 999999
+rank = 29
+"境界" = "大乘境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2015.elixir_config]
+2 = 384
+6 = 384
+
+[2016]
+name = "无涯鬼丸"
+desc = "使用后可以永久增加304840点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 304840
+buff_type = "atk_buff"
+all_num = 999999
+rank = 26
+"境界" = "虚道境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2016.elixir_config]
+2 = 768
+6 = 768
+
+[2017]
+name = "太一仙丸"
+desc = "使用后可以永久增加604840点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 604840
+buff_type = "atk_buff"
+all_num = 999999
+rank = 23
+"境界" = "斩我境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2017.elixir_config]
+2 = 1536
+6 = 1536
+
+[1998]
+name = "渡厄金丹"
+type = "丹药"
+buff_type = "level_up"
+buff = 0
+price = 100000
+selling = 100
+desc = "使下一次突破丢失的修为减少为0！并且增加一成修为！！"
+"境界" = "返虚境初期"
+status = 1
+quantity = 1
+rank = 51
+
+[1998.elixir_config]
+2 = 9999
+6 = 9999
+
+[2018]
+name = "外道兴奋剂"
+desc = "使用后可以永久增加3000000点攻击力,凡人可以无视境界限制使用！"
+type = "丹药"
+buff = 3000000
+buff_type = "atk_buff"
+all_num = 999999
+rank = 2
+"境界" = "遁一境初期"
+mix_need_time = 60
+mix_exp = 10
+mix_all = 100
+
+[2018.elixir_config]
+2 = 9999
+6 = 9999

@@ -4,6 +4,7 @@ from pathlib import Path
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.data_source import jsondata
 from .bossconfig import get_boss_config
+import tomllib
 
 config = get_boss_config()
 jinjie_list = [
@@ -37,11 +38,10 @@ jinjie_list = [
 sql_message = XiuxianDateManage()  # sql类
 
 def get_boss_jinjie_dict():
-    CONFIGJSONPATH = Path() / "data" / "xiuxian" / "境界.json"
-    with open(CONFIGJSONPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
+    CONFIGJSONPATH = Path() / "data" / "xiuxian" / "境界.toml"
+    with open(CONFIGJSONPATH, "rb") as f:
+        data = tomllib.load(f)
     temp_dict = {}
-    data = json.loads(data)
     for k, v in data.items():
         temp_dict[k] = v['exp']
     return temp_dict

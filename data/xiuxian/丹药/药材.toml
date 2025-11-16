@@ -1,0 +1,2159 @@
+[3001]
+name = "恒心草"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3001."主药"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3001."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3001."辅药"]
+type = 3
+power = 2
+
+[3002]
+name = "红绫草"
+level = "一品药材"
+type = "药材"
+rank = 48
+
+[3002."主药"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3002."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3002."辅药"]
+type = 3
+power = 2
+
+[3003]
+name = "罗犀草"
+level = "一品药材"
+type = "药材"
+rank = 48
+
+[3003."主药"]
+h_a_c = -1
+type = 2
+power = 2
+
+[3003."药引"]
+h_a_c = 1
+type = 2
+power = 2
+
+[3003."辅药"]
+type = 3
+power = 2
+
+[3004]
+name = "天青花"
+level = "一品药材"
+type = "药材"
+rank = 48
+
+[3004."主药"]
+h_a_c = 1
+type = 2
+power = 2
+
+[3004."药引"]
+h_a_c = -1
+type = 2
+power = 2
+
+[3004."辅药"]
+type = 3
+power = 2
+
+[3005]
+name = "五柳根"
+level = "二品药材"
+type = "药材"
+rank = 45
+
+[3005."主药"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3005."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3005."辅药"]
+type = 3
+power = 4
+
+[3006]
+name = "天元果"
+level = "二品药材"
+type = "药材"
+rank = 45
+
+[3006."主药"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3006."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3006."辅药"]
+type = 3
+power = 4
+
+[3007]
+name = "何首乌"
+level = "二品药材"
+type = "药材"
+rank = 45
+
+[3007."主药"]
+h_a_c = -2
+type = 2
+power = 4
+
+[3007."药引"]
+h_a_c = 2
+type = 2
+power = 4
+
+[3007."辅药"]
+type = 3
+power = 4
+
+[3008]
+name = "夜交藤"
+level = "二品药材"
+type = "药材"
+rank = 45
+
+[3008."主药"]
+h_a_c = 2
+type = 2
+power = 4
+
+[3008."药引"]
+h_a_c = -2
+type = 2
+power = 4
+
+[3008."辅药"]
+type = 3
+power = 4
+
+[3009]
+name = "紫猴花"
+level = "三品药材"
+type = "药材"
+rank = 42
+
+[3009."主药"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3009."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3009."辅药"]
+type = 3
+power = 8
+
+[3010]
+name = "九叶芝"
+level = "三品药材"
+type = "药材"
+rank = 42
+
+[3010."主药"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3010."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3010."辅药"]
+type = 3
+power = 8
+
+[3011]
+name = "幻心草"
+level = "三品药材"
+type = "药材"
+rank = 42
+
+[3011."主药"]
+h_a_c = -4
+type = 2
+power = 8
+
+[3011."药引"]
+h_a_c = 4
+type = 2
+power = 8
+
+[3011."辅药"]
+type = 3
+power = 8
+
+[3012]
+name = "鬼臼草"
+level = "三品药材"
+type = "药材"
+rank = 42
+
+[3012."主药"]
+h_a_c = 4
+type = 2
+power = 8
+
+[3012."药引"]
+h_a_c = -4
+type = 2
+power = 8
+
+[3012."辅药"]
+type = 3
+power = 8
+
+[3013]
+name = "血莲精"
+level = "四品药材"
+type = "药材"
+rank = 39
+
+[3013."主药"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3013."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3013."辅药"]
+type = 3
+power = 16
+
+[3014]
+name = "鸡冠草"
+level = "四品药材"
+type = "药材"
+rank = 39
+
+[3014."主药"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3014."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3014."辅药"]
+type = 3
+power = 16
+
+[3015]
+name = "银精芝"
+level = "四品药材"
+type = "药材"
+rank = 39
+
+[3015."主药"]
+h_a_c = -8
+type = 2
+power = 16
+
+[3015."药引"]
+h_a_c = 8
+type = 2
+power = 16
+
+[3015."辅药"]
+type = 3
+power = 16
+
+[3016]
+name = "玉髓芝"
+level = "四品药材"
+type = "药材"
+rank = 39
+
+[3016."主药"]
+h_a_c = 8
+type = 2
+power = 16
+
+[3016."药引"]
+h_a_c = -8
+type = 2
+power = 16
+
+[3016."辅药"]
+type = 3
+power = 16
+
+[3017]
+name = "地心火芝"
+level = "五品药材"
+type = "药材"
+rank = 36
+
+[3017."主药"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3017."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3017."辅药"]
+type = 3
+power = 32
+
+[3018]
+name = "天蝉灵叶"
+level = "五品药材"
+type = "药材"
+rank = 36
+
+[3018."主药"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3018."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3018."辅药"]
+type = 3
+power = 32
+
+[3019]
+name = "雪玉骨参"
+level = "五品药材"
+type = "药材"
+rank = 36
+
+[3019."主药"]
+h_a_c = -16
+type = 2
+power = 32
+
+[3019."药引"]
+h_a_c = 16
+type = 2
+power = 32
+
+[3019."辅药"]
+type = 3
+power = 32
+
+[3020]
+name = "腐骨灵花"
+level = "五品药材"
+type = "药材"
+rank = 36
+
+[3020."主药"]
+h_a_c = 16
+type = 2
+power = 32
+
+[3020."药引"]
+h_a_c = -16
+type = 2
+power = 32
+
+[3020."辅药"]
+type = 3
+power = 32
+
+[3021]
+name = "三叶青芝"
+level = "六品药材"
+type = "药材"
+rank = 33
+
+[3021."主药"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3021."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3021."辅药"]
+type = 3
+power = 64
+
+[3022]
+name = "七彩月兰"
+level = "六品药材"
+type = "药材"
+rank = 33
+
+[3022."主药"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3022."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3022."辅药"]
+type = 3
+power = 64
+
+[3023]
+name = "三尾风叶"
+level = "六品药材"
+type = "药材"
+rank = 33
+
+[3023."主药"]
+h_a_c = -32
+type = 2
+power = 64
+
+[3023."药引"]
+h_a_c = 32
+type = 2
+power = 64
+
+[3023."辅药"]
+type = 3
+power = 64
+
+[3024]
+name = "冰灵焰草"
+level = "六品药材"
+type = "药材"
+rank = 33
+
+[3024."主药"]
+h_a_c = 32
+type = 2
+power = 64
+
+[3024."药引"]
+h_a_c = -32
+type = 2
+power = 64
+
+[3024."辅药"]
+type = 3
+power = 64
+
+[3025]
+name = "地心淬灵乳"
+level = "七品药材"
+type = "药材"
+rank = 30
+
+[3025."主药"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3025."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3025."辅药"]
+type = 3
+power = 128
+
+[3026]
+name = "天麻翡石精"
+level = "七品药材"
+type = "药材"
+rank = 30
+
+[3026."主药"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3026."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3026."辅药"]
+type = 3
+power = 128
+
+[3027]
+name = "八角玄冰草"
+level = "七品药材"
+type = "药材"
+rank = 30
+
+[3027."主药"]
+h_a_c = -64
+type = 2
+power = 128
+
+[3027."药引"]
+h_a_c = 64
+type = 2
+power = 128
+
+[3027."辅药"]
+type = 3
+power = 128
+
+[3028]
+name = "奇茸通天菊"
+level = "七品药材"
+type = "药材"
+rank = 30
+
+[3028."主药"]
+h_a_c = 64
+type = 2
+power = 128
+
+[3028."药引"]
+h_a_c = -64
+type = 2
+power = 128
+
+[3028."辅药"]
+type = 3
+power = 128
+
+[3029]
+name = "木灵三针花"
+level = "八品药材"
+type = "药材"
+rank = 27
+
+[3029."主药"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3029."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3029."辅药"]
+type = 3
+power = 256
+
+[3030]
+name = "鎏鑫天晶草"
+level = "八品药材"
+type = "药材"
+rank = 27
+
+[3030."主药"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3030."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3030."辅药"]
+type = 3
+power = 256
+
+[3031]
+name = "檀芒九叶花"
+level = "八品药材"
+type = "药材"
+rank = 27
+
+[3031."主药"]
+h_a_c = -128
+type = 2
+power = 256
+
+[3031."药引"]
+h_a_c = 128
+type = 2
+power = 256
+
+[3031."辅药"]
+type = 3
+power = 256
+
+[3032]
+name = "坎水玄冰果"
+level = "八品药材"
+type = "药材"
+rank = 27
+
+[3032."主药"]
+h_a_c = 128
+type = 2
+power = 256
+
+[3032."药引"]
+h_a_c = -128
+type = 2
+power = 256
+
+[3032."辅药"]
+type = 3
+power = 256
+
+[3033]
+name = "离火梧桐芝"
+level = "九品药材"
+type = "药材"
+rank = 24
+
+[3033."主药"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3033."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3033."辅药"]
+type = 3
+power = 512
+
+[3034]
+name = "尘磊岩麟果"
+level = "九品药材"
+type = "药材"
+rank = 24
+
+[3034."主药"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3034."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3034."辅药"]
+type = 3
+power = 512
+
+[3035]
+name = "剑魄竹笋"
+level = "九品药材"
+type = "药材"
+rank = 24
+
+[3035."主药"]
+h_a_c = -256
+type = 2
+power = 512
+
+[3035."药引"]
+h_a_c = 256
+type = 2
+power = 512
+
+[3035."辅药"]
+type = 3
+power = 512
+
+[3036]
+name = "明心问道果"
+level = "九品药材"
+type = "药材"
+rank = 24
+
+[3036."主药"]
+h_a_c = 256
+type = 2
+power = 512
+
+[3036."药引"]
+h_a_c = -256
+type = 2
+power = 512
+
+[3036."辅药"]
+type = 3
+power = 512
+
+[3037]
+name = "宁心草"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3037."主药"]
+h_a_c = 0
+type = 3
+power = 2
+
+[3037."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3037."辅药"]
+type = 4
+power = 2
+
+[3038]
+name = "凝血草"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3038."主药"]
+h_a_c = 0
+type = 3
+power = 2
+
+[3038."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3038."辅药"]
+type = 4
+power = 2
+
+[3039]
+name = "银月花"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3039."主药"]
+h_a_c = -1
+type = 3
+power = 2
+
+[3039."药引"]
+h_a_c = 1
+type = 2
+power = 2
+
+[3039."辅药"]
+type = 4
+power = 2
+
+[3040]
+name = "宁神花"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3040."主药"]
+h_a_c = 1
+type = 3
+power = 2
+
+[3040."药引"]
+h_a_c = -1
+type = 2
+power = 2
+
+[3040."辅药"]
+type = 4
+power = 2
+
+[3041]
+name = "流莹草"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3041."主药"]
+h_a_c = 0
+type = 3
+power = 4
+
+[3041."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3041."辅药"]
+type = 4
+power = 4
+
+[3042]
+name = "蛇涎果"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3042."主药"]
+h_a_c = 0
+type = 3
+power = 4
+
+[3042."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3042."辅药"]
+type = 4
+power = 4
+
+[3043]
+name = "夏枯草"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3043."主药"]
+h_a_c = -2
+type = 3
+power = 4
+
+[3043."药引"]
+h_a_c = 2
+type = 2
+power = 4
+
+[3043."辅药"]
+type = 4
+power = 4
+
+[3044]
+name = "百草露"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3044."主药"]
+h_a_c = 2
+type = 3
+power = 4
+
+[3044."药引"]
+h_a_c = -2
+type = 2
+power = 4
+
+[3044."辅药"]
+type = 4
+power = 4
+
+[3045]
+name = "轻灵草"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3045."主药"]
+h_a_c = 0
+type = 3
+power = 8
+
+[3045."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3045."辅药"]
+type = 4
+power = 8
+
+[3046]
+name = "龙葵"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3046."主药"]
+h_a_c = 0
+type = 3
+power = 8
+
+[3046."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3046."辅药"]
+type = 4
+power = 8
+
+[3047]
+name = "弗兰草"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3047."主药"]
+h_a_c = -4
+type = 3
+power = 8
+
+[3047."药引"]
+h_a_c = 4
+type = 2
+power = 8
+
+[3047."辅药"]
+type = 4
+power = 8
+
+[3048]
+name = "玄参"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3048."主药"]
+h_a_c = 4
+type = 3
+power = 8
+
+[3048."药引"]
+h_a_c = -4
+type = 2
+power = 8
+
+[3048."辅药"]
+type = 4
+power = 8
+
+[3049]
+name = "菩提花"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3049."主药"]
+h_a_c = 0
+type = 3
+power = 16
+
+[3049."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3049."辅药"]
+type = 4
+power = 16
+
+[3050]
+name = "乌稠木"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3050."主药"]
+h_a_c = 0
+type = 3
+power = 16
+
+[3050."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3050."辅药"]
+type = 4
+power = 16
+
+[3051]
+name = "雪凝花"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3051."主药"]
+h_a_c = -8
+type = 3
+power = 16
+
+[3051."药引"]
+h_a_c = 8
+type = 2
+power = 16
+
+[3051."辅药"]
+type = 4
+power = 16
+
+[3052]
+name = "龙纹草"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3052."主药"]
+h_a_c = 8
+type = 3
+power = 16
+
+[3052."药引"]
+h_a_c = -8
+type = 2
+power = 16
+
+[3052."辅药"]
+type = 4
+power = 16
+
+[3053]
+name = "天灵果"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3053."主药"]
+h_a_c = 0
+type = 3
+power = 32
+
+[3053."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3053."辅药"]
+type = 4
+power = 32
+
+[3054]
+name = "灯心草"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3054."主药"]
+h_a_c = 0
+type = 3
+power = 32
+
+[3054."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3054."辅药"]
+type = 4
+power = 32
+
+[3055]
+name = "穿心莲"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3055."主药"]
+h_a_c = -16
+type = 3
+power = 32
+
+[3055."药引"]
+h_a_c = 16
+type = 2
+power = 32
+
+[3055."辅药"]
+type = 4
+power = 32
+
+[3056]
+name = "龙鳞果"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3056."主药"]
+h_a_c = 16
+type = 3
+power = 32
+
+[3056."药引"]
+h_a_c = -16
+type = 2
+power = 32
+
+[3056."辅药"]
+type = 4
+power = 32
+
+[3057]
+name = "白沉脂"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3057."主药"]
+h_a_c = 0
+type = 3
+power = 64
+
+[3057."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3057."辅药"]
+type = 4
+power = 64
+
+[3058]
+name = "苦曼藤"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3058."主药"]
+h_a_c = 0
+type = 3
+power = 64
+
+[3058."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3058."辅药"]
+type = 4
+power = 64
+
+[3059]
+name = "血菩提"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3059."主药"]
+h_a_c = -32
+type = 3
+power = 64
+
+[3059."药引"]
+h_a_c = 32
+type = 2
+power = 64
+
+[3059."辅药"]
+type = 4
+power = 64
+
+[3060]
+name = "诱妖草"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3060."主药"]
+h_a_c = 32
+type = 3
+power = 64
+
+[3060."药引"]
+h_a_c = -32
+type = 2
+power = 64
+
+[3060."辅药"]
+type = 4
+power = 64
+
+[3061]
+name = "天问花"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3061."主药"]
+h_a_c = 0
+type = 3
+power = 128
+
+[3061."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3061."辅药"]
+type = 4
+power = 128
+
+[3062]
+name = "渊血冥花"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3062."主药"]
+h_a_c = 0
+type = 3
+power = 128
+
+[3062."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3062."辅药"]
+type = 4
+power = 128
+
+[3063]
+name = "芒焰果"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3063."主药"]
+h_a_c = -64
+type = 3
+power = 128
+
+[3063."药引"]
+h_a_c = 64
+type = 2
+power = 128
+
+[3063."辅药"]
+type = 4
+power = 128
+
+[3064]
+name = "问道花"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3064."主药"]
+h_a_c = 64
+type = 3
+power = 128
+
+[3064."药引"]
+h_a_c = -64
+type = 2
+power = 128
+
+[3064."辅药"]
+type = 4
+power = 128
+
+[3065]
+name = "阴阳黄泉花"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3065."主药"]
+h_a_c = 0
+type = 3
+power = 256
+
+[3065."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3065."辅药"]
+type = 4
+power = 256
+
+[3066]
+name = "厉魂血珀"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3066."主药"]
+h_a_c = 0
+type = 3
+power = 256
+
+[3066."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3066."辅药"]
+type = 4
+power = 256
+
+[3067]
+name = "浩淼水藤"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3067."主药"]
+h_a_c = -128
+type = 3
+power = 256
+
+[3067."药引"]
+h_a_c = 128
+type = 2
+power = 256
+
+[3067."辅药"]
+type = 4
+power = 256
+
+[3068]
+name = "道蕴花"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3068."主药"]
+h_a_c = 128
+type = 3
+power = 256
+
+[3068."药引"]
+h_a_c = -128
+type = 2
+power = 256
+
+[3068."辅药"]
+type = 4
+power = 256
+
+[3069]
+name = "太乙碧莹花"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3069."主药"]
+h_a_c = 0
+type = 3
+power = 512
+
+[3069."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3069."辅药"]
+type = 4
+power = 512
+
+[3070]
+name = "森檀木"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3070."主药"]
+h_a_c = 0
+type = 3
+power = 512
+
+[3070."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3070."辅药"]
+type = 4
+power = 512
+
+[3071]
+name = "炼心芝"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3071."主药"]
+h_a_c = -256
+type = 3
+power = 512
+
+[3071."药引"]
+h_a_c = 256
+type = 2
+power = 512
+
+[3071."辅药"]
+type = 4
+power = 512
+
+[3072]
+name = "重元换血草"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3072."主药"]
+h_a_c = 256
+type = 3
+power = 512
+
+[3072."药引"]
+h_a_c = -256
+type = 2
+power = 512
+
+[3072."辅药"]
+type = 4
+power = 512
+
+[3073]
+name = "地黄参"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3073."主药"]
+h_a_c = 0
+type = 5
+power = 2
+
+[3073."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3073."辅药"]
+type = 6
+power = 2
+
+[3074]
+name = "火精枣"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3074."主药"]
+h_a_c = 0
+type = 5
+power = 2
+
+[3074."药引"]
+h_a_c = 0
+type = 2
+power = 2
+
+[3074."辅药"]
+type = 6
+power = 2
+
+[3075]
+name = "剑芦"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3075."主药"]
+h_a_c = -1
+type = 5
+power = 2
+
+[3075."药引"]
+h_a_c = 1
+type = 2
+power = 2
+
+[3075."辅药"]
+type = 6
+power = 2
+
+[3076]
+name = "七星草"
+level = "一品药材"
+type = "药材"
+rank = 54
+
+[3076."主药"]
+h_a_c = 1
+type = 5
+power = 2
+
+[3076."药引"]
+h_a_c = -1
+type = 2
+power = 2
+
+[3076."辅药"]
+type = 6
+power = 2
+
+[3077]
+name = "风灵花"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3077."主药"]
+h_a_c = 0
+type = 5
+power = 4
+
+[3077."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3077."辅药"]
+type = 6
+power = 4
+
+[3078]
+name = "伏龙参"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3078."主药"]
+h_a_c = 0
+type = 5
+power = 4
+
+[3078."药引"]
+h_a_c = 0
+type = 2
+power = 4
+
+[3078."辅药"]
+type = 6
+power = 4
+
+[3079]
+name = "凌风花"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3079."主药"]
+h_a_c = -2
+type = 5
+power = 4
+
+[3079."药引"]
+h_a_c = 2
+type = 2
+power = 4
+
+[3079."辅药"]
+type = 6
+power = 4
+
+[3080]
+name = "补天芝"
+level = "二品药材"
+type = "药材"
+rank = 48
+
+[3080."主药"]
+h_a_c = 2
+type = 5
+power = 4
+
+[3080."药引"]
+h_a_c = -2
+type = 2
+power = 4
+
+[3080."辅药"]
+type = 6
+power = 4
+
+[3081]
+name = "枫香脂"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3081."主药"]
+h_a_c = 0
+type = 5
+power = 8
+
+[3081."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3081."辅药"]
+type = 6
+power = 8
+
+[3082]
+name = "炼魂珠"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3082."主药"]
+h_a_c = 0
+type = 5
+power = 8
+
+[3082."药引"]
+h_a_c = 0
+type = 2
+power = 8
+
+[3082."辅药"]
+type = 6
+power = 8
+
+[3083]
+name = "玄冰花"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3083."主药"]
+h_a_c = -4
+type = 5
+power = 8
+
+[3083."药引"]
+h_a_c = 4
+type = 2
+power = 8
+
+[3083."辅药"]
+type = 6
+power = 8
+
+[3084]
+name = "炼血珠"
+level = "三品药材"
+type = "药材"
+rank = 45
+
+[3084."主药"]
+h_a_c = 4
+type = 5
+power = 8
+
+[3084."药引"]
+h_a_c = -4
+type = 2
+power = 8
+
+[3084."辅药"]
+type = 6
+power = 8
+
+[3085]
+name = "石龙芮"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3085."主药"]
+h_a_c = 0
+type = 5
+power = 16
+
+[3085."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3085."辅药"]
+type = 6
+power = 16
+
+[3086]
+name = "锦地罗"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3086."主药"]
+h_a_c = 0
+type = 5
+power = 16
+
+[3086."药引"]
+h_a_c = 0
+type = 2
+power = 16
+
+[3086."辅药"]
+type = 6
+power = 16
+
+[3087]
+name = "冰灵果"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3087."主药"]
+h_a_c = -8
+type = 5
+power = 16
+
+[3087."药引"]
+h_a_c = 8
+type = 2
+power = 16
+
+[3087."辅药"]
+type = 6
+power = 16
+
+[3088]
+name = "玉龙参"
+level = "四品药材"
+type = "药材"
+rank = 42
+
+[3088."主药"]
+h_a_c = 8
+type = 5
+power = 16
+
+[3088."药引"]
+h_a_c = -8
+type = 2
+power = 16
+
+[3088."辅药"]
+type = 6
+power = 16
+
+[3089]
+name = "伴妖草"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3089."主药"]
+h_a_c = 0
+type = 5
+power = 32
+
+[3089."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3089."辅药"]
+type = 6
+power = 32
+
+[3090]
+name = "剑心竹"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3090."主药"]
+h_a_c = 0
+type = 5
+power = 32
+
+[3090."药引"]
+h_a_c = 0
+type = 2
+power = 32
+
+[3090."辅药"]
+type = 6
+power = 32
+
+[3091]
+name = "绝魂草"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3091."主药"]
+h_a_c = -16
+type = 5
+power = 32
+
+[3091."药引"]
+h_a_c = 16
+type = 2
+power = 32
+
+[3091."辅药"]
+type = 6
+power = 32
+
+[3092]
+name = "月灵花"
+level = "五品药材"
+type = "药材"
+rank = 39
+
+[3092."主药"]
+h_a_c = 16
+type = 5
+power = 32
+
+[3092."药引"]
+h_a_c = -16
+type = 2
+power = 32
+
+[3092."辅药"]
+type = 6
+power = 32
+
+[3093]
+name = "混元果"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3093."主药"]
+h_a_c = 0
+type = 5
+power = 64
+
+[3093."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3093."辅药"]
+type = 6
+power = 64
+
+[3094]
+name = "皇龙花"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3094."主药"]
+h_a_c = 0
+type = 5
+power = 64
+
+[3094."药引"]
+h_a_c = 0
+type = 2
+power = 64
+
+[3094."辅药"]
+type = 6
+power = 64
+
+[3095]
+name = "天剑笋"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3095."主药"]
+h_a_c = -32
+type = 5
+power = 64
+
+[3095."药引"]
+h_a_c = 32
+type = 6
+power = 64
+
+[3095."辅药"]
+type = 3
+power = 64
+
+[3096]
+name = "黑天麻"
+level = "六品药材"
+type = "药材"
+rank = 36
+
+[3096."主药"]
+h_a_c = 32
+type = 5
+power = 64
+
+[3096."药引"]
+h_a_c = -32
+type = 2
+power = 64
+
+[3096."辅药"]
+type = 6
+power = 64
+
+[3097]
+name = "血玉竹"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3097."主药"]
+h_a_c = 0
+type = 5
+power = 128
+
+[3097."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3097."辅药"]
+type = 6
+power = 128
+
+[3098]
+name = "肠蚀草"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3098."主药"]
+h_a_c = 0
+type = 5
+power = 128
+
+[3098."药引"]
+h_a_c = 0
+type = 2
+power = 128
+
+[3098."辅药"]
+type = 6
+power = 128
+
+[3099]
+name = "凤血果"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3099."主药"]
+h_a_c = -64
+type = 5
+power = 128
+
+[3099."药引"]
+h_a_c = 64
+type = 2
+power = 128
+
+[3099."辅药"]
+type = 6
+power = 128
+
+[3100]
+name = "冰精芝"
+level = "七品药材"
+type = "药材"
+rank = 33
+
+[3100."主药"]
+h_a_c = 64
+type = 5
+power = 128
+
+[3100."药引"]
+h_a_c = -64
+type = 2
+power = 128
+
+[3100."辅药"]
+type = 6
+power = 128
+
+[3101]
+name = "狼桃"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3101."主药"]
+h_a_c = 0
+type = 5
+power = 256
+
+[3101."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3101."辅药"]
+type = 6
+power = 256
+
+[3102]
+name = "霸王花"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3102."主药"]
+h_a_c = 0
+type = 5
+power = 256
+
+[3102."药引"]
+h_a_c = 0
+type = 2
+power = 256
+
+[3102."辅药"]
+type = 6
+power = 256
+
+[3103]
+name = "太清玄灵草"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3103."主药"]
+h_a_c = -128
+type = 5
+power = 256
+
+[3103."药引"]
+h_a_c = 128
+type = 2
+power = 256
+
+[3103."辅药"]
+type = 6
+power = 256
+
+[3104]
+name = "冥胎骨"
+level = "八品药材"
+type = "药材"
+rank = 30
+
+[3104."主药"]
+h_a_c = 128
+type = 5
+power = 256
+
+[3104."药引"]
+h_a_c = -128
+type = 2
+power = 256
+
+[3104."辅药"]
+type = 6
+power = 256
+
+[3105]
+name = "地龙干"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3105."主药"]
+h_a_c = 0
+type = 5
+power = 512
+
+[3105."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3105."辅药"]
+type = 6
+power = 512
+
+[3106]
+name = "龙须藤"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3106."主药"]
+h_a_c = 0
+type = 5
+power = 512
+
+[3106."药引"]
+h_a_c = 0
+type = 2
+power = 512
+
+[3106."辅药"]
+type = 6
+power = 512
+
+[3107]
+name = "鬼面花"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3107."主药"]
+h_a_c = -256
+type = 5
+power = 512
+
+[3107."药引"]
+h_a_c = 256
+type = 2
+power = 512
+
+[3107."辅药"]
+type = 6
+power = 512
+
+[3108]
+name = "梧桐木"
+level = "九品药材"
+type = "药材"
+rank = 27
+
+[3108."主药"]
+h_a_c = 256
+type = 5
+power = 512
+
+[3108."药引"]
+h_a_c = -256
+type = 2
+power = 512
+
+[3108."辅药"]
+type = 6
+power = 512
