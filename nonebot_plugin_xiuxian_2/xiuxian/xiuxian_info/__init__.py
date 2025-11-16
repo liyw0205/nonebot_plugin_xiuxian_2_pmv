@@ -162,7 +162,15 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await xiuxian_message.finish()
     
     _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
+    if XiuConfig().user_info_image:
+        img_res = await get_msg_pic(text_msg)
+        if isinstance(event, GroupMessageEvent):
+            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
+        await xiuxian_message.finish()
     await handle_send(bot, event, text_msg)
+    await xiuxian_message.finish()
 
 @xiuxian_message_img.handle(parameterless=[Cooldown(cd_time=30)])
 async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

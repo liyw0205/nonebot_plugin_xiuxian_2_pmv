@@ -6,7 +6,7 @@ import os
 from PIL import Image
 import io
 from pathlib import Path
-
+from ..xiuxian_config import XiuConfig
 
 async def download_url(url: str) -> bytes:
     async with httpx.AsyncClient() as client:
@@ -35,9 +35,10 @@ async def get_avatar_by_user_id_and_save(user_id):
     PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     USER_AVATAR_PATH = PLAYERSDATA / user_id / 'AVATAR.png'
     INIT_PATH = Path() / "data" / "xiuxian" / "info_img" / "init.png"
-    # 直接返回默认头像不下载
-    im = Image.open(INIT_PATH).resize((280, 280)).convert("RGBA")
-    return im
+    if not XiuConfig().use_network_avatar:
+        # 直接返回默认头像不下载
+        im = Image.open(INIT_PATH).resize((280, 280)).convert("RGBA")
+        return im
     
     try:
         if USER_AVATAR_PATH.exists():
