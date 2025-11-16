@@ -449,7 +449,10 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 如果输入时间超过最大允许时间
     if impaer_exp_time > max_allowed_time:
-        msg = f"修炼时长超出上限，最多可修炼{round(max_allowed_time)}分钟"
+        if max_allowed_time > 0:
+            msg = f"修炼时长超出上限，最多可修炼{round(max_allowed_time)}分钟"
+        else:
+            msg = f"修炼时长超出上限，已不可修炼！"
         await handle_send(bot, event, msg)
         await impart_pk_exp.finish()
     
