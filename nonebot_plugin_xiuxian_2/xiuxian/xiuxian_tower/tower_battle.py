@@ -140,8 +140,8 @@ class TowerBattle:
         user_id = user_info["user_id"]
         user_buff_data = UserBuffDate(user_info['user_id'])
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        sub_buff_integral_buff = sub_buff_data.get('integral', 0)
-        sub_buff_stone_buff = sub_buff_data.get('stone', 0)
+        sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
+        sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, type_in=1, bot_id=bot.self_id)        
         await send_msg_handler(bot, event, result)
         if victor == "群友赢了":
@@ -221,8 +221,8 @@ class TowerBattle:
         user_id = user_info["user_id"]
         user_buff_data = UserBuffDate(user_info['user_id'])
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        sub_buff_integral_buff = sub_buff_data.get('integral', 0)
-        sub_buff_stone_buff = sub_buff_data.get('stone', 0)
+        sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
+        sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         tower_info = tower_data.get_user_tower_info(user_id)
         initial_max_floor = tower_info["max_floor"]  # 保存初始的最大层数
         
@@ -313,8 +313,8 @@ class TowerBattle:
         tower_info = tower_data.get_user_tower_info(user_id)
         user_buff_data = UserBuffDate(user_info['user_id'])
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        sub_buff_integral_buff = sub_buff_data.get('integral', 0)
-        sub_buff_stone_buff = sub_buff_data.get('stone', 0)
+        sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
+        sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         """给予层数奖励"""
         # 基础奖励
         base_score = self.config["积分奖励"]["每层基础"]

@@ -354,8 +354,8 @@ class TrainingEvents:
         """处理奖励事件"""
         user_buff_data = UserBuffDate(user_info['user_id'])
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        sub_buff_integral_buff = sub_buff_data.get('integral', 0)
-        sub_buff_stone_buff = sub_buff_data.get('stone', 0)
+        sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
+        sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         is_big_reward = "2" in event_type
         events_pool = WORLDLY_EVENTS if self.event_style == "worldly" else TRANSCENDENT_EVENTS
         reward_types = list(events_pool["reward"].keys())

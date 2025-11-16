@@ -97,8 +97,8 @@ class XiuConfig:
         self.layout_bot_dict = {}
         # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
         # "123456":"123456",
-        self.at_response = True
-        # 艾特响应命令
+        self.at_response = False
+        # 艾特响应命令（官机请勿打开）
         self.at_sender = True
         # 消息是否艾特
         self.qqq = 144795954 
