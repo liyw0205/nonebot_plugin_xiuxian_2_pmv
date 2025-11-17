@@ -411,8 +411,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     # 境界加成（只有在没有境界压制时才应用）
     if rank_penalty == 1.0:
-        boss_integral = int(boss_integral * (1 + (0.8 * (user_rank - boss_rank))))
-        points_bonus = int(80 * (user_rank - boss_rank))
+        boss_integral = int(boss_integral * (1 + (0.3 * (user_rank - boss_rank))))
+        points_bonus = int(30 * (user_rank - boss_rank))
         more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
     
     # 应用灵石加成

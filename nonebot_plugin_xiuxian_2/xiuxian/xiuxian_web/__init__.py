@@ -1004,8 +1004,8 @@ def batch_edit(table_name):
             params = [value]
         else:
             return jsonify({"success": False, "error": "无效的操作类型"})
-    
-    # 添加WHERE条件
+        
+        # 添加WHERE条件
         if not apply_to_all:
             if search_field and search_value:  # 指定字段搜索
                 values = search_value.split()
@@ -1027,7 +1027,7 @@ def batch_edit(table_name):
                         if field != tables[table_name].get('primary_key'):
                             conditions.append(f"{field} LIKE ?")
                             params.append(f"%{search_value}%")
-                
+                    
                     # 确保有搜索条件时才添加WHERE
                     if conditions:
                         sql += f" WHERE ({' OR '.join(conditions)})"
