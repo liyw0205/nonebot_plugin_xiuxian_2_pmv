@@ -124,6 +124,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
         sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
@@ -189,6 +190,7 @@ async def twolun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         sql_message.updata_user_main_buff(user_id, 0) #重置用户主功法
         sql_message.updata_user_sub_buff(user_id, 0) #重置用户辅修功法
         sql_message.updata_user_sec_buff(user_id, 0) #重置用户神通
+        sql_message.reset_user_drug_resistance(user_id) #重置用户耐药性
         sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
         sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
