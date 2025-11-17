@@ -499,17 +499,17 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if isCrit:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
         else:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}造成{atkmsg[:-1]}{turnmsg}"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{atkmsg[:-1]}{turnmsg}"
 
         return skillmsg, skillsh, turncost
 
@@ -522,17 +522,17 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if isCrit:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}并且发生了会心一击，造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
         else:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
 
         return skillmsg, skillsh, turncost
 
@@ -544,17 +544,17 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if secbuffdata['bufftype'] == 1:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}攻击力增加{skillsh}倍，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力增加{skillsh}倍，持续{turncost}回合！"
         elif secbuffdata['bufftype'] == 2:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}获得{skillsh * 100}%的减伤，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}获得{skillsh * 100}%的减伤，持续{turncost}回合！"
 
         return skillmsg, skillsh, turncost
 
@@ -564,19 +564,19 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if random.randint(0, 100) <= secbuffdata['success']:  # 命中
             skillsh = True
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}使对手动弹不得,{secbuffdata['desc']}持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}使对手动弹不得,持续{turncost}回合！"
         else:  # 未命中
             skillsh = False
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}但是被对手躲避！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}但是被对手躲避！"
 
         return skillmsg, skillsh, turncost
         
@@ -597,17 +597,17 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if isCrit:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
         else:
-            skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}造成{atkmsg[:-1]}{turnmsg}"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{atkmsg[:-1]}{turnmsg}"
 
         return skillmsg, skillsh, turncost
 
@@ -618,14 +618,14 @@ def get_skill_sh_data(player, secbuffdata):
         # 构建消耗信息，如果消耗为0则不显示
         cost_msgs = []
         if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to2(secbuffdata['hpcost'] * player['气血'])}点")
+            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
         if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to2(secbuffdata['mpcost'] * player['exp'])}点")
+            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
         
         cost_msg = "、".join(cost_msgs)
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
-        skillmsg = f"{player['道号']}发动技能：{secbuffdata['name']}，{cost_prefix}{secbuffdata['desc']}攻击力叠加{skillsh}倍，持续{turncost}回合！"
+        skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力叠加{skillsh}倍，持续{turncost}回合！"
 
         return skillmsg, skillsh, turncost
         
@@ -709,7 +709,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             restore_health = 0
         if restore_health > 0:
             player1['气血'] = min(player1['气血'] + int(restore_health), max_hp)
-            other_msg = f"回复气血:{number_to2(int(restore_health))}"
+            other_msg = f"❤️回复气血:{number_to(int(restore_health))}"
         
     elif buff_type == '5':  # 回蓝
         restore_mana = max_mp * buff_value / 100
@@ -717,7 +717,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             restore_mana = 0
         if restore_mana > 0:
             player1['真元'] = min(player1['真元'] + int(restore_mana), max_mp)
-            other_msg = f"回复真元:{number_to2(int(restore_mana))}"
+            other_msg = f"💙回复真元:{number_to(int(restore_mana))}"
         
     elif buff_type == '6':  # 吸血
         if damage1 > 0:  # 只有命中才吸血
@@ -727,7 +727,7 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             health_stolen = max(health_stolen, 0)
             player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
             if health_stolen > 0:
-                health_stolen_msg = f"吸取气血:{number_to2(int(health_stolen))}"
+                health_stolen_msg = f"🩸吸取气血:{number_to(int(health_stolen))}"
                 
     elif buff_type == '7':  # 吸蓝
         if damage1 > 0:  # 只有命中才吸蓝
@@ -737,13 +737,13 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             mana_stolen = max(mana_stolen, 0)
             player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             if mana_stolen > 0:
-                mana_stolen_msg = f"吸取真元:{number_to2(int(mana_stolen))}"
+                mana_stolen_msg = f"🩵吸取真元:{number_to(int(mana_stolen))}"
                 
     elif buff_type == '8':  # 中毒
         poison_damage = player2['气血'] / 100 * buff_value
         player2['气血'] = max(player2['气血'] - int(poison_damage), 0)
         if poison_damage > 0:
-            other_msg = f"对手中毒消耗血量:{number_to2(int(poison_damage))}"
+            other_msg = f"🌀对手中毒消耗血量:{number_to(int(poison_damage))}"
             
     elif buff_type == '9':  # 双吸
         if damage1 > 0:  # 只有命中才有效
@@ -761,9 +761,9 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             
             if health_stolen > 0:
-                health_stolen_msg = f"吸取气血:{number_to2(int(health_stolen))}"
+                health_stolen_msg = f"🩵吸取气血:{number_to(int(health_stolen))}"
             if mana_stolen > 0:
-                mana_stolen_msg = f"吸取真元:{number_to2(int(mana_stolen))}"
+                mana_stolen_msg = f"🩸吸取真元:{number_to(int(mana_stolen))}"
     
     # 组合消息
     if health_stolen_msg and mana_stolen_msg:
@@ -953,7 +953,7 @@ class BattleEngine:
         actual_damage = 0
         if check_hit(attacker['hit'], defender['dodge']):
             if is_crit:
-                msg = "{}发起会心一击，造成了{}伤害"
+                msg = "{}发起💥会心一击，造成了{}伤害"
             else:
                 msg = "{}发起攻击，造成了{}伤害"
                 
@@ -962,7 +962,7 @@ class BattleEngine:
             
             attack_msg = msg.format(attacker_name, number_to2(actual_damage))
             hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
+            hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
             
             self.add_message(attacker, attack_msg)
             self.process_after_attack_buffs(attacker, defender, actual_damage)
@@ -1014,7 +1014,7 @@ class BattleEngine:
             
         defender['player']['气血'] -= actual_damage
         hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
+        hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
         self.process_after_attack_buffs(attacker, defender, actual_damage)
         self.add_message(attacker, hp_msg)
         return True
@@ -1089,7 +1089,7 @@ class BattleEngine:
         msg = "{}发起攻击，造成了{}伤害"
         hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
         attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
-        hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
+        hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
         
         self.add_message(attacker, attack_msg)
         self.add_message(attacker, hp_msg)
@@ -1109,10 +1109,10 @@ class BattleEngine:
             persistent_damage = int(attacker['skill_sh'] * min(0.2 + defender['current_js'], 1.0))
             defender['player']['气血'] -= persistent_damage
 
-            skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to2(attacker['skill_sh'])}伤害，剩余回合：{attacker['turn_cost']}!"
+            skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to(attacker['skill_sh'])}伤害，剩余回合：{attacker['turn_cost']}!"
             self.add_message(attacker, skill_msg)
             hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            persistent_hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
+            persistent_hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
             self.add_message(attacker, persistent_hp_msg)
             
         elif skill_type == 3:  # buff类持续效果
@@ -1150,7 +1150,7 @@ class BattleEngine:
             msg = "{}发起攻击，造成了{}伤害"
             hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
             attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
-            hp_msg = f"{defender_name}剩余血量{number_to2(defender['player']['气血'])}\n{hp_bar}"
+            hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
             
             self.add_message(attacker, attack_msg)
             self.add_message(attacker, f"{attacker['skill_data']['name']}叠伤剩余:{attacker['turn_cost']}回合，当前{round(stack_multiplier, 1)}倍")
@@ -1336,9 +1336,9 @@ def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_comb
     if si_boss and boss_combatant is not None:
         boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
         sub_buff_data = player_combatant.get('sub_buff_data')
-        fan_data = sub_buff_data.get('fan', '0') if sub_buff_data is not None else 0
+        fan_data = sub_buff_data.get('fan') if sub_buff_data is not None else 0
         
-        if fan_data > 0:
+        if int(fan_data) > 0:
             # 将BOSS的特定负面Buff设置为0
             boss_buff.boss_xl = 0
             boss_buff.boss_jb = 0
@@ -1642,14 +1642,14 @@ def execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_in
             effect_name = boss['name']
             if boss['name'] in BOSSATK:
                 effect_name = BOSSATK[boss['name']]
-            msg = f"{effect_name}发起会心一击，造成了{number_to2(actual_damage)}伤害"
+            msg = f"{effect_name}发起💥会心一击，造成了{number_to2(actual_damage)}伤害"
         else:
             msg = f"{boss['name']}发起攻击，造成了{number_to2(actual_damage)}伤害"
             
         player['气血'] -= actual_damage
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的攻击被{player['道号']}闪避了！", boss_init_hp)
 
@@ -1672,12 +1672,12 @@ def execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_i
         player['气血'] -= total_damage
         
         if is_crit:
-            msg = f"{boss['name']}：紫玄掌！！紫星河！！！并且发生了会心一击，造成了{number_to2(total_damage)}伤害"
+            msg = f"{boss['name']}：紫玄掌！！紫星河！！！💥并且发生了会心一击，造成了{number_to2(total_damage)}伤害"
         else:
             msg = f"{boss['name']}：紫玄掌！！紫星河！！！造成了{number_to2(total_damage)}伤害"
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
 
@@ -1698,12 +1698,12 @@ def execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_i
         player['气血'] -= special_damage
         
         if is_crit:
-            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！并且发生了会心一击，造成了{number_to2(special_damage)}伤害"
+            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！💥并且发生了会心一击，造成了{number_to2(special_damage)}伤害"
         else:
             msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！造成了{number_to2(special_damage)}伤害"
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to2(player['气血'])}\n{hp_bar}", boss_init_hp)
+        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
     else:
         engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
 
