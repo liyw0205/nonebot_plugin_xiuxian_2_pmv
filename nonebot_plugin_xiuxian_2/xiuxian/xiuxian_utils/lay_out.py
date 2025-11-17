@@ -143,6 +143,10 @@ def Cooldown(
         return
 
     async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent | PrivateMessageEvent):
+        if XiuConfig().at_response:
+            if not event.to_me:
+                logger.opt(colors=True).success(f"<green>不为艾特命令,已忽略！</green>")
+                await matcher.finish()
         is_private = isinstance(event, PrivateMessageEvent)
         user_id = str(event.get_user_id())
         group_id = str(event.group_id) if not is_private else None
