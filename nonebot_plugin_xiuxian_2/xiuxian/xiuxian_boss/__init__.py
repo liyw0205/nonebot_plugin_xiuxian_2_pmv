@@ -756,7 +756,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await send_msg_handler(bot, event, f'世界BOSS列表 - 第{current_page}页', bot.self_id, paged_msgs)
     await boss_info2.finish()
 
-@generate_all.handle()
+@generate_all.handle(parameterless=[Cooldown(1.4)])
 async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bosses = create_all_bosses()  # 自动计算最高境界
     group_boss["000000"] = bosses  # 替换当前 BOSS 列表
@@ -789,7 +789,7 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     await handle_send(bot, event, msg)
     await create.finish()
 
-@create_appoint.handle()
+@create_appoint.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

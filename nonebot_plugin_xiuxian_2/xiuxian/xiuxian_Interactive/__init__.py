@@ -1293,20 +1293,20 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     await handle_send(bot, event, message)
 
-@licking_dog_diary.handle()
+@licking_dog_diary.handle(parameterless=[Cooldown(1.4)])
 async def handle_licking_dog_diary(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理舔狗日记命令"""
     message = random.choice(LICKING_DOG_MESSAGES)
     await handle_send(bot, event, message)
 
-@what_to_eat.handle()
+@what_to_eat.handle(parameterless=[Cooldown(1.4)])
 async def handle_what_to_eat(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理今天吃什么命令"""
     food = random.choice(FOOD_MESSAGES)
     message = f"今天推荐吃：{food}！"
     await handle_send(bot, event, message)
 
-@good_morning.handle()
+@good_morning.handle(parameterless=[Cooldown(1.4)])
 async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理早安命令"""
     isUser, user_info, msg = check_user(event)
@@ -1329,7 +1329,7 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     message = get_morning_message_by_time(current_count)
     await handle_send(bot, event, message)
 
-@good_night.handle()
+@good_night.handle(parameterless=[Cooldown(1.4)])
 async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理晚安命令"""
     isUser, user_info, msg = check_user(event)
@@ -1352,103 +1352,103 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     message = get_night_message_by_time(current_count)
     await handle_send(bot, event, message)
 
-@cute_command.handle()
+@cute_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_cute(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理可爱命令"""
     message = random.choice(CUTE_MESSAGES)
     await handle_send(bot, event, message)
 
-@hello_command.handle()
+@hello_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_hello(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理你好命令"""
     message = random.choice(HELLO_MESSAGES)
     await handle_send(bot, event, message)
 
-@thanks_command.handle()
+@thanks_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_thanks(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理谢谢命令"""
     message = random.choice(THANKS_MESSAGES)
     await handle_send(bot, event, message)
 
-@bye_command.handle()
+@bye_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_bye(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理再见命令"""
     message = random.choice(BYE_MESSAGES)
     await handle_send(bot, event, message)
 
-@how_are_you.handle()
+@how_are_you.handle(parameterless=[Cooldown(1.4)])
 async def handle_how_are_you(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理你好吗命令"""
     message = random.choice(HOW_ARE_YOU_MESSAGES)
     await handle_send(bot, event, message)
 
-@weather_command.handle()
+@weather_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_weather(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理天气命令"""
     message = random.choice(WEATHER_MESSAGES)
     await handle_send(bot, event, message)
 
-@time_command.handle()
+@time_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_time(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理时间命令"""
     message = get_time_message()
     await handle_send(bot, event, message)
 
-@eat_command.handle()
+@eat_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_eat(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理吃饭命令"""
     message = random.choice(EAT_MESSAGES)
     await handle_send(bot, event, message)
 
-@study_command.handle()
+@study_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_study(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理学习命令"""
     message = random.choice(STUDY_MESSAGES)
     await handle_send(bot, event, message)
 
-@work_command.handle()
+@work_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理工作命令"""
     message = random.choice(WORK_MESSAGES)
     await handle_send(bot, event, message)
 
-@rest_command.handle()
+@rest_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_rest(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理休息命令"""
     message = random.choice(REST_MESSAGES)
     await handle_send(bot, event, message)
 
-@joke_command.handle()
+@joke_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_joke(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理笑话命令"""
     message = random.choice(JOKE_MESSAGES)
     await handle_send(bot, event, message)
 
-@encourage_command.handle()
+@encourage_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_encourage(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理加油命令"""
     message = random.choice(ENCOURAGE_MESSAGES)
     await handle_send(bot, event, message)
 
-@crazy_thursday.handle()
+@crazy_thursday.handle(parameterless=[Cooldown(1.4)])
 async def handle_crazy_thursday(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理疯狂星期四命令"""
     message = random.choice(CRAZY_THURSDAY_MESSAGES)
     await handle_send(bot, event, message)
 
-@funny_story.handle()
+@funny_story.handle(parameterless=[Cooldown(1.4)])
 async def handle_funny_story(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理讲个段子命令"""
     message = random.choice(FUNNY_STORY_MESSAGES)
     await handle_send(bot, event, message)
 
-@love_sentence.handle()
+@love_sentence.handle(parameterless=[Cooldown(1.4)])
 async def handle_love_sentence(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理土味情话命令"""
     message = random.choice(LOVE_SENTENCE_MESSAGES)
     await handle_send(bot, event, message)
 
-@fortune_command.handle()
+@fortune_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理今日运势命令"""
     isUser, user_info, msg = check_user(event)
@@ -1471,7 +1471,7 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     await handle_send(bot, event, fortune_message)
 
-@interaction_command.handle()
+@interaction_command.handle(parameterless=[Cooldown(1.4)])
 async def handle_interaction(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理互动命令，显示所有可用命令"""
     

@@ -1490,6 +1490,8 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 执行购买（严格按照输入顺序处理每个物品名）
     total_cost = 0
+    user_stone = user_info["stone"]
+    user_stone_cost = False
     success_items = []
     failed_items = []
     
@@ -1513,6 +1515,11 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 if item["seller_id"] == user_id:
                     continue
 
+                # 检查用户是否有足够的灵石购买这个物品
+                if user_stone < item["price"]:
+                    user_stone_cost = True
+                    break  # 灵石不足，停止购买
+
                 # 执行购买
                 sql_message.update_ls(user_id, item["price"], 2)  # 扣钱
                 sql_message.update_ls(item["seller_id"], item["price"], 1)  # 给卖家
@@ -1528,6 +1535,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 purchased += 1
                 item_total += item["price"]
                 total_cost += item["price"]
+                user_stone -= item["price"]
                 remaining -= 1
                 
             except Exception as e:
@@ -1537,8 +1545,11 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         # 记录结果（每个name单独记录）
         if purchased > 0:
             success_items.append(f"{name}×{purchased} ({number_to(item_total)}灵石)")
-        if remaining > 0:
-            failed_items.append(f"{name}×{remaining}（库存不足）")
+        if user_stone_cost:
+            failed_items.append(f"{name}×{remaining}（灵石不足）")
+        else:
+            if remaining > 0:
+                failed_items.append(f"{name}×{remaining}（库存不足）")
     
     # 构建结果消息
     msg_parts = []
@@ -3235,7 +3246,7 @@ def place_bid(user_id, user_name, auction_id, bid_price):
     
     return True, "\n".join(msg)
 
-@auction_view.handle()
+@auction_view.handle(parameterless=[Cooldown(1.4)])
 async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看拍卖"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3360,7 +3371,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg.append("\n输入【拍卖查看 ID】查看详情")
     await handle_send(bot, event, "\n".join(msg))
 
-@auction_bid.handle()
+@auction_bid.handle(parameterless=[Cooldown(1.4)])
 async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """参与拍卖竞拍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3391,7 +3402,7 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     )
     await handle_send(bot, event, result)
 
-@auction_add.handle()
+@auction_add.handle(parameterless=[Cooldown(1.4)])
 async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """上架物品到拍卖（限制ITEM_TYPES类型）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3476,7 +3487,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     )
     await handle_send(bot, event, result)
 
-@auction_remove.handle()
+@auction_remove.handle(parameterless=[Cooldown(1.4)])
 async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """下架拍卖品（仅在非拍卖期间有效）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3553,7 +3564,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(msg))
     await my_auction.finish()
 
-@auction_info.handle()
+@auction_info.handle(parameterless=[Cooldown(1.4)])
 async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看拍卖信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3588,7 +3599,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     await handle_send(bot, event, "\n".join(msg))
 
-@auction_start.handle()
+@auction_start.handle(parameterless=[Cooldown(1.4)])
 async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """管理员开启拍卖"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3612,7 +3623,7 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = f"拍卖已开启！本次拍卖将持续{schedule['duration_hours']}小时，预计{end_time}结束。"
     await handle_send(bot, event, msg)
 
-@auction_end.handle()
+@auction_end.handle(parameterless=[Cooldown(1.4)])
 async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """管理员结束拍卖"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3641,7 +3652,7 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     await handle_send(bot, event, "\n".join(msg))
 
-@auction_lock.handle()
+@auction_lock.handle(parameterless=[Cooldown(1.4)])
 async def auction_lock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """封闭拍卖（取消自动开启）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3650,7 +3661,7 @@ async def auction_lock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg = "拍卖已封闭，将不再自动开启！"
     await handle_send(bot, event, msg)
 
-@auction_unlock.handle()
+@auction_unlock.handle(parameterless=[Cooldown(1.4)])
 async def auction_unlock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """解封拍卖（恢复自动开启）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -2275,7 +2275,7 @@ async def sect_power_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await send_msg_handler(bot, event, '宗门战力排行', bot.self_id, msg_list)
     await sect_power_top.finish()
 
-@sect_shop.handle()
+@sect_shop.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看宗门商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2343,7 +2343,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await send_msg_handler(bot, event, "宗门商店", bot.self_id, msg_list)
     await sect_shop.finish()
 
-@sect_buy.handle()
+@sect_buy.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换宗门商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

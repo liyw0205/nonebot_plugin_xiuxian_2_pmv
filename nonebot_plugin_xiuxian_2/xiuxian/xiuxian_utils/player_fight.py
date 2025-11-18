@@ -761,9 +761,9 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
             player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
             
             if health_stolen > 0:
-                health_stolen_msg = f"🩵吸取气血:{number_to(int(health_stolen))}"
+                health_stolen_msg = f"🩸吸取气血:{number_to(int(health_stolen))}"
             if mana_stolen > 0:
-                mana_stolen_msg = f"🩸吸取真元:{number_to(int(mana_stolen))}"
+                mana_stolen_msg = f"🩵吸取真元:{number_to(int(mana_stolen))}"
     
     # 组合消息
     if health_stolen_msg and mana_stolen_msg:

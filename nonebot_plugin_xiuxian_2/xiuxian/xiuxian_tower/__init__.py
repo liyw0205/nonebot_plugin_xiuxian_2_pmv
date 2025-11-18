@@ -40,7 +40,7 @@ async def reset_tower_floors():
     tower_data.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
 
-@tower_boss_info.handle()
+@tower_boss_info.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看当前要挑战层数的BOSS属性"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -72,7 +72,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await tower_boss_info.finish()
 
-@tower_help.handle()
+@tower_help.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """通天塔帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -175,7 +175,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     log_message(user_id, msg)
     await tower_continuous.finish()
 
-@tower_info.handle()
+@tower_info.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看通天塔信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -200,7 +200,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await tower_info.finish()
 
-@tower_rank.handle()
+@tower_rank.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看通天塔排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -221,7 +221,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_msg_handler(bot, event, "通天塔排行榜", bot.self_id, msg_list)
     await tower_rank.finish()
 
-@tower_shop.handle()
+@tower_shop.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看通天塔商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -277,7 +277,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list)
     await tower_shop.finish()
 
-@tower_buy.handle()
+@tower_buy.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换通天塔商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -351,7 +351,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await tower_buy.finish()
 
-@tower_reset.handle()
+@tower_reset.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置通天塔数据(管理员)"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

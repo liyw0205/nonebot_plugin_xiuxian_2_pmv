@@ -358,7 +358,7 @@ class IllusionData:
             question["counts"] = [0] * len(question["options"])
         cls.save_questions(questions)
 
-@illusion_heart.handle()
+@illusion_heart.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """幻境寻心"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -474,7 +474,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await illusion_heart.finish()
 
-@illusion_reset.handle()
+@illusion_reset.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置幻境数据(管理员) - 重置玩家数据和问题统计数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -485,7 +485,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await illusion_reset.finish()
 
-@illusion_clear.handle()
+@illusion_clear.handle(parameterless=[Cooldown(1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空幻境数据(管理员) - 仅清空玩家数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
