@@ -794,7 +794,7 @@ class BattleEngine:
             
         # 获取修炼数据
         user_info = sql_message.get_user_info_with_id(player['user_id'])
-        hppractice = user_info['hppractice'] * 0.08 if user_info['hppractice'] else 0
+        hppractice = user_info['hppractice'] * 0.05 if user_info['hppractice'] else 0
         mppractice = user_info['mppractice'] * 0.05 if user_info['mppractice'] else 0
         
         # 计算最终buff
