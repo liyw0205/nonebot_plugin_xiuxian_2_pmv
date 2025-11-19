@@ -565,6 +565,12 @@ def number_to(num):
     except (TypeError, ValueError):
         raise ValueError("输入必须是数字")
 
+    # 处理负数
+    is_negative = False
+    if num < 0:
+        is_negative = True
+        num = abs(num)
+
     def convert(n, level):
         if level >= len(units) - 1 or n < 10000:
             return n, level
@@ -584,7 +590,13 @@ def number_to(num):
             # 保留2位小数并去除末尾的0
             formatted_num = "{0:.2f}".format(num).rstrip('0').rstrip('.')
     
-    return f"{formatted_num}{units[level]}"
+    result = f"{formatted_num}{units[level]}"
+    
+    # 如果是负数，添加负号
+    if is_negative:
+        result = f"-{result}"
+    
+    return result
 
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
