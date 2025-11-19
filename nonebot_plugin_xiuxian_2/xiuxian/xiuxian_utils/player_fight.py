@@ -680,8 +680,8 @@ def after_atk_sub_buff_handle(player1_sub_open, attacker, user1_main_buff_data, 
         return player1, player2, msg
     
     # 计算最大气血和真元
-    max_hp = int(player1['exp'] / 2 * attacker['hp_buff'])
-    max_mp = int(player1['exp'] * attacker['mp_buff'])
+    max_hp = int(player1['exp'] / 2 * (1 + attacker['hp_buff']))
+    max_mp = int(player1['exp'] * (1 + attacker['mp_buff']))
     
     buff_value = int(subbuffdata1['buff'])
     buff_type = subbuffdata1['buff_type']
@@ -800,7 +800,7 @@ class BattleEngine:
         # 计算最终buff
         total_hp_buff = hp_buff + impart_hp + hppractice
         total_mp_buff = mp_buff + impart_mp + mppractice
-        
+        max_hp = int(player['exp'] / 2 * (1 + total_hp_buf))
         # 获取身法和瞳术数据
         effect1_data = buff_data.get_user_effect1_buff_data()  # 身法
         effect2_data = buff_data.get_user_effect2_buff_data()  # 瞳术
@@ -851,7 +851,7 @@ class BattleEngine:
             'turn_skip': True,
             'buff_turn': True,
             'battle_buff': UserBattleBuffDate(player['user_id']),
-            'init_hp': player['气血'],
+            'init_hp': max_hp,
             'def_js': max(get_user_def_buff(player['user_id']), 0.05),
             'current_js': max(get_user_def_buff(player['user_id']), 0.05),
             'skill_sh': 0
