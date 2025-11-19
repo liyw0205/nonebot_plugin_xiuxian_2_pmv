@@ -375,7 +375,7 @@ class TowerBattle:
             base_rank = max(convert_rank(user_level)[0], 16)
         else:
             base_rank = max(convert_rank(user_level)[0] - 22, 10)
-        zx_rank = random.randint(base_rank, min(base_rank + 35, 54))
+        zx_rank = random.randint(base_rank, base_rank + 35)
         # 获取随机物品
         item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
         if not item_id_list:

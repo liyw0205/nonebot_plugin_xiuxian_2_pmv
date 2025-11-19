@@ -36,7 +36,7 @@ def workmake(work_level, exp, user_level):
             base_rank = max(convert_rank(user_level)[0] - 22, 16)
         else:
             base_rank = max(convert_rank(user_level)[0] - 22, 5)
-        zx_rank = random.randint(base_rank, min(base_rank + 35, 54))
+        zx_rank = random.randint(base_rank, base_rank + 35)
         if zx_rank == 5 and random.randint(1, 100) != 100:
             zx_rank = 10
         item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)

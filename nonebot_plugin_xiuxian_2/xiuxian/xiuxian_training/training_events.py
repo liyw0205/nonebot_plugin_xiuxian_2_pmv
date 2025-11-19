@@ -403,7 +403,7 @@ class TrainingEvents:
                 base_rank = 16
             else:
                 base_rank = random.randint(5, 50) - reward_data["rank_offset"]
-            zx_rank = random.randint(base_rank, min(base_rank + 20, 54))
+            zx_rank = random.randint(base_rank, base_rank + 20)
             if zx_rank == 5 and random.randint(1, 100) != 100:
                 zx_rank = 10
             item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
