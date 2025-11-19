@@ -264,8 +264,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 1. 执行签到逻辑
     result = sql_message.get_sign(user_id)
-    if result == "贪心的人是不会有好运的！":
-        log_message(user_id, result)
+    if user_info['is_sign'] == 1:
         await handle_send(bot, event, result)
         await sign_in.finish()
      # 2. 自动参与"借运"抽奖

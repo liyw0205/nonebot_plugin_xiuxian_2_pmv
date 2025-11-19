@@ -1491,8 +1491,8 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     
     # 1. 获取签到状态信息
-    sign_status = sql_message.get_sign(user_id)
-    if sign_status == "贪心的人是不会有好运的！":
+    sign_status = user_info['is_sign']
+    if sign_status == 1:
         sign_msg = "今日已签到"
     else:
         sign_msg = "今日未签到"
