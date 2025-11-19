@@ -38,7 +38,7 @@ items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic, CommandObjectID,
-    pic_msg_format, send_msg_handler, log_message, handle_send, update_statistics_value
+    send_msg_handler, log_message, handle_send, update_statistics_value
 )
 from .boss_limit import boss_limit
 from .. import DRIVER

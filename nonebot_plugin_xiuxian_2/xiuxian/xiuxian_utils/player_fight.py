@@ -1,7 +1,7 @@
 import random
 from .xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from ..xiuxian_config import convert_rank
-from .utils import number_to, number_to2
+from .utils import number_to
 from .item_json import Items
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -336,26 +336,24 @@ def generate_hp_bar(current_hp, max_hp):
     filled_blocks = max(0, min(10, filled_blocks))  # 限制在0-10之间
     
     # 生成血量条字符串
-    hp_bar = "⬛️" * filled_blocks + "⬜️" * (10 - filled_blocks)
+    hp_bar = "▬" * filled_blocks + "▭" * (10 - filled_blocks)
     return f"{hp_bar} {percentage_int}%"
 
 def get_msg_dict(player, player_init_hp, msg):
-    player['气血'] = int(round(player['气血']))
     return {
         "type": "node", 
         "data": {
-            "name": f"{player['道号']}，当前血量：{int(player['气血'])} / {int(player_init_hp)}",
+            "name": f"{player['道号']}，当前血量：{number_to(int(player['气血']))} / {number_to(int(player_init_hp))}",
             "uin": int(player['user_id']), "content": msg
                 }
             }
 
 
 def get_boss_dict(boss, boss_init_hp, msg, bot_id):
-    boss['气血'] = int(round(boss['气血']))
     return {
         "type": "node",
         "data": {
-            "name": f"{boss['name']}当前血量：{int(boss['气血'])} / {int(boss_init_hp)}", 
+            "name": f"{boss['name']}当前血量：{number_to(int(boss['气血']))} / {number_to(int(boss_init_hp))}", 
             "uin": int(bot_id),
             "content": msg
                 }
@@ -483,7 +481,7 @@ def get_skill_sh_data(player, secbuffdata):
         skillsh = 0
         atkmsg = ''
         for value in atkvalue:
-            atkmsg += f"{number_to2(value * turnatk)}伤害、"
+            atkmsg += f"{number_to(value * turnatk)}伤害、"
             skillsh += int(value * turnatk)
 
         if turncost == 0:
@@ -525,9 +523,9 @@ def get_skill_sh_data(player, secbuffdata):
         cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if isCrit:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{number_to(skillsh)}点伤害，持续{turncost}回合！"
         else:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to2(skillsh)}点伤害，持续{turncost}回合！"
+            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to(skillsh)}点伤害，持续{turncost}回合！"
 
         return skillmsg, skillsh, turncost
 
@@ -581,7 +579,7 @@ def get_skill_sh_data(player, secbuffdata):
         atkvalue = secbuffdata['atkvalue']  # 最低伤害
         atkvalue2 = secbuffdata['atkvalue2']  # 最高伤害
         value = random.uniform(atkvalue, atkvalue2)
-        atkmsg = f"{number_to2(value * turnatk)}伤害、"
+        atkmsg = f"{number_to(value * turnatk)}伤害、"
         skillsh = int(value * turnatk)
 
         if turncost == 0:
@@ -667,7 +665,7 @@ def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date
 
 
 # 处理攻击后辅修功法效果
-def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, subbuffdata1, damage1, player2,
+def after_atk_sub_buff_handle(player1_sub_open, attacker, user1_main_buff_data, subbuffdata1, damage1, defender,
                              boss_buff: BossBuff = empty_boss_buff,
                              random_buff: UserRandomBuff = empty_ussr_random_buff):
     """处理攻击后的辅修功法效果（优化版）"""
@@ -675,20 +673,15 @@ def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, s
     health_stolen_msg = None
     mana_stolen_msg = None
     other_msg = None
+    player1 = attacker['player']
+    player2 = defender['player']
 
     if not player1_sub_open:
         return player1, player2, msg
-
-    # 获取玩家属性
-    user_id = player1['user_id']
-    user_info = sql_message.get_user_info_with_id(user_id)
     
     # 计算最大气血和真元
-    max_hp = int(player1['exp'] / 2)
-    max_mp = int(player1['exp'])
-    if user1_main_buff_data:
-        max_hp = int(player1['exp'] / 2) * (1 + user1_main_buff_data.get('hpbuff', 0))
-        max_mp = player1['exp'] * (1 + user1_main_buff_data.get('mpbuff', 0))
+    max_hp = int(player1['exp'] / 2 * attacker['hp_buff'])
+    max_mp = int(player1['exp'] * attacker['mp_buff'])
     
     buff_value = int(subbuffdata1['buff'])
     buff_type = subbuffdata1['buff_type']
@@ -955,7 +948,7 @@ class BattleEngine:
             actual_damage = int(calculate_damage(attacker, defender, damage * rate))
             defender['player']['气血'] -= actual_damage
             
-            attack_msg = msg.format(attacker_name, number_to2(actual_damage))
+            attack_msg = msg.format(attacker_name, number_to(actual_damage))
             hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
             hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
             
@@ -1083,7 +1076,7 @@ class BattleEngine:
         
         msg = "{}发起攻击，造成了{}伤害"
         hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-        attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
+        attack_msg = msg.format(attacker['player']['道号'], number_to(actual_damage))
         hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
         
         self.add_message(attacker, attack_msg)
@@ -1142,7 +1135,7 @@ class BattleEngine:
             
             msg = "{}发起攻击，造成了{}伤害"
             hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            attack_msg = msg.format(attacker['player']['道号'], number_to2(actual_damage))
+            attack_msg = msg.format(attacker['player']['道号'], number_to(actual_damage))
             hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
             
             self.add_message(attacker, attack_msg)
@@ -1169,11 +1162,11 @@ class BattleEngine:
             
         player1, player2, msg = after_atk_sub_buff_handle(
             attacker['sub_open'], 
-            attacker['player'], 
+            attacker, 
             attacker['main_buff_data'],
             attacker['sub_buff_data'], 
             damage_dealt, 
-            defender['player'],
+            defender,
             defender.get('boss_buff', empty_boss_buff),
             attacker.get('random_buff', empty_ussr_random_buff)
         )
@@ -1329,7 +1322,7 @@ def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_comb
     if si_boss and boss_combatant is not None:
         boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
         sub_buff_data = player_combatant.get('sub_buff_data')
-        fan_data = sub_buff_data.get('fan') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
+        fan_data = sub_buff_data.get('fan', '0') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
         
         if int(fan_data) > 0:
             # 将BOSS的特定负面Buff设置为0
@@ -1635,9 +1628,9 @@ def execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_in
             effect_name = boss['name']
             if boss['name'] in BOSSATK:
                 effect_name = BOSSATK[boss['name']]
-            msg = f"{effect_name}发起💥会心一击，造成了{number_to2(actual_damage)}伤害"
+            msg = f"{effect_name}发起💥会心一击，造成了{number_to(actual_damage)}伤害"
         else:
-            msg = f"{boss['name']}发起攻击，造成了{number_to2(actual_damage)}伤害"
+            msg = f"{boss['name']}发起攻击，造成了{number_to(actual_damage)}伤害"
             
         player['气血'] -= actual_damage
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])
@@ -1665,9 +1658,9 @@ def execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_i
         player['气血'] -= total_damage
         
         if is_crit:
-            msg = f"{boss['name']}：紫玄掌！！紫星河！！！💥并且发生了会心一击，造成了{number_to2(total_damage)}伤害"
+            msg = f"{boss['name']}：紫玄掌！！紫星河！！！💥并且发生了会心一击，造成了{number_to(total_damage)}伤害"
         else:
-            msg = f"{boss['name']}：紫玄掌！！紫星河！！！造成了{number_to2(total_damage)}伤害"
+            msg = f"{boss['name']}：紫玄掌！！紫星河！！！造成了{number_to(total_damage)}伤害"
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
         engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
@@ -1691,9 +1684,9 @@ def execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_i
         player['气血'] -= special_damage
         
         if is_crit:
-            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！💥并且发生了会心一击，造成了{number_to2(special_damage)}伤害"
+            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！💥并且发生了会心一击，造成了{number_to(special_damage)}伤害"
         else:
-            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！造成了{number_to2(special_damage)}伤害"
+            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！造成了{number_to(special_damage)}伤害"
         hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
         engine.add_boss_message(boss, msg, boss_init_hp)
         engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)

@@ -586,26 +586,6 @@ def number_to(num):
     
     return f"{formatted_num}{units[level]}"
 
-def number_to2(num):
-    """带中文单位的格式化（限制单位到'京'，保留原单位列表）"""
-    units = ["", "万", "亿", "兆", "京"]
-    
-    # 处理科学计数法/字符串输入
-    try:
-        num = float(num)
-    except (TypeError, ValueError):
-        raise ValueError("输入必须是数字")
-
-    # 递归计算单位和数值
-    def convert(n, level):
-        if level >= len(units) - 1 or n < 10000:
-            return n, level
-        return convert(n / 10000, level + 1)
-
-    num, level = convert(num, 0)
-    formatted_num = format_number(num)
-    return f"{formatted_num}{units[level]}"
-
 async def pic_msg_format(msg, event):
     user_name = event.sender.card if event.sender.card else event.sender.nickname
     result = "@" + user_name + "\n" + msg
