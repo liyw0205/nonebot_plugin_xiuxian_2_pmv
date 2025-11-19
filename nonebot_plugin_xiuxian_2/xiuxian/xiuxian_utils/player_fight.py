@@ -388,39 +388,34 @@ def get_turnatk(player, buff=0, user_battle_buff_date={},
     sub_crit = 0
     sub_dmg = 0
     zwsh = 0
-    try:
-        user_id = player['user_id']
-        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-        user_buff_data = UserBuffDate(user_id)
-        weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()  # 武器会心伤害
-        weapon_zw = UserBuffDate(user_id).get_user_weapon_data()
-        main_zw = user_buff_data.get_user_main_buff_data()
-        # 专武伤害，其实叫伴生武器更好。。。
-        zwsh = 0.5 if main_zw["ew"] != 0 and weapon_zw["zw"] != 0 and main_zw["ew"] == weapon_zw["zw"] else 0
-        main_critatk_data = user_buff_data.get_user_main_buff_data()  # 功法会心伤害
-        player_sub_open = False  # 辅修功法14
-        user_sub_buff_date = {}
-        if user_buff_data.get_user_sub_buff_data() != None:
-            user_sub_buff_date = UserBuffDate(user_id).get_user_sub_buff_data()
-            player_sub_open = True
-        buff_value = int(user_sub_buff_date['buff'])
-        buff_type = user_sub_buff_date['buff_type']
-        if buff_type == '1':
-            sub_atk = buff_value / 100
-        else:
-            sub_atk = 0
-        if buff_type == '2':
-            sub_crit = buff_value / 100
-        else:
-            sub_crit = 0
-        if buff_type == '3':
-            sub_dmg = buff_value / 100
-        else:
-            sub_dmg = 0
-    except:
-        impart_data = None
-        weapon_critatk_data = None
-        main_critatk_data = None
+
+    user_id = player['user_id']
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    user_buff_data = UserBuffDate(user_id)
+    weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()  # 武器会心伤害
+    weapon_zw = UserBuffDate(user_id).get_user_weapon_data()
+    main_zw = user_buff_data.get_user_main_buff_data()
+    # 专武伤害，其实叫伴生武器更好。。。
+    zwsh = 0.5 if main_zw["ew"] != 0 and weapon_zw["zw"] != 0 and main_zw["ew"] == weapon_zw["zw"] else 0
+    main_critatk_data = user_buff_data.get_user_main_buff_data()  # 功法会心伤害
+    sub_buff_data = {}
+    buff_type = None
+    if user_buff_data.get_user_sub_buff_data() is not None:
+        sub_buff_data = user_buff_data.get_user_sub_buff_data()
+        buff_value = sub_buff_data['buff']
+        buff_type = sub_buff_data['buff_type']
+    if buff_type == '1':
+        sub_atk = buff_value / 100
+    else:
+        sub_atk = 0
+    if buff_type == '2':
+        sub_crit = buff_value / 100
+    else:
+        sub_crit = 0
+    if buff_type == '3':
+        sub_dmg = buff_value / 100
+    else:
+        sub_dmg = 0
     impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
     impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
     weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0  # 武器会心伤害
@@ -933,7 +928,7 @@ class BattleEngine:
         """执行普通攻击"""
         self.execute_normal_attack_base(attacker, defender, turn_type)
 
-    def execute_normal_attack_base(self, attacker, defender, turn_type):
+    def execute_normal_attack_base(self, attacker, defender, turn_type, rate=1.0):
         """普通攻击基础逻辑"""
         # 根据战斗类型选择不同的伤害计算函数
         atk_buff = attacker.get('atk_buff', 0)
@@ -957,7 +952,7 @@ class BattleEngine:
             else:
                 msg = "{}发起攻击，造成了{}伤害"
                 
-            actual_damage = int(calculate_damage(attacker, defender, damage))
+            actual_damage = int(calculate_damage(attacker, defender, damage * rate))
             defender['player']['气血'] -= actual_damage
             
             attack_msg = msg.format(attacker_name, number_to2(actual_damage))
@@ -1111,9 +1106,7 @@ class BattleEngine:
 
             skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to(attacker['skill_sh'])}伤害，剩余回合：{attacker['turn_cost']}!"
             self.add_message(attacker, skill_msg)
-            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            persistent_hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
-            self.add_message(attacker, persistent_hp_msg)
+            self.execute_normal_attack_base(attacker, defender, turn_type, rate=0.5)
             
         elif skill_type == 3:  # buff类持续效果
             attacker['turn_cost'] -= 1
@@ -1336,7 +1329,7 @@ def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_comb
     if si_boss and boss_combatant is not None:
         boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
         sub_buff_data = player_combatant.get('sub_buff_data')
-        fan_data = sub_buff_data.get('fan', '0') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
+        fan_data = sub_buff_data.get('fan') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
         
         if int(fan_data) > 0:
             # 将BOSS的特定负面Buff设置为0
