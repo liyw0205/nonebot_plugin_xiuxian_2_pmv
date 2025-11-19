@@ -800,7 +800,7 @@ class BattleEngine:
         # 计算最终buff
         total_hp_buff = hp_buff + impart_hp + hppractice
         total_mp_buff = mp_buff + impart_mp + mppractice
-        max_hp = int(player['exp'] / 2 * (1 + total_hp_buf))
+        max_hp = int(player['exp'] / 2 * (1 + total_hp_buff))
         # 获取身法和瞳术数据
         effect1_data = buff_data.get_user_effect1_buff_data()  # 身法
         effect2_data = buff_data.get_user_effect2_buff_data()  # 瞳术
