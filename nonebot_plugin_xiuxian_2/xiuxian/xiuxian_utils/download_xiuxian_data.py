@@ -13,55 +13,96 @@ from nonebot.log import logger
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
 
 def download_xiuxian_data():
-    path_data = Path() / "data"
-    zipPath = str(path_data / "xiuxian_data_temp.zip")  # 压缩包的绝对路径
-    version = "xiuxian_version.txt"
-    URL = "https://huggingface.co/xiaonana/xiuxian/resolve/main/xiuxian.zip"
+    """
+    检测修仙插件必要文件是否存在（如字体文件），
+    如不存在则自动下载最新的 xiuxian.zip
+    """
+    FONT_FILE = Path() / "data" / "xiuxian" / "font" / "SarasaMonoSC-Bold.ttf"
+    XIUXIAN_ZIP_URL = "https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip"
+    XIUXIAN_TEMP_ZIP_PATH = Path() / "data" / "xiuxian_data_temp.zip"
+    path_xiuxian = Path() / "data" / "xiuxian"
 
-    def get_data():
-        wget.download(URL, out=zipPath)  # 获取内容
+    if FONT_FILE.exists():
+        return True
 
-    def _main_():
-        if not os.path.exists(path_data):
-            os.makedirs(path_data)
-        version_path = path_data / "xiuxian" / version
-        data = None
-        try:
-            with open(version_path, 'r', encoding='utf-8') as f:
-                data = f.read()
-                f.close()
-        except:
-            pass
-        if str(data) == str(XiuConfig().version):
-            logger.opt(colors=True).info(f"<green>修仙配置校核完成！</green>")
-        else:
-            logger.opt(colors=True).info(f"<green>正在更新修仙配置文件，请等待！</green>")
+    logger.opt(colors=True).info(f"<yellow>未检测到修仙插件资源文件（字体/图片），开始自动下载更新...</yellow>")    
+    path_xiuxian.mkdir(parents=True, exist_ok=True)
+
+    try:
+        manager = UpdateManager()
+        proxy_list = manager.get_proxy_list()
+
+        # 测试代理延迟并排序
+        working_proxies = manager.test_proxies(proxy_list)
+        working_proxies_sorted = sorted(working_proxies, key=lambda x: x.get('delay', 9999))[:3]
+
+        logger.info(f"检测到 {len(working_proxies_sorted)} 个可用代理，将尝试使用代理下载...")
+
+        success = False
+        error_msgs = []
+
+        # 尝试使用代理下载
+        for proxy in working_proxies_sorted:
+            proxy_url = proxy['url']
+            logger.info(f"尝试通过代理 {proxy_url} 下载...")
             try:
-                get_data()  # data为byte字节
-                logger.opt(colors=True).info(f"<green>正在解压修仙配置文件！</green>")
-                with zipfile.ZipFile(file=zipPath, mode='r') as zf:
-                    for old_name in zf.namelist():
-                        # 获取文件大小，目的是区分文件夹还是文件，如果是空文件应该不好用。
-                        file_size = zf.getinfo(old_name).file_size
-                        new_name = old_name.encode('cp437').decode('gbk')
-                        new_path = os.path.join(path_data, new_name)
-                        if file_size > 0:
-                            with open(file=new_path, mode='wb') as f:
-                                f.write(zf.read(old_name))
-                                f.close()
-                        else:
-                            if not os.path.exists(new_path):
-                                os.makedirs(new_path)
-                zf.close()
+                success, message = manager.download_with_proxy(XIUXIAN_ZIP_URL, XIUXIAN_TEMP_ZIP_PATH, proxy)
+                if success:
+                    logger.opt(colors=True).info(f"<green>使用代理 {proxy_url} 下载成功！</green>")
+                    break
+                else:
+                    error_msgs.append(f"代理 {proxy_url} 下载失败: {message}")
+
             except Exception as e:
-                logger.opt(colors=True).info(f"<red>修仙配置文件下载失败，原因{e}，一直失败请前往网址手动下载{URL}</red>")
-            finally:
-                try:
-                    os.remove(zipPath)
-                    logger.opt(colors=True).info(f"<red>原始压缩包已删除！</red>")
-                except:
-                    logger.opt(colors=True).info(f"<red>原始压缩包删除失败，请手动删除，路径{zipPath}!</red>")
-    return _main_()
+                err_msg = f"代理 {proxy_url} 下载失败: {str(e)}"
+                error_msgs.append(err_msg)
+                logger.warning(err_msg)
+                continue
+
+        # 如果所有代理都失败，尝试直连下载
+        if not success:
+            logger.info(f"<yellow>所有代理下载失败，尝试直连下载...</yellow>")
+            try:
+                response = requests.get(XIUXIAN_ZIP_URL, stream=True, timeout=30)
+                response.raise_for_status()
+
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+
+                with open(XIUXIAN_TEMP_ZIP_PATH, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size > 0:
+                                percent = (downloaded / total_size) * 100
+                                logger.info(f"直连下载进度: {percent:.1f}%")
+
+                logger.opt(colors=True).info(f"<green>直连下载成功！</green>")
+                success = True
+
+            except Exception as e:
+                logger.opt(colors=True).error(f"<red>直连下载也失败: {str(e)}</red>")
+                raise RuntimeError(f"所有下载方式均失败，请手动下载：{XIUXIAN_ZIP_URL}")
+
+        if not success or not XIUXIAN_TEMP_ZIP_PATH.exists():
+            raise RuntimeError("未能成功下载更新包。")
+
+        logger.opt(colors=True).info(f"<green>开始解压到：{path_xiuxian}</green>")
+        with zipfile.ZipFile(XIUXIAN_TEMP_ZIP_PATH, 'r') as zip_ref:
+            zip_ref.extractall(path_xiuxian)
+
+        logger.opt(colors=True).info(f"<green>修仙插件资源更新完成！</green>")
+
+        try:
+            XIUXIAN_TEMP_ZIP_PATH.unlink()
+            logger.opt(colors=True).info(f"<green>临时下载文件已删除</green>")
+        except Exception as e:
+            logger.warning(f"<yellow>删除临时文件失败：{e}</yellow>")
+
+    except Exception as e:
+        logger.opt(colors=True).error(f"<red>下载或解压过程中出错: {e}</red>")
+        raise
 
 class UpdateManager:
     def __init__(self):

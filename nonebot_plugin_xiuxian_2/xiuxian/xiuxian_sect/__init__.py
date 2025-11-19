@@ -176,6 +176,7 @@ async def auto_handle_inactive_sect_owners():
     try:
         # 使用新的方法获取宗门列表（包含成员数量）
         all_sects = sql_message.get_all_sects_with_member_count()
+        auto_change_sect_owner_cd = XiuConfig().auto_change_sect_owner_cd
         logger.info(f"获取到宗门总数：{len(all_sects)}个")
         
         if not all_sects:
@@ -224,7 +225,7 @@ async def auto_handle_inactive_sect_owners():
                     active_candidates = []
                     for candidate in candidates:
                         last_active = sql_message.get_last_check_info_time(candidate['user_id'])
-                        if last_active and (datetime.now() - last_active).days <= 30:
+                        if last_active and (datetime.now() - last_active).days <= auto_change_sect_owner_cd:
                             active_candidates.append(candidate)
                     
                     logger.info(f"活跃候选人数量：{len(active_candidates)}")
@@ -266,7 +267,7 @@ async def auto_handle_inactive_sect_owners():
                 offline_days = (datetime.now() - last_check_time).days
                 logger.info(f"宗主 {owner_id} 最后活跃：{last_check_time} | 已离线：{offline_days}天")
                 
-                if offline_days < 30:
+                if offline_days < auto_change_sect_owner_cd:
                     logger.info("宗主活跃时间在30天内，跳过处理")
                     continue
                 

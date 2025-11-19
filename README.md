@@ -17,229 +17,6 @@ _✨ QQ群聊修仙文字游戏✨_
 一款适用于QQ群的修仙插件,设定征集中，有好的想法可以推送给我哦~~~
 
 原插件地址：https://github.com/MyXiaoNan/nonebot_plugin_xiuxian_2_pmv
-
-
-# 💿 安装
-
-<details>
-<summary>(安卓安装：Termux)</summary>
-
-安装Termux
-- [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
-- [Termux](https://github.com/termux/termux-app/releases)
-
-安装napcat
-```
-curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
-```
-进入容器
-```
-proot-distro login napcat
-```
-剩下看Linux安装，不需要安装napcat
-
-> 下次启动要先进入容器: proot-distro login napcat
-
-查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
- </details>
-
-<details>
-<summary>(Linux安装：Debian)</summary>
-
-安装Python
-```
-apt update && apt upgrade -y && \
-apt install screen curl wget git python3 python3-pip python3-venv -y
-```
-安装napcat
-```
-curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh && sudo bash napcat.sh
-```
-安装nb-cli
-```
-cd ~
-python3 -m venv myenv
-source ~/myenv/bin/activate
-pip install nb-cli
-```
-克隆项目
-```
-git clone --depth=1 -b main https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
-```
-nb安装插件
-```
-cd ~
-source ~/myenv/bin/activate #进入虚拟环境
-nb #打开nb命令行
-```
-- 选择 Create a NoneBot project.（创建项目）
-- 选择 simple
-- 输入项目名 xiu2
-选择适配器
-```
-OneBot V11 (OneBot V11 协议)
-```
-选择驱动器
-```
-FastAPI (FastAPI 驱动器)
-HTTPX (HTTPX 驱动器)
-websockets (websockets 驱动器)
-AIOHTTP (AIOHTTP 驱动器)
-```
-- 选择 In a "src" folder（在src文件夹里）
-确定安装虚拟环境和依赖
-```
-Create virtual environment? (Y/n) y
-Install dependencies now? (Y/n) y
-```
-选择 echo（默认安装插件）
-
-
-- 移动项目
-```
-mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
-mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
-mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
-```
-- 下载字体和卡图包
-```
-curl -L -o ~/xiuxian.zip https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip
-```
-- 解压字体和卡图包
-```
-unzip ~/xiuxian.zip -d /root/xiu2/data/xiuxian
-```
-安装修仙2依赖
-```
-cd ~/xiu2
-source ~/xiu2/.venv/bin/activate
-pip install -r requirements.txt
-```
-修改nb配置
-```
-echo 'LOG_LEVEL=INFO # 日志等级INFO就行
-
-SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
-
-COMMAND_START = [""] # 指令前缀，默认空
-NICKNAME = [""] # 机器人昵称
-
-DEBUG = False
-HOST = 127.0.0.1
-PORT = 8080 # 反代的8080端口，有需要自己改' > ~/xiu2/.env.dev
-```
-启动修仙2
-```
-source ~/myenv/bin/activate
-cd ~/xiu2
-nb run --reload
-```
-
-查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
- </details>
- 
-<details>
-<summary>(Windows安装)</summary>
-
-安装Python
-```
-https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe
-```
-安装napcat
-```
-https://napneko.github.io/guide/napcat
-```
-安装nb-cli
-- 在C/D盘根目录新建文件夹然后打开cmd
-```
-python -m venv myenv
-myenv/bin/activate
-pip install nb-cli
-```
-下载最新的project.tar.gz
-```
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest
-```
-nb安装插件
-```
-cd C:\nb #进入nb文件夹
-myenv/bin/activate #进入虚拟环境
-nb #打开nb命令行
-```
-- 选择 Create a NoneBot project.（创建项目）
-- 选择 simple
-- 输入项目名 xiu2
-选择适配器
-```
-OneBot V11 (OneBot V11 协议)
-```
-选择驱动器
-```
-FastAPI (FastAPI 驱动器)
-HTTPX (HTTPX 驱动器)
-websockets (websockets 驱动器)
-AIOHTTP (AIOHTTP 驱动器)
-```
-- 选择 In a "src" folder（在src文件夹里）
-确定安装虚拟环境和依赖
-```
-Create virtual environment? (Y/n) y
-Install dependencies now? (Y/n) y
-```
-选择 echo（默认安装插件）
-
-
-- 解压project.tar.gz
-```
-移动nonebot_plugin_xiuxian_2 
-到xiu2/src/plugins
-
-移动data 
-到xiu2
-
-移动requirements.txt 
-到xiu2
-```
-- 下载字体和卡图包
-```
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip
-```
-- 解压字体和卡图包
-```
-移动到xiu2/data/xiuxian
-```
-安装修仙2依赖
-```
-cd xiu2
-.venv/bin/activate
-pip install -r requirements.txt
-```
-修改nb配置
-```
-echo 'LOG_LEVEL=INFO # 日志等级INFO就行
-
-SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
-
-COMMAND_START = [""] # 指令前缀，默认空
-NICKNAME = [""] # 机器人昵称
-
-DEBUG = False
-HOST = 127.0.0.1
-PORT = 8080 # 反代的8080端口，有需要自己改' > xiu2/.env.dev
-```
-启动修仙2
-- 新建文件，改后缀`.bat`
-```
-call myenv/bin/activate
-cd xiu2
-nb run --reload
-```
-
-查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
- </details>
  
 # 💿 配置
 
@@ -335,14 +112,221 @@ self.layout_bot_dict = {{}}
 ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
-# 💿 连接QQ
+# 💿 安装
+
+<details>
+<summary>(安卓安装：Termux)</summary>
+
+安装Termux
+- [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
+- [Termux](https://github.com/termux/termux-app/releases)
+
+安装napcat
+```
+curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
+```
+进入容器
+```
+proot-distro login napcat
+```
+剩下看Linux安装，不需要安装napcat
+
+> 下次启动要先进入容器: proot-distro login napcat
+
+查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
+ </details>
+
+<details>
+<summary>(Linux安装：Debian)</summary>
+
+安装Python
+```
+apt update && apt upgrade -y && \
+apt install screen curl wget git python3 python3-pip python3-venv -y
+```
+安装napcat
+```
+curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh && sudo bash napcat.sh
+```
+安装nb-cli
+```
+cd ~
+python3 -m venv myenv
+source ~/myenv/bin/activate
+pip install nb-cli
+```
+克隆项目
+```
+git clone --depth=1 -b main https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
+```
+nb安装插件
+```
+cd ~
+source ~/myenv/bin/activate #进入虚拟环境
+nb #打开nb命令行
+```
+- 选择 Create a NoneBot project.（创建项目）
+- 选择 simple
+- 输入项目名 xiu2
+选择适配器
+```
+OneBot V11 (OneBot V11 协议)
+```
+选择驱动器
+```
+FastAPI (FastAPI 驱动器)
+HTTPX (HTTPX 驱动器)
+websockets (websockets 驱动器)
+AIOHTTP (AIOHTTP 驱动器)
+```
+- 选择 In a "src" folder（在src文件夹里）
+确定安装虚拟环境和依赖
+```
+Create virtual environment? (Y/n) y
+Install dependencies now? (Y/n) y
+```
+选择 echo（默认安装插件）
+
+
+- 移动项目
+```
+mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
+mv  ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
+mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
+```
+安装修仙2依赖
+```
+cd ~/xiu2
+source ~/xiu2/.venv/bin/activate
+pip install -r requirements.txt
+```
+修改nb配置
+```
+echo 'LOG_LEVEL=INFO # 日志等级INFO就行
+
+SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
+
+COMMAND_START = [""] # 指令前缀，默认空
+NICKNAME = [""] # 机器人昵称
+
+DEBUG = False
+HOST = 127.0.0.1
+PORT = 8080 # 反代的8080端口，有需要自己改' > ~/xiu2/.env.dev
+```
+启动修仙2
+```
+source ~/myenv/bin/activate
+cd ~/xiu2
+nb run --reload
+```
+
+查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
+ </details>
+ 
+<details>
+<summary>(Windows安装)</summary>
+
+安装Python
+```
+https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe
+```
+安装napcat
+```
+https://napneko.github.io/guide/napcat
+```
+安装nb-cli
+- 在C/D盘根目录新建文件夹然后打开cmd
+```
+python -m venv myenv
+myenv/bin/activate
+pip install nb-cli
+```
+下载最新的project.tar.gz
+```
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest
+```
+nb安装插件
+```
+cd C:\nb #进入nb文件夹
+myenv/bin/activate #进入虚拟环境
+nb #打开nb命令行
+```
+- 选择 Create a NoneBot project.（创建项目）
+- 选择 simple
+- 输入项目名 xiu2
+选择适配器
+```
+OneBot V11 (OneBot V11 协议)
+```
+选择驱动器
+```
+FastAPI (FastAPI 驱动器)
+HTTPX (HTTPX 驱动器)
+websockets (websockets 驱动器)
+AIOHTTP (AIOHTTP 驱动器)
+```
+- 选择 In a "src" folder（在src文件夹里）
+确定安装虚拟环境和依赖
+```
+Create virtual environment? (Y/n) y
+Install dependencies now? (Y/n) y
+```
+选择 echo（默认安装插件）
+
+
+- 解压project.tar.gz
+```
+移动nonebot_plugin_xiuxian_2 
+到xiu2/src/plugins
+
+移动data 
+到xiu2
+
+移动requirements.txt 
+到xiu2
+```
+安装修仙2依赖
+```
+cd xiu2
+.venv/bin/activate
+pip install -r requirements.txt
+```
+修改nb配置
+```
+echo 'LOG_LEVEL=INFO # 日志等级INFO就行
+
+SUPERUSERS = [""] # 野生bot填自己QQ号(不是机器人的QQ)，官方bot下的用户id自行获取，填的不对的话会出现指令无响应的情况
+
+COMMAND_START = [""] # 指令前缀，默认空
+NICKNAME = [""] # 机器人昵称
+
+DEBUG = False
+HOST = 127.0.0.1
+PORT = 8080 # 反代的8080端口，有需要自己改' > xiu2/.env.dev
+```
+启动修仙2
+- 新建文件，改后缀`.bat`
+```
+call myenv/bin/activate
+cd xiu2
+nb run --reload
+```
+
+查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
+ </details>
+
+
+# 💿 连接QQ（Linux）
 
 <details>
 <summary>(napcat)</summary>
 
 后台启动QQ
 ```
-screen -dmS napcat bash -c 'xvfb-run -a qq --no-sandbox'
+screen -dmS napcat bash -c 'xvfb-run -a /root/Napcat/opt/QQ/qq --no-sandbox'
 ```
 进入QQ
 ```
@@ -360,9 +344,9 @@ screen -S napcat -X quit
 ```
 http://IP:6099
 ```
-- 默认token:
+- 查看默认token:
 ```
-napcat
+/root/Napcat/opt/QQ/resources/app/app_launcher/napcat/config/webui.json
 ```
 进入WEBUI，登录QQ
 
@@ -406,9 +390,11 @@ screen -S xiu2 -X quit
  
 # 💿 使用
 
-群聊发送 `启用修仙功能` 后根据引导来即可，不支持私聊
-
 发送 `修仙帮助` 查看功能
+
+发送 `修仙手册` 查看管理员指令
+
+可以来这体验[144795954](https://qun.qq.com/universal-share/share?ac=1&authKey=JcaNbcnyFbgcjfffkakYujFwpYFJewe2mSFUtSNWi1mA6qap%2FHBQNsCl0D9olm4I&busi_data=eyJncm91cENvZGUiOiIxNDQ3OTU5NTQiLCJ0b2tlbiI6ImZKYXpKOVM3Z0pwek80ZlUzLzhzbWN1Y1daY0JIQy9BYXZFUlZGd1lGREJQUXJXWERLNlJCcFNjSjVGc3JZVWsiLCJ1aW4iOiIyNjUwMTE1MzE3In0%3D&data=5w52a2CkyEIX_t_INqS29fA4Sxl8eozGazmL-EIUo6ehG7ESdNgxtDnVmgXoLlLfaVeZ2SbPMW-1SJ4I9o7IeQ&svctype=4&tempid=h5_group_info)
 
 如果你使用的是官方机器人记得改配置
 
