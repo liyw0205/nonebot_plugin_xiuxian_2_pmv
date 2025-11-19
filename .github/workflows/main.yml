@@ -49,7 +49,7 @@ jobs:
         body: |
           ## Release Notes
 
-          - ${{ steps.commit_message.outputs.COMMIT_MSG }}
+          ${{ steps.commit_message.outputs.COMMIT_MSG }}
 
         draft: false
         prerelease: false
