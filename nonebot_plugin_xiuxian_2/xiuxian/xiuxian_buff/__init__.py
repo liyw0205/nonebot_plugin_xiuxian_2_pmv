@@ -1338,7 +1338,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 攻击:{number_to(user_attack)}
 突破状态: {exp_meg}(概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%)
 攻击修炼:{user_info['atkpractice']}级(提升攻击力{user_info['atkpractice'] * 4}%)
-元血修炼:{user_info['hppractice']}级(提升气血{user_info['hppractice'] * 8}%)
+元血修炼:{user_info['hppractice']}级(提升气血{user_info['hppractice'] * 5}%)
 灵海修炼:{user_info['mppractice']}级(提升真元{user_info['mppractice'] * 5}%)
 修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
 会心:{total_crit_rate:.1f}%
