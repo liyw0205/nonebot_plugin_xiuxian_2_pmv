@@ -1752,7 +1752,7 @@ CONFIG_EDITABLE_FIELDS = {
     },
     "merge_forward_send": {
         "name": "消息发送方式",
-        "description": "1=长文本,2=合并转发,3=合并转长图",
+        "description": "1=长文本,2=合并转发,3=合并转长图,4=长文本合并转发",
         "type": "int",
         "category": "消息设置"
     },

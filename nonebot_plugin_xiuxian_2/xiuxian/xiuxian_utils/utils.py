@@ -796,6 +796,48 @@ async def send_msg_handler(bot, event, *args):
                 )
         else:
             raise ValueError("参数数量或类型不匹配")
+    elif XiuConfig().merge_forward_send == 4:
+        if len(args) == 3:
+            name, uin, msgs = args
+            msg = "\n".join(msgs)
+            if XiuConfig().message_optimization:
+                msg = optimize_message(msg, is_group)
+            if msg.startswith('\n'):
+                msg = msg[1:]
+            messages = [
+                {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
+            ]
+            if is_group:
+                await bot.call_api(
+                    "send_group_forward_msg", group_id=event.group_id, messages=messages
+                )
+            else:
+                await bot.call_api(
+                    "send_private_forward_msg", user_id=event.user_id, messages=messages
+                )
+        elif len(args) == 1 and isinstance(args[0], list):
+            merged_contents = [msg["data"]["content"] for msg in args[0]]
+            merged_content = "\n\n".join(merged_contents)
+            if XiuConfig().message_optimization:
+                merged_content = optimize_message(merged_content, is_group)
+            if merged_content.startswith('\n'):
+                merged_content = merged_content[1:]
+            first_msg = args[0][0] if args[0] else None
+            name = first_msg["data"]["name"] if first_msg else "系统"
+            uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
+            messages = [
+                {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
+            ]
+            if is_group:
+                await bot.call_api(
+                    "send_group_forward_msg", group_id=event.group_id, messages=messages
+                )
+            else:
+                await bot.call_api(
+                    "send_private_forward_msg", user_id=event.user_id, messages=messages
+                )
+        else:
+            raise ValueError("参数数量或类型不匹配")
 
 async def handle_send(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""

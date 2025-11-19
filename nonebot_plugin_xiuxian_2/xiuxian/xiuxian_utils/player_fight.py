@@ -1336,7 +1336,7 @@ def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_comb
     if si_boss and boss_combatant is not None:
         boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
         sub_buff_data = player_combatant.get('sub_buff_data')
-        fan_data = sub_buff_data.get('fan') if sub_buff_data is not None else 0
+        fan_data = sub_buff_data.get('fan', '0') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
         
         if int(fan_data) > 0:
             # 将BOSS的特定负面Buff设置为0

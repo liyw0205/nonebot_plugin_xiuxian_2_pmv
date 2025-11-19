@@ -38,15 +38,30 @@ class XiuConfig:
         self.at_sender = True
         # 消息是否艾特
 
-        self.banned_unseal_ids = ["779151826"]  
-        # 鉴石禁止群
-
         self.web_status = True
         # 修仙管理面板是否开启
         self.web_port = 5888 
         # 修仙管理面板端口
         self.web_host = "0.0.0.0" 
         # 修仙管理面板IP
+
+        self.merge_forward_send = 4
+        # 使用消息合并转发
+        # 1是合并转发的内容转换成长文本发送
+        # 2是合并转发发送
+        # 3是合并转发的内容转换成长图发送
+        # 4是合并转发的内容转换长文本再以合并转发的方式发送
+        self.message_optimization = True  
+        # 是否开启信息优化
+        # 群聊消息：如果开头没有换行则添加一个换行
+        # 私聊消息：如果开头有换行则删除一个换行
+        # 所有消息：如果结尾有换行则删除一个换行
+        self.img_compression_limit = 90 
+        # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
+        self.img_type = "webp" 
+        # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
+        self.img_send_type = "io" 
+        # 图片发送类型io或者base64，官方bot建议base64
 
         self.img = False 
         # 是否使用图片发送消息
@@ -118,6 +133,8 @@ class XiuConfig:
         # 偷灵石下限(百分比)
         self.tou_upper_limit = 0.50
         # 偷灵石上限(百分比)
+        self.banned_unseal_ids = ["779151826"]  
+        # 鉴石禁止群
 
         self.auto_select_root = True  
         # 默认开启自动选择最佳灵根
@@ -129,20 +146,6 @@ class XiuConfig:
         # 体力上限
         self.stamina_recovery_points = 2 
         # 体力恢复点数/分钟
-
-        self.merge_forward_send = 1 
-        # 使用消息合并转发,1是长文本,2是合并转发，3是合并转发的内容转换成长图发送
-        self.message_optimization = True  
-        # 是否开启信息优化
-        # 群聊消息：如果开头没有换行则添加一个换行
-        # 私聊消息：如果开头有换行则删除一个换行
-        # 所有消息：如果结尾有换行则删除一个换行
-        self.img_compression_limit = 90 
-        # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
-        self.img_type = "webp" 
-        # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
-        self.img_send_type = "io" 
-        # 图片发送类型，官方bot建议base64
 
         self.sql_table = ["user_xiuxian", "user_cd", "sects", "back", "BuffInfo"]  
         self.sql_user_xiuxian = [

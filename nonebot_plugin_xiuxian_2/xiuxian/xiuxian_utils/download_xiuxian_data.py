@@ -428,7 +428,7 @@ class UpdateManager:
             
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 # 备份data目录（排除backups目录本身）
-                data_dir = Path() / "data"
+                data_dir = Path() / "data" / "xiuxian"
                 if data_dir.exists():
                     for root, dirs, files in os.walk(data_dir):
                         if any(x in root.split(os.sep) for x in ["backups", "config_backups", "db_backup", "boss_img", "font", "卡图"]):
@@ -437,7 +437,7 @@ class UpdateManager:
                         for file in files:
                             file_path = Path(root) / file
                             try:
-                                arcname = file_path.relative_to(data_dir.parent)
+                                arcname = file_path.relative_to(data_dir.parent.parent)
                                 zipf.write(file_path, arcname)
                             except Exception as e:
                                 logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
