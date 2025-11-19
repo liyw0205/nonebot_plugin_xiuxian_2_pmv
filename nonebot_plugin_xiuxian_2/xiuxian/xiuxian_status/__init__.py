@@ -1,5 +1,6 @@
 import platform
 import psutil
+import asyncio
 import os
 import time
 from datetime import datetime
@@ -17,10 +18,10 @@ from nonebot.adapters.onebot.v11 import (
     ActionFailed
 )
 from ..xiuxian_utils.utils import handle_send
+from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
 
-# 注册四个独立的命令处理器
 bot_info_cmd = on_command("bot信息", permission=SUPERUSER, priority=5, block=True)
 sys_info_cmd = on_command("系统信息", permission=SUPERUSER, priority=5, block=True)
 ping_test_cmd = on_command("ping测试", permission=SUPERUSER, priority=5, block=True)
@@ -48,40 +49,92 @@ def get_ping_emoji(delay: float) -> str:
     else:
         return "🐌"  # 极慢
 
-def ping_test(host: str) -> tuple:
-    """执行ping测试并返回(延迟ms, 是否超时)"""
+async def ping_host(host: str) -> tuple:
+    """
+    异步执行单个 ping 测试
+    返回 (host, delay_ms, is_timeout, emoji)
+    """
+    loop = asyncio.get_event_loop()
     try:
         # Windows和Linux/macOS的ping命令参数不同
         param = '-n' if platform.system().lower() == 'windows' else '-c'
         count = '4'  # ping 4次
-        
-        # 执行ping命令
-        result = subprocess.run(
-            ['ping', param, count, host],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=10
-        )
-        
-        # 解析输出获取平均延迟
-        output = result.stdout
-        if platform.system().lower() == 'windows':
-            # Windows ping输出格式
-            match = re.search(r'平均 = (\d+)ms', output)
-            if match:
-                return (float(match.group(1)), False)
-        else:
-            # Linux/macOS ping输出格式
-            match = re.search(r'min/avg/max/mdev = [\d.]+/([\d.]+)/', output)
-            if match:
-                return (float(match.group(1)), False)
-        
-        return (0, True)  # 解析失败视为超时
-    except subprocess.TimeoutExpired:
-        return (0, True)  # 超时
+
+        # 使用 asyncio 创建子进程执行 ping
+        def _ping():
+            try:
+                result = subprocess.run(
+                    ['ping', param, count, host],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=10
+                )
+                output = result.stdout
+                if platform.system().lower() == 'windows':
+                    match = re.search(r'平均 = (\d+)ms', output)
+                    if match:
+                        return (float(match.group(1)), False)
+                else:
+                    match = re.search(r'min/avg/max/mdev = [\d.]+/([\d.]+)/', output)
+                    if match:
+                        return (float(match.group(1)), False)
+                return (0, True)  # 未找到平均延迟，视为超时
+            except subprocess.TimeoutExpired:
+                return (0, True)
+            except Exception:
+                return (0, True)
+
+        delay, is_timeout = await loop.run_in_executor(None, _ping)
+
+        emoji = get_ping_emoji(delay)
+
+        return (host, delay, is_timeout, emoji)
+
     except Exception:
-        return (0, True)  # 其他错误视为超时
+        return (host, 0, True, "💀")  # 兜底异常也视为超时
+
+async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
+    """异步并发执行所有 ping 测试"""
+    await ping_test_cmd.send("正在测试网络延迟，请稍候...")
+
+    sites = {
+        "百度": "www.baidu.com",
+        "腾讯": "www.qq.com",
+        "阿里": "www.aliyun.com",
+        "必应": "cn.bing.com",
+        "GitHub": "github.com",
+        "Gitee": "gitee.com",
+        "谷歌": "www.google.com",
+        "苹果": "www.apple.com"
+    }
+
+    # 构造所有要 ping 的任务
+    tasks = [ping_host(host) for host in sites.values()]
+
+    # 并发执行所有 ping
+    results = await asyncio.gather(*tasks)
+
+    # 组装消息
+    msg = "\n=== 网络延迟测试 ===\n"
+
+    # 国内站点（前4个）
+    msg += "\n【国内站点】\n"
+    for (name, host), (_, delay, is_timeout, emoji) in zip(list(sites.items())[:4], results[:4]):
+        if is_timeout:
+            msg += f"{emoji} {name}: 超时(0ms)\n"
+        else:
+            msg += f"{emoji} {name}: {delay:.3f}ms\n"
+
+    # 国外站点（后4个）
+    msg += "\n【国外站点】\n"
+    for (name, host), (_, delay, is_timeout, emoji) in zip(list(sites.items())[4:], results[4:]):
+        if is_timeout:
+            msg += f"{emoji} {name}: 超时(0ms)\n"
+        else:
+            msg += f"{emoji} {name}: {delay:.3f}ms\n"
+
+    return msg
 
 async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
     """获取Bot信息"""
@@ -185,54 +238,6 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     for section, data in info_sections:
         msg += f"\n【{section}】\n"
         msg += "\n".join(f"{k}: {v}" for k, v in data.items())
-    
-    return msg
-
-async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
-    """执行ping测试"""
-    # 发送测试开始提示
-    await ping_test_cmd.send("正在测试网络延迟，请稍候...")
-    
-    # 测试多个网站的ping
-    sites = {
-        "百度": "www.baidu.com",
-        "腾讯": "www.qq.com",
-        "阿里": "www.aliyun.com",
-        "必应": "cn.bing.com",
-        "GitHub": "github.com",
-        "Gitee": "gitee.com",
-        "谷歌": "www.google.com",
-        "苹果": "www.apple.com"
-    }
-    
-    # 分组测试：先测国内站点，再测国外站点
-    msg = "\n=== 网络延迟测试 ===\n"
-    
-    # 国内站点测试
-    msg += "\n【国内站点】\n"
-    for name, host in list(sites.items())[:4]:  # 前4个是国内站点
-        delay, is_timeout = ping_test(host)
-        emoji = get_ping_emoji(delay)
-        
-        if is_timeout:
-            msg += f"{emoji} {name}: 超时(0ms)\n"
-        else:
-            msg += f"{emoji} {name}: {delay:.3f}ms\n"
-        
-        time.sleep(1)  # 避免连续ping
-    
-    # 国外站点测试
-    msg += "\n【国外站点】\n"
-    for name, host in list(sites.items())[4:]:  # 后4个是国外站点
-        delay, is_timeout = ping_test(host)
-        emoji = get_ping_emoji(delay)
-        
-        if is_timeout:
-            msg += f"{emoji} {name}: 超时(0ms)\n"
-        else:
-            msg += f"{emoji} {name}: {delay:.3f}ms\n"
-        
-        time.sleep(1)  # 避免连续ping
     
     return msg
 

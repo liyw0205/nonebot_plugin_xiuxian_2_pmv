@@ -807,7 +807,7 @@ async def handle_send(bot, event, msg: str):
     
     if XiuConfig().img:
         # 处理昵称为空的情况
-        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname is not None or event.sender.nickname == '' else msg
+        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname else msg
         pic = await get_msg_pic(pic_msg)
         if is_group:
             await bot.send_group_msg(
