@@ -115,6 +115,8 @@ class XiuConfig:
         # 开启则使用网络头像（官机请勿打开）
         self.private_chat_enabled = False 
         # 私聊功能开关，默认关闭
+        self.web_status = True
+        # 修仙管理面板是否开启
         self.web_port = 5888 
         # 修仙管理面板端口
         self.web_host = "0.0.0.0" 

@@ -2230,12 +2230,11 @@ def search_users():
 import threading
 
 def run_flask():
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    app.run(host=HOST, port=PORT, debug=False)
 
-# 创建并启动线程
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.daemon = True  # 设置为守护线程，主程序退出时会自动结束
-flask_thread.start()
-
-# 你的主程序可以继续执行其他代码
-print("修仙管理面板已启动：127.0.0.1:5888")
+if XiuConfig().web_status:
+    # 创建并启动线程
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True  # 设置为守护线程，主程序退出时会自动结束
+    flask_thread.start()
+    logger.info(f"修仙管理面板已启动：{HOST}:{PORT}")
