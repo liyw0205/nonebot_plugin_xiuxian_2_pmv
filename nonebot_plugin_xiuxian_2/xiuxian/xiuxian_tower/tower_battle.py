@@ -20,9 +20,9 @@ TOWER_BOSS_CONFIG = {
         "元磁道人", "外道贩卖鬼", "散发着威压的尸体"
     ],
     "Boss倍率": {
-        "气血": 10,  # 气血是修为的10倍
-        "真元": 2,    # 真元是修为的2倍
-        "攻击": 0.3   # 攻击是修为的0.3倍
+        "气血": 30,  # 气血是修为的30倍
+        "真元": 10,    # 真元是修为的10倍
+        "攻击": 0.5   # 攻击是修为的0.5倍
     }
 }
 
@@ -45,13 +45,7 @@ jinjie_list = [
     "星芒境",
     "月华境",
     "耀日境",
-    "祭道境",
-    "自在境",
-    "破虚境",
-    "无界境",
-    "混元境",
-    "造化境",
-    "永恒境"
+    "祭道境"
 ]
 
 class TowerBattle:
@@ -71,12 +65,14 @@ class TowerBattle:
         if jj_index >= len(jj_list) - 1:
             exceed_floor = floor - (len(jj_list) - 1) * 10
             jj = "祭道境"
-            base_exp = int(jsondata.level_data()["祭道境初期"]["power"])
+            base_exp = int(jsondata.level_data()["祭道境中期"]["power"])
             hundred_layers = exceed_floor // 100
-            base_scale = 1.0 + hundred_layers * 0.5
-            current_hundred_floor = exceed_floor % 100
+            base_scale = 1.0 + (hundred_layers * 2)
             floor_scale = 1.0 + (base_scale * 0.1 * exceed_floor)
-            exp = int(base_exp * floor_scale)
+            base_exp = int(base_exp * floor_scale)
+            hundred_layers = exceed_floor // 10
+            base_scale = 1.0 + (hundred_layers * 0.1)
+            exp = int(base_exp * floor_scale * base_scale)
         else:
             jj = jj_list[min(jj_index, len(jj_list) - 1)]
             if base_floor <= 3:

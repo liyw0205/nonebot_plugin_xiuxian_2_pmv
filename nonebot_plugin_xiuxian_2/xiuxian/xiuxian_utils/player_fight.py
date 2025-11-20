@@ -400,7 +400,7 @@ def get_turnatk(player, buff=0, user_battle_buff_date={},
     buff_type = None
     if user_buff_data.get_user_sub_buff_data() is not None:
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        buff_value = sub_buff_data['buff']
+        buff_value = int(sub_buff_data['buff'])
         buff_type = sub_buff_data['buff_type']
     if buff_type == '1':
         sub_atk = buff_value / 100
@@ -665,23 +665,22 @@ def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date
 
 
 # 处理攻击后辅修功法效果
-def after_atk_sub_buff_handle(player1_sub_open, attacker, user1_main_buff_data, subbuffdata1, damage1, defender,
+def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, subbuffdata1, damage1, player2,
                              boss_buff: BossBuff = empty_boss_buff,
-                             random_buff: UserRandomBuff = empty_ussr_random_buff):
+                             random_buff: UserRandomBuff = empty_ussr_random_buff,
+                             hp_buff=0, mp_buff=0):
     """处理攻击后的辅修功法效果（优化版）"""
     msg = None
     health_stolen_msg = None
     mana_stolen_msg = None
     other_msg = None
-    player1 = attacker['player']
-    player2 = defender['player']
 
     if not player1_sub_open:
         return player1, player2, msg
     
     # 计算最大气血和真元
-    max_hp = int(player1['exp'] / 2 * (1 + attacker['hp_buff']))
-    max_mp = int(player1['exp'] * (1 + attacker['mp_buff']))
+    max_hp = int(player1['exp'] / 2 * (1 + hp_buff))
+    max_mp = int(player1['exp'] * (1 + mp_buff))
     
     buff_value = int(subbuffdata1['buff'])
     buff_type = subbuffdata1['buff_type']
@@ -1162,13 +1161,15 @@ class BattleEngine:
             
         player1, player2, msg = after_atk_sub_buff_handle(
             attacker['sub_open'], 
-            attacker, 
+            attacker['player'], 
             attacker['main_buff_data'],
             attacker['sub_buff_data'], 
             damage_dealt, 
-            defender,
+            defender['player'],
             defender.get('boss_buff', empty_boss_buff),
-            attacker.get('random_buff', empty_ussr_random_buff)
+            attacker.get('random_buff', empty_ussr_random_buff),
+            hp_buff=attacker['hp_buff'],
+            mp_buff=attacker['mp_buff']
         )
         
         if msg:
