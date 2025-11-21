@@ -350,7 +350,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def get_elders(self):
         """获取所有长老的 user_id"""
         cur = self.conn.cursor()
-        sql = f"SELECT user_id FROM user_xiuxian WHERE sect_position = 1"
+        sql = f"SELECT user_id FROM user_xiuxian WHERE sect_position = 2"
         cur.execute(sql)
         result = cur.fetchall()
         return [row[0] for row in result]

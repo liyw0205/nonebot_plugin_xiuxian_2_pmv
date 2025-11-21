@@ -328,13 +328,14 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
     msg = "☆------宗门职位系统------☆\n"
-    msg += "职位编号 | 职位名称 | 人数限制\n"
+    msg += "职位编号 | 职位名称 | 职位加成 | 人数限制\n"
     msg += "─────────────\n"
     
     for pos_id, pos_data in sorted(jsondata.sect_config_data().items(), key=lambda x: int(x[0])):
         max_count = pos_data.get("max_count", 0)
+        speeds = pos_data.get("speeds", 0)
         count_info = f"限{max_count}人" if max_count > 0 else "不限"
-        msg += f"{pos_id:2} | {pos_data['title']:6} | {count_info:4}\n"
+        msg += f"{pos_id:2} | {pos_data['title']} | {speeds} | {count_info}\n"
     
     msg += "\n使用示例：\n"
     msg += "• 宗门职位变更 道号 职位编号\n"
@@ -1329,7 +1330,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             msg = f"道友当前没有接取宗门任务，道友浪费了一次出门机会哦！"
             await handle_send(bot, event, msg)
             await sect_task_complete.finish()
-
+            
+        sect_info = sql_message.get_sect_info(sect_id)
         if userstask[user_id]['任务内容']['type'] == 1:  # type=1：需要扣气血，type=2：需要扣灵石
             costhp = int((user_info['exp'] / 2) * userstask[user_id]['任务内容']['cost'])
             if user_info['hp'] < user_info['exp'] / 10 or costhp >= user_info['hp']:
@@ -1346,7 +1348,11 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 max_exp_limit = 4
             else:
                 max_exp_limit = user_info['sect_position']
-            max_exp = jsondata.sect_config_data()[str(max_exp_limit)]["max_exp"]
+            speeds = jsondata.sect_config_data()[str(max_exp_limit)]["speeds"]
+            max_exp = int(sect_info['sect_scale'] * 100)
+            if max_exp >= 100000000000000:
+                max_exp = 100000000000000
+            max_exp = max_exp * speeds
             if get_exp >= max_exp:
                 get_exp = max_exp
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
@@ -1382,7 +1388,11 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 max_exp_limit = 4
             else:
                 max_exp_limit = user_info['sect_position']
-            max_exp = jsondata.sect_config_data()[str(max_exp_limit)]["max_exp"]
+            speeds = jsondata.sect_config_data()[str(max_exp_limit)]["speeds"]
+            max_exp = int(sect_info['sect_scale'] * 100)
+            if max_exp >= 100000000000000:
+                max_exp = 100000000000000
+            max_exp = max_exp * speeds
             if get_exp >= max_exp:
                 get_exp = max_exp
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限

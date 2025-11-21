@@ -39,7 +39,7 @@ class IMPART_PK(object):
                 return True
         except KeyError:
             user_number = len(self.data) + 1
-            self.data[user_id] = {"number": user_number, "pk_num": 5, "win_num": 0, "impart_num": 10}
+            self.data[user_id] = {"number": user_number, "pk_num": 7, "win_num": 0, "impart_num": 10}
             self.__save()
             return False
 
