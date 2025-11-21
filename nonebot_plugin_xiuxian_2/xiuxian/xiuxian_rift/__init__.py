@@ -458,10 +458,23 @@ async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     rift_info["time"] = new_time
     save_rift_data(user_id, rift_info)
     
+    # 检查是否可以结算
+    user_cd_message = sql_message.get_user_cd(user_id)
+    work_time = datetime.strptime(
+        user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
+    )
+    exp_time = (datetime.now() - work_time).seconds // 60
+    time2 = rift_info["time"]
+    
+    if exp_time >= time2:
+        rift_status = "可结算"
+    else:
+        rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
+    
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     
-    msg = f"秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"秘境探索时间减少30分钟！\n当前状态：{rift_status}"
     await handle_send(bot, event, msg)
     return
 
@@ -496,9 +509,22 @@ async def use_rift_big_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessa
     rift_info["time"] = new_time
     save_rift_data(user_id, rift_info)
     
+    # 检查是否可以结算
+    user_cd_message = sql_message.get_user_cd(user_id)
+    work_time = datetime.strptime(
+        user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
+    )
+    exp_time = (datetime.now() - work_time).seconds // 60
+    time2 = rift_info["time"]
+    
+    if exp_time >= time2:
+        rift_status = "可结算"
+    else:
+        rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
+    
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     
-    msg = f"秘境探索时间从{original_time}分钟减少到{new_time}分钟！"
+    msg = f"秘境探索时间减少60分钟！\n当前状态：{rift_status}"
     await handle_send(bot, event, msg)
     return
