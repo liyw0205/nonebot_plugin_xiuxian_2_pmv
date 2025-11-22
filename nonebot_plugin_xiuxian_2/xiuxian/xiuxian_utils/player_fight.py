@@ -390,11 +390,12 @@ def get_turnatk(player, buff=0, user_battle_buff_date={},
     user_id = player['user_id']
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     user_buff_data = UserBuffDate(user_id)
-    weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()  # 武器会心伤害
-    weapon_zw = UserBuffDate(user_id).get_user_weapon_data()
+    weapon_critatk_data = user_buff_data.get_user_weapon_data()  # 武器会心伤害
+    weapon_zw = user_buff_data.get_user_weapon_data()
     main_zw = user_buff_data.get_user_main_buff_data()
     # 专武伤害，其实叫伴生武器更好。。。
-    zwsh = 0.5 if main_zw["ew"] != 0 and weapon_zw["zw"] != 0 and main_zw["ew"] == weapon_zw["zw"] else 0
+    if weapon_zw and main_zw:
+        zwsh = 0.5 if main_zw["ew"] != 0 and weapon_zw["zw"] != 0 and main_zw["ew"] == weapon_zw["zw"] else 0
     main_critatk_data = user_buff_data.get_user_main_buff_data()  # 功法会心伤害
     sub_buff_data = {}
     buff_type = None
