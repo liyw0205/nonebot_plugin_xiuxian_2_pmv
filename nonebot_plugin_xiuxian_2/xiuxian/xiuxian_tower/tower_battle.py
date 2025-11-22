@@ -20,9 +20,9 @@ TOWER_BOSS_CONFIG = {
         "元磁道人", "外道贩卖鬼", "散发着威压的尸体"
     ],
     "Boss倍率": {
-        "气血": 30,  # 气血是修为的30倍
+        "气血": 50,  # 气血是修为的50倍
         "真元": 10,    # 真元是修为的10倍
-        "攻击": 0.5   # 攻击是修为的0.5倍
+        "攻击": 10   # 攻击是修为的10倍
     }
 }
 
@@ -67,7 +67,7 @@ class TowerBattle:
             jj = "祭道境"
             base_exp = int(jsondata.level_data()["祭道境中期"]["power"])
             hundred_layers = exceed_floor // 100
-            base_scale = 1.0 + (hundred_layers * 2)
+            base_scale = 1.0 + (hundred_layers * 0.5)
             floor_scale = 1.0 + (base_scale * 0.1 * exceed_floor)
             base_exp = int(base_exp * floor_scale)
             hundred_layers = exceed_floor // 10
@@ -138,7 +138,7 @@ class TowerBattle:
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
         sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
         sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
-        result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, type_in=1, bot_id=bot.self_id)        
+        result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, bot_id=bot.self_id)        
         await send_msg_handler(bot, event, result)
         if victor == "群友赢了":
             # 挑战成功
@@ -234,7 +234,7 @@ class TowerBattle:
 
         for floor in range(start_floor, max_floor + 1):
             boss_info = self.generate_tower_boss(floor)
-            result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, type_in=1, bot_id=bot.self_id)
+            result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, bot_id=bot.self_id)
             last_result = result  # 始终保存最后一次战斗结果
             
             if victor == "群友赢了":

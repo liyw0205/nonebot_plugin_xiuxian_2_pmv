@@ -229,6 +229,7 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
     # 平局处理
     if not winner:
         if not is_scarecrow:
+            winner = player_combatant
             engine.add_system_message("你们打到了天昏地暗，被大能叫停！")
             suc = "Boss赢了"
         else:
