@@ -299,7 +299,7 @@ class TowerBattle:
                 sql_message.update_ls(user_id, total_stone, 1)
         
         if failed_floor:
-            msg = f"连续挑战失败，止步第{failed_floor - 1}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚"
+            msg = f"连续挑战失败，止步第{failed_floor - 1}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
             return False, msg
         else:
             msg = f"连续挑战完成，成功通关第{max_floor}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
