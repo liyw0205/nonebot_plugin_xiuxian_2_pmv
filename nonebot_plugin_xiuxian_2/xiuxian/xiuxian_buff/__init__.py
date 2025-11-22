@@ -1548,10 +1548,10 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     impart_pk_data = impart_pk.find_user_data(user_id)
     if impart_pk_data:
         pk_num = impart_pk_data["pk_num"]
-        max_pk_num = 5
+        max_pk_num = 7
         pk_msg = f"{pk_num}/{max_pk_num}"
     else:
-        pk_msg = "0/5"
+        pk_msg = "0/7"
     
     # 7. 获取虚神界探索次数信息
     if impart_pk_data:
