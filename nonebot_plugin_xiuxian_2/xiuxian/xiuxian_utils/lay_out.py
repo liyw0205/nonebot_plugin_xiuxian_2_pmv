@@ -1,6 +1,7 @@
 import random
 from nonebot.log import logger
 from nonebot.rule import Rule
+from nonebot import get_driver
 from nonebot import get_bots, get_bot, require
 from enum import IntEnum, auto
 from collections import defaultdict
@@ -16,7 +17,7 @@ from .utils import get_msg_pic, check_user, handle_send
 
 
 sql_message = XiuxianDateManage()
-
+ADMIN_IDS = get_driver().config.superusers
 limit_all_message = require("nonebot_plugin_apscheduler").scheduler
 limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
 auto_recover_hp = require("nonebot_plugin_apscheduler").scheduler
@@ -205,7 +206,8 @@ def Cooldown(
         if XiuConfig().admin_debug:
             if event.get_user_id() not in bot.config.superusers:
                 await matcher.finish()
-
+        if user_id in ADMIN_IDS:
+            return
         if stamina_cost > 0:
             user_data = sql_message.get_user_info_with_id(user_id)
             if user_data:

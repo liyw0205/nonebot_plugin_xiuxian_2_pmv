@@ -2509,7 +2509,7 @@ async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 def generate_daohao():
     """生成严格控制在2-7实际汉字长度的道号系统（完整词库版）"""
     # 拼接符号库（不计入总字数）
-    connectors = ['·', '-', '~', '丨', '※', '〓', '§']
+    connectors = ['·', '-', '※']
     
     # 姓氏库（单姓、复姓和三字姓）
     family_names = {
@@ -2587,24 +2587,18 @@ def generate_daohao():
             '昆仑之巅', '蓬莱仙岛', '方丈神山', '瀛洲幻境', '金刚不坏', '罗汉金身', '菩提般若',
             '明王怒火', '如来神掌', '天魔乱舞', '血煞冲天', '幽冥鬼域', '黄泉路上', '九幽之主',
             '噬魂夺魄'
-        ],
-        'quint': [
-            '太乙救苦天尊', '混元无极道君', '玄天荡魔大帝', '紫霄神雷真君', '青冥剑道至尊',
-            '碧落黄泉主宰', '星河倒悬真仙', '月华如水仙子', '日曜中天神君', '云海翻腾老祖',
-            '金刚不坏罗汉', '菩提般若菩萨', '明王怒火金刚', '如来神掌佛陀', '天魔乱舞魔尊',
-            '血煞冲天妖王', '幽冥鬼域鬼帝', '黄泉路上阎君', '九幽之主冥王', '噬魂夺魄魔君'
         ]
     }
 
     # 选择修饰词类型（权重分配）
     mod_type = random.choices(
-        ['single', 'double', 'triple', 'quad', 'quint'],
-        weights=[20, 30, 25, 15, 10]
+        ['single', 'double', 'triple', 'quad'],
+        weights=[65, 20, 10, 5]
     )[0]
     modifier = random.choice(modifiers[mod_type])
 
     # 根据修饰词长度选择姓氏和名字
-    if mod_type == 'quint':  # 5字修饰词特殊处理
+    if mod_type == 'quad':  # 5字修饰词特殊处理
         # 只能搭配单字姓或单字名
         if random.random() < 0.7:
             family_name = random.choice(family_names['single'])
