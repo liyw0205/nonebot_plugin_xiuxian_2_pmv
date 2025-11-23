@@ -24,7 +24,7 @@ training_rank = on_command("历练排行榜", priority=5, block=True)
 training_reset = on_command("重置历练", permission=SUPERUSER, priority=5, block=True)
 training_help = on_command("历练帮助", priority=5, block=True)
 
-@training_help.handle(parameterless=[Cooldown(1.4)])
+@training_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """历练帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -48,7 +48,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await training_help.finish()
 
-@training_start.handle(parameterless=[Cooldown()])
+@training_start.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """开始历练"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -95,7 +95,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     update_statistics_value(user_id, "历练次数")
     await training_start.finish()
 
-@training_status.handle(parameterless=[Cooldown(1.4)])
+@training_status.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看历练状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -142,7 +142,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await training_status.finish()
 
-@training_shop.handle(parameterless=[Cooldown(1.4)])
+@training_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看历练商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -202,7 +202,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list)
     await training_shop.finish()
 
-@training_buy.handle(parameterless=[Cooldown(1.4)])
+@training_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换历练商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -270,7 +270,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await training_buy.finish()
 
-@training_rank.handle(parameterless=[Cooldown(1.4)])
+@training_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看历练排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -290,7 +290,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_msg_handler(bot, event, "历练排行榜", bot.self_id, msg_list)
     await training_rank.finish()
 
-@training_reset.handle(parameterless=[Cooldown(1.4)])
+@training_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置历练数据(管理员)"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -241,25 +241,25 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     return msg
 
-@bot_info_cmd.handle(parameterless=[Cooldown(1.4)])
+@bot_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理bot信息命令"""
     msg = await get_bot_info(bot, event)
     await handle_send(bot, event, msg)
 
-@sys_info_cmd.handle(parameterless=[Cooldown(1.4)])
+@sys_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理系统信息命令"""
     sys_msg = await get_system_info(bot, event)
     await handle_send(bot, event, sys_msg)
 
-@ping_test_cmd.handle(parameterless=[Cooldown(1.4)])
+@ping_test_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理ping测试命令"""
     ping_msg = await get_ping_test(bot, event)
     await handle_send(bot, event, ping_msg)
 
-@status_cmd.handle(parameterless=[Cooldown(1.4)])
+@status_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理状态命令 - 调用其他三个功能"""
     # 先发送Bot信息

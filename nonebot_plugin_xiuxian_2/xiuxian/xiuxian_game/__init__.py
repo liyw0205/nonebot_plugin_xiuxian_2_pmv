@@ -451,7 +451,7 @@ async def start_move_timeout(bot: Bot, event: GroupMessageEvent | PrivateMessage
     move_timeout_tasks[room_id] = task
 
 # 开始五子棋命令
-@gomoku_start.handle(parameterless=[Cooldown(1.4)])
+@gomoku_start.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """开始五子棋游戏"""
     isUser, user_info, msg = check_user(event)
@@ -509,7 +509,7 @@ async def gomoku_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await start_room_timeout(bot, event, room_id)
 
 # 加入五子棋命令
-@gomoku_join.handle(parameterless=[Cooldown(1.4)])
+@gomoku_join.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """加入五子棋游戏"""
     isUser, user_info, msg = check_user(event)
@@ -575,7 +575,7 @@ async def gomoku_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await start_move_timeout(bot, event, room_id)
 
 # 落子命令
-@gomoku_move.handle(parameterless=[Cooldown(1.4)])
+@gomoku_move.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """落子操作"""
     isUser, user_info, msg = check_user(event)
@@ -669,7 +669,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         room_manager.delete_room(user_room)
 
 # 认输命令
-@gomoku_surrender.handle(parameterless=[Cooldown(1.4)])
+@gomoku_surrender.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_surrender_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """认输操作"""
     isUser, user_info, msg = check_user(event)
@@ -719,7 +719,7 @@ async def gomoku_surrender_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     room_manager.delete_room(user_room)
 
 # 棋局信息命令
-@gomoku_info.handle(parameterless=[Cooldown(1.4)])
+@gomoku_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看棋局信息"""
     arg = args.extract_plain_text().strip()
@@ -797,7 +797,7 @@ async def gomoku_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await bot.send(event, MessageSegment.image(board_image))
 
 # 退出五子棋命令
-@gomoku_quit.handle(parameterless=[Cooldown(1.4)])
+@gomoku_quit.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_quit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """退出五子棋游戏"""
     isUser, user_info, msg = check_user(event)
@@ -850,7 +850,7 @@ async def gomoku_quit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     await handle_send(bot, event, msg)
 
-@gomoku_help.handle(parameterless=[Cooldown(1.4)])
+@gomoku_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """五子棋帮助信息"""
     help_msg = f"""※※ 五子棋游戏帮助 ※※
@@ -1278,7 +1278,7 @@ async def start_half_timeout(bot: Bot, event: GroupMessageEvent | PrivateMessage
     half_timeout_tasks[room_id] = task
 
 # 开始十点半命令
-@half_ten_start.handle(parameterless=[Cooldown(1.4)])
+@half_ten_start.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """开始十点半游戏"""
     isUser, user_info, msg = check_user(event)
@@ -1337,7 +1337,7 @@ async def half_ten_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await start_half_timeout(bot, event, room_id)
 
 # 加入十点半命令
-@half_ten_join.handle(parameterless=[Cooldown(1.4)])
+@half_ten_join.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """加入十点半游戏"""
     isUser, user_info, msg = check_user(event)
@@ -1423,7 +1423,7 @@ async def half_ten_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await start_half_timeout(bot, event, room_id)
 
 # 结算十点半命令
-@half_ten_close.handle(parameterless=[Cooldown(1.4)])
+@half_ten_close.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_close_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """结算十点半游戏"""
     isUser, user_info, msg = check_user(event)
@@ -1481,7 +1481,7 @@ async def half_ten_close_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     half_manager.delete_room(user_room)
 
 # 退出十点半命令
-@half_ten_quit.handle(parameterless=[Cooldown(1.4)])
+@half_ten_quit.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_quit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """退出十点半游戏"""
     isUser, user_info, msg = check_user(event)
@@ -1512,7 +1512,7 @@ async def half_ten_quit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
 
 # 十点半信息命令
-@half_ten_info.handle(parameterless=[Cooldown(1.4)])
+@half_ten_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看十点半游戏信息"""
     isUser, user_info, msg = check_user(event)
@@ -1576,7 +1576,7 @@ async def half_ten_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
 
 # 十点半帮助命令
-@half_ten_help.handle(parameterless=[Cooldown(1.4)])
+@half_ten_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def half_ten_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """十点半游戏帮助"""
     help_msg = f"""

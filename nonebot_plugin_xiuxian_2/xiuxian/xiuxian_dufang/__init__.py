@@ -125,7 +125,7 @@ unseal_help = on_command("鉴石帮助", priority=10, block=True)
 unseal_message = on_command("鉴石信息", priority=10, block=True)
 
 # 鉴石帮助
-@unseal_help.handle(parameterless=[Cooldown(1.4)])
+@unseal_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     help_msg = """※※ 鉴石系统帮助 ※※
 【鉴石】- 消耗灵石解封尘封之物
@@ -140,7 +140,7 @@ async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, help_msg)
 
 # 共享开启
-@unseal_share_on.handle(parameterless=[Cooldown(1.4)])
+@unseal_share_on.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -158,7 +158,7 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg)
 
 # 共享关闭
-@unseal_share_off.handle(parameterless=[Cooldown(1.4)])
+@unseal_share_off.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -273,7 +273,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     return "\n".join(msg), amount
 
 # 鉴石信息
-@unseal_message.handle(parameterless=[Cooldown(1.4)])
+@unseal_message.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:

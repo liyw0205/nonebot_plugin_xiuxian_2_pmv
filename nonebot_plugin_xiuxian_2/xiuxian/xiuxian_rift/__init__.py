@@ -103,7 +103,7 @@ async def generate_rift_for_group():
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
-@rift_help.handle(parameterless=[Cooldown()])
+@rift_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -237,7 +237,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         return
         
-@complete_rift.handle(parameterless=[Cooldown()])
+@complete_rift.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境结算"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -304,7 +304,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 await complete_rift.finish()
 
 
-@break_rift.handle(parameterless=[Cooldown()])
+@break_rift.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """终止探索秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

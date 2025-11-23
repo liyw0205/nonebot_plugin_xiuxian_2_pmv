@@ -152,7 +152,7 @@ ID：{user_id}
     
     return DETAIL_MAP, text_msg
 
-@xiuxian_message.handle(parameterless=[Cooldown()])
+@xiuxian_message.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """普通文本版修仙信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -170,21 +170,21 @@ async def set_boss_limits_reset():
     boss_limit.reset_limits()
     logger.opt(colors=True).info(f"<green>仙途奇缘重置成功！</green>")
 
-@boss_help.handle(parameterless=[Cooldown()])
+@boss_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__ 
     await handle_send(bot, event, msg)
     await boss_help.finish()
 
-@boss_admin.handle(parameterless=[Cooldown()])
+@boss_admin.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__2 
     await handle_send(bot, event, msg)
     await boss_admin.finish()
     
-@boss_delete.handle(parameterless=[Cooldown()])
+@boss_delete.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """天罚世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -226,7 +226,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await boss_delete.finish()
 
 
-@boss_delete_all.handle(parameterless=[Cooldown()])
+@boss_delete_all.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """天罚全部世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -642,7 +642,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     await challenge_training_puppet.finish()
     
     
-@boss_info.handle(parameterless=[Cooldown()])
+@boss_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查询世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -708,7 +708,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await boss_info.finish()
         
         
-@boss_info2.handle(parameterless=[Cooldown()])
+@boss_info2.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查询世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -756,7 +756,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await send_msg_handler(bot, event, f'世界BOSS列表 - 第{current_page}页', bot.self_id, paged_msgs)
     await boss_info2.finish()
 
-@generate_all.handle(parameterless=[Cooldown(1.4)])
+@generate_all.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bosses = create_all_bosses()  # 自动计算最高境界
     group_boss["000000"] = bosses  # 替换当前 BOSS 列表
@@ -764,7 +764,7 @@ async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await bot.send(event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
 
 
-@create.handle(parameterless=[Cooldown()])
+@create.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -789,7 +789,7 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     await handle_send(bot, event, msg)
     await create.finish()
 
-@create_appoint.handle(parameterless=[Cooldown(1.4)])
+@create_appoint.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -829,7 +829,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await create_appoint.finish()
 
-@boss_integral_store.handle(parameterless=[Cooldown()])
+@boss_integral_store.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """世界积分商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -890,7 +890,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
     await boss_integral_store.finish()
 
-@boss_integral_info.handle(parameterless=[Cooldown()])
+@boss_integral_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """世界BOSS信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -928,7 +928,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await handle_send(bot, event, msg)
     await boss_integral_info.finish()
     
-@boss_integral_use.handle(parameterless=[Cooldown()])
+@boss_integral_use.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """世界积分商店兑换"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

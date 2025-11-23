@@ -363,21 +363,21 @@ __compensation_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@compensation_help_cmd.handle(parameterless=[Cooldown()])
+@compensation_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_compensation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """补偿帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __compensation_help__)
     await compensation_help_cmd.finish()
 
-@compensation_admin_help_cmd.handle(parameterless=[Cooldown()])
+@compensation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_compensation_admin_help(bot: Bot, event: MessageEvent):
     """补偿管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __compensation_admin_help__)
     await compensation_admin_help_cmd.finish()
 
-@list_compensation_cmd.handle(parameterless=[Cooldown(1.4)])
+@list_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """列出所有补偿（合并版）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -458,7 +458,7 @@ async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateM
     msg = "\n".join(msg_lines)
     await handle_send(bot, event, msg)
 
-@add_compensation_cmd.handle(parameterless=[Cooldown(1.4)])
+@add_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """新增补偿命令处理"""
     try:
@@ -491,7 +491,7 @@ async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message =
     except Exception as e:
         await handle_send(bot, event, f"新增补偿出错: {str(e)}")
 
-@claim_compensation_cmd.handle(parameterless=[Cooldown(1.4)])
+@claim_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_claim_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """领取补偿命令处理"""
     user_id = event.get_user_id()
@@ -519,7 +519,7 @@ async def handle_claim_compensation(bot: Bot, event: GroupMessageEvent | Private
     else:
         await handle_send(bot, event, "领取补偿失败")
 
-@delete_compensation_cmd.handle(parameterless=[Cooldown(1.4)])
+@delete_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_delete_compensation(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """删除补偿命令处理"""
     comp_id = args.extract_plain_text().strip()
@@ -740,21 +740,21 @@ __gift_package_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@gift_package_help_cmd.handle(parameterless=[Cooldown()])
+@gift_package_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_gift_package_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """礼包帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __gift_package_help__)
     await gift_package_help_cmd.finish()
 
-@gift_package_admin_help_cmd.handle(parameterless=[Cooldown()])
+@gift_package_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_gift_package_admin_help(bot: Bot, event: MessageEvent):
     """礼包管理"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __gift_package_admin_help__)
     await gift_package_admin_help_cmd.finish()
 
-@list_gift_packages_cmd.handle(parameterless=[Cooldown(1.4)])
+@list_gift_packages_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """列出所有礼包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -827,7 +827,7 @@ async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | Private
     
     await handle_send(bot, event, msg)
 
-@add_gift_package_cmd.handle(parameterless=[Cooldown(1.4)])
+@add_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """新增礼包命令处理"""
     try:
@@ -858,7 +858,7 @@ async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message =
     except Exception as e:
         await handle_send(bot, event, f"新增礼包出错: {str(e)}")
 
-@claim_gift_package_cmd.handle(parameterless=[Cooldown(1.4)])
+@claim_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """领取礼包命令处理"""
     user_id = event.get_user_id()
@@ -886,7 +886,7 @@ async def handle_claim_gift_package(bot: Bot, event: GroupMessageEvent | Private
     else:
         await handle_send(bot, event, "领取礼包失败")
 
-@delete_gift_package_cmd.handle(parameterless=[Cooldown(1.4)])
+@delete_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_delete_gift_package(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """删除礼包命令处理"""
     gift_id = args.extract_plain_text().strip()
@@ -1166,21 +1166,21 @@ __redeem_code_admin_help__ = f"""
 当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
-@redeem_code_help_cmd.handle(parameterless=[Cooldown()])
+@redeem_code_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_redeem_code_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """兑换码帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __redeem_code_help__)
     await redeem_code_help_cmd.finish()
 
-@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown()])
+@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_redeem_code_admin_help(bot: Bot, event: MessageEvent):
     """兑换码管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __redeem_code_admin_help__)
     await redeem_code_admin_help_cmd.finish()
 
-@list_redeem_codes_cmd.handle(parameterless=[Cooldown(1.4)])
+@list_redeem_codes_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     """列出所有兑换码(仅管理员可见)"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1257,7 +1257,7 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     
     await handle_send(bot, event, msg)
 
-@add_redeem_code_cmd.handle(parameterless=[Cooldown(1.4)])
+@add_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """新增兑换码命令处理"""
     try:
@@ -1300,7 +1300,7 @@ async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = 
     except Exception as e:
         await handle_send(bot, event, f"新增兑换码出错: {str(e)}")
 
-@claim_redeem_code_cmd.handle(parameterless=[Cooldown(1.4)])
+@claim_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用兑换码命令处理"""
     user_id = event.get_user_id()
@@ -1312,7 +1312,7 @@ async def handle_claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateM
     
     await claim_redeem_code(bot, event, user_id, redeem_code)
 
-@delete_redeem_code_cmd.handle(parameterless=[Cooldown(1.4)])
+@delete_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_delete_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """删除兑换码命令处理"""
     redeem_code = args.extract_plain_text().strip()
@@ -1344,7 +1344,7 @@ clear_compensation_cmd = on_command("清空补偿", permission=SUPERUSER, priori
 clear_gift_packages_cmd = on_command("清空礼包", permission=SUPERUSER, priority=5, block=True)
 clear_redeem_codes_cmd = on_command("清空兑换码", permission=SUPERUSER, priority=5, block=True)
 
-@clear_compensation_cmd.handle(parameterless=[Cooldown(1.4)])
+@clear_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_clear_compensation(bot: Bot, event: MessageEvent):
     """清空所有补偿"""
     # 清空补偿数据
@@ -1357,7 +1357,7 @@ async def handle_clear_compensation(bot: Bot, event: MessageEvent):
     
     await handle_send(bot, event, "已清空所有补偿数据及领取记录")
 
-@clear_gift_packages_cmd.handle(parameterless=[Cooldown(1.4)])
+@clear_gift_packages_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_clear_gift_packages(bot: Bot, event: MessageEvent):
     """清空所有礼包"""
     # 清空礼包数据
@@ -1370,7 +1370,7 @@ async def handle_clear_gift_packages(bot: Bot, event: MessageEvent):
     
     await handle_send(bot, event, "已清空所有礼包数据及领取记录")
 
-@clear_redeem_codes_cmd.handle(parameterless=[Cooldown(1.4)])
+@clear_redeem_codes_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_clear_redeem_codes(bot: Bot, event: MessageEvent):
     """清空所有兑换码"""
     # 清空兑换码数据
@@ -1491,7 +1491,7 @@ invitation_check = on_command("邀请人", priority=5, block=True)
 invitation_claim = on_command("邀请奖励领取", priority=5, block=True)
 invitation_info = on_command("我的邀请", priority=5, block=True)
 
-@invitation_set_reward.handle(parameterless=[Cooldown(1.4)])
+@invitation_set_reward.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_set_reward(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     """设置邀请奖励"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1586,7 +1586,7 @@ async def handle_invitation_set_reward(bot: Bot, event: MessageEvent, args: Mess
     msg = f"成功设置邀请{threshold}人的奖励：\n{', '.join(items_msg)}"
     await handle_send(bot, event, msg)
 
-@invitation_use.handle(parameterless=[Cooldown(1.4)])
+@invitation_use.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用邀请码"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1638,7 +1638,7 @@ async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMess
     msg = f"成功绑定邀请人！您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
     await handle_send(bot, event, msg)
 
-@invitation_check.handle(parameterless=[Cooldown(1.4)])
+@invitation_check.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看邀请人信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1666,7 +1666,7 @@ async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMe
     msg = f"您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
     await handle_send(bot, event, msg)
 
-@invitation_info.handle(parameterless=[Cooldown(1.4)])
+@invitation_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的邀请信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1698,7 +1698,7 @@ async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     await handle_send(bot, event, "\n".join(msg))
 
-@invitation_claim.handle(parameterless=[Cooldown(1.4)])
+@invitation_claim.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """领取邀请奖励"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1848,7 +1848,7 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
     
 invitation_reward_list_cmd = on_command("邀请奖励列表", priority=5, block=True)
 
-@invitation_reward_list_cmd.handle(parameterless=[Cooldown(1.4)])
+@invitation_reward_list_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_reward_list(bot: Bot, event: MessageEvent):
     """查看邀请奖励列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1932,14 +1932,14 @@ __invitation_admin_help__ = f"""
 invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
 
-@invitation_help_cmd.handle(parameterless=[Cooldown()])
+@invitation_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """邀请帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __invitation_help__)
     await invitation_help_cmd.finish()
 
-@invitation_admin_help_cmd.handle(parameterless=[Cooldown()])
+@invitation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_admin_help(bot: Bot, event: MessageEvent):
     """邀请管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

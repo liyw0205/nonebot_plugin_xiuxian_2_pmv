@@ -220,7 +220,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     await remaname.finish()
 
 
-@run_xiuxian.handle(parameterless=[Cooldown()])
+@run_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我要修仙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -252,7 +252,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await run_xiuxian.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
 
-@sign_in.handle(parameterless=[Cooldown()])
+@sign_in.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙签到"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -281,7 +281,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     except ActionFailed:
         await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
-@hongyun.handle(parameterless=[Cooldown()])
+@hongyun.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看中奖记录和当前奖池"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -365,7 +365,7 @@ def save_lottery_data(data):
     with open('xiuxian_lottery.json', 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-@help_in.handle(parameterless=[Cooldown()])
+@help_in.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -471,7 +471,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     await handle_send(bot, event, msg)
     await help_in.finish()
 
-@level_help.handle(parameterless=[Cooldown()])
+@level_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """灵根帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -480,7 +480,7 @@ async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await level_help.finish()
 
         
-@level1_help.handle(parameterless=[Cooldown()])
+@level1_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def level1_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """品阶帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -488,7 +488,7 @@ async def level1_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await level1_help.finish()
         
-@level2_help.handle(parameterless=[Cooldown()])
+@level2_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """境界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -496,7 +496,7 @@ async def level2_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await level2_help.finish()
 
-@restart.handle(parameterless=[Cooldown()])
+@restart.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """刷新灵根信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -569,7 +569,7 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await restart.finish()
 
 
-@rank.handle(parameterless=[Cooldown()])
+@rank.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -679,7 +679,7 @@ def clear_user_tribulation_info(user_id):
     if file_path.exists():
         file_path.unlink()
 
-@tribulation_info.handle(parameterless=[Cooldown()])
+@tribulation_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看渡劫信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -750,7 +750,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await tribulation_info.finish()
 
-@fusion_destiny_pill.handle(parameterless=[Cooldown()])
+@fusion_destiny_pill.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """融合天命丹"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -812,7 +812,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await fusion_destiny_pill.finish()
 
-@fusion_destiny_tribulation_pill.handle(parameterless=[Cooldown()])
+@fusion_destiny_tribulation_pill.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """融合天命渡劫丹"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -873,7 +873,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     await handle_send(bot, event, msg)
 
-@start_tribulation.handle(parameterless=[Cooldown()])
+@start_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """开始渡劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -986,7 +986,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await start_tribulation.finish()
 
-@destiny_tribulation.handle(parameterless=[Cooldown()])
+@destiny_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """天命渡劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1079,7 +1079,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await destiny_tribulation.finish()
 
-@heart_devil_tribulation.handle(parameterless=[Cooldown()])
+@heart_devil_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡心魔劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1361,7 +1361,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await level_up.finish()
 
-@level_up_zj.handle(parameterless=[Cooldown()])
+@level_up_zj.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """直接突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1989,7 +1989,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     await handle_send(bot, event, result_msg)
     await level_up_drjd_lx.finish()
 
-@user_leveluprate.handle(parameterless=[Cooldown()])
+@user_leveluprate.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的突破概率"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2009,7 +2009,7 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await user_leveluprate.finish()
 
 
-@user_stamina.handle(parameterless=[Cooldown()])
+@user_stamina.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的体力信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2022,7 +2022,7 @@ async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await user_stamina.finish()
 
 
-@give_stone.handle(parameterless=[Cooldown()])
+@give_stone.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """送灵石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2445,7 +2445,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await handle_send(bot, event, msg)
         await rob_stone.finish()
 
-@view_logs.handle(parameterless=[Cooldown()])
+@view_logs.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看修仙日志"""
     args = args.extract_plain_text().split()
@@ -2484,7 +2484,7 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg)
     await view_logs.finish()
 
-@view_data.handle(parameterless=[Cooldown()])
+@view_data.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看修仙数据"""
     user_id = event.get_user_id()
@@ -2713,7 +2713,7 @@ def get_user_name(user_id):
     user_info = sql_message.get_user_info_with_id(user_id)
     return user_info['user_name'] if user_info else f"未知({user_id})"
 
-@give_xiangyuan.handle(parameterless=[Cooldown()])
+@give_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """送仙缘"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2912,7 +2912,7 @@ XIANGYUAN_EVENTS = [
     }
 ]
 
-@get_xiangyuan.handle(parameterless=[Cooldown()])
+@get_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     """抢仙缘"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3063,7 +3063,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg)
     await get_xiangyuan.finish()
 
-@xiangyuan_list.handle(parameterless=[Cooldown()])
+@xiangyuan_list.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiangyuan_list_(bot: Bot, event: GroupMessageEvent):
     """仙缘列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -3128,7 +3128,7 @@ __xiangyuan_notes__ = f"""
 3. 珍惜仙缘，广结善缘
 """.strip()
 
-@xiangyuan_help.handle(parameterless=[Cooldown()])
+@xiangyuan_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """仙缘帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

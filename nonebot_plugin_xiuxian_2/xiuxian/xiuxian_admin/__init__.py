@@ -61,7 +61,7 @@ create_new_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER,
 do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 
 # GM加灵石
-@gm_command.handle(parameterless=[Cooldown(1.4)])
+@gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """神秘力量 - 给玩家或全服发放灵石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -121,7 +121,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await gm_command.finish()
 
 # GM加思恋结晶
-@ccll_command.handle(parameterless=[Cooldown(1.4)])
+@ccll_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承力量 - 给玩家或全服发放思恋结晶"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -180,7 +180,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 continue
     await ccll_command.finish()
 
-@adjust_exp_command.handle(parameterless=[Cooldown(1.4)])
+@adjust_exp_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修为调整 - 增加或减少玩家修为"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -240,7 +240,7 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             await adjust_exp_command.finish()    
     await adjust_exp_command.finish()
 
-@zaohua_xiuxian.handle(parameterless=[Cooldown(1.4)])
+@zaohua_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """造化力量 - 修改玩家境界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -289,7 +289,7 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         await zaohua_xiuxian.finish()
 
-@gmm_command.handle(parameterless=[Cooldown(1.4)])
+@gmm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """轮回力量 - 修改玩家灵根"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -323,7 +323,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg)
         await gmm_command.finish()
 
-@cz.handle(parameterless=[Cooldown(1.4)])
+@cz.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """创造力量 - 给玩家或全服发放物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -402,7 +402,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     await handle_send(bot, event, msg)
     await cz.finish()
 
-@hmll.handle(parameterless=[Cooldown(1.4)])
+@hmll.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """毁灭力量 - 扣除玩家或全服的物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -512,7 +512,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     await handle_send(bot, event, msg)
     await hmll.finish()
 
-@restate.handle(parameterless=[Cooldown(1.4)])
+@restate.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -549,7 +549,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await restate.finish()
 
-@set_xiuxian.handle(parameterless=[Cooldown(1.4)])
+@set_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """群修仙开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -581,7 +581,7 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()
 
-@set_private_chat.handle(parameterless=[Cooldown(1.4)])
+@set_private_chat.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """私聊功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -606,7 +606,7 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await set_private_chat.finish()
     
-@xiuxian_updata_level.handle(parameterless=[Cooldown()])
+@xiuxian_updata_level.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将修仙2的境界适配到修仙2魔改"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -676,13 +676,13 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
 
-@clear_xiangyuan.handle(parameterless=[Cooldown()])
+@clear_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = await clear_all_xiangyuan()
     await handle_send(bot, event, msg)
     await clear_xiangyuan.finish()
 
-@xiuxian_novice.handle(parameterless=[Cooldown()])
+@xiuxian_novice.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置新手礼包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -691,13 +691,13 @@ async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await xiuxian_novice.finish()
 
-@create_new_rift.handle(parameterless=[Cooldown()])
+@create_new_rift.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def create_new_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await create_rift(bot, event)
 
-@do_work_cz.handle(parameterless=[Cooldown()])
+@do_work_cz.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的悬赏令"""
     from ..xiuxian_work import count
@@ -706,7 +706,7 @@ async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await do_work_cz.finish()
 
-@super_help.handle(parameterless=[Cooldown()])
+@super_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
