@@ -168,7 +168,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         page = 1
     
     # 分页设置
-    items_per_page = 5
+    items_per_page = 10
     total_pages = (len(shop_items) + items_per_page - 1) // items_per_page
     page = max(1, min(page, total_pages))
     

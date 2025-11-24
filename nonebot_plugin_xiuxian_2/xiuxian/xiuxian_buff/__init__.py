@@ -1850,6 +1850,33 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await unbind_partner.finish()
     
     partner_user_id = partner_data["partner_id"]
+    bind_time_str = partner_data.get("bind_time")
+    
+    if not bind_time_str:
+        # 如果没有绑定时间，视为异常情况，允许解绑
+        msg = "检测到绑定时间异常，允许解绑道侣。"
+        await handle_send(bot, event, msg)
+        # 继续执行解绑逻辑
+    else:
+        try:
+            bind_time = datetime.strptime(bind_time_str, '%Y-%m-%d %H:%M:%S')
+            current_time = datetime.now()
+            time_difference = current_time - bind_time
+            days_difference = time_difference.days
+            
+            if days_difference < 7:
+                remaining_days = 7 - days_difference
+                msg = f"你与道侣的绑定时间不足7天，还需等待{remaining_days}天才能解绑道侣。"
+                await handle_send(bot, event, msg)
+                await unbind_partner.finish()
+        except ValueError:
+            # 如果 bind_time 格式不正确，视为异常，允许解绑
+            msg = "检测到绑定时间格式异常，允许解绑道侣。"
+            await handle_send(bot, event, msg)
+            # 继续执行解绑逻辑
+    
+    # 继续执行解绑逻辑
+    partner_user_id = partner_data["partner_id"]
     
     # 解除双方道侣关系
     save_partner(user_id, {'partner_id': None, 'bind_time': None, 'affection': None})

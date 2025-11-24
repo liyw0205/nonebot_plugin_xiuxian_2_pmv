@@ -22,81 +22,6 @@ DEFAULT_CONFIG = {
             "cost": 1000,
             "weekly_limit": 10
         },
-        "4003": {
-            "name": "陨铁炉",
-            "cost": 5000,
-            "weekly_limit": 1
-        },
-        "4002": {
-            "name": "雕花紫铜炉",
-            "cost": 25000,
-            "weekly_limit": 1
-        },
-        "4001": {
-            "name": "寒铁铸心炉",
-            "cost": 100000,
-            "weekly_limit": 1
-        },
-        "2500": {
-            "name": "一级聚灵旗",
-            "cost": 5000,
-            "weekly_limit": 1
-        },
-        "2501": {
-            "name": "二级聚灵旗",
-            "cost": 10000,
-            "weekly_limit": 1
-        },
-        "2502": {
-            "name": "三级聚灵旗",
-            "cost": 20000,
-            "weekly_limit": 1
-        },
-        "2503": {
-            "name": "四级聚灵旗",
-            "cost": 40000,
-            "weekly_limit": 1
-        },
-        "2504": {
-            "name": "仙级聚灵旗",
-            "cost": 80000,
-            "weekly_limit": 1
-        },
-        "2505": {
-            "name": "无上聚灵旗",
-            "cost": 160000,
-            "weekly_limit": 1
-        },
-        "7085": {
-            "name": "冲天槊槊",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "8931": {
-            "name": "苍寰变",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "9937": {
-            "name": "弑仙魔典",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "10402": {
-            "name": "真神威录",
-            "cost": 700000,
-            "weekly_limit": 1
-        },
-        "10403": {
-            "name": "太乙剑诀",
-            "cost": 1000000,
-            "weekly_limit": 1
-        },
-        "10411": {
-            "name": "真龙九变",
-            "cost": 1200000,
-            "weekly_limit": 1
-        },
         "20004": {
             "name": "蕴灵石",
             "cost": 10000,
@@ -114,7 +39,7 @@ DEFAULT_CONFIG = {
         },
         "20005": {
             "name": "祈愿石",
-            "cost": 1000,
+            "cost": 10000,
             "weekly_limit": 10
         },
         "15357": {
@@ -135,36 +60,6 @@ DEFAULT_CONFIG = {
         "10405": {
             "name": "醉仙",
             "cost": 50000,
-            "weekly_limit": 1
-        },
-        "10410": {
-            "name": "劫破",
-            "cost": 1000000,
-            "weekly_limit": 1
-        },
-        "10412": {
-            "name": "无极·靖天",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "8933": {
-            "name": "冥河鬼镰·千慄慄葬世",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "8934": {
-            "name": "血影碎空·胧剑劫",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "8935": {
-            "name": "剑御九天·万剑归墟",
-            "cost": 2000000,
-            "weekly_limit": 1
-        },
-        "8936": {
-            "name": "华光·万影噬空",
-            "cost": 2000000,
             "weekly_limit": 1
         },
         "20011": {

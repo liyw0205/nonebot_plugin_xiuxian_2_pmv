@@ -2048,7 +2048,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 @guishi_withdraw.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """鬼市取灵石（收取20%暂存费）"""
+    """鬼市取灵石（收取动态手续费）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -2082,8 +2082,20 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         await guishi_withdraw.finish()
     
-    # 计算手续费（20%）
-    fee = int(amount * 0.2)
+    # 计算手续费
+    base_fee_rate = 0.2  # 基础手续费20%
+    additional_fee_per_100m = 0.05  # 每10亿增加5%
+    max_fee_rate = 0.8  # 最大手续费80%
+    
+    if user_data["stone"] > 10000000000:
+        excess_amount = user_data["stone"] - 10000000000
+        additional_fee = excess_amount // 1000000000 * additional_fee_per_100m
+        fee_rate = base_fee_rate + additional_fee
+        fee_rate = min(fee_rate, max_fee_rate)  # 确保不超过最大手续费
+    else:
+        fee_rate = base_fee_rate
+    
+    fee = int(amount * fee_rate)
     actual_amount = amount - fee
     
     # 更新鬼市账户
@@ -2093,7 +2105,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     # 给用户灵石
     sql_message.update_ls(user_id, actual_amount, 1)
     
-    msg = f"成功取出 {number_to(amount)} 灵石（扣除20%暂存费，实际到账 {number_to(actual_amount)} 灵石）"
+    msg = f"成功取出 {number_to(amount)} 灵石（手续费：{fee_rate*100:.0f}%，扣除{number_to(fee)}灵石，实际到账 {number_to(actual_amount)} 灵石）"
     await handle_send(bot, event, msg)
     await guishi_withdraw.finish()
 

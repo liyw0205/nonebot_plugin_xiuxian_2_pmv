@@ -170,8 +170,13 @@ CONFIG = {
         },
         "20005": {
             "name": "祈愿石",
-            "cost": 1000,
+            "cost": 10000,
             "weekly_limit": 10
+        },
+        "20012": {
+            "name": "秘境加速券",
+            "cost": 10000,
+            "weekly_limit": 5
         },
         "15357": {
             "name": "八九玄功",
@@ -231,7 +236,7 @@ CONFIG = {
         "20006": {
             "name": "福缘石",
             "cost": 5000,
-            "weekly_limit": 1
+            "weekly_limit": 5
         }
     }
 }
