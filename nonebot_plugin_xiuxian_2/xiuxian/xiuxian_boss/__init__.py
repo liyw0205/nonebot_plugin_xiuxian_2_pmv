@@ -455,9 +455,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     if victor == "群友赢了":
         msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
-        # 移除并生成新BOSS
-        group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
-        new_boss = createboss_jj(bossinfo['jj'])
+        if boss_now_hp >= 0:
+            # 移除并生成新BOSS
+            group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
+            new_boss = createboss_jj(bossinfo['jj'])
         if new_boss:  
             group_boss[group_id].append(new_boss)
         if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
@@ -1143,13 +1144,13 @@ def boss_drops(user_rank, boss_rank, boss, user_info):
     
     # 基础掉落概率检查(10%)
     roll = random.randint(1, 100)
-    if roll >= 10: 
+    if roll >= 30: 
         return None, None
         
     # 境界差距过大时极低概率掉落(5%)
     if boss_rank - user_rank >= 4 or user_rank - boss_rank >= 4:
         roll = random.randint(1, 100)
-        if roll >= 5: 
+        if roll >= 10: 
             return None, None
         
     # 获取随机掉落物
