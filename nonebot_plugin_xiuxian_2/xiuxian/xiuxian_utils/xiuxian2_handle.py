@@ -2740,7 +2740,7 @@ def backup_db_files():
             pass
         return False, error_msg
 
-def clean_old_backups(backup_dir, keep_days=30):
+def clean_old_backups(backup_dir, keep_days=10):
     """
     清理旧的备份文件，保留指定天数内的备份
     """

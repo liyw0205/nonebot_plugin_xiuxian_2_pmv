@@ -13,6 +13,7 @@ from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_buff import load_partner
 from .draw_changelog import get_commits, create_changelog_image
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -62,7 +63,23 @@ async def get_user_xiuxian_info(user_id):
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
         else:
             exp_meg = f"可突破！"
-
+    partner_data = load_partner(user_id)
+    if not partner_data or partner_data.get('partner_id') is None:
+        partner_info = "无"
+    else:
+        partner_user_id = partner_data["partner_id"]
+        affection = partner_data["affection"]
+        partner_info = sql_message.get_user_real_info(partner_user_id)
+        if affection >= 1000:
+            affection_level = "💖 深情厚谊"
+        elif affection >= 500:
+            affection_level = "💕 心有灵犀"
+        elif affection >= 100:
+            affection_level = "💗 初识情愫"
+        else:
+            affection_level = "💓 缘分伊始"
+        partner_info = f"{partner_info['user_name']} ({affection_level})"
+    
     user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
@@ -145,6 +162,7 @@ ID：{user_id}
 瞳术: {effect2_buff_buff_name}
 法器: {weapon_name}
 防具: {armor_name}
+道侣：{partner_info}
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
 灵石排行: 第{int(user_stone)}位
