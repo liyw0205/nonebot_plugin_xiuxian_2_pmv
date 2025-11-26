@@ -14,7 +14,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 from ..xiuxian_config import convert_rank
-
+from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
 
@@ -334,7 +334,7 @@ def get_user_main_back_msg(user_id):
                 
                 # 2. 显示未装备的装备（按品阶从高到低）
                 for rank in equipment_ranks:
-                    equipments = equipment_types[equip_type]["未装备"][rank]
+                    equipments = equipment_types[equip_type]["未装备"].get(rank, [])
                     if equipments:
                         for equip in equipments:
                             msg = f"{equip['level']}-{equip['name']}\n"
