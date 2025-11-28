@@ -37,7 +37,7 @@ async def _():# 每天0点
     await impart_re()  # 虚神界对决
 
 
-@scheduler.scheduled_job("cron", hour=8, minute=0)
+@scheduler.scheduled_job("cron", hour=13, minute=16)
 async def _():  # 每天8点
     await reset_illusion_data()  # 幻境寻心
     await resetusertask()  # 宗门丹药/宗门任务
@@ -54,7 +54,7 @@ async def _():  # 每天0/12点5分
     await auto_handle_inactive_sect_owners()  # 处理宗门状态
     await reset_data_by_time()  # 处理早/晚数据
 
-@scheduler.scheduled_job("cron", hour='*/4')
+@scheduler.scheduled_job("cron", hour='*/4', minute=10)
 async def _():  # 每4小时执行一次
     """定时备份数据库"""
     success, message = backup_db_files()

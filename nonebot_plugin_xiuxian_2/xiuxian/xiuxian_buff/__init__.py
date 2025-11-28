@@ -1912,11 +1912,11 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
     bound_days = (datetime.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
-    if affection >= 1000:
+    if affection >= 10000:
         affection_level = "💖 深情厚谊"
-    elif affection >= 500:
+    elif affection >= 5000:
         affection_level = "💕 心有灵犀"
-    elif affection >= 100:
+    elif affection >= 1000:
         affection_level = "💗 初识情愫"
     else:
         affection_level = "💓 缘分伊始"

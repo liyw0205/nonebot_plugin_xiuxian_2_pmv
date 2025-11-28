@@ -308,7 +308,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, msg)
         await Infinite_reincarnation.finish()
     
-    if list_level_all.index(level) >= list_level_all.index(XiuConfig().Infinite_reincarnation_min_level) and user_root == '永恒道果' or user_root == '命运道果':
+    if (list_level_all.index(level) >= list_level_all.index(XiuConfig().Infinite_reincarnation_min_level)) and (user_root == '永恒道果' or user_root == '命运道果'):
         exp = user_msg['exp']
         now_exp = exp - 100
         sql_message.updata_level(user_id, '江湖好手') #重置用户境界
