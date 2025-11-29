@@ -1118,6 +1118,7 @@ class BossDrops:
         # 计算适合用户等级的掉落物范围
         base_rank = max(convert_rank(user_level)[0], 5)
         zx_rank = random.randint(base_rank, base_rank + 35)
+        zx_rank = min(zx_rank, 55)
         if zx_rank == 5 and random.randint(1, 100) != 100:
             zx_rank = 10
         # 筛选符合条件的掉落物

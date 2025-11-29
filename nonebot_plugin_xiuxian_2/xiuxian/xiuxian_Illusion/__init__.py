@@ -506,6 +506,7 @@ def _give_random_item(user_id, user_level):
     else:
         base_rank = random.randint(5, 50)
     zx_rank = random.randint(base_rank, base_rank + 35)
+    zx_rank = min(zx_rank, 55)
     if zx_rank == 5 and random.randint(1, 100) != 100:
         zx_rank = 10
     # 获取随机物品

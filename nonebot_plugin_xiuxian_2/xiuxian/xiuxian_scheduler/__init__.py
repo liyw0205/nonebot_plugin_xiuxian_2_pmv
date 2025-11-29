@@ -37,7 +37,7 @@ async def _():# 每天0点
     await impart_re()  # 虚神界对决
 
 
-@scheduler.scheduled_job("cron", hour=13, minute=16)
+@scheduler.scheduled_job("cron", hour=8, minute=0)
 async def _():  # 每天8点
     await reset_illusion_data()  # 幻境寻心
     await resetusertask()  # 宗门丹药/宗门任务
