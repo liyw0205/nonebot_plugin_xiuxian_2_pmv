@@ -1,6 +1,6 @@
 from nonebot import require
 from nonebot.log import logger
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, backup_db_files
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, backup_db_files
 from ..xiuxian_base import reset_lottery_participants, reset_stone_limits, reset_xiangyuan_daily
 from ..xiuxian_boss import set_boss_limits_reset
 from ..xiuxian_buff import two_exp_cd_up
@@ -13,6 +13,7 @@ from ..xiuxian_tower import reset_tower_floors
 from ..xiuxian_work import resetrefreshnum
 
 sql_message = XiuxianDateManage()
+xiuxian_impart = XIUXIAN_IMPART_BUFF()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 
@@ -28,7 +29,11 @@ async def _():# 每天0点
 
 # 重置丹药每日使用次数
     sql_message.day_num_reset()
-    logger.opt(colors=True).info(f"<green>每日丹药使用次数重置成功！</green>")    
+    logger.opt(colors=True).info(f"<green>每日丹药使用次数重置成功！</green>")
+    sql_message.mixelixir_num_reset()
+    logger.opt(colors=True).info(f"<green>每日炼丹次数重置成功！</green>")
+    xiuxian_impart.impart_num_reset()
+    logger.opt(colors=True).info(f"<green>每日传承抽卡次数重置成功！</green>")
     await reset_lottery_participants()  # 借运/鸿运
     await reset_stone_limits()  # 送灵石额度
     await reset_xiangyuan_daily()  # 送仙缘

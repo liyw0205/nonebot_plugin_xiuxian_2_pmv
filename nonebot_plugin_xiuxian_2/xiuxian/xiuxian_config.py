@@ -156,7 +156,7 @@ class XiuConfig:
             "level_up_rate", "sect_id",
             "sect_position", "hp", "mp", "atk",
             "atkpractice", "hppractice", "mppractice", "sect_task", "sect_contribution",
-            "sect_elixir_get", "blessed_spot_flag", "blessed_spot_name", "user_stamina"
+            "sect_elixir_get", "blessed_spot_flag", "blessed_spot_name", "user_stamina", "mixelixir_num"
         ]
         self.sql_user_cd = [
             "user_id", "type", "create_time", "scheduled_time", "last_check_info_time"

@@ -7,6 +7,7 @@ import zipfile
 import random
 import shutil
 import sqlite3
+import string
 from datetime import datetime
 from pathlib import Path
 from nonebot.log import logger
@@ -25,6 +26,7 @@ SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号
 impart_num = "123451234"
+trade_num = "123451234"
 items = Items()
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
@@ -86,7 +88,8 @@ class XiuxianDateManage:
       "work_num" integer DEFAULT 5,
       "user_name" TEXT DEFAULT NULL,
       "level_up_cd" integer DEFAULT NULL,
-      "level_up_rate" integer DEFAULT 0
+      "level_up_rate" integer DEFAULT 0,
+      "mixelixir_num" integer DEFAULT 0
     );""")
             elif i == "user_cd":
                 try:
@@ -605,6 +608,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, (user_id,))
         self.conn.commit()
 
+    def update_mixelixir_num(self, user_id):
+        """增加炼丹次数"""
+        sql = f"UPDATE user_xiuxian SET mixelixir_num=mixelixir_num+1 WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (user_id,))
+        self.conn.commit()
+
     def update_user_name(self, user_id, user_name):
         """更新用户道号"""
         cur = self.conn.cursor()
@@ -618,7 +628,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
             cur.execute(sql, (user_name, user_id))
             self.conn.commit()
-            return '道友的道号更新成功拉~'
+            return '道友的道号更新成啦~'
 
     def updata_level_cd(self, user_id):
         """更新突破境界CD"""
@@ -1475,6 +1485,13 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         cur.execute(sql, )
         self.conn.commit()
 
+    def mixelixir_num_reset(self):
+        """重置每日炼丹次数"""
+        sql = f"UPDATE back SET mixelixir_num=0"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
+        self.conn.commit()
+
     def reset_work_num(self, count):
         """重置用户悬赏令刷新次数"""
         sql = f"UPDATE user_xiuxian SET work_num=?"
@@ -1880,6 +1897,187 @@ async def close_db():
     XiuxianDateManage().close()
 
 
+# 这里是交易数据部分
+class TradeDataManager:
+    global trade_num
+    _instance = {}
+    _has_init = {}
+
+    def __new__(cls):
+        if cls._instance.get(trade_num) is None:
+            cls._instance[trade_num] = super(TradeDataManager, cls).__new__(cls)
+        return cls._instance[trade_num]
+
+    def __init__(self):
+        if not self._has_init.get(trade_num):
+            self._has_init[trade_num] = True
+            self.database_path = DATABASE
+            trade_db_path = self.database_path / "trade.db"
+            if not trade_db_path.exists():
+                trade_db_path.parent.mkdir(parents=True, exist_ok=True)  # 创建目录（如果不存在）
+                self.conn = sqlite3.connect(trade_db_path, check_same_thread=False)
+                self._create_tables()  # 初始化表结构
+                logger.opt(colors=True).info(f"<green>交易数据库已连接！</green>")
+            else:
+                self.conn = sqlite3.connect(trade_db_path, check_same_thread=False)
+                logger.opt(colors=True).info(f"<green>交易数据库已连接！</green>")
+    
+    def _create_tables(self):
+        """创建交易所需的表结构"""
+        c = self.conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS xianshi_items (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                type TEXT,
+                name TEXT,
+                price INTEGER,
+                quantity INTEGER,
+                description TEXT
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS guishi_qiugou (
+                order_id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                item_name TEXT,
+                price INTEGER,
+                quantity INTEGER,
+                filled INTEGER DEFAULT 0
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS guishi_baitan (
+                order_id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                item_id TEXT,
+                item_name TEXT,
+                price INTEGER,
+                quantity INTEGER,
+                sold INTEGER DEFAULT 0,
+                create_time INTEGER,
+                end_time INTEGER
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS auctions (
+                auction_id TEXT PRIMARY KEY,
+                item_id TEXT,
+                name TEXT,
+                start_price INTEGER,
+                current_price INTEGER,
+                seller_id INTEGER,
+                seller_name TEXT,
+                is_system BOOLEAN DEFAULT FALSE,
+                bids TEXT DEFAULT '{}',
+                last_bid_time INTEGER
+            )
+        ''')
+        self.conn.commit()
+
+    def generate_unique_id(self):
+        return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+
+    def add_xianshi_item(self, user_id, item_type, name, price, quantity, description):
+        item_id = self.generate_unique_id()
+        self.cursor.execute('''
+            INSERT INTO xianshi_items (id, user_id, type, name, price, quantity, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (item_id, user_id, item_type, name, price, quantity, description))
+        self.conn.commit()
+        return item_id
+
+    def add_guishi_qiugou_order(self, user_id, item_name, price, quantity):
+        order_id = self.generate_unique_id()
+        self.cursor.execute('''
+            INSERT INTO guishi_qiugou (order_id, user_id, item_name, price, quantity)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, user_id, item_name, price, quantity))
+        self.conn.commit()
+        return order_id
+
+    def add_guishi_baitan_order(self, user_id, item_id, item_name, price, quantity, create_time, end_time):
+        order_id = self.generate_unique_id()
+        self.cursor.execute('''
+            INSERT INTO guishi_baitan (order_id, user_id, item_id, item_name, price, quantity, sold, create_time, end_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (order_id, user_id, item_id, item_name, price, quantity, 0, create_time, end_time))
+        self.conn.commit()
+        return order_id
+
+    def add_auction_item(self, item_id, name, start_price, seller_id, seller_name, is_system=False):
+        auction_id = self.generate_unique_id()
+        self.cursor.execute('''
+            INSERT INTO auctions (auction_id, item_id, name, start_price, current_price, seller_id, seller_name, is_system, bids, last_bid_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (auction_id, item_id, name, start_price, start_price, seller_id, seller_name, is_system, '{}', int(datetime.now().timestamp())))
+        self.conn.commit()
+        return auction_id
+
+    def get_xianshi_item(self, item_id):
+        self.cursor.execute('SELECT * FROM xianshi_items WHERE id = ?', (item_id,))
+        return self.cursor.fetchone()
+
+    def get_guishi_qiugou_order(self, order_id):
+        self.cursor.execute('SELECT * FROM guishi_qiugou WHERE order_id = ?', (order_id,))
+        return self.cursor.fetchone()
+
+    def get_guishi_baitan_order(self, order_id):
+        self.cursor.execute('SELECT * FROM guishi_baitan WHERE order_id = ?', (order_id,))
+        return self.cursor.fetchone()
+
+    def get_auction_item(self, auction_id):
+        self.cursor.execute('SELECT * FROM auctions WHERE auction_id = ?', (auction_id,))
+        return self.cursor.fetchone()
+
+    def update_guishi_qiugou_order(self, order_id, filled):
+        self.cursor.execute('UPDATE guishi_qiugou SET filled = ? WHERE order_id = ?', (filled, order_id))
+        self.conn.commit()
+
+    def update_guishi_baitan_order(self, order_id, sold):
+        self.cursor.execute('UPDATE guishi_baitan SET sold = ? WHERE order_id = ?', (sold, order_id))
+        self.conn.commit()
+
+    def place_auction_bid(self, auction_id, bidder_id, bid_price):
+        auction = self.get_auction_item(auction_id)
+        if not auction:
+            return False
+        current_price = auction[4]
+        if bid_price <= current_price:
+            return False
+        bids = json.loads(auction[8])
+        bids[str(bidder_id)] = bid_price
+        self.cursor.execute('UPDATE auctions SET bids = ?, last_bid_time = ? WHERE auction_id = ?', (json.dumps(bids), int(datetime.now().timestamp()), auction_id))
+        self.conn.commit()
+        return True
+
+    def remove_xianshi_item(self, item_id):
+        self.cursor.execute('DELETE FROM xianshi_items WHERE id = ?', (item_id,))
+        self.conn.commit()
+
+    def remove_guishi_qiugou_order(self, order_id):
+        self.cursor.execute('DELETE FROM guishi_qiugou WHERE order_id = ?', (order_id,))
+        self.conn.commit()
+
+    def remove_guishi_baitan_order(self, order_id):
+        self.cursor.execute('DELETE FROM guishi_baitan WHERE order_id = ?', (order_id,))
+        self.conn.commit()
+
+    def remove_auction_item(self, auction_id):
+        self.cursor.execute('DELETE FROM auctions WHERE auction_id = ?', (auction_id,))
+        self.conn.commit()
+
+    def close(self):
+        """关闭数据库连接"""
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+            logger.opt(colors=True).info(f"<green>交易数据库关闭！</green>")
+
+driver = get_driver()
+@driver.on_shutdown
+async def close_db():
+    TradeDataManager().close()
+
 # 这里是虚神界部分
 class XIUXIAN_IMPART_BUFF:
     global impart_num
@@ -1947,6 +2145,7 @@ class XIUXIAN_IMPART_BUFF:
     "impart_two_exp" integer DEFAULT 0,
     "stone_num" integer DEFAULT 0,
     "impart_lv" integer DEFAULT 0,
+    "impart_num" integer DEFAULT 0,
     "exp_day" integer DEFAULT 0,
     "wish" integer DEFAULT 0
     );""")
@@ -1983,7 +2182,7 @@ class XIUXIAN_IMPART_BUFF:
             pass
         else:
             c = self.conn.cursor()
-            sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,exp_day,wish) VALUES(?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
+            sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,impart_num,exp_day,wish) VALUES(?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
             c.execute(sql, (user_id,))
             self.conn.commit()
 
@@ -2153,6 +2352,14 @@ class XIUXIAN_IMPART_BUFF:
         self.conn.commit()
         return True
 
+    def update_impart_num(self, impart_num, user_id):
+        """更新抽卡次数"""
+        cur = self.conn.cursor()
+        sql = f"UPDATE xiuxian_impart SET impart_num=impart_num+? WHERE user_id=?"
+        cur.execute(sql, (impart_num, user_id))
+        self.conn.commit()
+        return True
+
     def add_impart_two_exp(self, impart_num, user_id):
         """add impart_two_exp"""
         cur = self.conn.cursor()
@@ -2209,6 +2416,13 @@ class XIUXIAN_IMPART_BUFF:
     def impart_lv_reset(self):
         """重置所有用户虚神界等级"""
         sql = f"UPDATE xiuxian_impart SET impart_lv=0"
+        cur = self.conn.cursor()
+        cur.execute(sql, )
+        self.conn.commit()
+
+    def impart_num_reset(self):
+        """重置所有用户传承抽卡次数"""
+        sql = f"UPDATE xiuxian_impart SET impart_num=0"
         cur = self.conn.cursor()
         cur.execute(sql, )
         self.conn.commit()

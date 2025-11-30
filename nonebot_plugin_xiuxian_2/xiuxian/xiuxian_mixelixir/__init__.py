@@ -325,9 +325,17 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
     """配方,用来炼制丹药"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_id = event.user_id
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await mix_elixir.finish()
+    user_id = user_info['user_id']
     pattern = r"主药([\u4e00-\u9fa5]+)(\d+)药引([\u4e00-\u9fa5]+)(\d+)辅药([\u4e00-\u9fa5]+)(\d+)丹炉([\u4e00-\u9fa5]+)+"
     matched = re.search(pattern, mode)
+    if user_info['mixelixir_num'] >= 100:
+        msg = "道友今日炼丹已达上限，请明日再来！"
+        await handle_send(bot, event, msg)
+        await mix_make.finish()
     if matched is None:
         msg = f"请输入正确的配方！"
         await handle_send(bot, event, msg)
@@ -416,6 +424,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 sql_message.update_back_j(user_id, fuyao_goods_id, fuyao_num)
                 sql_message.update_back_j(user_id, yaoyin_goods_id, yaoyin_num)
                 update_statistics_value(user_id, "炼丹次数")
+                sql_message.update_mixelixir_num(user_id)
                 try:
                     var = mix_elixir_info['炼丹记录'][id]
                     now_num = mix_elixir_info['炼丹记录'][id]['num'] #now_num 已经炼制的丹药数量
