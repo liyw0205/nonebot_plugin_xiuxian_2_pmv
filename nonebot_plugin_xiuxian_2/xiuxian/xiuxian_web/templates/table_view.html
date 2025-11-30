@@ -83,24 +83,15 @@
             <table>
                 <thead>
                     <tr>
+                        <th>操作</th>
                         {% for field in table_info.fields %}
                             <th>{{ field }}{% if field == primary_key %} 🔑{% endif %}</th>
                         {% endfor %}
-                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in data.data %}
                         <tr>
-                            {% for field in table_info.fields %}
-                                <td>
-                                    {% if field in row %}
-                                        {{ row[field] }}
-                                    {% else %}
-                                        NULL
-                                    {% endif %}
-                                </td>
-                            {% endfor %}
                             <td>
                                 {% if table_name == "impart_cards" %}
                                     {# impart_cards表使用复合主键 #}
@@ -115,6 +106,15 @@
                                     <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn btn-primary">编辑</a>
                                 {% endif %}
                             </td>
+                            {% for field in table_info.fields %}
+                                <td>
+                                    {% if field in row %}
+                                        {{ row[field] }}
+                                    {% else %}
+                                        NULL
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
                         </tr>
                     {% endfor %}
                 </tbody>

@@ -5,7 +5,7 @@ import re
 import os
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 from nonebot import on_command, require, on_fullmatch
 from nonebot.adapters.onebot.v11 import (
@@ -46,7 +46,6 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_config import XiuConfig, convert_rank
-from datetime import datetime, timedelta
 from .auction_config import *
 
 # 初始化组件
@@ -1877,36 +1876,46 @@ async def process_guishi_transactions(user_id):
         # 使用索引快速查找匹配的摆摊订单
         matched_sellers = baitan_index["by_item"].get(item_name, [])
         
+        # 初始化已购买数量
+        purchased = 0
+        
+        # 遍历所有匹配的卖家
         for seller_id in matched_sellers:
             if order.get("filled", 0) >= order["quantity"]:
                 break  # 订单已完成
                 
             seller_data = get_guishi_user_data(seller_id)
             for seller_order_id, seller_order in list(seller_data["baitan_orders"].items()):
-                if (seller_order["item_name"] == item_name and 
-                    seller_order["price"] <= order["price"] and
-                    seller_order["quantity"] - seller_order.get("sold", 0) > 0):
+                if (seller_order["item_name"] == item_name):
                     
+                    # 跳过自己的物品
+                    if seller_id == user_id or seller_order["price"] > order["price"]:
+                        continue
+
                     # 计算可交易数量
                     available = seller_order["quantity"] - seller_order.get("sold", 0)
                     needed = order["quantity"] - order.get("filled", 0)
-                    trade_num = min(available, needed)
+                    if available > needed:
+                        available = needed
+                    trade_num = max(available, needed)
                     
+                    if trade_num <= 0:
+                        continue  # 无法交易
+
                     # 检查鬼市账户余额
                     total_cost = trade_num * seller_order["price"]
                     if user_data["stone"] < total_cost:
                         continue
                         
                     # 执行交易
-                    user_data["stone"] -= total_cost
-                    seller_data["stone"] += total_cost
+                    seller_data["stone"] += total_cost  # 增加灵石
                     
                     # 更新订单状态
                     order["filled"] = order.get("filled", 0) + trade_num
                     seller_order["sold"] = seller_order.get("sold", 0) + trade_num
                     
                     # 转移物品
-                    item_id = seller_order["item_id"]
+                    item_id = str(seller_order["item_id"])
                     if item_id not in user_data["items"]:
                         user_data["items"][item_id] = {
                             "name": seller_order["item_name"],
@@ -1925,6 +1934,7 @@ async def process_guishi_transactions(user_id):
                     if seller_order["sold"] >= seller_order["quantity"]:
                         del seller_data["baitan_orders"][seller_order_id]
                         update_baitan_index(seller_order_id, item_name, seller_id, "remove")
+                        break
                     
             # 保存卖家数据
             save_guishi_user_data(seller_id, seller_data)
@@ -1942,36 +1952,46 @@ async def process_guishi_transactions(user_id):
         # 使用索引快速查找匹配的求购订单
         matched_buyers = qiugou_index["by_item"].get(item_name, [])
         
+        # 初始化已售数量
+        sold = 0
+        
+        # 遍历所有匹配的买家
         for buyer_id in matched_buyers:
             if order.get("sold", 0) >= order["quantity"]:
                 break  # 订单已完成
                 
             buyer_data = get_guishi_user_data(buyer_id)
             for buyer_order_id, buyer_order in list(buyer_data["qiugou_orders"].items()):
-                if (buyer_order["item_name"] == item_name and 
-                    buyer_order["price"] >= order["price"] and
-                    buyer_order["quantity"] - buyer_order.get("filled", 0) > 0):
+                if (buyer_order["item_name"] == item_name):
                     
+                    # 跳过自己的物品
+                    if buyer_id == user_id or buyer_order["price"] < order["price"]:
+                        continue
+
                     # 计算可交易数量
                     available = order["quantity"] - order.get("sold", 0)
                     needed = buyer_order["quantity"] - buyer_order.get("filled", 0)
-                    trade_num = min(available, needed)
+                    if available > needed:
+                        available = needed
+                    trade_num = max(available, needed)
                     
+                    if trade_num <= 0:
+                        continue  # 无法交易
+
                     # 检查对方鬼市账户余额
                     total_cost = trade_num * order["price"]
                     if buyer_data["stone"] < total_cost:
                         continue
                         
                     # 执行交易
-                    buyer_data["stone"] -= total_cost
-                    user_data["stone"] += total_cost
+                    user_data["stone"] += total_cost  # 增加灵石
                     
                     # 更新订单状态
                     order["sold"] = order.get("sold", 0) + trade_num
                     buyer_order["filled"] = buyer_order.get("filled", 0) + trade_num
                     
                     # 转移物品
-                    item_id = order["item_id"]
+                    item_id = str(order["item_id"])
                     if item_id not in buyer_data["items"]:
                         buyer_data["items"][item_id] = {
                             "name": order["item_name"],
@@ -1990,6 +2010,7 @@ async def process_guishi_transactions(user_id):
                     if buyer_order["filled"] >= buyer_order["quantity"]:
                         del buyer_data["qiugou_orders"][buyer_order_id]
                         update_qiugou_index(buyer_order_id, item_name, buyer_id, "remove")
+                        break
                     
             # 保存买家数据
             save_guishi_user_data(buyer_id, buyer_data)
@@ -2514,6 +2535,8 @@ async def clear_expired_baitan_():
     for user_file in GUISHI_DATA_PATH.glob("user_*.json"):
         try:
             user_id = user_file.stem.split("_")[1]
+            # 在清空前先处理一次交易
+            await process_guishi_transactions(user_id)
             user_data = json.loads(user_file.read_text(encoding="utf-8"))
             
             # 检查是否有超时摊位
