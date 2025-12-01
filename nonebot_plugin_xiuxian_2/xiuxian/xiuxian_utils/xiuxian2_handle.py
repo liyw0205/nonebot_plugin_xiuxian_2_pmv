@@ -1487,7 +1487,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def mixelixir_num_reset(self):
         """重置每日炼丹次数"""
-        sql = f"UPDATE back SET mixelixir_num=0"
+        sql = f"UPDATE user_xiuxian SET mixelixir_num=0"
         cur = self.conn.cursor()
         cur.execute(sql, )
         self.conn.commit()

@@ -1934,7 +1934,6 @@ async def process_guishi_transactions(user_id):
                     if seller_order["sold"] >= seller_order["quantity"]:
                         del seller_data["baitan_orders"][seller_order_id]
                         update_baitan_index(seller_order_id, item_name, seller_id, "remove")
-                        break
                     
             # 保存卖家数据
             save_guishi_user_data(seller_id, seller_data)
@@ -2010,7 +2009,6 @@ async def process_guishi_transactions(user_id):
                     if buyer_order["filled"] >= buyer_order["quantity"]:
                         del buyer_data["qiugou_orders"][buyer_order_id]
                         update_qiugou_index(buyer_order_id, item_name, buyer_id, "remove")
-                        break
                     
             # 保存买家数据
             save_guishi_user_data(buyer_id, buyer_data)
