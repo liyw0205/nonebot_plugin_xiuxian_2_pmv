@@ -549,7 +549,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await restate.finish()
 
-@set_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
+@set_xiuxian.handle()
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """群修仙开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -581,7 +581,7 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()
 
-@set_private_chat.handle(parameterless=[Cooldown(cd_time=1.4)])
+@set_private_chat.handle()
 async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """私聊功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
