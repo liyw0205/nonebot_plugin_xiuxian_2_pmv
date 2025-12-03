@@ -151,20 +151,11 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     # 解析抽卡次数
-    msg = args.extract_plain_text().strip()
-    if msg:
-        try:
-            times_str = msg.split()[-1]
-            times = int(times_str)
-            times = (times // 10) * 10
-            times = max(10, min(times, 10000))
-        except (IndexError, ValueError):
-            await handle_send(bot, event, "请输入有效次数（如：传承祈愿 10）")
-            return
-    else:
-        times = 10
+    msg_text = args.extract_plain_text().strip()
+    times = int(msg_text) if msg_text and 0 < int(msg_text) else 1
 
     # 检查思恋结晶是否足够
+    times = times * 10
     required_crystals = times
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
@@ -272,28 +263,21 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    if impart_data_draw['impart_num'] >= 1000:
+    if impart_data_draw['impart_num'] >= 100:
         msg = "道友今日抽卡已达上限，请明日再来！"
         await handle_send(bot, event, msg)
         return
-
-    # 解析抽卡次数
-    msg = args.extract_plain_text().strip()
-    if msg:
-        try:
-            times_str = msg.split()[-1]
-            times = int(times_str)
-            times = (times // 10) * 10
-            times = max(10, min(times, 10000))
-        except (IndexError, ValueError):
-            await handle_send(bot, event, "请输入有效次数（如：传承抽卡 10）")
-            return
-    else:
-        times = 10
-    times = times - impart_data_draw['impart_num']
+    max_impart_num = 100 - impart_data_draw['impart_num']
     
+    # 解析抽卡次数
+    msg_text = args.extract_plain_text().strip()
+    times = int(msg_text) if msg_text and 0 < int(msg_text) else 1
+
+    if times > max_impart_num:
+        times = max_impart_num
+
     # 检查灵石是否足够
-    required_crystals = times * 1000000
+    required_crystals = times * 10000000
     if user_stone_num < required_crystals:
         await handle_send(bot, event, f"灵石不足，需要{number_to(required_crystals)}!")
         return
@@ -312,7 +296,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     guaranteed_pulls = 0  # 记录触发的保底次数
 
     # 执行抽卡
-    for _ in range(times // 10):
+    for _ in range(times):
         # 每次10连增加10点计数
         current_wish += 10
         
@@ -356,7 +340,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     xiuxian_impart.update_impart_num(times, user_id)
     await re_impart_data(user_id)
     impart_data_draw = await impart_check(user_id)
-    update_statistics_value(user_id, "传承抽卡", increment=times)
+    update_statistics_value(user_id, "传承抽卡", increment=times * 10)
 
     # 计算实际抽卡概率
     actual_wish = current_wish % 90  # 显示当前概率计数（0-89）

@@ -4191,7 +4191,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         user_buff_info = UserBuffDate(user_id).BuffInfo
         skill_info = goods_info
         skill_type = skill_info['item_type']
-        if goods_rank < user_rank:
+        if goods_rank <= user_rank:
              msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}"
         elif skill_type == "神通":
             if int(user_buff_info['sec_buff']) == int(goods_id):
