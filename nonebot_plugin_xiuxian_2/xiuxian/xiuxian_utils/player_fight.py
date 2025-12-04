@@ -474,32 +474,39 @@ def calculate_skill_cost(player, hpcost, mpcost):
 
     return player
 
-def get_skill_sh_data(player, secbuffdata):
+def get_skill_sh_data(attacker, defender, turn_type, secbuffdata):
     skillmsg = ''
+    player = attacker['player']
+    cost_msgs = []
+    if secbuffdata['hpcost'] != 0:
+        cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
+    if secbuffdata['mpcost'] != 0:
+        cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
+        
+    cost_msg = "、".join(cost_msgs)
+    cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
+
     if secbuffdata['skill_type'] == 1:  # 连续攻击类型
         turncost = -secbuffdata['turncost']
-        isCrit, turnatk = get_turnatk(player)
+        atk_buff = attacker.get('atk_buff', 0)
+        if turn_type == "boss":
+            boss_buff = defender.get('boss_buff', empty_boss_buff)
+            random_buff = attacker.get('random_buff', empty_ussr_random_buff)
+            isCrit, turnatk = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'], boss_buff, random_buff)
+        else:
+            isCrit, turnatk = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'])
         atkvalue = secbuffdata['atkvalue']  # 列表
+        turnatks = int(calculate_damage(attacker, defender, turnatk))
         skillsh = 0
         atkmsg = ''
         for value in atkvalue:
-            atkmsg += f"{number_to(value * turnatk)}伤害、"
+            atkmsg += f"{number_to(value * turnatks)}伤害、"
             skillsh += int(value * turnatk)
 
         if turncost == 0:
             turnmsg = '!'
         else:
             turnmsg = f"，休息{secbuffdata['turncost']}回合！"
-
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if isCrit:
             skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
@@ -510,24 +517,11 @@ def get_skill_sh_data(player, secbuffdata):
 
     elif secbuffdata['skill_type'] == 2:  # 持续伤害类型
         turncost = secbuffdata['turncost']
-        isCrit, turnatk = get_turnatk(player)
         skillsh = int(secbuffdata['atkvalue'] * player['攻击'])  # 改动
+        turnatk = int(skillsh * min(0.2 + defender['current_js'], 1.0))
         atkmsg = ''
-        
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
-        if isCrit:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{number_to(skillsh)}点伤害，持续{turncost}回合！"
-        else:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to(skillsh)}点伤害，持续{turncost}回合！"
+        skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to(turnatk)}点伤害，持续{turncost}回合！"
 
         return skillmsg, skillsh, turncost
 
@@ -535,16 +529,6 @@ def get_skill_sh_data(player, secbuffdata):
         turncost = secbuffdata['turncost']
         skillsh = secbuffdata['buffvalue']
         atkmsg = ''
-        
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if secbuffdata['bufftype'] == 1:
             skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力增加{skillsh}倍，持续{turncost}回合！"
@@ -555,16 +539,6 @@ def get_skill_sh_data(player, secbuffdata):
 
     elif secbuffdata['skill_type'] == 4:  # 封印类技能
         turncost = secbuffdata['turncost']
-        
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         if random.randint(0, 100) <= secbuffdata['success']:  # 命中
             skillsh = True
@@ -589,16 +563,6 @@ def get_skill_sh_data(player, secbuffdata):
         else:
             turnmsg = f"，休息{secbuffdata['turncost']}回合！"
 
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
-
         if isCrit:
             skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
         else:
@@ -609,16 +573,6 @@ def get_skill_sh_data(player, secbuffdata):
     elif secbuffdata['skill_type'] == 6:  # 叠加类型技能
         turncost = secbuffdata['turncost']
         skillsh = secbuffdata['buffvalue']
-        
-        # 构建消耗信息，如果消耗为0则不显示
-        cost_msgs = []
-        if secbuffdata['hpcost'] != 0:
-            cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-        if secbuffdata['mpcost'] != 0:
-            cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-        cost_msg = "、".join(cost_msgs)
-        cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
 
         skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力叠加{skillsh}倍，持续{turncost}回合！"
 
@@ -904,7 +858,7 @@ class BattleEngine:
             attacker['atk_buff'] = 0  # 恢复攻击
             
             if isEnableUserSikll(player, hp_cost, mp_cost, attacker['turn_cost'], skill_rate):
-                skill_msg, skill_sh, turn_cost = get_skill_sh_data(player, skill_data)
+                skill_msg, skill_sh, turn_cost = get_skill_sh_data(attacker, defender, turn_type, skill_data)
                 attacker['turn_cost'] = turn_cost
                 attacker['skill_sh'] = skill_sh
                 
@@ -1098,7 +1052,7 @@ class BattleEngine:
             persistent_damage = int(attacker['skill_sh'] * min(0.2 + defender['current_js'], 1.0))
             defender['player']['气血'] -= persistent_damage
 
-            skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to(attacker['skill_sh'])}伤害，剩余回合：{attacker['turn_cost']}!"
+            skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to(persistent_damage)}伤害，剩余回合：{attacker['turn_cost']}!"
             self.add_message(attacker, skill_msg)
             self.execute_normal_attack_base(attacker, defender, turn_type, rate=0.5)
             

@@ -40,13 +40,9 @@ async def impart_re():
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
 
-async def impart_lv():
-    """每周调整虚神界等级"""
+async def impart_lv(change_type, change_amount):
+    """调整虚神界等级"""
     logger.opt(colors=True).info(f"<green>开始执行虚神界等级批量调整...</green>")
-    
-    # 随机决定是增加还是减少等级
-    change_type = 2  # 1增加，2减少
-    change_amount = random.randint(1, 3)  # 1-3级
     
     xiuxian_impart.update_all_users_impart_lv(change_amount, change_type)
     

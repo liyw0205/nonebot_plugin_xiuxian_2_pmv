@@ -48,10 +48,14 @@ async def _():  # 每天8点
     await resetusertask()  # 宗门丹药/宗门任务
     await resetrefreshnum()  # 悬赏令次数
     
-@scheduler.scheduled_job("cron", day_of_week=0, hour=0, minute=0)
-async def _():  # 每周一0点
-    await impart_lv()  # 深入虚神界
+@scheduler.scheduled_job("cron", day_of_week=0, hour=0, minute=1)
+async def _():  # 每周一0点1分
+    await impart_lv(2, 10)  # 深入虚神界
     await reset_tower_floors()  # 重置通天塔层数
+
+@scheduler.scheduled_job("cron", hour=0, minute=2)
+async def _():  # 每天0点2分
+    await impart_lv(1, 1)  # 深入虚神界
 
 @scheduler.scheduled_job("cron", hour='0,12', minute=5)
 async def _():  # 每天0/12点5分
