@@ -319,9 +319,9 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         player['道号'] = userinfo['user_name']
         player['气血'] = userinfo['hp']
         if boss:
-            player['攻击'] = int(userinfo['atk'] * (1 + impart_atk_per + boss_atk))
+            player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
         else:
-            player['攻击'] = int(userinfo['atk'] * (1 + impart_atk_per))
+            player['攻击'] = int(userinfo['atk'])
         player['真元'] = userinfo['mp']
         player['exp'] = userinfo['exp']
         return player

@@ -152,7 +152,7 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
     engine = BattleEngine(bot_id)
     
     # 初始化玩家
-    player_combatant = engine.init_combatant(user1)
+    player_combatant = engine.init_combatant(user1, is_boss=True)
     
     # 检查是否为稻草人
     is_scarecrow = boss.get('is_scarecrow', False) or boss['name'] == "稻草人"
@@ -285,8 +285,10 @@ def calculate_damage(attacker, defender, base_damage):
         defense_factor = defender['current_js'] + sub_break + attacker_break
     
     # 限制减伤系数在合理范围内
-    defense_factor = max(min(defense_factor, 1.0), 0.05)
-    
+    if int(defender['current_js']) == 1:
+        defense_factor = defender['current_js']
+    else:
+        defense_factor = max(min(defense_factor, 1.0), 0.05)
     actual_damage = int(base_damage * defense_factor)
     return actual_damage
 
@@ -807,8 +809,8 @@ class BattleEngine:
             'buff_turn': True,
             'battle_buff': UserBattleBuffDate(player['user_id']),
             'init_hp': max_hp,
-            'def_js': max(get_user_def_buff(player['user_id']), 0.05),
-            'current_js': max(get_user_def_buff(player['user_id']), 0.05),
+            'def_js': get_user_def_buff(player['user_id']),
+            'current_js': get_user_def_buff(player['user_id']),
             'skill_sh': 0
         }
 
