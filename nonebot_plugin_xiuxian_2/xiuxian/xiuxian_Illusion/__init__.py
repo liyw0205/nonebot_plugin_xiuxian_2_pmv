@@ -509,14 +509,29 @@ def _give_random_item(user_id, user_level):
     zx_rank = min(zx_rank, 55)
     if zx_rank == 5 and random.randint(1, 100) != 100:
         zx_rank = 10
+
     # 获取随机物品
     item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
-    if not item_id_list:
+
+    # 自定义物品ID列表
+    zdyid_list = ["20001", "20005", "20006", "20007", "20010", "20017"]
+
+    # 合并系统生成物品ID与自定义物品ID
+    combined_id_list = []
+    if item_id_list:
+        combined_id_list.extend(item_id_list)
+    if zdyid_list:
+        combined_id_list.extend(zdyid_list)
+
+    if not combined_id_list:
         return "无"
-    
-    item_id = random.choice(item_id_list)
+
+    item_id = random.choice(combined_id_list)
     item_info = items.get_data_by_item_id(item_id)
-    
+
+    if item_info is None:
+        return "无"
+
     # 给予物品
     sql_message.send_back(
         user_id, 
@@ -525,5 +540,5 @@ def _give_random_item(user_id, user_level):
         item_info["type"], 
         1
     )
-    
-    return f"{item_info['level']}:{item_info['name']}"
+
+    return f"{item_info.get('level', '特殊道具')}:{item_info['name']}"

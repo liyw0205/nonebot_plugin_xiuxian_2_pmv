@@ -1542,24 +1542,33 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 5. 获取悬赏令次数信息
     work_nums = sql_message.get_work_num(user_id)
     max_work_nums = count
-    work_msg = f"{work_nums}/{max_work_nums}"
+    if work_nums <= 0:
+        work_msg = f"已完成"
+    else:
+        work_msg = f"{work_nums}/{max_work_nums}"
     
     # 6. 获取虚神界对决次数信息
     impart_pk_data = impart_pk.find_user_data(user_id)
+    max_pk_num = 7
     if impart_pk_data:
         pk_num = impart_pk_data["pk_num"]
-        max_pk_num = 7
-        pk_msg = f"{pk_num}/{max_pk_num}"
+        if pk_num == 0:
+            pk_msg = f"已完成"
+        else:
+            pk_msg = f"{pk_num}/{max_pk_num}"
     else:
-        pk_msg = "0/7"
+        pk_msg = f"{max_pk_num}/{max_pk_num}"
     
     # 7. 获取虚神界探索次数信息
+    max_impart_num = 10
     if impart_pk_data:
         impart_num = impart_pk_data["impart_num"]
-        max_impart_num = 10
-        impart_msg = f"{impart_num}/{max_impart_num}"
+        if impart_num == 0:
+            impart_msg = f"已完成"
+        else:
+            impart_msg = f"{impart_num}/{max_impart_num}"
     else:
-        impart_msg = "0/10"
+        impart_msg = f"{max_impart_num}/{max_impart_num}"
     
     # 8. 获取宗门丹药信息
     sect_id = user_info['sect_id']
@@ -1584,7 +1593,12 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 9. 获取讨伐次数信息
     today_battle_count = boss_limit.get_battle_count(user_id)
-    battle_msg = f"{30 - today_battle_count}/30"
+    max_battle_count = 30
+    battle_count = max_battle_count - today_battle_count
+    if battle_count == 0:
+        battle_msg = f"已完成"
+    else:
+        battle_msg = f"{battle_count}/{max_battle_count}"
 
     # 10. 获取秘境状态信息
     rift_status = "无秘境"
