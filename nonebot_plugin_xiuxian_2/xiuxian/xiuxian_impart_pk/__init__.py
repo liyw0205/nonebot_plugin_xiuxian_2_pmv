@@ -563,74 +563,75 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     impart_suc = random.randint(1, 100)
     impart_time = random.randint(1, 100)
     impart_rate = random.randint(1, 3)
-
-    if impart_suc <= 30:
-        stay_msgs = [
+    rates = [0.15, 0.15, 0.25, 0.25, 0.10, 0.10]  # stay, fail, down, up, down_rate, up_rate
+    all_msgs : Dict[str, List[str]] = {
+        "stay": [
             f"道友突然心有所感，决定原地静修，参悟{impart_name}的玄机",
             f"《{random.choice(['太虚','九幽','混元'])}经》自行运转，道友决定暂缓探索",
             f"冥冥中似有警示，道友决定今日不宜继续探索虚神界",
             f"道友在{impart_name}中偶得顿悟，决定就地闭关参悟",
             f"「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」发出共鸣，道友决定停下脚步"
-        ]
-        msg = random.choice(stay_msgs)
-        impart_pk.update_user_impart_lv(user_info['user_id'])
-        await handle_send(bot, event, msg)
-        await impart_pk_go.finish()
-    elif 31 <= impart_suc <= 50:
-        fail_msgs = [
+        ],
+        "fail": [
             f"遭遇{impart_name}守护大阵反噬，道友元神受创退回！",
             f"虚空突现《{random.choice(['太虚','九幽','混元'])}禁制》，将道友逼退！",
             f"心魔劫显化{random.choice(['天魔','域外邪神','上古怨灵'])}虚影，道友不得不暂避锋芒！",
             f"{random.choice(['青冥','玄黄','混沌'])}道则显化，阻断道友前进之路！",
             f"道友本命法宝「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」震颤示警，被迫撤退！"
-        ]
-        msg = random.choice(fail_msgs)
-        msg += f"\n消耗虚神界时间：{impart_time} 分钟"
-        xiuxian_impart.use_impart_exp_day(impart_time, user_id)
-        impart_pk.update_user_impart_lv(user_info['user_id'])
-        await handle_send(bot, event, msg)
-        await impart_pk_go.finish()
-    elif 51 <= impart_suc <= 65:
-        impart_lv = max(impart_lv - 1, 0)
-        down_msgs = [
+        ],
+        "down": [
             f"道友误触{random.choice(['周天','洪荒','太古'])}禁制，境界暂时跌落",
             f"遭遇{random.choice(['虚空风暴','法则乱流','混沌潮汐'])}，被迫退守",
             f"{random.choice(['诛仙','戮神','陷仙'])}剑气纵横，斩落道友一缕元神",
             f"神秘存在「{random.choice(['荒天帝','叶天帝','楚天尊'])}」虚影显现，威压逼退道友",
             f"《{random.choice(['道藏','佛经','魔典'])}》显化天碑，道友参悟有误反受其害"
-        ]
-        msg = random.choice(down_msgs)
-    elif 71 <= impart_suc <= 85:
-        impart_lv = min(impart_lv + 1, 30)
-        up_msgs = [
+        ],
+        "up": [
             f"道友顿悟{random.choice(['太初','鸿蒙','混沌'])}真意，境界突破！",
             f"得「{random.choice(['菩提树','悟道石','混沌青莲'])}」相助，勘破一层玄机",
             f"以《{random.choice(['大衍诀','神象镇狱劲','他化自在法'])}》破开禁制",
             f"献祭{random.choice(['千年修为','本命精血','先天灵宝'])}，强行突破桎梏",
             f"引动{random.choice(['周天星辰','地脉龙气','混沌雷劫'])}之力，开辟前路"
-        ]
-        msg = random.choice(up_msgs)
-    elif 86 <= impart_suc <= 95:
-        impart_lv = max(impart_lv - impart_rate, 0)
-        down_rate_msgs = [
+        ],
+        "down_rate": [
             f"遭逢{random.choice(['量劫','天人五衰','纪元更迭'])}天象，道基受损！",
             f"{random.choice(['天道','大道','混沌'])}反噬，境界连跌！",
             f"被「{random.choice(['时间长河','命运长河','因果长河'])}」冲刷，丢失部分道果",
             f"{random.choice(['上苍之上','界海彼岸','黑暗源头'])}传来诡异低语，道友道心几近崩溃",
             f"《{random.choice(['葬经','度人经','灭世书'])}》显化，强行削去道友修为"
-        ]
-        msg = random.choice(down_rate_msgs)
-    else:
-        impart_lv = min(impart_lv + impart_rate, 30)
-        up_rate_msgs = [
+        ],
+        "up_rate": [
             f"触发{random.choice(['混沌青莲','世界树','玄黄母气'])}异象，连破数关！",
             f"得「{random.choice(['盘古斧','造化玉碟','东皇钟'])}」道韵洗礼，修为暴涨",
             f"参透《{random.choice(['道经','佛经','魔典'])}》终极奥义，直指大道本源",
             f"{random.choice(['鸿钧','陆压','扬眉'])}老祖显圣点化，醍醐灌顶",
             f"吞噬{random.choice(['先天灵宝','混沌至宝','大道碎片'])}，实力飙升"
         ]
-        msg = random.choice(up_rate_msgs)
+    }
+    msg_type = random.choices(list(all_msgs.keys()), weights=rates)[0]
     
+    msg = random.choice(all_msgs[msg_type])
+    match msg_type:
+        case "stay":
+            impart_pk.update_user_impart_lv(user_info['user_id'])  # 扣除探索次数
+            await handle_send(bot, event, msg)
+            await impart_pk_go.finish()
+        case "fail":
+            msg += f"\n消耗虚神界时间：{impart_time} 分钟"
+            xiuxian_impart.use_impart_exp_day(impart_time, user_id)  # 消耗时间
+            
+            impart_pk.update_user_impart_lv(user_info['user_id'])
+            await handle_send(bot, event, msg)
+            await impart_pk_go.finish()
+        case "down":
+            impart_lv = max(impart_lv - 1, 0)
+        case "up":
+            impart_lv = min(impart_lv + 1, 30)
+        case "down_rate":
+            impart_lv = max(impart_lv - impart_rate, 0)
+        case "up_rate":
+            impart_lv = min(impart_lv + impart_rate, 30)
+
     xiuxian_impart.use_impart_exp_day(impart_time, user_id)
     xiuxian_impart.update_impart_lv(user_id, impart_lv)
     impart_pk.update_user_impart_lv(user_info['user_id'])
