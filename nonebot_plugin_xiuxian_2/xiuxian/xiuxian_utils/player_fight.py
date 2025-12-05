@@ -273,6 +273,8 @@ def calculate_damage(attacker, defender, base_damage):
     
     if 'boss_cj' in defender:
         battle_type = "player_attack_boss"
+    elif 'boss_cj' in attacker:
+        battle_type = "boss_attack_player"
     else:
         battle_type = "player"     
 
@@ -283,7 +285,10 @@ def calculate_damage(attacker, defender, base_damage):
     elif battle_type == "player_attack_boss":
         # 玩家攻击BOSS：伤害 * (对方减伤 + 辅修穿甲 + 自己随机穿甲)
         defense_factor = defender['current_js'] + sub_break + attacker_break
-    
+    elif battle_type == "boss_attack_player":
+        # BOSS攻击玩家：伤害 * (对方减伤 - 对方随机减伤buff + 自己随机穿甲)
+        defense_factor = defender['current_js'] - defender_def + attacker['boss_cj']
+
     # 限制减伤系数在合理范围内
     if int(defender['current_js']) == 1:
         defense_factor = defender['current_js']
@@ -1581,7 +1586,8 @@ def execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_in
     if check_hit(boss_combatant['hit'], player_combatant['dodge']):
         # 计算实际伤害（考虑玩家减伤和BOSS穿甲）
         player_js = player_combatant['current_js']
-        actual_damage = int(boss_damage * (1 + boss_buff.boss_zs) * max(min(player_js - random_buff.random_def + boss_combatant['boss_cj'], 1.0), 0.05))
+        actual_damage = int(boss_damage * (1 + boss_buff.boss_zs))
+        actual_damage = calculate_damage(boss_combatant, player_combatant, actual_damage)
         
         if is_crit:
             effect_name = boss['name']
@@ -1610,7 +1616,8 @@ def execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_i
     if check_hit(boss_combatant['hit'], player_combatant['dodge']):
         # 特殊技能1：造成5倍伤害并附加30%最大生命值的伤害
         player_js = player_combatant['current_js']
-        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * max(min(player_js - random_buff.random_def + boss_combatant['boss_cj'], 1.0), 0.05) * 5)
+        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * 5)
+        special_damage = calculate_damage(boss_combatant, player_combatant, special_damage)
         extra_damage = int(player['气血'] * 0.3)
         total_damage = special_damage + extra_damage
         
@@ -1637,8 +1644,12 @@ def execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_i
     
     if check_hit(boss_combatant['hit'], player_combatant['dodge']):
         player_js = player_combatant['current_js']
+        boss_cj = boss_combatant['boss_cj']
+        boss_combatant['boss_cj'] += 0.5
         # 特殊技能2：穿透护甲，造成3倍伤害
-        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * max(min(player_js - random_buff.random_def + boss_combatant['boss_cj'] + 0.5, 1.0), 0.05) * 3)
+        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * 3)
+        special_damage = calculate_damage(boss_combatant , player_combatant, special_damage)
+        boss_combatant['boss_cj'] = boss_cj
         
         player['气血'] -= special_damage
         
