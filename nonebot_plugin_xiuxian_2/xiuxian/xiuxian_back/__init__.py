@@ -456,8 +456,6 @@ def save_xianshi_type_data(item_type, data):
 
 def get_item_type_by_id(goods_id):
     """根据物品ID获取类型"""
-    # 这里需要接入您的物品系统
-    # 示例: return items.get_data_by_item_id(goods_id)['type']
     return items.get_data_by_item_id(goods_id)['type']
 
 def generate_unique_id(existing_ids):
@@ -2196,7 +2194,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_name = args[0]
     try:
         price = int(args[1])
-        price = max(price, MIN_PRICE)
+        price = max(price, MIN_PRICE * 10)
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = min(quantity, GUISHI_MAX_QUANTITY)
     except ValueError:
@@ -2208,7 +2206,8 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_id = None
     for k, v in items.items.items():
         if goods_name == v['name']:
-            if str(k) in BANNED_ITEM_IDS:
+            goods_item_type = items.get_data_by_item_id(str(k))['item_type']
+            if str(k) in BANNED_ITEM_IDS or goods_item_type == '功法':
                 msg = f"物品 {goods_name} 禁止在鬼市交易！"
                 await handle_send(bot, event, msg)
                 await guishi_qiugou.finish()
@@ -2401,7 +2400,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_name = args[0]
     try:
         price = int(args[1])
-        price = max(price, MIN_PRICE)
+        price = max(price, MIN_PRICE * 10)
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = min(quantity, GUISHI_MAX_QUANTITY)
     except ValueError:
@@ -2413,7 +2412,8 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_id = None
     for k, v in items.items.items():
         if goods_name == v['name']:
-            if str(k) in BANNED_ITEM_IDS:
+            goods_item_type = items.get_data_by_item_id(str(k))['item_type']
+            if str(k) in BANNED_ITEM_IDS or goods_item_type == '功法':
                 msg = f"物品 {goods_name} 禁止在鬼市交易！"
                 await handle_send(bot, event, msg)
                 await guishi_baitan.finish()
@@ -2692,7 +2692,8 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 item_id,
                 item["name"],
                 item["type"],
-                item["quantity"]
+                item["quantity"],
+                1
             )
             msg += f"{item['name']} x{item['quantity']}\n"
             del user_data["items"][item_id]
@@ -2712,14 +2713,14 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         await guishi_take_item.finish()
     
-    # 处理多个同名物品情况（理论上不会出现，因为鬼市合并了同名物品）
     for item_id, item in matched_items:
         sql_message.send_back(
             user_id,
             item_id,
             item["name"],
             item["type"],
-            item["quantity"]
+            item["quantity"],
+            1
         )
         del user_data["items"][item_id]
     
