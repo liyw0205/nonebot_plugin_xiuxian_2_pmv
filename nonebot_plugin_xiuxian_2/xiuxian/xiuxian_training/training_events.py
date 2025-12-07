@@ -388,7 +388,7 @@ class TrainingEvents:
         elif reward_type == "exp":
             locals_dict = {"base_percent": reward_data["base_percent"], "random": random}
             percent = eval(calc_rule, {}, locals_dict)
-            user_rank = convert_rank(user_info['level'])[0]
+            user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
             exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
             sql_message.update_exp(user_id, exp)
             return {
