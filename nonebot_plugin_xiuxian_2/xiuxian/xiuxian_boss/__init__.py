@@ -438,7 +438,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 修为奖励
     exp_msg = ""
     if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
-        now_exp = int((user_info['exp']) * exp_buff / 10000 * min(0.1 * user_rank, 1))
+        now_exp = int((user_info['exp']) * exp_buff / 10000 * min(0.1 * max(user_rank // 3, 1), 1))
         sql_message.update_exp(user_id, now_exp)
         exp_msg = f"，获得修为{number_to(now_exp)}点！"
     

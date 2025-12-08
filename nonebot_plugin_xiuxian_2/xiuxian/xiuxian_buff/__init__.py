@@ -742,8 +742,8 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     exp_limit_1 = int(exp_base * (1 + mainbuffratebuff_1) * (1 + mainbuffcloexp_1) * (1 + user_blessed_spot_data_1))
     exp_limit_2 = int(exp_base * (1 + mainbuffratebuff_2) * (1 + mainbuffcloexp_2) * (1 + user_blessed_spot_data_2))
 
-    user1_rank = convert_rank(user_mes_1['level'])[0]
-    user2_rank = convert_rank(user_mes_2['level'])[0]
+    user1_rank = max(convert_rank(user_mes_1['level'])[0] // 3, 1)
+    user2_rank = max(convert_rank(user_mes_2['level'])[0] // 3, 1)
     max_exp_1 = int((user_mes_1['exp'] * 0.001) * min(0.1 * user1_rank, 1))# 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
     max_exp_2 = int((user_mes_2['exp'] * 0.001) * min(0.1 * user2_rank, 1))
     max_two_exp = 1_000_000_000

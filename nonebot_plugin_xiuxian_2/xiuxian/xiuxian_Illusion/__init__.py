@@ -449,7 +449,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 根据占比给予奖励
     reward_msg = ""
     if percentage < 30:  # 少数派
-        user_rank = convert_rank(user_info['level'])[0]
+        user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
         exp_reward = int(user_info["exp"] * 0.01 * min(0.1 * user_rank, 1))
         sql_message.update_exp(user_id, exp_reward)
         reward_msg = f"你的选择是第{user_rank}受欢迎的(第{choice_count}位道友)，获得修为：{number_to(exp_reward)}点"

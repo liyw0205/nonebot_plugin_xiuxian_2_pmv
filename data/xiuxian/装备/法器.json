@@ -541,7 +541,7 @@
     },
     "11013": {
         "name": "金钟罩",
-        "atk_buff": 0.4,
+        "atk_buff": 0.2,
         "crit_buff": 0.2,
         "def_buff": 0.5,
         "critatk": 0,

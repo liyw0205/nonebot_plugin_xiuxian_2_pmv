@@ -16,6 +16,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+from ..xiuxian_config import convert_rank
 sql_message = XiuxianDateManage()
 
 # 创建数据存储目录
@@ -1250,7 +1251,8 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if random.random() < 0.5:  # 同意
         # 计算奖励：玩家当前修为的0.1%-0.9%
         current_exp = user_info["exp"]
-        exp_reward = int(current_exp * random.uniform(0.001, 0.009))
+        user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
+        exp_reward = int(current_exp * random.uniform(0.001, 0.009) * min(0.1 * user_rank, 1))
         
         # 更新用户修为
         sql_message.update_exp(user_id, exp_reward)
