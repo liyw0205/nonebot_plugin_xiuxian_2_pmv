@@ -53,7 +53,7 @@ DEFAULT_CONFIG = {
         },
         "20005": {
             "name": "祈愿石",
-            "cost": 10000,
+            "cost": 2000,
             "weekly_limit": 10
         },
         "15357": {

@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
         },
         "20005": {
             "name": "祈愿石",
-            "cost": 10000,
+            "cost": 2000,
             "weekly_limit": 10
         },
         "15357": {
@@ -147,7 +147,7 @@ class TrainingData:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=4)
     
-    def make_choice(self, user_id, choice_type):
+    def make_choice(self, user_id):
         """进行历练选择"""
         training_info = self.get_user_training_info(user_id)
         user_info = sql_message.get_user_info_with_id(user_id)
@@ -156,32 +156,20 @@ class TrainingData:
         # 记录本次历练时间
         training_info["last_time"] = now
         
-        # 根据选择类型确定事件权重
-        if choice_type == 1:  # 前进
-            weights = {
-                "progress_plus_1": 30,
-                "progress_plus_2": 30,
-                "nothing": 20,
-                "progress_minus_1": 10,
-                "progress_minus_2": 10
-            }
-        elif choice_type == 2:  # 后退
-            weights = {
-                "progress_plus_1": 40,
-                "progress_plus_2": 0,
-                "nothing": 40,
-                "progress_minus_1": 20,
-                "progress_minus_2": 0
-            }
-        else:  # 休息
-            weights = {
-                "progress_plus_1": 30,
-                "progress_plus_2": 30,
-                "nothing": 20,
-                "progress_minus_1": 10,
-                "progress_minus_2": 10
-            }
-        
+        # weights = {  # 等价于原版
+        #     "progress_plus_1": 33,
+        #     "progress_plus_2": 20,
+        #     "nothing": 27,
+        #     "progress_minus_1": 13,
+        #     "progress_minus_2": 7
+        # }
+        weights = {
+            "progress_plus_1": 35,
+            "progress_plus_2": 30,
+            "nothing": 20,
+            "progress_minus_1": 10,
+            "progress_minus_2": 5,
+        }
         # 随机选择事件
         event_type = random.choices(list(weights.keys()), weights=list(weights.values()))[0]
         
