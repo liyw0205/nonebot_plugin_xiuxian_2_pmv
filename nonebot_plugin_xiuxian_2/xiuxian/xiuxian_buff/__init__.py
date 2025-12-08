@@ -746,7 +746,7 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     user2_rank = max(convert_rank(user_mes_2['level'])[0] // 3, 1)
     max_exp_1 = int((user_mes_1['exp'] * 0.001) * min(0.1 * user1_rank, 1))# 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
     max_exp_2 = int((user_mes_2['exp'] * 0.001) * min(0.1 * user2_rank, 1))
-    max_two_exp = 100000000
+    max_two_exp = 1_000_000_000
     
     # 计算实际可获得的修为
     exp_limit_1 = min(exp_limit_1, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp_limit_1, remaining_exp_1, max_exp_1_limit * 0.1)

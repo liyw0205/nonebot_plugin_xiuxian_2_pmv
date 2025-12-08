@@ -384,6 +384,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             rank_penalty = 0.9  # 高2个小境界，衰减10%
         elif rank_diff == 3:
             rank_penalty = 0.8  # 高3个小境界，衰减20%
+        elif rank_diff == 4:
+            rank_penalty = 0.7  # 高4个小境界，衰减30%
         else:  # rank_diff >= 4
             rank_penalty = 0.5  # 高4个及以上小境界，衰减50%
     
