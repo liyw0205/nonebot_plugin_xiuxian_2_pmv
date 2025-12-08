@@ -82,8 +82,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
-    choice_type = random.randint(1, 3)  # 1:前进 2:后退 3:休息
-    success, result = training_data.make_choice(user_id, choice_type)
+    success, result = training_data.make_choice(user_id)
     
     if not success:
         await handle_send(bot, event, result)

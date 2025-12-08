@@ -776,7 +776,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     # 更新HP和MP
     result_msg, result_hp_mp = OtherSet().send_hp_mp(
-        user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time)
+        user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
     sql_message.update_user_attribute(
         user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10)
