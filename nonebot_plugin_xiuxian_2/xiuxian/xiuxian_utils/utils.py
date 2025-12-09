@@ -707,6 +707,24 @@ async def send_msg_handler(bot, event, *args):
     :param msg_type: 关键字参数，可用于传递特定命名参数
     """
     is_group = isinstance(event, GroupMessageEvent)
+    MAX_LEN = 3800
+
+    def split_to_groups(messages):
+        """将消息列表分组，每组总字符数不超过限制"""
+        groups, current, current_len = [], [], 0
+        for msg in messages:
+            content = msg.get("data", {}).get("content", "")
+            msg_len = len(content)
+            if current_len + msg_len > MAX_LEN and current:
+                groups.append(current)
+                current = [msg]
+                current_len = msg_len
+            else:
+                current.append(msg)
+                current_len += msg_len
+        if current:
+            groups.append(current)
+        return groups
     
     if XiuConfig().merge_forward_send == 1:
         if len(args) == 3:
@@ -742,15 +760,15 @@ async def send_msg_handler(bot, event, *args):
                     "send_private_forward_msg", user_id=event.user_id, messages=messages
                 )
         elif len(args) == 1 and isinstance(args[0], list):
-            messages = args[0]
-            if isinstance(event, GroupMessageEvent):
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
-            else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
+            for messages in split_to_groups(args[0]):
+                if isinstance(event, GroupMessageEvent):
+                    await bot.call_api(
+                        "send_group_forward_msg", group_id=event.group_id, messages=messages
+                    )
+                else:
+                    await bot.call_api(
+                        "send_private_forward_msg", user_id=event.user_id, messages=messages
+                    )
         else:
             raise ValueError("参数数量或类型不匹配")
     elif XiuConfig().merge_forward_send == 3:
