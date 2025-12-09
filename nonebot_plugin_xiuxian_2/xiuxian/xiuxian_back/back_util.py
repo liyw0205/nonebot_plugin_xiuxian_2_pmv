@@ -557,6 +557,8 @@ def get_user_danyao_back_msg(user_id):
             
             for danyao in danyao_list:
                 msg = f"名字：{danyao['name']}\n"
+                danyao_item_id, danyao_item = Items().get_data_by_item_name(danyao['name'])
+                msg += f"效果：{danyao_item['desc']}\n"
                 msg += f"拥有数量：{danyao['num']}，绑定数量：{danyao['bind_num']}"
                 l_msg.append(msg)
     
