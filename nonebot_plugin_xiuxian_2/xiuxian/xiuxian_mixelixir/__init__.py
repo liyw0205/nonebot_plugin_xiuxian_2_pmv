@@ -317,8 +317,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg_list.append(msg)
         
         # 将所有配方的消息合并发送
-        full_msg = "\n".join(msg_list)
-        await handle_send(bot, event, full_msg)
+        await send_msg_handler(bot, event, '配方', bot.self_id, msg_list)
         await mix_elixir.finish()
 
 # 配方
