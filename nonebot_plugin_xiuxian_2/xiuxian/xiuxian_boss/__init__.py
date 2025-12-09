@@ -462,7 +462,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
             new_boss = createboss_jj(bossinfo['jj'])
         if new_boss:  
-            group_boss[group_id].append(new_boss)
+            group_boss[group_id].insert(boss_num - 1, new_boss)
         if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
