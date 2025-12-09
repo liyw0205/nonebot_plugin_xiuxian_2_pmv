@@ -1,6 +1,7 @@
 import random
 import asyncio
 import re
+import json
 from nonebot import on_command, on_fullmatch
 from nonebot.params import EventPlainText
 from nonebot.adapters.onebot.v11 import (
@@ -444,6 +445,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     mix_elixir_info['炼丹记录'][id]['num'] = num
                     mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] +  main_exp) * num
                     msg += f"获得炼丹经验{(goods_info['mix_exp'] +  main_exp) * num}点"
+                    mix_elixir_info['炼丹记录'] = json.dumps(mix_elixir_info.get("炼丹记录", {}))
                 save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
                 await handle_send(bot, event, msg)
                 await mix_make.finish()

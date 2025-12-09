@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
     save_player_info,UserBuffDate, get_main_info_msg, 
     get_user_buff, get_sec_msg, get_sub_info_msg, get_effect_info_msg,
-    XIUXIAN_IMPART_BUFF, leave_harm_time
+    XIUXIAN_IMPART_BUFF, leave_harm_time, PlayerDataManager
 )
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -48,6 +48,7 @@ invite_cache = {}
 partner_invite_cache = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+player_data_manager = PlayerDataManager()
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 two_exp_limit = 3 # 默认双修次数上限，修仙之人一天3次也不奇怪（
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
@@ -374,29 +375,17 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
 
 def load_player_user(user_id):
-    """加载用户数据，如果文件不存在或为空，返回默认数据"""
-    user_file = PLAYERSDATA / str(user_id) / "user_data.json"
-    
-    if not user_file.exists():
-        return {}
-    
-    try:
-        with open(user_file, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            if not content:
-                return {}
-            return json.loads(content)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+    """加载用户数据，如果不存在或为空，返回默认数据"""
+    user_id_str = str(user_id)
+    status = player_data_manager.get_field_data(user_id_str, "two_exp_protect", "status")
+    if status is None:
+        status = False  # 默认值为 False
+    return {"two_exp_protect": status}
 
 def save_player_user(user_id, data):
     """保存用户数据，确保目录存在"""
-    user_dir = PLAYERSDATA / str(user_id)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    
-    user_file = user_dir / "user_data.json"
-    with open(user_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    user_id_str = str(user_id)
+    player_data_manager.update_or_write_data(user_id_str, "two_exp_protect", "status", data["two_exp_protect"])
 
 @two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10)])
 async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -746,7 +735,7 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     user2_rank = max(convert_rank(user_mes_2['level'])[0] // 3, 1)
     max_exp_1 = int((user_mes_1['exp'] * 0.001) * min(0.1 * user1_rank, 1))# 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
     max_exp_2 = int((user_mes_2['exp'] * 0.001) * min(0.1 * user2_rank, 1))
-    max_two_exp = 1_000_000_000
+    max_two_exp = 100000000
     
     # 计算实际可获得的修为
     exp_limit_1 = min(exp_limit_1, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp_limit_1, remaining_exp_1, max_exp_1_limit * 0.1)
@@ -1946,6 +1935,58 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 # 加载和保存道侣数据的函数
 def load_partner(user_id):
+    """加载用户道侣数据"""
+    partner_data = {}
+    partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")
+    if partner_id:
+        partner_info = player_data_manager.get_fields(str(partner_id), "partner_info")
+        if partner_info:
+            partner_data['partner_id'] = partner_info.get('user_id')
+            partner_data['bind_time'] = partner_info.get('bind_time')
+            partner_data['affection'] = partner_info.get('affection')
+        else:
+            partner_data['partner_id'] = None
+            partner_data['bind_time'] = None
+            partner_data['affection'] = None
+    else:
+        partner_data['partner_id'] = None
+        partner_data['bind_time'] = None
+        partner_data['affection'] = None
+    return partner_data
+
+def save_partner(user_id, data):
+    """保存用户道侣数据"""    
+    player_data_manager.update_or_write_data(str(user_id), "partner", "partner_id", data.get("partner_id", None))
+    player_data_manager.update_or_write_data(str(user_id), "partner", "bind_time", data.get("bind_time", None))
+    player_data_manager.update_or_write_data(str(user_id), "partner", "affection", data.get("affection", None))
+
+from nonebot.log import logger
+# 获取所有用户的 ID
+def get_all_user_ids():
+    user_ids = []
+    for user_dir in PLAYERSDATA.iterdir():
+        if user_dir.is_dir():
+            user_id = user_dir.name
+            user_ids.append(user_id)
+    return user_ids
+
+def load_player_user2(user_id):
+    """加载用户数据，如果文件不存在或为空，返回默认数据"""
+    user_file = PLAYERSDATA / str(user_id) / "user_data.json"
+    
+    if not user_file.exists():
+        return {}
+    
+    try:
+        with open(user_file, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+
+def load_partner2(user_id):
     """加载用户道侣数据，如果文件不存在或为空，返回默认数据"""
     partner_file = PLAYERSDATA / str(user_id) / "partner.json"
     
@@ -1961,11 +2002,53 @@ def load_partner(user_id):
     except (json.JSONDecodeError, UnicodeDecodeError, FileNotFoundError):
         return {'partner_id': None, 'bind_time': None, 'affection': None}
 
-def save_partner(user_id, data):
-    """保存用户道侣数据，确保目录存在"""
-    partner_dir = PLAYERSDATA / str(user_id)
-    partner_dir.mkdir(parents=True, exist_ok=True)
+def load_player_user3(user_id, file_name):
+    """加载用户数据，如果文件不存在或为空，返回默认数据"""
+    user_file = PLAYERSDATA / str(user_id) / f"{file_name}.json"
     
-    partner_file = partner_dir / "partner.json"
-    with open(partner_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    if not user_file.exists():
+        return {}
+    
+    try:
+        with open(user_file, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
+    except (json.JSONDecodeError, UnicodeDecodeError, FileNotFoundError):
+        return {}
+
+migrate_data = on_fullmatch("player数据同步", priority=25, block=True)
+@migrate_data.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    user_ids = get_all_user_ids()
+    user_num = 0
+    for user_id in user_ids:
+        user_num += 1
+        user_data = load_player_user2(user_id)
+        if user_data:
+            protection_status = user_data.get('two_exp_protect', False)
+            player_data_manager.update_or_write_data(user_id, "two_exp_protect", "status", protection_status)
+            logger.info(f"更新双修: {user_id}")
+        
+        # 加载灵田数据
+        mix_elixir_info = load_player_user3(user_id, "mix_elixir_info")
+        if mix_elixir_info:
+            # 迁移灵田数据到数据库
+            player_id_str = str(user_id)
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "收取时间", mix_elixir_info.get("收取时间", ""))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "收取等级", mix_elixir_info.get("收取等级", 0))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "灵田数量", mix_elixir_info.get("灵田数量", 1))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "药材速度", mix_elixir_info.get("药材速度", 0))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药控火", mix_elixir_info.get("丹药控火", 0))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药耐药性", mix_elixir_info.get("丹药耐药性", 0))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "炼丹记录", json.dumps(mix_elixir_info.get("炼丹记录", {})))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "炼丹经验", mix_elixir_info.get("炼丹经验", 0))
+            logger.info(f"更新灵田数据: {user_id}")
+        
+        partner_data = load_partner2(user_id)
+        if partner_data:
+            logger.info(f"更新道侣: {user_id}")
+            save_partner(user_id, partner_data)
+    await handle_send(bot, event, f"同步完成，共：{user_num}")
+        

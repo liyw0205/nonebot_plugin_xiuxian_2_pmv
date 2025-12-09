@@ -2078,6 +2078,102 @@ driver = get_driver()
 async def close_db():
     TradeDataManager().close()
 
+# 这里是Player部分
+class PlayerDataManager:
+    def __init__(self):
+        self.database_path = Path() / "data" / "xiuxian" / "player.db"
+        self._ensure_database_exists()
+
+    def _ensure_database_exists(self):
+        if not self.database_path.exists():
+            logger.opt(colors=True).info(f"<green>player数据库不存在，正在创建...</green>")
+            self.database_path.touch()
+            logger.opt(colors=True).info(f"<green>player数据库已创建！</green>")
+
+    def _get_connection(self):
+        return sqlite3.connect(self.database_path, check_same_thread=False)
+
+    def _ensure_table_exists(self, user_id, table_name):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+        if cursor.fetchone() is None:
+            cursor.execute(f"CREATE TABLE {table_name} (user_id INTEGER PRIMARY KEY)")
+            logger.opt(colors=True).info(f"<green>表 {table_name} 已创建！</green>")
+        conn.commit()
+        conn.close()
+
+    def _ensure_field_exists(self, user_id, table_name, field, data_type='INTEGER'):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        fields = [col[1] for col in cursor.fetchall()]
+        if field not in fields:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {field} {data_type} DEFAULT 0")
+            logger.opt(colors=True).info(f"<green>字段 {field} 已添加到表 {table_name}，类型为 {data_type}！</green>")
+        conn.commit()
+        conn.close()
+
+    def update_or_write_data(self, user_id, table_name, field, value, data_type='INTEGER'):
+        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
+            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to INTEGER.</yellow>")
+            data_type = 'INTEGER'
+        self._ensure_table_exists(user_id, table_name)
+        self._ensure_field_exists(user_id, table_name, field, data_type)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"UPDATE {table_name} SET {field}=? WHERE user_id=?", (value, user_id))
+        if cursor.rowcount == 0:
+            cursor.execute(f"INSERT INTO {table_name} (user_id, {field}) VALUES (?, ?)", (user_id, value))
+        conn.commit()
+        conn.close()
+
+    def get_fields(self, user_id, table_name):
+        """通过user_id查看一个表这个主键的全部字段"""
+        self._ensure_table_exists(user_id, table_name)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            columns = [column[0] for column in cursor.description]
+            user_dict = dict(zip(columns, result))
+            return user_dict
+        else:
+            return None
+
+    def get_field_data(self, user_id, table_name, field):
+        self._ensure_table_exists(user_id, table_name)
+        self._ensure_field_exists(user_id, table_name, field)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT {field} FROM {table_name} WHERE user_id=?", (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+
+    def get_all_field_data(self, table_name, field):
+        self._ensure_table_exists(None, table_name)  # No need for user_id here
+        self._ensure_field_exists(None, table_name, field)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT user_id, {field} FROM {table_name}")
+        result = cursor.fetchall()
+        conn.close()
+        return result
+
+    def close(self):
+        """关闭数据库连接"""
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+            logger.opt(colors=True).info(f"<green>player数据库关闭！</green>")
+
+driver = get_driver()
+@driver.on_shutdown
+async def close_db():
+    PlayerDataManager().close()
+    
 # 这里是虚神界部分
 class XIUXIAN_IMPART_BUFF:
     global impart_num
@@ -2820,12 +2916,28 @@ def get_effect_info_msg(id): #身法、瞳术
 
     msg = f"{effectmsg}"
     return effectbuff, msg
-    
-    
+
+mix_elixir_infoconfigkey = ["收取时间", "收取等级", "灵田数量", '药材速度', "丹药控火", "丹药耐药性", "炼丹记录", "炼丹经验"]
+
+def read_player_info(user_id, info_name):
+    player_data_manager = PlayerDataManager()
+    user_id_str = str(user_id)
+    info = {}
+    for field in mix_elixir_infoconfigkey:
+        data = player_data_manager.get_field_data(user_id_str, info_name, field)
+        if data is not None:
+            info[field] = data
+    return info
+
+def save_player_info(user_id, data, info_name):
+    player_data_manager = PlayerDataManager()
+    user_id_str = str(user_id)
+    for field, value in data.items():
+        player_data_manager.update_or_write_data(user_id_str, info_name, field, value, data_type="TEXT")
+
 def get_player_info(user_id, info_name):
     player_info = None
-    if info_name == "mix_elixir_info":  # 灵田信息
-        mix_elixir_infoconfigkey = ["收取时间", "收取等级", "灵田数量", '药材速度', "丹药控火", "丹药耐药性", "炼丹记录", "炼丹经验"]
+    try:
         nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
         MIXELIXIRINFOCONFIG = {
             "收取时间": nowtime,
@@ -2837,39 +2949,19 @@ def get_player_info(user_id, info_name):
             "炼丹记录": {},
             "炼丹经验": 0
         }
-        try:
-            player_info = read_player_info(user_id, info_name)
-            for key in mix_elixir_infoconfigkey:
-                if key not in list(player_info.keys()):
-                    player_info[key] = MIXELIXIRINFOCONFIG[key]
-            save_player_info(user_id, player_info, info_name)
-        except:
-            player_info = MIXELIXIRINFOCONFIG
-            save_player_info(user_id, player_info, info_name)
+        player_info = read_player_info(user_id, info_name)
+        
+        for key in mix_elixir_infoconfigkey:
+            if key not in list(player_info.keys()):
+                player_info[key] = MIXELIXIRINFOCONFIG[key]
+        save_player_info(user_id, player_info, info_name)
+    except Exception as e:
+        player_info = MIXELIXIRINFOCONFIG
+        save_player_info(user_id, player_info, info_name)
+        # 反序列化炼丹记录
+    if '炼丹记录' in player_info and isinstance(player_info['炼丹记录'], str):
+        player_info['炼丹记录'] = json.loads(player_info['炼丹记录'])
     return player_info
-
-
-def read_player_info(user_id, info_name):
-    user_id = str(user_id)
-    FILEPATH = PLAYERSDATA / user_id / f"{info_name}.json"
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
-
-
-def save_player_info(user_id, data, info_name):
-    user_id = str(user_id)
-
-    if not os.path.exists(PLAYERSDATA / user_id):
-        logger.opt(colors=True).info(f"<green>用户目录不存在，创建目录</green>")
-        os.makedirs(PLAYERSDATA / user_id)
-
-    FILEPATH = PLAYERSDATA / user_id / f"{info_name}.json"
-    data = json.dumps(data, ensure_ascii=False, indent=4)
-    save_mode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=save_mode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
 
 def number_count(num):
     """
