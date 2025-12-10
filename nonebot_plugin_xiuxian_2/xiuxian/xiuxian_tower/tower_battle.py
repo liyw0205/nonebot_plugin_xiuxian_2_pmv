@@ -161,7 +161,7 @@ class TowerBattle:
                 total_stone += extra_stone
                 
                 item_msg = self._give_random_item(user_id, user_info["level"])
-                user_rank = convert_rank(user_info['level'])[0]
+                user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
                 exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * min(0.1 * user_rank, 1))
                 sql_message.update_exp(user_id, exp_reward)
                 
@@ -175,7 +175,7 @@ class TowerBattle:
                 total_stone += extra_stone
                 
                 item_msg = self._give_random_item(user_id, user_info["level"])
-                user_rank = convert_rank(user_info['level'])[0]
+                user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
                 exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2 * min(0.1 * user_rank, 1))
                 sql_message.update_exp(user_id, exp_reward)
                 
