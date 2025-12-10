@@ -909,7 +909,7 @@ def check_use_elixir(user_id, goods_id, num):
 
     if goods_info['buff_type'] == "level_up_rate":  # 增加突破概率的丹药
         level_up_rate = False
-        if goods_id == 15151:  # 太清玉液丹
+        if goods_id in [15151, 15152, 15153]:  # 太清玉液丹等
             if num > remaining_limit:
                 num = remaining_limit
                 msg = f"道友使用的数量超过了耐药性上限呢，仅使用了{num}颗！"
