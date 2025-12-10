@@ -1939,7 +1939,7 @@ def load_partner(user_id):
     partner_data = {}
     partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")
     if partner_id:
-        partner_info = player_data_manager.get_fields(str(partner_id), "partner_info")
+        partner_info = player_data_manager.get_fields(str(partner_id), "partner")
         if partner_info:
             partner_data['partner_id'] = partner_info.get('user_id')
             partner_data['bind_time'] = partner_info.get('bind_time')
