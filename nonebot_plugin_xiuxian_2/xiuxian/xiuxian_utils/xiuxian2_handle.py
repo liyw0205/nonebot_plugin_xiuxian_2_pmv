@@ -2120,6 +2120,7 @@ class PlayerDataManager:
             data_type = 'INTEGER'
         self._ensure_table_exists(user_id, table_name)
         self._ensure_field_exists(user_id, table_name, field, data_type)
+        value = str(value)
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(f"UPDATE {table_name} SET {field}=? WHERE user_id=?", (value, user_id))
@@ -2950,7 +2951,6 @@ def get_player_info(user_id, info_name):
             "炼丹经验": 0
         }
         player_info = read_player_info(user_id, info_name)
-        
         for key in mix_elixir_infoconfigkey:
             if key not in list(player_info.keys()):
                 player_info[key] = MIXELIXIRINFOCONFIG[key]
@@ -2958,9 +2958,6 @@ def get_player_info(user_id, info_name):
     except Exception as e:
         player_info = MIXELIXIRINFOCONFIG
         save_player_info(user_id, player_info, info_name)
-        # 反序列化炼丹记录
-    if '炼丹记录' in player_info and isinstance(player_info['炼丹记录'], str):
-        player_info['炼丹记录'] = json.loads(player_info['炼丹记录'])
     return player_info
 
 def number_count(num):
