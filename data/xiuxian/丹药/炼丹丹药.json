@@ -562,6 +562,9 @@
         "day_num": 10,
         "all_num": 100,
         "rank": 11,
+        "mix_need_time": 60,
+        "mix_exp": 10,
+        "mix_all": 100,
         "elixir_config": {
             "2": 8192,
             "6": 8192
@@ -581,6 +584,9 @@
         "day_num": 10,
         "all_num": 100,
         "rank": 8,
+        "mix_need_time": 60,
+        "mix_exp": 10,
+        "mix_all": 100,
         "elixir_config": {
             "2": 10240,
             "6": 10240
