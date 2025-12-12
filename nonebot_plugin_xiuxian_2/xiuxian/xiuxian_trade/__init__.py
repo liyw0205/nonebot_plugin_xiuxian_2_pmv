@@ -1007,20 +1007,31 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
         await xian_shop_remove_by_admin.finish()
     
     # 确定要下架的物品
-    items_to_remove = [i for i in item if i['user_id'] == 0]
+    items_to_remove = [i for i in item]
     if not items_to_remove:
-        msg = f"没有找到系统上架的物品 {identifier}！"
+        msg = f"没有找到物品 {identifier}！"
         await handle_send(bot, event, msg)
         await xian_shop_remove_by_admin.finish()
     
     removed_count = 0
     for i in items_to_remove:
         try:
+            if removed_count >= quantity:
+                logger.info(f"系统仙肆下架成功: {removed_count}个")
+                break
             trade.remove_xianshi_all_item(i['id'])
             removed_count += 1
         except Exception as e:
             logger.error(f"系统仙肆下架失败: {e}")
             continue
+        if i['user_id'] != 0:
+            sql_message.send_back(
+            i["user_id"],
+            i["goods_id"],
+            i["name"],
+            i["type"],
+            1
+        )
     
     msg = f"成功下架 {identifier} x{removed_count}！"
     await handle_send(bot, event, msg)

@@ -9,7 +9,7 @@
 - xiuxian_compensation ：补偿/礼包/兑换码/邀请
 ---
 
-- xiuxian_back ：背包/交易系统
+- xiuxian_back ：背包
 - xiuxian_bank ：灵庄
 - xiuxian_base ：签到/突破/渡劫/送灵石/送仙缘
 - xiuxian_beg ：新手礼包/仙途奇缘
@@ -26,5 +26,6 @@
 - xiuxian_rift ：秘境
 - xiuxian_sect ：宗门
 - xiuxian_tower ：通天塔
+- xiuxian_trade ：交易
 - xiuxian_training ：历练
 - xiuxian_work ：悬赏令
