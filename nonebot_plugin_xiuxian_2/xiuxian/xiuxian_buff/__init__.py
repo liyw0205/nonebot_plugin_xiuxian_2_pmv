@@ -2050,5 +2050,8 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if partner_data:
             logger.info(f"更新道侣: {user_id}")
             save_partner(user_id, partner_data)
+        boss_integral = load_player_user3(user_id, "boss_fight_info").get("boss_integral", 0)
+        player_data_manager.update_or_write_data(user_id, "integral", "boss_integral", boss_integral)
+        logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
         

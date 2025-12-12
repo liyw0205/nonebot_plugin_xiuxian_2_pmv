@@ -2132,17 +2132,24 @@ class PlayerDataManager:
     def get_fields(self, user_id, table_name):
         """通过user_id查看一个表这个主键的全部字段"""
         self._ensure_table_exists(user_id, table_name)
+        
+        # 检查主键是否存在
         conn = self._get_connection()
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        if result:
-            columns = [column[0] for column in cursor.description]
-            user_dict = dict(zip(columns, result))
-            return user_dict
-        else:
+        try:
+            cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+        except Exception as e:
+            result = None
+        if result is None:
+            logger.warning(f"用户ID {user_id} 在表 {table_name} 中不存在")
+            conn.close()
             return None
+        
+        columns = [column[0] for column in cursor.description]
+        user_dict = dict(zip(columns, result))
+        conn.close()
+        return user_dict
 
     def get_field_data(self, user_id, table_name, field):
         self._ensure_table_exists(user_id, table_name)
@@ -2155,7 +2162,7 @@ class PlayerDataManager:
         return result[0] if result else None
 
     def get_all_field_data(self, table_name, field):
-        self._ensure_table_exists(None, table_name)  # No need for user_id here
+        self._ensure_table_exists(None, table_name)
         self._ensure_field_exists(None, table_name, field)
         conn = self._get_connection()
         cursor = conn.cursor()
