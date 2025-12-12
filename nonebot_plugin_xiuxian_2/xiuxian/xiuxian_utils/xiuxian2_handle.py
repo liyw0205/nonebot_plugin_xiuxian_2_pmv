@@ -8,6 +8,7 @@ import random
 import shutil
 import sqlite3
 import string
+import time
 from datetime import datetime
 from pathlib import Path
 from nonebot.log import logger
@@ -1899,179 +1900,124 @@ async def close_db():
 
 # 这里是交易数据部分
 class TradeDataManager:
-    global trade_num
-    _instance = {}
-    _has_init = {}
-
-    def __new__(cls):
-        if cls._instance.get(trade_num) is None:
-            cls._instance[trade_num] = super(TradeDataManager, cls).__new__(cls)
-        return cls._instance[trade_num]
-
     def __init__(self):
-        if not self._has_init.get(trade_num):
-            self._has_init[trade_num] = True
-            self.database_path = DATABASE
-            trade_db_path = self.database_path / "trade.db"
-            if not trade_db_path.exists():
-                trade_db_path.parent.mkdir(parents=True, exist_ok=True)  # 创建目录（如果不存在）
-                self.conn = sqlite3.connect(trade_db_path, check_same_thread=False)
-                self._create_tables()  # 初始化表结构
-                logger.opt(colors=True).info(f"<green>交易数据库已连接！</green>")
-            else:
-                self.conn = sqlite3.connect(trade_db_path, check_same_thread=False)
-                logger.opt(colors=True).info(f"<green>交易数据库已连接！</green>")
-    
-    def _create_tables(self):
-        """创建交易所需的表结构"""
+        self.database_path = DATABASE
+        self.trade_db_path = self.database_path / "trade.db"
+        if not self.trade_db_path.exists():
+            self.trade_db_path.touch()
+            logger.opt(colors=True).info(f"<green>trade数据库已创建！</green>")
+        self.conn = sqlite3.connect(self.trade_db_path, check_same_thread=False)
+        self._check_data()
+
+    def _check_data(self):
+        """检查数据完整性"""
         c = self.conn.cursor()
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS xianshi_items (
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS xianshi_item (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER,
+                goods_id INTEGER,
+                name TEXT,
                 type TEXT,
-                name TEXT,
                 price INTEGER,
-                quantity INTEGER,
-                description TEXT
+                quantity INTEGER
             )
-        ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS guishi_qiugou (
-                order_id TEXT PRIMARY KEY,
-                user_id INTEGER,
-                item_name TEXT,
-                price INTEGER,
-                quantity INTEGER,
-                filled INTEGER DEFAULT 0
-            )
-        ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS guishi_baitan (
-                order_id TEXT PRIMARY KEY,
-                user_id INTEGER,
-                item_id TEXT,
-                item_name TEXT,
-                price INTEGER,
-                quantity INTEGER,
-                sold INTEGER DEFAULT 0,
-                create_time INTEGER,
-                end_time INTEGER
-            )
-        ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS auctions (
-                auction_id TEXT PRIMARY KEY,
-                item_id TEXT,
-                name TEXT,
-                start_price INTEGER,
-                current_price INTEGER,
-                seller_id INTEGER,
-                seller_name TEXT,
-                is_system BOOLEAN DEFAULT FALSE,
-                bids TEXT DEFAULT '{}',
-                last_bid_time INTEGER
-            )
-        ''')
+        """)
         self.conn.commit()
 
-    def generate_unique_id(self):
-        return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-
-    def add_xianshi_item(self, user_id, item_type, name, price, quantity, description):
-        item_id = self.generate_unique_id()
-        self.cursor.execute('''
-            INSERT INTO xianshi_items (id, user_id, type, name, price, quantity, description)
+    def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
+        """增加仙肆物品"""
+        timestamp = int(time.time())
+        random_part = random.randint(1000, 9999)
+        unique_id = f"{timestamp}{random_part:04d}"
+        
+        sql = f"""
+            INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (item_id, user_id, item_type, name, price, quantity, description))
-        self.conn.commit()
-        return item_id
-
-    def add_guishi_qiugou_order(self, user_id, item_name, price, quantity):
-        order_id = self.generate_unique_id()
-        self.cursor.execute('''
-            INSERT INTO guishi_qiugou (order_id, user_id, item_name, price, quantity)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (order_id, user_id, item_name, price, quantity))
-        self.conn.commit()
-        return order_id
-
-    def add_guishi_baitan_order(self, user_id, item_id, item_name, price, quantity, create_time, end_time):
-        order_id = self.generate_unique_id()
-        self.cursor.execute('''
-            INSERT INTO guishi_baitan (order_id, user_id, item_id, item_name, price, quantity, sold, create_time, end_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (order_id, user_id, item_id, item_name, price, quantity, 0, create_time, end_time))
-        self.conn.commit()
-        return order_id
-
-    def add_auction_item(self, item_id, name, start_price, seller_id, seller_name, is_system=False):
-        auction_id = self.generate_unique_id()
-        self.cursor.execute('''
-            INSERT INTO auctions (auction_id, item_id, name, start_price, current_price, seller_id, seller_name, is_system, bids, last_bid_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (auction_id, item_id, name, start_price, start_price, seller_id, seller_name, is_system, '{}', int(datetime.now().timestamp())))
-        self.conn.commit()
-        return auction_id
-
-    def get_xianshi_item(self, item_id):
-        self.cursor.execute('SELECT * FROM xianshi_items WHERE id = ?', (item_id,))
-        return self.cursor.fetchone()
-
-    def get_guishi_qiugou_order(self, order_id):
-        self.cursor.execute('SELECT * FROM guishi_qiugou WHERE order_id = ?', (order_id,))
-        return self.cursor.fetchone()
-
-    def get_guishi_baitan_order(self, order_id):
-        self.cursor.execute('SELECT * FROM guishi_baitan WHERE order_id = ?', (order_id,))
-        return self.cursor.fetchone()
-
-    def get_auction_item(self, auction_id):
-        self.cursor.execute('SELECT * FROM auctions WHERE auction_id = ?', (auction_id,))
-        return self.cursor.fetchone()
-
-    def update_guishi_qiugou_order(self, order_id, filled):
-        self.cursor.execute('UPDATE guishi_qiugou SET filled = ? WHERE order_id = ?', (filled, order_id))
+        """
+        self.conn.execute(sql, (unique_id, user_id, goods_id, name, type, price, quantity))
         self.conn.commit()
 
-    def update_guishi_baitan_order(self, order_id, sold):
-        self.cursor.execute('UPDATE guishi_baitan SET sold = ? WHERE order_id = ?', (sold, order_id))
-        self.conn.commit()
-
-    def place_auction_bid(self, auction_id, bidder_id, bid_price):
-        auction = self.get_auction_item(auction_id)
-        if not auction:
+    def remove_xianshi_item(self, item_id):
+        """删除仙肆物品（先数量-1，如果数量-1之后等于0才删除，不是0则是更新数量）"""
+        # 先查询当前物品的数量
+        cur = self.conn.cursor()
+        cur.execute("SELECT quantity FROM xianshi_item WHERE id = ?", (item_id,))
+        result = cur.fetchone()
+    
+        if not result:
+            logger.opt(colors=True).warning(f"<yellow>未找到ID为 {item_id} 的物品</yellow>")
             return False
-        current_price = auction[4]
-        if bid_price <= current_price:
-            return False
-        bids = json.loads(auction[8])
-        bids[str(bidder_id)] = bid_price
-        self.cursor.execute('UPDATE auctions SET bids = ?, last_bid_time = ? WHERE auction_id = ?', (json.dumps(bids), int(datetime.now().timestamp()), auction_id))
+    
+        current_quantity = result[0]
+
+        if str(current_quantity) == "-1":
+            logger.opt(colors=True).warning(f"<yellow>系统无限物品不删除</yellow>")
+            return
+        elif current_quantity == 1:
+            # 如果当前数量为1减1后等于0，直接删除
+            sql = "DELETE FROM xianshi_item WHERE id = ?"
+            self.conn.execute(sql, (item_id,))
+            logger.opt(colors=True).info(f"<green>物品 {item_id} 数量减至0，已从数据库中删除</green>")
+        else:
+            # 如果当前数量大于1，减1后仍有剩余，更新数量
+            new_quantity = current_quantity - 1
+            sql = "UPDATE xianshi_item SET quantity = ? WHERE id = ?"
+            self.conn.execute(sql, (new_quantity, item_id))
+            logger.opt(colors=True).info(f"<green>物品 {item_id} 数量从 {current_quantity} 减少至 {new_quantity}</green>")
+    
         self.conn.commit()
         return True
 
-    def remove_xianshi_item(self, item_id):
-        self.cursor.execute('DELETE FROM xianshi_items WHERE id = ?', (item_id,))
+    def remove_xianshi_all_item(self, item_id):
+        """删除仙肆物品"""
+        sql = "DELETE FROM xianshi_item WHERE id = ?"
+        self.conn.execute(sql, (item_id,))
         self.conn.commit()
 
-    def remove_guishi_qiugou_order(self, order_id):
-        self.cursor.execute('DELETE FROM guishi_qiugou WHERE order_id = ?', (order_id,))
-        self.conn.commit()
-
-    def remove_guishi_baitan_order(self, order_id):
-        self.cursor.execute('DELETE FROM guishi_baitan WHERE order_id = ?', (order_id,))
-        self.conn.commit()
-
-    def remove_auction_item(self, auction_id):
-        self.cursor.execute('DELETE FROM auctions WHERE auction_id = ?', (auction_id,))
-        self.conn.commit()
+    def get_xianshi_items(self, user_id=None, type=None, id=None, name=None):
+        """查看仙肆物品"""
+        conditions = []
+        params = []
+        
+        if user_id:
+            conditions.append("user_id = ?")
+            params.append(user_id)
+        
+        if type:
+            conditions.append("type = ?")
+            params.append(type)
+        
+        if id:
+            conditions.append("id = ?")
+            params.append(id)
+        
+        if name:
+            conditions.append("name = ?")
+            params.append(name)
+        
+        query = "SELECT * FROM xianshi_item"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        cur = self.conn.cursor()
+        cur.execute(query, params)
+        result = cur.fetchall()
+        if not result:
+            return None
+        
+        columns = [column[0] for column in cur.description]
+        results = []
+        for row in result:
+            item_dict = dict(zip(columns, row))
+            results.append(item_dict)
+        return results
 
     def close(self):
         """关闭数据库连接"""
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
-            logger.opt(colors=True).info(f"<green>交易数据库关闭！</green>")
+            logger.opt(colors=True).info(f"<green>trade数据库关闭！</green>")
 
 driver = get_driver()
 @driver.on_shutdown
