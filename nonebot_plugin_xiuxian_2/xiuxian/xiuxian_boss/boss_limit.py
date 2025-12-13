@@ -28,6 +28,7 @@ class BossLimit:
 
     def _save_data(self, user_id, data):
         """保存数据"""
+        weekly_purchases_json = json.dumps(data["weekly_purchases"])
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_integral", data["boss_integral"])
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_stone", data["boss_stone"])
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_battle_count", data["boss_battle_count"])
