@@ -168,19 +168,21 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 一次性扣除总手续费
     sql_message.update_ls(user_id, total_fee, 2)
+    for _ in range(quantity):
+        # 添加到仙肆系统        
+        try:
+            trade.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, 1)
+            sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
+            success_count += 1
+        except Exception as e:
+            logger.error(f"仙肆上架失败: {e}")
+            msg = "上架过程中出现错误，请稍后再试！"
+            continue
 
-    try:
-        trade.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, quantity)
-        sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
-        msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
-        msg += f"单价: {number_to(price)} 灵石\n"
-        msg += f"总手续费: {number_to(total_fee)} 灵石"
-        await handle_send(bot, event, msg)
-    except Exception as e:
-        logger.error(f"仙肆上架失败: {e}")
-        msg = "上架过程中出现错误，请稍后再试！"
-        await handle_send(bot, event, msg)
-    
+    msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
+    msg += f"单价: {number_to(price)} 灵石\n"
+    msg += f"总手续费: {number_to(total_fee)} 灵石"
+    await handle_send(bot, event, msg)    
     await xian_shop_add.finish()
 
 @xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=1.4)])
