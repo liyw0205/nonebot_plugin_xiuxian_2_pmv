@@ -6,7 +6,6 @@ from pathlib import Path
 from datetime import datetime
 import os
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-
 player_data_manager = PlayerDataManager()
 
 class BossLimit:
@@ -24,6 +23,7 @@ class BossLimit:
         if data is None:
             self._save_data(user_id, self.default_data)
             return self.default_data
+        data["weekly_purchases"] = json.loads(data["weekly_purchases"])
         return data
 
     def _save_data(self, user_id, data):
@@ -31,7 +31,7 @@ class BossLimit:
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_integral", data["boss_integral"])
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_stone", data["boss_stone"])
         player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_battle_count", data["boss_battle_count"])
-        player_data_manager.update_or_write_data(user_id, "boss_limit", "weekly_purchases", json.dumps(data["weekly_purchases"]))
+        player_data_manager.update_or_write_data(user_id, "boss_limit", "weekly_purchases", weekly_purchases_json)
 
     def get_integral(self, user_id):
         """获取用户今日已获得BOSS积分"""
@@ -73,7 +73,7 @@ class BossLimit:
         user_id = str(user_id)
         item_id = str(item_id)
         
-        user_data = json.loads(data["weekly_purchases"])
+        user_data = data["weekly_purchases"]
         if "_last_reset" in user_data:
             last_reset = datetime.strptime(user_data.get("_last_reset"), "%Y-%m-%d")
             current_week = datetime.now().isocalendar()[1]
@@ -100,10 +100,11 @@ class BossLimit:
         
         if "_last_reset" not in data["weekly_purchases"]:
             data["weekly_purchases"] = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
-        user_data = json.loads(data["weekly_purchases"])
-        current = user_data.get(item_id, 0)
-        user_data[item_id] = current + quantity
-        data["weekly_purchases"] = user_data
+        else:
+            user_data = data["weekly_purchases"]
+            current = user_data.get(item_id, 0)
+            user_data[item_id] = current + quantity
+            data["weekly_purchases"] = user_data
         self._save_data(user_id, data)
 
     def reset_limits(self, user_id):
