@@ -10,7 +10,7 @@ from nonebot.log import logger
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Union
 from nonebot.adapters import MessageSegment
 from nonebot.adapters.onebot.v11 import (
@@ -30,7 +30,7 @@ from typing import Union
 
 sql_message = XiuxianDateManage()  # sql类
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
-
+PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 class MyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -1022,7 +1022,7 @@ def log_message(user_id: str, msg: str):
         user_id: 用户ID
         msg: 要记录的日志消息
     """
-    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    clean_old_logs()
     try:
         # 确保用户文件夹存在
         user_dir = PLAYERSDATA / str(user_id)
@@ -1082,7 +1082,6 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "current_page": 当前页码
         }
     """
-    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     try:
         # 确定日期
         if date_str is None:
@@ -1152,6 +1151,38 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "error": f"获取日志失败: {e}"
         }
 
+def clean_old_logs(keep_days=10):
+    """
+    清理旧日志文件，保留指定天数内的日志
+    """
+    try:
+        current_time = datetime.now()
+        log_dirs = PLAYERSDATA.rglob("*/logs")  # 遍历所有用户的logs文件夹
+
+        for log_dir in log_dirs:
+            log_files = list(log_dir.glob("*.log"))
+            for log_file in log_files:
+                try:
+                    # 从文件名中提取日期
+                    date_str = log_file.stem
+                    if len(date_str) != 6:
+                        logger.warning(f"日志文件名格式不正确，跳过: {log_file.name}")
+                        continue
+                    file_date = datetime.strptime(date_str, "%y%m%d")
+                    
+                    # 计算文件的年龄
+                    age_days = (current_time - file_date).days
+                    if age_days > keep_days:
+                        log_file.unlink()
+                        logger.info(f"清理旧日志: {log_file.name} (已保存 {age_days} 天)")
+                except ValueError:
+                    # 如果文件名格式不匹配，跳过这个文件
+                    logger.warning(f"日志文件名格式不正确，跳过: {log_file.name}")
+                except Exception as e:
+                    logger.error(f"删除日志文件 {log_file.name} 时出错: {e}")
+    except Exception as e:
+        logger.error(f"清理旧日志时出错: {e}")
+
 def get_statistics_data(user_id: str, key: str = None):
     """
     获取用户的统计数据
@@ -1164,7 +1195,6 @@ def get_statistics_data(user_id: str, key: str = None):
         如果指定key，返回该键对应的值（不存在则返回None）
         如果不指定key，返回整个统计数据字典
     """
-    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     try:
         # 确保用户文件夹存在
         user_dir = PLAYERSDATA / str(user_id)
@@ -1205,7 +1235,6 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
     返回:
         更新后的统计数据字典
     """
-    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
     try:
         # 确保用户文件夹存在
         user_dir = PLAYERSDATA / str(user_id)

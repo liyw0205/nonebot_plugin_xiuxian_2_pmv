@@ -20,14 +20,11 @@ from .item_json import Items
 from .xn_xiuxian_impart_config import config_impart
 
 WORKDATA = Path() / "data" / "xiuxian" / "work"
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 DATABASE = Path() / "data" / "xiuxian"
-DATABASE_IMPARTBUFF = Path() / "data" / "xiuxian"
 SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号
 impart_num = "123451234"
-trade_num = "123451234"
 items = Items()
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
@@ -2043,7 +2040,7 @@ async def close_db():
 # 这里是Player部分
 class PlayerDataManager:
     def __init__(self):
-        self.database_path = Path() / "data" / "xiuxian" / "player.db"
+        self.database_path = DATABASE / "player.db"
         self._ensure_database_exists()
 
     def _ensure_database_exists(self):
@@ -2177,7 +2174,7 @@ class XIUXIAN_IMPART_BUFF:
     def __init__(self):
         if not self._has_init.get(impart_num):
             self._has_init[impart_num] = True
-            self.database_path = DATABASE_IMPARTBUFF
+            self.database_path = DATABASE
             if not self.database_path.exists():
                 self.database_path.mkdir(parents=True)
                 self.database_path /= "xiuxian_impart.db"
@@ -2972,7 +2969,8 @@ def backup_db_files():
         # 定义源数据库文件路径和目标备份目录
         db_files = [
             DATABASE / "xiuxian.db",
-            DATABASE_IMPARTBUFF / "xiuxian_impart.db"
+            DATABASE / "xiuxian_impart.db",
+            DATABASE / "player.db"
         ]
         
         backup_dir = Path() / "data" / "db_backup"
