@@ -26,7 +26,7 @@ WORLDLY_EVENTS = {
                 ("出售自制符箓，获利{}灵石", "base_amount * 0.8 + random.randint(300000, 900000)"),
                 ("在废弃洞府中发现{}灵石", "base_amount + random.randint(500000, 1500000)")
             ],
-            "base_amount": 2000000
+            "base_amount": 200_0000
         },
         "exp": {
             "descriptions": [
@@ -97,7 +97,7 @@ WORLDLY_EVENTS = {
                 ("被幻术所骗购买假货，损失{}灵石", "base_amount * 0.9 + random.randint(200000, 600000)"),
                 ("资助邪修被发现，缴纳罚金{}灵石", "base_amount * 1.2 + random.randint(300000, 700000)")
             ],
-            "base_amount": 500000
+            "base_amount": 50_0000
         },
         "exp": {
             "descriptions": [
@@ -170,7 +170,7 @@ TRANSCENDENT_EVENTS = {
                 ("在雷暴中心采集到雷灵石，价值{}灵石", "base_amount * 3 + random.randint(0, 500000)"),
                 ("发现灵脉节点，采集{}灵石", "base_amount + random.randint(600000, 1400000)")
             ],
-            "base_amount": 1000000
+            "base_amount": 100_0000
         },
         "exp": {
             "descriptions": [
@@ -241,7 +241,7 @@ TRANSCENDENT_EVENTS = {
                 ("遭天劫余波冲击，损失{}灵石", "base_amount * 1.5 + random.randint(300000, 800000)"),
                 ("为镇压魔气泄露消耗{}灵石", "base_amount * 1.2 + random.randint(300000, 700000)")
             ],
-            "base_amount": 500000
+            "base_amount": 50_0000
         },
         "exp": {
             "descriptions": [
@@ -420,7 +420,7 @@ class TrainingEvents:
                     "item_name": item_info["name"]
                 }
             else:
-                amount = 1000000
+                amount = 100_0000
                 sql_message.update_ls(user_id, amount, 1)
                 return {
                     "message": f"探索有所收获，但没找到合适物品，获得{number_to(amount)}灵石",
@@ -463,7 +463,7 @@ class TrainingEvents:
             back_msg = sql_message.get_back_msg(user_id)
             
             if not back_msg:
-                amount = 5000000
+                amount = 500_0000
                 sql_message.update_ls(user_id, amount, 2)
                 return {
                     "message": f"探索遭遇意外，损失{number_to(amount)}灵石",
@@ -516,7 +516,7 @@ class TrainingEvents:
                     }
                         
             # 没有则扣灵石
-            amount = 5000000
+            amount = 500_0000
             sql_message.update_ls(user_id, amount, 2)
             return {
                 "message": f"遭遇意外，损失{number_to(amount)}灵石",
