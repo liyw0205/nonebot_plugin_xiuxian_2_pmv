@@ -46,7 +46,7 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
 ITEM_TYPES = ["药材", "装备", "丹药", "技能"]
 MIN_PRICE = 600000
-MAX_QUANTITY = 10
+MAX_QUANTITY = 10000
 
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
@@ -171,6 +171,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     try:
         trade.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, quantity)
+        sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
         msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
         msg += f"单价: {number_to(price)} 灵石\n"
         msg += f"总手续费: {number_to(total_fee)} 灵石"
@@ -317,6 +318,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         for _ in range(item['quantity']):            
             try:
                 trade.add_xianshi_item(user_id, item['id'], item['name'], item['type'], item['price'], 1)
+                sql_message.update_back_j(user_id, item['id'], 1)
                 success_count += 1
                 result_msg.append(f"{item['name']} x1 - 单价:{number_to(item['price'])}")
             except Exception as e:
@@ -440,6 +442,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         # 添加到仙肆系统        
         try:
             trade.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, 1)
+            sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
             success_count += 1
         except Exception as e:
             logger.error(f"快速上架失败: {e}")

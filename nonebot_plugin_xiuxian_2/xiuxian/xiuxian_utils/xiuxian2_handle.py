@@ -1925,11 +1925,27 @@ class TradeDataManager:
         """)
         self.conn.commit()
 
+    def generate_unique_id(self):
+        """生成唯一的 unique_id"""
+        while True:
+            timestamp_part = int(time.time() % 10000)
+            random_part = random.randint(100, 99999)
+            new_id = int(f"{timestamp_part}{random_part}") % 10**10  # 确保不超过10位
+        
+            # 限制在6-10位
+            unique_id = max(100000, min(new_id, 9999999999))
+            if not self._unique_id_exists(unique_id):
+                return unique_id
+
+    def _unique_id_exists(self, unique_id):
+        """检查 unique_id 是否已经存在于数据库中"""
+        cur = self.conn.cursor()
+        cur.execute("SELECT id FROM xianshi_item WHERE id = ?", (unique_id,))
+        return cur.fetchone() is not None
+
     def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
         """增加仙肆物品"""
-        timestamp = int(time.time())
-        random_part = random.randint(1000, 9999)
-        unique_id = f"{timestamp}{random_part:04d}"
+        unique_id = self.generate_unique_id()
         
         sql = f"""
             INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
