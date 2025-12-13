@@ -40,7 +40,7 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, CommandObjectID,
     send_msg_handler, log_message, handle_send, update_statistics_value
 )
-from .boss_limit import boss_limit
+from .boss_limit import boss_limit, player_data_manager
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -1010,50 +1010,15 @@ PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 
 def get_user_boss_fight_info(user_id):
-    try:
-        user_boss_fight_info = read_user_boss_fight_info(user_id)
-    except Exception as e:
-        # 如果读取失败，初始化默认值并保存
-        user_boss_fight_info = {"boss_integral": 0}
-        save_user_boss_fight_info(user_id, user_boss_fight_info)
-        logger.opt(colors=True).warning(f"<yellow>用户 {user_id} 的BOSS战斗信息读取失败，已初始化默认值: {e}</yellow>")
+    boss_integral = player_data_manager.get_field_data(str(user_id), "integral", "boss_integral")
+    if boss_integral is None:
+        boss_integral = 0
+    user_boss_fight_info = {"boss_integral": boss_integral}
     return user_boss_fight_info
-
-
-def read_user_boss_fight_info(user_id):
-    user_id = str(user_id)
-
-    FILEPATH = PLAYERSDATA / user_id / "boss_fight_info.json"
-    if not os.path.exists(FILEPATH):
-        data = {"boss_integral": 0}
-        with open(FILEPATH, "w", encoding="UTF-8") as f:
-            json.dump(data, f, indent=4)
-    else:
-        with open(FILEPATH, "r", encoding="UTF-8") as f:
-            data = json.load(f)
-
-    # 检查 boss_integral 键值是否为负数
-    if "boss_integral" in data and data["boss_integral"] < 0:
-        data["boss_integral"] = 0
-        with open(FILEPATH, "w", encoding="UTF-8") as f:
-            json.dump(data, f, indent=4)
-
-    return data
-
 
 def save_user_boss_fight_info(user_id, data):
     user_id = str(user_id)
-
-    if not os.path.exists(PLAYERSDATA / user_id):
-        logger.opt(colors=True).info("<green>目录不存在，创建目录</green>")
-        os.makedirs(PLAYERSDATA / user_id)
-
-    FILEPATH = PLAYERSDATA / user_id / "boss_fight_info.json"
-    data = json.dumps(data, ensure_ascii=False, indent=4)
-    save_mode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=save_mode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
+    player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_integral", data["boss_integral"])
 
 def get_dict_type_rate(data_dict):
     """根据字典内概率,返回字典key"""
