@@ -1018,7 +1018,7 @@ def get_user_boss_fight_info(user_id):
 
 def save_user_boss_fight_info(user_id, data):
     user_id = str(user_id)
-    player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_integral", data["boss_integral"])
+    player_data_manager.update_or_write_data(user_id, "integral", "boss_integral", data["boss_integral"])
 
 def get_dict_type_rate(data_dict):
     """根据字典内概率,返回字典key"""
