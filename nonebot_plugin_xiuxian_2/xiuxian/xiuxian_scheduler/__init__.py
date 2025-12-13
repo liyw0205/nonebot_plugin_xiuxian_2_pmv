@@ -11,6 +11,7 @@ from ..xiuxian_rift import scheduled_rift_generation
 from ..xiuxian_sect import resetusertask, auto_handle_inactive_sect_owners
 from ..xiuxian_tower import reset_tower_floors
 from ..xiuxian_work import resetrefreshnum
+from ..xiuxian_compensation import auto_clean_expired_items
 
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -40,6 +41,7 @@ async def _():# 每天0点
     await set_boss_limits_reset()  # 世界BOSS额度
     await two_exp_cd_up()  # 双修次数
     await impart_re()  # 虚神界对决
+    await auto_clean_expired_items()  # 清理过期礼包/补偿/兑换码
 
 
 @scheduler.scheduled_job("cron", hour=8, minute=0)

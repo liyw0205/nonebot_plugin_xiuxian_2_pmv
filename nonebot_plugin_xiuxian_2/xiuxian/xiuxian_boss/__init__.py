@@ -66,6 +66,7 @@ boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全�
 boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
 boss_integral_store = on_command("世界BOSS商店", aliases={"世界boss商店", "世界Boss商店", "世界boss积分商店", "世界Boss积分商店", "世界BOSS积分商店"}, priority=10, block=True)
 boss_integral_use = on_command("世界BOSS兑换", aliases={"世界boss兑换", "世界Boss兑换"}, priority=6, block=True)
+boss_integral_rank = on_command("世界BOSS积分排行榜", aliases={"世界boss积分排行榜", "世界BOSS排行榜", "世界boss排行榜"}, priority=6, block=True)
 challenge_scarecrow = on_command("挑战稻草人", aliases={"挑战稻草人", "挑战稻草人"}, priority=6, block=True)
 challenge_training_puppet = on_command("挑战训练傀儡", aliases={"挑战训练傀儡", "挑战训练傀儡"}, priority=6, block=True)
 
@@ -73,9 +74,10 @@ __boss_help__ = f"""
 世界BOSS系统帮助
 
 🔹🔹 查询指令：
-  ▶ 查询世界BOSS - 查看全服BOSS列表
+  ▶ 查询世界BOSS - 查看BOSS列表
   ▶ 世界BOSS列表 [页码] - 分页查看BOSS详情
   ▶ 世界BOSS信息 - 查看个人信息
+  ▶ 世界BOSS积分排行榜 - 查看排行榜
   ▶ 世界BOSS商店 - 查看可兑换物品
 
 🔹🔹 战斗指令：
@@ -168,7 +170,7 @@ async def save_boss_():
 
 async def set_boss_limits_reset():
     boss_limit.reset_limits()
-    logger.opt(colors=True).info(f"<green>仙途奇缘重置成功！</green>")
+    logger.opt(colors=True).info(f"<green>世界BOSS重置成功！</green>")
 
 @boss_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
@@ -964,9 +966,9 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         if str(shop_id) in boss_integral_shop:
             is_in = True
             cost = boss_integral_shop[str(shop_id)]['cost']
+            weekly_limit = boss_integral_shop[str(shop_id)].get('weekly_limit', 1)
             item_id = shop_id
             item_info = Items().get_data_by_item_id(item_id)
-            weekly_limit = item_info.get('weekly_limit', 1)
     else:
         msg = f"世界积分商店内空空如也！"
         await handle_send(bot, event, msg)
@@ -1006,8 +1008,30 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg)
         await boss_integral_use.finish()
 
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+@boss_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """世界BOSS积分排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await boss_integral_rank.finish()
 
+    # 获取所有用户的boss_integral数据
+    all_user_integral = player_data_manager.get_all_field_data("integral", "boss_integral")
+    
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
+    
+    # 生成排行榜
+    rank_msg = "✨【世界BOSS积分排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    
+    await handle_send(bot, event, rank_msg)
+    await boss_integral_rank.finish()
 
 def get_user_boss_fight_info(user_id):
     boss_integral = player_data_manager.get_field_data(str(user_id), "integral", "boss_integral")

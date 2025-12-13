@@ -1945,3 +1945,114 @@ async def handle_invitation_admin_help(bot: Bot, event: MessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     await handle_send(bot, event, __invitation_admin_help__)
     await invitation_admin_help_cmd.finish()
+
+
+async def auto_clean_expired_items():
+    clean_expired_compensations()
+    clean_expired_gift_packages()
+    clean_expired_redeem_codes()
+    logger.info("已自动清理所有过期项目")
+
+def clean_expired_redeem_codes():
+    """自动清理过期的兑换码项，并清除对应的领取记录"""
+    data = load_redeem_code_data()
+    claimed_data = load_claimed_redeem_codes()
+    to_delete = []
+
+    for code, code_info in data.items():
+        if code_info["expire_time"] == "无限":
+            continue
+        try:
+            if is_redeem_code_expired(code_info):
+                to_delete.append(code)
+        except Exception:
+            continue
+
+    for code in to_delete:
+        del data[code]
+        if code in claimed_data:
+            del claimed_data[code]
+        else:
+            for user_id in list(claimed_data.keys()):
+                if code in claimed_data[user_id]:
+                    claimed_data[user_id].remove(code)
+                    if not claimed_data[user_id]:
+                        del claimed_data[user_id]
+
+    if to_delete:
+        save_redeem_code_data(data)
+        save_claimed_redeem_codes(claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期兑换码: {to_delete}")
+    else:
+        logger.info("没有发现过期兑换码，无需清理")
+
+def clean_expired_gift_packages():
+    """自动清理过期的礼包项，并清除对应的领取记录"""
+    data = load_gift_package_data()
+    claimed_data = load_claimed_gift_packages()
+    to_delete = []
+
+    for gift_id, gift_info in data.items():
+        if gift_info["expire_time"] == "无限":
+            continue
+        try:
+            if is_gift_package_expired(gift_info):
+                to_delete.append(gift_id)
+        except Exception:
+            continue
+
+    for gift_id in to_delete:
+        del data[gift_id]
+        if gift_id in claimed_data:
+            del claimed_data[gift_id]
+        else:
+            for user_id in list(claimed_data.keys()):
+                if gift_id in claimed_data[user_id]:
+                    claimed_data[user_id].remove(gift_id)
+                    if not claimed_data[user_id]:
+                        del claimed_data[user_id]
+
+    if to_delete:
+        save_gift_package_data(data)
+        save_claimed_gift_packages(claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期礼包: {to_delete}")
+    else:
+        logger.info("没有发现过期礼包，无需清理")
+
+def clean_expired_compensations():
+    """自动清理过期的补偿项，并清除对应的领取记录"""
+    data = load_compensation_data()
+    claimed_data = load_claimed_data()
+    to_delete = []
+
+    for comp_id, comp_info in data.items():
+        if comp_info["expire_time"] == "无限":
+            continue  # 永不过期，不移除
+        try:
+            if is_compensation_expired(comp_info):
+                to_delete.append(comp_id)
+        except Exception:
+            # 如果判断过期出错，保留该项
+            continue
+
+    # 删除过期的补偿
+    for comp_id in to_delete:
+        del data[comp_id]
+        # 同时从领取记录中移除该补偿ID
+        if comp_id in claimed_data:
+            del claimed_data[comp_id]
+        else:
+            # 遍历所有用户，删除该补偿ID的领取记录
+            for user_id in list(claimed_data.keys()):
+                if comp_id in claimed_data[user_id]:
+                    claimed_data[user_id].remove(comp_id)
+                    if not claimed_data[user_id]:  # 如果用户没有其他补偿，则删除该用户记录
+                        del claimed_data[user_id]
+
+    # 保存清理后的数据
+    if to_delete:
+        save_compensation_data(data)
+        save_claimed_data(claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期补偿: {to_delete}")
+    else:
+        logger.info("没有发现过期补偿，无需清理")

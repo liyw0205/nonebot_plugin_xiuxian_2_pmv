@@ -2133,6 +2133,25 @@ class PlayerDataManager:
         conn.close()
         return result
 
+    def update_all_records(self, table_name, field, value, data_type='INTEGER'):
+        """
+        更新指定表中所有记录的某个字段的值
+        :param table_name: 表名
+        :param field: 字段名
+        :param value: 新值
+        :param data_type: 数据类型，默认为 INTEGER
+        """
+        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
+            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to INTEGER.</yellow>")
+            data_type = 'INTEGER'
+        
+        value = str(value)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"UPDATE {table_name} SET {field}=? ", (value,))
+        conn.commit()
+        conn.close()
+
     def close(self):
         """关闭数据库连接"""
         if hasattr(self, 'conn') and self.conn:
