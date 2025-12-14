@@ -2090,8 +2090,11 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if partner_data:
             logger.info(f"更新道侣: {user_id}")
             save_partner(user_id, partner_data)
+        from ..xiuxian_boss.boss_limit import boss_limit
+        boss_limit._load_data(user_id)
         boss_integral = load_player_user3(user_id, "boss_fight_info").get("boss_integral", 0)
-        player_data_manager.update_or_write_data(user_id, "integral", "boss_integral", boss_integral)
+        boss_integral = player_data_manager.get_field_data(str(user_id), "boss_limit", "integral")
+        player_data_manager.update_or_write_data(user_id, "boss", "integral", boss_integral)
         logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
@@ -2102,6 +2105,8 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_num = 0
     for user_id in user_ids:
         user_num += 1
+        from ..xiuxian_training.training_limit import training_limit
+        training_limit.get_user_training_info(user_id)
         progress = load_player_user3(user_id, "training_info").get("progress", 0)
         player_data_manager.update_or_write_data(user_id, "training", "progress", progress)
         max_progress = load_player_user3(user_id, "training_info").get("max_progress", 0)
@@ -2110,7 +2115,23 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_data_manager.update_or_write_data(user_id, "training", "completed", completed)
         points = load_player_user3(user_id, "training_info").get("points", 0)
         player_data_manager.update_or_write_data(user_id, "training", "points", int(points))
-        player_data_manager.update_or_write_data(user_id, "training", "last_time", None)
         logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
-        
+
+migrate_data3 = on_fullmatch("player数据同步3", priority=25, block=True)
+@migrate_data3.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    user_ids = get_all_user_ids()
+    user_num = 0
+    for user_id in user_ids:
+        user_num += 1
+        from ..xiuxian_tower import tower_limit
+        tower_limit.get_user_tower_info(user_id)
+        current_floor = load_player_user3(user_id, "tower_info").get("current_floor", 0)
+        player_data_manager.update_or_write_data(user_id, "tower", "current_floor", current_floor)
+        max_floor = load_player_user3(user_id, "tower_info").get("max_floor", 0)
+        player_data_manager.update_or_write_data(user_id, "tower", "max_floor", max_floor)
+        score = load_player_user3(user_id, "tower_info").get("score", 0)
+        player_data_manager.update_or_write_data(user_id, "tower", "score", score)
+        logger.info(f"更新通天塔: {user_id}")
+    await handle_send(bot, event, f"同步完成，共：{user_num}")

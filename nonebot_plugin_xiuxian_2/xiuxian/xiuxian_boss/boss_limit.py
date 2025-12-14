@@ -11,6 +11,7 @@ player_data_manager = PlayerDataManager()
 class BossLimit:
     def __init__(self):
         self.default_data = {
+            "integral": 0,   # 世界BOSS积分
             "boss_integral": 0,   # 每日BOSS积分记录
             "boss_stone": 0,      # 每日BOSS灵石记录
             "weekly_purchases": {}, # 每周商品购买记录
@@ -19,7 +20,7 @@ class BossLimit:
 
     def _load_data(self, user_id):
         """加载数据"""
-        data = player_data_manager.get_fields(user_id, "boss_limit")
+        data = player_data_manager.get_fields(user_id, "boss")
         if data is None:
             self._save_data(user_id, self.default_data)
             return self.default_data
@@ -29,10 +30,10 @@ class BossLimit:
     def _save_data(self, user_id, data):
         """保存数据"""
         weekly_purchases_json = json.dumps(data["weekly_purchases"])
-        player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_integral", data["boss_integral"])
-        player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_stone", data["boss_stone"])
-        player_data_manager.update_or_write_data(user_id, "boss_limit", "boss_battle_count", data["boss_battle_count"])
-        player_data_manager.update_or_write_data(user_id, "boss_limit", "weekly_purchases", weekly_purchases_json)
+        player_data_manager.update_or_write_data(user_id, "boss", "boss_integral", data["boss_integral"])
+        player_data_manager.update_or_write_data(user_id, "boss", "boss_stone", data["boss_stone"])
+        player_data_manager.update_or_write_data(user_id, "boss", "boss_battle_count", data["boss_battle_count"])
+        player_data_manager.update_or_write_data(user_id, "boss", "weekly_purchases", weekly_purchases_json)
 
     def get_integral(self, user_id):
         """获取用户今日已获得BOSS积分"""
@@ -110,8 +111,8 @@ class BossLimit:
 
     def reset_limits(self):
         """重置所有每日BOSS奖励限制"""
-        player_data_manager.update_all_records("boss_limit", "boss_integral", 0)
-        player_data_manager.update_all_records("boss_limit", "boss_stone", 0)
-        player_data_manager.update_all_records("boss_limit", "boss_battle_count", 0)
+        player_data_manager.update_all_records("boss", "boss_integral", 0)
+        player_data_manager.update_all_records("boss", "boss_stone", 0)
+        player_data_manager.update_all_records("boss", "boss_battle_count", 0)
 
 boss_limit = BossLimit()

@@ -61,6 +61,7 @@ create_new_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER,
 do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 training_reset = on_command("重置历练", permission=SUPERUSER, priority=6, block=True)
 boss_reset = on_command("重置世界BOSS", permission=SUPERUSER, priority=6, block=True)
+tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -716,6 +717,15 @@ async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg = "用户历练状态重置成功"
     await handle_send(bot, event, msg)
     await training_reset.finish()
+
+@tower_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def tower_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置所有用户的通天塔层数"""
+    from ..xiuxian_tower import reset_tower_floors
+    await reset_tower_floors()  # 重置通天塔层数
+    msg = "用户通天塔层数重置成功"
+    await handle_send(bot, event, msg)
+    await tower_reset.finish()
 
 @boss_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

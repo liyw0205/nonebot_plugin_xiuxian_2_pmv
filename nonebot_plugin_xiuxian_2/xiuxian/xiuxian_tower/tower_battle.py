@@ -7,6 +7,7 @@ from ..xiuxian_utils.utils import number_to, check_user, check_user_type, send_m
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
+from .tower_limit import tower_limit
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -98,39 +99,6 @@ class TowerBattle:
         
         return boss_info
     
-    async def challenge_floor(self, bot, event, user_id, floor=None, continuous=False, target_floors=10):
-        """挑战通天塔"""
-        isUser, user_info, msg = check_user(event)
-        if not isUser:
-            return False, msg
-        
-        # 检查用户状态
-        is_type, msg = check_user_type(user_id, 0)
-        if not is_type:
-            return False, msg
-
-        # 获取用户当前层数
-        tower_info = tower_data.get_user_tower_info(user_id)
-        current_floor = tower_info["current_floor"]
-        
-        # 如果是首次挑战或指定层数
-        if floor is None:
-            floor = current_floor + 1
-        else:
-            if floor != current_floor + 1:
-                return False, f"只能挑战下一层({current_floor + 1})！"
-        
-        # 生成BOSS
-        boss_info = self.generate_tower_boss(floor)
-        
-        # 执行战斗
-        if continuous:
-            # 连续爬塔模式
-            return await self._continuous_challenge(bot, event, user_info, floor, target_floors)
-        else:
-            # 单层挑战模式
-            return await self._single_challenge(bot, event, user_info, boss_info)
-    
     async def _single_challenge(self, bot, event, user_info, boss_info):
         """单层挑战"""
         user_id = user_info["user_id"]
@@ -138,6 +106,7 @@ class TowerBattle:
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
         sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
         sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
+        tower_info = tower_limit.get_user_tower_info(user_id)
         result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, bot_id=bot.self_id)        
         await send_msg_handler(bot, event, result)
         if victor == "群友赢了":
@@ -149,11 +118,13 @@ class TowerBattle:
             # 基础奖励
             base_score = self.config["积分奖励"]["每层基础"]
             base_stone = self.config["灵石奖励"]["每层基础"]
+            if boss_info["floor"] <= tower_info["max_floor"]:
+                base_score = int(base_score * 0.3)
+                base_stone = int(base_stone * 0.3)
             total_score += base_score
             total_stone += base_stone
             
             # 每10层首通奖励
-            tower_info = tower_data.get_user_tower_info(user_id)
             if boss_info["floor"] % 10 == 0 and boss_info["floor"] > tower_info["max_floor"]:
                 extra_score = self.config["积分奖励"]["每10层额外"]
                 extra_stone = self.config["灵石奖励"]["每10层额外"]
@@ -184,21 +155,14 @@ class TowerBattle:
             # 更新积分
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            tower_info = tower_data.get_user_tower_info(user_id)
+            tower_info = tower_limit.get_user_tower_info(user_id)
             tower_info["score"] += total_score
             tower_info["current_floor"] = boss_info["floor"]
             tower_info["max_floor"] = max(tower_info["max_floor"], boss_info["floor"])
-            tower_data.save_user_tower_info(user_id, tower_info)
+            tower_limit.save_user_tower_info(user_id, tower_info)
             
             # 给予灵石
             sql_message.update_ls(user_id, total_stone, 1)
-            
-            # 更新排行榜
-            tower_data.update_tower_rank(
-                user_id, 
-                user_info["user_name"], 
-                boss_info["floor"]
-            )
             
             msg = (
                 f"恭喜道友击败{boss_info['name']}，成功通关通天塔第{boss_info['floor']}层！\n"
@@ -219,7 +183,7 @@ class TowerBattle:
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
         sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
         sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
-        tower_info = tower_data.get_user_tower_info(user_id)
+        tower_info = tower_limit.get_user_tower_info(user_id)
         initial_max_floor = tower_info["max_floor"]  # 保存初始的最大层数
         
         # 计算最大挑战层数，限制为100层
@@ -242,6 +206,9 @@ class TowerBattle:
                 # 给予基础奖励
                 score = self.config["积分奖励"]["每层基础"]
                 stone = self.config["灵石奖励"]["每层基础"]
+                if floor <= tower_info["max_floor"]:
+                    score = int(score * 0.3)
+                    stone = int(stone * 0.3)
                 total_score += score
                 total_stone += stone
             
@@ -285,14 +252,7 @@ class TowerBattle:
             tower_info["current_floor"] = max_success
             tower_info["max_floor"] = max(tower_info["max_floor"], max_success)
             tower_info["score"] += total_score
-            tower_data.save_user_tower_info(user_id, tower_info)
-            
-            # 更新排行榜
-            tower_data.update_tower_rank(
-                user_id, 
-                user_info["user_name"], 
-                max_success
-            )
+            tower_limit.save_user_tower_info(user_id, tower_info)
             
             # 给予总灵石奖励
             if total_stone > 0:
@@ -304,63 +264,7 @@ class TowerBattle:
         else:
             msg = f"连续挑战完成，成功通关第{max_floor}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
             return True, msg
-    
-    def _give_floor_reward(self, user_id, user_info, floor):
-        tower_info = tower_data.get_user_tower_info(user_id)
-        user_buff_data = UserBuffDate(user_info['user_id'])
-        sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
-        sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
-        """给予层数奖励"""
-        # 基础奖励
-        base_score = self.config["积分奖励"]["每层基础"]
-        base_stone = self.config["灵石奖励"]["每层基础"]
-        
-        total_score = base_score
-        total_stone = base_stone
-        total_score = int(total_score * (1 + sub_buff_integral_buff))
-        total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-        
-        msg = f"获得积分：{base_score}点，灵石：{number_to(base_stone)}枚"
 
-        # 每10层首通奖励
-        if floor % 10 == 0 and floor > tower_info["max_floor"]:
-            extra_score = self.config["积分奖励"]["每10层额外"]
-            extra_stone = self.config["灵石奖励"]["每10层额外"]
-            total_score += extra_score
-            total_stone += extra_stone
-            total_score = int(total_score * (1 + sub_buff_integral_buff))
-            total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            item_msg = self._give_random_item(user_id, user_info["level"])
-            exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
-            sql_message.update_exp(user_id, exp_reward)
-        
-            msg += f"\n通关第{floor}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点，额外积分：{extra_score}点"
-
-        # 每100层可重复奖励(双倍十层奖励)
-        if floor % 100 == 0:
-            extra_score = self.config["积分奖励"]["每10层额外"] * 2
-            extra_stone = self.config["灵石奖励"]["每10层额外"] * 2
-            total_score += extra_score
-            total_stone += extra_stone
-            total_score = int(total_score * (1 + sub_buff_integral_buff))
-            total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            item_msg = self._give_random_item(user_id, user_info["level"])
-            exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
-            sql_message.update_exp(user_id, exp_reward)
-        
-            msg += f"\n百层奖励：{item_msg}，修为：{number_to(exp_reward)}点，额外积分：{extra_score}点"
-
-        # 更新积分
-        tower_info = tower_data.get_user_tower_info(user_id)
-        tower_info["score"] += total_score  # 使用总积分
-        tower_data.save_user_tower_info(user_id, tower_info)
-
-        # 给予灵石
-        sql_message.update_ls(user_id, total_stone, 1)
-
-        return msg
-    
     def _give_random_item(self, user_id, user_level):
         """给予随机物品奖励"""
         # 随机选择物品类型

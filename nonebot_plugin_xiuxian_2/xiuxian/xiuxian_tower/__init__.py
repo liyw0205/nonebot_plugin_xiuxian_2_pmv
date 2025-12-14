@@ -20,8 +20,9 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.item_json import Items
-from .tower_data import tower_data, PLAYERSDATA
+from .tower_data import tower_data
 from .tower_battle import tower_battle
+from .tower_limit import tower_limit
 sql_message = XiuxianDateManage()
 items = Items()
 
@@ -30,14 +31,14 @@ tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑
 tower_continuous = on_command("连续爬塔", aliases={"通天塔速通", "速通通天塔"}, priority=5, block=True)
 tower_info = on_command("通天塔信息", priority=5, block=True)
 tower_rank = on_command("通天塔排行", priority=5, block=True)
+tower_integral_rank = on_command("通天塔积分排行", priority=5, block=True)
 tower_shop = on_command("通天塔商店", priority=5, block=True)
 tower_buy = on_command("通天塔兑换", priority=5, block=True)
-tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
 tower_help = on_command("通天塔帮助", priority=5, block=True)
 tower_boss_info = on_command("查看通天塔BOSS", aliases={"通天塔BOSS", "查看通天塔boss", "通天塔boss"}, priority=5, block=True)
 
 async def reset_tower_floors():
-    tower_data.reset_all_floors()
+    tower_limit.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
 
 @tower_boss_info.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -50,7 +51,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await tower_boss_info.finish()
     
     user_id = user_info["user_id"]
-    tower_info_data = tower_data.get_user_tower_info(user_id)
+    tower_info_data = tower_limit.get_user_tower_info(user_id)
     current_floor = tower_info_data["current_floor"]
     next_floor = current_floor + 1
     
@@ -84,11 +85,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "【通天塔信息】 - 查看当前通天塔进度\n"
         "【通天塔BOSS】 - 查看下层BOSS属性\n"
         "【通天塔排行】 - 查看通天塔排行榜\n"
+        "【通天塔积分排行】 - 查看通天塔积分排行榜\n"
         "【通天塔商店】 - 查看通天塔商店商品\n"
         "【通天塔兑换+编号】 - 兑换商店商品\n"
         "════════════\n"
         "通天塔规则说明：\n"
-        "1. 每月1号0点重置所有用户层数\n"
+        "1. 每周一0点重置所有用户层数\n"
         "2. 每周一0点重置商店限购\n"
         "3. 每10层可获得额外奖励\n"
         "════════════\n"
@@ -125,7 +127,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["单层爬塔"], 1)
         await handle_send(bot, event, msg)
         await tower_challenge.finish()
-    success, msg = await tower_battle.challenge_floor(bot, event, user_id)
+    success, msg = await challenge_floor(bot, event, user_id)
     
     await handle_send(bot, event, msg)
     log_message(user_id, msg)
@@ -169,7 +171,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         target_floors = 10  # 默认10层
     
-    success, msg = await tower_battle.challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
+    success, msg = await challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
     
     await handle_send(bot, event, msg)
     log_message(user_id, msg)
@@ -185,7 +187,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await tower_info.finish()
     
     user_id = user_info["user_id"]
-    tower_info_data = tower_data.get_user_tower_info(user_id)
+    tower_info_data = tower_limit.get_user_tower_info(user_id)
     
     msg = (
         f"\n═══  通天塔信息  ════\n"
@@ -200,27 +202,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await tower_info.finish()
 
-@tower_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """查看通天塔排行榜"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    rank_data = tower_data.get_tower_rank(50)
-    
-    if not rank_data:
-        msg = "暂无通天塔排行榜数据！"
-        await handle_send(bot, event, msg)
-        await tower_rank.finish()
-    
-    msg_list = ["\n═══  通天塔排行榜  ════"]
-    for i, (user_id, data) in enumerate(rank_data, 1):
-        msg_list.append(
-            f"第{i}名：{data['name']} - 第{data['floor']}层\n"
-            f"达成时间：{data['time']}"
-        )
-    
-    await send_msg_handler(bot, event, "通天塔排行榜", bot.self_id, msg_list)
-    await tower_rank.finish()
-
 @tower_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看通天塔商店"""
@@ -231,7 +212,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_shop.finish()
     
     user_id = user_info["user_id"]
-    tower_info = tower_data.get_user_tower_info(user_id)
+    tower_info = tower_limit.get_user_tower_info(user_id)
     shop_items = tower_data.config["商店商品"]
     
     if not shop_items:
@@ -261,13 +242,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     for item_id, item_data in current_page_items:
         item_info = items.get_data_by_item_id(item_id)
+        already_purchased = tower_limit.get_weekly_purchases(user_id, item_id)
         if item_info:  # 确保物品存在
             msg_list.append(
                 f"编号：{item_id}\n"
                 f"名称：{item_info['name']}\n"
                 f"描述：{item_info.get('desc', '暂无描述')}\n"
                 f"价格：{item_data['cost']}积分\n"
-                f"每周限购：{item_data['weekly_limit']}个\n"
+                f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
                 f"════════════"
             )
     
@@ -305,7 +287,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_buy.finish()
     
     item_data = shop_items[item_id]
-    tower_info = tower_data.get_user_tower_info(user_id)
+    tower_info = tower_limit.get_user_tower_info(user_id)
     
     # 检查物品是否存在
     item_info = items.get_data_by_item_id(item_id)
@@ -313,7 +295,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = "该物品不存在！"
         await handle_send(bot, event, msg)
         await tower_buy.finish()
-    
+
+    # 检查限购
+    already_purchased = tower_limit.get_weekly_purchases(user_id, item_id)
+    max_quantity = item_data['weekly_limit'] - already_purchased
+    if quantity > max_quantity:
+        quantity = max_quantity
+    if quantity <= 0:
+        msg = f"{item_info['name']}已到限购无法再购买！"
+        await handle_send(bot, event, msg)
+        await tower_buy.finish()
+
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
     if tower_info["score"] < total_cost:
@@ -321,21 +313,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await tower_buy.finish()
     
-    # 检查限购
-    already_purchased = tower_data.get_weekly_purchases(user_id, item_id)
-    if already_purchased + quantity > item_data["weekly_limit"]:
-        msg = (
-            f"该商品每周限购{item_data['weekly_limit']}个\n"
-            f"本周已购买{already_purchased}个\n"
-            f"无法再购买{quantity}个！"
-        )
-        await handle_send(bot, event, msg)
-        await tower_buy.finish()
-    
     # 兑换商品
     tower_info["score"] -= total_cost
-    tower_data.save_user_tower_info(user_id, tower_info)
-    tower_data.update_weekly_purchase(user_id, item_id, quantity)
+    tower_limit.save_user_tower_info(user_id, tower_info)
+    tower_limit.update_weekly_purchase(user_id, item_id, quantity)
     
     # 给予物品
     sql_message.send_back(
@@ -351,22 +332,85 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await tower_buy.finish()
 
-@tower_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """重置通天塔数据(管理员)"""
+@tower_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """通天塔排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await tower_rank.finish()
+
+    # 获取所有用户的current_floor数据
+    all_user_integral = player_data_manager.get_all_field_data("tower", "current_floor")
     
-    # 重置所有用户层数
-    for user_file in PLAYERSDATA.glob("*/tower_info.json"):
-        with open(user_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        
-        data["current_floor"] = 0
-        data["last_reset"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        with open(user_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
-    msg = "所有用户的通天塔层数已重置！"
-    await handle_send(bot, event, msg)
-    await tower_reset.finish()
+    # 生成排行榜
+    rank_msg = "✨【通天塔排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    
+    await handle_send(bot, event, rank_msg)
+    await tower_rank.finish()
+
+@tower_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """通天塔积分排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await tower_integral_rank.finish()
+
+    # 获取所有用户的score数据
+    all_user_integral = player_data_manager.get_all_field_data("tower", "score")
+    
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
+    
+    # 生成排行榜
+    rank_msg = "✨【通天塔积分排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    
+    await handle_send(bot, event, rank_msg)
+    await tower_integral_rank.finish()
+
+async def challenge_floor(bot, event, user_id, floor=None, continuous=False, target_floors=10):
+    """挑战通天塔"""
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        return False, msg
+    
+    # 检查用户状态
+    is_type, msg = check_user_type(user_id, 0)
+    if not is_type:
+        return False, msg
+
+    # 获取用户当前层数
+    tower_info = tower_limit.get_user_tower_info(user_id)
+    current_floor = tower_info["current_floor"]
+    
+    # 如果是首次挑战或指定层数
+    if floor is None:
+        floor = current_floor + 1
+    else:
+        if floor != current_floor + 1:
+            return False, f"只能挑战下一层({current_floor + 1})！"
+    
+    # 生成BOSS
+    boss_info = tower_battle.generate_tower_boss(floor)
+    
+    # 执行战斗
+    if continuous:
+        # 连续爬塔模式
+        return await tower_battle._continuous_challenge(bot, event, user_info, floor, target_floors)
+    else:
+        # 单层挑战模式
+        return await tower_battle._single_challenge(bot, event, user_info, boss_info)

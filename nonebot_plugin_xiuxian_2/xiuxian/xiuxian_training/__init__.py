@@ -42,6 +42,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "【历练商店】 - 查看历练商店商品\n"
         "【历练兑换+编号】 - 兑换商店商品\n"
         "【历练排行榜】 - 查看历练排行榜\n"
+        "【历练积分排行榜】 - 查看历练积分排行榜\n"
         "═════════════\n"
         "历练规则说明：\n"
         "1. 每小时可进行一次历练（整点刷新）\n"
@@ -385,18 +386,18 @@ def make_choice(user_id):
         training_info["progress"] = 0
         training_info["completed"] += 1
         training_info["max_progress"] = max(training_info["max_progress"], 12)
-        
+        user_rank = convert_rank(user_info["level"])[0]
+
         # 完成奖励
         exp_reward = int(user_info["exp"] * 0.01)  # 1%修为
         stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
         points_reward = 1000  # 1000成就点
-        
+        exp_reward = int(exp_reward * min(0.1 * max(user_rank // 3, 1), 1))
         sql_message.update_exp(user_id, exp_reward)
         sql_message.update_ls(user_id, stone_reward, 1)
         training_info["points"] += points_reward
         
         # 添加随机物品奖励
-        user_rank = convert_rank(user_info["level"])[0]
         min_rank = max(user_rank - 16, 16)
         item_rank = random.randint(min_rank, min_rank + 20)
         item_types = ["功法", "神通", "药材"]
