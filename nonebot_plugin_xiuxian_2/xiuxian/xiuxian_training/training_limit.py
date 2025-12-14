@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 player_data_manager = PlayerDataManager()
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 class TrainingLimit:
     def __init__(self):
