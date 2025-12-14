@@ -2070,6 +2070,7 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_data_manager.update_or_write_data(user_id, "training", "completed", completed)
         points = load_player_user3(user_id, "training_info").get("points", 0)
         player_data_manager.update_or_write_data(user_id, "training", "points", int(points))
+        player_data_manager.update_or_write_data(user_id, "training", "last_time", None)
         logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
         
