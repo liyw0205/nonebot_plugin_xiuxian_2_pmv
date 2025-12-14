@@ -189,6 +189,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     for item_id, item_data in current_page_items:
         # 动态获取物品信息
         item_info = items.get_data_by_item_id(item_id)
+        already_purchased = training_limit.get_weekly_purchases(user_id, item_id)
         if not item_info:
             continue
             
@@ -197,7 +198,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"名称：{item_info['name']}\n"
             f"描述：{item_info.get('desc', '暂无描述')}\n"
             f"价格：{item_data['cost']}成就点\n"
-            f"每周限购：{item_data['weekly_limit']}个\n"
+            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
             f"════════════"
         )
     
@@ -235,23 +236,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     item_data = shop_items[shop_id]
+    item_info = items.get_data_by_item_id(shop_id)
     training_info = training_limit.get_user_training_info(user_id)
-    
+    # 检查限购
+    already_purchased = training_limit.get_weekly_purchases(user_id, shop_id)
+    max_quantity = item_data['weekly_limit'] - already_purchased
+    if quantity > max_quantity:
+        quantity = max_quantity
+    if quantity <= 0:
+        msg = f"{item_info['name']}已到限购无法再购买！"
+        await handle_send(bot, event, msg)
+        await training_buy.finish()
+                
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
     if training_info["points"] < total_cost:
         msg = f"成就点不足！需要{total_cost}点，当前拥有{training_info['points']}点"
-        await handle_send(bot, event, msg)
-        await training_buy.finish()
-    
-    # 检查限购
-    already_purchased = training_limit.get_weekly_purchases(user_id, shop_id)
-    if already_purchased + quantity > item_data["weekly_limit"]:
-        msg = (
-            f"该商品每周限购{item_data['weekly_limit']}个\n"
-            f"本周已购买{already_purchased}个\n"
-            f"无法再购买{quantity}个！"
-        )
         await handle_send(bot, event, msg)
         await training_buy.finish()
     
@@ -261,7 +261,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     training_limit.update_weekly_purchase(user_id, shop_id, quantity)
     
     # 给予物品
-    item_info = items.get_data_by_item_id(shop_id)
     sql_message.send_back(
         user_id, 
         shop_id, 
