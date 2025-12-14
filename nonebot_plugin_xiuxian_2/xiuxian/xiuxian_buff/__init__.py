@@ -2093,7 +2093,6 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         from ..xiuxian_boss.boss_limit import boss_limit
         boss_limit._load_data(user_id)
         boss_integral = load_player_user3(user_id, "boss_fight_info").get("boss_integral", 0)
-        boss_integral = player_data_manager.get_field_data(str(user_id), "boss_limit", "integral")
         player_data_manager.update_or_write_data(user_id, "boss", "integral", boss_integral)
         logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
