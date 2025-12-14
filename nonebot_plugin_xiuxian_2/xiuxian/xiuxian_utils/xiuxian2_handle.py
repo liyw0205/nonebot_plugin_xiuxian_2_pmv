@@ -214,6 +214,40 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         c.execute(sql, (user_id, root, type, power, create_time, user_name,XiuConfig().max_stamina))
         self.conn.commit()
 
+    def today_active_users(self):
+        """获取今日活跃用户数（今天有操作记录的用户）"""
+        cur = self.conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?"
+        cur.execute(sql, (today,))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            return 0
+
+    def all_users(self):
+        """获取全部用户数"""
+        cur = self.conn.cursor()
+        sql = "SELECT COUNT(*) FROM user_xiuxian"
+        cur.execute(sql)
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            return 0
+
+    def total_items_quantity(self):
+        """获取全部用户背包的物品数量总合"""
+        cur = self.conn.cursor()
+        sql = "SELECT SUM(goods_num) FROM back"
+        cur.execute(sql)
+        result = cur.fetchone()
+        if result and result[0] is not None:
+            return result[0]
+        else:
+            return 0
+
     def get_user_info_with_id(self, user_id):
         """根据USER_ID获取用户信息,不获取功法加成"""
         cur = self.conn.cursor()
@@ -1921,6 +1955,23 @@ class TradeDataManager:
             )
         """)
         self.conn.commit()
+
+    def total_goods_quantity(self):
+        """
+        获取全部仙肆物品数量总合，忽略系统物品（user_id = 0）
+        """
+        cur = self.conn.cursor()
+        sql = """
+            SELECT SUM(quantity) AS total_quantity
+            FROM xianshi_item
+            WHERE user_id != 0
+        """
+        cur.execute(sql)
+        result = cur.fetchone()
+        if result and result[0] is not None:
+            return result[0]
+        else:
+            return 0
 
     def generate_unique_id(self):
         """生成唯一的 unique_id"""

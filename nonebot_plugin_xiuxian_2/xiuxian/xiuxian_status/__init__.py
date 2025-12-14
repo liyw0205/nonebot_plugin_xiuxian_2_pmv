@@ -17,10 +17,14 @@ from nonebot.adapters.onebot.v11 import (
     GROUP_OWNER,
     ActionFailed
 )
-from ..xiuxian_utils.utils import handle_send
+from ..xiuxian_utils.utils import handle_send, number_to
 from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, TradeDataManager
+
+sql_message = XiuxianDateManage()
+trade = TradeDataManager()
 
 bot_info_cmd = on_command("bot信息", permission=SUPERUSER, priority=5, block=True)
 sys_info_cmd = on_command("系统信息", permission=SUPERUSER, priority=5, block=True)
@@ -140,7 +144,10 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """获取Bot信息"""
     is_group = isinstance(event, GroupMessageEvent)
     group_id = str(event.group_id) if is_group else "私聊"
-    
+    all_users = sql_message.all_users()
+    active_users = sql_message.today_active_users()
+    total_items_quantity = sql_message.total_items_quantity()
+    total_goods_quantity = trade.total_goods_quantity()
     # 获取Bot运行时间
     try:
         current_time = time.time()
@@ -164,7 +171,11 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg += "\n".join(f"{k}: {v}" for k, v in bot_info.items())
     msg += "\n\n【⏱ 运行时间】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_uptime.items())
-    
+    msg += "\n\n【🧘 修仙数据】\n"
+    msg += f"全部用户：{all_users}"
+    msg += f"\n活跃用户：{active_users}"
+    msg += f"\n用户物品：{total_items_quantity}({number_to(total_items_quantity)})"
+    msg += f"\n仙肆物品：{total_goods_quantity}({number_to(total_goods_quantity)})"
     return msg
 
 async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
