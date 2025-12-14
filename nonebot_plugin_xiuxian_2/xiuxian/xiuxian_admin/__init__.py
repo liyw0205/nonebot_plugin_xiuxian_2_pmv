@@ -59,6 +59,8 @@ clear_xiangyuan = on_command("清空仙缘", permission=SUPERUSER, priority=5, b
 xiuxian_novice = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
 create_new_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
 do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
+training_reset = on_command("重置历练", permission=SUPERUSER, priority=6, block=True)
+boss_reset = on_command("重置世界BOSS", permission=SUPERUSER, priority=6, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -706,6 +708,24 @@ async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await do_work_cz.finish()
 
+@training_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置所有用户的历练"""
+    from ..xiuxian_training import training_reset_limits
+    training_reset_limits()
+    msg = "用户历练状态重置成功"
+    await handle_send(bot, event, msg)
+    await training_reset.finish()
+
+@boss_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重置所有用户的世界BOSS额度"""
+    from ..xiuxian_boss import set_boss_limits_reset
+    await set_boss_limits_reset()
+    msg = "用户世界BOSS额度重置成功"
+    await handle_send(bot, event, msg)
+    await boss_reset.finish()
+
 @super_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙管理帮助"""
@@ -793,6 +813,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 ⚡ 功能管理：
 → 清空仙缘 - 清除所有未领取仙缘
+→ 重置世界BOSS - 重置所以玩家世界BOSS额度
 → 重置悬赏令 - 重置所以玩家悬赏令
 → 重置通天塔 - 重置玩家通天塔层数
 → 重置历练 - 重置当前历练状态

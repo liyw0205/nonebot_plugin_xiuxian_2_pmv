@@ -110,6 +110,7 @@ __boss_help__2 = f"""
 🔹🔹 管理指令：
   ▶ 天罚世界BOSS [编号] - 删除指定BOSS
   ▶ 天罚全部世界BOSS - 清空所有BOSS
+  ▶ 重置世界BOSS - 重置所有玩家世界BOSS额度
 """.strip()
 
 @DRIVER.on_startup
@@ -1034,7 +1035,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await boss_integral_rank.finish()
 
 def get_user_boss_fight_info(user_id):
-    boss_integral = player_data_manager.get_field_data(str(user_id), "integral", "boss_integral")
+    boss_integral = player_data_manager.get_field_data(str(user_id), "boss_limit", "integral")
     if boss_integral is None:
         boss_integral = 0
     user_boss_fight_info = {"boss_integral": boss_integral}
@@ -1042,45 +1043,7 @@ def get_user_boss_fight_info(user_id):
 
 def save_user_boss_fight_info(user_id, data):
     user_id = str(user_id)
-    player_data_manager.update_or_write_data(user_id, "integral", "boss_integral", data["boss_integral"])
-
-def get_dict_type_rate(data_dict):
-    """根据字典内概率,返回字典key"""
-    temp_dict = {}
-    for i, v in data_dict.items():
-        try:
-            temp_dict[i] = v["type_rate"]
-        except:
-            continue
-    key = OtherSet().calculated(temp_dict)
-    return key
-
-def get_goods_type():
-    data_dict = BOSSDLW['宝物']
-    return get_dict_type_rate(data_dict)
-
-def get_story_type():
-    """根据概率返回事件类型"""
-    data_dict = BOSSDLW
-    return get_dict_type_rate(data_dict)
-
-BOSSDLW ={"衣以候": "衣以侯布下了禁制镜花水月，",
-    "金凰儿": "金凰儿使用了神通：金凰天火罩！",
-    "九寒": "九寒使用了神通：寒冰八脉！",
-    "莫女": "莫女使用了神通：圣灯启语诀！",
-    "术方": "术方使用了神通：天罡咒！",
-    "卫起": "卫起使用了神通：雷公铸骨！",
-    "血枫": "血枫使用了神通：混世魔身！",
-    "以向": "以向使用了神通：云床九练！",
-    "砂鲛": "不说了！开鳖！",
-    "神风王": "不说了！开鳖！",
-    "鲲鹏": "鲲鹏使用了神通：逍遥游！",
-    "天龙": "天龙使用了神通：真龙九变！",
-    "历飞雨": "厉飞雨使用了神通：天煞震狱功！",
-    "外道贩卖鬼": "不说了！开鳖！",
-    "元磁道人": "元磁道人使用了法宝：元磁神山！",
-    "散发着威压的尸体": "尸体周围爆发了出强烈的罡气！"
-    }
+    player_data_manager.update_or_write_data(user_id, "boss_limit", "integral", data["boss_integral"])
 
 BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物" / "boss掉落物.json"
 

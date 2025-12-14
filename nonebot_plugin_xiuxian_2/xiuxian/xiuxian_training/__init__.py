@@ -9,10 +9,16 @@ from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, Private
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
 from ..xiuxian_utils.item_json import Items
-from .training_data import training_data, PLAYERSDATA
+from .training_data import training_data
+from .training_limit import training_limit
+from .training_events import training_events
+from ..xiuxian_config import convert_rank
+from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.utils import number_to
 
+player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
 # 定义命令
@@ -20,9 +26,9 @@ training_start = on_command("开始历练", aliases={"历练开始"}, priority=5
 training_status = on_command("历练状态", priority=5, block=True)
 training_shop = on_command("历练商店", priority=5, block=True)
 training_buy = on_command("历练兑换", priority=5, block=True)
-training_rank = on_command("历练排行榜", priority=5, block=True)
-training_reset = on_command("重置历练", permission=SUPERUSER, priority=5, block=True)
 training_help = on_command("历练帮助", priority=5, block=True)
+training_rank = on_command("历练排行榜", priority=5, block=True)
+training_integral_rank = on_command("历练积分排行榜", priority=5, block=True)
 
 @training_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -70,7 +76,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 检查历练时间 - 同小时内不可重复历练
-    training_info = training_data.get_user_training_info(user_id)
+    training_info = training_limit.get_user_training_info(user_id)
     now = datetime.now()
     last_time = training_info["last_time"]
     
@@ -82,7 +88,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
-    success, result = training_data.make_choice(user_id)
+    success, result = make_choice(user_id)
     
     if not success:
         await handle_send(bot, event, result)
@@ -104,7 +110,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_status.finish()
     
     user_id = user_info["user_id"]
-    training_info = training_data.get_user_training_info(user_id)
+    training_info = training_limit.get_user_training_info(user_id)
     now = datetime.now()
     
     # 计算下次可历练时间
@@ -152,7 +158,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_shop.finish()
     
     user_id = user_info["user_id"]
-    training_info = training_data.get_user_training_info(user_id)
+    training_info = training_limit.get_user_training_info(user_id)
     
     if not shop_items:
         msg = "历练商店暂无商品！"
@@ -229,7 +235,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     item_data = shop_items[shop_id]
-    training_info = training_data.get_user_training_info(user_id)
+    training_info = training_limit.get_user_training_info(user_id)
     
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
@@ -239,7 +245,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     # 检查限购
-    already_purchased = training_data.get_weekly_purchases(user_id, shop_id)
+    already_purchased = training_limit.get_weekly_purchases(user_id, shop_id)
     if already_purchased + quantity > item_data["weekly_limit"]:
         msg = (
             f"该商品每周限购{item_data['weekly_limit']}个\n"
@@ -251,8 +257,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     # 兑换商品
     training_info["points"] -= total_cost
-    training_data.save_user_training_info(user_id, training_info)
-    training_data.update_weekly_purchase(user_id, shop_id, quantity)
+    training_limit.save_user_training_info(user_id, training_info)
+    training_limit.update_weekly_purchase(user_id, shop_id, quantity)
     
     # 给予物品
     item_info = items.get_data_by_item_id(shop_id)
@@ -270,45 +276,156 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await training_buy.finish()
 
 @training_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """查看历练排行榜"""
+async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """历练排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    rank_data = training_data.get_training_rank(50)
-    
-    if not rank_data:
-        msg = "暂无历练排行榜数据！"
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
         await handle_send(bot, event, msg)
         await training_rank.finish()
+
+    # 获取所有用户的completed数据
+    all_user_integral = player_data_manager.get_all_field_data("training", "completed")
     
-    msg_list = ["\n═══  历练排行榜  ═════"]
-    for i, (user_id, data) in enumerate(rank_data, 1):
-        msg_list.append(
-            f"第{i}名：{data['name']} - 完成{data['completed']}次"
-        )
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
-    await send_msg_handler(bot, event, "历练排行榜", bot.self_id, msg_list)
+    # 生成排行榜
+    rank_msg = "✨【历练排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    
+    await handle_send(bot, event, rank_msg)
     await training_rank.finish()
 
-@training_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """重置历练数据(管理员)"""
+@training_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """历练排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await training_integral_rank.finish()
+
+    # 获取所有用户的completed数据
+    all_user_integral = player_data_manager.get_all_field_data("training", "completed")
     
-    # 重置所有用户数据
-    for user_file in PLAYERSDATA.glob("*/training_info.json"):
-        with open(user_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        
-        data["progress"] = 0
-        data["last_time"] = None
-        data["points"] = 0
-        data["completed"] = 0
-        data["max_progress"] = 0
-        data["last_event"] = ""
-        
-        with open(user_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
-    msg = "所有用户的历练数据已重置！"
-    await handle_send(bot, event, msg)
-    await training_reset.finish()
+    # 生成排行榜
+    rank_msg = "✨【历练积分排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    
+    await handle_send(bot, event, rank_msg)
+    await training_integral_rank.finish()
+
+def make_choice(user_id):
+    """进行历练选择"""
+    training_info = training_limit.get_user_training_info(user_id)
+    user_info = sql_message.get_user_info_with_id(user_id)
+    now = datetime.now()
+    
+    # 记录本次历练时间
+    training_info["last_time"] = now
+    
+    # weights = {  # 等价于原版
+    #     "progress_plus_1": 33,
+    #     "progress_plus_2": 20,
+    #     "nothing": 27,
+    #     "progress_minus_1": 13,
+    #     "progress_minus_2": 7
+    # }
+    weights = {
+        "progress_plus_1": 35,
+        "progress_plus_2": 30,
+        "nothing": 20,
+        "progress_minus_1": 10,
+        "progress_minus_2": 5,
+    }
+    # 随机选择事件
+    event_type = random.choices(list(weights.keys()), weights=list(weights.values()))[0]
+    
+    # 调用事件处理器，传入用户信息
+    event_result = training_events.handle_event(user_id, user_info, event_type)
+    
+    # 更新进度 - 默认+1
+    base_progress = 1
+    
+    if "plus_1" in event_type:  # 小奖励: +1 (总+2)
+        progress_change = base_progress + 1
+    elif "plus_2" in event_type:  # 大奖励: +1 (总+2)
+        progress_change = base_progress + 1
+    elif "minus_1" in event_type:  # 小惩罚: -1 (总0)
+        progress_change = base_progress - 1
+    elif "minus_2" in event_type:  # 大惩罚: -2 (总-1)
+        progress_change = base_progress - 2
+    else:  # nothing: 0 (总+1)
+        progress_change = base_progress
+    
+    training_info["progress"] = max(0, training_info["progress"] + progress_change)
+    
+    # 处理事件结果
+    if isinstance(event_result, dict):
+        # 更新成就点
+        if event_result.get("type") == "points":
+            training_info["points"] += event_result["amount"]
+        
+        # 记录最后事件
+        training_info["last_event"] = event_result.get("message", "")
+    else:
+        training_info["last_event"] = str(event_result)
+    
+    # 检查是否完成一个进程
+    if training_info["progress"] >= 12:
+        training_info["progress"] = 0
+        training_info["completed"] += 1
+        training_info["max_progress"] = max(training_info["max_progress"], 12)
+        
+        # 完成奖励
+        exp_reward = int(user_info["exp"] * 0.01)  # 1%修为
+        stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
+        points_reward = 1000  # 1000成就点
+        
+        sql_message.update_exp(user_id, exp_reward)
+        sql_message.update_ls(user_id, stone_reward, 1)
+        training_info["points"] += points_reward
+        
+        # 添加随机物品奖励
+        user_rank = convert_rank(user_info["level"])[0]
+        min_rank = max(user_rank - 16, 16)
+        item_rank = random.randint(min_rank, min_rank + 20)
+        item_types = ["功法", "神通", "药材"]
+        item_type = random.choice(item_types)
+        item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+        
+        if item_id_list:
+            item_id = random.choice(item_id_list)
+            item_info = items.get_data_by_item_id(item_id)
+            sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
+            item_reward_msg = f"\n随机物品：{item_info['level']}:{item_info['name']}"
+        else:
+            item_reward_msg = ""
+            
+        training_info["last_event"] += (
+            f"\n恭喜道友完成一个历练进程！获得：\n"
+            f"修为+{number_to(exp_reward)}\n"
+            f"灵石+{number_to(stone_reward)}\n"
+            f"成就点+{points_reward}{item_reward_msg}"
+        )
+    
+    # 更新最高进度
+    training_info["max_progress"] = max(training_info["max_progress"], training_info["progress"])
+    
+    training_limit.save_user_training_info(user_id, training_info)
+    
+    return True, training_info["last_event"]
+
+def training_reset_limits():
+    training_limit.reset_limits()
+    

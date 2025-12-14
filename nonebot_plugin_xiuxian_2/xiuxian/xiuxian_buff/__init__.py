@@ -38,7 +38,7 @@ from ..xiuxian_sect import isUserTask, userstask
 from ..xiuxian_sect.sectconfig import get_config
 from ..xiuxian_rift import group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
-from ..xiuxian_training.training_data import training_data
+from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from .two_exp_cd import two_exp_cd
 
@@ -1639,7 +1639,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         rift_status = "无秘境"
 
     # 11. 获取历练状态信息
-    training_info = training_data.get_user_training_info(user_id)
+    training_info = training_limit.get_user_training_info(user_id)
     now = datetime.now()
     
     if training_info["last_time"]:
@@ -2053,5 +2053,23 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         boss_integral = load_player_user3(user_id, "boss_fight_info").get("boss_integral", 0)
         player_data_manager.update_or_write_data(user_id, "integral", "boss_integral", boss_integral)
         logger.info(f"更新BOSS积分: {user_id}")
+    await handle_send(bot, event, f"同步完成，共：{user_num}")
+
+migrate_data2 = on_fullmatch("player数据同步2", priority=25, block=True)
+@migrate_data2.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    user_ids = get_all_user_ids()
+    user_num = 0
+    for user_id in user_ids:
+        user_num += 1
+        progress = load_player_user3(user_id, "training_info").get("progress", 0)
+        player_data_manager.update_or_write_data(user_id, "training", "progress", progress)
+        max_progress = load_player_user3(user_id, "training_info").get("max_progress", 0)
+        player_data_manager.update_or_write_data(user_id, "training", "max_progress", max_progress)
+        completed = load_player_user3(user_id, "training_info").get("completed", 0)
+        player_data_manager.update_or_write_data(user_id, "training", "completed", completed)
+        points = load_player_user3(user_id, "training_info").get("points", 0)
+        player_data_manager.update_or_write_data(user_id, "training", "points", int(points))
+        logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
         
