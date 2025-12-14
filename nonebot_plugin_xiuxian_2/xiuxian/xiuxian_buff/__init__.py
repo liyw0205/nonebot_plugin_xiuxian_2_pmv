@@ -377,15 +377,15 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 def load_player_user(user_id):
     """加载用户数据，如果不存在或为空，返回默认数据"""
     user_id_str = str(user_id)
-    status = player_data_manager.get_field_data(user_id_str, "two_exp_protect", "status")
+    status = player_data_manager.get_field_data(user_id_str, "status", "two_exp_protect")
     if status is None:
-        status = False  # 默认值为 False
-    return {"two_exp_protect": status}
+        status = "off"  # 默认值为 False
+    return status
 
-def save_player_user(user_id, data):
+def save_player_user(user_id, status):
     """保存用户数据，确保目录存在"""
     user_id_str = str(user_id)
-    player_data_manager.update_or_write_data(user_id_str, "two_exp_protect", "status", data["two_exp_protect"])
+    player_data_manager.update_or_write_data(user_id_str, "status", "two_exp_protect", status)
 
 @two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10)])
 async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -506,16 +506,13 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await two_exp_invite.finish()
 
     # 检查对方的双修保护状态
-    user_data = load_player_user(two_qq)
-    if user_data is None:
-        user_data = {}
-    protection_status = user_data.get('two_exp_protect', False)
+    protection_status = load_player_user(two_qq)
 
     if protection_status == "refusal":
         msg = "对方已设置拒绝所有双修邀请，无法进行双修！"
         await handle_send(bot, event, msg)
         await two_exp_invite.finish()
-    if protection_status:
+    elif protection_status == "on":
         # 对方开启保护，需要发送邀请
         # 检查邀请是否已存在（再次确认，防止并发）
         if str(two_qq) in invite_cache:
@@ -861,26 +858,22 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip().lower()
     
-    user_data = load_player_user(user_id)
-    if user_data is None:
-        user_data = {}
-    
     # 默认双修保护状态为关闭
-    current_status = user_data.get('two_exp_protect', False)
+    current_status = load_player_user(user_id)
     
     if arg in ['开启', 'on']:
-        user_data['two_exp_protect'] = True
+        current_status = "on"
         msg = "双修保护已开启！其他玩家可以向你发送双修邀请。"
     elif arg in ['关闭', 'off']:
-        user_data['two_exp_protect'] = False
+        current_status = "off"
         msg = "双修保护已关闭！其他玩家可以直接和你双修。"
     elif arg in ['拒绝', 'refusal']:
-        user_data['two_exp_protect'] = "refusal"
+        current_status = "refusal"
         msg = "双修保护已设置为拒绝！其他玩家无法与你双修。"
     elif arg in ['状态', 'status']:
         status_map = {
-            True: "已开启 (需要邀请)",
-            False: "已关闭 (允许直接双修)", 
+            "on": "已开启 (需要邀请)",
+            "off": "已关闭 (允许直接双修)", 
             "refusal": "已拒绝 (拒绝所有双修)"
         }
         current_status_display = status_map.get(current_status, "已关闭 (允许直接双修)")
@@ -893,7 +886,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await two_exp_protect.finish()
     
     # 保存用户数据
-    save_player_user(user_id, user_data)
+    save_player_user(user_id, current_status)
     await handle_send(bot, event, msg)
     await two_exp_protect.finish()
 
@@ -1215,16 +1208,12 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_info = sql_message.get_user_info_with_id(user_id)
     
-    user_data = load_player_user(user_id)
-    if user_data is None:
-        user_data = {}
-    
-    current_status = user_data.get('two_exp_protect', False)
+    current_status = load_player_user(user_id)
     
     # 状态映射
     status_map = {
-        True: "开启",
-        False: "关闭", 
+        "on": "开启",
+        "off": "关闭", 
         "refusal": "拒绝"
     }
     current_status_display = status_map.get(current_status, "关闭")
@@ -2010,22 +1999,6 @@ def get_all_user_ids():
             user_ids.append(user_id)
     return user_ids
 
-def load_player_user2(user_id):
-    """加载用户数据，如果文件不存在或为空，返回默认数据"""
-    user_file = PLAYERSDATA / str(user_id) / "user_data.json"
-    
-    if not user_file.exists():
-        return {}
-    
-    try:
-        with open(user_file, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            if not content:
-                return {}
-            return json.loads(content)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
-
 def load_partner2(user_id):
     """加载用户道侣数据，如果文件不存在或为空，返回默认数据"""
     partner_file = PLAYERSDATA / str(user_id) / "partner.json"
@@ -2065,11 +2038,6 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_num = 0
     for user_id in user_ids:
         user_num += 1
-        user_data = load_player_user2(user_id)
-        if user_data:
-            protection_status = user_data.get('two_exp_protect', False)
-            player_data_manager.update_or_write_data(user_id, "two_exp_protect", "status", protection_status)
-            logger.info(f"更新双修: {user_id}")
         
         # 加载灵田数据
         mix_elixir_info = load_player_user3(user_id, "mix_elixir_info")
