@@ -78,7 +78,7 @@ my_partner = on_command("我的道侣", priority=5, block=True)
 bind_partner = on_command("绑定道侣", aliases={"结为道侣"}, priority=5, block=True)
 agree_bind = on_command("同意道侣", aliases={"接受道侣"}, priority=5, block=True)
 unbind_partner = on_command("解除道侣", aliases={"断绝关系"}, priority=5, block=True)
-
+partner_rank = on_command("道侣排行榜", priority=5, block=True)
 __buff_help__ = f"""
 【修仙功法系统】📜
 
@@ -1890,6 +1890,18 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     await unbind_partner.finish()
 
+def get_affection_level(affection):
+    affection = safe_int(affection)
+    if affection >= 10000:
+        affection_level = "💖 深情厚谊"
+    elif affection >= 5000:
+        affection_level = "💕 心有灵犀"
+    elif affection >= 1000:
+        affection_level = "💗 初识情愫"
+    else:
+        affection_level = "💓 缘分伊始"
+    return affection_level
+
 @my_partner.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
@@ -1915,14 +1927,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
     bound_days = (datetime.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
-    if affection >= 10000:
-        affection_level = "💖 深情厚谊"
-    elif affection >= 5000:
-        affection_level = "💕 心有灵犀"
-    elif affection >= 1000:
-        affection_level = "💗 初识情愫"
-    else:
-        affection_level = "💓 缘分伊始"
+    affection_level = get_affection_level(affection)
     msg = f"""💕 我的道侣信息 💕
 🏮 道侣道号：{partner_info['user_name']}
 🌟 当前境界：{sql_message.get_user_info_with_id(partner_user_id)['level']}
@@ -1959,6 +1964,41 @@ def save_partner(user_id, data):
     player_data_manager.update_or_write_data(str(user_id), "partner", "partner_id", data.get("partner_id", None))
     player_data_manager.update_or_write_data(str(user_id), "partner", "bind_time", data.get("bind_time", None))
     player_data_manager.update_or_write_data(str(user_id), "partner", "affection", data.get("affection", None))
+
+def safe_int(value):
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+@partner_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """道侣排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await partner_rank.finish()
+
+    # 获取所有用户的affection数据
+    all_user_integral = player_data_manager.get_all_field_data("partner", "affection")
+    
+    # 排序数据
+    sorted_integral = sorted(all_user_integral, key=lambda x: safe_int(x[1]), reverse=True)
+    
+    # 生成排行榜
+    rank_msg = "✨【道侣排行榜】✨\n"
+    rank_msg += "-----------------------------------\n"
+    for i, (user_id, affection) in enumerate(sorted_integral[:50], start=1):
+        user_info = sql_message.get_user_info_with_id(user_id)
+        partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")
+        partner_info = sql_message.get_user_info_with_id(partner_id)
+        if partner_info is None:
+            continue
+        rank_msg += f"第{i}位 | {user_info['user_name']}&{partner_info['user_name']}\n亲密度：{number_to(affection)}\n"
+    
+    await handle_send(bot, event, rank_msg)
+    await partner_rank.finish()
 
 from nonebot.log import logger
 # 获取所有用户的 ID

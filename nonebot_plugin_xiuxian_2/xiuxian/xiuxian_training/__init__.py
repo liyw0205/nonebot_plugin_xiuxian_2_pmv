@@ -302,7 +302,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
 @training_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """历练排行榜"""
+    """历练积分排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -310,7 +310,7 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await training_integral_rank.finish()
 
     # 获取所有用户的completed数据
-    all_user_integral = player_data_manager.get_all_field_data("training", "completed")
+    all_user_integral = player_data_manager.get_all_field_data("training", "points")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
