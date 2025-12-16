@@ -352,7 +352,6 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
             await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
             return
         release_tag = latest_release['tag_name']
-        await handle_send(bot, event, f"发现新版本 {release_tag}，开始更新...")
     else:
         # 指定版本号
         release_tag = action
@@ -360,10 +359,12 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
         if not recent_releases:
             await handle_send(bot, event, "无法获取网络版本信息。")
             return
-        if release_tag not in recent_releases:
-            await handle_send(bot, event, "输入的版本号不正确\n请通过【版本查询】\n获取最近的发布版本")
+        release_tags = [release['tag_name'] for release in recent_releases]
+        if release_tag not in release_tags:
+            await handle_send(bot, event, f"输入的版本号{release_tag}不正确\n请通过【版本查询】\n获取最近的发布版本")
             return
 
+    await handle_send(bot, event, f"更新版本 {release_tag}，开始更新...")
     # 执行更新流程
     success, result = update_manager.perform_update_with_backup(release_tag)
     if success:
