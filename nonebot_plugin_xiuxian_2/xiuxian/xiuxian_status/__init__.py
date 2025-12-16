@@ -185,7 +185,7 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg += f"全部用户：{all_users}"
     msg += f"\n活跃用户：{active_users}"
     msg += f"\n用户物品：{total_items_quantity}({number_to(total_items_quantity)})"
-    msg += f"\n仙肆物品：{total_goods_quantity}({number_to(total_goods_quantity)})"
+    msg += f"\n交易物品：{total_goods_quantity}({number_to(total_goods_quantity)})"
     return msg
 
 async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
@@ -331,7 +331,7 @@ async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessag
     latest_release, message = update_manager.check_update()
     if latest_release:
         release_tag = latest_release['tag_name']
-        await handle_send(bot, event, f"发现新版本 {release_tag}，当前版本 {update_manager.get_current_version()}。建议进行更新。")
+        await handle_send(bot, event, f"发现新版本 {release_tag}\n当前版本 {update_manager.get_current_version()}\n建议【查看日志】后更新")
     else:
         await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
 
@@ -345,7 +345,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
 
     action = str(args[0])
 
-    if action == "latest":
+    if action in ["latest", "update", "最新"]:
         # 检查是否有更新
         latest_release, message = update_manager.check_update()
         if not latest_release:
@@ -367,6 +367,6 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
     # 执行更新流程
     success, result = update_manager.perform_update_with_backup(release_tag)
     if success:
-        await handle_send(bot, event, f"版本更新成功！当前版本：{result}")
+        await handle_send(bot, event, f"版本更新成功！当前版本：{update_manager.get_current_version()}")
     else:
         await handle_send(bot, event, f"版本更新失败：{result}")
