@@ -235,12 +235,12 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     try:
         price = max(int(args[1]), MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
-        quantity = min(quantity, MAX_QUANTITY)
+        quantity = max(1, min(quantity, MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
-    
+
     # 检查背包是否有该物品
     back_msg = sql_message.get_back_msg(user_id)
     goods_info = None
@@ -1300,12 +1300,12 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg)
             await guishi_qiugou.finish()
         quantity = int(args[2]) if len(args) > 2 else 1
-        quantity = min(quantity, GUISHI_MAX_QUANTITY)
+        quantity = max(1, min(quantity, GUISHI_MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await guishi_qiugou.finish()
-    
+
     # 检查禁止交易的物品
     goods_id = None
     for k, v in items.items.items():
@@ -1410,12 +1410,12 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg)
             await guishi_baitan.finish()
         quantity = int(args[2]) if len(args) > 2 else 1
-        quantity = min(quantity, GUISHI_MAX_QUANTITY)
+        quantity = max(1, min(quantity, GUISHI_MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
-    
+
     # 检查禁止交易的物品
     goods_id = None
     for k, v in items.items.items():
