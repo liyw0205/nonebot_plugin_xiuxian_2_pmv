@@ -3,7 +3,7 @@ import psutil
 import asyncio
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from nonebot import on_command, __version__ as nb_version
 from nonebot.permission import SUPERUSER
 from nonebot.params import CommandArg
@@ -283,6 +283,8 @@ async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 @status_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
+更新日志 - 获取版本日志
+
 版本更新 - 指定版本号更新/latest：更新最新版本
 
 版本查询 - 获取最近发布的版本
@@ -299,6 +301,14 @@ ping测试 - 测试网络延迟
 """
     await handle_send(bot, event, msg)
 
+def utc_time(published_at):
+    utc_time_str = published_at.replace('Z', '+00:00')
+    utc_time = datetime.fromisoformat(utc_time_str)
+    beijing_timezone = timezone(timedelta(hours=8))
+    beijing_time = utc_time.astimezone(beijing_timezone)
+    formatted_beijing_time = beijing_time.strftime('%Y-%m-%d %H:%M:%S')
+    return formatted_beijing_time
+
 @version_query_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """版本查询命令"""
@@ -308,13 +318,11 @@ async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     msg = "\n☆------版本查询------☆\n"
-    msg += "最近发布的版本：\n"
+    msg += "最近发布的版本：\n\n"
     for release in recent_releases:
-        msg += "☆----------------------☆\n"
-        msg += f"版本号: {release['tag_name']}\n\n"
-        msg += f"发布时间: {release['published_at']}\n"
-        msg += f"描述: {release['body']}\n" if release['body'] else "描述: 无\n"
-    
+        msg += f"版本号: {release['tag_name']}\n"
+        msg += f"发布时间: {utc_time(release['published_at'])}\n\n"
+    msg += "通过【更新日志】查看详情"
     await handle_send(bot, event, msg)
 
 @check_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
