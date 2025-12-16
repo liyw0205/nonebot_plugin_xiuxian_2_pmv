@@ -1928,7 +1928,6 @@ driver = get_driver()
 async def close_db():
     XiuxianDateManage().close()
 
-
 # 这里是交易数据部分
 class TradeDataManager:
     def __init__(self):
@@ -1954,17 +1953,39 @@ class TradeDataManager:
                 quantity INTEGER
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS guishi_item (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                item_id INTEGER,
+                item_name TEXT,
+                item_type TEXT, -- '求购' 或 '摆摊'
+                price INTEGER,
+                quantity INTEGER,
+                filled_quantity INTEGER DEFAULT 0
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS guishi_info (
+                user_id INTEGER PRIMARY KEY,
+                stored_stone INTEGER DEFAULT 0,
+                items TEXT DEFAULT '{}'
+            )
+        """)
         self.conn.commit()
 
     def total_goods_quantity(self):
         """
-        获取全部仙肆物品数量总合，忽略系统物品（user_id = 0）
+        获取全部仙肆物品数量总合，包括求购和摆摊类
         """
         cur = self.conn.cursor()
         sql = """
             SELECT SUM(quantity) AS total_quantity
-            FROM xianshi_item
-            WHERE user_id != 0
+            FROM (
+                SELECT quantity FROM xianshi_item WHERE user_id != 0
+                UNION ALL
+                SELECT quantity FROM guishi_item WHERE user_id != 0 AND item_type = '摆摊'
+            )
         """
         cur.execute(sql)
         result = cur.fetchone()
@@ -1989,6 +2010,9 @@ class TradeDataManager:
         """检查 unique_id 是否已经存在于数据库中"""
         cur = self.conn.cursor()
         cur.execute("SELECT id FROM xianshi_item WHERE id = ?", (unique_id,))
+        if cur.fetchone():
+            return True
+        cur.execute("SELECT id FROM guishi_item WHERE id = ?", (unique_id,))
         return cur.fetchone() is not None
 
     def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
@@ -2001,6 +2025,17 @@ class TradeDataManager:
         """
         self.conn.execute(sql, (unique_id, user_id, goods_id, name, type, price, quantity))
         self.conn.commit()
+
+    def add_guishi_order(self, user_id, item_id, item_name, item_type, price, quantity):
+        """新增鬼市求购订单/摊位"""
+        unique_id = self.generate_unique_id()
+        sql = f"""
+            INSERT INTO guishi_item (id, user_id, item_id, item_name, item_type, price, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        self.conn.execute(sql, (unique_id, user_id, item_id, item_name, item_type, price, quantity))
+        self.conn.commit()
+        return unique_id
 
     def remove_xianshi_item(self, item_id):
         """删除仙肆物品（先数量-1，如果数量-1之后等于0才删除，不是0则是更新数量）"""
@@ -2033,10 +2068,16 @@ class TradeDataManager:
         self.conn.commit()
         return True
 
-    def remove_xianshi_all_item(self, item_id):
-        """删除仙肆物品"""
-        sql = "DELETE FROM xianshi_item WHERE id = ?"
-        self.conn.execute(sql, (item_id,))
+    def remove_guishi_order(self, order_id):
+        """删除鬼市求购订单/摊位"""
+        sql = "DELETE FROM guishi_item WHERE id = ?"
+        self.conn.execute(sql, (order_id,))
+        self.conn.commit()
+
+    def increase_filled_quantity(self, order_id, amount):
+        """增加鬼市求购订单已购买数/摊位已售出数"""
+        sql = "UPDATE guishi_item SET filled_quantity = filled_quantity + ? WHERE id = ?"
+        self.conn.execute(sql, (amount, order_id))
         self.conn.commit()
 
     def get_xianshi_items(self, user_id=None, type=None, id=None, name=None):
@@ -2076,6 +2117,121 @@ class TradeDataManager:
             item_dict = dict(zip(columns, row))
             results.append(item_dict)
         return results
+
+    def get_guishi_orders(self, user_id=None, name=None, type=None, id=None):
+        """获取鬼市订单"""
+        conditions = []
+        params = []
+        if user_id:
+            conditions.append("user_id = ?")
+            params.append(user_id)
+        if name:
+            conditions.append("item_name = ?")
+            params.append(name)
+        if type:
+            conditions.append("item_type = ?")
+            params.append(type)
+        if id:
+            conditions.append("id = ?")
+            params.append(id)
+
+        query = "SELECT * FROM guishi_item"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        cur = self.conn.cursor()
+        cur.execute(query, params)
+        result = cur.fetchall()
+        if not result:
+            return None
+        
+        columns = [column[0] for column in cur.description]
+        results = []
+        for row in result:
+            item_dict = dict(zip(columns, row))
+            results.append(item_dict)
+        return results
+
+    def get_stored_stone(self, user_id):
+        """获取暂存灵石"""
+        cur = self.conn.cursor()
+        cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+        return result[0] if result else 0
+
+    def get_stored_items(self, user_id):
+        """获取暂存物品"""
+        cur = self.conn.cursor()
+        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+        if result:
+            return json.loads(result[0]) if result[0] else {}
+        return {}
+
+    def add_stored_item(self, user_id, item_id, quantity=1):
+        """
+        增加暂存物品，如果存在则更新数量，不存在则新增
+        :param user_id: 用户ID
+        :param item_id: 物品ID
+        :param quantity: 物品数量，默认为1
+        """
+        # 将数量转换为整数
+        quantity = int(quantity)
+        
+        # 获取当前的暂存物品信息
+        current_items = self.get_stored_items(user_id)
+        current_sum = 0
+        for current_id, current in current_items.items():
+            if str(current_id) == str(item_id):
+               current_sum = current
+        
+        # 更新数量
+        current_items[item_id] = current_sum + quantity
+        
+        # 序列化物品信息
+        items_json = json.dumps(current_items)
+        
+        # 更新或插入记录
+        cur = self.conn.cursor()
+        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+        
+        if result:
+            # 更新现有记录
+            sql = "UPDATE guishi_info SET items = ? WHERE user_id = ?"
+            cur.execute(sql, (items_json, user_id))
+        else:
+            # 插入新记录
+            sql = "INSERT INTO guishi_info (user_id, items) VALUES (?, ?)"
+            cur.execute(sql, (user_id, items_json))
+        
+        self.conn.commit()
+       
+    def remove_stored_item(self, user_id, item_id):
+        """删除暂存物品"""
+        cur = self.conn.cursor()
+        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+        if result:
+            items = json.loads(result[0]) if result[0] else {}
+            if item_id in items:
+                del items[item_id]
+                sql = "UPDATE guishi_info SET items = ? WHERE user_id = ?"
+                cur.execute(sql, (json.dumps(items), user_id))
+                self.conn.commit()
+
+    def update_stored_stone(self, user_id, amount, operation):
+        """更新暂存灵石"""
+        cur = self.conn.cursor()
+        if operation == 'add':
+            sql = "UPDATE guishi_info SET stored_stone = stored_stone + ? WHERE user_id = ?"
+        elif operation == 'subtract':
+            sql = "UPDATE guishi_info SET stored_stone = stored_stone - ? WHERE user_id = ?"
+        cur.execute(sql, (amount, user_id))
+        if cur.rowcount == 0:
+            sql_insert = "INSERT INTO guishi_info (user_id, stored_stone) VALUES (?, ?)"
+            cur.execute(sql_insert, (user_id, amount))
+        self.conn.commit()
 
     def close(self):
         """关闭数据库连接"""

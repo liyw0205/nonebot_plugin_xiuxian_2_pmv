@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from nonebot import on_command, __version__ as nb_version
 from nonebot.permission import SUPERUSER
+from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
@@ -22,14 +23,19 @@ from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, TradeDataManager
+from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 
+update_manager = UpdateManager()
 sql_message = XiuxianDateManage()
-trade = TradeDataManager()
+trade_manager = TradeDataManager()
 
 bot_info_cmd = on_command("bot信息", permission=SUPERUSER, priority=5, block=True)
 sys_info_cmd = on_command("系统信息", permission=SUPERUSER, priority=5, block=True)
 ping_test_cmd = on_command("ping测试", permission=SUPERUSER, priority=5, block=True)
-status_cmd = on_command("全部信息", permission=SUPERUSER, priority=5, block=True)
+status_cmd = on_command("插件帮助", permission=SUPERUSER, priority=5, block=True)
+version_query_cmd = on_command("版本查询", permission=SUPERUSER, priority=5, block=True)
+version_update_cmd = on_command("版本更新", permission=SUPERUSER, priority=5, block=True)
+check_update_cmd = on_command("检测更新", permission=SUPERUSER, priority=5, block=True)
 
 def format_time(seconds: float) -> str:
     """将秒数格式化为 'X天X小时X分X秒'"""
@@ -120,7 +126,7 @@ async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     results = await asyncio.gather(*tasks)
 
     # 组装消息
-    msg = "\n=== 网络延迟测试 ===\n"
+    msg = "\n☆------网络延迟测试------☆\n"
 
     # 国内站点（前4个）
     msg += "\n【国内站点】\n"
@@ -147,7 +153,7 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     all_users = sql_message.all_users()
     active_users = sql_message.today_active_users()
     total_items_quantity = sql_message.total_items_quantity()
-    total_goods_quantity = trade.total_goods_quantity()
+    total_goods_quantity = trade_manager.total_goods_quantity()
     # 获取Bot运行时间
     try:
         current_time = time.time()
@@ -158,15 +164,19 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     except Exception:
         bot_uptime = {"Bot运行时间": "获取失败"}
     
+    # 获取当前插件版本号
+    current_version = update_manager.get_current_version()
+
     # 组装Bot信息
     bot_info = {
         "Bot ID": bot.self_id,
         "NoneBot2版本": nb_version,
         "会话类型": "群聊" if is_group else "私聊",
-        "会话ID": group_id
+        "会话ID": group_id,
+        "修仙插件版本": current_version
     }
     
-    msg = "\n=== Bot信息 ===\n"
+    msg = "\n☆------Bot信息------☆\n"
     msg += "\n【🤖 Bot信息】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_info.items())
     msg += "\n\n【⏱ 运行时间】\n"
@@ -237,7 +247,7 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         system_uptime_info = {"系统运行时间": "获取失败"}
     
     # 组装系统信息
-    msg = "\n=== 系统信息 ===\n"
+    msg = "\n☆------系统信息------☆\n"
     info_sections = [
         ("⏱ 运行时间", system_uptime_info),
         ("💻 系统信息", system_info),
@@ -254,33 +264,101 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 @bot_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """处理bot信息命令"""
+    """bot信息命令"""
     msg = await get_bot_info(bot, event)
     await handle_send(bot, event, msg)
 
 @sys_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """处理系统信息命令"""
+    """系统信息命令"""
     sys_msg = await get_system_info(bot, event)
     await handle_send(bot, event, sys_msg)
 
 @ping_test_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """处理ping测试命令"""
+    """ping测试命令"""
     ping_msg = await get_ping_test(bot, event)
     await handle_send(bot, event, ping_msg)
 
 @status_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """处理状态命令 - 调用其他三个功能"""
-    # 先发送Bot信息
-    bot_msg = await get_bot_info(bot, event)
-    await handle_send(bot, event, bot_msg)
+    msg = f"""
+版本更新 - 指定版本号更新/latest：更新最新版本
+
+版本查询 - 获取最近发布的版本
+
+检测更新 - 检测是否需要更新
+
+bot信息 - 获取机器人和修仙数据
+
+系统信息 - 获取系统信息
+
+ping测试 - 测试网络延迟
+
+→ GitHub - liyw0205/nonebot_plugin_xiuxian_2_pmv
+"""
+    await handle_send(bot, event, msg)
+
+@version_query_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """版本查询命令"""
+    recent_releases = update_manager.get_latest_releases(5)  # 获取最近的5个发布
+    if not recent_releases:
+        await handle_send(bot, event, "无法获取版本信息。")
+        return
+
+    msg = "\n☆------版本查询------☆\n"
+    msg += "最近发布的版本：\n"
+    for release in recent_releases:
+        msg += "☆----------------------☆\n"
+        msg += f"版本号: {release['tag_name']}\n\n"
+        msg += f"发布时间: {release['published_at']}\n"
+        msg += f"描述: {release['body']}\n" if release['body'] else "描述: 无\n"
     
-    # 然后发送系统信息
-    sys_msg = await get_system_info(bot, event)
-    await handle_send(bot, event, sys_msg)
-    
-    # 最后执行ping测试
-    ping_msg = await get_ping_test(bot, event)
-    await handle_send(bot, event, ping_msg)
+    await handle_send(bot, event, msg)
+
+@check_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """检测更新命令"""
+    latest_release, message = update_manager.check_update()
+    if latest_release:
+        release_tag = latest_release['tag_name']
+        await handle_send(bot, event, f"发现新版本 {release_tag}，当前版本 {update_manager.get_current_version()}。建议进行更新。")
+    else:
+        await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
+
+@version_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """版本更新命令"""
+    args = args.extract_plain_text().split()
+    if len(args) != 1:
+        await handle_send(bot, event, "用法：版本更新 <版本号|latest>")
+        return
+
+    action = str(args[0])
+
+    if action == "latest":
+        # 检查是否有更新
+        latest_release, message = update_manager.check_update()
+        if not latest_release:
+            await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
+            return
+        release_tag = latest_release['tag_name']
+        await handle_send(bot, event, f"发现新版本 {release_tag}，开始更新...")
+    else:
+        # 指定版本号
+        release_tag = action
+        recent_releases = update_manager.get_latest_releases(5)
+        if not recent_releases:
+            await handle_send(bot, event, "无法获取网络版本信息。")
+            return
+        if release_tag not in recent_releases:
+            await handle_send(bot, event, "输入的版本号不正确\n请通过【版本查询】\n获取最近的发布版本")
+            return
+
+    # 执行更新流程
+    success, result = update_manager.perform_update_with_backup(release_tag)
+    if success:
+        await handle_send(bot, event, f"版本更新成功！当前版本：{result}")
+    else:
+        await handle_send(bot, event, f"版本更新失败：{result}")

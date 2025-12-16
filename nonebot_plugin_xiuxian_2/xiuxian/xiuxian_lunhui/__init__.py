@@ -122,7 +122,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     if str(user_id) in confirm_lunhui_cache:
         msg = "请发送【确认轮回】！"
         await handle_send(bot, event, msg)
-        await Infinite_reincarnation.finish()
+        await lunhui.finish()
     if user_root == '轮回道果':
         root_level = 7
         lunhui_level = XiuConfig().twolun_min_level
