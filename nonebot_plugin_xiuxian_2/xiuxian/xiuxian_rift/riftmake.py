@@ -193,10 +193,11 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
     """获取Boss战事件的内容"""
     boss_data = STORY['战斗']['Boss战斗']["Boss数据"]
     base_exp = user_info['exp']
+    boss_hp = int(base_exp * random.choice(boss_data["hp"]) * 10)
     boss_info = {
         "name": random.choice(boss_data["name"]),
-        "气血": int(base_exp * random.choice(boss_data["hp"]) * 10),
-        "总血量": int(base_exp * random.choice(boss_data["hp"]) * 10),
+        "气血": boss_hp,
+        "总血量": boss_hp,
         "攻击": int(base_exp * random.choice(boss_data["atk"])),
         "真元": base_exp * boss_data["mp"],
         "jj":"遁一境",
