@@ -514,6 +514,24 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg)
     await impart_pk_info.finish()
 
+def get_rates_by_floor(floor):
+    """根据层数动态返回概率权重"""
+    floor = min(max(floor, 1), 30)  # 确保在1-30范围内
+
+    # 基础概率（第1层）
+    base_rates = [0.20, 0.10, 0.20, 0.30, 0.05, 0.15]  # stay, fail, down, up, down_rate, up_rate
+    # 终点概率（第30层）
+    final_rates = [0.10, 0.20, 0.25, 0.25, 0.10, 0.10]
+    # 线性插值
+    t = (floor - 1) / 29  # 标准化到0-1
+
+    rates = []
+    for b, f in zip(base_rates, final_rates):
+        value = b + (f - b) * t
+        rates.append(round(value, 3))
+
+    return rates
+
 @impart_pk_go.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索虚神界"""
@@ -559,23 +577,6 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             msg += f"\n当前区域加持：修为增益{int(impart_exp_up * 100)}%"
             await handle_send(bot, event, msg)
             await impart_pk_go.finish()
-
-    def get_rates_by_floor(floor):
-        """根据层数动态返回概率权重"""
-
-        # 基础概率（第1层）
-        base_rates = [0.20, 0.10, 0.20, 0.30, 0.05, 0.15]  # stay, fail, down, up, down_rate, up_rate
-        # 终点概率（第30层）
-        final_rates = [0.10, 0.20, 0.25, 0.25, 0.10, 0.10]
-        # 线性插值
-        t = (floor - 1) / 29  # 标准化到0-1
-
-        rates = []
-        for b, f in zip(base_rates, final_rates):
-            value = b + (f - b) * t
-            rates.append(round(value, 3))
-
-        return rates
     
     impart_suc = random.randint(1, 100)
     impart_time = random.randint(1, 100)
