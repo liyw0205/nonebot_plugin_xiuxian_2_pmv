@@ -425,4 +425,3 @@ screen -S xiu2 -X quit
 # 🎉 许可证
 
 本项目使用 [MIT](https://choosealicense.com/licenses/mit/) 作为开源许可证，并且没有cc限制
-
