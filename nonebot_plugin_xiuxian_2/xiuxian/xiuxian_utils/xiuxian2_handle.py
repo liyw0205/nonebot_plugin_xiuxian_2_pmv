@@ -25,7 +25,6 @@ SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号
 impart_num = "123451234"
-items = Items()
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
@@ -1880,7 +1879,6 @@ class OtherSet(XiuConfig):
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 
-
 def final_user_data(user_data, columns):
     """传入用户当前信息、buff信息,返回最终信息"""
     user_dict = dict(zip((col[0] for col in columns), user_data))
@@ -1922,11 +1920,6 @@ def final_user_data(user_data, columns):
             1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])
     
     return user_dict
-
-driver = get_driver()
-@driver.on_shutdown
-async def close_db():
-    XiuxianDateManage().close()
 
 # 这里是交易数据部分
 class TradeDataManager:
@@ -2238,12 +2231,7 @@ class TradeDataManager:
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
             logger.opt(colors=True).info(f"<green>trade数据库关闭！</green>")
-
-driver = get_driver()
-@driver.on_shutdown
-async def close_db():
-    TradeDataManager().close()
-
+    
 # 这里是Player部分
 class PlayerDataManager:
     def __init__(self):
@@ -2361,11 +2349,6 @@ class PlayerDataManager:
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
             logger.opt(colors=True).info(f"<green>player数据库关闭！</green>")
-
-driver = get_driver()
-@driver.on_shutdown
-async def close_db():
-    PlayerDataManager().close()
     
 # 这里是虚神界部分
 class XIUXIAN_IMPART_BUFF:
@@ -2821,11 +2804,6 @@ async def impart_check(user_id):
     
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
-@driver.on_shutdown
-async def close_db():
-    XIUXIAN_IMPART_BUFF().close()
-
-
 # 这里是buff部分
 class BuffJsonDate:
 
@@ -3264,3 +3242,11 @@ def clean_old_backups(backup_dir, keep_days=10):
                 
     except Exception as e:
         logger.warning(f"清理旧备份时出错: {str(e)}")
+
+driver = get_driver()
+@driver.on_shutdown
+async def close_db():
+    XiuxianDateManage().close()
+    XIUXIAN_IMPART_BUFF().close()
+    PlayerDataManager().close()
+    TradeDataManager().close()

@@ -61,7 +61,6 @@ MAX_BAITAN_ORDERS = 10  # 最大摆摊订单数
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
 xianshi_fast_add = on_command("仙肆快速上架", priority=5, block=True)
-xian_shop_added_by_admin = on_command("系统仙肆上架", priority=5, permission=SUPERUSER, block=True)
 my_xian_shop = on_command("我的仙肆", priority=5, block=True)
 xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
 xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSER, block=True)

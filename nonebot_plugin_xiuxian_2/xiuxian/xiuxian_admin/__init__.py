@@ -62,6 +62,7 @@ do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, blo
 training_reset = on_command("重置历练", permission=SUPERUSER, priority=6, block=True)
 boss_reset = on_command("重置世界BOSS", permission=SUPERUSER, priority=6, block=True)
 tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
+items_refresh = on_command("重载items", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -736,6 +737,14 @@ async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await boss_reset.finish()
 
+@items_refresh.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """重载items"""
+    items.refresh()
+    msg = "重载items完成"
+    await handle_send(bot, event, msg)
+    await items_refresh.finish()
+    
 @super_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙管理帮助"""
@@ -830,6 +839,8 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 重置幻境 - 重置当前幻境数据
 → 清空幻境 - 仅清空玩家数据
 → 重置新手礼包
+
+→ 重载items - 重新获取物品数据
 
 → 更新日志 - 获取版本日志
 → 版本更新 - 指定版本号更新/latest：更新最新版本

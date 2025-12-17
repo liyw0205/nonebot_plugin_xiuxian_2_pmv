@@ -5,6 +5,8 @@ except ImportError:
 import os
 from pathlib import Path
 from typing import List
+from nonebot.log import logger
+from .. import DRIVER
 
 READPATH = Path() / "data" / "xiuxian"
 SKILLPATH = READPATH / "功法"
@@ -12,10 +14,13 @@ WEAPONPATH = READPATH / "装备"
 ELIXIRPATH = READPATH / "丹药"
 PACKAGESPATH = READPATH / "礼包"
 XIULIANITEMPATH = READPATH / "修炼物品"
+ITEMSFILEPATH = Path() / "data" / "xiuxian" / "items.json"
 
+ITEMS_CACHE = {}
 
 class Items:
     def __init__(self) -> None:
+        global ITEMS_CACHE
         self.mainbuff_jsonpath = SKILLPATH / "主功法.json"
         self.subbuff_jsonpath = SKILLPATH / "辅修功法.json" 
         self.secbuff_jsonpath = SKILLPATH / "神通.json"
@@ -31,81 +36,97 @@ class Items:
         self.jlq_jsonpath = XIULIANITEMPATH / "聚灵旗.json"
         self.sw_jsonpath = ELIXIRPATH / "神物.json"
         self.special_jsonpath = XIULIANITEMPATH / "特殊物品.json" 
-        self.items = {}
-        self.set_item_data(self.get_armor_data(), "防具")
-        self.set_item_data(self.get_weapon_data(), "法器")
-        self.set_item_data(self.get_main_buff_data(), "功法")
-        self.set_item_data(self.get_sub_buff_data(), "辅修功法") 
-        self.set_item_data(self.get_sec_buff_data(), "神通")
-        self.set_item_data(self.get_effect1_buff_data(), "身法")
-        self.set_item_data(self.get_effect2_buff_data(), "瞳术")
-        self.set_item_data(self.get_elixir_data(), "丹药")
-        self.set_item_data(self.get_lb_data(), "礼包")
-        self.set_item_data(self.get_yaocai_data(), "药材")
-        self.set_item_data(self.get_mix_elixir_type_data(), "合成丹药")
-        self.set_item_data(self.get_ldl_data(), "炼丹炉")
-        self.set_item_data(self.get_jlq_data(), "聚灵旗")
-        self.set_item_data(self.get_sw_data(), "神物")
-        self.set_item_data(self.get_special_data(), "特殊物品") 
-        self.savef(self.items)
-
+        self.items = ITEMS_CACHE
+        
     def readf(self, FILEPATH):
-        with open(FILEPATH, "r", encoding="UTF-8") as f:
-            data = f.read()
-        return json.loads(data)
+        try:
+            with open(FILEPATH, "r", encoding="UTF-8") as f:
+                data = f.read()
+                if data:
+                    return json.loads(data)
+                else:
+                    return None
+        except FileNotFoundError:
+            logger.error(f"文件未找到: {FILEPATH}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON解析错误 {FILEPATH}: {e}")
+            return None
+        except PermissionError:
+            logger.error(f"没有权限读取文件: {FILEPATH}")
+            return None
+        except UnicodeDecodeError:
+            logger.error(f"文件编码错误，无法以UTF-8读取: {FILEPATH}")
+            return None
+        except Exception as e:
+            logger.error(f"读取文件时发生未知错误 {FILEPATH}: {e}")
+            return None
 
     def savef(self, data):
-        FILEPATH = Path() / "data" / "xiuxian" / "items.json"
+        FILEPATH = ITEMSFILEPATH
         data = json.dumps(data, ensure_ascii=False, indent=4)
         save_mode = "w" if os.path.exists(FILEPATH) else "x"
         with open(FILEPATH, mode=save_mode, encoding="UTF-8") as f:
             f.write(data)
             f.close()
 
-    def get_armor_data(self):
-        return self.readf(self.armor_jsonpath)
+    def refresh(self):
+        """重新加载所有物品数据，更新 self.items"""
+        global ITEMS_CACHE
+        ITEMS_CACHE.clear()
+        self.export_items_data()  # 重新读取并处理所有物品文件
+        self.savef(ITEMS_CACHE)  # 可选：将最新数据再次保存到 items.json
 
-    def get_weapon_data(self):
-        return self.readf(self.weapon_jsonpath)
+    def export_items_data(self):
+        """导出所有物品数据"""        
+        item_types = [
+            "功法", "辅修功法", "神通", "身法", "瞳术",
+            "法器", "防具", "丹药", "礼包", "药材",
+            "合成丹药", "炼丹炉", "聚灵旗", "神物", "特殊物品"
+        ]
+        for item_type in item_types:
+            self.set_item_data(self.get_items_data(item_type), item_type)
 
-    def get_main_buff_data(self):
-        return self.readf(self.mainbuff_jsonpath)
-    
-    def get_sub_buff_data(self):
-        return self.readf(self.subbuff_jsonpath)
-
-    def get_sec_buff_data(self):
-        return self.readf(self.secbuff_jsonpath)
-
-    def get_effect1_buff_data(self):
-        return self.readf(self.effect1buff_jsonpath)
+    def get_items_data(self, item_type):
+        """根据物品类型获取对应的数据"""
+        type_to_path = {
+            "防具": self.armor_jsonpath,
+            "法器": self.weapon_jsonpath,
+            "功法": self.mainbuff_jsonpath,
+            "辅修功法": self.subbuff_jsonpath,
+            "神通": self.secbuff_jsonpath,
+            "身法": self.effect1buff_jsonpath,
+            "瞳术": self.effect2buff_jsonpath,
+            "丹药": self.elixir_jsonpath,
+            "礼包": self.lb_jsonpath,
+            "药材": self.yaocai_jsonpath,
+            "合成丹药": self.mix_elixir_type_jsonpath,
+            "炼丹炉": self.ldl_jsonpath,
+            "聚灵旗": self.jlq_jsonpath,
+            "神物": self.sw_jsonpath,
+            "特殊物品": self.special_jsonpath
+        }
         
-    def get_effect2_buff_data(self):
-        return self.readf(self.effect2buff_jsonpath)
-        
-    def get_elixir_data(self):
-        return self.readf(self.elixir_jsonpath)
-    
-    def get_lb_data(self):
-        return self.readf(self.lb_jsonpath)
+        file_path = type_to_path.get(item_type)
+        if file_path:
+            return self.readf(file_path)
+        else:
+            logger.warning(f"未知的物品类型: {item_type}")
+            return None
 
-    def get_yaocai_data(self):
-        return self.readf(self.yaocai_jsonpath)
-
-    def get_mix_elixir_type_data(self):
-        return self.readf(self.mix_elixir_type_jsonpath)
-
-    def get_ldl_data(self):
-        return self.readf(self.ldl_jsonpath)
-
-    def get_jlq_data(self):
-        return self.readf(self.jlq_jsonpath)
-    
-    def get_sw_data(self):
-        return self.readf(self.sw_jsonpath)
-
-    def get_special_data(self):
-        return self.readf(self.special_jsonpath)
+    def set_item_data(self, dict_data, item_type):
+        global ITEMS_CACHE
+        if not dict_data:
+            logger.warning(f"{item_type}加载失败！")
+            return
+        for k, v in dict_data.items():
+            if item_type in ['功法', '神通', '辅修功法', '身法', '瞳术']:
+                v['rank'], v['level'] = v['level'], v['rank']
+                v['type'] = '技能'
+            ITEMS_CACHE[k] = v
+            ITEMS_CACHE[k].update({'item_type': item_type})
+            if '境界' in v:
+                ITEMS_CACHE[k]['境界'] = v['境界']
 
     def get_data_by_item_id(self, item_id):
         """通过物品ID获取物品数据"""
@@ -115,9 +136,14 @@ class Items:
     
     def get_data_by_item_name(self, item_name):
         """通过物品名称获取物品ID和物品数据"""
-        for item_id, item in self.items.items():
-            if item['name'] == item_name:
-                return item_id, item
+        if item_name.isdigit():
+            item = self.get_data_by_item_id(self, item_name)
+            if item:
+                return item_name, item
+        else:
+            for item_id, item in self.items.items():
+                if str(item['name']) == str(item_name):
+                    return item_id, item
         return None, None
 
     def get_fusion_items(self):
@@ -128,17 +154,8 @@ class Items:
                 fusion_items.append(f"{item_data['name']} ({item_data['item_type']})")
         return fusion_items
 
-    def set_item_data(self, dict_data, item_type):
-        for k, v in dict_data.items():
-            if item_type in ['功法', '神通', '辅修功法', '身法', '瞳术']:
-                v['rank'], v['level'] = v['level'], v['rank']
-                v['type'] = '技能'
-            self.items[k] = v
-            self.items[k].update({'item_type': item_type})
-            if '境界' in v:
-                self.items[k]['境界'] = v['境界']
-
     def get_data_by_item_type(self, item_type):
+        """获取指定类型"""
         temp_dict = {}
         for k, v in self.items.items():
             if v['item_type'] in item_type:
@@ -169,3 +186,7 @@ class Items:
                 else:
                     continue
         return l_id
+
+@DRIVER.on_startup
+async def read_items_data():
+    Items().export_items_data()

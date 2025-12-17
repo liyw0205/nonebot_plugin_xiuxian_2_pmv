@@ -172,6 +172,10 @@ no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("背包帮助", priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
+def get_recover(goods_id, num):
+    price = int((convert_rank('江湖好手')[0] - 16) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    return price
+
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看物品效果，支持物品名或ID"""
@@ -191,23 +195,11 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await check_item_effect.finish()
 
     # 判断输入是ID还是名称
-    goods_id = None
-    if input_str.isdigit():  # 如果是纯数字，视为ID
-        goods_id = int(input_str)
-        item_info = items.get_data_by_item_id(goods_id)
-        if not item_info:
-            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
-            await handle_send(bot, event, msg)
-            await check_item_effect.finish()
-    else:  # 视为物品名称
-        for k, v in items.items.items():
-            if input_str == v['name']:
-                goods_id = k
-                break
-        if goods_id is None:
-            msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
-            await handle_send(bot, event, msg)
-            await check_item_effect.finish()
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
+        await handle_send(bot, event, msg)
+        return
     item_msg = get_item_msg(goods_id, user_info['user_id'])
     if goods_id == 15053 or input_str == "补偿":
         await check_item_effect.finish()
@@ -1216,9 +1208,9 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             num = int(args[1])
     except:
             num = 1 
-    price = int((convert_rank('江湖好手')[0] - 16) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    price = get_recover(goods_id, num)
     if price <= 0:
-        msg = f"物品：{goods_name}炼金失败，凝聚{number_to(price)}枚灵石，记得通知晓楠！"
+        msg = f"物品：{goods_name}炼金失败，凝聚{number_to(price)}枚灵石！"
         await handle_send(bot, event, msg)
         await goods_re_root.finish()
 
@@ -1274,11 +1266,8 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         results = []
         
         for elixir in elixirs:
-            # 计算价格（基础rank - 物品rank）* 100000 + 100万
-            base_rank = convert_rank('江湖好手')[0]
-            item_rank = get_item_msg_rank(elixir['id'])
-            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
-            total_price = price * elixir['num']
+            # 计算价格
+            total_price = get_recover(elixir['id'], elixir['num'])
             
             # 从背包扣除
             sql_message.update_back_j(user_id, elixir['id'], num=elixir['num'])
@@ -1388,11 +1377,8 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if str(item['id']) in BANNED_ITEM_IDS:
             continue  # 跳过禁止交易的物品
         
-        # 计算价格（基础rank - 物品rank）* 100000 + 100万
-        base_rank = convert_rank('江湖好手')[0]
-        item_rank = get_item_msg_rank(item['id'])
-        price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
-        total_price = price * item['available_num']
+        # 计算价格
+        total_price = get_recover(item['id'], item['num'])
         
         # 从背包扣除
         sql_message.update_back_j(user_id, item['id'], num=item['available_num'])
