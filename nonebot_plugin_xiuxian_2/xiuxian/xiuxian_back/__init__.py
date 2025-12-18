@@ -195,7 +195,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await check_item_effect.finish()
 
     # 判断输入是ID还是名称
-    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    goods_id, goods_info = items.get_data_by_item_name(input_str)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)

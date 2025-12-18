@@ -253,7 +253,7 @@ def execute_sql(db_path, sql, params=None):
     finally:
         conn.close()
 
-def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None):
+def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
     """获取表数据（分页和搜索）"""
     offset = (page - 1) * per_page
     
@@ -266,41 +266,32 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     sql = f"SELECT * FROM {table_name}"
     params = []
     
-    # 添加搜索条件 - 支持多值搜索
+    # 添加搜索条件
     if search_field and search_value:
-        # 单字段搜索逻辑（保持不变）
-        values = search_value.split()
-        if len(values) > 1:
-            placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
-            sql += f" WHERE ({placeholders})"
-            params.extend([f"%{value}%" for value in values])
-        else:
-            sql += f" WHERE {search_field} LIKE ?"
-            params.append(f"%{search_value}%")
-    
-    elif search_value:  # 全字段搜索
-        # 获取所有字段
-        tables = get_database_tables(db_path)
-        table_fields = tables.get(table_name, {}).get('fields', [])
-        
-        if table_fields:
-            conditions = []
-            search_params = []
-            
-            # 对每个字段添加LIKE条件
-            for field in table_fields:
-                # 排除主键字段（可选）
-                if field != tables[table_name].get('primary_key'):
-                    conditions.append(f"{field} LIKE ?")
-                    search_params.append(f"%{search_value}%")
-            
-            # 只有当有搜索条件时才添加WHERE子句
-            if conditions:
-                sql += f" WHERE ({' OR '.join(conditions)})"
-                params.extend(search_params)
+        if search_condition == '=':
+            # 全字段搜索逻辑（保持不变）
+            values = search_value.split()
+            if len(values) > 1:
+                placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                sql += f" WHERE ({placeholders})"
+                params.extend([f"%{value}%" for value in values])
             else:
-                # 如果没有可搜索的字段，返回空结果
-                sql += " WHERE 1=0"  # 确保不返回任何结果
+                sql += f" WHERE {search_field} LIKE ?"
+                params.append(f"%{search_value}%")
+        elif search_condition == '>':
+            # 数值大于搜索
+            if not search_value.replace('.', '', 1).isdigit():
+                return {"error": "搜索值必须是数值"}, 400
+            sql += f" WHERE {search_field} > ?"
+            params.append(float(search_value))
+        elif search_condition == '<':
+            # 数值小于搜索
+            if not search_value.replace('.', '', 1).isdigit():
+                return {"error": "搜索值必须是数值"}, 400
+            sql += f" WHERE {search_field} < ?"
+            params.append(float(search_value))
+        else:
+            return {"error": "无效的搜索条件"}, 400
     
     # 添加分页
     sql += f" LIMIT ? OFFSET ?"
@@ -314,32 +305,38 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
     count_params = []
     
     if search_field and search_value:
-        # 单字段搜索的计数逻辑
-        values = search_value.split()
-        if len(values) > 1:
-            placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
-            count_sql += f" WHERE ({placeholders})"
-            count_params = [f"%{value}%" for value in values]
-        else:
-            count_sql += f" WHERE {search_field} LIKE ?"
-            count_params = [f"%{search_value}%"]
-    
-    elif search_value:
-        # 全字段搜索的计数逻辑
-        tables = get_database_tables(db_path)
-        table_fields = tables.get(table_name, {}).get('fields', [])
-        
-        if table_fields:
-            conditions = []
-            for field in table_fields:
-                if field != tables[table_name].get('primary_key'):
-                    conditions.append(f"{field} LIKE ?")
-                    count_params.append(f"%{search_value}%")
-            
-            if conditions:
-                count_sql += f" WHERE ({' OR '.join(conditions)})"
+        if search_condition == '=':
+            # 单字段搜索的计数逻辑
+            values = search_value.split()
+            if len(values) > 1:
+                conditions = []
+                search_params = []
+                
+                # 对每个字段添加LIKE条件
+                for field in table_info.get('fields', []):
+                    if field != tables[table_name].get('primary_key'):
+                        conditions.append(f"{field} LIKE ?")
+                        search_params.append(f"%{value}%")
+                
+                # 只有当有搜索条件时才添加WHERE子句
+                if conditions:
+                    count_sql += f" WHERE ({' OR '.join(conditions)})"
+                    count_params.extend(search_params)
+                else:
+                    # 如果没有可搜索的字段，返回空结果
+                    count_sql += " WHERE 1=0"  # 确保不返回任何结果
             else:
-                count_sql += " WHERE 1=0"
+                # 单字段搜索
+                count_sql += f" WHERE {search_field} LIKE ?"
+                count_params.append(f"%{search_value}%")
+        elif search_condition in ('>', '<'):
+            # 数值比较的计数逻辑
+            if not search_value.replace('.', '', 1).isdigit():
+                return {"error": "搜索值必须是数值"}, 400
+            count_sql += f" WHERE {search_field} {search_condition} ?"
+            count_params.append(float(search_value))
+        else:
+            return {"error": "无效的搜索条件"}, 400
     
     total_result = execute_sql(db_path, count_sql, count_params)
     total = total_result[0]['COUNT(*)'] if total_result else 0
@@ -807,7 +804,7 @@ def database():
     all_tables = get_tables()
     return render_template('database.html', tables=all_tables)
 
-@app.route('/table/<table_name>')
+@app.route('/table/<table_name>', methods=['GET'])
 def table_view(table_name):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
@@ -832,11 +829,13 @@ def table_view(table_name):
     per_page = int(request.args.get('per_page', 20))
     search_field = request.args.get('search_field')
     search_value = request.args.get('search_value')
+    search_condition = request.args.get('search_condition', '=')  # 默认搜索条件是=
     
     table_data = get_table_data(
         db_path, table_name, 
         page=page, per_page=per_page,
-        search_field=search_field, search_value=search_value
+        search_field=search_field, search_value=search_value,
+        search_condition=search_condition  # 传递搜索条件
     )
     
     return render_template(
@@ -846,6 +845,7 @@ def table_view(table_name):
         data=table_data,
         search_field=search_field,
         search_value=search_value,
+        search_condition=search_condition,  # 传递搜索条件到模板
         primary_key=table_info.get('primary_key', 'id')
     )
 
@@ -975,6 +975,7 @@ def batch_edit(table_name):
     # 获取表单数据
     search_field = request.form.get('search_field')
     search_value = request.form.get('search_value')
+    search_condition = request.form.get('search_condition', '=')  # 获取搜索条件
     batch_field = request.form.get('batch_field')
     operation = request.form.get('operation')
     value = request.form.get('value')
@@ -1007,17 +1008,27 @@ def batch_edit(table_name):
         
         # 添加WHERE条件
         if not apply_to_all:
-            if search_field and search_value:  # 指定字段搜索
-                values = search_value.split()
-                if len(values) > 1:
-                    condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
-                    sql += f" WHERE ({condition})"
-                    params.extend([f"%{v}%" for v in values])
+            if search_field and search_value:
+                if search_condition == '=':
+                    # 单字段搜索
+                    values = search_value.split()
+                    if len(values) > 1:
+                        condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                        sql += f" WHERE ({condition})"
+                        params.extend([f"%{v}%" for v in values])
+                    else:
+                        sql += f" WHERE {search_field} LIKE ?"
+                        params.append(f"%{search_value}%")
+                elif search_condition in ('>', '<'):
+                    # 数值比较
+                    if not search_value.replace('.', '', 1).isdigit():
+                        return jsonify({"success": False, "error": "搜索值必须是数值"})
+                    sql += f" WHERE {search_field} {search_condition} ?"
+                    params.append(float(search_value))
                 else:
-                    sql += f" WHERE {search_field} LIKE ?"
-                    params.append(f"%{search_value}%")
-            elif search_value:  # 全字段搜索
-                # 获取所有字段
+                    return jsonify({"success": False, "error": "无效的搜索条件"})
+            elif search_value:
+                # 全字段搜索
                 tables = get_database_tables(db_path)
                 table_fields = tables.get(table_name, {}).get('fields', [])
             
@@ -1637,60 +1648,66 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "float",
         "category": "修炼设置"
     },
+    "max_goods_num": {
+        "name": "物品上限",
+        "description": "背包单样物品最高上限",
+        "type": "int",
+        "category": "资源设置"
+    },
     "sign_in_lingshi_lower_limit": {
         "name": "签到灵石下限",
         "description": "每日签到灵石下限",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "sign_in_lingshi_upper_limit": {
         "name": "签到灵石上限",
         "description": "每日签到灵石上限",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "beg_max_level": {
         "name": "奇缘最高境界",
         "description": "仙途奇缘能领灵石最高境界",
         "type": "select",
         "options": LEVELS,
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "beg_max_days": {
         "name": "奇缘最多天数",
         "description": "仙途奇缘能领灵石最多天数",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "beg_lingshi_lower_limit": {
         "name": "奇缘灵石下限",
         "description": "仙途奇缘灵石下限",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "beg_lingshi_upper_limit": {
         "name": "奇缘灵石上限",
         "description": "仙途奇缘灵石上限",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "tou": {
         "name": "偷灵石惩罚",
         "description": "偷灵石惩罚金额",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "tou_lower_limit": {
         "name": "偷灵石下限",
         "description": "偷灵石下限（百分比）",
         "type": "float",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "tou_upper_limit": {
         "name": "偷灵石上限",
         "description": "偷灵石上限（百分比）",
         "type": "float",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "auto_select_root": {
         "name": "自动选择灵根",
@@ -1702,13 +1719,13 @@ CONFIG_EDITABLE_FIELDS = {
         "name": "重入仙途消费",
         "description": "重入仙途的消费灵石",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "remaname": {
         "name": "修仙改名消费",
         "description": "修仙改名的消费灵石",
         "type": "int",
-        "category": "经济设置"
+        "category": "资源设置"
     },
     "max_stamina": {
         "name": "体力上限",
@@ -2036,7 +2053,7 @@ def get_config_category_icon(category):
         "修炼设置": "fas fa-medal",
         "渡劫设置": "fas fa-bolt",
         "宗门设置": "fas fa-landmark",
-        "经济设置": "fas fa-coins",
+        "资源设置": "fas fa-coins",
         "灵根设置": "fas fa-seedling",
         "体力设置": "fas fa-heart",
         "轮回设置": "fas fa-infinity"

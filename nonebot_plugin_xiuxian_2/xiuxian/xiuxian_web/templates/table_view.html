@@ -18,6 +18,13 @@
                     <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
                 {% endfor %}
             </select>
+
+            <select name="search_condition" id="searchConditionSelect">
+                <option value="=" {% if search_condition == '=' %}selected{% endif %}>=</option>
+                <option value=">" {% if search_condition == '>' %}selected{% endif %}>&gt;</option>
+                <option value="<" {% if search_condition == '<' %}selected{% endif %}>&lt;</option>
+            </select>
+
             <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
             <button type="submit" class="btn btn-info">搜索</button>
             <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">重置搜索</a>
@@ -26,57 +33,59 @@
         <!-- 批量操作表单 -->
         <div class="card" style="margin-top: 20px; background-color: #f8f9fa;">
             <h3>批量修改</h3>
-            <form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
-                <input type="hidden" name="search_field" value="{{ search_field or '' }}">
-                <input type="hidden" name="search_value" value="{{ search_value or '' }}">
-        
-                <div class="form-group">
-                    <label for="batch_field">选择字段</label>
-                    <select id="batch_field" name="batch_field" required>
-                        <option value="">请选择要修改的字段</option>
-                        {% for field in table_info.fields %}
-                            {% if field != table_info.primary_key %}
-                                <option value="{{ field }}" 
-                                        {% if search_field and search_field != '' and search_field == field %}selected{% endif %}>
-                                    {{ field }}
-                                </option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    <small id="batchFieldHelp" class="form-text text-muted">
-                        {% if search_field and search_field != '' %}
-                            已自动选择搜索字段: <strong>{{ search_field }}</strong>
-                        {% else %}
-                            请选择要批量修改的字段
-                        {% endif %}
-                    </small>
-                </div>
-        
-        <!-- 其他表单字段保持不变 -->
-        <div class="form-group">
-            <label for="operation">操作类型</label>
-            <select id="operation" name="operation" required>
-                <option value="set">替换为</option>
-                <option value="add">增加</option>
-                <option value="subtract">减少</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label for="value">值</label>
-            <input type="text" id="value" name="value" required>
-        </div>
-        
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="apply_to_all" name="apply_to_all">
-                应用到整张表（忽略搜索条件）
-            </label>
-        </div>
-        
-        <button type="submit" class="btn btn-success">执行批量操作</button>
-        <span id="batchResult" style="margin-left: 15px;"></span>
-    </form>
+<!-- 批量操作表单 -->
+<form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
+    <input type="hidden" name="search_field" value="{{ search_field or '' }}">
+    <input type="hidden" name="search_value" value="{{ search_value or '' }}">
+    <input type="hidden" name="search_condition" value="{{ search_condition }}">  <!-- 添加搜索条件 -->
+
+    <div class="form-group">
+        <label for="batch_field">选择字段</label>
+        <select id="batch_field" name="batch_field" required>
+            <option value="">请选择要修改的字段</option>
+            {% for field in table_info.fields %}
+                {% if field != table_info.primary_key %}
+                    <option value="{{ field }}" 
+                            {% if search_field and search_field != '' and search_field == field %}selected{% endif %}>
+                        {{ field }}
+                    </option>
+                {% endif %}
+            {% endfor %}
+        </select>
+        <small id="batchFieldHelp" class="form-text text-muted">
+            {% if search_field and search_field != '' %}
+                已自动选择搜索字段: <strong>{{ search_field }}</strong>
+            {% else %}
+                请选择要批量修改的字段
+            {% endif %}
+        </small>
+    </div>
+
+    <!-- 其他表单字段保持不变 -->
+    <div class="form-group">
+        <label for="operation">操作类型</label>
+        <select id="operation" name="operation" required>
+            <option value="set">替换为</option>
+            <option value="add">增加</option>
+            <option value="subtract">减少</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="value">值</label>
+        <input type="text" id="value" name="value" required>
+    </div>
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" id="apply_to_all" name="apply_to_all">
+            应用到整张表（忽略搜索条件）
+        </label>
+    </div>
+
+    <button type="submit" class="btn btn-success">执行批量操作</button>
+    <span id="batchResult" style="margin-left: 15px;"></span>
+</form>
 </div>
         
         <div style="overflow-x: auto; margin-top: 20px;">

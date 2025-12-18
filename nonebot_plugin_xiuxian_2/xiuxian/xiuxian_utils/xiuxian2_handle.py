@@ -516,7 +516,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def update_ls(self, user_id, price, key):
         """更新灵石  1为增加，2为减少"""
         cur = self.conn.cursor()
-
+        price = abs(price)
         if key == 1:
             sql = f"UPDATE user_xiuxian SET stone=stone+? WHERE user_id=?"
             cur.execute(sql, (price, user_id))
@@ -1559,6 +1559,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :return: None
         """
         now_time = datetime.now()
+        goods_num = abs(goods_num)
         # 检查物品是否存在，存在则update
         cur = self.conn.cursor()
         back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
@@ -1568,7 +1569,9 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
                 bind_num = back['bind_num'] + goods_num
             else:
                 bind_num = min(back['bind_num'], back['goods_num'])
-            goods_nums = back['goods_num'] + goods_num
+            goods_nums = min(back['goods_num'] + goods_num)
+            if goods_nums > XiuConfig().max_goods_num:
+                goods_nums = XiuConfig().max_goods_num
             sql = f"UPDATE back set goods_num=?,update_time=?,bind_num={bind_num} WHERE user_id=? and goods_id=?"
             cur.execute(sql, (goods_nums, now_time, user_id, goods_id))
             self.conn.commit()
@@ -1619,6 +1622,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :num 减少数量  默认1
         :use_key 是否使用，丹药使用才传 默认0
         """
+        num = abs(num)
         back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
         if back['goods_type'] == "丹药" and use_key == 1:  # 丹药要判断耐药性、日使用上限
             if back['bind_num'] >= 1:

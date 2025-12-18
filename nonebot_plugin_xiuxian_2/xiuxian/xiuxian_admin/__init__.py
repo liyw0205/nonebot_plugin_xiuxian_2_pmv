@@ -83,7 +83,11 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         stone_num = arg_list[1]  # 灵石数
         nick_name = arg_list[0]  # 道号
 
-    give_stone_num = stone_num
+    give_stone_num = abs(stone_num)
+    if stone_num > 0:
+        give_stone_key = 1
+    else:
+        give_stone_key = 2
     # 遍历Message对象，寻找艾特信息
     for arg in args:
         if arg.type == "at":
@@ -97,7 +101,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
-            sql_message.update_ls(give_qq, give_stone_num, 1)  # 增加用户灵石
+            sql_message.update_ls(give_qq, give_stone_num, give_stone_key)  # 增加用户灵石
             msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_user['user_name']}道友！"
             await handle_send(bot, event, msg)
             await gm_command.finish()

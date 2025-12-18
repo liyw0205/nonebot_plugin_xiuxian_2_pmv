@@ -115,6 +115,8 @@ class XiuConfig:
         self.auto_change_sect_owner_cd = 30
         # 自动换长时间不玩宗主cd/天
 
+        self.max_goods_num = 1000
+        # 背包单样物品最高上限
         self.sign_in_lingshi_lower_limit = 100000  
         # 每日签到灵石下限
         self.sign_in_lingshi_upper_limit = 500000  
