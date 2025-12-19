@@ -1301,6 +1301,32 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             results.append(back_dict)
         return results
 
+    def check_and_adjust_goods_quantity(self):
+        """检查并调整背包表中的物品数量，确保不超过最大限制，并返回处理结果"""
+        cur = self.conn.cursor()
+        sql = "SELECT user_id, goods_id, goods_num, bind_num, goods_name FROM back"
+        cur.execute(sql)
+        results = cur.fetchall()
+        
+        processed_goods = ""
+        for row in results:
+            user_id, goods_id, goods_num, bind_num, goods_name = row
+            if goods_num > XiuConfig().max_goods_num:
+                new_goods_num = XiuConfig().max_goods_num
+                sql_update = f"UPDATE back SET goods_num=? WHERE user_id=? AND goods_id=?"
+                cur.execute(sql_update, (new_goods_num, user_id, goods_id))
+                logger.opt(colors=True).info(f"<green>用户 {user_id} 的物品 {goods_name} 的数量已调整为 {new_goods_num}</green>")
+                processed_goods += f"{user_id} 的 {goods_name} 数量异常{goods_num}\n"
+            
+            if bind_num > XiuConfig().max_goods_num:
+                new_bind_num = XiuConfig().max_goods_num
+                sql_update = f"UPDATE back SET bind_num=? WHERE user_id=? AND goods_id=?"
+                cur.execute(sql_update, (new_bind_num, user_id, goods_id))
+        
+        self.conn.commit()
+        if not processed_goods:
+            return "无"
+        return processed_goods
 
     def goods_num(self, user_id, goods_id):
         """
@@ -1559,19 +1585,20 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :return: None
         """
         now_time = datetime.now()
-        goods_num = abs(goods_num)
+        max_goods_num = int(XiuConfig().max_goods_num)
+        goods_num = min(abs(goods_num), max_goods_num)
         # 检查物品是否存在，存在则update
         cur = self.conn.cursor()
         back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
+
         if back:
             # 判断是否存在，存在则update
             if bind_flag == 1:
                 bind_num = back['bind_num'] + goods_num
             else:
                 bind_num = min(back['bind_num'], back['goods_num'])
-            goods_nums = min(back['goods_num'] + goods_num)
-            if goods_nums > XiuConfig().max_goods_num:
-                goods_nums = XiuConfig().max_goods_num
+            goods_nums = min(back['goods_num'] + goods_num, max_goods_num)
+            bind_num = min(bind_num, max_goods_num)
             sql = f"UPDATE back set goods_num=?,update_time=?,bind_num={bind_num} WHERE user_id=? and goods_id=?"
             cur.execute(sql, (goods_nums, now_time, user_id, goods_id))
             self.conn.commit()

@@ -2241,3 +2241,15 @@ async def check_user_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     await send_msg_handler(bot, event, '装备检测', bot.self_id, result_msg)
     await check_user_equipment.finish()
+
+check_user_back = on_fullmatch("背包检测", priority=4, permission=SUPERUSER, block=True)
+@check_user_back.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """背包上限检测"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    
+    msg = "开始检测用户背包，请稍候..."
+    await handle_send(bot, event, msg)
+    result = sql_message.check_and_adjust_goods_quantity()
+    msg = f"处理物品数量异常用户：{result}"
+    await handle_send(bot, event, msg)

@@ -83,8 +83,8 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         stone_num = arg_list[1]  # 灵石数
         nick_name = arg_list[0]  # 道号
 
-    give_stone_num = abs(stone_num)
-    if stone_num > 0:
+    give_stone_num = int(stone_num)
+    if int(stone_num) > 0:
         give_stone_key = 1
     else:
         give_stone_key = 2
