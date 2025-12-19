@@ -2,6 +2,7 @@ try:
     import ujson as json
 except ImportError:
     import json
+import random
 from pathlib import Path
 from nonebot.log import logger
 
