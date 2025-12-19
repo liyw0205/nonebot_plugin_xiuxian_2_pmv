@@ -357,11 +357,7 @@ def get_goods_type():
 def get_id_by_rank(dict_data, user_level, rift_rank=0):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
     l_temp = []
-    base_rank = max(convert_rank(user_level)[0] - 22, 5)
-    zx_rank = random.randint(base_rank, min(base_rank + 35 - rift_rank, 54))
-    zx_rank = random.randint(base_rank, min(base_rank + 20 - rift_rank, 54))
-    if zx_rank == 5 and random.randint(1, 100) != 100:
-        zx_rank = 10
+    zx_rank = base_rank(user_level, 5, up=rift_rank)
     for k, v in dict_data.items():
         if zx_rank <= v['rank']:
             l_temp.append(k)

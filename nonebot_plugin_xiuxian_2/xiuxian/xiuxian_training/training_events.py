@@ -3,6 +3,8 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 from ..xiuxian_config import convert_rank, base_rank
+from ..xiuxian_config import XiuConfig
+from ..xiuxian_utils.data_source import jsondata
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -399,6 +401,7 @@ class TrainingEvents:
         
         elif reward_type == "item":
             item_type = random.choice(reward_data["types"])
+            user_level = user_info["level"]
             if item_type in ["法器", "防具", "辅修功法"]:
                 zx_rank = base_rank(user_level, 16)
             else:
@@ -538,6 +541,9 @@ class TrainingEvents:
                 percent = eval(calc_rule, {}, locals_dict)
                 user_rank = convert_rank(user_info['level'])[0]
                 exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
+                level = user_info['level'][:3] + '初期'
+                max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit)
+                exp = min(exp, max_exp)
                 sql_message.update_j_exp(user_id, exp)
                 return {
                     "message": desc_template.format(number_to(exp)),
