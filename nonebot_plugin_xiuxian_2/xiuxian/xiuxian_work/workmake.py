@@ -1,7 +1,7 @@
 from .reward_data_source import reward
 import random
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.xiuxian2_handle import OtherSet
 from datetime import datetime
 
@@ -33,13 +33,9 @@ def workmake(work_level, exp, user_level):
         
         item_type = get_random_item_type()
         if item_type in ["法器", "防具", "辅修功法"]:
-            base_rank = max(convert_rank(user_level)[0] - 22, 16)
+            zx_rank = base_rank(user_level, 16)
         else:
-            base_rank = max(convert_rank(user_level)[0] - 22, 5)
-        zx_rank = random.randint(base_rank, base_rank + 35)
-        zx_rank = min(zx_rank, 55)
-        if zx_rank == 5 and random.randint(1, 100) != 100:
-            zx_rank = 10
+            zx_rank = base_rank(user_level, 5)
         item_id = item_s.get_random_id_list_by_rank_and_item_type((zx_rank), item_type)
         if not item_id:
             item_id = 0

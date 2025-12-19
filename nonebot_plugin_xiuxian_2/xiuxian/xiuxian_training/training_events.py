@@ -2,7 +2,7 @@ import random
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import convert_rank, base_rank
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -400,13 +400,9 @@ class TrainingEvents:
         elif reward_type == "item":
             item_type = random.choice(reward_data["types"])
             if item_type in ["法器", "防具", "辅修功法"]:
-                base_rank = 16
+                zx_rank = base_rank(user_level, 16)
             else:
-                base_rank = random.randint(5, 50) - reward_data["rank_offset"]
-            zx_rank = random.randint(base_rank, base_rank + 20)
-            zx_rank = min(zx_rank, 55)
-            if zx_rank == 5 and random.randint(1, 100) != 100:
-                zx_rank = 10
+                zx_rank = base_rank(user_level, 5, up=reward_data["rank_offset"])
             item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
             
             if item_id_list:

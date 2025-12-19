@@ -21,7 +21,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import convert_rank, base_rank
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -502,13 +502,9 @@ def _give_random_item(user_id, user_level):
     item_types = ["功法", "神通", "药材", "法器", "防具", "身法", "瞳术"]
     item_type = random.choice(item_types)
     if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
-        base_rank = 16
+        zx_rank = base_rank(user_level, 16)
     else:
-        base_rank = random.randint(5, 50)
-    zx_rank = random.randint(base_rank, base_rank + 35)
-    zx_rank = min(zx_rank, 55)
-    if zx_rank == 5 and random.randint(1, 100) != 100:
-        zx_rank = 10
+        zx_rank = base_rank(user_level, 5)
 
     # 获取随机物品
     item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)

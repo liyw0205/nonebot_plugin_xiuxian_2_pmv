@@ -45,13 +45,14 @@ from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_boss, use_ri
 from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from .auction_config import *
 
 # 初始化组件
 items = Items()
 sql_message = XiuxianDateManage()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
+added_ranks = added_ranks()
 
 # 通用物品类型
 BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止交易的物品ID
@@ -173,7 +174,7 @@ back_help = on_command("背包帮助", priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
 def get_recover(goods_id, num):
-    price = int((convert_rank('江湖好手')[0] - 16) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    price = int((convert_rank('江湖好手')[0] added_ranks) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
     return price
 
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1520,9 +1521,9 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     rank_name_list = convert_rank("江湖好手")[1]
     goods_rank = int(goods_info.get('rank', 1))
     if goods_rank == -5:
-        goods_rank = 23
+        goods_rank = 22
     else:
-        goods_rank = int(goods_rank) + 21
+        goods_rank = int(goods_rank) + added_ranks
     if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
         goods_rank = goods_rank + 3
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
@@ -1634,7 +1635,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     elif goods_type == "神物":
         user_info = sql_message.get_user_info_with_id(user_id)
         user_rank = convert_rank(user_info['level'])[0]
-        goods_rank = goods_info['rank'] + 19
+        goods_rank = goods_info['rank'] + added_ranks
         goods_name = goods_info['name']
         if goods_rank < user_rank:
             msg = f"神物：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"

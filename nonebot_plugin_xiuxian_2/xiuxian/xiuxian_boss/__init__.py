@@ -28,7 +28,7 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage ,UserBuffDate, OtherSet, leave_harm_time
 )
-from ..xiuxian_config import convert_rank, XiuConfig, JsonConfig
+from ..xiuxian_config import convert_rank, base_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
 from .bossconfig import get_boss_config, savef_boss
 from .old_boss_info import old_boss_info
@@ -1074,11 +1074,7 @@ class BossDrops:
             return None, None
             
         # 计算适合用户等级的掉落物范围
-        base_rank = max(convert_rank(user_level)[0], 5)
-        zx_rank = random.randint(base_rank, base_rank + 35)
-        zx_rank = min(zx_rank, 55)
-        if zx_rank == 5 and random.randint(1, 100) != 100:
-            zx_rank = 10
+        zx_rank = base_rank(user_level, 5)
         # 筛选符合条件的掉落物
         eligible_drops = []
         for drop_id, drop_info in self.drops_data.items():

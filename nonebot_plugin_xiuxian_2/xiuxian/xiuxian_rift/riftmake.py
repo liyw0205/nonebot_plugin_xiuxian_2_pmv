@@ -5,7 +5,7 @@ from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF, OtherSet
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
 
 sql_message = XiuxianDateManage()
@@ -442,10 +442,7 @@ def get_sub_info(user_level, rift_rank):
 
 def get_skill_by_rank(user_level, rift_rank):
     """根据用户等级、秘境等级随机获取一个技能"""
-    base_rank = max(convert_rank(user_level)[0] - 22, 5)
-    zx_rank = random.randint(base_rank, min(base_rank + 35 - rift_rank, 54))
-    if zx_rank == 5 and random.randint(1, 100) != 100:
-        zx_rank = 10
+    zx_rank = base_rank(user_level, 5, up=rift_rank)
     temp_dict = []
     for k, v in skill_data.items():
         if zx_rank <= v['rank']:
