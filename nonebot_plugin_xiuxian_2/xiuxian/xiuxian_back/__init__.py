@@ -174,7 +174,7 @@ back_help = on_command("背包帮助", priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 
 def get_recover(goods_id, num):
-    price = int((convert_rank('江湖好手')[0] added_ranks) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    price = int((convert_rank('江湖好手')[0] + added_ranks) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
     return price
 
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=1.4)])
