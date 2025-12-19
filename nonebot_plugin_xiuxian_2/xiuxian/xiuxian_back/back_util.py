@@ -902,7 +902,7 @@ def check_use_elixir(user_id, goods_id, num):
     user_info = sql_message.get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
-    goods_rank = goods_info['rank'] + added_ranks
+    goods_rank = goods_info['rank'] + added_ranks - 2
     goods_name = goods_info['name']
     back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
     goods_all_num = back['all_num'] # 数据库里的使用数量
