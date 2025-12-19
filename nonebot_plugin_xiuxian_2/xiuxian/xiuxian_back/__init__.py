@@ -1520,12 +1520,14 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank("江湖好手")[1]
     goods_rank = int(goods_info.get('rank', 1))
+    lh_msg = ""
     if goods_rank == -5:
-        goods_rank = 22
+        goods_rank = added_ranks
     else:
         goods_rank = int(goods_rank) + added_ranks
-    if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
-        goods_rank = goods_rank + 3
+        if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
+            goods_rank = goods_rank + 3
+            lh_msg = "\n轮回重修：境界限制下降！"
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
         
     if goods_type == "礼包":
@@ -1569,7 +1571,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 
     elif goods_type == "装备":
         if goods_rank < user_rank:
-             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}"
+             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         elif not check_equipment_can_use(user_id, goods_id):
             msg = "该装备已被装备，请勿重复装备！"
         else:
@@ -1587,7 +1589,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         skill_info = goods_info
         skill_type = skill_info['item_type']
         if goods_rank <= user_rank:
-             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}"
+             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         elif skill_type == "神通":
             if int(user_buff_info['sec_buff']) == int(goods_id):
                 msg = f"道友已学会该神通：{skill_info['name']}，请勿重复学习！"

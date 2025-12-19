@@ -13,10 +13,11 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from datetime import datetime
 import os
 from pathlib import Path
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import convert_rank, added_ranks
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
+added_ranks = added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -798,7 +799,7 @@ def get_item_msg(goods_id, user_id=None):
     if int(item_info['rank']) == -5:
         goods_rank = 23
     else:
-        goods_rank = int(item_info['rank']) + 21
+        goods_rank = int(item_info['rank']) + added_ranks
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
     msg = ''
     if item_info['type'] == '丹药':
@@ -901,7 +902,7 @@ def check_use_elixir(user_id, goods_id, num):
     user_info = sql_message.get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
-    goods_rank = goods_info['rank'] + 19
+    goods_rank = goods_info['rank'] + added_ranks
     goods_name = goods_info['name']
     back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
     goods_all_num = back['all_num'] # 数据库里的使用数量
