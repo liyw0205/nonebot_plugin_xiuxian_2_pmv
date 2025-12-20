@@ -25,6 +25,8 @@ SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号
 impart_num = "123451234"
+trade_num = "123451234"
+player_num = "123451234"
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
@@ -1328,19 +1330,28 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             return "无"
         return processed_goods
 
-    def goods_num(self, user_id, goods_id):
+    def goods_num(self, user_id, goods_id, num_type=None):
         """
         判断用户物品数量
         :param user_id: 用户qq
         :param goods_id: 物品id
+        :param num_type: 物品数量类型，可选值为 None（总数量）、'bind'（绑定数量）、'trade'（可交易数量）
         :return: 物品数量
         """
-        sql = "SELECT num FROM back WHERE user_id=? and goods_id=?"
+        sql = "SELECT goods_num, bind_num, state FROM back WHERE user_id=? and goods_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (user_id, goods_id))
         result = cur.fetchone()
         if result:
-            return result[0]
+            goods_num = result[0]
+            bind_num = result[1]
+            state = result[2]
+            if num_type == 'bind':
+                return bind_num
+            elif num_type == 'trade':
+                return goods_num - bind_num - state
+            else:
+                return goods_num
         else:
             return 0
 
@@ -1905,63 +1916,27 @@ class OtherSet(XiuConfig):
 
         return msg, hp_mp
 
-
-
-sql_message = XiuxianDateManage()  # sql类
-items = Items()
-
-def final_user_data(user_data, columns):
-    """传入用户当前信息、buff信息,返回最终信息"""
-    user_dict = dict(zip((col[0] for col in columns), user_data))
-    
-    # 通过字段名称获取相应的值
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
-    if impart_data is None:
-        xiuxian_impart._create_user(user_dict['user_id'])
-  
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
-    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
-    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
-    impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
-    
-    user_buff_data = UserBuffDate(user_dict['user_id']).BuffInfo
-    
-    armor_atk_buff = 0
-    if int(user_buff_data['armor_buff']) != 0:
-        armor_info = items.get_data_by_item_id(user_buff_data['armor_buff'])
-        armor_atk_buff = armor_info['atk_buff']
-        
-    weapon_atk_buff = 0
-    if int(user_buff_data['faqi_buff']) != 0:
-        weapon_info = items.get_data_by_item_id(user_buff_data['faqi_buff'])
-        weapon_atk_buff = weapon_info['atk_buff']
-    
-    main_buff_data = UserBuffDate(user_dict['user_id']).get_user_main_buff_data()
-    main_hp_buff = main_buff_data['hpbuff'] if main_buff_data is not None else 0
-    main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
-    main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
-    
-    hppractice = user_dict['hppractice'] * 0.05 if user_dict['hppractice'] is not None else 0
-    mppractice = user_dict['mppractice'] * 0.05 if user_dict['mppractice'] is not None else 0
-    
-    # 改成字段名称来获取相应的值
-    user_dict['hp'] = int(user_dict['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
-    user_dict['mp'] = int(user_dict['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
-    user_dict['atk'] = int((user_dict['atk'] * (user_dict['atkpractice'] * 0.04 + 1) * (1 + main_atk_buff) * (
-            1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])
-    
-    return user_dict
-
 # 这里是交易数据部分
 class TradeDataManager:
+    global trade_num
+    _instance = {}
+    _has_init = {}
+
+    def __new__(cls):
+        if cls._instance.get(trade_num) is None:
+            cls._instance[trade_num] = super(TradeDataManager, cls).__new__(cls)
+        return cls._instance[trade_num]
+
     def __init__(self):
-        self.database_path = DATABASE
-        self.trade_db_path = self.database_path / "trade.db"
-        if not self.trade_db_path.exists():
-            self.trade_db_path.touch()
-            logger.opt(colors=True).info(f"<green>trade数据库已创建！</green>")
-        self.conn = sqlite3.connect(self.trade_db_path, check_same_thread=False)
-        self._check_data()
+        if not self._has_init.get(trade_num):
+            self._has_init[trade_num] = True
+            self.database_path = DATABASE
+            self.trade_db_path = self.database_path / "trade.db"
+            if not self.trade_db_path.exists():
+                self.trade_db_path.touch()
+                logger.opt(colors=True).info(f"<green>trade数据库已创建！</green>")
+            self.conn = sqlite3.connect(self.trade_db_path, check_same_thread=False)
+            self._check_data()
 
     def _check_data(self):
         """检查数据完整性"""
@@ -2091,6 +2066,12 @@ class TradeDataManager:
     
         self.conn.commit()
         return True
+
+    def remove_xianshi_all_item(self, item_id):
+        """删除所有用户的仙肆物品"""
+        sql = "DELETE FROM xianshi_item WHERE id = ?"
+        self.conn.execute(sql, (item_id,))
+        self.conn.commit()
 
     def remove_guishi_order(self, order_id):
         """删除鬼市求购订单/摊位"""
@@ -2265,9 +2246,20 @@ class TradeDataManager:
     
 # 这里是Player部分
 class PlayerDataManager:
+    global player_num
+    _instance = {}
+    _has_init = {}
+
+    def __new__(cls):
+        if cls._instance.get(player_num) is None:
+            cls._instance[player_num] = super(PlayerDataManager, cls).__new__(cls)
+        return cls._instance[player_num]
+
     def __init__(self):
-        self.database_path = DATABASE / "player.db"
-        self._ensure_database_exists()
+        if not self._has_init.get(player_num):
+            self._has_init[player_num] = True
+            self.database_path = DATABASE / "player.db"
+            self._ensure_database_exists()
 
     def _ensure_database_exists(self):
         if not self.database_path.exists():
@@ -2949,6 +2941,47 @@ class UserBuffDate:
             armor_buff_data = items.get_data_by_item_id(armor_buff_id)
         return armor_buff_data
 
+def final_user_data(user_data, columns):
+    """传入用户当前信息、buff信息,返回最终信息"""
+    user_dict = dict(zip((col[0] for col in columns), user_data))
+    
+    # 通过字段名称获取相应的值
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
+    if impart_data is None:
+        xiuxian_impart._create_user(user_dict['user_id'])
+  
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
+    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
+    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
+    impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
+    
+    user_buff_data = UserBuffDate(user_dict['user_id']).BuffInfo
+    
+    armor_atk_buff = 0
+    if int(user_buff_data['armor_buff']) != 0:
+        armor_info = items.get_data_by_item_id(user_buff_data['armor_buff'])
+        armor_atk_buff = armor_info['atk_buff']
+        
+    weapon_atk_buff = 0
+    if int(user_buff_data['faqi_buff']) != 0:
+        weapon_info = items.get_data_by_item_id(user_buff_data['faqi_buff'])
+        weapon_atk_buff = weapon_info['atk_buff']
+    
+    main_buff_data = UserBuffDate(user_dict['user_id']).get_user_main_buff_data()
+    main_hp_buff = main_buff_data['hpbuff'] if main_buff_data is not None else 0
+    main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
+    main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
+    
+    hppractice = user_dict['hppractice'] * 0.05 if user_dict['hppractice'] is not None else 0
+    mppractice = user_dict['mppractice'] * 0.05 if user_dict['mppractice'] is not None else 0
+    
+    # 改成字段名称来获取相应的值
+    user_dict['hp'] = int(user_dict['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
+    user_dict['mp'] = int(user_dict['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
+    user_dict['atk'] = int((user_dict['atk'] * (user_dict['atkpractice'] * 0.04 + 1) * (1 + main_atk_buff) * (
+            1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])
+    
+    return user_dict
 
 def get_weapon_info_msg(weapon_id, weapon_info=None):
     """
@@ -3275,6 +3308,11 @@ def clean_old_backups(backup_dir, keep_days=10):
         logger.warning(f"清理旧备份时出错: {str(e)}")
 
 driver = get_driver()
+sql_message = XiuxianDateManage()  # sql类
+items = Items()
+trade_manager = TradeDataManager()
+player_data_manager = PlayerDataManager()
+
 @driver.on_shutdown
 async def close_db():
     XiuxianDateManage().close()

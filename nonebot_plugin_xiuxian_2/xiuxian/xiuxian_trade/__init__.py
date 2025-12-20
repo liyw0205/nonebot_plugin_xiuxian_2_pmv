@@ -230,7 +230,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
     
-    goods_name = args[0]
+    item_name = args[0]
     try:
         price = max(int(args[1]), MIN_PRICE)
         quantity = int(args[2]) if len(args) > 2 else 1
@@ -240,57 +240,32 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await xian_shop_add.finish()
 
-    # 检查背包是否有该物品
-    back_msg = sql_message.get_back_msg(user_id)
-    goods_info = None
-    for item in back_msg:
-        if item['goods_name'] == goods_name:
-            goods_info = item
-            break
-    
-    if not goods_info:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+    # 检查背包物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
-    
-    # 检查绑定物品
-    if goods_info['bind_num'] >= goods_info['goods_num']:
-        msg = f"该物品是绑定物品，无法上架！"
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
+        return
     
-    # 对于装备类型，检查是否已被使用
-    if goods_info['goods_type'] == "装备":
-        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
-        if is_equipped:
-            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
-            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
-        else:
-            # 如果未装备，可上架数量 = 总数量 - 绑定数量
-            available_num = goods_info['goods_num'] - goods_info['bind_num']
-    else:
-        # 非装备物品，正常计算
-        available_num = goods_info['goods_num'] - goods_info['bind_num']
-    
-    # 检查可上架数量
-    if quantity > available_num:
-        msg = f"可上架数量不足！\n最多可上架{available_num}个"
+    # 检查物品类型是否允许
+    if goods_info['type'] not in ITEM_TYPES:
+        msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
-    
-    # 获取物品类型
-    goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in ITEM_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
-        await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
+        return
     
     # 检查禁止交易的物品
-    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
-        msg = f"物品 {goods_name} 禁止在仙肆交易！"
+    if str(goods_id) in BANNED_ITEM_IDS:
+        msg = f"物品 {item_name} 禁止交易！"
         await handle_send(bot, event, msg)
-        await xian_shop_add.finish()
-
+        return
+        
+    if quantity > goods_num:
+        quantity = goods_num
     total_fee = get_fee_price(price * quantity)
     if user_info['stone'] < total_fee:
         msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
@@ -302,15 +277,15 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     for _ in range(quantity):
         # 添加到仙肆系统        
         try:
-            trade_manager.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, 1)
-            sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
+            trade_manager.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
+            sql_message.update_back_j(user_id, goods_id, 1)
             success_count += 1
         except Exception as e:
             logger.error(f"仙肆上架失败: {e}")
             msg = "上架过程中出现错误，请稍后再试！"
             continue
 
-    msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
+    msg = f"\n成功上架 {item_name} x{quantity} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总手续费: {number_to(total_fee)} 灵石"
     await handle_send(bot, event, msg)    
@@ -486,7 +461,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
-    goods_name = args[0]
+    item_name = args[0]
     # 尝试解析价格参数
     try:
         price = int(args[1]) if len(args) > 1 else None
@@ -495,62 +470,47 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
     
-    # 检查背包是否有该物品
-    back_msg = sql_message.get_back_msg(user_id)
-    goods_info = None
-    for item in back_msg:
-        if item['goods_name'] == goods_name:
-            goods_info = item
-            break
-    
-    if not goods_info:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+    # 检查背包物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await xianshi_fast_add.finish()
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
+        await handle_send(bot, event, msg)
+        return
     
-    # 对于装备类型，检查是否已被使用
-    if goods_info['goods_type'] == "装备":
-        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
-        if is_equipped:
-            # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
-            available_num = goods_info['goods_num'] - goods_info['bind_num'] - 1
-        else:
-            # 如果未装备，可上架数量 = 总数量 - 绑定数量
-            available_num = goods_info['goods_num'] - goods_info['bind_num']
-    else:
-        # 非装备物品，正常计算
-        available_num = goods_info['goods_num'] - goods_info['bind_num']
+    # 检查物品类型是否允许
+    if goods_info['type'] not in ITEM_TYPES:
+        msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
+        await handle_send(bot, event, msg)
+        return
     
+    # 检查禁止交易的物品
+    if str(goods_id) in BANNED_ITEM_IDS:
+        msg = f"物品 {item_name} 禁止交易！"
+        await handle_send(bot, event, msg)
+        return
+
     # 检查可上架数量（固定为10或背包中全部数量）
-    quantity = min(10, available_num)  # 最多10个
+    quantity = min(10, goods_num)  # 最多10个
     
     if quantity <= 0:
         msg = f"可上架数量不足！"
-        await handle_send(bot, event, msg)
-        await xianshi_fast_add.finish()
-    
-    # 获取物品类型
-    goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in ITEM_TYPES:
-        msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
-        await handle_send(bot, event, msg)
-        await xianshi_fast_add.finish()
-
-    # 检查禁止交易的物品
-    if str(goods_info['goods_id']) in BANNED_ITEM_IDS:
-        msg = f"物品 {goods_name} 禁止在仙肆交易！"
         await handle_send(bot, event, msg)
         await xianshi_fast_add.finish()
 
     # 获取价格（如果用户未指定价格）
     if price is None:
         # 获取仙肆最低价
-        min_price = get_xianshi_min_price(goods_name)
+        min_price = get_xianshi_min_price(item_name)
         
         # 如果没有最低价，则使用炼金价格+100万
         if min_price is None:
             base_rank = convert_rank('江湖好手')[0]
-            item_rank = get_item_msg_rank(goods_info['goods_id'])
+            item_rank = get_item_msg_rank(goods_id)
             price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
         else:
             price = min_price
@@ -574,14 +534,14 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     for _ in range(quantity):
         # 添加到仙肆系统        
         try:
-            trade_manager.add_xianshi_item(user_id, goods_info['goods_id'], goods_name, goods_type, price, 1)
-            sql_message.update_back_j(user_id, goods_info['goods_id'], 1)
+            trade_manager.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
+            sql_message.update_back_j(user_id, goods_id, 1)
             success_count += 1
         except Exception as e:
             logger.error(f"快速上架失败: {e}")
             continue
     
-    msg = f"\n成功上架 {goods_name} x{quantity} 到仙肆！\n"
+    msg = f"\n成功上架 {item_name} x{quantity} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(single_fee)} 灵石"
@@ -1291,7 +1251,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await guishi_qiugou.finish()
     
-    goods_name = args[0]
+    item_name = args[0]
     try:
         price = int(args[1])
         if price < int(MIN_PRICE * 10):
@@ -1305,26 +1265,15 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await guishi_qiugou.finish()
 
-    # 检查禁止交易的物品
-    goods_id = None
-    for k, v in items.items.items():
-        if goods_name == v['name']:
-            goods_item_type = items.get_data_by_item_id(str(k))['item_type']
-            if str(k) in BANNED_ITEM_IDS or goods_item_type == '功法':
-                msg = f"物品 {goods_name} 禁止在鬼市交易！"
-                await handle_send(bot, event, msg)
-                await guishi_qiugou.finish()
-            goods_id = k
-            break
-    
+    # 检查背包的物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
-        msg = f"物品 {goods_name} 不存在！"
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await guishi_qiugou.finish()
+        return
 
     # 获取物品类型
-    goods_type = get_item_type_by_id(goods_id)
-    if goods_type not in GUISHI_TYPES:
+    if goods_info['type'] not in GUISHI_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
         await handle_send(bot, event, msg)
         await guishi_qiugou.finish()
@@ -1345,13 +1294,13 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_qiugou.finish()
     
     # 生成订单ID # 添加求购订单
-    order_id = trade_manager.add_guishi_order(user_id, item_id=goods_id, item_name=goods_name, item_type="qiugou", price=price, quantity=quantity)
+    order_id = trade_manager.add_guishi_order(user_id, item_id=goods_id, item_name=item_name, item_type="qiugou", price=price, quantity=quantity)
     
     # 冻结相应灵石
     trade_manager.update_stored_stone(user_id, total_cost, 'subtract')
     
     msg = f"成功发布求购订单！\n"
-    msg += f"物品：{goods_name}\n"
+    msg += f"物品：{item_name}\n"
     msg += f"总价：{number_to(quantity * price)} 灵石\n"
     msg += f"单价：{number_to(price)} 灵石\n"
     msg += f"数量：{quantity}\n"
@@ -1401,7 +1350,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
     
-    goods_name = args[0]
+    item_name = args[0]
     try:
         price = int(args[1])
         if price < int(MIN_PRICE * 10):
@@ -1414,23 +1363,6 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = "请输入有效的价格和数量！"
         await handle_send(bot, event, msg)
         await guishi_baitan.finish()
-
-    # 检查禁止交易的物品
-    goods_id = None
-    for k, v in items.items.items():
-        if goods_name == v['name']:
-            goods_item_type = items.get_data_by_item_id(str(k))['item_type']
-            if str(k) in BANNED_ITEM_IDS or goods_item_type == '功法':
-                msg = f"物品 {goods_name} 禁止在鬼市交易！"
-                await handle_send(bot, event, msg)
-                await guishi_baitan.finish()
-            goods_id = k
-            break
-    
-    if not goods_id:
-        msg = f"物品 {goods_name} 不存在！"
-        await handle_send(bot, event, msg)
-        await guishi_baitan.finish()
     
     # 检查订单数量限制
     guishi_orders = trade_manager.get_guishi_orders(user_id, type="baitan")
@@ -1441,52 +1373,40 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_baitan.finish()
     
     # 检查背包物品
-    back_msg = sql_message.get_back_msg(user_id)
-    goods_info = None
-    for item in back_msg:
-        if item['goods_name'] == goods_name:
-            goods_info = item
-            break
-    
-    if not goods_info:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await guishi_baitan.finish()
-    
-    # 对于装备类型，检查是否已被使用
-    if goods_info['goods_type'] == "装备":
-        is_equipped = check_equipment_use_msg(user_id, goods_info['goods_id'])
-        if is_equipped:
-            # 如果装备已被使用，可上架数量 = 总数量 - 1（已装备的）
-            available_num = goods_info['goods_num'] - 1
-        else:
-            # 如果未装备，可上架数量 = 总数量
-            available_num = goods_info['goods_num']
-    else:
-        # 非装备物品，正常计算
-        available_num = goods_info['goods_num']
-    
-    # 检查物品总数量
-    if available_num < quantity:
-        msg = f"可上架数量不足！\n最多可摆摊{available_num}个"
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg)
-        await guishi_baitan.finish()
+        return
     
-    # 获取物品类型
-    goods_type = get_item_type_by_id(goods_info['goods_id'])
-    if goods_type not in GUISHI_TYPES:
+    # 检查物品类型是否允许
+    if goods_info['type'] not in GUISHI_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
         await handle_send(bot, event, msg)
-        await guishi_baitan.finish()
+        return
     
+    # 检查禁止交易的物品
+    if str(goods_id) in BANNED_ITEM_IDS:
+        msg = f"物品 {item_name} 禁止交易！"
+        await handle_send(bot, event, msg)
+        return
+    
+    if quantity > goods_num:
+        quantity = goods_num
+        
     # 从背包扣除物品
-    sql_message.update_back_j(user_id, goods_info['goods_id'], num=quantity)
+    sql_message.update_back_j(user_id, goods_id, num=quantity)
     
     # 生成订单ID 添加摆摊订单
-    order_id = trade_manager.add_guishi_order(user_id, item_id=goods_info['goods_id'], item_name=goods_name, item_type="baitan", price=price, quantity=quantity)
+    order_id = trade_manager.add_guishi_order(user_id, item_id=goods_id, item_name=item_name, item_type="baitan", price=price, quantity=quantity)
     
     msg = f"成功摆摊！\n"
-    msg += f"物品：{goods_name}\n"
+    msg += f"物品：{item_name}\n"
     msg += f"价格：{number_to(price)} 灵石\n"
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"

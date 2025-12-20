@@ -198,7 +198,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 判断输入是ID还是名称
     goods_id, goods_info = items.get_data_by_item_name(input_str)
     if not goods_id:
-        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
+        msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
         return
     item_msg = get_item_msg(goods_id, user_info['user_id'])
@@ -866,56 +866,39 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         msg = "价格必须是整数！"
         await handle_send(bot, event, msg)
         return
-    
+
     # 检查背包物品
-    back_msg = sql_message.get_back_msg(user_info['user_id'])
-    item_data = None
-    for item in back_msg:
-        if item['goods_name'] == item_name:
-            if item['bind_num'] >= item['goods_num']:
-                msg = "绑定物品不能上架！"
-                await handle_send(bot, event, msg)
-                return
-            
-            # 对于装备类型，检查是否已被使用
-            if item['goods_type'] == "装备":
-                is_equipped = check_equipment_use_msg(user_info['user_id'], item['goods_id'])
-                if is_equipped:
-                    # 如果装备已被使用，需要至少有一个未装备的才能上架
-                    if item['goods_num'] - item['bind_num'] <= 1:
-                        msg = "该装备已被装备，没有多余的可上架！"
-                        await handle_send(bot, event, msg)
-                        return
-            
-            # 检查物品类型是否允许
-            goods_type = get_item_type_by_id(item['goods_id'])
-            if goods_type not in ITEM_TYPES:
-                msg = f"该物品类型不允许拍卖！允许类型：{', '.join(ITEM_TYPES)}"
-                await handle_send(bot, event, msg)
-                return
-                
-            item_data = item
-            break
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
+        await handle_send(bot, event, msg)
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查物品类型是否允许
+    if goods_info['type'] not in ITEM_TYPES:
+        msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
+        await handle_send(bot, event, msg)
+        return
     
     # 检查禁止交易的物品
-    if str(item['goods_id']) in BANNED_ITEM_IDS:
-        msg = f"物品 {item_name} 禁止拍卖！"
+    if str(goods_id) in BANNED_ITEM_IDS:
+        msg = f"物品 {item_name} 禁止交易！"
         await handle_send(bot, event, msg)
         return
 
-    if not item_data:
-        msg = f"背包中没有 {item_name} 或物品已绑定！"
-        await handle_send(bot, event, msg)
-        return
-    
     # 从背包移除
-    sql_message.update_back_j(user_info['user_id'], item_data['goods_id'], num=1)
+    sql_message.update_back_j(user_info['user_id'], goods_id, num=1)
     
     # 添加上架记录
     success, result = add_player_auction(
         user_info['user_id'],
         user_info['user_name'],
-        item_data['goods_id'],
+        goods_id,
         item_name,
         price
     )
@@ -1160,44 +1143,18 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await goods_re_root.finish()
         
     # 判断输入是ID还是名称
-    goods_id = None
-    if args[0].isdigit():
-        goods_id = int(args[0])
-        item_info = items.get_data_by_item_id(goods_id)
-        if not item_info:
-            msg = f"ID {goods_id} 对应的物品不存在，请检查输入！"
-            await handle_send(bot, event, msg)
-            await goods_re_root.finish()
-        goods_name = item_info['name']
-    else:  # 视为物品名称
-        goods_name = args[0]
-    back_msg = sql_message.get_back_msg(user_id)  # 背包sql信息,list(back)
-    if back_msg is None:
-        msg = "道友的背包空空如也！"
+    item_name = args[0]
+    # 检查背包物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await goods_re_root.finish()
-    in_flag = False  # 判断指令是否正确，道具是否在背包内
-    goods_id = None
-    goods_type = None
-    goods_state = None
-    goods_num = None
-    for back in back_msg:
-        if goods_name == back['goods_name']:
-            in_flag = True
-            goods_id = back['goods_id']
-            goods_type = back['goods_type']
-            goods_state = back['state']
-            goods_num = back['goods_num']
-            break
-    if not in_flag:
-        msg = f"请检查该道具 {goods_name} 是否在背包内！"
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg)
-        await goods_re_root.finish()
-
-    if goods_type == "装备" and int(goods_state) == 1 and int(goods_num) == 1:
-        msg = f"装备：{goods_name}已经被道友装备在身，无法炼金！"
-        await handle_send(bot, event, msg)
-        await goods_re_root.finish()
+        return
 
     if get_item_msg_rank(goods_id) == 520:
         msg = "此类物品不支持！"
@@ -1211,13 +1168,13 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             num = 1 
     price = get_recover(goods_id, num)
     if price <= 0:
-        msg = f"物品：{goods_name}炼金失败，凝聚{number_to(price)}枚灵石！"
+        msg = f"物品：{item_name}炼金失败，凝聚{number_to(price)}枚灵石！"
         await handle_send(bot, event, msg)
         await goods_re_root.finish()
 
     sql_message.update_back_j(user_id, goods_id, num=num)
     sql_message.update_ls(user_id, price, 1)
-    msg = f"物品：{goods_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
+    msg = f"物品：{item_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
     await handle_send(bot, event, msg)
     await goods_re_root.finish()
 
@@ -1478,30 +1435,18 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await handle_send(bot, event, msg)
         await use.finish()
     
-    arg = args[0]  # 物品名称
-    back_msg = sql_message.get_back_msg(user_id)  # 获取背包信息
-    if back_msg is None:
-        msg = "道友的背包空空如也！"
+    item_name = args[0]  # 物品名称
+        # 检查背包物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await use.finish()
-    
-    # 检查物品是否在背包中
-    in_flag = False
-    goods_id = None
-    goods_type = None
-    goods_num = None
-    for back in back_msg:
-        if arg == back['goods_name']:
-            in_flag = True
-            goods_id = back['goods_id']
-            goods_type = back['goods_type']
-            goods_num = back['goods_num']
-            break
-    
-    if not in_flag:
-        msg = f"请检查该道具 {arg} 是否在背包内！"
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg)
-        await use.finish()
+        return
     
     # 处理使用数量的通用逻辑
     num = 1
@@ -1509,17 +1454,17 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         if len(args) > 1 and 1 <= int(args[1]) <= int(goods_num):
             num = int(args[1])
         elif len(args) > 1 and int(args[1]) > int(goods_num):
-            msg = f"道友背包中的{arg}数量不足，当前仅有{goods_num}个！"
+            msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
             await handle_send(bot, event, msg)
             await use.finish()
     except ValueError:
         num = 1
     
     # 根据物品类型处理逻辑
-    goods_info = items.get_data_by_item_id(goods_id)
     user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank("江湖好手")[1]
     goods_rank = int(goods_info.get('rank', 1))
+    goods_type = goods_info['type']
     lh_msg = ""
     if goods_rank == -5:
         goods_rank = added_ranks
@@ -1582,7 +1527,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 sql_message.updata_user_faqi_buff(user_id, goods_id)
             if item_type == "防具":
                 sql_message.updata_user_armor_buff(user_id, goods_id)
-            msg = f"成功装备 {arg}！"
+            msg = f"成功装备 {item_name}！"
 
     elif goods_type == "技能":
         user_buff_info = UserBuffDate(user_id).BuffInfo
@@ -1697,32 +1642,17 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             await handle_send(bot, event, msg)
             await use_item.finish()
     
-    # 查找物品ID
-    item_id = None
-    for item_key, item_data in items.items.items():
-        if item_data['name'] == item_name:
-            item_id = int(item_key)
-            break
-    
-    if not item_id:
-        msg = f"未找到名为 {item_name} 的物品！"
+    # 检查背包物品
+    goods_id, goods_info = items.get_data_by_item_name(item_name)
+    if not goods_id:
+        msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg)
-        await use_item.finish()
-    
-    # 检查背包中是否有该物品
-    back_msg = sql_message.get_back_msg(user_id)
-    in_flag = None
-    
-    for back in back_msg:
-        if item_name == back['goods_name']:
-            in_flag = True
-            goods_num = back['goods_num']
-            break
-    
-    if not in_flag:
-        msg = f"背包中没有 {item_name}！"
+        return
+    goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+    if goods_num <= 0:
+        msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg)
-        await use_item.finish()
+        return
     
     # 检查数量是否足够
     if goods_num < quantity:
@@ -1740,9 +1670,9 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20015: use_work_capture_order,
         20017: use_two_exp_token
     }
-    handler_func = ITEM_HANDLERS.get(item_id, None)
+    handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
-        await handler_func(bot, event, item_id, quantity)
+        await handler_func(bot, event, goods_id, quantity)
     else:
         msg = f"{item_name} 不可直接使用！"
         await handle_send(bot, event, msg)
