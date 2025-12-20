@@ -2240,8 +2240,8 @@ async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 def get_skill_type(skill_type):
     skill_descriptions = {
         1: "伤害",
-        2: "增强",
-        3: "持续",
+        2: "持续",
+        3: "增强",
         4: "叠加",
         5: "波动",
         6: "封印",
