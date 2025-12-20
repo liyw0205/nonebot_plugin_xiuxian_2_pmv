@@ -172,6 +172,7 @@ use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("背包帮助", priority=8, block=True)
 xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
+compare_items = on_command("快速对比", priority=5, block=True)
 
 def get_recover(goods_id, num):
     price = int((convert_rank('江湖好手')[0] + added_ranks) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
@@ -228,6 +229,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🔹 查看修仙界物品+类型 [页码] - 查看物品图鉴
 🔹 查看效果+物品名 - 查看物品详情
 🔹 灵石 - 查看当前灵石数量
+🔹 快速对比 [物品1] [物品2] - 对比装备或者功法的属性
 """
 
     await handle_send(bot, event, msg)
@@ -2186,3 +2188,244 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     result = sql_message.check_and_adjust_goods_quantity()
     msg = f"处理物品数量异常用户：{result}"
     await handle_send(bot, event, msg)
+
+@compare_items.handle(parameterless=[Cooldown(cd_time=30)])
+async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg)
+        await compare_items.finish()
+    
+    user_id = user_info['user_id']
+    item_names = args.extract_plain_text().split()
+    
+    if len(item_names) != 2:
+        await handle_send(bot, event, "请提供两个物品名称进行对比，格式：对比 物品1 物品2")
+        return
+
+    item_name1, item_name2 = item_names
+
+    item1_info = items.get_data_by_item_name(item_name1)[1]
+    item2_info = items.get_data_by_item_name(item_name2)[1]
+
+    if not item1_info:
+        await handle_send(bot, event, f"物品 '{item_name1}' 不存在，请检查名称是否正确！")
+        return
+    if not item2_info:
+        await handle_send(bot, event, f"物品 '{item_name2}' 不存在，请检查名称是否正确！")
+        return
+
+    if item1_info['item_type'] != item2_info['item_type']:
+        await handle_send(bot, event, f"物品的类型不一致，无法进行对比！\n{item_name1}类型：{item1_info['item_type']}\n{item_name2}类型：{item2_info['item_type']}")
+        return
+
+    item_type = item1_info['item_type']
+
+    basic_info = format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type)
+    await handle_send(bot, event, basic_info)
+
+    if item_type == '功法':
+        comparison_result = compare_main(item_name1, item1_info, item_name2, item2_info)
+    elif item_type in ['法器', '防具']:
+        comparison_result = compare_equipment(item_name1, item1_info, item_name2, item2_info)
+    else:
+        await handle_send(bot, event, f"暂不支持类型 '{item_type}' 的物品对比！")
+        return
+
+    await handle_send(bot, event, comparison_result)
+
+def format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type):
+    rank_name_list = convert_rank("江湖好手")[1]
+    if int(item1_info['rank']) == -5:
+        item1_rank = 23
+    else:
+        item1_rank = int(item1_info['rank']) + added_ranks
+    item1_required_rank_name = rank_name_list[len(rank_name_list) - item1_rank]
+    if int(item2_info['rank']) == -5:
+        item2_rank = 23
+    else:
+        item2_rank = int(item2_info['rank']) + added_ranks
+    item2_required_rank_name = rank_name_list[len(rank_name_list) - item2_rank]
+    if item_type == '功法':
+        basic_info = [
+            f"📜 【功法信息】",
+            f"═════════════",
+            f"【{item_name1}】",
+            f"• 品阶：{item1_info.get('level', '未知')}",
+            f"• 类型：{item1_info.get('type', '未知')}",
+            f"• 境界：{item1_required_rank_name}",
+            f"• 描述：{item1_info.get('desc', '暂无描述')}",
+            f"",
+            f"【{item_name2}】",
+            f"• 品阶：{item2_info.get('level', '未知')}",
+            f"• 境界：{item2_required_rank_name}",
+            f"• 类型：{item2_info.get('type', '未知')}",
+            f"• 描述：{item2_info.get('desc', '暂无描述')}",
+            f"═════════════"
+        ]
+    
+    elif item_type in ['法器', '防具']:
+        if item_type == '法器':
+            basic_info = [
+                f"⚔️ 【法器信息】",
+                f"═════════════",
+                f"【{item_name1}】",
+                f"• 品阶：{item1_info.get('level', '未知')}",
+                f"• 境界：{item1_required_rank_name}",
+                f"• 描述：{item1_info.get('desc', '暂无描述')}",
+                f"",
+                f"【{item_name2}】",
+                f"• 品阶：{item2_info.get('level', '未知')}",
+                f"• 境界：{item2_required_rank_name}",
+                f"• 描述：{item2_info.get('desc', '暂无描述')}",
+                f"═════════════"
+            ]
+        else:
+            basic_info = [
+                f"🛡️ 【防具信息】",
+                f"═════════════",
+                f"【{item_name1}】",
+                f"• 品阶：{item1_info.get('level', '未知')}",
+                f"• 境界：{item1_required_rank_name}",
+                f"• 描述：{item1_info.get('desc', '暂无描述')}",
+                f"",
+                f"【{item_name2}】",
+                f"• 品阶：{item2_info.get('level', '未知')}",
+                f"• 境界：{item2_required_rank_name}",
+                f"• 描述：{item2_info.get('desc', '暂无描述')}",
+                f"═════════════"
+            ]
+    
+    return "\n".join(basic_info)
+
+def format_number(value, multiply_hundred=True):
+    if isinstance(value, (int, float)):
+        if multiply_hundred:
+            percentage = value * 100
+            if isinstance(percentage, int) or percentage.is_integer():
+                return f"{int(percentage)}%"
+            rounded = round(percentage, 0)
+            if rounded.is_integer():
+                return f"{int(rounded)}%"
+            return f"{rounded:.0f}%"
+        else:
+            if isinstance(value, int) or value.is_integer():
+                return f"{int(value)}"
+            return f"{value:.1f}"
+    return str(value)
+
+def format_difference(diff, multiply_hundred=True):
+    if isinstance(diff, (int, float)):
+        if multiply_hundred:
+            percentage_diff = diff * 100
+            if isinstance(percentage_diff, int) or percentage_diff.is_integer():
+                return f"{abs(int(percentage_diff))}%"
+            rounded = round(percentage_diff, 0)
+            if rounded.is_integer():
+                return f"{abs(int(rounded))}%"
+            return f"{abs(rounded):.0f}%"
+        else:
+            if isinstance(diff, int) or diff.is_integer():
+                return f"{abs(int(diff))}"
+            return f"{abs(diff):.1f}"
+    return str(diff)
+
+def compare_main(item_name1, item1_info, item_name2, item2_info):
+    comparison = [
+        f"\n🎯 【{item_name1} ↔ {item2_info['name']}】", 
+        f"═════════════"
+    ]
+    skill_params = {
+        'hpbuff': '气血',
+        'mpbuff': '真元',
+        'atkbuff': '攻击',
+        'ratebuff': '修炼速度',
+        'crit_buff': '会心',
+        'def_buff': '减伤',
+        'dan_exp': '炼丹经验',
+        'dan_buff': '丹药数量',
+        'reap_buff': '药材数量',
+        'exp_buff': '经验保护',
+        'critatk': '会心伤害',
+        'two_buff': '双修次数',
+        'number': '突破概率',
+        'clo_exp': '闭关经验',
+        'clo_rs': '闭关生命回复',
+    }
+    
+    no_multiply_params = {'two_buff', 'number', 'dan_exp', 'dan_buff', 'reap_buff', 'exp_buff'}
+    
+    has_comparison = False
+    for param, description in skill_params.items():
+        value1 = item1_info.get(param, 0)
+        value2 = item2_info.get(param, 0)
+        
+        if value1 == 0 and value2 == 0:
+            continue
+        else:
+            has_comparison = True
+            multiply_hundred = param not in no_multiply_params
+        
+            formatted_value1 = format_number(value1, multiply_hundred)
+            formatted_value2 = format_number(value2, multiply_hundred)
+
+            diff = value2 - value1
+            formatted_diff = format_difference(diff, multiply_hundred)
+            
+            if diff > 0:
+                comp_symbol = f"(+{formatted_diff}) 📈"
+            elif diff < 0:
+                comp_symbol = f"(-{formatted_diff}) 📉"
+            else:
+                comp_symbol = "(相同)"
+            
+            comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+    
+    if not has_comparison:
+        comparison.append("• 两个物品在可对比的属性上均无特殊效果")
+    
+    comparison.append("═════════════")
+    return "\n".join(comparison)
+
+def compare_equipment(item_name1, item1_info, item_name2, item2_info):
+    comparison = [
+        f"\n⚔️ 【{item_name1} ↔ {item2_info['name']}】", 
+        f"═════════════"
+    ]
+    equipment_params = {
+        'atk_buff': '攻击',
+        'crit_buff': '会心',
+        'def_buff': '减伤',
+        'mp_buff': '降耗',
+        'critatk': '会心伤害',
+    }
+    
+    has_comparison = False
+    for param, description in equipment_params.items():
+        value1 = item1_info.get(param, 0)
+        value2 = item2_info.get(param, 0)
+        
+        if value1 == 0 and value2 == 0:
+            continue
+        else:
+            has_comparison = True
+            formatted_value1 = format_number(value1)
+            formatted_value2 = format_number(value2)
+            diff = value2 - value1
+            formatted_diff = format_difference(diff)
+            
+            if diff > 0:
+                comp_symbol = f"(+{formatted_diff}) 📈"
+            elif diff < 0:
+                comp_symbol = f"(-{formatted_diff}) 📉"
+            else:
+                comp_symbol = "(相同)"
+            
+            comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+    
+    if not has_comparison:
+        comparison.append("• 两个装备在可对比的属性上均无特殊加成")
+    
+    comparison.append("═════════════")
+    return "\n".join(comparison)
