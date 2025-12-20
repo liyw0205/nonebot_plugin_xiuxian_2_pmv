@@ -191,11 +191,12 @@ class Items:
         return self.items[str(item_id)]
     
     def get_data_by_item_name(self, item_name):
-        """通过物品名称获取物品ID和物品数据"""
+        """通过物品名称获取物品ID和物品数据，如果item_name为数字ID，也支持通过ID查找，返回格式统一为 (item_id, item_data)"""
         if item_name.isdigit():
-            item = self.get_data_by_item_id(self, item_name)
-            if item:
-                return item_name, item
+            item_id = item_name
+            item_data = self.get_data_by_item_id(int(item_id))
+            if item_data:
+                return item_id, item_data
         else:
             for item_id, item in self.items.items():
                 if str(item['name']) == str(item_name):
