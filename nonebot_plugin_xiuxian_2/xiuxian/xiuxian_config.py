@@ -147,7 +147,7 @@ class XiuConfig:
         # 修仙改名的消费
         self.max_stamina = 240 
         # 体力上限
-        self.stamina_recovery_points = 2 
+        self.stamina_recovery_points = 5
         # 体力恢复点数/分钟
 
         self.sql_table = ["user_xiuxian", "user_cd", "sects", "back", "BuffInfo"]  

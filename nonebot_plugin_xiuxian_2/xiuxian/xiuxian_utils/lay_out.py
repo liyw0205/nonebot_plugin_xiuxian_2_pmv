@@ -20,15 +20,10 @@ sql_message = XiuxianDateManage()
 ADMIN_IDS = get_driver().config.superusers
 limit_all_message = require("nonebot_plugin_apscheduler").scheduler
 limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
-auto_recover_hp = require("nonebot_plugin_apscheduler").scheduler
 
 limit_all_data: Dict[str, Any] = {}
 limit_num = 99999
-
-@auto_recover_hp.scheduled_job('interval', minutes=1)
-def auto_recover_hp_():
-    sql_message.auto_recover_hp
-
+    
 @limit_all_message.scheduled_job('interval', minutes=1)
 def limit_all_message_():
     # 重置消息字典

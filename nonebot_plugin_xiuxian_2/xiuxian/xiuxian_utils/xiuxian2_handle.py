@@ -1273,19 +1273,6 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
             self.conn.commit()
-
-    def auto_recover_hp(self):
-        """自动回血函数"""
-        sql = f"SELECT user_id, exp, hp FROM user_xiuxian WHERE hp < exp/2"
-        cur = self.conn.cursor()
-        users = cur.fetchall()
-        
-        for user in users:
-            user_id, exp, hp = user
-            sql = f"UPDATE user_xiuxian SET hp=hp + ?*0.001 WHERE user_id=?"
-            cur.execute(sql, (exp, user_id))
-        
-        self.conn.commit()
     
     def get_back_msg(self, user_id):
         """获取用户背包信息"""

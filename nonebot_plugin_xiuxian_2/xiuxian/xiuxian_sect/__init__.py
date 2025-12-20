@@ -21,7 +21,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
 from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
-from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig
+from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
 from ..xiuxian_utils.utils import (
     check_user, number_to,
@@ -34,6 +34,7 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 config = get_config()
 LEVLECOST = config["LEVLECOST"]
+added_rank = added_ranks()
 cache_help = {}
 userstask = {}
 
@@ -449,7 +450,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                 rank_up = sect_now_room_config['give_level']['rank_up']
                 give_dict = {}
                 give_elixir_id_list = items.get_random_id_list_by_rank_and_item_type(
-                    fanil_rank=max(convert_rank(user_info['level'])[0] - rank_up - 22, 16), item_type=['丹药'])
+                    fanil_rank=max(convert_rank(user_info['level'])[0] - rank_up - added_rank, 16), item_type=['丹药'])
                 if not give_elixir_id_list:  # 没有合适的ID，全部给渡厄丹
                     msg = f"道友成功领取到丹药：渡厄丹 2 枚！"
                     sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 2, 1)  # 送1个渡厄丹

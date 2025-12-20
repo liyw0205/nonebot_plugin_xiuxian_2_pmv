@@ -23,12 +23,13 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict
-from ..xiuxian_config import convert_rank, XiuConfig
+from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
+added_rank = added_ranks()
 cache_help = {}
 
 mix_elixir = on_fullmatch("炼丹", priority=17, block=True)
@@ -151,7 +152,7 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                                                                                               '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,
                          2)
         if timedeff >= round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2):
-            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(max(convert_rank(user_info['level'])[0] - 22, 16), ['药材'])
+            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(max(convert_rank(user_info['level'])[0] - added_rank, 16), ['药材'])
             # 加入传承
             impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
             impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
