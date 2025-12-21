@@ -274,8 +274,27 @@ async def resetrefreshnum():
     sql_message.reset_work_num(count)
     logger.opt(colors=True).info(f"用户悬赏令刷新次数重置成功")
 
+async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str):
+    try:
+        await asyncio.sleep(180)
+        if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
+            has_work, work_data = has_unaccepted_work(user_id)
+            if has_work:
+                remaining_minutes = (datetime.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
+                remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
+                reminder_msg = (
+                    "您已有未接取的悬赏令\n"
+                    f"剩余时间：{int(remaining_minutes)}分钟\n"
+                    "请输入【悬赏令查看】查看当前悬赏"
+                )
+                await handle_send(bot, event, reminder_msg)
+            user_reminder_status[user_id]["pending"] = False
+            user_reminder_status[user_id]["reminded"] = True
+    except Exception as e:
+        logger.error(f"延迟提醒任务发生异常: {e}", exc_info=True)
+
 __work_help__ = f"""
-═══  悬赏令帮助   ═════
+═══  悬赏令帮助   ════
 
 【悬赏令操作】
 悬赏令查看 - 浏览当前可接取的悬赏任务
@@ -355,11 +374,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if has_work:
             # 取消任何现有的延迟提醒任务
             if user_id in user_reminder_tasks:
-                user_reminder_tasks[user_id].cancel()
-                try:
-                    await user_reminder_tasks[user_id]
-                except asyncio.CancelledError:
-                    pass
+                user_reminder_tasks[user_id].cancel()  # 取消任务
                 del user_reminder_tasks[user_id]
                 
             # 设置提醒状态
@@ -369,24 +384,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 "refresh_time": datetime.now()
             }
             
-            # 启动新的延迟提醒任务
-            async def delayed_reminder():
-                await asyncio.sleep(180)  # 3分钟
-                if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
-                    has_work, work_data = has_unaccepted_work(user_id)
-                    if has_work:
-                        remaining_minutes = (datetime.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
-                        remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
-                        reminder_msg = (
-                            "您已有未接取的悬赏令\n"
-                            f"剩余时间：{int(remaining_minutes)}分钟\n"
-                            "请输入【悬赏令查看】查看当前悬赏"
-                        )
-                        await handle_send(bot, event, reminder_msg)
-                    user_reminder_status[user_id]["pending"] = False
-                    user_reminder_status[user_id]["reminded"] = True
-            
-            task = asyncio.create_task(delayed_reminder())
+            task = asyncio.create_task(delayed_reminder(bot, event, user_id))
             user_reminder_tasks[user_id] = task
             
             msg = (
@@ -404,11 +402,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             
             # 取消任何现有的延迟提醒任务
             if user_id in user_reminder_tasks:
-                user_reminder_tasks[user_id].cancel()
-                try:
-                    await user_reminder_tasks[user_id]
-                except asyncio.CancelledError:
-                    pass
+                user_reminder_tasks[user_id].cancel()  # 取消任务
                 del user_reminder_tasks[user_id]
                 
             # 设置新悬赏令的提醒状态
@@ -418,24 +412,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 "refresh_time": datetime.now()
             }
             
-            # 启动新的延迟提醒任务
-            async def delayed_reminder():
-                await asyncio.sleep(180)  # 3分钟
-                if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
-                    has_work, work_data = has_unaccepted_work(user_id)
-                    if has_work:
-                        remaining_minutes = (datetime.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
-                        remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
-                        reminder_msg = (
-                            "您已有未接取的悬赏令\n"
-                            f"剩余时间：{int(remaining_minutes)}分钟\n"
-                            "请输入【悬赏令查看】查看当前悬赏"
-                        )
-                        await handle_send(bot, event, reminder_msg)
-                    user_reminder_status[user_id]["pending"] = False
-                    user_reminder_status[user_id]["reminded"] = True
-            
-            task = asyncio.create_task(delayed_reminder())
+            task = asyncio.create_task(delayed_reminder(bot, event, user_id))
             user_reminder_tasks[user_id] = task
             
             await handle_send(bot, event, msg)
@@ -455,11 +432,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         
         # 取消任何现有的延迟提醒任务
         if user_id in user_reminder_tasks:
-            user_reminder_tasks[user_id].cancel()
-            try:
-                await user_reminder_tasks[user_id]
-            except asyncio.CancelledError:
-                pass
+            user_reminder_tasks[user_id].cancel()  # 取消任务
             del user_reminder_tasks[user_id]
         
         # 确认刷新，删除旧悬赏令        
@@ -475,24 +448,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             "refresh_time": datetime.now()
         }
         
-        # 启动新的延迟提醒任务
-        async def delayed_reminder():
-            await asyncio.sleep(180)  # 3分钟
-            if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
-                has_work, work_data = has_unaccepted_work(user_id)
-                if has_work:
-                    remaining_minutes = (datetime.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
-                    remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
-                    reminder_msg = (
-                        "您已有未接取的悬赏令\n"
-                        f"剩余时间：{int(remaining_minutes)}分钟\n"
-                        "请输入【悬赏令查看】查看当前悬赏"
-                    )
-                    await handle_send(bot, event, reminder_msg)
-                user_reminder_status[user_id]["pending"] = False
-                user_reminder_status[user_id]["reminded"] = True
-        
-        task = asyncio.create_task(delayed_reminder())
+        task = asyncio.create_task(delayed_reminder(bot, event, user_id))
         user_reminder_tasks[user_id] = task
         
         await handle_send(bot, event, msg)
