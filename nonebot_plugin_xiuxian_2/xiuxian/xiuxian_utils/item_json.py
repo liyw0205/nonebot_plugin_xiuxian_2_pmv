@@ -196,11 +196,11 @@ class Items:
             item_id = item_name
             item_data = self.get_data_by_item_id(int(item_id))
             if item_data:
-                return item_id, item_data
+                return int(item_id), item_data
         else:
             for item_id, item in self.items.items():
                 if str(item['name']) == str(item_name):
-                    return item_id, item
+                    return int(item_id), item
         return None, None
 
     def get_fusion_items(self):
