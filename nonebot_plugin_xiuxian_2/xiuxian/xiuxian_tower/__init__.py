@@ -18,11 +18,12 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, log_message, handle_send, 
     number_to, send_msg_handler
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
+player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
 
@@ -30,8 +31,8 @@ items = Items()
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
 tower_continuous = on_command("连续爬塔", aliases={"通天塔速通", "速通通天塔"}, priority=5, block=True)
 tower_info = on_command("通天塔信息", priority=5, block=True)
-tower_rank = on_command("通天塔排行", priority=5, block=True)
-tower_integral_rank = on_command("通天塔积分排行", priority=5, block=True)
+tower_rank = on_command("通天塔排行榜", priority=5, block=True)
+tower_integral_rank = on_command("通天塔积分排行榜", priority=5, block=True)
 tower_shop = on_command("通天塔商店", priority=5, block=True)
 tower_buy = on_command("通天塔兑换", priority=5, block=True)
 tower_help = on_command("通天塔帮助", priority=5, block=True)
@@ -84,8 +85,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "【速通通天塔】 - 连续挑战10层通天塔，可指定层数\n"
         "【通天塔信息】 - 查看当前通天塔进度\n"
         "【通天塔BOSS】 - 查看下层BOSS属性\n"
-        "【通天塔排行】 - 查看通天塔排行榜\n"
-        "【通天塔积分排行】 - 查看通天塔积分排行榜\n"
+        "【通天塔排行榜】 - 查看通天塔排行榜\n"
+        "【通天塔积分排行榜】 - 查看通天塔积分排行榜\n"
         "【通天塔商店】 - 查看通天塔商店商品\n"
         "【通天塔兑换+编号】 - 兑换商店商品\n"
         "════════════\n"

@@ -1338,7 +1338,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             continue  # 跳过禁止交易的物品
         
         # 计算价格
-        total_price = get_recover(item['id'], item['num'])
+        total_price = get_recover(item['id'], item['available_num'])
         
         # 从背包扣除
         sql_message.update_back_j(user_id, item['id'], num=item['available_num'])
