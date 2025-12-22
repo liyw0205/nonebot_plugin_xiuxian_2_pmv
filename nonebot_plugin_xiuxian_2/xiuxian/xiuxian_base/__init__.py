@@ -974,15 +974,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             )
             
             tribulation_data['current_rate'] = new_rate
-            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-            save_user_tribulation_info(user_id, tribulation_data)
             
             msg = (
                 f"渡劫失败！\n"
                 f"雷劫之下，道心受损！\n"
                 f"下次渡劫成功率：{new_rate}%"
             )
-    
+        tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        save_user_tribulation_info(user_id, tribulation_data)    
     await handle_send(bot, event, msg)
     await start_tribulation.finish()
 
