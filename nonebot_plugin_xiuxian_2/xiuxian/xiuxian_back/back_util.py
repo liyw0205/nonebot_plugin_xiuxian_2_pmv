@@ -801,6 +801,7 @@ def get_item_msg(goods_id, user_id=None):
     else:
         goods_rank = int(item_info['rank']) + added_ranks
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
+    goods_max_num = sql_message.goods_max_num(goods_id)
     msg = ''
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
@@ -812,37 +813,37 @@ def get_item_msg(goods_id, user_id=None):
             msg += f"\n境界：{rank}\n耐药性：{goods_all_num}/{item_info['all_num']}"
     elif item_info['item_type'] == '神物':
         msg = f"名字：{item_info['name']}\n"
-        msg += f"效果：{item_info['desc']}\n境界：{item_info['境界']}\n增加{number_to(item_info['buff'])}修为"
+        msg += f"境界：{item_info['境界']}\n全服持有：{number_to(goods_max_num)} 个\n效果：{item_info['desc']}\n增加{number_to(item_info['buff'])}修为"
     elif item_info['item_type'] == '神通':
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_sec_msg(item_info)}\n境界：{required_rank_name}\n{item_info['desc']}"
+        msg += f"境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个\n效果：{get_sec_msg(item_info)}\n\n{item_info['desc']}"
     elif item_info['item_type'] == '身法':
         msg += f"身法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n境界：{required_rank_name}\n{item_info['desc']}"
+        msg += f"境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个\n效果：{get_effect_info_msg(goods_id)[1]}\n\n{item_info['desc']}"
     elif item_info['item_type'] == '瞳术':
         msg += f"瞳术名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
-        msg += f"效果：{get_effect_info_msg(goods_id)[1]}\n境界：{required_rank_name}\n{item_info['desc']}"
+        msg += f"境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个\n效果：{get_effect_info_msg(goods_id)[1]}\n\n{item_info['desc']}"
     elif item_info['item_type'] == '功法':
         msg += f"功法名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
         if str(item_info['desc']) != "":
             item_info['desc'] = f"\n{item_info['desc']}"
-        msg += f"效果：{get_main_info_msg(goods_id)[1]}\n境界：{required_rank_name}{item_info['desc']}"
+        msg += f"境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个\n效果：{get_main_info_msg(goods_id)[1]}\n\n{item_info['desc']}"
     elif item_info['item_type'] == '辅修功法':  # 辅修功法
         msg += f"辅修名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
         if str(item_info['desc']) != "":
             item_info['desc'] = f"\n{item_info['desc']}"
-        msg += f"效果：{get_sub_info_msg(goods_id)[1]}\n境界：{required_rank_name}{item_info['desc']}"
+        msg += f"境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个\n效果：{get_sub_info_msg(goods_id)[1]}\n\n{item_info['desc']}"
     elif item_info['item_type'] == '防具':
         msg = get_armor_info_msg(goods_id, item_info)
-        msg += f"\n境界：{required_rank_name}"
+        msg += f"\n境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个"
     elif item_info['item_type'] == '法器':
         msg = get_weapon_info_msg(goods_id, item_info)
-        msg += f"\n境界：{required_rank_name}"
+        msg += f"\n境界：{required_rank_name}\n全服持有：{number_to(goods_max_num)} 个"
     elif item_info['item_type'] == "药材":
         msg = get_yaocai_info_msg(goods_id, item_info)
     elif item_info['item_type'] == "聚灵旗":

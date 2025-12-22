@@ -1342,6 +1342,17 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return 0
 
+    def goods_max_num(self, goods_id):
+        """返回物品的总数量"""
+        cur = self.conn.cursor()
+        sql = f"SELECT SUM(goods_num) FROM back WHERE goods_id=?"
+        cur.execute(sql, (goods_id,))
+        result = cur.fetchone()
+        if result and result[0] is not None:
+            return result[0]
+        else:
+            return 0
+
     def get_all_user_exp(self, level):
         """查询所有对应大境界玩家的修为"""
         sql = f"SELECT exp FROM user_xiuxian  WHERE level like '{level}%'"
