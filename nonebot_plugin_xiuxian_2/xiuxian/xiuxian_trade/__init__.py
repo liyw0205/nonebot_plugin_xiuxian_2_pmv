@@ -291,7 +291,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)    
     await xian_shop_add.finish()
 
-@xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=30)])
 async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆自动上架（按类型和品阶批量上架）优化版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -442,7 +442,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, msg)
     await xianshi_auto_add.finish()
 
-@xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=10)])
 async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速上架（按物品名快速上架）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -853,7 +853,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     await xian_buy.finish()
 
-@xianshi_fast_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xianshi_fast_buy.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=10)])
 async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

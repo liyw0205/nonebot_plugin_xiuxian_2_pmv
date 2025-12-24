@@ -2217,7 +2217,7 @@ async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
 
     if item1_info['item_type'] != item2_info['item_type']:
-        await handle_send(bot, event, f"• {item_name1}：{item1_info['item_type']}\n• {item_name2}：{item2_info['item_type']}/n物品的类型不一致，无法进行对比！")
+        await handle_send(bot, event, f"物品的类型不一致，无法进行对比！\n{item_name1}类型：{item1_info['item_type']}\n{item_name2}类型：{item2_info['item_type']}")
         return
 
     item_type = item1_info['item_type']
@@ -2238,34 +2238,36 @@ async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, comparison_result)
 
 def get_skill_type(skill_type):
-    skill_descriptions = {
-        1: "伤害",
-        2: "持续",
-        3: "增强",
-        4: "叠加",
-        5: "波动",
-        6: "封印",
-        7: "变化",
-    }
-    return skill_descriptions.get(skill_type, "未知")
+    if skill_type == 1:
+        skill_desc = "伤害"
+    elif skill_type == 2:
+        skill_desc = "增强"
+    elif skill_type == 3:
+        skill_desc = "持续"
+    elif skill_type == 4:
+        skill_desc = "叠加"
+    elif skill_type == 5:
+        skill_desc = "波动"
+    elif skill_type == 6:
+        skill_desc = "封印"
+    elif skill_type == 7:
+        skill_desc = "变化"
+    else:
+        skill_desc = "未知"
+    return skill_desc
 
 def format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type):
     rank_name_list = convert_rank("江湖好手")[1]
-    # 假设 added_ranks 已定义，如果未定义需要根据实际情况调整
-    added_ranks = 0  # 请根据实际情况设置 added_ranks 的值
-
-    def get_required_rank_name(rank_value):
-        if rank_value == -5:
-            rank = 23
-        else:
-            rank = int(rank_value) + added_ranks
-        return rank_name_list[len(rank_name_list) - rank] if rank < len(rank_name_list) else "未知"
-
-    item1_rank = int(item1_info['rank']) if item1_info['rank'] != '-5' else -5
-    item1_required_rank_name = get_required_rank_name(item1_rank)
-
-    item2_rank = int(item2_info['rank']) if item2_info['rank'] != '-5' else -5
-    item2_required_rank_name = get_required_rank_name(item2_rank)
+    if int(item1_info['rank']) == -5:
+        item1_rank = 23
+    else:
+        item1_rank = int(item1_info['rank']) + added_ranks
+    item1_required_rank_name = rank_name_list[len(rank_name_list) - item1_rank]
+    if int(item2_info['rank']) == -5:
+        item2_rank = 23
+    else:
+        item2_rank = int(item2_info['rank']) + added_ranks
+    item2_required_rank_name = rank_name_list[len(rank_name_list) - item2_rank]
     
     if item_type == '功法':
         basic_info = [
@@ -2316,7 +2318,7 @@ def format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type)
             f"• 描述：{item1_info.get('desc', '暂无描述')}",
             f"",
             f"【{item_name2}】",
-            f"• 品阶：{item2_info.get('level', '未知')}",
+            f"• 品阶：{item1_info.get('level', '未知')}",
             f"• 类型：{skill_desc2}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
             f"═════════════"
@@ -2328,76 +2330,33 @@ def format_number(value, multiply_hundred=True):
     if isinstance(value, (int, float)):
         if multiply_hundred:
             percentage = value * 100
-            if percentage == int(percentage):
+            if isinstance(percentage, int) or percentage.is_integer():
                 return f"{int(percentage)}%"
             rounded = round(percentage, 0)
-            if rounded == int(rounded):
+            if rounded.is_integer():
                 return f"{int(rounded)}%"
             return f"{rounded:.0f}%"
         else:
-            if value == int(value):
+            if isinstance(value, int) or value.is_integer():
                 return f"{int(value)}"
             return f"{value:.1f}"
     return str(value)
 
 def format_difference(diff, multiply_hundred=True):
     if isinstance(diff, (int, float)):
-        abs_diff = abs(diff)
         if multiply_hundred:
-            percentage_diff = abs_diff * 100
-            if percentage_diff == int(percentage_diff):
-                return f"{int(percentage_diff)}%"
+            percentage_diff = diff * 100
+            if isinstance(percentage_diff, int) or percentage_diff.is_integer():
+                return f"{abs(int(percentage_diff))}%"
             rounded = round(percentage_diff, 0)
-            if rounded == int(rounded):
-                return f"{int(rounded)}%"
-            return f"{rounded:.0f}%"
+            if rounded.is_integer():
+                return f"{abs(int(rounded))}%"
+            return f"{abs(rounded):.0f}%"
         else:
-            if abs_diff == int(abs_diff):
-                return f"{int(abs_diff)}"
-            return f"{abs_diff:.1f}"
+            if isinstance(diff, int) or diff.is_integer():
+                return f"{abs(int(diff))}"
+            return f"{abs(diff):.1f}"
     return str(diff)
-
-def compare_attributes(item_name1, item1_info, item_name2, item2_info, attributes, format_func=None, multiply_hundred=True, is_skill=False):
-    comparison = []
-    has_comparison = False
-    for param, description in attributes.items():
-        value1 = item1_info.get(param, 0)
-        value2 = item2_info.get(param, 0)
-        
-        if value1 == 0 and value2 == 0:
-            continue
-        else:
-            has_comparison = True
-            if format_func:
-                formatted_value1 = format_func(value1, multiply_hundred)
-                formatted_value2 = format_func(value2, multiply_hundred)
-            else:
-                formatted_value1 = format_number(value1, multiply_hundred)
-                formatted_value2 = format_number(value2, multiply_hundred)
-            
-            diff = value2 - value1
-            formatted_diff = format_difference(diff, multiply_hundred)
-            
-            if diff > 0:
-                comp_symbol = f"(+{formatted_diff}) 📈"
-            elif diff < 0:
-                comp_symbol = f"(-{formatted_diff}) 📉"
-            else:
-                comp_symbol = "(相同)"
-            
-            if is_skill:
-                comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
-            else:
-                comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
-    
-    if not has_comparison:
-        if is_skill:
-            comparison.append("• 两个物品在可对比的属性上均无特殊效果")
-        else:
-            comparison.append("• 两个物品在可对比的属性上均无特殊效果")
-    
-    comparison.append("═════════════")
-    return "\n".join(comparison)
 
 def compare_main(item_name1, item1_info, item_name2, item2_info):
     comparison = [
@@ -2421,26 +2380,39 @@ def compare_main(item_name1, item1_info, item_name2, item2_info):
         'clo_exp': '闭关经验',
         'clo_rs': '闭关生命回复',
     }
+    
     no_multiply_params = {'two_buff', 'number', 'dan_exp', 'dan_buff', 'reap_buff', 'exp_buff'}
     
-    def format_func(value, multiply_hundred):
-        if param in no_multiply_params:
-            return format_number(value, multiply_hundred=False)
-        else:
-            return format_number(value, multiply_hundred=True)
-    
-    attributes = {}
+    has_comparison = False
     for param, description in skill_params.items():
-        attributes[param] = description
+        value1 = item1_info.get(param, 0)
+        value2 = item2_info.get(param, 0)
+        
+        if value1 == 0 and value2 == 0:
+            continue
+        else:
+            has_comparison = True
+            multiply_hundred = param not in no_multiply_params
+        
+            formatted_value1 = format_number(value1, multiply_hundred)
+            formatted_value2 = format_number(value2, multiply_hundred)
+
+            diff = value2 - value1
+            formatted_diff = format_difference(diff, multiply_hundred)
+            
+            if diff > 0:
+                comp_symbol = f"(+{formatted_diff}) 📈"
+            elif diff < 0:
+                comp_symbol = f"(-{formatted_diff}) 📉"
+            else:
+                comp_symbol = "(相同)"
+            
+            comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
     
-    comparison_part = compare_attributes(
-        item_name1, item1_info, item_name2, item2_info, 
-        attributes, 
-        format_func=lambda v, m: format_number(v, param not in no_multiply_params), 
-        multiply_hundred=True, 
-        is_skill=True
-    )
-    comparison.append(comparison_part)
+    if not has_comparison:
+        comparison.append("• 两个物品在可对比的属性上均无特殊效果")
+    
+    comparison.append("═════════════")
     return "\n".join(comparison)
 
 def compare_equipment(item_name1, item1_info, item_name2, item2_info):
@@ -2456,19 +2428,39 @@ def compare_equipment(item_name1, item1_info, item_name2, item2_info):
         'critatk': '会心伤害',
     }
     
-    comparison_part = compare_attributes(
-        item_name1, item1_info, item_name2, item2_info, 
-        equipment_params, 
-        multiply_hundred=False, 
-        is_skill=True
-    )
-    comparison.append(comparison_part)
+    has_comparison = False
+    for param, description in equipment_params.items():
+        value1 = item1_info.get(param, 0)
+        value2 = item2_info.get(param, 0)
+        
+        if value1 == 0 and value2 == 0:
+            continue
+        else:
+            has_comparison = True
+            formatted_value1 = format_number(value1)
+            formatted_value2 = format_number(value2)
+            diff = value2 - value1
+            formatted_diff = format_difference(diff)
+            
+            if diff > 0:
+                comp_symbol = f"(+{formatted_diff}) 📈"
+            elif diff < 0:
+                comp_symbol = f"(-{formatted_diff}) 📉"
+            else:
+                comp_symbol = "(相同)"
+            
+            comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+    
+    if not has_comparison:
+        comparison.append("• 两个装备在可对比的属性上均无特殊加成")
+    
+    comparison.append("═════════════")
     return "\n".join(comparison)
 
-def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
+def compare_skill_types(item_name1, skill1, item_name2, skill2):
     comparison = []
-    skill_type1 = item1_info.get('skill_type', 0)
-    skill_type2 = item2_info.get('skill_type', 0)
+    skill_type1 = skill1.get('skill_type', 0)
+    skill_type2 = skill2.get('skill_type', 0)
     skill_desc1 = get_skill_type(skill_type1)
     skill_desc2 = get_skill_type(skill_type2)
     
@@ -2477,9 +2469,11 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
             comparison.append(f"🔥【{item_name1} ↔ {item_name2}】")
             comparison.append(f"═════════════")
             
-            atkvalue1 = item1_info.get('atkvalue', [0])
-            atkvalue2 = item2_info.get('atkvalue', [0])
+            # 处理伤害值，支持列表（多段伤害）
+            atkvalue1 = skill1.get('atkvalue', [0])
+            atkvalue2 = skill2.get('atkvalue', [0])
             
+            # 计算总伤害
             total_atk1 = sum(atkvalue1) if isinstance(atkvalue1, list) else atkvalue1
             total_atk2 = sum(atkvalue2) if isinstance(atkvalue2, list) else atkvalue2
             
@@ -2497,6 +2491,7 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
             
             comparison.append(f"• 总直接伤害: {formatted_total_atk1} ↔ {formatted_total_atk2} {comp_symbol_atk}")
             
+            # 其他参数
             skill_params = {
                 'hpcost': ('气血消耗', True),
                 'mpcost': ('真元消耗', True),
@@ -2504,31 +2499,30 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'rate': ('触发概率', False),
             }
             
-            comparison_part = compare_attributes(
-                item_name1, item1_info, item_name2, item2_info, 
-                skill_params, 
-                multiply_hundred={'hpcost': True, 'mpcost': True, 'turncost': False, 'rate': False},
-                is_skill=True
-            )
-            # 需要调整 compare_attributes 以接受不同的 multiply_hundred 参数
-            # 暂时简化处理，可以根据需要进一步优化
+            has_comparison = False
             for param, (description, multiply_hundred) in skill_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
             
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊效果")
+        
         elif skill_type1 == 2:  # 增强类
             comparison.append(f"💪【{item_name1} ↔ {item_name2}】")
             comparison.append(f"═════════════")
@@ -2540,22 +2534,29 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'mpcost': ('真元消耗', True),
                 'rate': ('触发概率', False),
             }
+            has_comparison = False
             for param, (description, multiply_hundred) in enhance_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+            
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊加成")
         
         elif skill_type1 == 3:  # 持续类
             comparison.append(f"🔄【{item_name1} ↔ {item_name2}】")
@@ -2567,22 +2568,29 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'mpcost': ('真元消耗', True),
                 'rate': ('触发概率', False),
             }
+            has_comparison = False
             for param, (description, multiply_hundred) in continuous_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+            
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊效果")
         
         elif skill_type1 == 4:  # 叠加类
             comparison.append(f"📈【{item_name1} ↔ {item_name2}】")
@@ -2595,22 +2603,29 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'mpcost': ('真元消耗', True),
                 'rate': ('触发概率', False),
             }
+            has_comparison = False
             for param, (description, multiply_hundred) in stack_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+            
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊效果")
         
         elif skill_type1 == 5:  # 波动类
             comparison.append(f"🌊【{item_name1} ↔ {item_name2}】")
@@ -2623,22 +2638,29 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'mpcost': ('真元消耗', True),
                 'rate': ('触发概率', False),
             }
+            has_comparison = False
             for param, (description, multiply_hundred) in wave_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+            
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊效果")
         
         elif skill_type1 == 6:  # 封印类
             comparison.append(f"🔒【{item_name1} ↔ {item_name2}】")
@@ -2650,29 +2672,36 @@ def compare_skill_types(item_name1, item1_info, item_name2, item2_info):
                 'mpcost': ('真元消耗', True),
                 'rate': ('触发概率', False),
             }
+            has_comparison = False
             for param, (description, multiply_hundred) in seal_params.items():
-                value1 = item1_info.get(param, 0)
-                value2 = item2_info.get(param, 0)
+                value1 = skill1.get(param, 0)
+                value2 = skill2.get(param, 0)
                 if value1 == 0 and value2 == 0:
                     continue
+                has_comparison = True
                 formatted_value1 = format_number(value1, multiply_hundred)
                 formatted_value2 = format_number(value2, multiply_hundred)
                 diff = value2 - value1
                 formatted_diff = format_difference(diff, multiply_hundred)
+                
                 if diff > 0:
                     comp_symbol = f"(+{formatted_diff}) 📈"
                 elif diff < 0:
                     comp_symbol = f"(-{formatted_diff}) 📉"
                 else:
                     comp_symbol = "(相同)"
+                
                 comparison.append(f"• {description}: {formatted_value1} ↔ {formatted_value2} {comp_symbol}")
+            
+            if not has_comparison:
+                comparison.append("• 两个神通在可对比的属性上均无特殊效果")
         
         else:
             comparison.append("🤔 【未知类型】")
             comparison.append(f"• 该神通类型暂不支持对比！类型: {skill_type1}")
     else:
         comparison.append("⚠️ 【类型不匹配】")
-        comparison.append(f"• {item_name1}: {skill_desc1}\n• {item_name2}: {skill_desc2}")
+        comparison.append(f"• {item_name1}类型: {skill_desc1}，{item_name2}类型: {skill_desc2}")
         comparison.append("• 不同类型的神通无法进行对比！")
     
     comparison.append("═════════════")
