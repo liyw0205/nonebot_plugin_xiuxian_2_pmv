@@ -3,10 +3,11 @@ import asyncio
 import re
 import json
 from nonebot import on_command, on_fullmatch
-from nonebot.params import EventPlainText
+from nonebot.params import EventPlainText, CommandArg
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GROUP,
+    Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
@@ -14,25 +15,26 @@ from nonebot.adapters.onebot.v11 import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, get_player_info, save_player_info, 
+    XiuxianDateManage, get_player_info, save_player_info,
     UserBuffDate, XIUXIAN_IMPART_BUFF
 )
 from ..xiuxian_utils.utils import (
-    check_user, send_msg_handler, 
+    check_user, send_msg_handler,
     get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
-from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict
+from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict, get_elixir_recipe_msg
 from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
+
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
 cache_help = {}
 
-mix_elixir = on_fullmatch("炼丹", priority=17, block=True)
+mix_elixir = on_command("炼丹", priority=17, block=True)
 mix_make = on_command("配方", priority=5, block=True)
 elixir_help = on_fullmatch("炼丹帮助", priority=7, block=True)
 mix_elixir_help = on_fullmatch("炼丹配方帮助", priority=7, block=True)
@@ -126,7 +128,7 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await mix_elixir_dykh_up.finish()
 
 
-@yaocai_get.handle(parameterless=[Cooldown(stamina_cost = 1)])
+@yaocai_get.handle(parameterless=[Cooldown(stamina_cost=1)])
 async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """灵田收取"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -152,14 +154,15 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                                                                                               '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,
                          2)
         if timedeff >= round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2):
-            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(max(convert_rank(user_info['level'])[0] - added_rank, 16), ['药材'])
+            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(
+                max(convert_rank(user_info['level'])[0] - added_rank, 16), ['药材'])
             # 加入传承
             impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
             impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
-            #功法灵田收取加成
+            # 功法灵田收取加成
             main_reap = UserBuffDate(user_id).get_user_main_buff_data()
-                
-            if  main_reap != None: #功法灵田收取加成
+
+            if main_reap != None:  # 功法灵田收取加成
                 reap_buff = main_reap['reap_buff']
             else:
                 reap_buff = 0
@@ -189,7 +192,8 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             log_message(user_id, msg)
             await yaocai_get.finish()
         else:
-            remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2) - timedeff
+            remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])),
+                                   2) - timedeff
             hours = int(remaining_time)
             minutes = int((remaining_time - hours) * 60)
             msg = f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
@@ -252,8 +256,16 @@ user_ldl_dict = {}
 user_ldl_flag = {}
 
 
+def remove_herbs_by_levels(herb_dict, levels_to_remove):
+    """根据数字品级删除对应药材"""
+    level_map = {i: f"{['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'][i]}品药材" for i in
+                 range(1, 10)}
+    remove_levels = {level_map[l] for l in levels_to_remove if 1 <= l <= 9}
+    return {k: v for k, v in herb_dict.items() if v.get("level") not in remove_levels}
+
+
 @mix_elixir.handle(parameterless=[Cooldown(cd_time=10)])
-async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """炼丹,用来生成配方"""
     global user_ldl_dict, user_ldl_flag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -263,6 +275,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mix_elixir.finish()
     user_id = user_info['user_id']
     user_back = sql_message.get_back_msg(user_id)
+
     yaocai_dict = {}
     user_ldl_flag[user_id] = False  # 初始化炼丹炉标志
     for back in user_back:
@@ -279,7 +292,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = "道友的背包空空如也，无法炼丹"
         await handle_send(bot, event, msg)
         await mix_elixir.finish()
-    
+
     if yaocai_dict == {}:
         msg = "道友的背包内没有药材，无法炼丹！"
         await handle_send(bot, event, msg)
@@ -293,18 +306,31 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = "正在生成丹方，请稍候..."
     await handle_send(bot, event, msg)
 
-    yaocai_dict = await make_dict(yaocai_dict)
-    mix_elixir_msgs = await get_mix_elixir_msg(yaocai_dict)  # 现在返回一个配方列表
-    
+    input_str = args.extract_plain_text().strip()  # 获取用户输入的物品名
+    if input_str:
+        msg = "请输入丹药名称！\n例如：炼丹 灭神古丸"
+        # ====== 解析 丹药名 + 可变数量 的品级数字 ======
+        parts = input_str.split()
+        dan_name = parts[0]  # 丹药名
+        remove_level_nums = set(map(int, parts[1:]))  # 如 {7,8}
+        target_elixir_id, target_elixir = Items().get_data_by_item_name(dan_name)
+        if not target_elixir_id:
+            msg = "请输入有效丹药名称！"
+            await handle_send(bot, event, msg)
+            await mix_elixir.finish()
+        yaocai_dict = remove_herbs_by_levels(yaocai_dict, remove_level_nums)  # 删除指定品质药材
+        mix_elixir_msgs = await get_elixir_recipe_msg(target_elixir_id, target_elixir, yaocai_dict, top_n=20)
+    else:
+        yaocai_dict = await make_dict(yaocai_dict)
+        mix_elixir_msgs = await get_mix_elixir_msg(yaocai_dict)  # 现在返回一个配方列表
+
     if not mix_elixir_msgs:  # 如果没有找到任何配方
         msg = "系统未检测到丹方，道友背包内的药材不满足！"
         await handle_send(bot, event, msg)
         await mix_elixir.finish()
     else:
         ldl_name = sorted(user_ldl_dict[user_id].items(), key=lambda x: x[0], reverse=False)[0][1]
-        
-        # 构建多个配方的消息
-        msg_list = []
+        msg_list = []  # 构建多个配方的消息
         for idx, mix_elixir_msg in enumerate(mix_elixir_msgs, 1):
             goods_info = items.get_data_by_item_id(mix_elixir_msg['id'])
             msg = f"配方{idx}：\n"
@@ -317,10 +343,11 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             if mix_elixir_msg['辅药_num'] != 0:
                 msg += f"辅药：{mix_elixir_msg['辅药']},{mix_elixir_msg['辅药_level']}，数量：{mix_elixir_msg['辅药_num']}\n"
             msg_list.append(msg)
-        
+
         # 将所有配方的消息合并发送
         await send_msg_handler(bot, event, '配方', bot.self_id, msg_list)
         await mix_elixir.finish()
+
 
 # 配方
 @mix_make.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -403,26 +430,26 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 # 加入传承
                 impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
                 impart_mix_per = impart_data['impart_mix_per'] if impart_data is not None else 0
-                #功法炼丹数加成
+                # 功法炼丹数加成
                 main_dan_data = UserBuffDate(user_id).get_user_main_buff_data()
-                
-                if  main_dan_data != None: #功法炼丹数量加成
+
+                if main_dan_data != None:  # 功法炼丹数量加成
                     main_dan = main_dan_data['dan_buff']
                 else:
                     main_dan = 0
-                #功法炼丹经验加成
+                # 功法炼丹经验加成
                 main_dan_exp = UserBuffDate(user_id).get_user_main_buff_data()
-                
-                if  main_dan_exp != None: #功法炼丹经验加成
+
+                if main_dan_exp != None:  # 功法炼丹经验加成
                     main_exp = main_dan_exp['dan_exp']
                 else:
                     main_exp = 0
-                
-                num = 1 + ldl_info['buff'] + mix_elixir_info['丹药控火'] + impart_mix_per + main_dan#炼丹数量提升
+
+                num = 1 + ldl_info['buff'] + mix_elixir_info['丹药控火'] + impart_mix_per + main_dan  # 炼丹数量提升
                 msg = f"恭喜道友成功炼成丹药：{goods_info['name']}{num}枚"
                 # 背包sql
-                sql_message.send_back(user_id, id, goods_info['name'], "丹药", num) #将炼制的丹药加入背包
-                sql_message.update_back_j(user_id, zhuyao_goods_id, zhuyao_num) #将消耗的药材从背包中减去
+                sql_message.send_back(user_id, id, goods_info['name'], "丹药", num)  # 将炼制的丹药加入背包
+                sql_message.update_back_j(user_id, zhuyao_goods_id, zhuyao_num)  # 将消耗的药材从背包中减去
                 sql_message.update_back_j(user_id, fuyao_goods_id, fuyao_num)
                 sql_message.update_back_j(user_id, yaoyin_goods_id, yaoyin_num)
                 update_statistics_value(user_id, "炼丹次数")
@@ -430,23 +457,23 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 mix_elixir_info['炼丹记录'] = json.loads(mix_elixir_info['炼丹记录'])
                 try:
                     var = mix_elixir_info['炼丹记录'][id]
-                    now_num = mix_elixir_info['炼丹记录'][id]['num'] #now_num 已经炼制的丹药数量
+                    now_num = mix_elixir_info['炼丹记录'][id]['num']  # now_num 已经炼制的丹药数量
                     if now_num >= goods_info['mix_all']:
                         msg += f"该丹药道友已炼制{now_num}次，无法获得炼丹经验了~"
                     elif now_num + num >= goods_info['mix_all']:
                         exp_num = goods_info['mix_all'] - now_num
-                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] +  main_exp) * exp_num
+                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * exp_num
                         msg += f"获得炼丹经验{goods_info['mix_exp'] * exp_num}点"
                     else:
-                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] +  main_exp) * num
-                        msg += f"获得炼丹经验{(goods_info['mix_exp'] +  main_exp) * num}点"
+                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
+                        msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
                     mix_elixir_info['炼丹记录'][id]['num'] += num
                 except:
                     mix_elixir_info['炼丹记录'][id] = {}
                     mix_elixir_info['炼丹记录'][id]['name'] = goods_info['name']
                     mix_elixir_info['炼丹记录'][id]['num'] = num
-                    mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] +  main_exp) * num
-                    msg += f"获得炼丹经验{(goods_info['mix_exp'] +  main_exp) * num}点"
+                    mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
+                    msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
                 mix_elixir_info['炼丹记录'] = json.dumps(mix_elixir_info.get("炼丹记录", {}))
                 save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
                 await handle_send(bot, event, msg)
