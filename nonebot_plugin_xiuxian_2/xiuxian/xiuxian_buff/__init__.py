@@ -64,6 +64,7 @@ two_exp_accept = on_fullmatch("同意双修", priority=5, block=True)
 two_exp_reject = on_fullmatch("拒绝双修", priority=5, block=True)
 two_exp_protect = on_command("双修保护", priority=5, block=True)
 mind_state = on_fullmatch("我的状态", priority=7, block=True)
+my_exp = on_command('我的修为', aliases={'修为'}, priority=10, block=True)
 qc = on_command("切磋", priority=6, block=True)
 buff_help = on_command("功法帮助", aliases={"灵田帮助", "洞天福地帮助"}, priority=5, block=True)
 double_cultivation_help = on_command("道侣帮助", aliases={"双修帮助"}, priority=5, block=True)
@@ -1328,6 +1329,52 @@ boss战增益:{int(boss_atk * 100)}%
     sql_message.update_last_check_info_time(user_id)
     await handle_send(bot, event, msg)
     await mind_state.finish()
+
+@my_exp.handle(parameterless=[Cooldown(cd_time=10)])
+async def my_exp_(bot: Bot, event: GroupMessageEvent):
+    """我的修为
+    """
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg)
+        await my_exp.finish()
+
+    user_id = user_info['user_id']
+    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+    user_buff_data = UserBuffDate(user_id)
+    level_name = user_msg['level']  # 用户境界
+    leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
+    main_buff_data = user_buff_data.get_user_main_buff_data()  # 获取功法buff
+    main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
+    main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
+    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
+    realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
+    list_all = len(OtherSet().level) - 1
+    now_index = OtherSet().level.index(user_info['level'])
+    user_exp = user_info['exp']
+
+    if list_all == now_index:
+        need_exp = user_exp
+        exp_meg = f"位面至高"
+    else:
+        is_updata_level = OtherSet().level[now_index + 1]
+        need_exp = sql_message.get_level_power(is_updata_level)
+        get_exp = need_exp - user_exp
+        if get_exp > 0:
+            exp_meg = f"还需{number_to(get_exp)}修为可突破！"
+        else:
+            exp_meg = f"可突破！"
+
+    msg = f"境界：{level_name}\n"
+    msg += f"修为：{number_to(user_exp)} (上限{number_to(need_exp * 1.5)})\n"
+    msg += f"状态：{exp_meg}\n"
+    msg += f"概率：下一次突破成功概率为{jsondata.level_rate_data()[level_name] + leveluprate + main_buff_number_buff}%\n"
+    msg += f"效率：{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%"
+
+    await handle_send(bot, event, msg)
+    await my_exp.finish()
 
 @buffinfo.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
