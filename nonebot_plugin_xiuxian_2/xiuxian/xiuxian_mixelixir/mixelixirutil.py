@@ -199,6 +199,208 @@ async def get_mix_elixir_msg(yaocai: Dict) -> List[Dict]:
     
     return final_recipes
 
+async def get_elixir_recipe_msg(elixir_id, elixir, back, top_n=20):
+    """获取丹药配方"""
+    # ---------- 1. 提取丹药配置 ----------
+    config_items = list(elixir["elixir_config"].items())
+    zhuyao_type, zhuyao_need = int(config_items[0][0]), config_items[0][1]
+    fuyao_type, fuyao_need = int(config_items[1][0]), config_items[1][1]
+
+    # ---------- 2. 候选池 & 药引分桶 ----------
+    zhuyao_list, fuyao_list = [], []
+    yaoyin_by_hac = {1: [], -1: [], 0: []}
+
+    for item in back.values():
+        if "主药" in item and item["主药"]["type"] == zhuyao_type:
+            zhuyao_list.append(item)
+        if "辅药" in item and item["辅药"]["type"] == fuyao_type:
+            fuyao_list.append(item)
+        if "药引" in item:
+            hac = item["药引"]["h_a_c"]
+            key = (hac > 0) - (hac < 0)
+            yaoyin_by_hac[key].append(item)
+
+    # ---------- 3. 计算数量----------
+    z_list = [
+        {
+            "name": item["name"],
+            "level": item["level"],
+            "num": needed,
+            "h_a_c": item["主药"]["h_a_c"],
+            "hac": (item["主药"]["h_a_c"] > 0) - (item["主药"]["h_a_c"] < 0)
+        }
+        for item in zhuyao_list
+        if (needed := math.ceil(zhuyao_need / item["主药"]["power"])) <= item.get("num", 0)
+    ]
+
+    f_list = [
+        {
+            "name": item["name"],
+            "level": item["level"],
+            "num": needed,
+            "hac": (item["药引"]["h_a_c"] > 0) - (item["药引"]["h_a_c"] < 0)
+        }
+        for item in fuyao_list
+        if (needed := math.ceil(fuyao_need / item["辅药"]["power"])) <= item.get("num", 0)
+    ]
+
+    y_list = {
+        1: [
+            {
+                "name": item["name"],
+                "level": item["level"],
+                "h_a_c": item["药引"]["h_a_c"],
+                "num": math.ceil(zhuyao_need / 2 / abs(item["药引"]["h_a_c"])),
+                "hac": 1
+            }
+            for item in yaoyin_by_hac.get(1, [])
+            if item.get("num", 0) >= math.ceil(zhuyao_need / 2 / abs(item["药引"]["h_a_c"]))
+        ],
+        -1: [
+            {
+                "name": item["name"],
+                "level": item["level"],
+                "h_a_c": item["药引"]["h_a_c"],
+                "num": math.ceil(zhuyao_need / 2 / abs(item["药引"]["h_a_c"])),
+                "hac": -1
+            }
+            for item in yaoyin_by_hac.get(-1, [])
+            if item.get("num", 0) >= math.ceil(zhuyao_need / 2 / abs(item["药引"]["h_a_c"]))
+        ],
+        0: [
+            {
+                "name": item["name"],
+                "level": item["level"],
+                "h_a_c": item["药引"]["h_a_c"],
+                "num": 1,
+                "hac": 0
+            }
+            for item in yaoyin_by_hac.get(0, [])
+            if item.get("num", 0) >= 1
+        ]
+    }
+
+    results = await _generate_sorted_recipes_optimized(elixir_id, z_list, y_list, f_list, max_per_type=5)
+    top_formulas = remove_duplicate_formulas(results, top_n)
+
+    return top_formulas
+
+
+# ---------------- 辅助函数 ----------------
+def remove_duplicate_formulas(formulas, top_n=20):
+    """去除重复配方，只保留总消耗最少的"""
+    best = {}
+    for f in formulas:
+        key = (f['主药'], f['药引'], f['辅药'])
+        cost = f['主药_num'] + f['药引_num'] + f['辅药_num']
+        if key not in best or cost < best[key][0]:
+            best[key] = (cost, f)
+
+    sorted_items = sorted(best.values(), key=lambda x: x[0])
+    top_formulas = [f for _, f in sorted_items[:top_n]]
+
+    return top_formulas
+
+
+def get_level_number(level_str):
+    """将品级字符串转换为数字，一品最低，九品最高"""
+    level_map = {
+        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9
+    }
+    # 从字符串中提取中文数字字符
+    for char in level_str:
+        if char in level_map:
+            return level_map[char]
+    return 10  # 如果无法识别，返回一个较大的数
+
+
+def sort_medicine_list(medicine_list):
+    """排序药材列表：先按数量从小到大，再按品级从低到高"""
+    return sorted(
+        medicine_list,
+        key=lambda x: (x['num'], get_level_number(x['level']))
+    )
+
+
+def sort_zhuyao_list(zhuyao_list):
+    """排序主药列表：先按数量从小到大，再按品级从低到高，最后中性药优先"""
+    return sorted(
+        zhuyao_list,
+        key=lambda x: (
+            x['num'],  # 数量少的优先
+            get_level_number(x['level']),  # 品级低的优先
+            1 if x['hac'] == 0 else 2  # 中性药(hac=0)优先，非中性在后
+        )
+    )
+
+
+async def _generate_sorted_recipes_optimized(elixir_id, z_list, y_list, f_list, max_per_type=5):
+    """
+    每个药材列表只取前几个进行组合，提高效率
+    参数:
+    - top_n: 返回前N个配方
+    - max_per_type: 每个药材列表最多取多少个进行组合
+    """
+
+    # 对输入列表进行排序并截断
+    sorted_z_list = sort_zhuyao_list(z_list)[:max_per_type]
+    sorted_f_list = sort_medicine_list(f_list)[:max_per_type]
+
+    # 对y_list的每个子列表排序并截断
+    sorted_y_list = {}
+    for hac_key, medicine_list in y_list.items():
+        sorted_y_list[hac_key] = sort_medicine_list(medicine_list)[:max_per_type]
+
+    recipes = []
+
+    # 遍历所有主药
+    for zhuyao in sorted_z_list:
+        zhuyao_name = zhuyao['name']
+        zhuyao_hac = zhuyao['hac']
+
+        # 根据主药的hac确定药引列表
+        if zhuyao_hac == 0:
+            yaoyin_candidates = sorted_y_list.get(0, [])
+        elif zhuyao_hac == 1:
+            yaoyin_candidates = sorted_y_list.get(-1, [])
+        else:  # zhuyao_hac == -1
+            yaoyin_candidates = sorted_y_list.get(1, [])
+
+        # 遍历所有可能的药引
+        for yaoyin in yaoyin_candidates:
+            yaoyin_name = yaoyin['name']
+
+            # 检查主药和药引是否重复
+            if zhuyao_name == yaoyin_name:
+                continue
+
+            # 遍历所有可能的辅药
+            for fuyao in sorted_f_list:
+                fuyao_name = fuyao['name']
+
+                # 检查是否与主药或药引重复
+                if fuyao_name == zhuyao_name or fuyao_name == yaoyin_name:
+                    continue
+
+                # 提前检查调和可能性
+                zhuyao_hac_power = zhuyao['h_a_c'] * zhuyao['num']
+                yaoyin_hac_power = yaoyin['h_a_c'] * yaoyin['num']
+                if abs(zhuyao_hac_power + yaoyin_hac_power) > yonhudenji:
+                    continue
+
+                recipe = await _create_recipe(
+                    elixir_id, zhuyao, zhuyao['num'], yaoyin, yaoyin['num'], fuyao, fuyao['num']
+                )
+
+                recipes.append(recipe)
+
+                if len(recipes) > 100:
+                    return recipes
+
+    # 返回前N个配方
+    return recipes
+
 async def _check_tiaohe_early(zhuyao: Dict, yaoyin: Dict, zhuyao_num: int, yaoyin_num: int) -> bool:
     """
     提前检查调和可能性，避免深入循环
