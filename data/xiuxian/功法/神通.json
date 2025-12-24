@@ -1096,7 +1096,7 @@
         "desc": "引动混沌之力，召唤星陨降临，对大范围敌人造成毁灭性打击！",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8914": {
         "name": "九幽炼狱火",
@@ -1109,7 +1109,7 @@
         "desc": "九幽炼狱之火，层层燃烧，吞噬万物，火焰之力不断攀升，毁灭一切生机！",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8915": {
         "name": "地煞七十二术",
@@ -1155,57 +1155,57 @@
         "name": "万剑归宗",
         "skill_type": 3,
         "bufftype": 1,
-        "buffvalue": 4.0,
+        "buffvalue": 4.4,
         "hpcost": 0,
         "mpcost": 1.5,
         "turncost": 4,
         "desc": "万剑齐发，归于一宗，势不可挡！万剑归宗！！！",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8921": {
         "name": "华光猎影",
         "skill_type": 2,
-        "atkvalue": 4.5,
-        "hpcost": 0.1,
-        "mpcost": 2.0,
+        "atkvalue": 4.6,
+        "hpcost": 0.05,
+        "mpcost": 2,
         "turncost": 4,
         "desc": "刹诀！华光猎影！！",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8922": {
         "name": "灭剑血胧",
         "skill_type": 1,
         "atkvalue": [
-            6.8
+            7.5
         ],
-        "hpcost": 0.05,
+        "hpcost": 0.1,
         "mpcost": 0.75,
         "turncost": 0,
         "desc": "剑出血胧，灭敌无形，血雾弥漫！灭！！！！",
         "rate": 75,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8923": {
         "name": "千慄鬼噬",
         "skill_type": 1,
         "atkvalue": [
-            1.0,
-            2.0,
-            3.0,
-            4.0
+            1.1,
+            2.2,
+            3.3,
+            4.4
         ],
-        "hpcost": 0.05,
+        "hpcost": 0.1,
         "mpcost": 0.5,
         "turncost": 1,
         "desc": "鬼神皆惧，千慄吞噬，暗影降临！千慄鬼噬！！！",
         "rate": 100,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8924": {
         "name": "自爆",
@@ -1227,7 +1227,7 @@
         "desc": "以生命为代价，释放出毁灭性的自爆，敌人将遭受重创！",
         "rate": 10,
         "rank": "仙阶极品",
-        "level": "13",
+        "level": "-5",
         "fusion": {
             "need_item": {
                 "8908": 5,
@@ -1809,7 +1809,7 @@
         "desc": "万法归一的无上剑道",
         "rate": 55,
         "rank": "仙阶极品",
-        "level": "13"
+        "level": "-5"
     },
     "8961": {
         "name": "周天星斗大阵",
