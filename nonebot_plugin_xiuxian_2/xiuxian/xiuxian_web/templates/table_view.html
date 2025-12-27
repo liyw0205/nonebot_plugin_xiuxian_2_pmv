@@ -12,18 +12,18 @@
         </div>
         
         <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
-            <select name="search_field" id="searchFieldSelect">
-                <option value="">全字段搜索</option>
-                {% for field in table_info.fields %}
-                    <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
-                {% endfor %}
-            </select>
+<select name="search_field" id="searchFieldSelect" onchange="handleSearchFieldChange()">
+    <option value="">全字段搜索</option>
+    {% for field in table_info.fields %}
+        <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
+    {% endfor %}
+</select>
 
-            <select name="search_condition" id="searchConditionSelect">
-                <option value="=" {% if search_condition == '=' %}selected{% endif %}>=</option>
-                <option value=">" {% if search_condition == '>' %}selected{% endif %}>&gt;</option>
-                <option value="<" {% if search_condition == '<' %}selected{% endif %}>&lt;</option>
-            </select>
+<select name="search_condition" id="searchConditionSelect" {% if search_field == '' %}disabled{% endif %}>
+    <option value="=" {% if search_condition == '=' %}selected{% endif %}>=</option>
+    <option value=">" {% if search_condition == '>' %}selected{% endif %}>&gt;</option>
+    <option value="<" {% if search_condition == '<' %}selected{% endif %}>&lt;</option>
+</select>
 
             <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
             <button type="submit" class="btn btn-info">搜索</button>
@@ -137,7 +137,7 @@
             
             {# 第一页 #}
             {% if current_page > 1 %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=1, search_field=search_field, search_value=search_value) }}">1</a>
+                <a href="{{ url_for('table_view', table_name=table_name, page=1, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">1</a>
             {% endif %}
             
             {# 前省略号 #}
@@ -148,16 +148,16 @@
             {# 当前页的前3页 #}
             {% for p in range([1, current_page-3]|max, current_page) %}
                 {% if p > 1 %}
-                    <a href="{{ url_for('table_view', table_name=table_name, page=p, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+                    <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
                 {% endif %}
             {% endfor %}
             
             {# 当前页 #}
-            <a href="{{ url_for('table_view', table_name=table_name, page=current_page, search_field=search_field, search_value=search_value) }}" class="active">{{ current_page }}</a>
+            <a href="{{ url_for('table_view', table_name=table_name, page=current_page, search_condition=search_condition, search_field=search_field, search_value=search_value) }}" class="active">{{ current_page }}</a>
             
             {# 当前页的后3页 #}
             {% for p in range(current_page+1, [current_page+4, total_pages+1]|min) %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=p, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+                <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
             {% endfor %}
             
             {# 后省略号 #}
@@ -166,8 +166,8 @@
             {% endif %}
             
             {# 最后一页 #}
-            {% if total_pages > 1 and current_page < total_pages %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=total_pages, search_field=search_field, search_value=search_value) }}">{{ total_pages }}</a>
+            {% if total_pages > 4 and current_page < total_pages -3 and current_page < total_pages %}
+                <a href="{{ url_for('table_view', table_name=table_name, page=total_pages, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ total_pages }}</a>
             {% endif %}
         </div>
         
@@ -291,6 +291,24 @@ document.getElementById('searchFieldSelect')?.addEventListener('change', functio
         // 全字段搜索时重置帮助文本
         batchFieldHelp.innerHTML = '请选择要批量修改的字段';
     }
+});
+function handleSearchFieldChange() {
+    const searchFieldSelect = document.getElementById('searchFieldSelect');
+    const searchConditionSelect = document.getElementById('searchConditionSelect');
+    
+    if (searchFieldSelect.value === '') {
+        // 全字段搜索
+        searchConditionSelect.value = '=';
+        searchConditionSelect.disabled = true;
+    } else {
+        // 其他字段
+        searchConditionSelect.disabled = false;
+    }
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    handleSearchFieldChange(); // 初始化搜索条件选择框的状态
 });
     </script>
 {% endblock %}

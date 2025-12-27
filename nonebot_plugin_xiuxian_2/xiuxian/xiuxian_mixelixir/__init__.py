@@ -319,7 +319,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             await handle_send(bot, event, msg)
             await mix_elixir.finish()
         yaocai_dict = remove_herbs_by_levels(yaocai_dict, remove_level_nums)  # 删除指定品质药材
-        mix_elixir_msgs = await get_elixir_recipe_msg(target_elixir_id, target_elixir, yaocai_dict, top_n=20)
+        mix_elixir_msgs = await get_elixir_recipe_msg(target_elixir_id, target_elixir, yaocai_dict, top_n=10)
     else:
         yaocai_dict = await make_dict(yaocai_dict)
         mix_elixir_msgs = await get_mix_elixir_msg(yaocai_dict)  # 现在返回一个配方列表

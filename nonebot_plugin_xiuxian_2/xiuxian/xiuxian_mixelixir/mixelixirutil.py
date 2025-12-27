@@ -1,3 +1,4 @@
+import math
 from ..xiuxian_utils.item_json import Items
 from random import shuffle, sample
 from collections import Counter
@@ -199,7 +200,7 @@ async def get_mix_elixir_msg(yaocai: Dict) -> List[Dict]:
     
     return final_recipes
 
-async def get_elixir_recipe_msg(elixir_id, elixir, back, top_n=20):
+async def get_elixir_recipe_msg(elixir_id, elixir, back, top_n=10):
     """获取丹药配方"""
     # ---------- 1. 提取丹药配置 ----------
     config_items = list(elixir["elixir_config"].items())

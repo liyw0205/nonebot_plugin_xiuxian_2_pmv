@@ -15,6 +15,15 @@ from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart
+import os
+from datetime import datetime
+
+import os
+
+def log_to_file(message):
+    log_file_path = Path(__file__).parent / "log.txt"
+    with open(log_file_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(message + '\n')
 
 items = Items()
 update_manager = UpdateManager()
@@ -256,98 +265,125 @@ def execute_sql(db_path, sql, params=None):
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
     """获取表数据（分页和搜索）"""
     offset = (page - 1) * per_page
-    
-    # 获取表信息以确定主键
+
+    # 获取表信息以确定主键和字段
     tables = get_database_tables(db_path)
     table_info = tables.get(table_name, {})
+    if not table_info:
+        return {"error": "表不存在", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+
     primary_key = table_info.get('primary_key', 'id')
-    
-    # 基础查询
-    sql = f"SELECT * FROM {table_name}"
+    fields = table_info.get('fields', [])
+    if not fields:
+        return {"error": "表中没有字段", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+
+    # 构建基础 SELECT 语句，包含所有字段和 COUNT(*) OVER() 作为总数
+    select_fields = ', '.join(fields)
+    sql = f"SELECT *, COUNT(*) OVER() AS total_count FROM {table_name}"
+
     params = []
-    
-    # 添加搜索条件
+
+    # 构建 WHERE 条件
+    where_clauses = []
     if search_field and search_value:
         if search_condition == '=':
-            # 全字段搜索逻辑（保持不变）
+            # 处理多关键词搜索
             values = search_value.split()
             if len(values) > 1:
                 placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
-                sql += f" WHERE ({placeholders})"
+                where_clauses.append(f"({placeholders})")
                 params.extend([f"%{value}%" for value in values])
             else:
-                sql += f" WHERE {search_field} LIKE ?"
+                where_clauses.append(f"{search_field} LIKE ?")
                 params.append(f"%{search_value}%")
-        elif search_condition == '>':
-            # 数值大于搜索
-            if not search_value.replace('.', '', 1).isdigit():
-                return {"error": "搜索值必须是数值"}, 400
-            sql += f" WHERE {search_field} > ?"
-            params.append(float(search_value))
-        elif search_condition == '<':
-            # 数值小于搜索
-            if not search_value.replace('.', '', 1).isdigit():
-                return {"error": "搜索值必须是数值"}, 400
-            sql += f" WHERE {search_field} < ?"
-            params.append(float(search_value))
+        elif search_condition in ('>', '<'):
+            # 数值大于或小于搜索
+            values = search_value.split()
+            if len(values) > 2:
+                return {"error": "搜索值过多", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+            if len(values) == 1:
+                # 单个值，保持原样的匹配
+                if not search_value.replace('.', '', 1).isdigit():
+                    return {"error": "搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                where_clauses.append(f"{search_field} {search_condition} ?")
+                params.append(float(values[0]))
+            else:
+                # 两个值，第一个用于比较，第二个用于全字段搜索
+                if not values[0].replace('.', '', 1).isdigit():
+                    return {"error": "第一个搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                if not values[1]:
+                    return {"error": "第二个搜索值不能为空", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                where_clauses.append(f"{search_field} {search_condition} ?")
+                where_clauses.append(f"({' OR '.join([f'{field} LIKE ?' for field in fields if field != primary_key])})")
+                params.extend([float(values[0])] + [f"%{values[1]}%" for field in fields if field != primary_key])
         else:
-            return {"error": "无效的搜索条件"}, 400
-    
+            return {"error": "无效的搜索条件", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+    elif search_value and not search_field:
+        # 全字段搜索逻辑
+        # 排除主键字段
+        searchable_fields = [field for field in fields if field != primary_key]
+        if searchable_fields:
+            conditions = []
+            for field in searchable_fields:
+                conditions.append(f"{field} LIKE ?")
+                params.append(f"%{search_value}%")
+            if conditions:
+                where_clauses.append(f"({' OR '.join(conditions)})")
+        else:
+            # 如果没有可搜索的字段，返回空结果
+            where_clauses.append("1=0")  # 确保不返回任何结果
+
+    # 组合 WHERE 条件
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+
     # 添加分页
     sql += f" LIMIT ? OFFSET ?"
     params.extend([per_page, offset])
-    
+
     # 执行查询
-    data = execute_sql(db_path, sql, params)
-    
-    # 获取总数（需要相应修改）
-    count_sql = f"SELECT COUNT(*) FROM {table_name}"
-    count_params = []
-    
-    if search_field and search_value:
-        if search_condition == '=':
-            # 单字段搜索的计数逻辑
-            values = search_value.split()
-            if len(values) > 1:
-                conditions = []
-                search_params = []
-                
-                # 对每个字段添加LIKE条件
-                for field in table_info.get('fields', []):
-                    if field != tables[table_name].get('primary_key'):
-                        conditions.append(f"{field} LIKE ?")
-                        search_params.append(f"%{value}%")
-                
-                # 只有当有搜索条件时才添加WHERE子句
-                if conditions:
-                    count_sql += f" WHERE ({' OR '.join(conditions)})"
-                    count_params.extend(search_params)
-                else:
-                    # 如果没有可搜索的字段，返回空结果
-                    count_sql += " WHERE 1=0"  # 确保不返回任何结果
-            else:
-                # 单字段搜索
-                count_sql += f" WHERE {search_field} LIKE ?"
-                count_params.append(f"%{search_value}%")
-        elif search_condition in ('>', '<'):
-            # 数值比较的计数逻辑
-            if not search_value.replace('.', '', 1).isdigit():
-                return {"error": "搜索值必须是数值"}, 400
-            count_sql += f" WHERE {search_field} {search_condition} ?"
-            count_params.append(float(search_value))
-        else:
-            return {"error": "无效的搜索条件"}, 400
-    
-    total_result = execute_sql(db_path, count_sql, count_params)
-    total = total_result[0]['COUNT(*)'] if total_result else 0
-    
-    return {
-        "data": data,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": (total + per_page - 1) // per_page
-    }
+    try:
+        conn = get_db_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return {
+                "data": [],
+                "total": 0,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": 0
+            }
+
+        # 提取总数（来自第一行的 total_count）
+        total = rows[0]['total_count']
+
+        # 计算总页数
+        total_pages = (total + per_page - 1) // per_page
+
+        # 提取实际数据（排除 total_count 列）
+        data = [dict(row) for row in rows]
+
+        return {
+            "data": data,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "data": [],
+            "total": 0,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": 0
+        }
 
 def get_user_by_name(username):
     """根据道号获取用户信息（使用execute_sql）"""
@@ -794,7 +830,7 @@ def delete_config_backup():
         return jsonify({"success": True, "message": f"配置备份文件删除成功: {backup_filename}"})
         
     except Exception as e:
-        logger.error(f"删除配置备份失败: {str(e)}")
+        log_to_file(f"删除配置备份失败: {str(e)}")
         return jsonify({"success": False, "error": f"删除配置备份失败: {str(e)}"})
 
 @app.route('/database')
