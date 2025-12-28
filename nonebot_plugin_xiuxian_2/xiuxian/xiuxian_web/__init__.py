@@ -1007,7 +1007,23 @@ def row_edit(table_name, row_id):
 def batch_edit(table_name):
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
+
+    # 获取所有表结构（按数据库分组）
+    all_tables_grouped = get_tables()
     
+    # 确定表属于哪个数据库
+    db_path = None
+    table_info = None
+    
+    for db_name, db_info in all_tables_grouped.items():
+        if table_name in db_info["tables"]:
+            db_path = db_info["path"]
+            table_info = db_info["tables"][table_name]
+            break
+    
+    if not db_path:
+        return "表不存在", 404
+            
     # 获取表单数据
     search_field = request.form.get('search_field')
     search_value = request.form.get('search_value')
@@ -1057,10 +1073,21 @@ def batch_edit(table_name):
                         params.append(f"%{search_value}%")
                 elif search_condition in ('>', '<'):
                     # 数值比较
-                    if not search_value.replace('.', '', 1).isdigit():
-                        return jsonify({"success": False, "error": "搜索值必须是数值"})
-                    sql += f" WHERE {search_field} {search_condition} ?"
-                    params.append(float(search_value))
+                    values = search_value.split()
+                    if len(values) == 1:
+                        # 单个值，保持原样的匹配
+                        if not search_value.replace('.', '', 1).isdigit():
+                            return jsonify({"success": False, "error": "搜索值必须是数值"})
+                        sql += f" WHERE {search_field} {search_condition} ?"
+                        params.append(float(values[0]))
+                    else:
+                        # 两个值，第一个用于比较，第二个用于全字段搜索
+                        if not values[0].replace('.', '', 1).isdigit():
+                            return jsonify({"success": False, "error": "第一个搜索值必须是数值"})
+                        if not values[1]:
+                            return jsonify({"success": False, "error": "第二个搜索值不能为空"})
+                        sql += f" WHERE {search_field} {search_condition} ? AND ({' OR '.join([f'{field} LIKE ?' for field in table_info.get('fields', []) if field != table_info.get('primary_key')])})"
+                        params.extend([float(values[0])] + [f"%{values[1]}%" for field in table_info.get('fields', []) if field != table_info.get('primary_key')])
                 else:
                     return jsonify({"success": False, "error": "无效的搜索条件"})
             elif search_value:
