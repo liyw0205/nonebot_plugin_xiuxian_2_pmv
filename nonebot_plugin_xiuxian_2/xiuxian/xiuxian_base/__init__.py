@@ -884,19 +884,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     tribulation_data = get_user_tribulation_info(user_id)
-    
-    # 检查冷却时间
-    if tribulation_data['last_time']:
-        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
-        cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < tribulation_cd:
-            remaining = tribulation_cd - cd
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
-            await start_tribulation.finish()
-    
+        
     # 检查境界是否可以渡劫
     level_name = user_info['level']
     levels = convert_rank('江湖好手')[1]
@@ -944,7 +932,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if item['goods_id'] == 1996:  # 天命丹ID
             has_destiny_pill = True
             break
-    
+
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        if has_destiny_pill:  # 使用天命丹降低冷却
+            tribulation_cd = tribulation_cd // 2
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < tribulation_cd:
+            remaining = tribulation_cd - cd
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await start_tribulation.finish()
+
     # 开始渡劫
     success_rate = tribulation_data['current_rate']
     roll = random.randint(1, 100)
@@ -1111,17 +1113,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     tribulation_data['heart_devil_count'] = heart_devil_count + 1
     save_user_tribulation_info(user_id, tribulation_data)
     
-    # 检查冷却时间
-    if tribulation_data['last_time']:
-        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
-        cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < tribulation_cd:
-            hours = (tribulation_cd - cd) // 3600
-            minutes = ((tribulation_cd - cd) % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
-            await heart_devil_tribulation.finish()
-    
     # 检查境界是否可以渡劫
     level_name = user_info['level']
     levels = convert_rank('江湖好手')[1]
@@ -1165,7 +1156,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if item['goods_id'] == 1996:  # 天命丹ID
             has_destiny_pill = True
             break
-    
+
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        if has_destiny_pill:  # 使用天命丹降低冷却
+            tribulation_cd = tribulation_cd // 2
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < tribulation_cd:
+            hours = (tribulation_cd - cd) // 3600
+            minutes = ((tribulation_cd - cd) % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await heart_devil_tribulation.finish()
+        
     # 随机决定渡劫类型 (1:直接成功, 2:直接失败, 3:战斗判断)
     tribulation_type = random.choices([1, 2, 3], weights=[0.2, 0.2, 0.6])[0]
     
@@ -1176,8 +1180,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         save_user_tribulation_info(user_id, tribulation_data)
         
         msg = (
-            f"✨天赐良机，直接渡劫成功✨\n"
-            f"道友福缘深厚，直接渡过了心魔劫！\n"
+            f"✨天赐良机，渡劫成功✨\n"
+            f"道友福缘深厚，渡过了心魔劫！\n"
             f"渡劫成功率提升至{new_rate}%！"
         )
         await handle_send(bot, event, msg)
@@ -1187,21 +1191,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if has_destiny_pill:  # 使用天命丹避免概率降低
             sql_message.update_back_j(user_id, 1996, use_key=1)
             msg = (
-                f"💀直接渡劫失败💀\n"
+                f"💀渡劫失败💀\n"
                 f"心魔突然爆发，道心受损！\n"
                 f"幸得天命丹护体，下次渡劫成功率保持：{tribulation_data['current_rate']}%"
             )
         else:
             new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
             tribulation_data['current_rate'] = new_rate
-            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-            save_user_tribulation_info(user_id, tribulation_data)
             
             msg = (
-                f"💀直接渡劫失败💀\n"
+                f"💀渡劫失败💀\n"
                 f"心魔突然爆发，道心受损！\n"
                 f"下次渡劫成功率降低至{new_rate}%！"
             )
+        tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        save_user_tribulation_info(user_id, tribulation_data)
         await handle_send(bot, event, msg)
         await heart_devil_tribulation.finish()
         
@@ -1254,7 +1258,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             "气血": int(player['气血'] * 100),
             "总血量": int(player['气血'] * scale),
             "真元": int(player['真元'] * scale),
-            "攻击": int(player['攻击'] * scale),
+            "攻击": int(player['攻击'] * scale // 2),
             "name": devil_name,
             "jj": "祭道境",
             "desc": devil_data["lose_desc"]  # 默认显示负面描述
@@ -1286,15 +1290,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             else:
                 new_rate = max(tribulation_data['current_rate'] - 20, XiuConfig().tribulation_base_rate)
                 tribulation_data['current_rate'] = new_rate
-                tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-                save_user_tribulation_info(user_id, tribulation_data)
                 
                 msg = (
                     f"💀败于{devil_name}，道心受损💀\n"
                     f"{devil_data['lose_desc']}\n"
                     f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
                 )
-        
+            tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            save_user_tribulation_info(user_id, tribulation_data)        
         await send_msg_handler(bot, event, result)
         await handle_send(bot, event, msg)
         await heart_devil_tribulation.finish()

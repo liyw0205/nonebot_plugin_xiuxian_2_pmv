@@ -119,8 +119,8 @@ class TowerBattle:
             base_score = self.config["积分奖励"]["每层基础"]
             base_stone = self.config["灵石奖励"]["每层基础"]
             if boss_info["floor"] <= tower_info["max_floor"]:
-                base_score = int(base_score * 0.3)
-                base_stone = int(base_stone * 0.3)
+                base_score = int(base_score * 0.7)
+                base_stone = int(base_stone * 0.7)
             total_score += base_score
             total_stone += base_stone
             
@@ -207,8 +207,8 @@ class TowerBattle:
                 score = self.config["积分奖励"]["每层基础"]
                 stone = self.config["灵石奖励"]["每层基础"]
                 if floor <= tower_info["max_floor"]:
-                    score = int(score * 0.3)
-                    stone = int(stone * 0.3)
+                    score = int(score * 0.7)
+                    stone = int(stone * 0.7)
                 total_score += score
                 total_stone += stone
             

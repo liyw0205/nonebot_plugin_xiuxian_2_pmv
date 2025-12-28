@@ -373,8 +373,8 @@ def start_auction():
     player_auctions = get_player_auctions()
     system_items = get_system_items()
     
-    # 生成系统拍卖品 (随机3个)
-    selected_system_items = random.sample(list(system_items.items()), min(3, len(system_items)))
+    # 生成系统拍卖品 (随机5个)
+    selected_system_items = random.sample(list(system_items.items()), min(5, len(system_items)))
     
     # 生成拍卖品列表
     current_auctions = {
@@ -512,16 +512,16 @@ def end_auction():
     return results
 
 def refresh_display_auctions():
-    """刷新展示拍卖品（随机10个）"""
+    """刷新展示拍卖品（随机15个）"""
     current_auctions = get_current_auctions()
     if not current_auctions or "items" not in current_auctions:
         return False
     
     all_items = list(current_auctions["items"].values())
-    if len(all_items) <= 10:
+    if len(all_items) <= 15:
         display_items = all_items
     else:
-        display_items = random.sample(all_items, 10)
+        display_items = random.sample(all_items, 15)
     
     # 按当前价格排序
     display_items.sort(key=lambda x: -x["current_price"])
@@ -2318,7 +2318,7 @@ def format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type)
             f"• 描述：{item1_info.get('desc', '暂无描述')}",
             f"",
             f"【{item_name2}】",
-            f"• 品阶：{item1_info.get('level', '未知')}",
+            f"• 品阶：{item2_info.get('level', '未知')}",
             f"• 类型：{skill_desc2}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
             f"═════════════"
