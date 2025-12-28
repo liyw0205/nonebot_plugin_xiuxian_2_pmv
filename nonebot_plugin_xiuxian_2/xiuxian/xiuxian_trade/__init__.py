@@ -52,7 +52,7 @@ MIN_PRICE = 600000
 MAX_QUANTITY = 10000
 GUISHI_TYPES = ["药材", "装备", "技能"]
 GUISHI_BAITAN_START_HOUR = 20  # 20点开始
-GUISHI_BAITAN_END_HOUR = 8     # 次日8点结束
+GUISHI_BAITAN_END_HOUR = 12     # 次日8点结束
 GUISHI_AUTO_HOUR = 2   # 多少小时自动交易一次
 GUISHI_MAX_QUANTITY = 10   # 单次最大交易数量
 MAX_QIUGOU_ORDERS = 10  # 最大求购订单数
@@ -1486,20 +1486,24 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await guishi_take_item.finish()
     
     stored_items = trade_manager.get_stored_items(user_id)
-    quantity = stored_items[goods_id]
     if not stored_items:
         msg = "您没有暂存的物品！"
         await handle_send(bot, event, msg)
         await guishi_take_item.finish()
     
     # 判断物品存在和数量
-    if goods_id not in stored_items:
+    if str(goods_id) not in stored_items:
         msg = f"您没有暂存物品 {goods_name}！"
         await handle_send(bot, event, msg)
         await guishi_take_item.finish()
-    
+
+    for item_id, quantity in stored_items.items():
+        if item_id == goods_id:
+            quantity = quantity
+            break
+
     # 从暂存物品中删除物品
-    trade_manager.remove_stored_item(user_id, goods_id)
+    trade_manager.remove_stored_item(user_id, str(goods_id))
     
     # 给玩家物品
     sql_message.send_back(
