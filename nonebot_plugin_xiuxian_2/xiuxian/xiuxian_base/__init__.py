@@ -48,7 +48,7 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 qqq = XiuConfig().qqq
-tribulation_cd = XiuConfig().tribulation_cd * 60
+tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_fullmatch("重入仙途", priority=7, block=True)
@@ -884,6 +884,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     tribulation_data = get_user_tribulation_info(user_id)
+    tribulation_cd = tribulation_cd2
+    user_buff_info = UserBuffDate(user_id).BuffInfo
+    if int(user_buff_info.get('main_buff', 0)) == 9931:
+        tribulation_cd = int(tribulation_cd * 0.5)
         
     # 检查境界是否可以渡劫
     level_name = user_info['level']
@@ -936,7 +940,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查冷却时间
     if tribulation_data['last_time']:
         if has_destiny_pill:  # 使用天命丹降低冷却
-            tribulation_cd = tribulation_cd // 2
+            tribulation_cd = int(tribulation_cd * 0.75)
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
         cd = OtherSet().date_diff(datetime.now(), last_time)
         if cd < tribulation_cd:
@@ -998,17 +1002,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     tribulation_data = get_user_tribulation_info(user_id)
-    
-    # 检查冷却时间
-    if tribulation_data['last_time']:
-        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
-        cd = OtherSet().date_diff(datetime.now(), last_time)
-        if cd < tribulation_cd:
-            hours = (tribulation_cd - cd) // 3600
-            minutes = ((tribulation_cd - cd) % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
-            await destiny_tribulation.finish()
+    tribulation_cd = tribulation_cd2
+    user_buff_info = UserBuffDate(user_id).BuffInfo
+    if int(user_buff_info.get('main_buff', 0)) == 9931:
+        tribulation_cd = int(tribulation_cd * 0.5)
     
     # 检查是否有天命渡劫丹
     back = sql_message.get_back_msg(user_id)
@@ -1017,7 +1014,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if item['goods_id'] == 1997:
             has_item = True
             break
-    
+
+    # 检查冷却时间
+    if tribulation_data['last_time']:
+        if has_item:
+            tribulation_cd = int(tribulation_cd * 0.75)
+        last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+        cd = OtherSet().date_diff(datetime.now(), last_time)
+        if cd < tribulation_cd:
+            hours = (tribulation_cd - cd) // 3600
+            minutes = ((tribulation_cd - cd) % 3600) // 60
+            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            await handle_send(bot, event, msg)
+            await destiny_tribulation.finish()
+                
     if not has_item:
         msg = f"道友天命渡劫丹不足！\n请发送【融合天命渡劫丹】获得"
         await handle_send(bot, event, msg)
@@ -1091,6 +1101,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     tribulation_data = get_user_tribulation_info(user_id)
+    tribulation_cd = tribulation_cd2
+    user_buff_info = UserBuffDate(user_id).BuffInfo
+    if int(user_buff_info.get('main_buff', 0)) == 9931:
+        tribulation_cd = int(tribulation_cd * 0.5)
     
     # 检查渡劫概率是否已达上限
     if tribulation_data['current_rate'] >= XiuConfig().tribulation_max_rate:
@@ -1160,7 +1174,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查冷却时间
     if tribulation_data['last_time']:
         if has_destiny_pill:  # 使用天命丹降低冷却
-            tribulation_cd = tribulation_cd // 2
+            tribulation_cd = int(tribulation_cd * 0.75)
         last_time = datetime.strptime(tribulation_data['last_time'], '%Y-%m-%d %H:%M:%S.%f')
         cd = OtherSet().date_diff(datetime.now(), last_time)
         if cd < tribulation_cd:
