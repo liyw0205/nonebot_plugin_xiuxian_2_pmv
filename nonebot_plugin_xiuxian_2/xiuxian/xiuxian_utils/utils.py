@@ -27,6 +27,7 @@ from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage
 from nonebot.internal.adapter import Message
 from typing import Union
+from .markdown_segment import MessageSegmentPlus, markdown_param
 
 sql_message = XiuxianDateManage()  # sql类
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
@@ -692,7 +693,9 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     
     if msg_text.endswith('\n'):
         msg_text = msg_text[:-1]
-
+    
+    msg_text = msg_text.replace('\n', '\r')
+    
     return msg_text
 
 async def send_msg_handler(bot, event, *args):
@@ -851,6 +854,10 @@ async def send_msg_handler(bot, event, *args):
 
 async def handle_send(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""
+    if XiuConfig().markdown_status:
+        await handle_send_md(bot, event, msg)
+        return
+    
     is_group = isinstance(event, GroupMessageEvent)
     
     # 应用信息优化
@@ -883,6 +890,30 @@ async def handle_send(bot, event, msg: str):
             await bot.send_private_msg(
                 user_id=event.user_id, message=msg
             )
+
+async def handle_send_md(bot, event, msg: str):
+    """发送md模板消息"""
+    is_group = isinstance(event, GroupMessageEvent)
+    
+    # 应用信息优化
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, None)
+        if msg.startswith('\n'):
+            msg = msg.lstrip('\n')
+        
+    param = [
+        {
+            "key": "t1",
+            "values": [f" "]
+        },
+        {
+            "key": "t2",
+            "values": [f"{msg}"]
+        }
+        ]
+
+    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id, param)
+    await bot.send(event=event, message=msg)
 
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None):
     """

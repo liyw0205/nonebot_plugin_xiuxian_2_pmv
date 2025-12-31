@@ -39,6 +39,12 @@ class XiuConfig:
         self.at_sender = True
         # 消息是否艾特
 
+        #markdown模板
+        self.markdown_status = False
+        # 是否开启模板
+        self.markdown_id = "102569432_1750075053"
+        # 模板ID
+
         self.web_status = True
         # 修仙管理面板是否开启
         self.web_port = 5888 

@@ -29,3 +29,9 @@
 - xiuxian_trade ：交易
 - xiuxian_training ：历练
 - xiuxian_work ：悬赏令
+
+### markdown模板
+```
+# {{.t1}}
+{{.t2}}
+```
