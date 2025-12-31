@@ -694,8 +694,6 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     if msg_text.endswith('\n'):
         msg_text = msg_text[:-1]
     
-    msg_text = msg_text.replace('\n', '\r')
-    
     return msg_text
 
 async def send_msg_handler(bot, event, *args):
@@ -896,11 +894,13 @@ async def handle_send_md(bot, event, msg: str):
     is_group = isinstance(event, GroupMessageEvent)
     
     # 应用信息优化
+    if msg.startswith('\n'):
+        msg = msg.lstrip('\n')
     if XiuConfig().message_optimization:
         msg = optimize_message(msg, None)
-        if msg.startswith('\n'):
-            msg = msg.lstrip('\n')
-        
+    msg = msg.replace('\n', '\r')
+    msg = msg.replace('[', '')
+    msg = msg.replace(']', '')
     param = [
         {
             "key": "t1",

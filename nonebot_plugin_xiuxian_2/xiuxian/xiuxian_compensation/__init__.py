@@ -4,7 +4,7 @@ import os
 import string
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any, Literal
 
 from nonebot import on_command, require
 from nonebot.adapters.onebot.v11 import (
@@ -35,541 +35,123 @@ from ..xiuxian_utils.utils import (
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 
-# 补偿系统文件路径
-COMPENSATION_DATA_PATH = Path(__file__).parent / "compensation_data"
-COMPENSATION_RECORDS_PATH = COMPENSATION_DATA_PATH / "compensation_records.json"
-COMPENSATION_CLAIMED_PATH = COMPENSATION_DATA_PATH / "claimed_records.json"
+# ======================
+# 通用类型定义
+# ======================
+ItemType = Literal["补偿", "礼包", "兑换码"]
 
-# 确保目录存在
-COMPENSATION_DATA_PATH.mkdir(exist_ok=True)
+# ======================
+# 文件路径配置
+# ======================
+DATA_CONFIG = {
+    "补偿": {
+        "data_path": Path(__file__).parent / "compensation_data" / "compensation_records.json",
+        "claimed_path": Path(__file__).parent / "compensation_data" / "claimed_records.json",
+        "records_folder": Path(__file__).parent / "compensation_data",
+        "type_key": "补偿",
+        "type_field": "type"  # 补偿没有特定的 type 字段
+    },
+    "礼包": {
+        "data_path": Path(__file__).parent / "gift_package_data" / "gift_package_records.json",
+        "claimed_path": Path(__file__).parent / "gift_package_data" / "claimed_gift_packages.json",
+        "records_folder": Path(__file__).parent / "gift_package_data",
+        "type_key": "礼包",
+        "type_field": "type"  # 礼包有 "type": "gift"
+    },
+    "兑换码": {
+        "data_path": Path(__file__).parent / "redeem_code_data" / "redeem_codes.json",
+        "claimed_path": Path(__file__).parent / "redeem_code_data" / "claimed_redeem_codes.json",
+        "records_folder": Path(__file__).parent / "redeem_code_data",
+        "type_key": "兑换码",
+        "type_field": "type"  # 兑换码有 "type": "redeem_code"
+    }
+}
 
-# 初始化补偿记录文件
-if not COMPENSATION_RECORDS_PATH.exists():
-    with open(COMPENSATION_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
+# ======================
+# 初始化数据文件夹和文件
+# ======================
+for config in DATA_CONFIG.values():
+    config["records_folder"].mkdir(exist_ok=True)
+    if not config["data_path"].exists():
+        with open(config["data_path"], "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=4)
+    if not config["claimed_path"].exists():
+        with open(config["claimed_path"], "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=4)
 
-# 初始化领取记录文件
-if not COMPENSATION_CLAIMED_PATH.exists():
-    with open(COMPENSATION_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
+# ======================
+# 通用函数定义
+# ======================
 
-# 礼包系统文件路径
-GIFT_PACKAGE_DATA_PATH = Path(__file__).parent / "gift_package_data"
-GIFT_PACKAGE_RECORDS_PATH = GIFT_PACKAGE_DATA_PATH / "gift_package_records.json"
-GIFT_PACKAGE_CLAIMED_PATH = GIFT_PACKAGE_DATA_PATH / "claimed_gift_packages.json"
-
-# 确保目录存在
-GIFT_PACKAGE_DATA_PATH.mkdir(exist_ok=True)
-
-# 初始化礼包记录文件
-if not GIFT_PACKAGE_RECORDS_PATH.exists():
-    with open(GIFT_PACKAGE_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-
-# 初始化领取记录文件
-if not GIFT_PACKAGE_CLAIMED_PATH.exists():
-    with open(GIFT_PACKAGE_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-
-def load_compensation_data() -> Dict[str, dict]:
-    """加载补偿数据"""
-    with open(COMPENSATION_RECORDS_PATH, "r", encoding="utf-8") as f:
+def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
+    """加载指定类型的数据"""
+    with open(config["data_path"], "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_compensation_data(data: Dict[str, dict]):
-    """保存补偿数据"""
-    with open(COMPENSATION_RECORDS_PATH, "w", encoding="utf-8") as f:
+def save_data(config: Dict[str, Any], data: Dict[str, dict]):
+    """保存指定类型的数据"""
+    with open(config["data_path"], "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-def load_claimed_data() -> Dict[str, List[str]]:
-    """加载领取记录"""
-    with open(COMPENSATION_CLAIMED_PATH, "r", encoding="utf-8") as f:
+def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
+    """加载指定类型的领取记录"""
+    with open(config["claimed_path"], "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_claimed_data(data: Dict[str, List[str]]):
-    """保存领取记录"""
-    with open(COMPENSATION_CLAIMED_PATH, "w", encoding="utf-8") as f:
+def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
+    """保存指定类型的领取记录"""
+    with open(config["claimed_path"], "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-def load_gift_package_data() -> Dict[str, dict]:
-    """加载礼包数据"""
-    with open(GIFT_PACKAGE_RECORDS_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_gift_package_data(data: Dict[str, dict]):
-    """保存礼包数据"""
-    with open(GIFT_PACKAGE_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def load_claimed_gift_packages() -> Dict[str, List[str]]:
-    """加载礼包领取记录"""
-    with open(GIFT_PACKAGE_CLAIMED_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_claimed_gift_packages(data: Dict[str, List[str]]):
-    """保存礼包领取记录"""
-    with open(GIFT_PACKAGE_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def parse_duration(duration_str: str) -> timedelta:
-    """解析时间持续时间字符串 (支持多种格式)
-    支持的格式:
-    - "无限"或"0": 永不过期
-    - xx天: 当天23:59:59
-    - xx小时: 当前时间加xx小时
-    - yymmdd: 6位数字日期 (如257011表示2025年7月11日23:59:59)
-    """
-    try:
-        # 处理永不过期情况
-        if duration_str.lower() in ["无限", "0"]:
-            return timedelta.max  # 返回最大时间差，表示永不过期
-        
-        # 尝试解析为6位数字日期 (yymmdd)
-        if duration_str.isdigit() and len(duration_str) == 6:
-            year = int("20" + duration_str[:2])  # 25 -> 2025
-            month = int(duration_str[2:4])
-            day = int(duration_str[4:6])
-            expire_time = datetime(year, month, day).replace(hour=23, minute=59, second=59)
-            return expire_time - datetime.now()
-        elif "天" in duration_str:  # xx天
-            days = int(duration_str.split("天")[0])
-            # 计算当天23:59:59
-            today = datetime.now().replace(hour=23, minute=59, second=59)
-            expire_time = today + timedelta(days=days)
-            return expire_time - datetime.now()
-        elif "小时" in duration_str:  # xx小时
-            hours = int(duration_str.split("小时")[0])
-            return timedelta(hours=hours)
-        else:
-            raise ValueError("无效的时间格式")
-    except Exception as e:
-        raise ValueError(f"时间格式错误: {str(e)}")
-
-def generate_unique_id(existing_ids):
-    """生成4-6位随机不重复ID（大写字母+数字）"""    
+def generate_unique_id(existing_ids: List[str]) -> str:
+    """生成4-6位随机不重复ID（大写字母+数字）"""
     while True:
-        # 决定ID长度（4-6位）
         length = random.randint(4, 6)
-        
-        # 生成随机字符（大写字母+数字）
         characters = string.ascii_uppercase + string.digits
         new_id = ''.join(random.choice(characters) for _ in range(length))
-        
-        # 确保至少包含一个字母和一个数字
         if not any(c.isalpha() for c in new_id) or not any(c.isdigit() for c in new_id):
-            continue  # 如果不满足条件，重新生成
-        
-        # 检查是否已存在
+            continue
         if new_id not in existing_ids:
             return new_id
 
-def add_compensation(compensation_id: str, duration_str: str, items_str: str, reason: str):
-    """新增补偿
-    :param compensation_id: 补偿ID
-    :param duration_str: 持续时间字符串
-    :param items_str: 物品字符串
-    :param reason: 发放原因
-    """
-    data = load_compensation_data()
-    if compensation_id in data:
-        raise ValueError(f"补偿ID {compensation_id} 已存在")
-    
+def parse_duration(duration_str: str, is_start_time: bool = False) -> Union[datetime, timedelta, str]:
+    """解析时间持续时间字符串"""
     try:
         if duration_str.lower() in ["无限", "0"]:
-            expire_time = "无限"
-        else:
-            duration = parse_duration(duration_str)
-            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
-    except ValueError as e:
-        raise ValueError(f"时间格式错误: {str(e)}")
-    
-    # 解析物品字符串
-    items_list = []
-    for item_part in items_str.split(','):
-        item_part = item_part.strip()
-        if 'x' in item_part:
-            item_id_or_name, quantity = item_part.split('x', 1)
-            quantity = int(quantity)
-        else:
-            item_id_or_name = item_part
-            quantity = 1
-        
-        # 处理灵石特殊物品
-        if item_id_or_name == "灵石":
-            items_list.append({
-                "type": "stone",
-                "id": "stone",
-                "name": "灵石",
-                "quantity": quantity if quantity > 0 else 1000000,  # 默认100万
-                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
-            })
-            continue
-        
-        # 尝试转换为物品ID
-        goods_id = None
-        if item_id_or_name.isdigit():  # 如果是数字，直接作为ID
-            goods_id = int(item_id_or_name)
-            item_info = items.get_data_by_item_id(goods_id)
-            if not item_info:
-                raise ValueError(f"物品ID {goods_id} 不存在")
-        else:  # 否则作为物品名称查找
-            for k, v in items.items.items():
-                if item_id_or_name == v['name']:
-                    goods_id = k
-                    break
-            if not goods_id:
-                raise ValueError(f"物品 {item_id_or_name} 不存在")
-        
-        item_info = items.get_data_by_item_id(goods_id)
-        items_list.append({
-            "type": item_info['type'],
-            "id": goods_id,
-            "name": item_info['name'],
-            "quantity": quantity,
-            "desc": item_info['desc']
-        })
-    
-    if not items_list:
-        raise ValueError("未指定有效的补偿物品")
-    
-    data[compensation_id] = {
-        "items": items_list,
-        "reason": reason,
-        "expire_time": expire_time,
-        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    save_compensation_data(data)
-    return True
-
-def get_compensation_info(compensation_id: str) -> Optional[dict]:
-    """获取补偿信息"""
-    data = load_compensation_data()
-    return data.get(compensation_id)
-
-def is_compensation_expired(compensation_info: dict) -> bool:
-    """检查补偿是否过期"""
-    if compensation_info["expire_time"] == "无限":
-        return False
-    expire_time = datetime.strptime(compensation_info["expire_time"], "%Y-%m-%d %H:%M:%S")
-    return datetime.now() > expire_time
-
-def has_claimed_compensation(user_id: str, compensation_id: str) -> bool:
-    """检查是否已领取补偿"""
-    claimed_data = load_claimed_data()
-    return compensation_id in claimed_data.get(user_id, [])
-
-async def claim_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, compensation_id: str) -> bool:
-    """领取补偿"""
-    # 检查补偿是否存在
-    compensation_info = get_compensation_info(compensation_id)
-    if not compensation_info:
-        return False
-    
-    # 检查是否已过期
-    if is_compensation_expired(compensation_info):
-        return False
-    
-    # 检查是否已领取
-    if has_claimed_compensation(user_id, compensation_id):
-        return False
-    
-    msg_parts = [f"成功领取补偿 {compensation_id}:"]
-    
-    # 发放所有补偿物品
-    for item in compensation_info["items"]:
-        if item["type"] == "stone":  # 灵石特殊处理
-            sql_message.update_ls(user_id, item["quantity"], 1)
-            msg_parts.append(f"获得灵石 {number_to(item['quantity'])} 枚")
-        else:
-            # 使用补偿信息中的物品ID
-            goods_id = item["id"]
-            goods_name = item["name"]
-            goods_type = item["type"]
-            quantity = item["quantity"]
-            
-            # 处理物品类型
-            if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
-                goods_type_item = "技能"
-            elif goods_type in ["法器", "防具"]:
-                goods_type_item = "装备"
+            return "无限" if not is_start_time else datetime.now()
+        if is_start_time and duration_str.isdigit() and len(duration_str) == 6:
+            year = int("20" + duration_str[:2])
+            month = int(duration_str[2:4])
+            day = int(duration_str[4:6])
+            return datetime(year, month, day).replace(hour=0, minute=0, second=0)
+        if is_start_time:
+            if "小时" in duration_str:
+                hours = int(duration_str.split("小时")[0])
+                return datetime.now() + timedelta(hours=hours)
+            elif "天" in duration_str:
+                days = int(duration_str.split("天")[0])
+                return (datetime.now() + timedelta(days=days)).replace(hour=0, minute=0, second=0)
             else:
-                goods_type_item = goods_type
-            
-            # 发放物品
-            sql_message.send_back(
-                user_id,
-                goods_id,
-                goods_name,
-                goods_type_item,
-                quantity,
-                1  # 非绑定
-            )
-            msg_parts.append(f"获得 {goods_name} x{quantity}")
-    
-    msg = "\n".join(msg_parts)
-    await handle_send(bot, event, msg)
-    
-    # 记录领取状态
-    claimed_data = load_claimed_data()
-    if user_id not in claimed_data:
-        claimed_data[user_id] = []
-    claimed_data[user_id].append(compensation_id)
-    save_claimed_data(claimed_data)
-    return True
-
-add_compensation_cmd = on_command("新增补偿", permission=SUPERUSER, priority=5, block=True)
-delete_compensation_cmd = on_command("删除补偿", permission=SUPERUSER, priority=5, block=True)
-list_compensation_cmd = on_command("补偿列表", priority=5, block=True)
-claim_compensation_cmd = on_command("领取补偿", priority=5, block=True)
-compensation_help_cmd = on_command("补偿", priority=7, block=True)
-compensation_admin_help_cmd = on_command("补偿管理", permission=SUPERUSER, priority=5, block=True)
-
-__compensation_help__ = f"""
-⚖️ 补偿帮助 ⚖️
-═════════════
-1. 补偿列表 - 查看所有可领取补偿
-2. 领取补偿 [ID] - 领取指定补偿
-
-【注意事项】
-- 每个补偿每人限领一次
-- 过期补偿将无法领取
-═════════════
-当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-__compensation_admin_help__ = f"""
-⚖️ 补偿管理 ⚖️ 
-═════════════
-1. 新增补偿 [ID] [时间] [物品] [原因]
-   - 示例: 新增补偿 comp_001 3天 1001x1,灵石x500000 维护补偿
-
-2. 删除补偿 [ID] - 删除指定补偿
-
-3. 补偿列表 - 查看所有补偿(含过期)
-
-4. 清空补偿 - 清空所有补偿
-
-【参数说明】
-- 时间: 如"3天"或"48小时"
-- 物品: 物品ID或名称,可带数量
-   - 示例1: 1001,1002
-   - 示例2: 灵石x500000
-   - 示例3: 渡厄丹x1,两仪心经x1
-
-【注意事项】
-- 补偿ID必须唯一
-- 删除操作不可逆
-═════════════
-当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-@compensation_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_compensation_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """补偿帮助"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __compensation_help__)
-    await compensation_help_cmd.finish()
-
-@compensation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_compensation_admin_help(bot: Bot, event: MessageEvent):
-    """补偿管理"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __compensation_admin_help__)
-    await compensation_admin_help_cmd.finish()
-
-@list_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_list_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """列出所有补偿（合并版）"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    data = load_compensation_data()
-    if not data:
-        msg = "当前没有可用的补偿"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 构建消息内容
-    msg_lines = [
-        "📋 补偿列表 📋",
-        "====================",
-        "【有效补偿】"
-    ]
-    
-    # 先显示有效补偿
-    valid_comps = []
-    expired_comps = []
-    
-    for comp_id, info in data.items():
-        expired = is_compensation_expired(info)
-        if expired:
-            expired_comps.append((comp_id, info))
+                raise ValueError(f"无效的生效期格式: {duration_str}")
         else:
-            valid_comps.append((comp_id, info))
-    
-    if not valid_comps and not expired_comps:
-        msg_lines.append("暂无任何补偿")
-    else:
-        # 有效补偿
-        if valid_comps:
-            for comp_id, info in valid_comps:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                msg_lines.extend([
-                    f"🆔 补偿ID: {comp_id}",
-                    f"📝 原因: {info['reason']}",
-                    f"📦 补偿内容: {', '.join(items_msg)}",
-                    f"⏰ 有效期至: {info['expire_time']}",
-                    f"🕒 创建时间: {info['create_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无有效补偿")
-        
-        # 过期补偿
-        msg_lines.append("\n【过期补偿】")
-        if expired_comps:
-            for comp_id, info in expired_comps:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                msg_lines.extend([
-                    f"🆔 补偿ID: {comp_id}",
-                    f"📝 原因: {info['reason']}",
-                    f"📦 补偿内容: {', '.join(items_msg)}",
-                    f"⏰ 过期时间: {info['expire_time']}",
-                    f"🕒 创建时间: {info['create_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无过期补偿")
-    
-    # 添加服务器时间信息
-    msg_lines.append(f"\n⏱️ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # 发送合并后的消息
-    msg = "\n".join(msg_lines)
-    await handle_send(bot, event, msg)
-
-@add_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_add_compensation(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """新增补偿命令处理"""
-    try:
-        # 新格式: 补偿ID 时间 物品 补偿原因
-        arg_str = args.extract_plain_text().strip()
-        parts = arg_str.split(maxsplit=3)
-        if len(parts) < 4:
-            raise ValueError("参数不足，格式应为: 补偿ID 时间 物品 补偿原因")
-        
-        comp_id, duration, items_str, reason = parts
-        data = load_compensation_data()
-        if comp_id in ["随机", "0"]:
-            comp_id = generate_unique_id(data)
-        if add_compensation(comp_id, duration, items_str, reason):
-            # 获取补偿详情用于显示
-            comp_info = get_compensation_info(comp_id)
-            items_msg = []
-            for item in comp_info["items"]:
-                if item["type"] == "stone":
-                    items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                else:
-                    items_msg.append(f"{item['name']} x{item['quantity']}")
-            
-            msg = f"\n成功新增补偿 {comp_id}\n"
-            msg += f"物品: {', '.join(items_msg)}\n"
-            msg += f"原因: {reason}"
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, "新增补偿失败")
+            if "天" in duration_str:
+                days = int(duration_str.split("天")[0])
+                return timedelta(days=days)
+            elif "小时" in duration_str:
+                hours = int(duration_str.split("小时")[0])
+                return timedelta(hours=hours)
+            elif duration_str.isdigit() and len(duration_str) == 6:
+                year = int("20" + duration_str[:2])
+                month = int(duration_str[2:4])
+                day = int(duration_str[4:6])
+                return datetime(year, month, day).replace(hour=23, minute=59, second=59)
+            else:
+                raise ValueError(f"无效的有效期格式: {duration_str}")
     except Exception as e:
-        await handle_send(bot, event, f"新增补偿出错: {str(e)}")
-
-@claim_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_claim_compensation(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """领取补偿命令处理"""
-    user_id = event.get_user_id()
-    comp_id = args.extract_plain_text().strip()
-    
-    if not comp_id:
-        await handle_send(bot, event, "请指定要领取的补偿ID")
-        return
-    
-    comp_info = get_compensation_info(comp_id)
-    if not comp_info:
-        await handle_send(bot, event, f"补偿ID {comp_id} 不存在")
-        return
-    
-    if is_compensation_expired(comp_info):
-        await handle_send(bot, event, f"补偿 {comp_id} 已过期，无法领取")
-        return
-    
-    if has_claimed_compensation(user_id, comp_id):
-        await handle_send(bot, event, f"您已经领取过补偿 {comp_id} 了")
-        return
-    
-    if await claim_compensation(bot, event, user_id, comp_id):
-        pass
-    else:
-        await handle_send(bot, event, "领取补偿失败")
-
-@delete_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_delete_compensation(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """删除补偿命令处理"""
-    comp_id = args.extract_plain_text().strip()
-    
-    if not comp_id:
-        await handle_send(bot, event, "请指定要删除的补偿ID")
-        return
-    
-    data = load_compensation_data()
-    if comp_id not in data:
-        await handle_send(bot, event, f"补偿ID {comp_id} 不存在")
-        return
-    
-    # 从补偿记录中删除
-    del data[comp_id]
-    save_compensation_data(data)
-    
-    # 从所有用户的领取记录中删除该补偿ID
-    claimed_data = load_claimed_data()
-    for user_id in list(claimed_data.keys()):
-        if comp_id in claimed_data[user_id]:
-            claimed_data[user_id].remove(comp_id)
-            # 如果用户没有其他补偿记录，删除该用户条目
-            if not claimed_data[user_id]:
-                del claimed_data[user_id]
-    save_claimed_data(claimed_data)
-    
-    await handle_send(bot, event, f"成功删除补偿 {comp_id} 及其所有领取记录")
-
-def add_gift_package(gift_id: str, duration_str: str, items_str: str, reason: str):
-    """新增礼包
-    :param gift_id: 礼包ID
-    :param duration_str: 持续时间字符串
-    :param items_str: 物品字符串
-    :param reason: 发放原因
-    """
-    data = load_gift_package_data()
-    if gift_id in data:
-        raise ValueError(f"礼包ID {gift_id} 已存在")
-    
-    try:
-        if duration_str.lower() in ["无限", "0"]:
-            expire_time = "无限"
-        else:
-            duration = parse_duration(duration_str)
-            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
-    except ValueError as e:
         raise ValueError(f"时间格式错误: {str(e)}")
-    
-    # 解析物品字符串（与补偿系统相同）
+
+def get_item_list(items_str: str, items: Any) -> List[Dict[str, Any]]:
+    """解析物品字符串，返回物品列表"""
     items_list = []
     for item_part in items_str.split(','):
         item_part = item_part.strip()
@@ -579,7 +161,7 @@ def add_gift_package(gift_id: str, duration_str: str, items_str: str, reason: st
         else:
             item_id_or_name = item_part
             quantity = 1
-        
+
         if item_id_or_name == "灵石":
             items_list.append({
                 "type": "stone",
@@ -589,7 +171,7 @@ def add_gift_package(gift_id: str, duration_str: str, items_str: str, reason: st
                 "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
             })
             continue
-        
+
         goods_id = None
         if item_id_or_name.isdigit():
             goods_id = int(item_id_or_name)
@@ -603,61 +185,84 @@ def add_gift_package(gift_id: str, duration_str: str, items_str: str, reason: st
                     break
             if not goods_id:
                 raise ValueError(f"物品 {item_id_or_name} 不存在")
-        
+
         item_info = items.get_data_by_item_id(goods_id)
         items_list.append({
             "type": item_info['type'],
             "id": goods_id,
             "name": item_info['name'],
             "quantity": quantity,
-            "desc": item_info['desc']
+            "desc": item_info.get('desc', "")
         })
-    
     if not items_list:
-        raise ValueError("未指定有效的礼包物品")
-    
-    data[gift_id] = {
-        "items": items_list,
-        "reason": reason,
-        "expire_time": expire_time,
-        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "type": "gift"  # 标记为礼包类型
-    }
-    save_gift_package_data(data)
-    return True
+        raise ValueError("未指定有效的物品")
+    return items_list
 
-def get_gift_package_info(gift_id: str) -> Optional[dict]:
-    """获取礼包信息"""
-    data = load_gift_package_data()
-    return data.get(gift_id)
+def create_item_message(items: List[Dict[str, Any]]) -> List[str]:
+    """创建物品描述消息"""
+    items_msg = []
+    for item in items:
+        if item["type"] == "stone":
+            items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
+        else:
+            items_msg.append(f"{item['name']} x{item['quantity']}")
+    return items_msg
 
-def is_gift_package_expired(gift_info: dict) -> bool:
-    """检查礼包是否过期"""
-    if gift_info["expire_time"] == "无限":
-        return False
-    expire_time = datetime.strptime(gift_info["expire_time"], "%Y-%m-%d %H:%M:%S")
-    return datetime.now() > expire_time
+async def send_success_message(bot: Bot, event: MessageEvent, config: Dict[str, Any], comp_id: str, items: List[Dict[str, Any]], reason: str, expire_time: Union[datetime, timedelta, str], start_time: Union[datetime, str, None], usage_limit: Union[int, str, None] = None) -> None:
+    """发送成功添加的消息"""
+    items_msg = create_item_message(items)
+    expire_msg = "无限" if expire_time == "无限" else (expire_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(expire_time, datetime) else expire_time)
+    start_msg = start_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(start_time, datetime) else (start_time if start_time else "立即生效")
+    usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次" if usage_limit is not None else "未指定"
+    msg = f"\n成功新增{config['type_key']} {comp_id}\n"
+    msg += f"物品: {', '.join(items_msg)}\n"
+    msg += f"原因: {reason}\n"
+    msg += f"⏰ 有效期至: {expire_msg}\n"
+    msg += f"🕒 生效时间: {start_msg}\n"
+    if usage_limit is not None:
+        msg += f"🔄 使用限制: {usage_msg}\n"
+    await handle_send(bot, event, msg)
 
-def has_claimed_gift_package(user_id: str, gift_id: str) -> bool:
-    """检查是否已领取礼包"""
-    claimed_data = load_claimed_gift_packages()
-    return gift_id in claimed_data.get(user_id, [])
+def is_expired(item_info: Dict[str, Any], config: Dict[str, Any]) -> bool:
+    """检查是否过期"""
+    expire_time = item_info.get("expire_time")
+    if expire_time == "无限":
+        return False
+    if isinstance(expire_time, str):
+        expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+    elif isinstance(expire_time, datetime):
+        expire_time_dt = expire_time
+    else:
+        return False  # 无法识别的格式，默认不过期
+    return datetime.now() > expire_time_dt
 
-async def claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, gift_id: str) -> bool:
-    """领取礼包"""
-    gift_info = get_gift_package_info(gift_id)
-    if not gift_info:
+def has_claimed(user_id: str, item_id: str, config: Dict[str, Any]) -> bool:
+    """检查用户是否已经领取或使用过"""
+    claimed_data = load_claimed_data(config)
+    return item_id in claimed_data.get(user_id, [])
+
+async def claim_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, item_id: str, config: Dict[str, Any]) -> bool:
+    """通用领取逻辑"""
+    item_info = load_data(config).get(item_id)
+    if not item_info:
         return False
-    
-    if is_gift_package_expired(gift_info):
+    if is_expired(item_info, config):
         return False
-    
-    if has_claimed_gift_package(user_id, gift_id):
+    if has_claimed(user_id, item_id, config):
         return False
-    
-    msg_parts = [f"成功领取礼包 {gift_id}:"]
-    
-    for item in gift_info["items"]:
+    # 检查是否已生效
+    start_time = item_info.get("start_time")
+    if start_time:
+        if isinstance(start_time, str):
+            start_time_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+        elif isinstance(start_time, datetime):
+            start_time_dt = start_time
+        else:
+            return False  # 无法识别的格式，默认不生效
+        if datetime.now() < start_time_dt:
+            return False
+    msg_parts = [f"成功领取{config['type_key']} {item_id}:"]
+    for item in item_info["items"]:
         if item["type"] == "stone":
             sql_message.update_ls(user_id, item["quantity"], 1)
             msg_parts.append(f"获得灵石 {number_to(item['quantity'])} 枚")
@@ -666,14 +271,12 @@ async def claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessage
             goods_name = item["name"]
             goods_type = item["type"]
             quantity = item["quantity"]
-            
             if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
                 goods_type_item = "技能"
             elif goods_type in ["法器", "防具"]:
                 goods_type_item = "装备"
             else:
                 goods_type_item = goods_type
-            
             sql_message.send_back(
                 user_id,
                 goods_id,
@@ -683,397 +286,315 @@ async def claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 1
             )
             msg_parts.append(f"获得 {goods_name} x{quantity}")
-    
     msg = "\n".join(msg_parts)
     await handle_send(bot, event, msg)
-    
-    claimed_data = load_claimed_gift_packages()
+    claimed_data = load_claimed_data(config)
     if user_id not in claimed_data:
         claimed_data[user_id] = []
-    claimed_data[user_id].append(gift_id)
-    save_claimed_gift_packages(claimed_data)
+    claimed_data[user_id].append(item_id)
+    save_claimed_data(config, claimed_data)
+    # 更新使用次数
+    if config["type_key"] == "兑换码":
+        redeem_data = load_data(config)
+        redeem_data[item_id]["used_count"] += 1
+        save_data(config, redeem_data)
     return True
 
-add_gift_package_cmd = on_command("新增礼包", permission=SUPERUSER, priority=5, block=True)
-delete_gift_package_cmd = on_command("删除礼包", permission=SUPERUSER, priority=5, block=True)
-list_gift_packages_cmd = on_command("礼包列表", priority=5, block=True)
-claim_gift_package_cmd = on_command("领取礼包", priority=5, block=True)
-gift_package_help_cmd = on_command("礼包帮助", priority=7, block=True)
-gift_package_admin_help_cmd = on_command("礼包管理", permission=SUPERUSER, priority=5, block=True)
-
-__gift_package_help__ = f"""
-🎁 礼包帮助 🎁
-═════════════
-1. 礼包列表 - 查看所有可领取礼包
-2. 领取礼包 [ID] - 领取指定礼包
-
-【注意事项】
-- 每个礼包每人限领一次
-- 过期礼包将无法领取
-═════════════
-当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-__gift_package_admin_help__ = f"""
-🎁 礼包管理 🎁 
-═════════════
-1. 新增礼包 [ID] [时间] [物品] [原因]
-   - 示例: 新增礼包 gift_001 7天 1001x1,1002x2 节日福利
-
-2. 删除礼包 [ID] - 删除指定礼包
-
-3. 礼包列表 - 查看所有礼包(含过期)
-
-4. 清空礼包 - 清空所有礼包
-
-【参数说明】
-- 时间: 如"7天"或"48小时"
-- 物品: 物品ID或名称,可带数量
-   - 示例1: 1001,1002
-   - 示例2: 灵石x1000000
-   - 示例3: 渡厄丹x1,两仪心经x1
-
-【注意事项】
-- 礼包ID必须唯一
-- 删除操作不可逆
-═════════════
-当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-@gift_package_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_gift_package_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """礼包帮助"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __gift_package_help__)
-    await gift_package_help_cmd.finish()
-
-@gift_package_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_gift_package_admin_help(bot: Bot, event: MessageEvent):
-    """礼包管理"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __gift_package_admin_help__)
-    await gift_package_admin_help_cmd.finish()
-
-@list_gift_packages_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_list_gift_packages(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """列出所有礼包"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    data = load_gift_package_data()
+async def list_items(config: Dict[str, Any], bot: Bot, event: MessageEvent) -> None:
+    """通用列表展示逻辑"""
+    data = load_data(config)
     if not data:
-        msg = "当前没有可用的礼包"
+        msg = f"当前没有可用的{config['type_key']}"
         await handle_send(bot, event, msg)
         return
-    
-    msg_lines = [
-        "🎁 礼包列表 🎁",
-        "====================",
-        "【有效礼包】"
-    ]
-    
-    valid_gifts = []
-    expired_gifts = []
-    
-    for gift_id, info in data.items():
-        expired = is_gift_package_expired(info)
-        if expired:
-            expired_gifts.append((gift_id, info))
+    current_time = datetime.now()
+    msg_lines = [f"📋 {config['type_key']}列表 📋", "====================", "【有效】"]
+    valid_items = []
+    expired_items = []
+    not_yet_started_items = []
+    for item_id, info in data.items():
+        expire_time = info.get("expire_time")
+        start_time = info.get("start_time")
+        if expire_time == "无限":
+            expire_time_dt = None
         else:
-            valid_gifts.append((gift_id, info))
-    
-    if not valid_gifts and not expired_gifts:
-        msg_lines.append("暂无任何礼包")
+            if isinstance(expire_time, str):
+                expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+            elif isinstance(expire_time, datetime):
+                expire_time_dt = expire_time
+            else:
+                expire_time_dt = None  # 无法识别的格式，默认有效
+        if start_time:
+            if isinstance(start_time, str):
+                start_time_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+            elif isinstance(start_time, datetime):
+                start_time_dt = start_time
+            else:
+                start_time_dt = None  # 无法识别的格式，默认立即生效
+        else:
+            start_time_dt = None
+        if start_time_dt and current_time < start_time_dt:
+            not_yet_started_items.append((item_id, info))
+        elif expire_time_dt and current_time > expire_time_dt:
+            expired_items.append((item_id, info))
+        else:
+            valid_items.append((item_id, info))
+    if valid_items:
+        for item_id, info in valid_items:
+            items_msg = create_item_message(info["items"])
+            expire_msg = "无限" if info.get("expire_time") == "无限" else (info['expire_time'].strftime("%Y-%m-%d %H:%M:%S") if isinstance(info.get("expire_time"), datetime) else info.get("expire_time"))
+            start_msg = info.get("start_time", "立即生效")
+            if isinstance(start_msg, datetime):
+                start_msg = start_msg.strftime("%Y-%m-%d %H:%M:%S")
+            msg_lines.extend([
+                f"🆔 {config['type_key']}ID: {item_id}",
+                f"📝 原因: {info['reason']}",
+                f"📦 内容: {', '.join(items_msg)}",
+                f"⏰ 有效期至: {expire_msg}",
+                f"🕒 生效时间: {start_msg}",
+                "------------------"
+            ])
     else:
-        if valid_gifts:
-            for gift_id, info in valid_gifts:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                msg_lines.extend([
-                    f"🎁 ID: {gift_id}",
-                    f"📝 原因: {info['reason']}",
-                    f"🎁 内容: {', '.join(items_msg)}",
-                    f"⏰ 有效期至: {info['expire_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无有效礼包")
-        
-        msg_lines.append("\n【过期礼包】")
-        if expired_gifts:
-            for gift_id, info in expired_gifts:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                msg_lines.extend([
-                    f"🎁 ID: {gift_id}",
-                    f"📝 原因: {info['reason']}",
-                    f"🎁 内容: {', '.join(items_msg)}",
-                    f"⏰ 过期时间: {info['expire_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无过期礼包")
-    
-    msg_lines.append(f"\n⏱ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        msg_lines.append("暂无有效")
+    if not_yet_started_items:
+        msg_lines.append("\n【尚未生效】")
+        for item_id, info in not_yet_started_items:
+            items_msg = create_item_message(info["items"])
+            start_time = info.get("start_time")
+            if isinstance(start_time, datetime):
+                start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            expire_msg = "无限" if info.get("expire_time") == "无限" else (info['expire_time'].strftime("%Y-%m-%d %H:%M:%S") if isinstance(info.get("expire_time"), datetime) else info.get("expire_time"))
+            msg_lines.extend([
+                f"🆔 {config['type_key']}ID: {item_id}",
+                f"📝 原因: {info['reason']}",
+                f"📦 内容: {', '.join(items_msg)}",
+                f"⏰ 有效期至: {expire_msg}",
+                f"🕒 生效时间: {start_time}",
+                "------------------"
+            ])
+    if expired_items:
+        msg_lines.append("\n【过期】")
+        for item_id, info in expired_items:
+            items_msg = create_item_message(info["items"])
+            expire_msg = "无限" if info.get("expire_time") == "无限" else (info['expire_time'].strftime("%Y-%m-%d %H:%M:%S") if isinstance(info.get("expire_time"), datetime) else info.get("expire_time"))
+            start_msg = info.get("start_time", "立即生效")
+            if isinstance(start_msg, datetime):
+                start_msg = start_msg.strftime("%Y-%m-%d %H:%M:%S")
+            msg_lines.extend([
+                f"🆔 {config['type_key']}ID: {item_id}",
+                f"📝 原因: {info['reason']}",
+                f"📦 内容: {', '.join(items_msg)}",
+                f"⏰ 过期时间: {expire_msg}",
+                f"🕒 生效时间: {start_msg}",
+                "------------------"
+            ])
+    msg_lines.append(f"\n⏱ 当前服务器时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
     msg = "\n".join(msg_lines)
-    
     await handle_send(bot, event, msg)
 
-@add_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_add_gift_package(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """新增礼包命令处理"""
-    try:
-        arg_str = args.extract_plain_text().strip()
-        parts = arg_str.split(maxsplit=3)
-        if len(parts) < 4:
-            raise ValueError("参数不足，格式应为: 礼包ID 时间 物品 发放原因")
-        
-        gift_id, duration, items_str, reason = parts
-        data = load_gift_package_data()
-        if gift_id in ["随机", "0"]:
-            gift_id = generate_unique_id(data)
-        if add_gift_package(gift_id, duration, items_str, reason):
-            gift_info = get_gift_package_info(gift_id)
-            items_msg = []
-            for item in gift_info["items"]:
-                if item["type"] == "stone":
-                    items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                else:
-                    items_msg.append(f"{item['name']} x{item['quantity']}")
-            
-            msg = f"\n成功新增礼包 {gift_id}\n"
-            msg += f"🎁 内容: {', '.join(items_msg)}\n"
-            msg += f"📝 原因: {reason}"
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, "新增礼包失败")
-    except Exception as e:
-        await handle_send(bot, event, f"新增礼包出错: {str(e)}")
-
-@claim_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_claim_gift_package(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """领取礼包命令处理"""
-    user_id = event.get_user_id()
-    gift_id = args.extract_plain_text().strip()
-    
-    if not gift_id:
-        await handle_send(bot, event, "请指定要领取的礼包ID")
+def delete_item(item_id: str, config: Dict[str, Any]) -> None:
+    """通用删除逻辑"""
+    data = load_data(config)
+    if item_id not in data:
         return
-    
-    gift_info = get_gift_package_info(gift_id)
-    if not gift_info:
-        await handle_send(bot, event, f"礼包ID {gift_id} 不存在")
-        return
-    
-    if is_gift_package_expired(gift_info):
-        await handle_send(bot, event, f"礼包 {gift_id} 已过期，无法领取")
-        return
-    
-    if has_claimed_gift_package(user_id, gift_id):
-        await handle_send(bot, event, f"您已经领取过礼包 {gift_id} 了")
-        return
-    
-    if await claim_gift_package(bot, event, user_id, gift_id):
-        pass
+    del data[item_id]
+    save_data(config, data)
+    claimed_data = load_claimed_data(config)
+    if item_id in claimed_data:
+        del claimed_data[item_id]
     else:
-        await handle_send(bot, event, "领取礼包失败")
+        for user_id in list(claimed_data.keys()):
+            if item_id in claimed_data[user_id]:
+                claimed_data[user_id].remove(item_id)
+                if not claimed_data[user_id]:
+                    del claimed_data[user_id]
+    save_claimed_data(config, claimed_data)
 
-@delete_gift_package_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_delete_gift_package(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """删除礼包命令处理"""
-    gift_id = args.extract_plain_text().strip()
+def clear_all_items(config: Dict[str, Any]) -> None:
+    """清空指定类型的所有记录及其领取记录"""
+    data_path = config["data_path"]
+    claimed_path = config["claimed_path"]
     
-    if not gift_id:
-        await handle_send(bot, event, "请指定要删除的礼包ID")
-        return
-    
-    data = load_gift_package_data()
-    if gift_id not in data:
-        await handle_send(bot, event, f"礼包ID {gift_id} 不存在")
-        return
-    
-    del data[gift_id]
-    save_gift_package_data(data)
-    
-    claimed_data = load_claimed_gift_packages()
-    for user_id in list(claimed_data.keys()):
-        if gift_id in claimed_data[user_id]:
-            claimed_data[user_id].remove(gift_id)
-            if not claimed_data[user_id]:
-                del claimed_data[user_id]
-    save_claimed_gift_packages(claimed_data)
-    
-    await handle_send(bot, event, f"成功删除礼包 {gift_id} 及其所有领取记录")
-
-# 兑换码系统文件路径
-REDEEM_CODE_DATA_PATH = Path(__file__).parent / "redeem_code_data"
-REDEEM_CODE_RECORDS_PATH = REDEEM_CODE_DATA_PATH / "redeem_codes.json"
-REDEEM_CODE_CLAIMED_PATH = REDEEM_CODE_DATA_PATH / "claimed_redeem_codes.json"
-
-# 确保目录存在
-REDEEM_CODE_DATA_PATH.mkdir(exist_ok=True)
-
-# 初始化兑换码记录文件
-if not REDEEM_CODE_RECORDS_PATH.exists():
-    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
+    # 清空主数据文件
+    with open(data_path, "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=4)
-
-# 初始化领取记录文件
-if not REDEEM_CODE_CLAIMED_PATH.exists():
-    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
+    
+    # 清空领取记录文件
+    with open(claimed_path, "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=4)
-
-def load_redeem_code_data() -> Dict[str, dict]:
-    """加载兑换码数据"""
-    with open(REDEEM_CODE_RECORDS_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_redeem_code_data(data: Dict[str, dict]):
-    """保存兑换码数据"""
-    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def load_claimed_redeem_codes() -> Dict[str, List[str]]:
-    """加载兑换码领取记录"""
-    with open(REDEEM_CODE_CLAIMED_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_claimed_redeem_codes(data: Dict[str, List[str]]):
-    """保存兑换码领取记录"""
-    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def add_redeem_code(redeem_code: str, duration_str: str, items_str: str, usage_limit: int = 1):
-    """新增兑换码
-    :param redeem_code: 兑换码
-    :param duration_str: 持续时间字符串
-    :param items_str: 物品字符串
-    :param usage_limit: 使用次数限制 (0表示无限次)
-    """
-    data = load_redeem_code_data()
-    if redeem_code in data:
-        raise ValueError(f"兑换码 {redeem_code} 已存在")
     
-    try:
-        if duration_str.lower() in ["无限", "0"]:
-            expire_time = "无限"
-        else:
-            duration = parse_duration(duration_str)
-            expire_time = (datetime.now() + duration).strftime("%Y-%m-%d %H:%M:%S")
-    except ValueError as e:
-        raise ValueError(f"时间格式错误: {str(e)}")
-    
-    # 解析物品字符串
-    items_list = []
-    for item_part in items_str.split(','):
-        item_part = item_part.strip()
-        if 'x' in item_part:
-            item_id_or_name, quantity = item_part.split('x', 1)
-            quantity = int(quantity)
-        else:
-            item_id_or_name = item_part
-            quantity = 1
-        
-        if item_id_or_name == "灵石":
-            items_list.append({
-                "type": "stone",
-                "id": "stone",
-                "name": "灵石",
-                "quantity": quantity if quantity > 0 else 1000000,
-                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
-            })
-            continue
-        
-        goods_id = None
-        if item_id_or_name.isdigit():
-            goods_id = int(item_id_or_name)
-            item_info = items.get_data_by_item_id(goods_id)
-            if not item_info:
-                raise ValueError(f"物品ID {goods_id} 不存在")
-        else:
-            for k, v in items.items.items():
-                if item_id_or_name == v['name']:
-                    goods_id = k
-                    break
-            if not goods_id:
-                raise ValueError(f"物品 {item_id_or_name} 不存在")
-        
-        item_info = items.get_data_by_item_id(goods_id)
-        items_list.append({
-            "type": item_info['type'],
-            "id": goods_id,
-            "name": item_info['name'],
-            "quantity": quantity,
-            "desc": item_info['desc']
-        })
-    
-    if not items_list:
-        raise ValueError("未指定有效的兑换物品")
-    
-    data[redeem_code] = {
-        "items": items_list,
-        "expire_time": expire_time,
-        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "usage_limit": usage_limit,
-        "used_count": 0,
-        "type": "redeem_code"  # 标记为兑换码类型
-    }
-    save_redeem_code_data(data)
-    return True
+    logger.info(f"已清空所有{config['type_key']}记录及其领取记录。")
 
-def get_redeem_code_info(redeem_code: str) -> Optional[dict]:
-    """获取兑换码信息"""
-    data = load_redeem_code_data()
-    return data.get(redeem_code)
+# ======================
+# 通用命令处理
+# ======================
 
-def is_redeem_code_expired(redeem_info: dict) -> bool:
-    """检查兑换码是否过期"""
-    if redeem_info["expire_time"] == "无限":
-        return False
-    expire_time = datetime.strptime(redeem_info["expire_time"], "%Y-%m-%d %H:%M:%S")
-    return datetime.now() > expire_time
+def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
+    """注册通用命令"""
+    add_cmd = on_command(f"新增{item_type}", permission=SUPERUSER, priority=5, block=True)
+    delete_cmd = on_command(f"删除{item_type}", permission=SUPERUSER, priority=5, block=True)
+    clear_cmd = on_command(f"清空{item_type}", permission=SUPERUSER, priority=5, block=True)  # 新增清空命令
+    list_cmd = on_command(f"{item_type}列表", priority=5, block=True)
+    claim_cmd = on_command(f"领取{item_type}", priority=5, block=True)
+    help_cmd = on_command(f"{item_type}帮助", priority=7, block=True)
+    admin_help_cmd = on_command(f"{item_type}管理", permission=SUPERUSER, priority=5, block=True)
 
-def is_redeem_code_used_up(redeem_info: dict) -> bool:
-    """检查兑换码是否已用完"""
-    if redeem_info["usage_limit"] == 0:  # 无限次使用
-        return False
-    return redeem_info["used_count"] >= redeem_info["usage_limit"]
+    @clear_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])  # 清空命令的处理函数
+    async def handle_clear(bot: Bot, event: MessageEvent):
+        try:
+            clear_all_items(config)
+            await handle_send(bot, event, f"成功清空所有{item_type}记录及其领取记录。")
+        except Exception as e:
+            await handle_send(bot, event, f"清空{item_type}出错: {str(e)}")
 
-def has_claimed_redeem_code(user_id: str, redeem_code: str) -> bool:
-    """检查用户是否已领取过该兑换码"""
-    claimed_data = load_claimed_redeem_codes()
-    return redeem_code in claimed_data.get(user_id, [])
+    @add_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_add(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+        try:
+            arg_str = args.extract_plain_text().strip()
+            parts = arg_str.split(maxsplit=5)
+            if len(parts) < 3:
+                raise ValueError(f"参数不足，格式应为: {item_type}ID 物品数据 原因 有效期 生效期")
+            item_id = parts[0] if parts[0] not in ["随机", "0"] else None
+            items_str = parts[1]
+            reason = parts[2]
+            expire_time_str = parts[3] if len(parts) > 3 else None
+            start_time_str = parts[4] if len(parts) > 4 else None
+            data = load_data(config)
+            if item_id is None or item_id in ["随机", "0"]:
+                existing_ids = list(data.keys())
+                item_id = generate_unique_id(existing_ids)
+            else:
+                if item_id in data:
+                    logger.info(f"{item_type}ID {item_id} 已存在，将覆盖旧的记录。")
+            start_time = None
+            expire_delta = None
+            if start_time_str:
+                start_time = parse_duration(start_time_str, is_start_time=True)
+                if not isinstance(start_time, datetime):
+                    raise ValueError(f"无效的生效期格式: {start_time_str}")
+            else:
+                start_time = parse_duration("0", is_start_time=True)
+            if expire_time_str:
+                expire_delta = parse_duration(expire_time_str, is_start_time=False)
+                if expire_delta == "无限":
+                    expire_time = "无限"
+                elif isinstance(expire_delta, timedelta):
+                    expire_time = datetime.now() + expire_delta
+                    expire_time = expire_time.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    raise ValueError(f"无效的有效期格式: {expire_time_str}")
+            else:
+                expire_time = "无限"
+            if start_time and expire_time != "无限":
+                expire_datetime = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S") if isinstance(expire_time, str) else expire_time
+                if start_time > expire_datetime:
+                    raise ValueError("生效期不能超过有效期")
+            items_list = get_item_list(items_str, items)
+            if not items_list:
+                raise ValueError("未指定有效的物品")
+            data[item_id] = {
+                "items": items_list,
+                "reason": reason,
+                "expire_time": expire_time,
+                "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S") if start_time else None,
+            }
+            if config["type_key"] == "兑换码":
+                usage_limit_str = parts[2]  # 根据实际情况调整索引
+                try:
+                    usage_limit = int(usage_limit_str)
+                except ValueError:
+                    raise ValueError("兑换次数必须是数字")
+                data[item_id]["usage_limit"] = usage_limit
+                data[item_id]["used_count"] = 0
+            save_data(config, data)
+            await send_success_message(bot, event, config, item_id, items_list, reason, expire_time, start_time)
+        except Exception as e:
+            await handle_send(bot, event, f"新增{item_type}出错: {str(e)}")
 
-async def claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, redeem_code: str) -> bool:
-    """领取兑换码奖励"""
-    redeem_info = get_redeem_code_info(redeem_code)
+    @delete_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_delete(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+        item_id = args.extract_plain_text().strip()
+        if not item_id:
+            await handle_send(bot, event, f"请指定要删除的{item_type}ID")
+            return
+        delete_item(item_id, config)
+        await handle_send(bot, event, f"成功删除{item_type} {item_id} 及其所有领取记录")
+
+    @list_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_list(bot: Bot, event: MessageEvent):
+        await list_items(config, bot, event)
+
+    @claim_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+        user_id = event.get_user_id()
+        item_id = args.extract_plain_text().strip()
+        if not item_id:
+            await handle_send(bot, event, f"请指定要领取的{item_type}ID")
+            return
+        await claim_item(bot, event, user_id, item_id, config)
+
+    @help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        if item_type == "补偿":
+            await handle_send(bot, event, __compensation_help__)
+        elif item_type == "礼包":
+            await handle_send(bot, event, __gift_package_help__)
+        elif item_type == "兑换码":
+            await handle_send(bot, event, __redeem_code_help__)
+        await handle_help_cmd.finish()
+
+    @admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+    async def handle_admin_help(bot: Bot, event: MessageEvent):
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        if item_type == "补偿":
+            await handle_send(bot, event, __compensation_admin_help__)
+        elif item_type == "礼包":
+            await handle_send(bot, event, __gift_package_admin_help__)
+        elif item_type == "兑换码":
+            await handle_send(bot, event, __redeem_code_admin_help__)
+        await handle_admin_help_cmd.finish()
+
+# ======================
+# 特殊处理：兑换码的使用次数和领取逻辑
+# ======================
+claim_redeem_code_cmd = on_command("兑换", priority=10, block=True)
+@claim_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def claim_redeem_code_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    user_id = event.get_user_id()
+    redeem_code = args.extract_plain_text().strip()
+    if not redeem_code:
+        await handle_send(bot, event, "请指定要兑换的兑换码")
+        return
+    config = DATA_CONFIG["兑换码"]
+    data = load_data(config)
+    redeem_info = data.get(redeem_code)
     if not redeem_info:
-        await handle_send(bot, event, "兑换码无效或不存在")
-        return False
-    
-    if is_redeem_code_expired(redeem_info):
-        await handle_send(bot, event, "该兑换码已过期")
-        return False
-    
-    if is_redeem_code_used_up(redeem_info):
-        await handle_send(bot, event, "该兑换码已被使用完")
-        return False
-    
-    if has_claimed_redeem_code(user_id, redeem_code):
-        await handle_send(bot, event, "您已经使用过该兑换码了")
-        return False
-    
+        await handle_send(bot, event, "兑换码不存在")
+        return
+    if config["type_key"] == "兑换码":
+        usage_limit = redeem_info.get("usage_limit", 0)
+        if usage_limit != 0 and redeem_info.get("used_count", 0) >= usage_limit:
+            await handle_send(bot, event, "该兑换码已被使用完")
+            return
+    if has_claimed(user_id, redeem_code, config):
+        await handle_send(bot, event, f"您已经使用过兑换码 {redeem_code} 了")
+        return
+    if config["type_key"] == "兑换码":
+        start_time = redeem_info.get("start_time")
+        if start_time:
+            if isinstance(start_time, str):
+                start_time_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+            elif isinstance(start_time, datetime):
+                start_time_dt = start_time
+            else:
+                await handle_send(bot, event, "兑换码生效时间格式错误")
+                return
+            if datetime.now() < start_time_dt:
+                await handle_send(bot, event, f"兑换码 {redeem_code} 尚未生效，生效时间为 {start_time}，请稍后再试。")
+                return
     msg_parts = [f"成功兑换 {redeem_code}:"]
-    
-    # 发放物品
     for item in redeem_info["items"]:
         if item["type"] == "stone":
             sql_message.update_ls(user_id, item["quantity"], 1)
@@ -1083,14 +604,12 @@ async def claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             goods_name = item["name"]
             goods_type = item["type"]
             quantity = item["quantity"]
-            
             if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
                 goods_type_item = "技能"
             elif goods_type in ["法器", "防具"]:
                 goods_type_item = "装备"
             else:
                 goods_type_item = goods_type
-            
             sql_message.send_back(
                 user_id,
                 goods_id,
@@ -1100,288 +619,241 @@ async def claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 1
             )
             msg_parts.append(f"获得 {goods_name} x{quantity}")
-    
     msg = "\n".join(msg_parts)
     await handle_send(bot, event, msg)
-    
-    # 更新兑换码使用记录
-    redeem_data = load_redeem_code_data()
-    redeem_data[redeem_code]["used_count"] += 1
-    save_redeem_code_data(redeem_data)
-    
-    # 记录用户领取状态
-    claimed_data = load_claimed_redeem_codes()
+    if config["type_key"] == "兑换码":
+        redeem_data = load_data(config)
+        redeem_data[redeem_code]["used_count"] += 1
+        save_data(config, redeem_data)
+    claimed_data = load_claimed_data(config)
     if user_id not in claimed_data:
         claimed_data[user_id] = []
     claimed_data[user_id].append(redeem_code)
-    save_claimed_redeem_codes(claimed_data)
-    
-    return True
+    save_claimed_data(config, claimed_data)
 
-add_redeem_code_cmd = on_command("新增兑换码", permission=SUPERUSER, priority=5, block=True)
-delete_redeem_code_cmd = on_command("删除兑换码", permission=SUPERUSER, priority=5, block=True)
-list_redeem_codes_cmd = on_command("兑换码列表", permission=SUPERUSER, priority=5, block=True)
-claim_redeem_code_cmd = on_command("兑换", priority=5, block=True)
-redeem_code_help_cmd = on_command("兑换码帮助", priority=7, block=True)
-redeem_code_admin_help_cmd = on_command("兑换码管理", permission=SUPERUSER, priority=5, block=True)
-
-__redeem_code_help__ = f"""
-🎟 兑换码帮助 🎟
-═════════════
-1. 兑换 [兑换码] - 使用指定兑换码
-
-【注意事项】
-- 每个兑换码每人限用一次
-- 过期兑换码将无法使用
-- 一次性兑换码使用后失效
-═════════════
-当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-__redeem_code_admin_help__ = f"""
-🎟 兑换码管理 🎟 
-═════════════
-1. 新增兑换码 [兑换码] [时间] [物品] [使用次数]
-   - 示例1: 新增兑换码 XMAS2023 7天 1001x1,1002x2 1 (一次性)
-   - 示例2: 新增兑换码 NEWYEAR2024 30天 灵石x500000 0 (无限次)
-
-2. 删除兑换码 [兑换码] - 删除指定兑换码
-
-3. 兑换码列表 - 查看所有兑换码(含过期)
-
-4. 清空兑换码 - 清空所有兑换码
-
-【参数说明】
-- 时间: 如"7天"或"48小时"
-- 物品: 物品ID或名称,可带数量
-   - 示例1: 1001,1002
-   - 示例2: 灵石x1000000
-   - 示例3: 渡厄丹x1,两仪心经x1
-- 使用次数: 0表示无限次,1表示一次性
-
-【注意事项】
-- 兑换码必须唯一
-- 删除操作不可逆
-═════════════
-当前服务器时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-""".strip()
-
-@redeem_code_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_redeem_code_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """兑换码帮助"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __redeem_code_help__)
-    await redeem_code_help_cmd.finish()
-
-@redeem_code_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_redeem_code_admin_help(bot: Bot, event: MessageEvent):
-    """兑换码管理帮助"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __redeem_code_admin_help__)
-    await redeem_code_admin_help_cmd.finish()
-
-@list_redeem_codes_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_list_redeem_codes = on_command("兑换码列表", permission=SUPERUSER, priority=5, block=True)
+@handle_list_redeem_codes.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     """列出所有兑换码(仅管理员可见)"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    data = load_redeem_code_data()
+    config = DATA_CONFIG["兑换码"]
+    data = load_data(config)
     if not data:
-        msg = "当前没有可用的兑换码"
-        await handle_send(bot, event, msg)
         return
-    
+    current_time = datetime.now()
     msg_lines = [
         "🎟 兑换码列表 🎟",
-        "====================",
-        "【有效兑换码】"
+        "===================="
     ]
-    
     valid_codes = []
     expired_codes = []
-    
+    not_yet_started_codes = []
     for code, info in data.items():
-        expired = is_redeem_code_expired(info)
-        if expired:
+        expire_time = info.get("expire_time")
+        start_time = info.get("start_time")
+        if expire_time == "无限":
+            expire_time_dt = None
+        else:
+            if isinstance(expire_time, str):
+                expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+            elif isinstance(expire_time, datetime):
+                expire_time_dt = expire_time
+            else:
+                expire_time_dt = None
+        if start_time:
+            if isinstance(start_time, str):
+                start_time_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+            elif isinstance(start_time, datetime):
+                start_time_dt = start_time
+            else:
+                start_time_dt = None
+        else:
+            start_time_dt = None
+        if start_time_dt and current_time < start_time_dt:
+            not_yet_started_codes.append((code, info))
+        elif expire_time_dt and current_time > expire_time_dt:
             expired_codes.append((code, info))
         else:
             valid_codes.append((code, info))
-    
-    if not valid_codes and not expired_codes:
-        msg_lines.append("暂无任何兑换码")
-    else:
-        if valid_codes:
-            for code, info in valid_codes:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                usage_limit = "无限次" if info["usage_limit"] == 0 else f"{info['used_count']}/{info['usage_limit']}次"
-                msg_lines.extend([
-                    f"🎟 兑换码: {code}",
-                    f"🎁 内容: {', '.join(items_msg)}",
-                    f"🔄 使用限制: {usage_limit}",
-                    f"⏰ 有效期至: {info['expire_time']}",
-                    f"🕒 创建时间: {info['create_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无有效兑换码")
-        
+    if not_yet_started_codes:
+        msg_lines.append("\n【尚未生效的兑换码】")
+        for code, info in not_yet_started_codes:
+            items_msg = create_item_message(info["items"])
+            usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            start_time_str = info.get("start_time", "未知")
+            expire_time_str = info.get("expire_time", "未知")
+            create_time_str = info.get("create_time", "未知")
+            msg_lines.extend([
+                f"🎟 兑换码: {code}",
+                f"🎁 内容: {', '.join(items_msg)}",
+                f"🔄 使用限制: {usage_limit}",
+                f"⏰ 有效期至: {expire_time_str}",
+                f"🕒 生效时间: {start_time_str}",
+                f"🕒 创建时间: {create_time_str}",
+                "------------------"
+            ])
+    if valid_codes:
+        msg_lines.append("\n【有效兑换码】")
+        for code, info in valid_codes:
+            items_msg = create_item_message(info["items"])
+            usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            expire_time_str = info.get("expire_time", "未知")
+            start_time_str = info.get("start_time", "未知")
+            create_time_str = info.get("create_time", "未知")
+            msg_lines.extend([
+                f"🎟 兑换码: {code}",
+                f"🎁 内容: {', '.join(items_msg)}",
+                f"🔄 使用限制: {usage_limit}",
+                f"⏰ 有效期至: {expire_time_str}",
+                f"🕒 生效时间: {start_time_str}",
+                f"🕒 创建时间: {create_time_str}",
+                "------------------"
+            ])
+    if expired_codes:
         msg_lines.append("\n【过期兑换码】")
-        if expired_codes:
-            for code, info in expired_codes:
-                items_msg = []
-                for item in info["items"]:
-                    if item["type"] == "stone":
-                        items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                    else:
-                        items_msg.append(f"{item['name']} x{item['quantity']}")
-                
-                usage_limit = "无限次" if info["usage_limit"] == 0 else f"{info['used_count']}/{info['usage_limit']}次"
-                msg_lines.extend([
-                    f"🎟 兑换码: {code}",
-                    f"🎁 内容: {', '.join(items_msg)}",
-                    f"🔄 使用情况: {usage_limit}",
-                    f"⏰ 过期时间: {info['expire_time']}",
-                    f"🕒 创建时间: {info['create_time']}",
-                    "------------------"
-                ])
-        else:
-            msg_lines.append("暂无过期兑换码")
-    
-    msg_lines.append(f"\n⏱⏱⏱ 当前服务器时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        for code, info in expired_codes:
+            items_msg = create_item_message(info["items"])
+            usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            expire_time_str = info.get("expire_time", "未知")
+            start_time_str = info.get("start_time", "未知")
+            create_time_str = info.get("create_time", "未知")
+            msg_lines.extend([
+                f"🎟 兑换码: {code}",
+                f"🎁 内容: {', '.join(items_msg)}",
+                f"🔄 使用情况: {usage_limit}",
+                f"⏰ 过期时间: {expire_time_str}",
+                f"🕒 生效时间: {start_time_str}",
+                f"🕒 创建时间: {create_time_str}",
+                "------------------"
+            ])
+    msg_lines.append(f"\n⏱ 当前服务器时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
     msg = "\n".join(msg_lines)
-    
     await handle_send(bot, event, msg)
 
-@add_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_add_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """新增兑换码命令处理"""
-    try:
-        arg_str = args.extract_plain_text().strip()
-        parts = arg_str.split(maxsplit=4)
-        if len(parts) < 4:
-            raise ValueError("参数不足，格式应为: 兑换码 时间 物品 使用次数")
-        
-        if len(parts) == 4:
-            redeem_code, duration, items_str, usage_limit = parts
-            reason = ""
+def clean_expired_items():
+    """自动清理所有过期（补偿、礼包、兑换码）"""
+    for item_type, config in DATA_CONFIG.items():
+        if item_type == "补偿":
+            clean_expired_compensations()
+        elif item_type == "礼包":
+            clean_expired_gift_packages()
+        elif item_type == "兑换码":
+            clean_expired_redeem_codes()
+
+def clean_expired_compensations():
+    """自动清理过期的补偿项，并清除对应的领取记录"""
+    config = DATA_CONFIG["补偿"]
+    data = load_data(config)
+    claimed_data = load_claimed_data(config)
+    to_delete = []
+    for comp_id, comp_info in data.items():
+        expire_time = comp_info.get("expire_time")
+        if expire_time == "无限":
+            continue
+        if isinstance(expire_time, str):
+            expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+        elif isinstance(expire_time, datetime):
+            expire_time_dt = expire_time
         else:
-            redeem_code, duration, items_str, usage_limit, reason = parts
-        data = load_redeem_code_data()
-        if redeem_code in ["随机", "0"]:
-            redeem_code = generate_unique_id(data)
-        try:
-            usage_limit = int(usage_limit)
-        except ValueError:
-            raise ValueError("使用次数必须是数字")
-        
-        if add_redeem_code(redeem_code, duration, items_str, usage_limit):
-            redeem_info = get_redeem_code_info(redeem_code)
-            items_msg = []
-            for item in redeem_info["items"]:
-                if item["type"] == "stone":
-                    items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-                else:
-                    items_msg.append(f"{item['name']} x{item['quantity']}")
-            
-            usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次"
-            msg = f"\n成功新增兑换码 {redeem_code}\n"
-            msg += f"🎁 内容: {', '.join(items_msg)}\n"
-            msg += f"🔄 使用限制: {usage_msg}"
-            if reason:
-                msg += f"\n📝 备注: {reason}"
-            await handle_send(bot, event, msg)
+            continue  # 无法识别的格式，默认不过期
+        if datetime.now() > expire_time_dt:
+            to_delete.append(comp_id)
+    for comp_id in to_delete:
+        del data[comp_id]
+        if comp_id in claimed_data:
+            del claimed_data[comp_id]
         else:
-            await handle_send(bot, event, "新增兑换码失败")
-    except Exception as e:
-        await handle_send(bot, event, f"新增兑换码出错: {str(e)}")
+            for user_id in list(claimed_data.keys()):
+                if comp_id in claimed_data[user_id]:
+                    claimed_data[user_id].remove(comp_id)
+                    if not claimed_data[user_id]:
+                        del claimed_data[user_id]
+    if to_delete:
+        save_data(config, data)
+        save_claimed_data(config, claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期补偿: {to_delete}")
+    else:
+        logger.info("没有发现过期补偿，无需清理")
 
-@claim_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_claim_redeem_code(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """使用兑换码命令处理"""
-    user_id = event.get_user_id()
-    redeem_code = args.extract_plain_text().strip()
-    
-    if not redeem_code:
-        await handle_send(bot, event, "请指定要兑换的兑换码")
-        return
-    
-    await claim_redeem_code(bot, event, user_id, redeem_code)
+def clean_expired_gift_packages():
+    """自动清理过期的礼包项，并清除对应的领取记录"""
+    config = DATA_CONFIG["礼包"]
+    data = load_data(config)
+    claimed_data = load_claimed_data(config)
+    to_delete = []
+    for gift_id, gift_info in data.items():
+        expire_time = gift_info.get("expire_time")
+        if expire_time == "无限":
+            continue
+        if isinstance(expire_time, str):
+            expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+        elif isinstance(expire_time, datetime):
+            expire_time_dt = expire_time
+        else:
+            continue  # 无法识别的格式，默认不过期
+        if datetime.now() > expire_time_dt:
+            to_delete.append(gift_id)
+    for gift_id in to_delete:
+        del data[gift_id]
+        if gift_id in claimed_data:
+            del claimed_data[gift_id]
+        else:
+            for user_id in list(claimed_data.keys()):
+                if gift_id in claimed_data[user_id]:
+                    claimed_data[user_id].remove(gift_id)
+                    if not claimed_data[user_id]:
+                        del claimed_data[user_id]
+    if to_delete:
+        save_data(config, data)
+        save_claimed_data(config, claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期礼包: {to_delete}")
+    else:
+        logger.info("没有发现过期礼包，无需清理")
 
-@delete_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_delete_redeem_code(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """删除兑换码命令处理"""
-    redeem_code = args.extract_plain_text().strip()
-    
-    if not redeem_code:
-        await handle_send(bot, event, "请指定要删除的兑换码")
-        return
-    
-    data = load_redeem_code_data()
-    if redeem_code not in data:
-        await handle_send(bot, event, f"兑换码 {redeem_code} 不存在")
-        return
-    
-    del data[redeem_code]
-    save_redeem_code_data(data)
-    
-    # 从所有用户的领取记录中删除该兑换码
-    claimed_data = load_claimed_redeem_codes()
-    for user_id in list(claimed_data.keys()):
-        if redeem_code in claimed_data[user_id]:
-            claimed_data[user_id].remove(redeem_code)
-            if not claimed_data[user_id]:
-                del claimed_data[user_id]
-    save_claimed_redeem_codes(claimed_data)
-    
-    await handle_send(bot, event, f"成功删除兑换码 {redeem_code} 及其所有领取记录")
+def clean_expired_redeem_codes():
+    """自动清理过期的兑换码项，并清除对应的领取记录"""
+    config = DATA_CONFIG["兑换码"]
+    data = load_data(config)
+    claimed_data = load_claimed_data(config)
+    to_delete = []
+    for code, code_info in data.items():
+        expire_time = code_info.get("expire_time")
+        if expire_time == "无限":
+            continue
+        if isinstance(expire_time, str):
+            expire_time_dt = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+        elif isinstance(expire_time, datetime):
+            expire_time_dt = expire_time
+        else:
+            continue  # 无法识别的格式，默认不过期
+        if datetime.now() > expire_time_dt:
+            to_delete.append(code)
+    for code in to_delete:
+        del data[code]
+        if code in claimed_data:
+            del claimed_data[code]
+        else:
+            for user_id in list(claimed_data.keys()):
+                if code in claimed_data[user_id]:
+                    claimed_data[user_id].remove(code)
+                    if not claimed_data[user_id]:
+                        del claimed_data[user_id]
+    if to_delete:
+        save_data(config, data)
+        save_claimed_data(config, claimed_data)
+        logger.info(f"已自动清理 {len(to_delete)} 个过期兑换码: {to_delete}")
+    else:
+        logger.info("没有发现过期兑换码，无需清理")
 
-clear_compensation_cmd = on_command("清空补偿", permission=SUPERUSER, priority=5, block=True)
-clear_gift_packages_cmd = on_command("清空礼包", permission=SUPERUSER, priority=5, block=True)
-clear_redeem_codes_cmd = on_command("清空兑换码", permission=SUPERUSER, priority=5, block=True)
+# ======================
+# 注册通用命令
+# ======================
 
-@clear_compensation_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_clear_compensation(bot: Bot, event: MessageEvent):
-    """清空所有补偿"""
-    # 清空补偿数据
-    with open(COMPENSATION_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    # 清空领取记录
-    with open(COMPENSATION_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    await handle_send(bot, event, "已清空所有补偿数据及领取记录")
+for item_type, config in DATA_CONFIG.items():
+    register_common_commands(item_type, config)
 
-@clear_gift_packages_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_clear_gift_packages(bot: Bot, event: MessageEvent):
-    """清空所有礼包"""
-    # 清空礼包数据
-    with open(GIFT_PACKAGE_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    # 清空领取记录
-    with open(GIFT_PACKAGE_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    await handle_send(bot, event, "已清空所有礼包数据及领取记录")
-
-@clear_redeem_codes_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_clear_redeem_codes(bot: Bot, event: MessageEvent):
-    """清空所有兑换码"""
-    # 清空兑换码数据
-    with open(REDEEM_CODE_RECORDS_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    # 清空领取记录
-    with open(REDEEM_CODE_CLAIMED_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
-    
-    await handle_send(bot, event, "已清空所有兑换码数据及领取记录")
+# ======================
+# 邀请功能
+# ======================
 
 INVITATION_DATA_PATH = Path(__file__).parent / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
@@ -1405,7 +877,7 @@ if not INVITATION_RECORDS_FILE.exists():
 if not INVITATION_CLAIMED_FILE.exists():
     with open(INVITATION_CLAIMED_FILE, "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=4)
-        
+
 def load_invitation_rewards():
     """加载邀请奖励配置"""
     with open(INVITATION_REWARDS_FILE, "r", encoding="utf-8") as f:
@@ -1446,8 +918,6 @@ def add_invitation_record(inviter_id, invited_id):
     records = load_invitation_records()
     if str(inviter_id) not in records:
         records[str(inviter_id)] = []
-    
-    # 检查是否已经邀请过该用户
     if str(invited_id) not in records[str(inviter_id)]:
         records[str(inviter_id)].append(str(invited_id))
         save_invitation_records(records)
@@ -1484,109 +954,9 @@ def mark_reward_claimed(user_id, threshold):
         claimed[str(user_id)] = []
     claimed[str(user_id)].append(str(threshold))
     save_claimed_records(claimed)
-    
-invitation_set_reward = on_command("邀请奖励设置", permission=SUPERUSER, priority=5, block=True)
-invitation_use = on_command("邀请码", priority=5, block=True)
-invitation_check = on_command("邀请人", priority=5, block=True)
-invitation_claim = on_command("邀请奖励领取", priority=5, block=True)
-invitation_info = on_command("我的邀请", priority=5, block=True)
 
-@invitation_set_reward.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_invitation_set_reward(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
-    """设置邀请奖励"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    
-    arg_str = args.extract_plain_text().strip()
-    parts = arg_str.split(maxsplit=1)
-    
-    if len(parts) < 2:
-        msg = "格式错误！正确格式：邀请奖励设置 [门槛人数] [奖励物品]\n示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000"
-        await handle_send(bot, event, msg)
-        return
-    
-    try:
-        threshold = int(parts[0])
-        if threshold <= 0:
-            raise ValueError
-    except ValueError:
-        msg = "门槛人数必须是正整数！"
-        await handle_send(bot, event, msg)
-        return
-    
-    items_str = parts[1]
-    
-    # 解析物品字符串
-    items_list = []
-    for item_part in items_str.split(','):
-        item_part = item_part.strip()
-        if 'x' in item_part:
-            item_id_or_name, quantity = item_part.split('x', 1)
-            quantity = int(quantity)
-        else:
-            item_id_or_name = item_part
-            quantity = 1
-        
-        # 处理灵石特殊物品
-        if item_id_or_name == "灵石":
-            items_list.append({
-                "type": "stone",
-                "id": "stone",
-                "name": "灵石",
-                "quantity": quantity if quantity > 0 else 1000000,
-                "desc": f"获得 {number_to(quantity if quantity > 0 else 1000000)} 灵石"
-            })
-            continue
-        
-        # 尝试转换为物品ID
-        goods_id = None
-        if item_id_or_name.isdigit():
-            goods_id = int(item_id_or_name)
-            item_info = items.get_data_by_item_id(goods_id)
-            if not item_info:
-                msg = f"物品ID {goods_id} 不存在"
-                await handle_send(bot, event, msg)
-                return
-        else:
-            for k, v in items.items.items():
-                if item_id_or_name == v['name']:
-                    goods_id = k
-                    break
-            if not goods_id:
-                msg = f"物品 {item_id_or_name} 不存在"
-                await handle_send(bot, event, msg)
-                return
-        
-        item_info = items.get_data_by_item_id(goods_id)
-        items_list.append({
-            "type": item_info['type'],
-            "id": goods_id,
-            "name": item_info['name'],
-            "quantity": quantity,
-            "desc": item_info['desc']
-        })
-    
-    if not items_list:
-        msg = "未指定有效的奖励物品！"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 保存奖励配置
-    rewards = load_invitation_rewards()
-    rewards[str(threshold)] = items_list
-    save_invitation_rewards(rewards)
-    
-    # 构建奖励描述
-    items_msg = []
-    for item in items_list:
-        if item["type"] == "stone":
-            items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-        else:
-            items_msg.append(f"{item['name']} x{item['quantity']}")
-    
-    msg = f"成功设置邀请{threshold}人的奖励：\n{', '.join(items_msg)}"
-    await handle_send(bot, event, msg)
-
-@invitation_use.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_invitation_use = on_command("邀请码", priority=5, block=True)
+@handle_invitation_use.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用邀请码"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1594,51 +964,35 @@ async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMess
     if not is_user:
         await handle_send(bot, event, msg)
         return
-    
     user_id = user_info['user_id']
     inviter_id = args.extract_plain_text().strip()
-    
     if not inviter_id:
         msg = "请输入邀请人的ID！格式：邀请码 [邀请人ID]"
         await handle_send(bot, event, msg)
         return
-    
-    # 检查是否已经填写过邀请码
-    if has_invitation_code(user_id):
-        msg = "您已经填写过邀请码，无法再次填写或更改！"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 检查邀请人ID是否有效
     if not inviter_id.isdigit():
         msg = "邀请人ID必须是数字！"
         await handle_send(bot, event, msg)
         return
-    
-    # 检查不能邀请自己
     if str(user_id) == inviter_id:
         msg = "不能邀请自己！"
         await handle_send(bot, event, msg)
         return
-    
-    # 检查邀请人是否存在
     inviter_info = sql_message.get_user_info_with_id(inviter_id)
     if not inviter_info:
         msg = "邀请人不存在！"
         await handle_send(bot, event, msg)
         return
-    
-    # 添加邀请记录
     success = add_invitation_record(inviter_id, user_id)
     if not success:
         msg = "邀请记录添加失败，可能已经邀请过该用户！"
         await handle_send(bot, event, msg)
         return
-    
     msg = f"成功绑定邀请人！您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
     await handle_send(bot, event, msg)
 
-@invitation_check.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_invitation_check = on_command("邀请人", priority=5, block=True)
+@handle_invitation_check.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看邀请人信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1646,27 +1000,22 @@ async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMe
     if not is_user:
         await handle_send(bot, event, msg)
         return
-    
     user_id = user_info['user_id']
-    
-    # 获取邀请人ID
     inviter_id = get_inviter_id(user_id)
     if not inviter_id:
         msg = "您还没有填写邀请码！"
         await handle_send(bot, event, msg)
         return
-    
-    # 获取邀请人信息
     inviter_info = sql_message.get_user_info_with_id(inviter_id)
     if not inviter_info:
         msg = "邀请人信息不存在！"
         await handle_send(bot, event, msg)
         return
-    
     msg = f"您的邀请人是：{inviter_info['user_name']}(ID:{inviter_id})"
     await handle_send(bot, event, msg)
 
-@invitation_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_invitation_info = on_command("我的邀请", priority=5, block=True)
+@handle_invitation_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的邀请信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1674,31 +1023,24 @@ async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMes
     if not is_user:
         await handle_send(bot, event, msg)
         return
-    
     user_id = user_info['user_id']
-    
-    # 获取邀请数量
     count = get_user_invitation_count(user_id)
-    
-    # 获取可领取的奖励
     rewards = load_invitation_rewards()
     claimed = load_claimed_records().get(str(user_id), [])
-    
     available_rewards = []
     for threshold_str in sorted(rewards.keys(), key=lambda x: int(x)):
         threshold = int(threshold_str)
         if count >= threshold and threshold_str not in claimed:
             available_rewards.append(threshold)
-    
     msg = [
         f"☆------我的邀请信息------☆",
         f"邀请人数：{count}人",
         f"可领取奖励：{', '.join(map(str, available_rewards)) if available_rewards else '无'}"
     ]
-    
     await handle_send(bot, event, "\n".join(msg))
 
-@invitation_claim.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_invitation_claim = on_command("邀请奖励领取", priority=5, block=True)
+@handle_invitation_claim.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """领取邀请奖励"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1706,31 +1048,21 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
     if not is_user:
         await handle_send(bot, event, msg)
         return
-    
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()
-    
-    # 获取邀请数量
     count = get_user_invitation_count(user_id)
-    
-    # 获取奖励配置
-    rewards_config = load_invitation_rewards()
-    if not rewards_config:
+    rewards = load_invitation_rewards()
+    if not rewards:
         msg = "目前没有设置任何邀请奖励！"
         await handle_send(bot, event, msg)
         return
-    
-    # 如果没有指定门槛，自动领取所有可领取的奖励
     if not arg:
         claimed_any = False
         reward_msgs = []
-        
-        # 按门槛从小到大排序
-        for threshold_str in sorted(rewards_config.keys(), key=lambda x: int(x)):
+        for threshold_str in sorted(rewards.keys(), key=lambda x: int(x)):
             threshold = int(threshold_str)
             if count >= threshold and not has_claimed_reward(user_id, threshold):
-                # 发放奖励
-                reward_items = rewards_config[threshold_str]
+                reward_items = rewards[threshold_str]
                 for item in reward_items:
                     if item["type"] == "stone":
                         sql_message.update_ls(user_id, item["quantity"], 1)
@@ -1739,14 +1071,12 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
                         goods_name = item["name"]
                         goods_type = item["type"]
                         quantity = item["quantity"]
-                        
                         if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
                             goods_type_item = "技能"
                         elif goods_type in ["法器", "防具"]:
                             goods_type_item = "装备"
                         else:
                             goods_type_item = goods_type
-                        
                         sql_message.send_back(
                             user_id,
                             goods_id,
@@ -1755,30 +1085,21 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
                             quantity,
                             1
                         )
-                
-                # 标记已领取
                 mark_reward_claimed(user_id, threshold)
                 claimed_any = True
-                
-                # 记录奖励信息
                 items_msg = []
                 for item in reward_items:
                     if item["type"] == "stone":
                         items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
                     else:
                         items_msg.append(f"{item['name']} x{item['quantity']}")
-                
                 reward_msgs.append(f"邀请{threshold}人奖励：{', '.join(items_msg)}")
-        
         if claimed_any:
             msg = f"成功领取以下奖励：\n" + "\n".join(reward_msgs)
         else:
             msg = "没有可领取的奖励！"
-        
         await handle_send(bot, event, msg)
         return
-    
-    # 如果指定了具体门槛
     try:
         threshold = int(arg)
         if threshold <= 0:
@@ -1787,26 +1108,19 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
         msg = "门槛人数必须是正整数！"
         await handle_send(bot, event, msg)
         return
-    
-    if str(threshold) not in rewards_config:
+    if str(threshold) not in rewards:
         msg = f"没有设置邀请{threshold}人的奖励！"
         await handle_send(bot, event, msg)
         return
-    
-    # 检查是否满足条件
     if count < threshold:
         msg = f"您的邀请人数不足{threshold}人，当前只有{count}人！"
         await handle_send(bot, event, msg)
         return
-    
-    # 检查是否已经领取
     if has_claimed_reward(user_id, threshold):
         msg = f"您已经领取过邀请{threshold}人的奖励！"
         await handle_send(bot, event, msg)
         return
-    
-    # 发放奖励
-    reward_items = rewards_config[str(threshold)]
+    reward_items = rewards[str(threshold)]
     for item in reward_items:
         if item["type"] == "stone":
             sql_message.update_ls(user_id, item["quantity"], 1)
@@ -1815,14 +1129,12 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
             goods_name = item["name"]
             goods_type = item["type"]
             quantity = item["quantity"]
-            
             if goods_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
                 goods_type_item = "技能"
             elif goods_type in ["法器", "防具"]:
                 goods_type_item = "装备"
             else:
                 goods_type_item = goods_type
-            
             sql_message.send_back(
                 user_id,
                 goods_id,
@@ -1831,104 +1143,79 @@ async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMe
                 quantity,
                 1
             )
-    
-    # 标记已领取
     mark_reward_claimed(user_id, threshold)
-    
-    # 构建奖励消息
     items_msg = []
     for item in reward_items:
         if item["type"] == "stone":
             items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
         else:
             items_msg.append(f"{item['name']} x{item['quantity']}")
-    
     msg = f"成功领取邀请{threshold}人奖励：\n{', '.join(items_msg)}"
     await handle_send(bot, event, msg)
-    
-invitation_reward_list_cmd = on_command("邀请奖励列表", priority=5, block=True)
 
-@invitation_reward_list_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+handle_invitation_set_reward = on_command("邀请奖励设置", permission=SUPERUSER, priority=5, block=True)
+@handle_invitation_set_reward.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_invitation_set_reward(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+    """设置邀请奖励"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    arg_str = args.extract_plain_text().strip()
+    parts = arg_str.split(maxsplit=1)
+    if len(parts) < 2:
+        msg = "格式错误！正确格式：邀请奖励设置 [门槛人数] [奖励物品]\n示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000"
+        await handle_send(bot, event, msg)
+        return
+    try:
+        threshold = int(parts[0])
+        if threshold <= 0:
+            raise ValueError
+    except ValueError:
+        msg = "门槛人数必须是正整数！"
+        await handle_send(bot, event, msg)
+        return
+    items_str = parts[1]
+    items_list = get_item_list(items_str, items)
+    if not items_list:
+        msg = "未指定有效的奖励物品！"
+        await handle_send(bot, event, msg)
+        return
+    rewards = load_invitation_rewards()
+    rewards[str(threshold)] = items_list
+    save_invitation_rewards(rewards)
+    items_msg = create_item_message(items_list)
+    msg = f"成功设置邀请{threshold}人的奖励：\n{', '.join(items_msg)}"
+    await handle_send(bot, event, msg)
+
+handle_invitation_reward_list = on_command("邀请奖励列表", priority=5, block=True)
+@handle_invitation_reward_list.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_invitation_reward_list(bot: Bot, event: MessageEvent):
     """查看邀请奖励列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    
-    # 加载奖励配置
     rewards = load_invitation_rewards()
     if not rewards:
         msg = "当前没有设置任何邀请奖励"
         await handle_send(bot, event, msg)
         return
-    
-    # 构建消息内容
     msg_lines = [
         "🎁 邀请奖励列表 🎁",
         "====================",
     ]
-    
-    # 按门槛从小到大排序
     sorted_thresholds = sorted([int(k) for k in rewards.keys()])
-    
     for threshold in sorted_thresholds:
         threshold_str = str(threshold)
         reward_items = rewards[threshold_str]
-        
-        items_msg = []
-        for item in reward_items:
-            if item["type"] == "stone":
-                items_msg.append(f"{item['name']} x{number_to(item['quantity'])}")
-            else:
-                items_msg.append(f"{item['name']} x{item['quantity']}")
-        
+        items_msg = create_item_message(reward_items)
         msg_lines.extend([
             f"🎯 门槛: 邀请{threshold}人",
             f"🎁 奖励内容: {', '.join(items_msg)}",
             "------------------"
         ])
-
     msg = "\n".join(msg_lines)
-    
     await handle_send(bot, event, msg)
 
-__invitation_help__ = f"""
-🤝 邀请系统帮助 🤝
-═════════════
-1. 邀请码 [ID] - 填写邀请人的ID
-2. 邀请人 - 查看自己的邀请人信息
-3. 我的邀请 - 查看自己的邀请信息
-4. 邀请奖励列表 - 查看所有邀请奖励设置
-5. 邀请奖励领取 [门槛] - 领取邀请奖励
-   - 不填门槛：领取所有可领取的奖励
-   - 填写门槛：领取指定门槛的奖励
+# ======================
+# 邀请帮助
+# ======================
 
-【注意事项】
-- 每个用户只能填写一次邀请码，无法更改
-- 邀请人数达到指定门槛即可领取奖励
-- 奖励只能领取一次
-═════════════
-""".strip()
-
-__invitation_admin_help__ = f"""
-🤝 邀请管理 🤝 
-═════════════
-1. 邀请奖励设置 [门槛] [物品] - 设置邀请奖励
-   - 示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000
-2. 邀请奖励列表 - 查看所有邀请奖励设置
-
-【参数说明】
-- 门槛：邀请人数要求
-- 物品：物品ID或名称，可带数量
-   - 示例1: 1001,1002
-   - 示例2: 灵石x1000000
-   - 示例3: 渡厄丹x1,两仪心经x1
-
-【注意事项】
-- 奖励设置后立即生效
-- 玩家可以领取所有满足条件的奖励
-═════════════
-""".strip()
-
-# 添加帮助命令
 invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
 
@@ -1946,113 +1233,33 @@ async def handle_invitation_admin_help(bot: Bot, event: MessageEvent):
     await handle_send(bot, event, __invitation_admin_help__)
     await invitation_admin_help_cmd.finish()
 
+__invitation_help__ = f"""
+🤝 邀请系统帮助 🤝
+═════════════
+1. 邀请码 [ID] - 填写邀请人的ID
+2. 邀请人 - 查看自己的邀请人信息
+3. 我的邀请 - 查看自己的邀请信息
+4. 邀请奖励列表 - 查看所有邀请奖励设置
+5. 邀请奖励领取 [门槛] - 领取邀请奖励
+   - 不填门槛：领取所有可领取的奖励
+   - 填写门槛：领取指定   门槛的奖励
+6. 邀请奖励设置 [门槛人数] [奖励物品] - 设置邀请奖励（仅管理员）
+   - 示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000
+"""
+
+__invitation_admin_help__ = f"""
+👑 邀请系统管理帮助 👑
+═════════════════
+1. 邀请奖励设置 [门槛人数] [奖励物品] - 设置邀请奖励
+   - 示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000
+2. 邀请奖励列表 - 查看所有邀请奖励设置
+"""
+
+# ======================
+# 自动清理任务
+# ======================
 
 async def auto_clean_expired_items():
-    clean_expired_compensations()
-    clean_expired_gift_packages()
-    clean_expired_redeem_codes()
-    logger.info("已自动清理所有过期项目")
-
-def clean_expired_redeem_codes():
-    """自动清理过期的兑换码项，并清除对应的领取记录"""
-    data = load_redeem_code_data()
-    claimed_data = load_claimed_redeem_codes()
-    to_delete = []
-
-    for code, code_info in data.items():
-        if code_info["expire_time"] == "无限":
-            continue
-        try:
-            if is_redeem_code_expired(code_info):
-                to_delete.append(code)
-        except Exception:
-            continue
-
-    for code in to_delete:
-        del data[code]
-        if code in claimed_data:
-            del claimed_data[code]
-        else:
-            for user_id in list(claimed_data.keys()):
-                if code in claimed_data[user_id]:
-                    claimed_data[user_id].remove(code)
-                    if not claimed_data[user_id]:
-                        del claimed_data[user_id]
-
-    if to_delete:
-        save_redeem_code_data(data)
-        save_claimed_redeem_codes(claimed_data)
-        logger.info(f"已自动清理 {len(to_delete)} 个过期兑换码: {to_delete}")
-    else:
-        logger.info("没有发现过期兑换码，无需清理")
-
-def clean_expired_gift_packages():
-    """自动清理过期的礼包项，并清除对应的领取记录"""
-    data = load_gift_package_data()
-    claimed_data = load_claimed_gift_packages()
-    to_delete = []
-
-    for gift_id, gift_info in data.items():
-        if gift_info["expire_time"] == "无限":
-            continue
-        try:
-            if is_gift_package_expired(gift_info):
-                to_delete.append(gift_id)
-        except Exception:
-            continue
-
-    for gift_id in to_delete:
-        del data[gift_id]
-        if gift_id in claimed_data:
-            del claimed_data[gift_id]
-        else:
-            for user_id in list(claimed_data.keys()):
-                if gift_id in claimed_data[user_id]:
-                    claimed_data[user_id].remove(gift_id)
-                    if not claimed_data[user_id]:
-                        del claimed_data[user_id]
-
-    if to_delete:
-        save_gift_package_data(data)
-        save_claimed_gift_packages(claimed_data)
-        logger.info(f"已自动清理 {len(to_delete)} 个过期礼包: {to_delete}")
-    else:
-        logger.info("没有发现过期礼包，无需清理")
-
-def clean_expired_compensations():
-    """自动清理过期的补偿项，并清除对应的领取记录"""
-    data = load_compensation_data()
-    claimed_data = load_claimed_data()
-    to_delete = []
-
-    for comp_id, comp_info in data.items():
-        if comp_info["expire_time"] == "无限":
-            continue  # 永不过期，不移除
-        try:
-            if is_compensation_expired(comp_info):
-                to_delete.append(comp_id)
-        except Exception:
-            # 如果判断过期出错，保留该项
-            continue
-
-    # 删除过期的补偿
-    for comp_id in to_delete:
-        del data[comp_id]
-        # 同时从领取记录中移除该补偿ID
-        if comp_id in claimed_data:
-            del claimed_data[comp_id]
-        else:
-            # 遍历所有用户，删除该补偿ID的领取记录
-            for user_id in list(claimed_data.keys()):
-                if comp_id in claimed_data[user_id]:
-                    claimed_data[user_id].remove(comp_id)
-                    if not claimed_data[user_id]:  # 如果用户没有其他补偿，则删除该用户记录
-                        del claimed_data[user_id]
-
-    # 保存清理后的数据
-    if to_delete:
-        save_compensation_data(data)
-        save_claimed_data(claimed_data)
-        logger.info(f"已自动清理 {len(to_delete)} 个过期补偿: {to_delete}")
-    else:
-        logger.info("没有发现过期补偿，无需清理")
+    """自动清理过期"""
+    clean_expired_items()
+    logger.info("自动清理过期任务执行完成")
