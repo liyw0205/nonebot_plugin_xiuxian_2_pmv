@@ -24,12 +24,13 @@ from wcwidth import wcwidth
 
 from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
-from .xiuxian2_handle import XiuxianDateManage
+from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
 from typing import Union
 from .markdown_segment import MessageSegmentPlus, markdown_param
 
 sql_message = XiuxianDateManage()  # sql类
+player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
@@ -902,16 +903,9 @@ async def handle_send_md(bot, event, msg: str):
     msg = msg.replace('[', '')
     msg = msg.replace(']', '')
     param = [
-        {
-            "key": "t1",
-            "values": [f" "]
-        },
-        {
-            "key": "t2",
-            "values": [f"{msg}"]
-        }
-        ]
-
+        markdown_param("t1", " "),
+        markdown_param("t2", msg)
+    ]
     msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id, param)
     await bot.send(event=event, message=msg)
 
@@ -1227,31 +1221,14 @@ def get_statistics_data(user_id: str, key: str = None):
         如果不指定key，返回整个统计数据字典
     """
     try:
-        # 确保用户文件夹存在
-        user_dir = PLAYERSDATA / str(user_id)
-        if not user_dir.exists():
-            os.makedirs(user_dir)
-        
-        # 统计文件路径
-        stats_file = user_dir / "statistics.json"
-        
-        # 如果文件不存在，返回None或空字典
-        if not stats_file.exists():
-            return None if key else {}
-        
-        # 读取统计数据
-        with open(stats_file, "r", encoding="utf-8") as f:
-            stats_data = json.load(f)
-            
-        # 如果指定了key，返回对应的值
         if key:
-            return stats_data.get(key)
-            
+            return player_data_manager.get_field_data(str(user_id), "statistics", key)
+        
+        stats_data = player_data_manager.get_fields(str(user_id), "statistics")
+        del stats_data['user_id']
         return stats_data
-            
     except Exception as e:
-        logger.error(f"获取统计数据失败: {e}")
-        return None if key else {}
+        return {}
 
 def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
     """
@@ -1267,36 +1244,17 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
         更新后的统计数据字典
     """
     try:
-        # 确保用户文件夹存在
-        user_dir = PLAYERSDATA / str(user_id)
-        if not user_dir.exists():
-            os.makedirs(user_dir)
-        
-        # 统计文件路径
-        stats_file = user_dir / "statistics.json"
-        
-        # 读取现有数据或创建新数据
-        if stats_file.exists():
-            with open(stats_file, "r", encoding="utf-8") as f:
-                stats_data = json.load(f)
-        else:
+        stats_data = player_data_manager.get_fields(str(user_id), "statistics")
+        if not stats_data:
             stats_data = {}
-        
         # 更新指定键的值
         if value is not None:
             # 直接设置具体值
-            stats_data[key] = value
+            player_data_manager.update_or_write_data(str(user_id), "statistics", key, value)
         else:
             # 增量更新（如果键不存在则初始化为0）
             current_value = stats_data.get(key, 0)
-            stats_data[key] = current_value + increment
-        
-        # 保存更新后的数据
-        with open(stats_file, "w", encoding="utf-8") as f:
-            json.dump(stats_data, f, ensure_ascii=False, indent=4)
-        
-        return stats_data
+            player_data_manager.update_or_write_data(str(user_id), "statistics", key, current_value + increment)
             
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
-        return {}

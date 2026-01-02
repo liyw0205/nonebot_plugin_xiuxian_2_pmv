@@ -2149,3 +2149,18 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_data_manager.update_or_write_data(user_id, "tower", "score", score)
         logger.info(f"更新通天塔: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
+
+migrate_data4 = on_fullmatch("player数据同步4", priority=25, block=True)
+@migrate_data4.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    user_ids = get_all_user_ids()
+    user_num = 0
+    for user_id in user_ids:
+        user_num += 1
+        stats_data = load_player_user3(user_id, "statistics")
+        sorted_keys = sorted(stats_data.keys())
+        for key in sorted_keys:
+            value = stats_data[key]
+            player_data_manager.update_or_write_data(user_id, "statistics", key, value)
+        logger.info(f"更新统计数据: {user_id}")
+    await handle_send(bot, event, f"同步完成，共：{user_num}")

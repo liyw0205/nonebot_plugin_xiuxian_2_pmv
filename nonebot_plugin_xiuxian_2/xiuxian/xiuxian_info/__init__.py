@@ -11,7 +11,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_partner
 from .draw_changelog import get_commits, create_changelog_image
