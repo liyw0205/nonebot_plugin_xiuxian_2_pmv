@@ -189,7 +189,7 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg += "仙肆帮助 | 拍卖帮助 | 交易帮助\n"
             msg += "或输入'交易帮助全部'查看完整帮助"
     
-    await handle_send(bot, event, f"\n{msg}")
+    await handle_send(bot, event, msg, md_type="交易", k1="仙肆", v1="仙肆帮助", k2="鬼市", v2="鬼市帮助", k3="拍卖", v3="拍卖帮助")
     await trade_help.finish()
 
 def get_xianshi_min_price(item_name):
@@ -217,9 +217,9 @@ def get_fee_price(total_price):
 async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_shop_add.finish()
     
     user_id = user_info['user_id']
@@ -227,7 +227,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     if len(args) < 2:
         msg = "请输入正确指令！格式：仙肆上架 物品名称 价格 [数量]"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     
     item_name = args[0]
@@ -237,31 +237,31 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         quantity = max(1, min(quantity, MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
 
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     # 检查物品类型是否允许
     if goods_info['type'] not in ITEM_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     # 检查禁止交易的物品
     if str(goods_id) in BANNED_ITEM_IDS:
         msg = f"物品 {item_name} 禁止交易！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
         
     if quantity > goods_num:
@@ -269,7 +269,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     total_fee = get_fee_price(price * quantity)
     if user_info['stone'] < total_fee:
         msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     
     # 一次性扣除总手续费
@@ -288,16 +288,16 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = f"\n成功上架 {item_name} x{quantity} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总手续费: {number_to(total_fee)} 灵石"
-    await handle_send(bot, event, msg)    
+    await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")    
     await xian_shop_add.finish()
 
 @xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=30)])
 async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆自动上架（按类型和品阶批量上架）优化版"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xianshi_auto_add.finish()
     
     user_id = user_info['user_id']
@@ -309,7 +309,8 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
               "▶ 类型：装备|法器|防具|药材|技能|全部\n" \
               "▶ 品阶：全部|人阶|黄阶|...|上品通天法器（输入'品阶帮助'查看完整列表）\n" \
               "▶ 数量：可选，默认1个，最多10个"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="品阶", v3="品阶帮助")
         await xianshi_auto_add.finish()
     
     item_type = args[0]
@@ -319,19 +320,22 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if item_type not in type_mapping:
         msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     if rank_name not in rank_map:
         msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type}", k2="查看", v2="仙肆查看", k3="品阶", v3="品阶帮助")
         await xianshi_auto_add.finish()
 
     # 获取背包物品
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     # 筛选物品
@@ -376,7 +380,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not items_to_add:
         msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     # === 批量处理逻辑 ===
@@ -414,13 +418,15 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if user_info['stone'] < total_fee:
         msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     # 一次性扣除总手续费
     sql_message.update_ls(user_id, total_fee, 2)
     
     success_count = 0
+    title = f"☆------{item_type} {rank_name}------☆"
     result_msg = []
     for item in items_to_process:
         for _ in range(item['quantity']):            
@@ -432,23 +438,21 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             except Exception as e:
                 logger.error(f"批量上架失败: {e}")
                 continue
-    display_msg = result_msg[:10]
-    if len(result_msg) > 10:
+    display_msg = result_msg[:20]
+    if len(result_msg) > 20:
         display_msg.append(f"...等共{len(result_msg)}件物品")
-    msg = "\n".join(display_msg)
-    msg += f"\n✨ 成功上架 {success_count} 件物品\n"
-    msg += f"💎 总手续费: {number_to(total_fee)}灵石"
-    
-    await handle_send(bot, event, msg)
+    display_msg.append(f"\n✨ 成功上架 {success_count} 件物品\n")
+    display_msg.append(f"💎 总手续费: {number_to(total_fee)}灵石")
+    await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg, title=title)
     await xianshi_auto_add.finish()
 
 @xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=10)])
 async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速上架（按物品名快速上架）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xianshi_fast_add.finish()
     
     user_id = user_info['user_id']
@@ -458,7 +462,8 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = "指令格式：仙肆快速上架 物品名 [价格]\n" \
               "▶ 价格：可选，不填则自动匹配仙肆最低价\n" \
               "▶ 数量：固定为10个（或背包中全部数量）"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     
     item_name = args[0]
@@ -467,31 +472,36 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         price = int(args[1]) if len(args) > 1 else None
     except ValueError:
         msg = "请输入有效的价格！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     # 检查物品类型是否允许
     if goods_info['type'] not in ITEM_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     # 检查禁止交易的物品
     if str(goods_id) in BANNED_ITEM_IDS:
         msg = f"物品 {item_name} 禁止交易！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
 
     # 检查可上架数量（固定为10或背包中全部数量）
@@ -499,7 +509,8 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if quantity <= 0:
         msg = f"可上架数量不足！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
 
     # 获取价格（如果用户未指定价格）
@@ -524,7 +535,8 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if user_info['stone'] < single_fee:
         msg = f"灵石不足支付手续费！需要{single_fee}灵石，当前拥有{user_info['stone']}灵石"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 10, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     
     # 一次性扣除总手续费
@@ -546,16 +558,16 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(single_fee)} 灵石"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
     await xianshi_fast_add.finish()
 
 @xiuxian_shop_view.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆查看"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_shop_view.finish()
     
     # 解析参数
@@ -564,7 +576,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 情况1：无参数 - 显示可用类型
     if not args_str:
         msg = f"请指定查看类型：【{', '.join(ITEM_TYPES)}】"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await xiuxian_shop_view.finish()
     
     # 解析类型和页码
@@ -591,14 +603,14 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 检查类型有效性
     if item_type not in ITEM_TYPES:
         msg = f"无效类型！可用类型：【{', '.join(ITEM_TYPES)}】"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await xiuxian_shop_view.finish()
     
     type_items = trade_manager.get_xianshi_items(type=item_type)
     
     if not type_items:
         msg = f"仙肆中暂无{item_type}类物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1=f"仙肆查看 {item_type}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await xiuxian_shop_view.finish()
     
     # 处理物品显示逻辑
@@ -624,7 +636,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     
     if current_page > total_pages:
         msg = f"页码超出范围，最多{total_pages}页！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1=f"仙肆查看 {item_type} {total_pages}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await xiuxian_shop_view.finish()
     
     # 构建消息
@@ -633,7 +645,8 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     paged_items = items_list[start_idx:end_idx]
 
     # 构建消息
-    msg_list = [f"\n☆------仙肆 {item_type}------☆"]
+    title = f"☆------仙肆 {item_type}------☆"
+    msg_list = []
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"\n{item['name']} {price_str}灵石 \nID:{item['id']}"
@@ -647,20 +660,18 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg_list.append(msg)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title)
     if total_pages > 1:
-        next_page_cmd = f"仙肆查看{item_type}{current_page + 1}"
-        msg_list.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list)
+        await handle_send(bot, event, msg, md_type="交易", k1="翻页", v1=f"{next_page_cmd}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
     await xiuxian_shop_view.finish()
 
 @my_xian_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """我的仙肆"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_xian_shop.finish()
     
     # 获取页码
@@ -672,20 +683,15 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     
     user_items = trade_manager.get_xianshi_items(user_id=user_id)
-    
+
+    # 检查是否有上架物品    
     if not user_items:
         msg = "您在仙肆中没有上架任何物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await my_xian_shop.finish()
     
     # 按价格排序
     user_items.sort(key=lambda x: x['name'])
-    
-    # 检查是否有上架物品
-    if not user_items:
-        msg = "您在仙肆中没有上架任何物品！"
-        await handle_send(bot, event, msg)
-        await my_xian_shop.finish()
     
     # 分页处理
     per_page = 20
@@ -697,7 +703,8 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     end_idx = start_idx + per_page
     paged_items = user_items[start_idx:end_idx]
     
-    msg_list = [f"\n☆------{user_info['user_name']}的仙肆物品------☆"]
+    title = f"☆------{user_info['user_name']}的仙肆物品------☆"
+    msg_list = []
     for item in paged_items:
         price_str = number_to(item['price'])
         msg = f"{item['name']} {price_str}灵石"
@@ -706,19 +713,18 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg_list.append(msg)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title)
     if total_pages > 1:
-        msg_list.append(f"输入 我的仙肆 {current_page + 1} 查看下一页")
-    
-    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list)
+        await handle_send(bot, event, msg, md_type="交易", k1="翻页", v1=f"我的仙肆 {current_page + 1}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
     await my_xian_shop.finish()
 
 @xian_shop_remove.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_shop_remove.finish()
     
     user_id = user_info['user_id']
@@ -775,9 +781,9 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_buy.finish()
     
     user_id = user_info['user_id']
@@ -857,9 +863,9 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
 async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xianshi_fast_buy.finish()
     
     user_id = user_info['user_id']
@@ -869,6 +875,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = "指令格式：仙肆快速购买 物品名1,物品名2,... [数量1,数量2,...]\n" \
               "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
               "▶ 数量：可选，支持1-10个数量，用逗号分隔，没有数量默认每个物品买1个"
+        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg)
         await xianshi_fast_buy.finish()
     
@@ -876,6 +883,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     goods_names = args[0].split(",")
     if len(goods_names) > 5:
         msg = "一次最多指定5个物品名（可重复）！"
+        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg)
         await xianshi_fast_buy.finish()
     
@@ -887,6 +895,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     # 确保数量列表长度不超过物品名列表长度
     if len(quantities) > len(goods_names):
         msg = "数量列表长度不能超过物品名列表长度！"
+        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg)
         await xianshi_fast_buy.finish()
     
@@ -899,6 +908,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not filtered_items:
         msg = "仙肆中没有符合条件的用户物品！"
+        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg)
         await xianshi_fast_buy.finish()
     
@@ -981,9 +991,9 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空仙肆"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_shop_off_all.finish()
     
     msg = "正在清空全服仙肆，请稍候..."
@@ -1018,9 +1028,9 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """系统仙肆上架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_shop_added_by_admin.finish()
     
     args = args.extract_plain_text().split()
@@ -1075,9 +1085,9 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
 async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """系统仙肆下架"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xian_shop_remove_by_admin.finish()
     
     args = args.extract_plain_text().split()
@@ -1138,9 +1148,9 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
 async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市存灵石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_deposit.finish()
     
     user_id = user_info['user_id']
@@ -1176,9 +1186,9 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市取灵石（收取动态手续费）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_withdraw.finish()
     
     # 检查是否是周末
@@ -1238,9 +1248,9 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市求购"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_qiugou.finish()
     
     user_id = user_info['user_id']
@@ -1315,9 +1325,9 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市摆摊（每天18:00-次日8:00开放）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_baitan.finish()
     
     # 检查摆摊时间
@@ -1419,9 +1429,9 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市收摊"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_shoutan.finish()
     
     user_id = user_info['user_id']
@@ -1456,9 +1466,9 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市取物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_take_item.finish()
     
     user_id = user_info['user_id']
@@ -1523,9 +1533,9 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """鬼市信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_info.finish()
     
     user_id = user_info['user_id']
@@ -1564,9 +1574,9 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空鬼市"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await clear_all_guishi.finish()
 
     msg = "正在清空全服鬼市，请稍候..."

@@ -52,7 +52,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "输入对应命令开始你的历练之旅吧！"
     )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     await training_help.finish()
 
 @training_start.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -61,7 +61,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_start.finish()
     
     user_id = user_info["user_id"]
@@ -73,7 +73,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="历练", k1="再次", v1="开始历练", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await training_start.finish()
     
     # 检查历练时间 - 同小时内不可重复历练
@@ -85,18 +85,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         next_hour = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         wait_minutes = (next_hour - now).seconds // 60
         msg = f"本小时内已历练过，下次可历练时间: {next_hour.strftime('%H:%M')} (还需等待{wait_minutes}分钟)"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="排行榜", k1="历练排行榜", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
-    success, result = make_choice(user_id)
+    result = make_choice(user_id)
     
-    if not success:
-        await handle_send(bot, event, result)
-        await training_start.finish()
-    
-    msg = f"\n{result}"
-    await handle_send(bot, event, msg)
+    msg = f"{result}"
+    await handle_send(bot, event, msg, md_type="历练", k1="排行榜", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     log_message(user_id, result)
     update_statistics_value(user_id, "历练次数")
     await training_start.finish()
@@ -107,7 +103,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_status.finish()
     
     user_id = user_info["user_id"]
@@ -145,7 +141,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         msg += f"道友可以【开始历练】了"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="排行榜", v2="历练排行榜", k3="商店", v3="历练商店")
     await training_status.finish()
 
 @training_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -155,7 +151,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_items = training_data.config["商店商品"]
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_shop.finish()
     
     user_id = user_info["user_id"]
@@ -184,7 +180,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     end_idx = start_idx + items_per_page
     current_page_items = sorted_items[start_idx:end_idx]
     
-    msg_list = [f"\n道友目前拥有的历练成就点：{training_info['points']}点"]
+    title = f"道友目前拥有的历练成就点：{training_info['points']}点"
+    msg_list = []
     msg_list.append(f"════════════\n【历练商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
@@ -206,7 +203,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if total_pages > 1:
         msg_list.append(f"提示：发送 历练商店+页码 查看其他页（共{total_pages}页）")
     
-    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list)
+    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title)
     await training_shop.finish()
 
 @training_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -215,7 +212,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_buy.finish()
     
     user_id = user_info["user_id"]
@@ -224,7 +221,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     if not shop_info:
         msg = "请输入正确的商品编号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
     
     shop_id = shop_info[0][0]
@@ -233,7 +230,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_items = training_data.config["商店商品"]
     if shop_id not in shop_items:
         msg = "没有这个商品编号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
     
     item_data = shop_items[shop_id]
@@ -246,14 +243,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         quantity = max_quantity
     if quantity <= 0:
         msg = f"{item_info['name']}已到限购无法再购买！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
                 
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
     if training_info["points"] < total_cost:
         msg = f"成就点不足！需要{total_cost}点，当前拥有{training_info['points']}点"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
     
     # 兑换商品
@@ -272,7 +269,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}成就点！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
     await training_buy.finish()
 
 @training_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -281,7 +278,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_rank.finish()
 
     # 获取所有用户的completed数据
@@ -306,7 +303,7 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await training_integral_rank.finish()
 
     # 获取所有用户的completed数据
@@ -424,7 +421,7 @@ def make_choice(user_id):
     
     training_limit.save_user_training_info(user_id, training_info)
     
-    return True, training_info["last_event"]
+    return training_info["last_event"]
 
 def training_reset_limits():
     training_limit.reset_limits()

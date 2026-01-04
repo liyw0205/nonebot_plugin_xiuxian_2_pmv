@@ -367,8 +367,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     bossinfo_new['气血'] = boss_now_hp
     
     # 获取今日已获得的积分和灵石
-    today_integral = boss_limit.get_integral(user_id)
-    today_stone = boss_limit.get_stone(user_id)
+    today_integral = int(boss_limit.get_integral(user_id))
+    today_stone = int(boss_limit.get_stone(user_id))
     
     # 设置每日上限
     integral_limit = 6000
@@ -397,26 +397,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     damage_ratio = min(total_damage / boss_all_hp, 0.20)
     
-    # 计算积分奖励
-    if today_integral >= integral_limit:
-        boss_integral = 0
-        integral_msg = "今日积分已达上限，无法获得更多积分！"
-    else:
-        boss_integral = max(int(damage_ratio * 3000), 1)
-        # 应用境界压制衰减
-        boss_integral = int(boss_integral * rank_penalty)
-        boss_integral = min(boss_integral, integral_limit - today_integral)
-        
-    # 计算灵石奖励
-    if today_stone >= stone_limit:
-        get_stone = 0
-        stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-    else:
-        get_stone = int(boss_max_stone * damage_ratio)
-        # 应用境界压制衰减
-        get_stone = int(get_stone * rank_penalty)
-        get_stone = min(get_stone, stone_limit - today_stone)
-    
     # 境界加成（只有在没有境界压制时才应用）
     if rank_penalty == 1.0:
         boss_integral = int(boss_integral * (1 + (0.3 * (user_rank - boss_rank))))
@@ -430,17 +410,33 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 应用积分加成
     integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
     boss_integral = int(boss_integral * (1 + integral_buff))
-    
-    if boss_integral > 0:
-        integral_msg = f"获得世界积分：{boss_integral}点"
-    else:
+
+    # 计算积分奖励
+    if today_integral >= integral_limit:
+        boss_integral = 0
         integral_msg = "今日积分已达上限，无法获得更多积分！"
-        
-    if get_stone > 0:
-        stone_msg = f"获得灵石{number_to(get_stone)}枚"
     else:
+        boss_integral = max(int(damage_ratio * 3000), 1)
+        # 应用境界压制衰减
+        boss_integral = int(boss_integral * rank_penalty)
+        boss_integral = min(boss_integral, integral_limit - today_integral)
+        if boss_integral <= 0:
+            boss_integral = 1
+        integral_msg = f"获得世界积分：{boss_integral}点"
+
+    # 计算灵石奖励
+    if today_stone >= stone_limit:
+        get_stone = 0
         stone_msg = "今日灵石已达上限，无法获得更多灵石！"
-        
+    else:
+        get_stone = int(boss_max_stone * damage_ratio)
+        # 应用境界压制衰减
+        get_stone = int(get_stone * rank_penalty)
+        get_stone = min(get_stone, stone_limit - today_stone)        
+        if get_stone <= 0:
+            get_stone = 1
+        stone_msg = f"获得灵石{number_to(get_stone)}枚"        
+
     # 修为奖励
     exp_msg = ""
     if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
@@ -917,8 +913,8 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     
     # 获取今日已获得的积分和灵石和讨伐次数
-    today_integral = boss_limit.get_integral(user_id)
-    today_stone = boss_limit.get_stone(user_id)
+    today_integral = int(boss_limit.get_integral(user_id))
+    today_stone = int(boss_limit.get_stone(user_id))
     today_battle_count = boss_limit.get_battle_count(user_id)
     
     # 设置每日上限
