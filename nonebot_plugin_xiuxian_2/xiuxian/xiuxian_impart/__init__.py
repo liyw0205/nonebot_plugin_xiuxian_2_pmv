@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
 from .impart_uitls import (
     get_image_representation,
+    get_impart_card_description,
     get_star_rating,
     get_rank,
     img_path,
@@ -587,10 +588,23 @@ async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         msg = "请输入正确格式：传承卡图 卡图名"
         await handle_send(bot, event, msg)
         await impart_img.finish()
-    if img_name in img_list:
-        img = get_image_representation(img_name)
-        await handle_pic_send(bot, event, img)
-    else:
+
+    if img_name not in img_list:
         msg = "没有找到此卡图！"
         await handle_send(bot, event, msg)
         await impart_img.finish()
+
+    # 判断是否允许发送图片
+    if getattr(XiuConfig(), 'impart_image', True):  # 默认True防止未定义时报错
+        img = get_image_representation(img_name)
+        try:
+            await handle_pic_send(bot, event, img)
+        except Exception as e:
+            # 如果发送图片失败，降级为发送文本属性
+            logger.opt(colors=True).warning(f"发送传承卡图失败，降级发送文本。错误：{e}")
+            description = get_impart_card_description(img_name)
+            await handle_send(bot, event, f"传承卡图：{img_name}\n{description}")
+    else:
+        # 不发送图片，只发送属性文本
+        description = get_impart_card_description(img_name)
+        await handle_send(bot, event, f"传承卡图：{img_name}\n{description}")

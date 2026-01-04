@@ -711,7 +711,9 @@ def optimize_md(msg: Union[Message, str]) -> str:
 
     if msg.startswith('\n'):
         msg = msg.lstrip('\n')
-    
+        if msg_text.startswith('\n'):
+            msg_text = msg_text[1:]
+
     if msg_text.endswith('\n'):
         msg_text = msg_text[:-1]
 
@@ -720,7 +722,7 @@ def optimize_md(msg: Union[Message, str]) -> str:
     msg_text = msg_text.replace(']', '')
     return msg_text
 
-async def send_msg_handler(bot, event, *args):
+async def send_msg_handler(bot, event, *args, title=None):
     """
     统一消息发送处理器
     :param bot: 机器人实例
@@ -760,8 +762,10 @@ async def send_msg_handler(bot, event, *args):
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status:
-                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2)
+                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2, title=title)
                 return
+            if title:
+                msg = title + msg
             if XiuConfig().message_optimization:
                 msg = optimize_message(msg, is_group) 
             await handle_send(bot, event, msg)
@@ -770,8 +774,10 @@ async def send_msg_handler(bot, event, *args):
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status:
-                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id2)
+                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id2, title=title)
                 return
+            if title:
+                msg = title + msg
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             await handle_send(bot, event, merged_content)
@@ -883,13 +889,13 @@ async def send_msg_handler(bot, event, *args):
         else:
             raise ValueError("参数数量或类型不匹配")
 
-async def handle_send(bot, event, msg: str, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None):
+async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None):
     """处理文本，根据配置发送文本或者图片消息"""
     if XiuConfig().markdown_status:
         if md_type:
             await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3)
             return
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id)
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title)
         return
     is_group = isinstance(event, GroupMessageEvent)
     
@@ -924,11 +930,13 @@ async def handle_send(bot, event, msg: str, md_type=None, k1=None, v1=None, k2=N
                 user_id=event.user_id, message=msg
             )
 
-async def handle_send_md(bot, event, msg: str, markdown_id=None):
+async def handle_send_md(bot, event, msg: str, markdown_id=None, title=None):
     """发送md模板消息"""
     msg = optimize_md(msg)
+    if not title:
+        title = " "
     param = [
-        markdown_param("t1", " "),
+        markdown_param("t1", title),
         markdown_param("t2", msg),
     ]
     msg = MessageSegmentPlus.markdown_template(markdown_id, param)
@@ -968,6 +976,14 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     """发送md模板消息"""
     if md_type in ["0", "1", "2", "3", "4", "5"]:
         k1, v1 = check_user_md_type(md_type, event)
+    elif md_type == "我要修仙":
+        k1 = "我要修仙"
+        v1 = "我要修仙"
+        k2 ="帮助"
+        v2 = "修仙帮助"
+        k3 = "官群"
+        v3 = f"{XiuConfig().qqq}"
+
     msg = optimize_md(msg)
     param = [
         markdown_param("t1", msg),

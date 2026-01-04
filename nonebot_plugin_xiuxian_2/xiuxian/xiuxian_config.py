@@ -80,6 +80,8 @@ class XiuConfig:
         # 开启则使用网络背景图
         self.use_network_avatar = False 
         # 开启则使用网络头像（官机请勿打开）
+        self.impart_image = False
+        # 是否使用图片发送传承卡图
 
         self.level = convert_rank('江湖好手')[1] 
         # 境界列表，别动

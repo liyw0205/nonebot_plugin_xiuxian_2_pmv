@@ -177,7 +177,7 @@ async def set_boss_limits_reset():
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__ 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="世界BOSS", k1="查询", v1="查询世界BOSS", k2="信息", v2="世界BOSS信息", k3="商店", v3="世界BOSS商店")
     await boss_help.finish()
 
 @boss_admin.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -263,7 +263,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     group_boss = old_boss_info.read_boss_info()
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await battle.finish()
 
     user_id = user_info['user_id']
@@ -278,7 +278,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="世界BOSS帮助", v3="世界BOSS帮助")
         await battle.finish()
     
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
@@ -291,7 +291,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     else:
         msg = f"请输入正确的世界Boss编号!"
         sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="状态", v3="我的状态")
         await battle.finish()
     
     bosss = None
@@ -312,7 +312,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     index = len(group_boss[group_id])
     if not (0 < boss_num <= index):
         msg = f"请输入正确的世界Boss编号!"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 20, 1)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="状态", v3="我的状态")
         await battle.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
@@ -323,7 +324,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await battle.finish()
     
     user1_sub_buff_data = UserBuffDate(user_info['user_id']).get_user_sub_buff_data()
@@ -337,12 +338,14 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     rank_name_list = convert_rank(user_info["level"])[1]
     if boss_rank - user_rank >= 5:
         msg = f"道友已是{user_info['level']}之人，妄图抢小辈的Boss，可耻！"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 20, 1)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="讨伐", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
         await battle.finish()
     if user_rank - boss_rank >= 7:
         required_rank_name = rank_name_list[len(rank_name_list) - (boss_rank + 4)]
         msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
-        await handle_send(bot, event, msg)
+        sql_message.update_user_stamina(user_id, 20, 1)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="讨伐", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
         await battle.finish()
     
     more_msg = ''
@@ -491,7 +494,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await send_msg_handler(bot, event, result)
     except ActionFailed:
         msg += f"\nBoss战消息发送错误,可能被风控!"
-    await handle_send(bot, event, msg)
+    if drops_id:
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1=f"讨伐世界BOSS{boss_num}", k2="查询", v2=f"查询世界BOSS{boss_num}", k3="物品", v3=f"查看效果 {drops_info['name']}")
+    else:
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1=f"讨伐世界BOSS{boss_num}", k2="查询", v2=f"查询世界BOSS{boss_num}", k3="状态", v3="我的状态")
     log_message(user_id, msg)
     await battle.finish()
 
@@ -504,7 +510,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     sql_message = XiuxianDateManage()
 
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await challenge_scarecrow.finish()
 
     user_id = user_info['user_id']
@@ -518,7 +524,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_scarecrow.finish()
 
     scarecrow_hp = int(jsondata.level_data()["至高"]["power"]) * 10000
@@ -556,7 +562,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await send_msg_handler(bot, event, result)
     except ActionFailed:
             msg += f"\nBoss战消息发送错误,可能被风控!"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战稻草人", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
     await challenge_scarecrow.finish()
 
 
@@ -569,7 +575,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     sql_message = XiuxianDateManage()
 
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await challenge_training_puppet.finish()
 
     user_id = user_info['user_id']
@@ -583,7 +589,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_training_puppet.finish()
 
     
@@ -644,7 +650,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         await send_msg_handler(bot, event, result)
     except ActionFailed:
         msg += f"\nBoss战消息发送错误,可能被风控!"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战训练傀儡", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
     await challenge_training_puppet.finish()
     
     
@@ -677,7 +683,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         index = len(group_boss[group_id])
         if not (0 < boss_num <= index):
             msg = f"请输入正确的世界Boss编号!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="世界BOSS", k1="查询", v1="查询世界BOSS", k2="列表", v2="世界BOSS列表", k3="状态", v3="我的状态")
             await boss_info.finish()
 
         Flag = True
@@ -710,7 +716,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             bossmsgs += f"编号{i}、{boss['jj']}Boss:{boss['name']} \n"
             i += 1
         msg = bossmsgs
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="讨伐", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="状态", v3="我的状态")
         await boss_info.finish()
         
         
@@ -736,7 +742,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
         await boss_info2.finish()
 
-    per_page = 50
+    per_page = 5
     total_items = len(bosss)  # 总BOSS数量
     total_pages = (total_items + per_page - 1) // per_page
     
@@ -747,19 +753,18 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         current_page = 1
     if current_page < 1 or current_page > total_pages:
         msg = f"页码错误，有效范围为1~{total_pages}页！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="列表", v1="世界BOSS列表1", k2="讨伐", v2="讨伐世界BOSS", k3="状态", v3="我的状态")
         await boss_info2.finish()
     start_index = (current_page - 1) * per_page
     end_index = start_index + per_page
     paged_bosses = bosss[start_index:end_index]
-    msgs = f"世界BOSS列表"
-    header = f"{msgs}（第{current_page}/{total_pages}页）"
+    title = f"世界BOSS列表（第{current_page}/{total_pages}页）"
     footer = f"提示：发送 世界BOSS列表+页码 查看其他页（共{total_pages}页）"
-    paged_msgs = [header]
+    paged_msgs = []
     for i, boss in enumerate(paged_bosses, start=start_index + 1):
         paged_msgs.append(f"编号{i} \nBoss:{boss['name']} \n境界：{boss['jj']} \n总血量：{number_to(boss['总血量'])} \n剩余血量：{number_to(boss['气血'])} \n攻击：{number_to(boss['攻击'])} \n携带灵石：{number_to(boss['stone'])}")
     paged_msgs.append(footer)
-    await send_msg_handler(bot, event, f'世界BOSS列表 - 第{current_page}页', bot.self_id, paged_msgs)
+    await send_msg_handler(bot, event, f'世界BOSS列表 - 第{current_page}页', bot.self_id, paged_msgs, title=title)
     await boss_info2.finish()
 
 @generate_all.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -841,7 +846,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_store.finish()
 
     user_id = user_info['user_id']    
@@ -866,7 +871,8 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await boss_integral_store.finish()
     
     # 构建消息
-    l_msg = [f"\n道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"]
+    title = f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"
+    l_msg = []
     l_msg.append(f"════════════\n【世界积分商店】第{page}/{total_pages}页")
     
     if boss_integral_shop != {}:
@@ -895,7 +901,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if total_pages > 1:
         l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
     
-    await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg)
+    await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg, title=title)
     await boss_integral_store.finish()
 
 @boss_integral_info.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -904,7 +910,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_info.finish()
     
     user_id = user_info['user_id']    
@@ -923,9 +929,8 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     # 构建消息
     msg = f"""
 ════════════
-【世界BOSS信息】
-════════════
 当前世界积分：{user_boss_fight_info['boss_integral']}点
+════════════
 今日已获积分：{today_integral}/{integral_limit}点
 今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚
 今日讨伐次数：{today_battle_count}/{battle_count}次
@@ -933,7 +938,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 提示：每日0点重置获取上限
 """.strip()
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="世界BOSS", k1="商店", v1="世界BOSS商店", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
     await boss_integral_info.finish()
     
 @boss_integral_use.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -942,7 +947,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_use.finish()
 
     user_id = user_info['user_id']
@@ -954,7 +959,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
     else:
         msg = f"请输入正确的商品编号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
         await boss_integral_use.finish()
 
     boss_integral_shop = config['世界积分商品']
@@ -983,7 +988,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             quantity = max_quantity
         if quantity <= 0:
             msg = f"{item_info['name']}已到限购无法再购买！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
             
         user_boss_fight_info = get_user_boss_fight_info(user_id)
@@ -991,7 +996,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         
         if user_boss_fight_info['boss_integral'] < total_cost:
             msg = f"道友的世界积分不满足兑换条件呢"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
         else:
             user_boss_fight_info['boss_integral'] -= total_cost
@@ -1002,11 +1007,11 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
            
             sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity, 1)
             msg = f"道友成功兑换获得：{item_info['name']}{quantity}个"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
     else:
         msg = f"该编号不在商品列表内哦，请检查后再兑换"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
         await boss_integral_use.finish()
 
 @boss_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1015,7 +1020,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_rank.finish()
 
     # 获取所有用户的boss_integral数据

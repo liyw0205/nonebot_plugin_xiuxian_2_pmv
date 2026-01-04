@@ -4,6 +4,7 @@ import numpy
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
+from .impart_all import impart_all
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 img_path = Path() / "data" / "xiuxian" / "卡图"
@@ -125,3 +126,34 @@ def get_star_rating(count):
 def get_image_representation(image_name: str):
     """获取对应卡图地址"""
     return img_path / f"{image_name}.webp"
+
+def get_impart_card_description(card_name: str) -> str:
+    """根据卡图名称返回其属性加成描述文本，例如：会心提升：5.0%"""
+    card_info = impart_all.get(card_name)
+    if not card_info:
+        return f"未找到卡图「{card_name}」的属性信息。"
+    
+    card_type = card_info["type"]
+    value = card_info["vale"]
+
+    type_mapping = {
+        "impart_atk_per": "攻击提升",
+        "impart_hp_per": "气血提升",
+        "impart_mp_per": "真元提升",
+        "impart_know_per": "会心提升",
+        "impart_burst_per": "会心伤害提升",
+        "impart_exp_up": "闭关经验提升",
+        "impart_mix_per": "炼丹收获数量提升",
+        "impart_reap_per": "灵田收取数量提升",
+        "impart_two_exp": "每日双修次数提升",
+        "boss_atk": "boss战攻击提升",
+    }
+
+    type_text = type_mapping.get(card_type)
+    if not type_text:
+        return f"卡图「{card_name}」的属性类型暂不支持显示。"
+    
+    if card_type in ["impart_two_exp", "impart_reap_per", "impart_mix_per"]:
+        return f"{type_text}：{value}"
+    percent_value = value * 100
+    return f"{type_text}：{percent_value:.1f}%"

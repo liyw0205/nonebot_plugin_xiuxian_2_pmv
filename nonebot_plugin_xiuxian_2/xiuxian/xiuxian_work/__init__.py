@@ -325,7 +325,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     bot, send_group_id = await assign_bot(bot=bot, event=event)    
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await do_work.finish()
     
     user_level = user_info['level']
@@ -561,7 +561,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']
@@ -587,7 +587,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']

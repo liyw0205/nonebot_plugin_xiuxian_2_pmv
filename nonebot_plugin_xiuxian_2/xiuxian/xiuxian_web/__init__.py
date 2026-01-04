@@ -1601,6 +1601,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "impart_image": {
+        "name": "传承卡图",
+        "description": "开启则使用发送图片",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "private_chat_enabled": {
         "name": "私聊功能",
         "description": "私聊功能开关",
