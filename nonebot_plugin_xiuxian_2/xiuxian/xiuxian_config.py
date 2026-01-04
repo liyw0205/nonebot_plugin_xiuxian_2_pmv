@@ -42,7 +42,9 @@ class XiuConfig:
         #markdown模板
         self.markdown_status = False
         # 是否开启模板
-        self.markdown_id = "102569432_1750075053"
+        self.markdown_id = ""
+        self.markdown_id2 = ""
+        self.markdown_id3 = ""
         # 模板ID
 
         self.web_status = True

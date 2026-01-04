@@ -232,7 +232,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         )
     log_message(user_id, msg)
     update_statistics_value(user_id, "悬赏令结算次数")
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
     return msg
 
 def generate_work_message(work_list: list, freenum: int) -> str:
@@ -325,7 +325,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     bot, send_group_id = await assign_bot(bot=bot, event=event)    
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
         await do_work.finish()
     
     user_level = user_info['level']
@@ -343,20 +343,20 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     if mode == "查看":            
         status, work_data = get_user_work_status(user_id)
         msg = await get_work_status_message(user_id, work_data)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="终止", v3="悬赏令终止")
         await do_work.finish()
 
     elif mode == "刷新":
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         status, work_data = get_user_work_status(user_id)
         
         if status == 1 or status == 2:  # 进行中或可结算的悬赏
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看 ", k2="结算", v2="悬赏令确认结算", k3="终止", v3="悬赏令终止")
             await do_work.finish()
             
         usernums = sql_message.get_work_num(user_id)
@@ -392,7 +392,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 f"请输入【悬赏令查看】查看当前悬赏\n"
                 f"如需强制刷新，请输入【悬赏令确认刷新】"
             )
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
             await do_work.finish()
         elif status == 4 or status == 0:  # 已过期的悬赏令/无悬赏令
             # 生成新悬赏令
@@ -415,13 +415,13 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             task = asyncio.create_task(delayed_reminder(bot, event, user_id))
             user_reminder_tasks[user_id] = task
             
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
             await do_work.finish()
 
     elif mode == "确认刷新":
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         usernums = sql_message.get_work_num(user_id)
@@ -451,24 +451,24 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         task = asyncio.create_task(delayed_reminder(bot, event, user_id))
         user_reminder_tasks[user_id] = task
         
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
         await do_work.finish()
 
     elif mode == "结算":
         is_type, msg = check_user_type(user_id, 2)
         if not is_type:
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="2", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         status, work_data = get_user_work_status(user_id)
         
         if status == 1:  # 进行中的悬赏
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
         elif status != 2:  # 没有可结算的悬赏
             msg = "没有查到您的可结算悬赏令信息！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
     
         await settle_work(bot, event, user_id, work_data)
@@ -494,13 +494,13 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         else:
             msg = "没有查到您的悬赏令信息！"
         delete_work_file(user_id)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
         await do_work.finish()
 
     elif mode == "接取":
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         status, work_data = get_user_work_status(user_id)
@@ -508,18 +508,18 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         # 如果已有进行中或可结算的悬赏，显示当前悬赏状态
         if status == 1 or status == 2:
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         if status != 3:  # 未过期的悬赏令
             msg = "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         num = args[1]
         if num is None or str(num) not in ['1', '2', '3']:
             msg = '请输入正确的悬赏编号（1、2或3）'
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
             await do_work.finish()
         
         work_num = int(num)
@@ -550,18 +550,18 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if user_cd_message['type'] == 2:
             sql_message.do_work(user_id, 0)
         msg = "已重置悬赏令"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
 
     elif mode == "帮助":
         msg = f"\n{__work_help__}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
 
 async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用悬赏令刷新悬赏"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
         return
     
     user_id = user_info['user_id']
@@ -569,7 +569,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 检查当前状态
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
         return
     
     # 生成新悬赏令
@@ -579,7 +579,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
     return
 
 async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -587,7 +587,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙", k1="我要修仙", v1="我要修仙", k2="帮助", v2="修仙帮助", k3="官群", v3=f"{XiuConfig().qqq}")
         return
     
     user_id = user_info['user_id']
@@ -595,7 +595,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 检查当前状态
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
         return
     
     # 生成新悬赏令
@@ -605,7 +605,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     work_data = readf(user_id)
     if not work_data:
         msg = "悬赏令数据异常，请重新尝试！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
         return
     
     # 修改奖励倍率(2-5倍)并更新到数据中
@@ -636,5 +636,5 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     await handle_send(bot, event, msg2)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
     return

@@ -697,6 +697,29 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     
     return msg_text
 
+def optimize_md(msg: Union[Message, str]) -> str:
+    """
+    优化消息格式，确保将传入的 Message 或 str 处理为干净的字符串。
+    
+    :param msg: 原始消息，可以是 Message 对象或 str。
+    :return: 优化后的纯文本消息 (str)。
+    """
+    msg_text = str(msg)
+
+    if not msg_text:
+        return ""
+
+    if msg.startswith('\n'):
+        msg = msg.lstrip('\n')
+    
+    if msg_text.endswith('\n'):
+        msg_text = msg_text[:-1]
+
+    msg_text = msg_text.replace('\n', '\r')
+    msg_text = msg_text.replace('[', '')
+    msg_text = msg_text.replace(']', '')
+    return msg_text
+
 async def send_msg_handler(bot, event, *args):
     """
     统一消息发送处理器
@@ -727,12 +750,18 @@ async def send_msg_handler(bot, event, *args):
         if current:
             groups.append(current)
         return groups
-    
-    if XiuConfig().merge_forward_send == 1:
+    merge_forward_send = XiuConfig().merge_forward_send
+    if XiuConfig().markdown_status:
+        merge_forward_send = 1
+        
+    if merge_forward_send == 1:
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
+            if XiuConfig().markdown_status:
+                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2)
+                return
             if XiuConfig().message_optimization:
                 msg = optimize_message(msg, is_group) 
             await handle_send(bot, event, msg)
@@ -740,13 +769,16 @@ async def send_msg_handler(bot, event, *args):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
+            if XiuConfig().markdown_status:
+                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id2)
+                return
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             await handle_send(bot, event, merged_content)
         else:
             raise ValueError("参数数量或类型不匹配")
             
-    elif XiuConfig().merge_forward_send == 2:
+    elif merge_forward_send == 2:
         if len(args) == 3:
             name, uin, msgs = args
             messages = [
@@ -773,7 +805,7 @@ async def send_msg_handler(bot, event, *args):
                     )
         else:
             raise ValueError("参数数量或类型不匹配")
-    elif XiuConfig().merge_forward_send == 3:
+    elif merge_forward_send == 3:
         if len(args) == 3:
             name, uin, msgs = args
             img = Txt2Img()
@@ -808,7 +840,7 @@ async def send_msg_handler(bot, event, *args):
                 )
         else:
             raise ValueError("参数数量或类型不匹配")
-    elif XiuConfig().merge_forward_send == 4:
+    elif merge_forward_send == 4:
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
@@ -851,12 +883,14 @@ async def send_msg_handler(bot, event, *args):
         else:
             raise ValueError("参数数量或类型不匹配")
 
-async def handle_send(bot, event, msg: str):
+async def handle_send(bot, event, msg: str, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None):
     """处理文本，根据配置发送文本或者图片消息"""
     if XiuConfig().markdown_status:
-        await handle_send_md(bot, event, msg)
+        if md_type:
+            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3)
+            return
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id)
         return
-    
     is_group = isinstance(event, GroupMessageEvent)
     
     # 应用信息优化
@@ -890,23 +924,61 @@ async def handle_send(bot, event, msg: str):
                 user_id=event.user_id, message=msg
             )
 
-async def handle_send_md(bot, event, msg: str):
+async def handle_send_md(bot, event, msg: str, markdown_id=None):
     """发送md模板消息"""
-    is_group = isinstance(event, GroupMessageEvent)
-    
-    # 应用信息优化
-    if msg.startswith('\n'):
-        msg = msg.lstrip('\n')
-    if XiuConfig().message_optimization:
-        msg = optimize_message(msg, None)
-    msg = msg.replace('\n', '\r')
-    msg = msg.replace('[', '')
-    msg = msg.replace(']', '')
+    msg = optimize_md(msg)
     param = [
         markdown_param("t1", " "),
-        markdown_param("t2", msg)
+        markdown_param("t2", msg),
     ]
-    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id, param)
+    msg = MessageSegmentPlus.markdown_template(markdown_id, param)
+    await bot.send(event=event, message=msg)
+
+def check_user_md_type(md_type, event):
+    user_id = event.user_id
+    md_type = int(md_type)
+    user_cd_message = sql_message.get_user_cd(user_id)
+    if user_cd_message is None:
+        user_type = 0
+    else:
+        user_type = int(user_cd_message["type"])
+    
+    if user_type == 0 or md_type == user_type:
+        k1 = "信息"
+        v1 = "我的修仙信息"
+    elif user_type == 1:
+        k1 = "出关"
+        v1 = "出关"
+    elif user_type == 2:
+        k1 = "悬赏令结算"
+        v1 = "悬赏令结算"
+    elif user_type == 3:
+        k1 = "秘境结算"
+        v1 = "秘境结算"
+    elif user_type == 4:
+        k1 = "虚神界出关"
+        v1 = "虚神界出关"
+    elif user_type == 5:
+        k1 = "重置修炼状态"
+        v1 = "重置修炼状态"
+    
+    return k1, v1
+
+async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3):
+    """发送md模板消息"""
+    if md_type in ["0", "1", "2", "3", "4", "5"]:
+        k1, v1 = check_user_md_type(md_type, event)
+    msg = optimize_md(msg)
+    param = [
+        markdown_param("t1", msg),
+        markdown_param("button_text_1", v1),
+        markdown_param("button_show_1", k1),
+        markdown_param("button_text_2", v2),
+        markdown_param("button_show_2", k2),
+        markdown_param("button_text_3", v3),
+        markdown_param("button_show_3", k3),
+    ]
+    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id3, param)
     await bot.send(event=event, message=msg)
 
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None):

@@ -1531,7 +1531,7 @@ def execute_command():
 CONFIG_EDITABLE_FIELDS = {
     "put_bot": {
         "name": "接收消息QQ",
-        "description": "负责接收消息的QQ号列表",
+        "description": "负责接收消息的QQ号列表，设置这个屏蔽群聊/私聊才能生效",
         "type": "list[str]",
         "category": "基础设置"
     },
@@ -1567,7 +1567,7 @@ CONFIG_EDITABLE_FIELDS = {
     },
     "at_response": {
         "name": "艾特响应命令",
-        "description": "是否只接收艾特命令",
+        "description": "是否只接收艾特命令（官机请勿打开）",
         "type": "bool",
         "category": "消息设置"
     },
@@ -1829,6 +1829,30 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "select",
         "options": LEVELS,
         "category": "轮回设置"
+    },
+    "markdown_status": {
+        "name": "markdown模板",
+        "description": "是否发送模板信息（野机请勿打开）",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "markdown_id": {
+        "name": "模板ID1",
+        "description": "用于发送markdown文本",
+        "type": "str",
+        "category": "消息设置"
+    },
+    "markdown_id2": {
+        "name": "模板ID2",
+        "description": "用于发送markdown代码块",
+        "type": "str",
+        "category": "消息设置"
+    },
+    "markdown_id3": {
+        "name": "模板ID3",
+        "description": "用于发送markdown文本和蓝字",
+        "type": "str",
+        "category": "消息设置"
     },
     "merge_forward_send": {
         "name": "消息发送方式",
