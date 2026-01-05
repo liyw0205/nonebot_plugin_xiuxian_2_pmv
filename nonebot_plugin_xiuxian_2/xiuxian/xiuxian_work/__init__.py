@@ -287,7 +287,7 @@ async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     f"剩余时间：{int(remaining_minutes)}分钟\n"
                     "请输入【悬赏令查看】查看当前悬赏"
                 )
-                await handle_send(bot, event, reminder_msg)
+                await handle_send(bot, event, reminder_msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
             user_reminder_status[user_id]["pending"] = False
             user_reminder_status[user_id]["reminded"] = True
     except Exception as e:

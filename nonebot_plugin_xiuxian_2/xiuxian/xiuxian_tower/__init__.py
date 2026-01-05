@@ -48,7 +48,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_boss_info.finish()
     
     user_id = user_info["user_id"]
@@ -71,7 +71,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"输入【挑战通天塔】开始挑战！"
     )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="帮助", v3="通天塔帮助")
     await tower_boss_info.finish()
 
 @tower_help.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -102,7 +102,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "输入对应命令开始你的通天塔之旅吧！"
     )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
     await tower_help.finish()
 
 @tower_challenge.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["单层爬塔"])])
@@ -111,12 +111,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_challenge.finish()
     user_id = user_info["user_id"]
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
         await tower_challenge.finish()
     if user_info['hp'] is None or user_info['hp'] == 0:
         sql_message.update_user_hp(user_id)
@@ -126,11 +126,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["单层爬塔"], 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_challenge.finish()
     success, msg = await challenge_floor(bot, event, user_id)
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     log_message(user_id, msg)
     await tower_challenge.finish()
 
@@ -140,13 +140,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_continuous.finish()
     
     user_id = user_info["user_id"]
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
         await tower_continuous.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
@@ -157,7 +157,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_continuous.finish()
     
     # 解析层数参数
@@ -174,7 +174,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     success, msg = await challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="速通", v1="速通通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     log_message(user_id, msg)
     await tower_continuous.finish()
 
@@ -184,7 +184,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_info.finish()
     
     user_id = user_info["user_id"]
@@ -200,7 +200,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"输入【速通通天塔】连续挑战10层"
     )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     await tower_info.finish()
 
 @tower_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -209,7 +209,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_shop.finish()
     
     user_id = user_info["user_id"]
@@ -237,8 +237,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     current_page_items = list(shop_items.items())[start_idx:end_idx]
-    
-    msg_list = [f"\n道友目前拥有的通天塔积分：{tower_info['score']}点"]
+    title = f"道友目前拥有的通天塔积分：{tower_info['score']}点"
+    msg_list = []
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
@@ -257,7 +257,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if total_pages > 1:
         msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
     
-    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list)
+    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title)
     await tower_shop.finish()
 
 @tower_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -266,7 +266,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_buy.finish()
     
     user_id = user_info["user_id"]
@@ -275,7 +275,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     if not shop_info:
         msg = "请输入正确的物品ID！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
     
     item_id = shop_info[0][0]
@@ -284,7 +284,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_items = tower_data.config["商店商品"]
     if item_id not in shop_items:
         msg = "没有这个物品ID！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
     
     item_data = shop_items[item_id]
@@ -294,7 +294,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     item_info = items.get_data_by_item_id(item_id)
     if not item_info:
         msg = "该物品不存在！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
 
     # 检查限购
@@ -304,14 +304,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         quantity = max_quantity
     if quantity <= 0:
         msg = f"{item_info['name']}已到限购无法再购买！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
 
     # 检查积分是否足够
     total_cost = item_data["cost"] * quantity
     if tower_info["score"] < total_cost:
         msg = f"积分不足！需要{total_cost}点，当前拥有{tower_info['score']}点"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
     
     # 兑换商品
@@ -330,7 +330,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}积分！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
     await tower_buy.finish()
 
 @tower_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -339,7 +339,7 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_rank.finish()
 
     # 获取所有用户的current_floor数据
@@ -364,7 +364,7 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_integral_rank.finish()
 
     # 获取所有用户的score数据

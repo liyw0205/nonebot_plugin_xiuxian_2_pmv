@@ -241,14 +241,13 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 重置用户虚神界修炼时间
     xiuxian_impart.convert_stone_to_wishing_stone(user_id)
     # 转换思恋结晶
-    if root_level == 0:
-        sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
-    else:
+    if root_level != 0:
         sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
         sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
         sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
         sql_message.update_root(user_id, root_level)  # 更换灵根
-
+    if root_level == 0 or root_level == 9:
+        sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
     msg = f"{original_msg}！"
     await handle_send(bot, event, msg)
 

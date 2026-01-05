@@ -897,6 +897,8 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
             return
         await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title)
         return
+    if msg == " ":
+        return
     is_group = isinstance(event, GroupMessageEvent)
     
     # 应用信息优化
@@ -941,7 +943,9 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, title=None):
     ]
     msg = MessageSegmentPlus.markdown_template(markdown_id, param)
     await bot.send(event=event, message=msg)
-
+    msg = MessageSegmentPlus.markdown_template_with_button(markdown_id, param, "102569432_1767169600")
+    await bot.send(event=event, message=msg)
+    
 def check_user_md_type(md_type, event):
     user_id = event.user_id
     md_type = int(md_type)

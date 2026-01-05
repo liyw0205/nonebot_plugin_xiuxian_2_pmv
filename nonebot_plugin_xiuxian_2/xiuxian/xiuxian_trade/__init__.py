@@ -662,7 +662,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title)
     if total_pages > 1:
-        await handle_send(bot, event, msg, md_type="交易", k1="翻页", v1=f"{next_page_cmd}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+        await handle_send(bot, event, " ", md_type="交易", k1="翻页", v1=f"{next_page_cmd}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
     await xiuxian_shop_view.finish()
 
 @my_xian_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -715,7 +715,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title)
     if total_pages > 1:
-        await handle_send(bot, event, msg, md_type="交易", k1="翻页", v1=f"我的仙肆 {current_page + 1}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+        await handle_send(bot, event, " ", md_type="交易", k1="翻页", v1=f"我的仙肆 {current_page + 1}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
     await my_xian_shop.finish()
 
 @xian_shop_remove.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -732,7 +732,7 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not args:
         msg = "请输入要下架的物品名称！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="下架", v1="仙肆下架", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
         await xian_shop_remove.finish()
     
     goods_name = args[0]
@@ -744,7 +744,7 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not filtered_items:
         msg = f"您在仙肆中没有上架 {goods_name}！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="下架", v1="仙肆下架", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
         await xian_shop_remove.finish()
     
     # 按价格从低到高排序
@@ -774,7 +774,7 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(filtered_items) > removed_count:
         msg += f"\n(仙肆中仍有 {len(filtered_items)-removed_count} 个 {goods_name})"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="下架", v1="仙肆下架", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
     await xian_shop_remove.finish()
 
 @xian_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -791,7 +791,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     if len(args) < 1:
         msg = "请输入要购买的仙肆ID！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xian_buy.finish()
     
     xianshi_id = args[0]
@@ -803,7 +803,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     if not item:
         msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xian_buy.finish()
     
     item = item[0] 
@@ -811,14 +811,14 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     # 检查是否是自己的物品
     if item['user_id'] == user_id:
         msg = "不能购买自己上架的物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xian_buy.finish()
     
     # 检查库存（系统无限物品跳过检查）
     if item["quantity"] > 0:
         if item["quantity"] < quantity:
             msg = f"库存不足！只有 {item['quantity']} 个可用"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
             await xian_buy.finish()
     
     # 计算总价
@@ -827,7 +827,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     # 检查灵石是否足够
     if user_info["stone"] < total_price:
         msg = f"灵石不足！需要 {number_to(total_price)} 灵石，当前拥有 {number_to(user_info['stone'])} 灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xian_buy.finish()
     
     try:
@@ -851,11 +851,11 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         # 从系统中移除
         trade_manager.remove_xianshi_item(xianshi_id)
         msg = f"成功购买 {item['name']} x{quantity}\n花费 {number_to(total_price)} 灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     except Exception as e:
         logger.error(f"仙肆购买出错: {e}")
         msg = "购买过程中出现错误，请稍后再试！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     
     await xian_buy.finish()
 
@@ -876,7 +876,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
               "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
               "▶ 数量：可选，支持1-10个数量，用逗号分隔，没有数量默认每个物品买1个"
         sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 解析物品名列表（允许重复且保留顺序）
@@ -884,7 +884,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(goods_names) > 5:
         msg = "一次最多指定5个物品名（可重复）！"
         sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 解析数量列表
@@ -896,7 +896,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(quantities) > len(goods_names):
         msg = "数量列表长度不能超过物品名列表长度！"
         sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 补齐数量列表
@@ -909,7 +909,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if not filtered_items:
         msg = "仙肆中没有符合条件的用户物品！"
         sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 按价格从低到高排序
@@ -984,7 +984,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg_parts.extend(failed_items)
     
     msg = "\n".join(msg_parts)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     await xianshi_fast_buy.finish()
 
 @xian_shop_off_all.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GLOBAL, parallel=1)])
@@ -1158,18 +1158,18 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     if not amount_str.isdigit():
         msg = "请输入正确的灵石数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
     amount = int(amount_str)
     if amount <= 0:
         msg = "存入数量必须大于0！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
     if user_info['stone'] < amount:
         msg = f"灵石不足！当前拥有 {user_info['stone']} 灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
     # 扣除用户灵石
@@ -1179,7 +1179,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     trade_manager.update_stored_stone(user_id, amount, 'add')
     
     msg = f"成功存入 {number_to(amount)} 灵石到鬼市账户！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_deposit.finish()
 
 @guishi_withdraw.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1203,19 +1203,19 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     if not amount_str.isdigit():
         msg = "请输入正确的灵石数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
     amount = int(amount_str)
     if amount <= 0:
         msg = "取出数量必须大于0！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
     user_stored_stone = trade_manager.get_stored_stone(user_id)
     if user_stored_stone < amount:
         msg = f"鬼市账户余额不足！当前余额 {user_stored_stone} 灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
     # 计算手续费
@@ -1241,7 +1241,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     sql_message.update_ls(user_id, actual_amount, 1)
     
     msg = f"成功取出 {number_to(amount)} 灵石（手续费：{fee_rate*100:.0f}%，扣除{number_to(fee)}灵石，实际到账 {number_to(actual_amount)} 灵石）"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_withdraw.finish()
 
 @guishi_qiugou.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1258,7 +1258,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     if len(args) < 2:
         msg = "指令格式：鬼市求购 物品名称 价格 [数量]\n数量不填默认为1"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
     
     item_name = args[0]
@@ -1266,33 +1266,33 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price = int(args[1])
         if price < int(MIN_PRICE * 10):
             msg = f"当前价格过低！最低{number_to(MIN_PRICE * 10)}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
             await guishi_qiugou.finish()
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = max(1, min(quantity, GUISHI_MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
 
     # 检查背包的物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
 
     # 获取物品类型
     if goods_info['type'] not in GUISHI_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
 
     # 检查订单数量限制
     guishi_orders = trade_manager.get_guishi_orders(user_id, type="qiugou")
     if guishi_orders and len(guishi_orders) >= MAX_QIUGOU_ORDERS:
-        msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请先取消部分订单！"
-        await handle_send(bot, event, msg)
+        msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
     
     # 检查鬼市账户余额是否足够
@@ -1300,7 +1300,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     total_cost = price * quantity
     if user_stored_stone < total_cost:
         msg = f"鬼市账户余额不足！需要 {number_to(total_cost)} 灵石，当前余额 {number_to(user_stored_stone)} 灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
     
     # 生成订单ID # 添加求购订单
@@ -1317,7 +1317,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"订单ID：{order_id}\n"
     msg += f"♻️ 次日{GUISHI_BAITAN_END_HOUR}点自动取消订单，并退还未购得物品的灵石！"
     msg2 = await process_guishi_transactions(user_id=user_id)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await handle_send(bot, event, msg2)
     await guishi_qiugou.finish()
 
@@ -1349,7 +1349,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         
         msg = f"鬼市摆摊时间：每天18:00-次日8:00\n"
         msg += f"下次可摆摊时间：{next_start.strftime('%m月%d日 %H:%M')}（{hours}小时{minutes}分钟后）"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
     user_id = user_info['user_id']
@@ -1357,7 +1357,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     if len(args) < 2:
         msg = "指令格式：鬼市摆摊 物品名称 价格 [数量]\n数量不填默认为1"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
     item_name = args[0]
@@ -1365,13 +1365,13 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price = int(args[1])
         if price < int(MIN_PRICE * 10):
             msg = f"当前价格过低！最低{number_to(MIN_PRICE * 10)}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
             await guishi_baitan.finish()
         quantity = int(args[2]) if len(args) > 2 else 1
         quantity = max(1, min(quantity, GUISHI_MAX_QUANTITY))
     except ValueError:
         msg = "请输入有效的价格和数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
     # 检查订单数量限制
@@ -1379,31 +1379,31 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     if guishi_orders and len(guishi_orders) >= MAX_BAITAN_ORDERS:
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     
     # 检查物品类型是否允许
     if goods_info['type'] not in GUISHI_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(GUISHI_TYPES)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     
     # 检查禁止交易的物品
     if str(goods_id) in BANNED_ITEM_IDS:
         msg = f"物品 {item_name} 禁止交易！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     
     if quantity > goods_num:
@@ -1422,7 +1422,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"摊位ID：{order_id}\n"
     msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊，超时未收摊将自动清空摊位，物品不退还！"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_baitan.finish()
 
 @guishi_shoutan.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1441,7 +1441,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     if not baitan_orders:
         msg = "您当前没有摆摊订单！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="收摊", v1="鬼市收摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_shoutan.finish()
     
     # 取消所有摆摊订单
@@ -1459,7 +1459,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             )
     
     msg = "成功收摊！所有摆摊订单已取消，物品已退回背包。"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="收摊", v1="鬼市收摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_shoutan.finish()
 
 @guishi_take_item.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1483,7 +1483,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     if not args:
         msg = "请输入要取出的物品名称！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
     goods_name = args
@@ -1492,19 +1492,19 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     goods_id, item_info = items.get_data_by_item_name(goods_name)
     if not goods_id:
         msg = f"物品 {goods_name} 不存在！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
     stored_items = trade_manager.get_stored_items(user_id)
     if not stored_items:
         msg = "您没有暂存的物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
     # 判断物品存在和数量
     if str(goods_id) not in stored_items:
         msg = f"您没有暂存物品 {goods_name}！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 
     for item_id, quantity in stored_items.items():
@@ -1526,7 +1526,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     )
     
     msg = f"成功取出 {item_info['name']} x{quantity}！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_take_item.finish()
 
 @guishi_info.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1567,7 +1567,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         for order in baitan_orders:
             msg += f"{order['item_name']} {number_to(order['price'])}\nID:{order['id']}\n数量: {order['quantity']} 待售：{order['quantity'] - order['filled_quantity']}\n"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="求购", v2="鬼市求购", k3="摆摊", v3="鬼市摆摊")
     await guishi_info.finish()
 
 @clear_all_guishi.handle(parameterless=[Cooldown(60, isolate_level=CooldownIsolateLevel.GLOBAL, parallel=1)])
