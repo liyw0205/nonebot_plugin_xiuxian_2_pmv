@@ -320,7 +320,7 @@ async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
         title = ""
         font_size = 32
         img = Txt2Img(font_size)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
         await sect_help.finish()
 
 @sect_position_help.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -343,7 +343,7 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg += "• 宗门职位变更 道号 职位名称\n"
     msg += "• 注意：只有长老职位及以上才能变更"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_position_help.finish()
 
 @sect_elixir_room_make.handle(parameterless=[Cooldown(stamina_cost=2)])
@@ -352,7 +352,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_elixir_room_make.finish()
     sect_id = user_info['sect_id']
     if sect_id:
@@ -366,7 +366,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
             elixir_room_level = sect_info['elixir_room_level']  # 宗门丹房等级
             if int(elixir_room_level) == len(elixir_room_level_up_config):
                 msg = f"宗门丹房等级已经达到最高等级，无法继续建设了！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await sect_elixir_room_make.finish()
             to_up_level = int(elixir_room_level) + 1
             elixir_room_level_up_sect_scale_cost = elixir_room_level_up_config[str(to_up_level)]['level_up_cost']['建设度']
@@ -374,11 +374,11 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 'stone']
             if elixir_room_level_up_use_stone_cost > int(sect_info['sect_used_stone']):
                 msg = f"宗门可用灵石不满足升级条件，当前升级需要消耗宗门灵石：{elixir_room_level_up_use_stone_cost}枚！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_room_make.finish()
             elif elixir_room_level_up_sect_scale_cost > int(sect_info['sect_scale']):
                 msg = f"宗门建设度不满足升级条件，当前升级需要消耗宗门建设度：{elixir_room_level_up_sect_scale_cost}点！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_room_make.finish()
             else:
                 msg = f"宗门消耗：{elixir_room_level_up_sect_scale_cost}建设度，{elixir_room_level_up_use_stone_cost}宗门灵石\n"
@@ -387,7 +387,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                                                              sect_info['sect_used_stone'] - elixir_room_level_up_use_stone_cost,
                                                              sect_info['sect_scale'] - elixir_room_level_up_sect_scale_cost)
                 sql_message.update_sect_elixir_room_level(sect_id, to_up_level)
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await sect_elixir_room_make.finish()
         else:
             msg = f"道友不是宗主，无法使用该命令！"
@@ -395,7 +395,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
             await sect_elixir_room_make.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_elixir_room_make.finish()
 
 
@@ -405,7 +405,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_elixir_get.finish()
 
     sect_id = user_info['sect_id']
@@ -422,27 +422,27 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             sect_info = sql_message.get_sect_info(sect_id)
             if int(sect_info['elixir_room_level']) == 0:
                 msg = f"道友的宗门目前还未建设丹房！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             if int(user_info['sect_contribution']) < elixir_room_config['领取贡献度要求']:
                 msg = f"道友的宗门贡献度不满足领取条件，当前宗门贡献度要求：{elixir_room_config['领取贡献度要求']}点！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             elixir_room_level_up_config = elixir_room_config['elixir_room_level']
             elixir_room_cost = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]['level_up_cost']['建设度']
             if sect_info['sect_materials'] < elixir_room_cost:
                 msg = f"当前宗门资材无法维护丹房，请等待{config['发放宗门资材']['时间']}点发放宗门资材后尝试领取！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             if int(user_info['sect_elixir_get']) == 1:
                 msg = f"道友已经领取过了，不要贪心哦~"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             if int(sect_info['elixir_room_level']) == 1:
                 msg = f"道友成功领取到丹药:渡厄丹！"
                 sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 1, 1)  # 1级丹房送1个渡厄丹
                 sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             else:
                 sect_now_room_config = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]
@@ -455,7 +455,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     msg = f"道友成功领取到丹药：渡厄丹 2 枚！"
                     sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 2, 1)  # 送1个渡厄丹
                     sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                    await handle_send(bot, event, msg)
+                    await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                     await sect_elixir_get.finish()
                 i = 1
                 while i <= give_num:
@@ -476,11 +476,11 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     msg += f"道友成功领取到丹药：{goods_info['name']} {v} 枚!\n"
                     sql_message.send_back(user_info['user_id'], k, goods_info['name'], '丹药', v, bind_flag=1)
                 sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_elixir_get.finish()
 
 
@@ -490,26 +490,26 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_buff_info.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_buff_info.finish()
         
     sect_info = sql_message.get_sect_info(sect_id)
     if not sect_info['mainbuff']:
         msg = f"本宗尚未获得任何功法，请宗主发送【宗门功法搜寻】来获取！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="捐献", v3="宗门捐献")
         await sect_buff_info.finish()
 
     # 获取功法列表
     mainbuff_list = get_sect_mainbuff_id_list(sect_id)
     if not mainbuff_list:
         msg = f"本宗功法列表为空！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="捐献", v3="宗门捐献")
         await sect_buff_info.finish()
 
     # 按品阶排序
@@ -517,7 +517,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     # 构建消息
     msg_list = []
-    msg_list.append("☆------宗门功法------☆")
+    title = "☆------宗门功法------☆"
     
     for mainbuff_id in sorted_mainbuff_list:
         if not mainbuff_id:  # 跳过空ID
@@ -526,11 +526,8 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg_list.append(f"{mainbuff['level']}{mainbuff['name']}")
 
     # 发送消息
-    try:
-        await send_msg_handler(bot, event, '宗门功法', bot.self_id, msg_list)
-    except ActionFailed:
-        msg = "\n".join(msg_list)
-        await handle_send(bot, event, msg)
+    await send_msg_handler(bot, event, '宗门功法', bot.self_id, msg_list, title=title)
+    await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="学习", v3="宗门功法学习")
     
     await sect_buff_info.finish()
 
@@ -540,26 +537,26 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_buff_info2.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_buff_info2.finish()
         
     sect_info = sql_message.get_sect_info(sect_id)
     if not sect_info['secbuff']:
         msg = f"本宗尚未获得任何神通，请宗主发送【宗门神通搜寻】来获取！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="捐献", v3="宗门捐献")
         await sect_buff_info2.finish()
 
     # 获取神通列表
     secbuff_list = get_sect_secbuff_id_list(sect_id)
     if not secbuff_list:
         msg = f"本宗神通列表为空！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="捐献", v3="宗门捐献")
         await sect_buff_info2.finish()
 
     # 按品阶排序
@@ -567,7 +564,7 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     # 构建消息
     msg_list = []
-    msg_list.append("☆------宗门神通------☆")
+    title = "☆------宗门神通------☆"
     
     for secbuff_id in sorted_secbuff_list:
         if not secbuff_id:  # 跳过空ID
@@ -577,11 +574,8 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         msg_list.append(f"{secbuff['level']}:{secbuff['name']}")
 
     # 发送消息
-    try:
-        await send_msg_handler(bot, event, '宗门神通', bot.self_id, msg_list)
-    except ActionFailed:
-        msg = "\n".join(msg_list)
-        await handle_send(bot, event, msg)
+    await send_msg_handler(bot, event, '宗门神通', bot.self_id, msg_list, title=title)
+    await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="学习", v3="宗门神通学习")
     
     await sect_buff_info2.finish()
         
@@ -591,7 +585,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_mainbuff_learn.finish()
     msg = args.extract_plain_text().strip()
     sect_id = user_info['sect_id']
@@ -600,27 +594,27 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         sect_position = user_info['sect_position']
         if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足学习要求!"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await sect_mainbuff_learn.finish()
         else:
             sect_info = sql_message.get_sect_info(sect_id)
             if sect_info['mainbuff'] == 0:
                 msg = f"本宗尚未获得宗门功法，请宗主发送宗门功法搜寻来获得宗门功法！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
 
             sectmainbuffidlist = get_sect_mainbuff_id_list(sect_id)
 
             if msg not in get_mainname_list(sectmainbuffidlist):
                 msg = f"本宗还没有该功法，请发送本宗有的功法进行学习！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
 
             userbuffinfo = UserBuffDate(user_info['user_id']).BuffInfo
             mainbuffid = get_mainnameid(msg, sectmainbuffidlist)
             if str(userbuffinfo['main_buff']) == str(mainbuffid):
                 msg = f"道友请勿重复学习！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
 
             mainbuffconfig = config['宗门主功法参数']
@@ -634,15 +628,15 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 sql_message.updata_user_main_buff(user_info['user_id'], mainbuffid)
                 mainbuff, mainbuffmsg = get_main_info_msg(str(mainbuffid))
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{mainbufftype}功法：{mainbuff['name']}\n{mainbuffmsg}"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
             else:
                 msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_mainbuff_learn.finish()
 
 
@@ -652,7 +646,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_mainbuff_get.finish()
     
     sect_id = user_info['sect_id']
@@ -719,11 +713,11 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                     msg += f"，未搜寻到新功法！\n"
                 msg += f"\n".join(results)
 
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_get.finish()
             else:
                 msg = f"需要消耗{total_stone_cost}宗门灵石，{total_materials_cost}宗门资材，不满足条件！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_get.finish()
         else:
             msg = f"道友不是宗主，无法使用该命令！"
@@ -731,7 +725,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await sect_mainbuff_get.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_mainbuff_get.finish()
 
 @sect_secbuff_get.handle(parameterless=[Cooldown(stamina_cost=8)])
@@ -740,7 +734,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_secbuff_get.finish()
     
     sect_id = user_info['sect_id']
@@ -807,11 +801,11 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     msg += f"，未搜寻到新神通！\n"
                 msg += f"\n".join(results)
 
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_get.finish()
             else:
                 msg = f"需要消耗{total_stone_cost}宗门灵石，{total_materials_cost}宗门资材，不满足条件！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_get.finish()
         else:
             msg = f"道友不是宗主，无法使用该命令！"
@@ -819,7 +813,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             await sect_secbuff_get.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_secbuff_get.finish()
         
 @sect_secbuff_learn.handle(parameterless=[Cooldown(stamina_cost=1, cd_time=10)])
@@ -828,7 +822,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_secbuff_learn.finish()
     msg = args.extract_plain_text().strip()
     sect_id = user_info['sect_id']
@@ -837,13 +831,13 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         sect_position = user_info['sect_position']
         if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]['title']}，不满足学习要求!"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await sect_secbuff_learn.finish()
         else:
             sect_info = sql_message.get_sect_info(sect_id)
             if sect_info['secbuff'] == 0:
                 msg = f"本宗尚未获得宗门神通，请宗主发送宗门神通搜寻来获得宗门神通！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
 
             sectsecbuffidlist = get_sect_secbuff_id_list(sect_id)
@@ -851,14 +845,14 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if msg not in get_secname_list(sectsecbuffidlist):
                 msg = f"本宗还没有该神通，请发送本宗有的神通进行学习！"
 
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
 
             userbuffinfo = UserBuffDate(user_info['user_id']).BuffInfo
             secbuffid = get_secnameid(msg, sectsecbuffidlist)
             if str(userbuffinfo['sec_buff']) == str(secbuffid):
                 msg = f"道友请勿重复学习！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
 
             secbuffconfig = config['宗门神通参数']
@@ -873,15 +867,15 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sql_message.updata_user_sec_buff(user_info['user_id'], secbuffid)
                 secmsg = get_sec_msg(secbuff)
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{secbufftype}神通：{secbuff['name']}\n{secbuff['name']}：{secmsg}"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
             else:
                 msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
     else:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_secbuff_learn.finish()
 
 
@@ -891,7 +885,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await upatkpractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
@@ -908,7 +902,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         useratkpractice = int(user_info['atkpractice'])  # 当前等级
         if useratkpractice == 100:
             msg = f"道友的攻击修炼等级已达到最高等级!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upatkpractice.finish()
 
         sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
@@ -918,7 +912,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         level_up_count = min(level_up_count, sect_level - useratkpractice)
         if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
         elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
@@ -927,12 +921,12 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
         if useratkpractice >= sect_level:
             msg = f"道友的攻击修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请继续捐献灵石提升宗门建设度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
         if useratkpractice + level_up_count > sect_contribution_level:
             msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
         total_stone_cost = sum(LEVLECOST[str(useratkpractice + i)] for i in range(level_up_count))
@@ -940,23 +934,23 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
         if int(user_info['stone']) < total_stone_cost:
             msg = f"道友的灵石不够，升级到攻击修炼等级 {useratkpractice + level_up_count} 还需 {total_stone_cost - int(user_info['stone'])} 灵石!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
         if sect_materials < total_materials_cost:
             msg = f"道友的所处的宗门资材不足，还需 {total_materials_cost - sect_materials} 资材来升级到攻击修炼等级 {useratkpractice + level_up_count}!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
         sql_message.update_user_atkpractice(user_id, useratkpractice + level_up_count)
         msg = f"升级成功！\n道友当前攻击修炼等级：{useratkpractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await upatkpractice.finish()
     else:
         msg = f"修炼逆天而行消耗巨大，请加入宗门再进行修炼！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await upatkpractice.finish()
 
 @uphppractice.handle(parameterless=[Cooldown(cd_time=10)])
@@ -965,7 +959,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await uphppractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
@@ -982,7 +976,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         userhppractice = int(user_info['hppractice'])  # 当前等级
         if userhppractice == 100:
             msg = f"道友的元血修炼等级已达到最高等级!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await uphppractice.finish()
 
         sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
@@ -992,7 +986,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         level_up_count = min(level_up_count, sect_level - userhppractice)
         if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
         elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
@@ -1001,12 +995,12 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         if userhppractice >= sect_level:
             msg = f"道友的元血修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
         if userhppractice + level_up_count > sect_contribution_level:
             msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
         total_stone_cost = sum(LEVLECOST[str(userhppractice + i)] for i in range(level_up_count))
@@ -1014,23 +1008,23 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         if int(user_info['stone']) < total_stone_cost:
             msg = f"道友的灵石不够，升级到元血修炼等级 {userhppractice + level_up_count} 还需 {total_stone_cost - int(user_info['stone'])} 灵石!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
         if sect_materials < total_materials_cost:
             msg = f"道友的所处的宗门资材不足，还需 {total_materials_cost - sect_materials} 资材来升级到元血修炼等级 {userhppractice + level_up_count}!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
         sql_message.update_user_hppractice(user_id, userhppractice + level_up_count)
         msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await uphppractice.finish()
     else:
         msg = f"修炼逆天而行消耗巨大，请加入宗门再进行修炼！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await uphppractice.finish()
         
 @upmppractice.handle(parameterless=[Cooldown(cd_time=10)])
@@ -1039,7 +1033,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await upmppractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
@@ -1056,7 +1050,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         usermppractice = int(user_info['mppractice'])  # 当前等级
         if usermppractice == 100:
             msg = f"道友的灵海修炼等级已达到最高等级!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upmppractice.finish()
 
         sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
@@ -1066,7 +1060,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         level_up_count = min(level_up_count, sect_level - usermppractice)
         if sect_position in [12, 14, 15]:
             msg = f"""道友所在宗门的职位为：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}，不满足使用资材的条件!"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
         elif sect_position == 11 or sect_position == 13:
             sect_contribution_level = get_sect_contribution_level(int(user_info['sect_contribution']))[0]
@@ -1075,12 +1069,12 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         if usermppractice >= sect_level:
             msg = f"道友的灵海修炼等级已达到当前宗门修炼等级的最高等级：{sect_level}，请捐献灵石提升贡献度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
         if usermppractice + level_up_count > sect_contribution_level:
             msg = f"道友的贡献度修炼等级：{sect_contribution_level}，请继续捐献灵石提升贡献度吧！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
         total_stone_cost = sum(LEVLECOST[str(usermppractice + i)] for i in range(level_up_count))
@@ -1088,23 +1082,23 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         if int(user_info['stone']) < total_stone_cost:
             msg = f"道友的灵石不够，升级到灵海修炼等级 {usermppractice + level_up_count} 还需 {total_stone_cost - int(user_info['stone'])} 灵石!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
         if sect_materials < total_materials_cost:
             msg = f"道友的所处的宗门资材不足，还需 {total_materials_cost - sect_materials} 资材来升级到灵海修炼等级 {usermppractice + level_up_count}!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
         sql_message.update_ls(user_id, total_stone_cost, 2)
         sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
         sql_message.update_user_mppractice(user_id, usermppractice + level_up_count)
         msg = f"升级成功！\n道友当前灵海修炼等级：{usermppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await upmppractice.finish()
     else:
         msg = f"修炼逆天而行消耗巨大，请加入宗门再进行修炼！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await upmppractice.finish()
         
         
@@ -1114,7 +1108,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_task_refresh.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
@@ -1126,16 +1120,16 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             else:
                 task_type = "💰"
             msg = f"已刷新，道友当前接取的任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_refresh.finish()
         else:
             msg = f"道友目前还没有宗门任务，请发送指令宗门任务接取来获取吧"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_refresh.finish()
 
     else:
         msg = f"道友尚未加入宗门，请加入宗门后再发送该指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_task_refresh.finish()
 
 
@@ -1164,7 +1158,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_users.finish()
     
     # 获取页码，默认为1
@@ -1216,8 +1210,6 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             
             # 构建成员详细信息
             title = f"☆【{sect_info['sect_name']}】的成员信息☆"
-            header = f"{title}"
-            msg_list.append(header)
             
             # 每15条消息为一页（第一页已经显示了统计信息，所以成员信息从第16条开始）
             page_size = 15
@@ -1261,7 +1253,8 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     event, 
                     '宗门成员', 
                     bot.self_id, 
-                    msg_list
+                    msg_list,
+                    title=title
                 )
             except ActionFailed:
                 # 如果转发消息失败，改为普通消息发送
@@ -1269,10 +1262,10 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 await handle_send(bot, event, combined_msg)
         else:
             msg = "一介散修，莫要再问。"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     else:
         msg = "未曾踏入修仙世界，输入【我要修仙】加入我们，看破这世间虚妄!"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
     
     await sect_users.finish()
 
@@ -1282,7 +1275,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_task.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
@@ -1299,7 +1292,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             else:
                 task_type = "💰"
             msg = f"道友当前已接取了任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
             await sect_task.finish()
 
         create_user_sect_task(user_id)
@@ -1308,11 +1301,11 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         else:
             task_type = "💰"
         msg = f"{task_type} {userstask[user_id]['任务内容']['desc']}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
         await sect_task.finish()
     else:
         msg = f"道友尚未加入宗门，请加入宗门后再获取任务！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_task.finish()
 
 
@@ -1322,14 +1315,14 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_task_complete.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
     if sect_id:
         if not isUserTask(user_id):
             msg = f"道友当前没有接取宗门任务，道友浪费了一次出门机会哦！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
             await sect_task_complete.finish()
             
         sect_info = sql_message.get_sect_info(sect_id)
@@ -1340,7 +1333,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     f"道友兴高采烈的出门做任务，结果状态欠佳，没过两招就力不从心，坚持不住了，"
                     f"道友只好原路返回，浪费了一次出门机会，看你这么可怜，就不扣你任务次数了！"
                 )
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
                 await sect_task_complete.finish()
 
             get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
@@ -1370,7 +1363,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_complete.finish()
 
         elif userstask[user_id]['任务内容']['type'] == 2:  # type=1：需要扣气血，type=2：需要扣灵石
@@ -1380,7 +1373,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 msg = (
                     f"道友兴高采烈的出门做任务，结果发现灵石带少了，当前任务所需灵石：{number_to(costls)},"
                     f"道友只好原路返回，浪费了一次出门机会，看你这么可怜，就不扣你任务次数了！")
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
                 await sect_task_complete.finish()
 
             get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
@@ -1410,11 +1403,11 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             msg = f"道友为了完成任务购买宝物消耗灵石：{number_to(costls)}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_complete.finish()
     else:
         msg = f"道友尚未加入宗门，请加入宗门后再完成任务，但你申请出门的机会我已经用小本本记下来了！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_task_complete.finish()
 
 
@@ -1425,12 +1418,12 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     isUser, user_info, msg = check_user(event)
     enabled_groups = JsonConfig().get_enabled_groups()
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_owner_change.finish()
     user_id = user_info['user_id']
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_owner_change.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
@@ -1455,12 +1448,7 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 sect_info = sql_message.get_sect_info_by_id(give_user['sect_id'])
                 sql_message.update_sect_owner(give_user['user_id'], sect_info['sect_id'])
                 msg = f"传老宗主{user_info['user_name']}法旨，即日起由{give_user['user_name']}继任{sect_info['sect_name']}宗主"
-                for group_id in enabled_groups:
-                    bot = await assign_bot_group(group_id=group_id)
-                    try:
-                        await handle_send(bot, event, msg)
-                    except ActionFailed:
-                        continue
+                await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
                 await sect_owner_change.finish()
             else:
                 msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
@@ -1478,11 +1466,11 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_rename.finish()
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_rename.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
@@ -1499,22 +1487,22 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
         if len_sect_name > 20:
             msg = f"道友输入的宗门名字过长,请重新输入！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
         elif update_sect_name is None:
             msg = f"道友确定要改名无名之宗门？还请三思。"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
         elif sect_info['sect_used_stone'] < XiuConfig().sect_rename_cost:
             msg = f"道友宗门灵石储备不足，还需{number_to(XiuConfig().sect_rename_cost - sect_info['sect_used_stone'])}灵石!"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
         elif sql_message.update_sect_name(sect_id, update_sect_name) is False:
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
         else:
             sql_message.update_sect_name(sect_id, update_sect_name)
@@ -1527,12 +1515,7 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 愿同门共沐神光，共护宗门千世荣光！
 青天无云，道韵长存，灵气飘然。
 愿同门同心同德，共铸宗门万世辉煌！"""
-            for group_id in enabled_groups:
-                bot = await assign_bot_group(group_id=group_id)
-                try:
-                    await handle_send(bot, event, msg)
-                except ActionFailed:
-                    continue
+            await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
 @create_sect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1542,8 +1525,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     isUser, user_info, msg = check_user(event)
     
     if not isUser:
-        msg = "区区凡人，也想创立万世仙门，大胆！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await create_sect.finish()
     
     user_id = user_info['user_id']
@@ -1554,19 +1536,19 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     # 检查境界
     if (list_level_all.index(level) < list_level_all.index(XiuConfig().sect_min_level)):
         msg = f"需达到{XiuConfig().sect_min_level}境才可创建宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await create_sect.finish()
     
     # 检查灵石
     if user_info['stone'] < XiuConfig().sect_create_cost:
         msg = f"创建需{XiuConfig().sect_create_cost}灵石！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await create_sect.finish()
     
     # 检查是否已有宗门
     if user_info['sect_id']:
         msg = f"道友已是【{sect_info['sect_name']}】成员，无法另立门户！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="帮助", v1="宗门帮助", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await create_sect.finish()
     
     # 生成10个候选名称
@@ -1585,7 +1567,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"回复编号（0-10）进行选择\n"
         f"输入其他内容将随机选择"
     )
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
 
 @create_sect.receive()
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
@@ -1609,7 +1591,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
             # 灵石不足，自动随机选择一个
             sect_name = random.choice(name_options)
             msg = f"灵石不足，已自动选择宗门名称：{sect_name}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             # 继续创建流程
         else:
             # 扣除灵石
@@ -1631,7 +1613,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
                 f"回复编号（0-10）进行选择\n"
                 f"输入其他内容将随机选择"
             )
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await create_sect.reject()  # 继续等待用户选择
             return
     
@@ -1662,7 +1644,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         f"宗门编号为{new_sect['sect_id']}。\n"
         f"为道友贺！为仙道贺！"
     )
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="帮助", v1="宗门帮助", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
     await create_sect.finish()
 
 @sect_kick_out.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1671,20 +1653,20 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_kick_out.finish()
     
     # 检查用户是否有宗门
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
     # 解析参数
     arg_list = args.extract_plain_text().strip().split()
     if len(arg_list) < 1:
         msg = f"请按照规范进行操作，例如：踢出宗门 道号"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="提出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
     # 获取目标用户信息
@@ -1693,19 +1675,19 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     if not give_user:
         msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
     # 检查不能踢自己
     if give_user['user_id'] == user_info['user_id']:
         msg = f"无法对自己进行操作，试试退出宗门？"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
     # 检查目标是否在同一宗门
     if give_user['sect_id'] != user_info['sect_id']:
         msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
     # 获取长老职位配置
@@ -1716,7 +1698,7 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if user_info['sect_position'] <= idx_position:  # 长老及以上职位
         if give_user['sect_position'] <= user_info['sect_position']:
             msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
             await sect_kick_out.finish()
         else:
             # 执行踢出操作
@@ -1724,11 +1706,11 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             sql_message.update_usr_sect(give_user['user_id'], None, None)
             sql_message.update_user_sect_contribution(give_user['user_id'], 0)
             msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨，即日起{give_user['user_name']}被{sect_info['sect_name']}除名"""
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
             await sect_kick_out.finish()
     else:
         msg = f"""你的宗门职务为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，只有长老及以上可执行踢出操作。"""
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
 
 @sect_out.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1737,12 +1719,12 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_out.finish()
     user_id = user_info['user_id']
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
@@ -1752,11 +1734,11 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         sect_info = sql_message.get_sect_info_by_id(int(sect_out_id))
         sql_message.update_user_sect_contribution(user_id, 0)
         msg = f"道友已退出{sect_info['sect_name']}，今后就是自由散修，是福是祸，犹未可知。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
     else:
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
 
 
@@ -1766,30 +1748,30 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_donate.finish()
     user_id = user_info['user_id']
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_donate.finish()
     msg = args.extract_plain_text().strip()
     donate_num = re.findall(r"\d+", msg)  # 捐献灵石数
     if len(donate_num) > 0:
         if int(donate_num[0]) > user_info['stone']:
             msg = f"道友的灵石数量小于欲捐献数量{int(donate_num[0])}，请检查"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_donate.finish()
         else:
             sql_message.update_ls(user_id, int(donate_num[0]), 2)
             sql_message.donate_update(user_info['sect_id'], int(donate_num[0]))
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(donate_num[0]))
             msg = f"道友捐献灵石{int(donate_num[0])}枚，宗门建设度增加：{int(donate_num[0])}，宗门贡献度增加：{int(donate_num[0])}点，蒸蒸日上！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_donate.finish()
     else:
         msg = f"捐献的灵石数量解析异常"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_donate.finish()
 
 @sect_position_update.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1798,7 +1780,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_position_update.finish()
     
     user_id = user_info['user_id']
@@ -1816,14 +1798,14 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     raw_args = args.extract_plain_text().strip()
     if not raw_args:
         msg = f"请输入正确指令！例如：宗门职位变更 道号 职位编号/职位名称"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 分割参数
     args_list = raw_args.split()
     if len(args_list) < 2:
         msg = f"参数不足！格式应为：宗门职位变更 道号 职位编号/职位名称"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 获取职位参数（最后一个参数）
@@ -1849,45 +1831,45 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
             position_help += f"{pos_id}. {pos_data['title']}{count_info}\n"
         
         msg = f"职位参数解析异常！请输入有效的职位编号或名称。\n{position_help}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 获取道号（合并前面的所有参数）
     nick_name = ' '.join(args_list[:-1]).strip()
     if not nick_name:
         msg = f"请输入有效的道号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 获取目标用户信息
     give_user = sql_message.get_user_info_with_name(nick_name)
     if not give_user:
         msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 检查不能操作自己
     if give_user['user_id'] == user_id:
         msg = f"无法对自己的职位进行管理。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 检查目标是否在同一宗门
     if give_user['sect_id'] != user_info['sect_id']:
         msg = f"请确保变更目标道友与你在同一宗门。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 检查目标职位是否低于自己
     if give_user['sect_position'] <= user_info['sect_position']:
         msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 检查要变更的职位是否低于自己
     if int(position_num) <= user_info['sect_position']:
         msg = f"道友试图变更的职位品阶必须在你品阶之下"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
     # 检查职位人数限制
@@ -1901,7 +1883,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         
         if current_count >= max_count:
             msg = f"{position_data['title']}职位已有{current_count}人，已达到上限{max_count}人，无法再任命！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1=f"宗门职位变更 {give_user['user_name']}", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_position_update.finish()
     
     # 检查特殊职位限制（如大师兄、大师姐等）
@@ -1913,7 +1895,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
             if member['sect_position'] == int(position_num) and member['user_id'] != give_user['user_id']:
                 current_title = jsondata.sect_config_data()[position_num]['title']
                 msg = f"{current_title}职位已由{member['user_name']}担任，无法重复任命！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1=f"宗门职位变更 {give_user['user_name']}", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await sect_position_update.finish()
     
     # 执行职位变更
@@ -1925,7 +1907,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨：
 即日起{give_user['user_name']}由{old_title}晋升为本宗{new_title}"""
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await sect_position_update.finish()
 
 @join_sect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1934,8 +1916,7 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        msg = f"守山弟子：凡人，回去吧，仙途难入，莫要自误！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await join_sect.finish()
     
     # 检查是否已有宗门
@@ -1971,7 +1952,7 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         else:
             msg = reason
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await join_sect.finish()
 
 @my_sect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1980,8 +1961,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        msg = f"守山弟子：凡人，回去吧，仙途难入，莫要自误！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_position_update.finish()
     elixir_room_level_up_config = config['宗门丹房参数']['elixir_room_level']
     sect_id = user_info['sect_id']
@@ -2031,7 +2011,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         msg = f"一介散修，莫要再问。"
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await my_sect.finish()
 
 @sect_close_join.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -2040,13 +2020,13 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_close_join.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_close_join.finish()
     
     sect_position = user_info['sect_position']
@@ -2068,13 +2048,13 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_open_join.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_open_join.finish()
     
     sect_position = user_info['sect_position']
@@ -2096,13 +2076,13 @@ async def sect_close_mountain_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_close_mountain.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_close_mountain.finish()
     sect_position = user_info['sect_position']
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
@@ -2111,7 +2091,7 @@ async def sect_close_mountain_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if sect_position == owner_position:
         # 再次确认
         msg = "确定要封闭山门吗？封闭后：\n1. 自动关闭宗门加入\n2. 你将退位为长老\n3. 宗门将处于无主状态\n4. 长老们可以继承宗主之位\n\n请确认后再次发送【确认封闭山门】"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="确定", v1="确认封闭山门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_close_mountain.finish()
     else:
         msg = "只有宗主可以封闭山门！"
@@ -2125,13 +2105,13 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_close_mountain2.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_close_mountain2.finish()
     
     sect_position = user_info['sect_position']
@@ -2152,7 +2132,7 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     else:
         msg = "只有宗主可以封闭山门！"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_close_mountain2.finish()
 
 @sect_inherit.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -2161,13 +2141,13 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_inherit.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
     sect_info = sql_message.get_sect_info(sect_id)
@@ -2179,7 +2159,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 检查职位是否符合继承条件
     if user_info['sect_position'] not in [1, 2, 6, 7]:  # 1=副宗主，2=长老, 6=大师兄，7=大师姐
         msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
     # 检查是否有更高优先级的继承人
@@ -2192,7 +2172,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if higher_priority:
         msg = "存在更高优先级的继承人，请等待他们继承！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
     # 执行继承
@@ -2214,13 +2194,13 @@ async def sect_disband_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_disband.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_disband.finish()
     
     sect_position = user_info['sect_position']
@@ -2230,7 +2210,7 @@ async def sect_disband_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if sect_position == owner_position:
         # 再次确认
         msg = "确定要解散宗门吗？解散后：\n1. 所有成员将被踢出\n2. 宗门将被删除\n3. 所有宗门资源将消失\n\n请确认后再次发送【确认解散宗门】"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="确定", v1="确认解散宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_disband.finish()
     else:
         msg = "只有宗主可以解散宗门！"
@@ -2243,13 +2223,13 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_disband2.finish()
     
     sect_id = user_info['sect_id']
     if not sect_id:
         msg = "道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_disband2.finish()
     
     sect_position = user_info['sect_position']
@@ -2293,14 +2273,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_shop.finish()
     
     user_id = user_info['user_id']
     sect_id = sql_message.get_user_info_with_id(user_id)['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_shop.finish()
     
     sect_info = sql_message.get_sect_info(sect_id)
@@ -2361,7 +2341,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_buy.finish()
 
     user_id = user_info["user_id"]
@@ -2370,7 +2350,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     if not shop_info:
         msg = "请输入正确的商品编号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
     shop_id = shop_info[0][0]
@@ -2385,7 +2365,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_items = config["商店商品"]
     if shop_id not in shop_items:
         msg = "没有这个商品编号！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
     item_data = shop_items[shop_id]
@@ -2395,7 +2375,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     total_cost = item_data["cost"] * quantity
     if sect_contribution < total_cost:
         msg = f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(sect_contribution)}点"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
     # 检查封锁
@@ -2412,7 +2392,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"本周已购买{already_purchased}个\n"
             f"无法再购买{quantity}个！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
     # 兑换商品
@@ -2432,7 +2412,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
 
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(total_cost)}宗门贡献度！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
 
     # 更新限购记录
     update_sect_weekly_purchase(user_id, shop_id, quantity)

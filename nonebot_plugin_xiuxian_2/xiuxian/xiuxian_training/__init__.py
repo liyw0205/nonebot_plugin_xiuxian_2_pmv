@@ -85,14 +85,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         next_hour = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         wait_minutes = (next_hour - now).seconds // 60
         msg = f"本小时内已历练过，下次可历练时间: {next_hour.strftime('%H:%M')} (还需等待{wait_minutes}分钟)"
-        await handle_send(bot, event, msg, md_type="排行榜", k1="历练排行榜", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
+        await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
     result = make_choice(user_id)
     
     msg = f"{result}"
-    await handle_send(bot, event, msg, md_type="历练", k1="排行榜", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
+    await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     log_message(user_id, result)
     update_statistics_value(user_id, "历练次数")
     await training_start.finish()
