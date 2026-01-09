@@ -59,7 +59,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await bank.finish()
     mode = args[0]  # 存灵石、取灵石、升级会员、信息查看
     num = args[1]  # 数值

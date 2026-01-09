@@ -174,7 +174,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await blessed_spot_creat.finish()
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) != 0:
@@ -204,7 +204,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await blessed_spot_info.finish()
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
@@ -232,7 +232,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await ling_tian_up.finish()
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
@@ -291,7 +291,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await blessed_spot_rename.finish()
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
@@ -319,7 +319,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await qc.finish()
     user_id = user_info['user_id']
 
@@ -395,7 +395,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     global two_exp_limit
     isUser, user_1, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await two_exp_invite.finish()
 
     user_id = user_1['user_id']
@@ -787,7 +787,7 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await two_exp_accept.finish()
         
     user_id = user_info['user_id']
@@ -825,7 +825,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await two_exp_reject.finish()
         
     user_id = user_info['user_id']
@@ -853,7 +853,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await two_exp_protect.finish()
         
     user_id = user_info['user_id']
@@ -898,7 +898,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_type = 5  # 状态5为修炼
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await reset_exp.finish()
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, user_type)
@@ -923,7 +923,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_type = 5  # 状态5为修炼
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await up_exp.finish()
     user_id = user_info['user_id']
     user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
@@ -1007,7 +1007,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await stone_exp.finish()
     user_id = user_info['user_id']
     user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
@@ -1065,7 +1065,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_type = 1  # 状态0为无事件
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await in_closing.finish()
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, 0)
@@ -1090,7 +1090,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_type = 0  # 状态0为无事件
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await out_closing.finish()
     user_id = user_info['user_id']
     user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
@@ -1196,7 +1196,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_msg, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await mind_state.finish()
     user_id = user_msg['user_id']
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
@@ -1337,7 +1337,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_exp.finish()
 
     user_id = user_info['user_id']
@@ -1382,7 +1382,7 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await buffinfo.finish()
 
     user_id = user_info['user_id']
@@ -1439,7 +1439,7 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await del_exp_decimal.finish()
     user_id = user_info['user_id']
     exp = user_info['exp']
@@ -1456,7 +1456,7 @@ async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_exp_num.finish()
     user_id = user_info['user_id']
     limt = two_exp_cd.find_user(user_id)
@@ -1478,7 +1478,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
         
     user_id = user_info['user_id']
@@ -1510,7 +1510,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await daily_info.finish()
     
     user_id = user_info['user_id']
@@ -1728,7 +1728,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await bind_partner.finish()
     
     user_id = user_info['user_id']
@@ -1824,7 +1824,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await agree_bind.finish()
     
     user_id = user_info['user_id']
@@ -1875,7 +1875,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await unbind_partner.finish()
     
     user_id = user_info['user_id']
@@ -1944,7 +1944,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_partner.finish()
     
     user_id = user_info['user_id']
@@ -2013,7 +2013,7 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await partner_rank.finish()
 
     # 获取所有用户的affection数据

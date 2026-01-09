@@ -67,21 +67,16 @@ confirm_lunhui = on_command('确认轮回', priority=15,  block=True)
 async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """轮回重修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help_fk:
-        msg = cache_help_fk[session_id]
-        await handle_send(bot, event, msg)
-        await warring_help.finish()
-    else:
-        msg = __warring_help__
-        await handle_send(bot, event, msg)
-        await warring_help.finish()
+    msg = __warring_help__
+    await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="丹药", v3="丹药背包")
+    await warring_help.finish()
         
 @resetting.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await resetting.finish()
         
     user_id = user_info['user_id']
@@ -91,10 +86,10 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
                     
     if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
-        now_exp = exp
         sql_message.updata_level(user_id, '江湖好手') #重置用户境界
         sql_message.update_levelrate(user_id, 0) #重置突破成功率
-        sql_message.update_j_exp(user_id, now_exp) #重置用户修为
+        sql_message.update_j_exp(user_id, exp) #重置用户修为
+        sql_message.update_exp(user_id, 100)  
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"{user_name}现在是一介凡人了！！"
         await handle_send(bot, event, msg)
@@ -109,7 +104,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await lunhui.finish()
         
     user_id = user_info['user_id']
@@ -121,7 +116,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     
     if str(user_id) in confirm_lunhui_cache:
         msg = "请发送【确认轮回】！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="确认", v1="确认轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
         await lunhui.finish()
     if user_root == '轮回道果':
         root_level = 7
@@ -151,7 +146,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
         await confirm_lunhui_invite(bot, event, user_id, root_level, lunhui_level2, msg)
     else:
         msg = f"道友境界未达要求\n当前进入：{lunhui_level2}\n最低境界为：{lunhui_level}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await lunhui.finish()
 
 @Infinite_reincarnation.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -159,7 +154,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await Infinite_reincarnation.finish()
         
     user_id = user_info['user_id']
@@ -171,19 +166,19 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
     
     if str(user_id) in confirm_lunhui_cache:
         msg = "请发送【确认轮回】！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="确认", v1="确认轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
         await Infinite_reincarnation.finish()
 
     if user_root != '命运道果' :
         msg = "道友还未完成轮回，请先进入轮回！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
         await Infinite_reincarnation.finish()
     if (list_level_all.index(level) >= list_level_all.index(XiuConfig().Infinite_reincarnation_min_level)) and user_root == '命运道果':
         msg = f"超越永恒，超脱命运，执掌因果轮回！\n恭喜大能{user_name}突破命运桎梏，成就无上命运道果！"
         await confirm_lunhui_invite(bot, event, user_id, 0, "无限轮回", msg)
     else:
         msg = f"道友境界未达要求，无限轮回的最低境界为{XiuConfig().Infinite_reincarnation_min_level}！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await Infinite_reincarnation.finish()
 
 @confirm_lunhui.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -192,13 +187,13 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await confirm_lunhui.finish()
 
     user_id = user_info['user_id']
     if str(user_id) not in confirm_lunhui_cache:
         msg = "没有待处理的轮回！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
         await confirm_lunhui.finish()
 
     confirm_data = confirm_lunhui_cache[str(user_id)]
@@ -211,7 +206,6 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
     exp = user_msg['exp']
-    now_exp = exp - 100
     stone = user_info['stone']
     now_stone = int(stone - 1_0000_0000)
     if now_stone >= 0:
@@ -221,7 +215,8 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 重置用户境界
     sql_message.update_levelrate(user_id, 0)  
     # 重置突破成功率
-    sql_message.update_j_exp(user_id, now_exp)  
+    sql_message.update_j_exp(user_id, exp)
+    sql_message.update_exp(user_id, 100)
     # 重置用户修为
     sql_message.update_user_hp(user_id)  
     # 重置用户HP，mp，atk状态
@@ -249,7 +244,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if root_level == 0 or root_level == 9:
         sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
     msg = f"{original_msg}！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
 
     # 删除确认缓存
     del confirm_lunhui_cache[str(user_id)]
@@ -268,7 +263,7 @@ async def confirm_lunhui_invite(bot, event, user_id, root_level, lunhui_level2, 
     asyncio.create_task(expire_confirm_lunhui_invite(user_id, invite_id, bot, event))
 
     msg = f"您即将进入【{lunhui_level2}】，请在60秒内确认！\n发送【确认轮回】以继续，或等待60秒后自动取消。"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="轮回", k1="确认", v1="确认轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
 
 async def expire_confirm_lunhui_invite(user_id, invite_id, bot, event):
     """确认轮回过期处理"""
@@ -276,4 +271,4 @@ async def expire_confirm_lunhui_invite(user_id, invite_id, bot, event):
     if str(user_id) in confirm_lunhui_cache and confirm_lunhui_cache[str(user_id)]['invite_id'] == invite_id:
         del confirm_lunhui_cache[str(user_id)]
         msg = "确认轮回已过期！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")

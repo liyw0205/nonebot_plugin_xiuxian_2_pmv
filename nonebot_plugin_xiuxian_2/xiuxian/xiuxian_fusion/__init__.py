@@ -29,7 +29,7 @@ FIXED_SUCCESS_IDS = [7084]
 fusion_item = on_command('合成', priority=16, block=True)
 force_fusion = on_command('强行合成', priority=15, block=True)
 fusion_help = on_command("合成帮助", priority=15, block=True)
-available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=15, block=True)
+available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=24, block=True)
 
 fusion_help_text = f"""
 合成帮助:
@@ -42,7 +42,7 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await fusion_help.finish()
         
     msg = fusion_help_text
@@ -55,7 +55,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await fusion_item.finish()
 
     user_id = user_info['user_id']
@@ -91,7 +91,7 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await force_fusion.finish()
 
     user_id = user_info['user_id']

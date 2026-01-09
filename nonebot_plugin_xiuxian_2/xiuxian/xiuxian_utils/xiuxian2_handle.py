@@ -2306,6 +2306,9 @@ class PlayerDataManager:
 
     def get_fields(self, user_id, table_name):
         """通过user_id查看一个表这个主键的全部字段"""
+        if str(user_id) == "None":
+            return None
+            
         self._ensure_table_exists(user_id, table_name)
         
         # 检查主键是否存在

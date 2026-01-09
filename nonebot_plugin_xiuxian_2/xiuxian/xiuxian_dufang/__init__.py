@@ -144,7 +144,7 @@ async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']
@@ -162,7 +162,7 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']
@@ -277,7 +277,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
 async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']
@@ -305,7 +305,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     user_id = user_info['user_id']

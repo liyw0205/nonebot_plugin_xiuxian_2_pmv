@@ -165,8 +165,7 @@ ID：{user_id}
 道侣：{partner_info}
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
-灵石排行: 第{int(user_stone)}位
-\n【我的修仙信息图片版】"""
+灵石排行: 第{int(user_stone)}位"""
     
     return DETAIL_MAP, text_msg
 
@@ -176,18 +175,14 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
     
     _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
     if XiuConfig().user_info_image:
-        img_res = await get_msg_pic(text_msg)
-        if isinstance(event, GroupMessageEvent):
-            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
-        await xiuxian_message.finish()
-    await handle_send(bot, event, text_msg)
+        await xiuxian_message_img_(bot, event)
+    else:
+        await handle_send(bot, event, text_msg, md_type="修仙信息", k1="图片版", v1="我的修仙信息图片版", k2="修为", v2="我的修为", k3="状态", v3="我的状态")
     await xiuxian_message.finish()
 
 @xiuxian_message_img.handle(parameterless=[Cooldown(cd_time=30)])
@@ -196,7 +191,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
     
     detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])

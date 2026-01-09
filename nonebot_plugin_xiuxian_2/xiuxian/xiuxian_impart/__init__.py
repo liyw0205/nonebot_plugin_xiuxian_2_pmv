@@ -114,13 +114,9 @@ async def impart_help_(
 ):
     """传承帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]        
-        await handle_send(bot, event, msg)
-    else:
-        msg = __impart_help__
-        await handle_send(bot, event, msg)
-        await impart_help.finish()
+    msg = __impart_help__
+    await handle_send(bot, event, msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="信息", v2="传承信息", k3="背包", v3="传承背包")
+    await impart_help.finish()
 
 @impart_pk_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_pk_help_(
@@ -128,13 +124,9 @@ async def impart_pk_help_(
 ):
     """虚神界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]        
-        await handle_send(bot, event, msg)
-    else:
-        msg = __impart_pk_help__
-        await handle_send(bot, event, msg)
-        await impart_pk_help.finish()
+    msg = __impart_pk_help__
+    await handle_send(bot, event, msg, md_type="传承", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="探索", v3="虚神界探索")
+    await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -142,7 +134,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
     user_id = user_info["user_id"]
@@ -243,7 +235,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     )
 
     try:
-        await handle_send(bot, event, summary_msg)
+        await handle_send(bot, event, summary_msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     except ActionFailed:
         await handle_send(bot, event, "祈愿结果发送失败！")
     await impart_draw.finish()
@@ -254,7 +246,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
     user_id = user_info["user_id"]
@@ -357,7 +349,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     )
 
     try:
-        await handle_send(bot, event, summary_msg)
+        await handle_send(bot, event, summary_msg, md_type="传承", k1="抽卡", v1="传承抽卡", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     except ActionFailed:
         await handle_send(bot, event, "抽卡结果发送失败！")
     await impart_draw2.finish()
@@ -368,7 +360,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     isUser, user_info, msg = check_user(event)
     user_id = user_info["user_id"]
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
         
     impart_data_draw = await impart_check(user_id)
@@ -417,7 +409,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 {duplicate_cards_msg}
 """
     try:
-        await handle_send(bot, event, final_msg)
+        await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     except ActionFailed:
         await handle_send(bot, event, "获取祈愿石结果失败！")
     return
@@ -428,7 +420,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     isUser, user_info, msg = check_user(event)
     user_id = user_info["user_id"]
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
         
     # 获取当前思恋结晶数量
@@ -463,7 +455,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
     user_id = user_info["user_id"]
@@ -504,8 +496,9 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         card_lines.append(f"{stars} {card_name} (x{count})")
     
     # 构建消息
-    msg = f"\n道友的传承卡片：\n"
-    msg += "\n".join(card_lines)
+    title = f"道友的传承卡片：\n"
+    msg = "\n".join(card_lines)
+    l_msg = []
     
     # 只在第一页显示总数和种类
     if page == 1:
@@ -516,10 +509,11 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     # 添加分页信息
     msg += f"\n\n第{page}/{total_pages}页"
+    l_msg.append(msg)
     if total_pages > 1:
         msg += f"\n输入【传承背包+页码】查看其他页"
-    
-    await handle_send(bot, event, msg)
+    await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title)
+    await handle_send(bot, event, " ", md_type="传承", k1="翻页", v1=f"传承背包 {page + 1}", k2="信息", v2="传承信息", k3="卡图", v3="传承卡图")
 
 @re_impart_load.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -527,7 +521,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
     user_id = user_info["user_id"]
@@ -552,7 +546,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info["user_id"]
     impart_data_draw = await impart_check(user_id)
@@ -576,7 +570,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
 
 思恋结晶：{impart_data_draw["stone_num"]}颗"""
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
 
 @impart_img.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -586,12 +580,12 @@ async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     img_name = str(args.extract_plain_text().strip())
     if not img_name:
         msg = "请输入正确格式：传承卡图 卡图名"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="传承", k1="卡图", v1="传承卡图", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
         await impart_img.finish()
 
     if img_name not in img_list:
         msg = "没有找到此卡图！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="传承", k1="卡图", v1="传承卡图", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
         await impart_img.finish()
 
     # 判断是否允许发送图片

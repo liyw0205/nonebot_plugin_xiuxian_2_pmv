@@ -415,7 +415,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             task = asyncio.create_task(delayed_reminder(bot, event, user_id))
             user_reminder_tasks[user_id] = task
             
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
             await do_work.finish()
 
     elif mode == "确认刷新":
@@ -451,7 +451,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         task = asyncio.create_task(delayed_reminder(bot, event, user_id))
         user_reminder_tasks[user_id] = task
         
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
         await do_work.finish()
 
     elif mode == "结算":
@@ -579,7 +579,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     
-    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
     return
 
 async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -636,5 +636,5 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     await handle_send(bot, event, msg2)
-    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3")
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
     return

@@ -95,7 +95,7 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     diff_days = diff_time.days # 距离创建账号时间的天数
     
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await beg_stone.finish()
     
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
@@ -163,7 +163,7 @@ async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = event.get_user_id()
     
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await novice.finish()
     
     # 检查是否已领取

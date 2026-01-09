@@ -155,7 +155,7 @@ class XiuConfig:
         # 重入仙途的消费
         self.remaname = 10000000  
         # 修仙改名的消费
-        self.max_stamina = 240 
+        self.max_stamina = 500 
         # 体力上限
         self.stamina_recovery_points = 5
         # 体力恢复点数/分钟

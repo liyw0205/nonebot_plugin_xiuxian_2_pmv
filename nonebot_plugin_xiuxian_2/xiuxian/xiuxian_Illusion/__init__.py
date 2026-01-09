@@ -3,8 +3,8 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
-from nonebot import on_command, on_regex
-from nonebot.params import CommandArg, RegexGroup
+from nonebot import on_command
+from nonebot.params import CommandArg
 from nonebot.log import logger
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -22,12 +22,13 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, base_rank
-
+from .IllusionData import *
 sql_message = XiuxianDateManage()
 items = Items()
 
 # 定义命令
-illusion_heart = on_command("幻境寻心", aliases={"心境试炼"}, priority=5, block=True)
+illusion_start = on_command("幻境寻心", priority=5, block=True)
+illusion_choice = on_command("心境试炼", priority=5, block=True)
 illusion_reset = on_command("重置幻境", permission=SUPERUSER, priority=5, block=True)
 illusion_clear = on_command("清空幻境", permission=SUPERUSER, priority=5, block=True)
 
@@ -35,396 +36,103 @@ async def reset_illusion_data():
     IllusionData.reset_player_data_only()
     logger.opt(colors=True).info("<green>幻境寻心玩家数据已重置</green>")
 
-# 幻境问题和选项配置
-DEFAULT_QUESTIONS = {
-    "questions": [
-        {
-            "question": "你在修炼时遇到瓶颈，你会：",
-            "options": [
-                "闭关苦修，不突破不出关",
-                "外出游历，寻找机缘",
-                "请教前辈，寻求指点"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "面对强大的敌人，你会：",
-            "options": [
-                "正面迎战，绝不退缩",
-                "智取为上，寻找弱点",
-                "暂时退避，提升实力后再战"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "修炼最重要的是：",
-            "options": [
-                "坚定的道心",
-                "强大的功法",
-                "丰富的资源"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你如何看待因果：",
-            "options": [
-                "种因得果，必须谨慎",
-                "随心而行，不问因果",
-                "因果循环，自有定数"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你追求的是：",
-            "options": [
-                "无上大道",
-                "逍遥自在",
-                "守护重要之人"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "发现秘境时，你会：",
-            "options": [
-                "立即探索，机缘稍纵即逝",
-                "做好准备再进入",
-                "邀请同伴一同前往"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "对于仇敌，你的态度是：",
-            "options": [
-                "斩草除根，不留后患",
-                "小惩大诫，点到为止",
-                "冤冤相报何时了，化解恩怨"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "修炼遇到心魔，你会：",
-            "options": [
-                "直面心魔，战胜它",
-                "寻求静心之法化解",
-                "暂时停止修炼调整心态"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更倾向于：",
-            "options": [
-                "独自修炼",
-                "与志同道合者一起",
-                "建立自己的势力"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "面对天劫，你的准备是：",
-            "options": [
-                "依靠自身实力硬抗",
-                "准备大量防御法宝",
-                "寻找特殊地点渡劫"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更相信：",
-            "options": [
-                "人定胜天",
-                "天命难违",
-                "天人合一"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "对于宗门，你的看法是：",
-            "options": [
-                "必须忠诚于宗门",
-                "只是修炼的跳板",
-                "可有可无的存在"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更看重：",
-            "options": [
-                "实力境界",
-                "实战经验",
-                "人脉关系"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "修炼资源不足时，你会：",
-            "options": [
-                "抢夺他人资源",
-                "自己寻找或创造",
-                "交易或合作获取"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更倾向于修炼：",
-            "options": [
-                "攻击型功法",
-                "防御型功法",
-                "辅助型功法"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "对于凡人，你的态度是：",
-            "options": [
-                "视如蝼蝼蚁",
-                "平等相待",
-                "庇护一方"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更愿意：",
-            "options": [
-                "追求长生",
-                "追求力量",
-                "追求逍遥"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "面对诱惑，你会：",
-            "options": [
-                "坚守本心不为所动",
-                "权衡利弊后决定",
-                "先拿到手再说"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "你更相信：",
-            "options": [
-                "正道光明",
-                "魔道速成",
-                "亦正亦邪"
-            ],
-            "counts": [0, 0, 0]
-        },
-        {
-            "question": "修仙之路，你认为最重要的是：",
-            "options": [
-                "天赋资质",
-                "勤奋努力",
-                "机缘气运"
-            ],
-            "counts": [0, 0, 0]
-        }
-    ]
-}
-
-class IllusionData:
-    DATA_PATH = Path(__file__).parent / "illusion"
-    QUESTIONS_FILE = Path(__file__).parent / "illusion_questions.json"
-    DAILY_RESET_HOUR = 8  # 每天8点重置
-    
-    @classmethod
-    def get_or_create_user_illusion_info(cls, user_id):
-        """获取或创建用户幻境信息"""
-        user_id = str(user_id)
-        file_path = cls.DATA_PATH / f"{user_id}.json"
-        
-        questions = cls.get_questions()["questions"]  # 获取问题列表
-        question_count = len(questions)  # 获取问题总数
-        
-        default_data = {
-            "last_participate": None,  # 上次参与时间
-            "today_choice": None,      # 今日选择
-            "question_index": random.randint(0, question_count - 1) if question_count > 0 else None  # 随机分配问题索引
-        }
-        
-        if not file_path.exists():
-            os.makedirs(cls.DATA_PATH, exist_ok=True)
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(default_data, f, ensure_ascii=False, indent=4)
-            return default_data
-        
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        
-        # 检查是否需要重置(每天8点)
-        if cls._check_reset(data.get("last_participate")):
-            data["today_choice"] = None
-            data["question_index"] = random.randint(0, question_count - 1) if question_count > 0 else None  # 重置时重新分配问题
-            data["last_participate"] = None
-            cls.save_user_illusion_info(user_id, data)
-        
-        # 确保所有字段都存在
-        for key in default_data:
-            if key not in data:
-                data[key] = default_data[key]
-        
-        # 如果问题索引不存在或无效，分配一个
-        if data["question_index"] is None or data["question_index"] >= question_count:
-            data["question_index"] = random.randint(0, question_count - 1) if question_count > 0 else None
-            cls.save_user_illusion_info(user_id, data)
-        
-        return data
-    
-    @classmethod
-    def save_user_illusion_info(cls, user_id, data):
-        """保存用户幻境信息"""
-        user_id = str(user_id)
-        file_path = cls.DATA_PATH / f"{user_id}.json"
-        
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    
-    @classmethod
-    def get_questions(cls):
-        """获取问题数据"""
-        if not cls.QUESTIONS_FILE.exists():
-            # 如果文件不存在，创建默认问题文件
-            os.makedirs(cls.QUESTIONS_FILE.parent, exist_ok=True)
-            with open(cls.QUESTIONS_FILE, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_QUESTIONS, f, ensure_ascii=False, indent=4)
-            return DEFAULT_QUESTIONS
-        
-        with open(cls.QUESTIONS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # 确保数据结构正确
-            if "questions" not in data or not isinstance(data["questions"], list):
-                # 如果结构不正确，恢复默认设置
-                with open(cls.QUESTIONS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(DEFAULT_QUESTIONS, f, ensure_ascii=False, indent=4)
-                return DEFAULT_QUESTIONS
-            
-            # 确保每个问题都有counts字段
-            for question in data["questions"]:
-                if "counts" not in question or len(question["counts"]) != len(question["options"]):
-                    question["counts"] = [0] * len(question["options"])
-            
-            return data
-    
-    @classmethod
-    def save_questions(cls, questions):
-        """保存问题数据"""
-        with open(cls.QUESTIONS_FILE, "w", encoding="utf-8") as f:
-            json.dump(questions, f, ensure_ascii=False, indent=4)
-    
-    @classmethod
-    def update_question_stats(cls, question_index, choice_index):
-        """更新问题统计数据"""
-        questions = cls.get_questions()
-        if 0 <= question_index < len(questions["questions"]):
-            question = questions["questions"][question_index]
-            if 0 <= choice_index < len(question["counts"]):
-                question["counts"][choice_index] += 1
-                cls.save_questions(questions)
-    
-    @classmethod
-    def _check_reset(cls, last_participate_str):
-        """检查是否需要重置(每天8点)"""
-        if not last_participate_str:
-            return False
-            
-        try:
-            last_participate = datetime.strptime(last_participate_str, "%Y-%m-%d %H:%M:%S")
-            now = datetime.now()
-            
-            # 检查是否是新的天数且过了8点
-            return (now.day > last_participate.day and now.hour >= cls.DAILY_RESET_HOUR) or \
-                   (now.day == last_participate.day and now.hour >= cls.DAILY_RESET_HOUR and last_participate.hour < cls.DAILY_RESET_HOUR)
-        except:
-            return False
-    
-    @classmethod
-    def reset_player_data_only(cls):
-        """仅重置玩家数据（每日定时任务调用）"""
-        for file in cls.DATA_PATH.glob("*.json"):
-            try:
-                # 直接删除玩家数据文件，下次访问时会自动创建
-                file.unlink()
-            except:
-                continue
-    
-    @classmethod
-    def reset_all_data(cls):
-        """重置所有数据（玩家数据和问题统计数据）"""
-        # 重置玩家数据
-        cls.reset_player_data_only()
-        
-        # 重置问题统计数据
-        questions = cls.get_questions()
-        for question in questions["questions"]:
-            question["counts"] = [0] * len(question["options"])
-        cls.save_questions(questions)
-
-@illusion_heart.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """幻境寻心"""
+@illusion_start.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """幻境寻心 - 生成幻境或查看结果"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
-        await illusion_heart.finish()
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await illusion_start.finish()
     
     user_id = user_info["user_id"]
     illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
-    questions = IllusionData.get_questions()["questions"]
     
     # 检查问题索引是否有效
-    if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(questions):
+    if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
         msg = "幻境寻心功能暂时无法使用，请联系管理员检查问题配置"
         await handle_send(bot, event, msg)
-        await illusion_heart.finish()
-    
-    # 获取用户输入
-    user_input = args.extract_plain_text().strip()
+        await illusion_start.finish()
     
     # 检查是否已经参与过今日的幻境
     if illusion_info["today_choice"] is not None:
-        question_data = questions[illusion_info["question_index"]]
-        question = question_data["question"]
+        question = DEFAULT_QUESTIONS[illusion_info["question_index"]]["question"]
         choice = illusion_info["today_choice"]
         msg = (
             f"\n═══  幻境寻心  ════\n"
             f"今日问题：{question}\n"
-            f"{choice}\n"
+            f"你的选择：{choice}\n"
             f"════════════\n"
             f"每日8点重置，请明日再来！"
         )
-        await handle_send(bot, event, msg)
-        await illusion_heart.finish()
+        await handle_send(bot, event, msg, md_type="幻境寻心", k1="寻心", v1="幻境寻心", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
+        await illusion_start.finish()
     
     # 获取当前问题数据
-    question_data = questions[illusion_info["question_index"]]
+    question_data = DEFAULT_QUESTIONS[illusion_info["question_index"]]
     question = question_data["question"]
     options = question_data["options"]
     
-    # 如果没有输入参数，显示问题和选项
-    if not user_input:
-        msg = ["\n═══  幻境寻心  ════"]
-        msg.append(f"今日问题：{question}")
-        msg.append("请选择：")
-        for i, option in enumerate(options, 1):
-            msg.append(f"{i}. {option}")
-        msg.append("════════════")
-        msg.append("输入【幻境寻心+数字】进行选择")
-        
-        await send_msg_handler(bot, event, "幻境寻心", bot.self_id, msg)
-        await illusion_heart.finish()
+    # 显示问题和选项
+    msg = "\n═══  幻境寻心  ════\n"
+    msg += f"今日问题：{question}\n"
+    msg += "请选择："
+    for i, option in enumerate(options, 1):
+        msg += f"\n{i}. {option}"
+    msg += "\n════════════\n"
+    msg += "使用【心境试炼+数字】进行选择"
+    
+    await handle_send(bot, event, msg, md_type="幻境寻心", k1="试炼壹", v1="心境试炼 1", k2="试炼贰", v2="心境试炼 2", k3="试炼叁", v3="心境试炼 3")
+    await illusion_start.finish()
+
+@illusion_choice.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """心境试炼 - 选择幻境"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await illusion_choice.finish()
+    
+    user_id = user_info["user_id"]
+    illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
+    
+    # 检查问题索引是否有效
+    if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
+        msg = "幻境寻心功能暂时无法使用，请联系管理员检查问题配置"
+        await handle_send(bot, event, msg)
+        await illusion_choice.finish()
+    
+    # 获取用户输入的数字
+    choice_input = args.extract_plain_text().strip()
+    
+    try:
+        choice_num = int(choice_input)
+    except ValueError:
+        msg = "请输入有效的数字！"
+        await handle_send(bot, event, msg)
+        await illusion_choice.finish()
+    
+    # 获取当前问题数据
+    question_data = DEFAULT_QUESTIONS[illusion_info["question_index"]]
+    options = question_data["options"]
+    explanations = question_data.get("explanations", [])
     
     # 检查输入是否有效
-    try:
-        choice_num = int(user_input)
-        if choice_num < 1 or choice_num > len(options):
-            raise ValueError
-    except ValueError:
+    if choice_num < 1 or choice_num > len(options):
         msg = f"请输入有效的选择数字(1-{len(options)})！"
+        await handle_send(bot, event, msg, md_type="幻境寻心", k1="试炼壹", v1="心境试炼 1", k2="试炼贰", v2="心境试炼 2", k3="试炼叁", v3="心境试炼 3")
+        await illusion_choice.finish()
+    
+    # 检查是否已经参与过今日的幻境
+    if illusion_info["today_choice"] is not None:
+        msg = "今日已经参与过幻境寻心，请明日再来！"
         await handle_send(bot, event, msg)
-        await illusion_heart.finish()
+        await illusion_choice.finish()
     
     # 记录用户选择
     selected_option = options[choice_num - 1]  # 获取不带数字的选项文本
+    selected_explanation = explanations[choice_num - 1] if choice_num - 1 < len(explanations) else "暂无详细解释"
     illusion_info["today_choice"] = selected_option
     illusion_info["last_participate"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     IllusionData.save_user_illusion_info(user_id, illusion_info)
@@ -433,8 +141,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     IllusionData.update_question_stats(illusion_info["question_index"], choice_num - 1)
     
     # 获取当前问题的统计数据
-    question_data = IllusionData.get_questions()["questions"][illusion_info["question_index"]]
-    counts = question_data["counts"]
+    stats = IllusionData.get_stats()
+    question_stats = stats["question_stats"][illusion_info["question_index"]]
+    counts = question_stats
     total_choices = sum(counts)
     
     # 计算当前选择的排名
@@ -463,8 +172,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     msg = (
         f"\n═══  幻境寻心  ════\n"
-        f"今日问题：{question}\n"
+        f"今日问题：{question_data['question']}\n"
         f"你的选择：{selected_option}\n"
+        f"════════════\n"
+        f"【解析】\n{selected_explanation}\n"
         f"════════════\n"
         f"{reward_msg}\n"
         f"════════════\n"
@@ -472,7 +183,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     update_statistics_value(user_id, "寻心次数")
     await handle_send(bot, event, msg)
-    await illusion_heart.finish()
+    await illusion_choice.finish()
 
 @illusion_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

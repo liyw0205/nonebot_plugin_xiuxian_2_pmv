@@ -34,7 +34,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, TradeDataManager, get_weapon_info_msg, get_armor_info_msg,
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
 )
-from ..xiuxian_back import type_mapping, rank_map, get_item_type_by_id
+from ..xiuxian_back import type_mapping, rank_map, get_recover
 from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank
 from ..xiuxian_config import XiuConfig, convert_rank
 
@@ -268,7 +268,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         quantity = goods_num
     total_fee = get_fee_price(price * quantity)
     if user_info['stone'] < total_fee:
-        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
+        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{number_to(user_info['stone'])}灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     
@@ -393,9 +393,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         min_price = get_xianshi_min_price(item['name'])
         
         if min_price is None:
-            base_rank = convert_rank('江湖好手')[0]
-            item_rank = get_item_msg_rank(item['id'])
-            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+            price = int(get_recover(item['id'], 1) + 1000000)
         else:
             price = min_price
         
@@ -417,7 +415,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     total_fee = sum(item['fee'] for item in items_to_process)
     
     if user_info['stone'] < total_fee:
-        msg = f"灵石不足支付手续费！需要{total_fee}灵石，当前拥有{user_info['stone']}灵石"
+        msg = f"灵石不足支付手续费！需要{number_to(total_fee)}灵石，当前拥有{number_to(user_info['stone'])}灵石"
         sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
@@ -520,9 +518,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         
         # 如果没有最低价，则使用炼金价格+100万
         if min_price is None:
-            base_rank = convert_rank('江湖好手')[0]
-            item_rank = get_item_msg_rank(goods_id)
-            price = max(MIN_PRICE, (base_rank - 16) * 100000 - item_rank * 100000 + 1000000)
+            price = int(get_recover(goods_id, 1) + 1000000)
         else:
             price = min_price
     else:
@@ -534,7 +530,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     single_fee = get_fee_price(total_price)
     
     if user_info['stone'] < single_fee:
-        msg = f"灵石不足支付手续费！需要{single_fee}灵石，当前拥有{user_info['stone']}灵石"
+        msg = f"灵石不足支付手续费！需要{number_to(single_fee)}灵石，当前拥有{number_to(user_info['stone'])}灵石"
         sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
@@ -1058,7 +1054,7 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
         await xian_shop_added_by_admin.finish()
     
     # 检查物品类型是否允许上架
-    goods_type = get_item_type_by_id(goods_id)
+    goods_type = item_info['type']
     if goods_type not in ITEM_TYPES:
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
@@ -1168,7 +1164,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await guishi_deposit.finish()
     
     if user_info['stone'] < amount:
-        msg = f"灵石不足！当前拥有 {user_info['stone']} 灵石"
+        msg = f"灵石不足！当前拥有 {number_to(user_info['stone'])} 灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     

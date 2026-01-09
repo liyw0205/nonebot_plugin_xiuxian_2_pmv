@@ -175,7 +175,8 @@ xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
 compare_items = on_command("快速对比", priority=5, block=True)
 
 def get_recover(goods_id, num):
-    price = int((convert_rank('江湖好手')[0] + added_ranks) * 100000 - get_item_msg_rank(goods_id) * 100000) * num
+    price = int((convert_rank('江湖好手')[0] - added_ranks) - get_item_msg_rank(goods_id)) * 100000
+    price = min(max(price, MIN_PRICE), 5500000) * num
     return price
 
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -241,7 +242,7 @@ async def xiuxian_sone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_sone.finish()
     msg = f"当前灵石：{user_info['stone']}({number_to(user_info['stone'])})"
     await handle_send(bot, event, msg)
@@ -1135,7 +1136,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     group_id = "000000"
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await goods_re_root.finish()
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
@@ -1377,7 +1378,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await no_use_zb.finish()
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()
@@ -1428,7 +1429,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await use.finish()
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
@@ -1469,12 +1470,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     goods_type = goods_info['type']
     lh_msg = ""
     if goods_rank == -5:
-        goods_rank = added_ranks
+        goods_rank = 23
     else:
         goods_rank = int(goods_rank) + added_ranks
-        if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
-            goods_rank = goods_rank + 3
-            lh_msg = "\n轮回重修：境界限制下降！"
+    if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
+        goods_rank = goods_rank + 3
+        lh_msg = "\n轮回重修：境界限制下降！"
     required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
         
     if goods_type == "礼包":
@@ -1686,7 +1687,7 @@ async def use_lottery_talisman(bot, event, item_id, num):
     isUser, user_info, msg = check_user(event)
     user_id = user_info["user_id"]
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
         
     # 批量处理使用灵签宝箓
@@ -1839,7 +1840,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await main_back.finish()
     
     # 获取页码
@@ -1883,7 +1884,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await yaocai_back.finish()
     
     # 获取页码
@@ -1927,7 +1928,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await danyao_back.finish()
     
     # 获取页码
@@ -1971,7 +1972,7 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_equipment.finish()
     
     # 获取页码
@@ -2015,7 +2016,7 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await yaocai_detail_back.finish()
     
     # 获取页码

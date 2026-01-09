@@ -1124,7 +1124,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await sect_task_refresh.finish()
         else:
             msg = f"道友目前还没有宗门任务，请发送指令宗门任务接取来获取吧"
-            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
             await sect_task_refresh.finish()
 
     else:
@@ -1292,7 +1292,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             else:
                 task_type = "💰"
             msg = f"道友当前已接取了任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
-            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
+            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task.finish()
 
         create_user_sect_task(user_id)
@@ -1301,7 +1301,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         else:
             task_type = "💰"
         msg = f"{task_type} {userstask[user_id]['任务内容']['desc']}"
-        await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
+        await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
         await sect_task.finish()
     else:
         msg = f"道友尚未加入宗门，请加入宗门后再获取任务！"
@@ -1321,7 +1321,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     sect_id = user_info['sect_id']
     if sect_id:
         if not isUserTask(user_id):
-            msg = f"道友当前没有接取宗门任务，道友浪费了一次出门机会哦！"
+            msg = f"道友当前没有接取宗门任务哦！"
             await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
             await sect_task_complete.finish()
             

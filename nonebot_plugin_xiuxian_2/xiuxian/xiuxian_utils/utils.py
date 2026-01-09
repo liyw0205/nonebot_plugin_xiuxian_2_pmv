@@ -709,8 +709,8 @@ def optimize_md(msg: Union[Message, str]) -> str:
     if not msg_text:
         return ""
 
-    if msg.startswith('\n'):
-        msg = msg.lstrip('\n')
+    if msg_text.startswith('\n'):
+        msg_text = msg_text.lstrip('\n')
         if msg_text.startswith('\n'):
             msg_text = msg_text[1:]
 
@@ -720,6 +720,8 @@ def optimize_md(msg: Union[Message, str]) -> str:
     msg_text = msg_text.replace('\n', '\r')
     msg_text = msg_text.replace('[', '')
     msg_text = msg_text.replace(']', '')
+    msg_text = msg_text.replace('<', '')
+    msg_text = msg_text.replace('>', '')
     return msg_text
 
 async def send_msg_handler(bot, event, *args, title=None):
@@ -761,7 +763,7 @@ async def send_msg_handler(bot, event, *args, title=None):
             name, uin, msgs = args
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
-            if XiuConfig().markdown_status:
+            if XiuConfig().markdown_status and XiuConfig().markdown_id2:
                 await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2, title=title)
                 return
             if title:
@@ -773,7 +775,7 @@ async def send_msg_handler(bot, event, *args, title=None):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
-            if XiuConfig().markdown_status:
+            if XiuConfig().markdown_status and XiuConfig().markdown_id2:
                 await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id2, title=title)
                 return
             if title:
@@ -889,11 +891,11 @@ async def send_msg_handler(bot, event, *args, title=None):
         else:
             raise ValueError("参数数量或类型不匹配")
 
-async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None):
+async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None):
     """处理文本，根据配置发送文本或者图片消息"""
-    if XiuConfig().markdown_status:
+    if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().markdown_id3:
         if md_type:
-            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3)
+            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4)
             return
         await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title)
         return
@@ -932,20 +934,26 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
                 user_id=event.user_id, message=msg
             )
 
-async def handle_send_md(bot, event, msg: str, markdown_id=None, title=None):
+async def handle_send_md(bot, event, msg: str, markdown_id=None, title=None, title_param=None, msg_param=None):
     """发送md模板消息"""
+    if not markdown_id:
+        await handle_send(bot, event, msg)
     msg = optimize_md(msg)
+
     if not title:
         title = " "
-    param = [
-        markdown_param("t1", title),
-        markdown_param("t2", msg),
+    if not title_param:
+        title_param = markdown_param("t1", title)
+    if not msg_param:
+        msg_param = markdown_param("t2", msg)
+
+    param = [        
+        title_param,
+        msg_param,
     ]
     msg = MessageSegmentPlus.markdown_template(markdown_id, param)
     await bot.send(event=event, message=msg)
-    msg = MessageSegmentPlus.markdown_template_with_button(markdown_id, param, "102569432_1767169600")
-    await bot.send(event=event, message=msg)
-    
+
 def check_user_md_type(md_type, event):
     user_id = event.user_id
     md_type = int(md_type)
@@ -976,7 +984,7 @@ def check_user_md_type(md_type, event):
     
     return k1, v1
 
-async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3):
+async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4):
     """发送md模板消息"""
     if md_type in ["0", "1", "2", "3", "4", "5"]:
         k1, v1 = check_user_md_type(md_type, event)
@@ -998,6 +1006,19 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         markdown_param("button_text_3", v3),
         markdown_param("button_show_3", k3),
     ]
+    if k4:
+        param = [
+            markdown_param("t1", msg),
+            markdown_param("button_text_1", v1),
+            markdown_param("button_show_1", k1),
+            markdown_param("button_text_2", v2),
+            markdown_param("button_show_2", k2),
+            markdown_param("button_text_3", v3),
+            {"key": "button_show_3",
+            "values": [
+            f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"
+            ]}
+        ]
     msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id3, param)
     await bot.send(event=event, message=msg)
 

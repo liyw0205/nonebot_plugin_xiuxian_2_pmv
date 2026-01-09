@@ -35,7 +35,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value
+    Txt2Img, send_msg_handler, handle_send, handle_send_md, get_logs, log_message, get_statistics_data, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import BANNED_ITEM_IDS
@@ -167,17 +167,18 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await remaname.finish()
     user_id = user_info['user_id']
     
-    if user_info['stone'] < XiuConfig().remaname:
-        msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
-        await handle_send(bot, event, msg)
-        await remaname.finish()
     # 如果没有提供新道号，则生成随机道号
     user_name = args.extract_plain_text().strip()
     if not user_name:
+        if user_info['stone'] < XiuConfig().remaname:
+            msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
+            await handle_send(bot, event, msg)
+            await remaname.finish()
+
         # 生成不重复的道号
         while True:
             user_name = generate_daohao()
@@ -258,7 +259,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await sign_in.finish()
     user_id = user_info['user_id']
     
@@ -366,110 +367,94 @@ def save_lottery_data(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 @help_in.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    
-    # 解析页码参数
-    page_input = args.extract_plain_text().strip()
-    try:
-        page = int(page_input) if page_input else 1
-    except ValueError:
-        page = 1
-    
-    help_pages = [
-        # 第1页：核心功能
-        """✨【修仙指令】第1页/共4页✨
-═════════════
-🏮 核心功能
-├── 🌟 启程修仙: 发送"我要修仙"
-├── 📊 状态查询: 发送"我的修仙信息"
-├── 📅 每日签到: 发送"修仙签到"
-├── 🚀 突破境界: 发送"突破"
-│   └── 支持"连续突破"五次
-├── 💰 灵石交互: 送/偷/抢灵石+道号+数量
-├── ✏️ 修改道号: 发送"修仙改名+道号"
-├── 🎁 加入官群: 发送"官群"
-├── 😋 邀请奖励: 发送"邀请帮助"
-└── 💭 更新日志: 发送"更新日志"，查看游戏最新内容
 
-🏆 排行榜单
-├── 修仙排行榜
-├── 灵石排行榜
-├── 战力排行榜
-├── 宗门排行榜
-└── 轮回排行榜
-═════════════
-发送"修仙帮助 2"查看下一页""",
+    msg = f"""【修仙帮助】
+    
+🌟 核心功能
+- 启程修仙: 发送"我要修仙"
+- 存档查询: 发送"我的修仙信息"
+- 每日签到: 发送"修仙签到"
+- 突破境界: 发送"突破"
+  - 支持"连续突破"五次
+- 灵石交互: 送/偷/抢灵石+道号+数量
+- 修改道号: 发送"修仙改名+道号"
+- 加入官群: 发送"官群"
+- 邀请奖励: 发送"邀请帮助"
+- 更新日志: 发送"更新日志"，查看游戏最新内容
 
-        # 第2页：角色养成
-        f"""✨【修仙指令】第2页/共4页✨
-═════════════
+📊 排行榜单
+- 修仙排行榜
+- 灵石排行榜
+- 战力排行榜
+- 宗门排行榜
+- 轮回排行榜
+
 🌈 角色养成
-├── 🧘 修炼方式: 闭关/出关/灵石出关/灵石修炼/双修
-├── 💎 灵根重置: 发送"重入仙途"（需{number_to(XiuConfig().remake)}灵石）
-├── 📚 功法体系: 发送"境界/品阶/灵根帮助"
-├── 🌀 轮回重修: 发送"轮回重修帮助"
-├── ⚡ 渡劫系统: 发送"渡劫"查看渡劫信息
-├── ✨ 天命渡劫: 使用"天命渡劫丹"必定成功
-└── ❤️ 心魔挑战: 发送"渡心魔劫"提升成功率
+- 修炼方式: 闭关/出关/灵石出关/灵石修炼/双修
+- 灵根重置: 发送"重入仙途"（需{number_to(XiuConfig().remake)}灵石）
+- 功法体系: 发送"境界/品阶/灵根帮助"
+- 轮回重修: 发送"轮回重修帮助"
+- 渡劫系统: 发送"渡劫"查看渡劫信息
+- 天命渡劫: 使用"天命渡劫丹"必定成功
+- 心魔挑战: 发送"渡心魔劫"提升成功率
 
 🔧 系统功能
-├── 交易功能: 发送"交易帮助"
-├── 宗门体系: 发送"宗门帮助"
-├── 灵庄系统: 发送"灵庄帮助"
-└── 秘境探索: 发送"秘境帮助"
-═════════════
-发送"修仙帮助 3"查看下一页""",
+- 交易功能: 发送"交易帮助"
+- 宗门体系: 发送"宗门帮助"
+- 灵庄系统: 发送"灵庄帮助"
+- 秘境探索: 发送"秘境帮助"
 
-        # 第3页：生活技能
-        """✨【修仙指令】第3页/共4页✨
-═════════════
 🧪 生活技能
-├── 🧪 炼丹指南: 发送"炼丹帮助"
-├── 🌾 灵田管理: 发送"灵田帮助"
-├── 🔨 物品合成: 发送"合成帮助"
-└── 🙏 批量祈愿: 发送"传承祈愿 1000"
+- 炼丹指南: 发送"炼丹帮助"
+- 灵田管理: 发送"灵田帮助"
+- 物品合成: 发送"合成帮助"
+- 批量祈愿: 发送"传承祈愿 1000"
 
 🎯 任务系统
-├── 📜 悬赏任务: 发送"悬赏令帮助"
-├── 🏯 无限爬塔: 发送"通天塔帮助"
-├── 🌀 明我心志: 发送"幻境寻心"
-└── 🌈 仙缘奇遇: 发送"仙途奇缘帮助"
-═════════════
-发送"修仙帮助 4"查看下一页""",
+- 悬赏任务: 发送"悬赏令帮助"
+- 无限爬塔: 发送"通天塔帮助"
+- 明我心志: 发送"幻境寻心"
+- 仙缘奇遇: 发送"仙途奇缘帮助"
 
-        # 第4页：社交与特色
-        """✨【修仙指令】第4页/共4页✨
-═════════════
 🤝 社交互动
-├── 💝 赠送仙缘: 发送"送仙缘"
-├── 🎯 抢夺仙缘: 发送"抢仙缘"
-├── 📋 查看仙缘: 发送"仙缘列表"
-└── ❓ 仙缘帮助: 发送"仙缘帮助"
+- 赠送仙缘: 发送"送仙缘"
+- 抢夺仙缘: 发送"抢仙缘"
+- 查看仙缘: 发送"仙缘列表"
+- 仙缘帮助: 发送"仙缘帮助"
 
 🐉 世界挑战
-├── 👾 世界BOSS: 发送"世界boss帮助"
-├── 🏯 通天塔: 发送"通天塔帮助"
-└── 🌍 虚神界: 发送"虚神界帮助"
+- 世界BOSS: 发送"世界boss帮助"
+- 通天塔: 发送"通天塔帮助"
+- 虚神界: 发送"虚神界帮助"
 
 💡 小贴士
-├── 每次签到自动参与"借运"抽奖
-├── 每日有灵石赠送和接收额度限制
-└── 使用'修仙帮助 页码'查看详细内容
-═════════════"""
-    ]
+- 每次签到自动参与"鸿运"抽奖
+- 每日有灵石赠送和接收额度限制
+"""
     
-    # 确保页码在有效范围内
-    total_pages = len(help_pages)
-    if page < 1:
-        page = 1
-    elif page > total_pages:
-        page = total_pages
-    
-    msg = help_pages[page - 1]
-    await handle_send(bot, event, msg)
-    await help_in.finish()
+    if XiuConfig().markdown_status:
+        title_param = {
+        "key": "t1",
+        "values": [
+                "🌟 启程修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)\r📊 存档查询\r> [",
+                "我的修仙信息](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r\r📅 每日签到\r> [",
+                "修仙签到](mqqapi://aio/inlinecmd?command=修仙签到&enter=false&reply=false)\r\r✏️ 修改道号\r> [",
+                "修仙改名+道号](mqqapi://aio/inlinecmd?command=修仙改名&enter=false&reply=false)\r\r📚 功法体系\r> [",
+                "境界](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false)/[",
+                "灵根](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false)/[",
+                "品阶](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)\r\r🧘 修炼方式\r> [",
+                "修炼](mqqapi://aio/inlinecmd?command=修炼&enter=false&reply=false)/[",
+                "闭关](mqqapi://aio/inlinecmd?command=闭关&enter=false&reply=false)\r\r---\r\r",
+                "[***必死之境机逢仙缘，修仙之路波澜壮阔！***"
+            ]}
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2, title_param=title_param)
+        await help_in.finish()
+    else:    
+        await handle_send(bot, event, msg)
+        await help_in.finish()
 
 @level_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -502,7 +487,7 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await restart.finish()
 
     if user_info['stone'] < XiuConfig().remake:
@@ -685,7 +670,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await tribulation_info.finish()
     
     user_id = user_info['user_id']
@@ -756,7 +741,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await fusion_destiny_pill.finish()
     
     user_id = user_info['user_id']
@@ -818,7 +803,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await fusion_destiny_tribulation_pill.finish()
     
     user_id = user_info['user_id']
@@ -879,7 +864,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await start_tribulation.finish()
     
     user_id = user_info['user_id']
@@ -997,7 +982,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await destiny_tribulation.finish()
     
     user_id = user_info['user_id']
@@ -1096,7 +1081,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await heart_devil_tribulation.finish()
     
     user_id = user_info['user_id']
@@ -1322,7 +1307,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -1383,7 +1368,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_zj.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -1463,7 +1448,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_lx.finish()
     
     user_id = user_info['user_id']
@@ -1556,7 +1541,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_drjd.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -1665,7 +1650,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_dr.finish()
     user_id = user_info['user_id']
     if user_info['hp'] is None:
@@ -1769,7 +1754,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_dr_lx.finish()
     
     user_id = user_info['user_id']
@@ -1886,7 +1871,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_drjd_lx.finish()
     
     user_id = user_info['user_id']
@@ -2011,7 +1996,7 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await user_leveluprate.finish()
     user_id = user_info['user_id']
     user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
@@ -2031,7 +2016,7 @@ async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await user_stamina.finish()
     msg = f"当前体力：{user_info['user_stamina']}"
     await handle_send(bot, event, msg)
@@ -2044,7 +2029,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await give_stone.finish()
         
     user_id = user_info['user_id']
@@ -2176,7 +2161,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await steal_stone.finish()
     
     user_id = user_info['user_id']
@@ -2272,7 +2257,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await rob_stone.finish()
     
     user_id = user_info["user_id"]
