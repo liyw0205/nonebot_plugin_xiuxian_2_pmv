@@ -864,8 +864,8 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     """
     使用自定义Markdown模板发送消息，并支持按钮
     """
-    args_str = args.extract_plain_text().strip()
-    args_str = args_str.replace("\\r", "\r")
+    args_str = re.sub(r'mqqapi:/', 'mqqapi://', args.extract_plain_text())
+    args_str = args_str.replace("\\r", "\r").replace('\\"', '"')
     if not args_str:
         await bot.send(event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
         return
@@ -886,15 +886,17 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
 
-    params: List[Dict[str, List[str]]] = []
+    params: List[Dict[str, Any]] = []
 
     for arg in arg_parts:
         if '=' not in arg:
             continue
-        
-        key, value = arg.split('=', 1)
+    
+        key, raw_value = arg.split('=', 1)
         key = key.strip()
 
+        # 处理值中的特殊字符
+        value = raw_value.replace("\\'", "'").replace('\\"', '"')  # 处理单引号和双引号
         if value.startswith('\r'):
             value = value.strip()
             value = '\r' + value
@@ -903,22 +905,20 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         value = value.replace('\n', '\r')
 
         if value.startswith('[') and value.endswith(']'):
-            # 去除外层的方括号
-            inner_value = value[1:-1].strip()
-            # 分割内部的各个元素，假设元素之间用逗号分隔，并且可能包含空格
-            elements = [v.strip().strip('"\'') for v in inner_value.split(',') if v.strip()]
-            params.append({"key": key, "values": elements})
+            # 处理列表值
+            inner_values = [v.strip().strip('\'"') for v in value[1:-1].split(',')]
+            params.append({"key": key, "values": inner_values})
         else:
-            # 对于普通值，确保值作为一个列表中的单个元素
+            # 处理普通值
             if not value:
                 value = " "
-            params.append(markdown_param(key, value))
+            params.append({"key": key, "values": [value]})
 
     if button_id:
         msg = MessageSegmentPlus.markdown_template_with_button(template_id, params, button_id)
     else:
         msg = MessageSegmentPlus.markdown_template(template_id, params)
-
+    print(f"传入：\n{args_str}\n\n解析：\n{params}")
     await bot.send(event, f"传入：\n{args_str}\n\n解析：\n{params}")
     # 发送消息
     await bot.send(event, msg)
