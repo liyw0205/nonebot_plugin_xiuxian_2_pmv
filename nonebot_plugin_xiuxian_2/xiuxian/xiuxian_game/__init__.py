@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+from .. import NICKNAME
 from nonebot import on_command
 from nonebot.params import CommandArg
 from nonebot.adapters.onebot.v11 import (
@@ -22,6 +23,7 @@ sql_message = XiuxianDateManage()
 # 五子棋
 gomoku_help = on_command("五子棋帮助", priority=10, block=True)
 gomoku_start = on_command("开始五子棋", priority=10, block=True)
+gomoku_single = on_command("开始单人五子棋", priority=10, block=True)
 gomoku_join = on_command("加入五子棋", priority=10, block=True)
 gomoku_move = on_command("落子", priority=10, block=True)
 gomoku_surrender = on_command("认输", priority=10, block=True)
@@ -93,6 +95,71 @@ async def gomoku_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 启动房间超时任务
     await start_room_timeout(bot, event, room_id)
 
+# 单人五子棋
+@gomoku_single.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def gomoku_single_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """开始单人五子棋游戏（与AI对战）"""
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    
+    user_id = user_info['user_id']
+    arg = args.extract_plain_text().strip()
+    
+    # 检查用户是否已经在其他房间
+    existing_room = room_manager.get_user_room(user_id)
+    if existing_room:
+        msg = f"您已经在房间 {existing_room} 中，请先退出当前房间再创建新房间！"
+        await handle_send(bot, event, msg, md_type="游戏", k1="退出", v1=f"退出五子棋", k2="落子", v2="落子", k3="帮助", v3="五子棋帮助")
+        return
+    
+    # 如果没有指定房间号，自动生成随机房间号，并标识为单人模式
+    if not arg:
+        room_id = f"single_{generate_random_room_id()}"  # 添加前缀以区分单人模式
+        # 确保房间号不重复
+        while room_manager.get_room(room_id):
+            room_id = f"single_{generate_random_room_id()}"
+    else:
+        room_id = arg
+        if not room_id.startswith("single_"):
+            room_id = f"single_{room_id}"  # 强制标识为单人模式
+
+    # 创建房间，设置AI为白棋
+    game = room_manager.create_room(room_id, user_id)
+    if game is None:
+        if room_manager.get_user_room(user_id):
+            msg = "您已经在其他房间中，无法创建新房间！"
+        else:
+            msg = f"房间 {room_id} 已存在！请换一个房间号。"
+        await handle_send(bot, event, msg, md_type="游戏", k1="创建", v1="开始单人五子棋", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+        return
+    
+    # 设置为单人模式
+    game.status = "playing"  # 直接开始
+    game.current_player = user_id  # 玩家先手
+    game.player_black = user_id  # 玩家为黑棋
+    game.player_white = f"{NICKNAME}"  # AI为白棋
+    game.last_move_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 记录用户房间状态
+    user_room_status[user_id] = room_id
+    
+    # 创建初始棋盘图片
+    board_image = create_board_image(game)
+    
+    msg = (
+        f"单人五子棋房间 {room_id} 创建成功！\n"
+        f"玩家（黑棋）：{user_info['user_name']}\n"
+        f"对手：{NICKNAME}（白棋）\n"
+        f"游戏开始！玩家先行。\n"
+        f"使用命令：落子 A1 来下棋\n"
+        f"{NICKNAME}将根据策略进行应对。"
+    )
+    
+    await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+    await bot.send(event, MessageSegment.image(board_image))
+
 # 加入五子棋命令
 @gomoku_join.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -162,7 +229,7 @@ async def gomoku_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 # 落子命令
 @gomoku_move.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """落子操作"""
+    """落子操作，支持单人模式"""
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -173,7 +240,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     if not arg:
         msg = "请指定落子位置！例如：落子 A1 或 落子 B15"
-        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
         return
     
     # 查找用户所在的房间
@@ -191,67 +258,202 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="游戏", k1="加入", v1="加入五子棋", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
         return
     
-    if game.current_player != user_id:
-        msg = "现在不是您的回合！请等待对方落子。"
-        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
-        return
+    # 判断是否为单人模式
+    is_single_mode = game.player_white == f"{NICKNAME}"
+    current_player_is_user = (user_id == game.current_player)
     
-    # 解析坐标
-    position = coordinate_to_position(arg)
-    if position is None:
-        msg = f"坐标 {arg} 无效！请使用类似 A1、B15 的格式。"
-        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
-        return
-    
-    x, y = position
-    
-    # 检查位置是否可用
-    if game.board[y][x] != 0:
-        msg = f"位置 {arg} 已经有棋子了！请选择其他位置。"
-        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
-        return
-    
-    # 落子
-    player_stone = 1 if user_id == game.player_black else 2
-    game.board[y][x] = player_stone
-    game.moves.append((x, y))
-    game.last_move_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # 检查是否获胜
-    if check_win(game.board, x, y, player_stone):
-        game.status = "finished"
-        game.winner = user_id
-        game.current_player = None
-        
-        # 取消落子超时任务
-        if user_room in move_timeout_tasks:
-            move_timeout_tasks[user_room].cancel()
-            del move_timeout_tasks[user_room]
-        
-        winner_info = sql_message.get_user_info_with_id(user_id)
-        msg = f"🎉 恭喜 {winner_info['user_name']} 获胜！五子连珠！"
-        
+    if is_single_mode:
+        if current_player_is_user:
+            # 玩家的回合
+            # 解析坐标
+            position = coordinate_to_position(arg)
+            if position is None:
+                msg = f"坐标 {arg} 无效！请使用类似 A1、B15 的格式。"
+                await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+                return
+            
+            x, y = position
+            
+            # 检查位置是否可用
+            if game.board[y][x] != 0:
+                msg = f"位置 {arg} 已经有棋子了！请选择其他位置。"
+                await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+                return
+            
+            # 落子
+            player_stone = 1  # 玩家为黑棋
+            game.board[y][x] = player_stone
+            game.moves.append((x, y))
+            game.last_move_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # 检查是否获胜
+            if check_win(game.board, x, y, player_stone):
+                game.status = "finished"
+                game.winner = user_id
+                game.current_player = None
+                
+                winner_info = user_info
+                msg = f"🎉 恭喜 {winner_info['user_name']} 获胜！五子连珠！"
+                
+                # 保存最终棋盘
+                board_image = create_board_image(game)
+                await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                await bot.send(event, MessageSegment.image(board_image))
+                
+                # 清理房间
+                room_manager.delete_room(user_room)
+                return
+            else:
+                # 切换回合
+                game.current_player = game.player_white  # AI的回合
+                
+                # 保存游戏状态
+                room_manager.save_room(user_room)
+                
+                # 更新棋盘图片
+                board_image = create_board_image(game)
+                
+                msg = f"玩家落子在 {position_to_coordinate(x, y)}，轮到 {NICKNAME}的回合。"
+                await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                await bot.send(event, MessageSegment.image(board_image))
+                
+                # 调用AI函数进行AI落子
+                await asyncio.sleep(1)  # 延迟以模拟思考
+                ai_move = find_best_move(game, 2)  # AI为白棋，player=2
+                if ai_move:
+                    x_ai, y_ai= ai_move
+                    if game.board[y_ai][x_ai] == 0:
+                        game.board[y_ai][x_ai] = 2
+                        game.moves.append((x_ai, y_ai))
+                        game.last_move_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        current_player_info = f"{NICKNAME}"
+                        
+                        # 检查是否获胜
+                        if check_win(game.board, x_ai, y_ai, 2):
+                            game.status = "finished"
+                            game.winner = game.player_white
+                            game.current_player = None
+                            
+                            winner_info = {"user_name": f"{NICKNAME}"}
+                            msg = f"🎉 {NICKNAME}获胜！五子连珠！"
+                            
+                            # 保存最终棋盘
+                            board_image = create_board_image(game)
+                            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                            await bot.send(event, MessageSegment.image(board_image))
+                            
+                            # 清理房间
+                            room_manager.delete_room(user_room)
+                            return
+                        else:
+                            # 切换回合
+                            game.current_player = game.player_black  # 玩家的回合
+                            next_player_info = user_info
+                            msg = f"{NICKNAME} 落子在 {position_to_coordinate(x_ai, y_ai)}，轮到 {next_player_info['user_name']} 的回合。"
+                            
+                            # 保存游戏状态
+                            room_manager.save_room(user_room)
+                            
+                            # 更新棋盘图片
+                            board_image = create_board_image(game)
+                            
+                            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                            await bot.send(event, MessageSegment.image(board_image))
+                    else:
+                        # AI无法落子，跳过（理论上不会发生）
+                        game.current_player = game.player_black  # 玩家的回合
+                        next_player_info = user_info
+                        msg = f"{NICKNAME}无法落子，轮到 {next_player_info['user_name']} 的回合。"
+                        
+                        # 保存游戏状态
+                        room_manager.save_room(user_room)
+                        
+                        # 更新棋盘图片
+                        board_image = create_board_image(game)
+                        
+                        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                        await bot.send(event, MessageSegment.image(board_image))
+                else:
+                    # AI无法找到落子位置，结束游戏
+                    game.status = "finished"
+                    game.winner = game.player_black
+                    game.current_player = None
+                    winner_info = user_info
+                    msg = f"{NICKNAME}无法落子，恭喜 {winner_info['user_name']} 获胜！"
+                    
+                    # 保存最终棋盘
+                    board_image = create_board_image(game)
+                    await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+                    await bot.send(event, MessageSegment.image(board_image))
+                    
+                    # 清理房间
+                    room_manager.delete_room(user_room)
+                    return
+        else:
+            # AI的回合已经在玩家落子后处理，这里不需要额外处理
+            msg = "现在不是您的回合！请等待AI落子。"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+            return
     else:
-        # 切换回合
-        game.current_player = game.player_white if user_id == game.player_black else game.player_black
-        next_player_info = sql_message.get_user_info_with_id(game.current_player)
-        msg = f"落子成功！轮到 {next_player_info['user_name']} 的回合。"
+        # 双人模式
+        if game.current_player != user_id:
+            msg = "现在不是您的回合！请等待对方落子。"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+            return
         
-        # 重启落子超时任务
-        await start_move_timeout(bot, event, user_room)
-    
-    # 保存游戏状态
-    room_manager.save_room(user_room)
-    
-    # 更新棋盘图片
-    board_image = create_board_image(game)
-    
-    await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-    await bot.send(event, MessageSegment.image(board_image))
-    
-    # 如果游戏结束，清理房间
-    if game.status == "finished":
-        room_manager.delete_room(user_room)
+        # 解析坐标
+        position = coordinate_to_position(arg)
+        if position is None:
+            msg = f"坐标 {arg} 无效！请使用类似 A1、B15 的格式。"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+            return
+        
+        x, y = position
+        
+        # 检查位置是否可用
+        if game.board[y][x] != 0:
+            msg = f"位置 {arg} 已经有棋子了！请选择其他位置。"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+            return
+        
+        # 落子
+        player_stone = 1 if user_id == game.player_black else 2
+        game.board[y][x] = player_stone
+        game.moves.append((x, y))
+        game.last_move_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 检查是否获胜
+        if check_win(game.board, x, y, player_stone):
+            game.status = "finished"
+            game.winner = user_id
+            game.current_player = None
+            
+            winner_info = user_info
+            msg = f"🎉 恭喜 {winner_info['user_name']} 获胜！五子连珠！"
+            
+        else:
+            # 切换回合
+            game.current_player = game.player_white if user_id == game.player_black else game.player_black
+            next_player_info = sql_message.get_user_info_with_id(game.current_player)
+            msg = f"落子成功！轮到 {next_player_info['user_name']} 的回合。"
+        
+        # 保存游戏状态
+        room_manager.save_room(user_room)
+        
+        # 更新棋盘图片
+        board_image = create_board_image(game)
+        
+        if game.status == "finished":
+            winner_info = sql_message.get_user_info_with_id(game.winner) if game.winner else {"user_name": "Unknown"}
+            winner_name = winner_info['user_name'] if winner_info else "Unknown"
+            msg += f"🎉 恭喜 {winner_name} 获胜！"
+        
+        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
+        await bot.send(event, MessageSegment.image(board_image))
+        
+        # 如果游戏结束，清理房间
+        if game.status == "finished":
+            room_manager.delete_room(user_room)
 
 # 认输命令
 @gomoku_surrender.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -284,24 +486,65 @@ async def gomoku_surrender_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         move_timeout_tasks[user_room].cancel()
         del move_timeout_tasks[user_room]
     
-    # 确定获胜者
-    winner_id = game.player_white if user_id == game.player_black else game.player_black
-    winner_info = sql_message.get_user_info_with_id(winner_id)
+    # 判断是否为单人模式
+    is_single_mode = game.player_white == f"{NICKNAME}"
     
-    game.status = "finished"
-    game.winner = winner_id
-    game.current_player = None
+    if is_single_mode:
+        # 单人模式：玩家对AI
+        if user_id == game.player_black:  # 确保是玩家在认输
+            winner_id = game.player_white  # AI获胜
+            winner_info = {"user_name": f"{NICKNAME}"}
+            loser_info = user_info
+            msg = f"😢 {loser_info['user_name']} 认输！{NICKNAME}获胜！"
+            
+            # 保存最终棋盘
+            board_image = create_board_image(game)
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+            await bot.send(event, MessageSegment.image(board_image))
+            
+            # 清理房间
+            room_manager.delete_room(user_room)
+        else:
+            msg = "只有玩家可以认输，AI不会认输！"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+    else:
+        # 双人模式
+        if user_id == game.current_player:
+            # 当前玩家的回合认输
+            winner_id = game.player_white if user_id == game.player_black else game.player_black
+            winner_info = sql_message.get_user_info_with_id(winner_id)
+            loser_info = user_info
+            msg = f"😢 {loser_info['user_name']} 认输！恭喜 {winner_info['user_name']} 获胜！"
+        else:
+            # 非当前玩家的回合认输
+            winner_id = user_id
+            # 这种情况下，认输逻辑可能有问题，应该只能当前玩家认输
+            # 更合理的处理是：只有当前玩家可以认输
+            msg = "只有当前回合的玩家可以认输！"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+            return
+        
+        # 检查认输者是否是当前玩家（更严格的逻辑）
+        if user_id != game.current_player:
+            msg = "只有当前回合的玩家可以认输！"
+            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+            return
+        
+        # 正确的双人模式认输逻辑
+        winner_id = game.player_white if user_id == game.player_black else game.player_black
+        winner_info = sql_message.get_user_info_with_id(winner_id)
+        loser_info = user_info
+        msg = f"😢 {loser_info['user_name']} 认输！恭喜 {winner_info['user_name']} 获胜！"
+        
+        # 保存最终棋盘
+        board_image = create_board_image(game)
+        await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
+        await bot.send(event, MessageSegment.image(board_image))
+        
+        # 清理房间
+        room_manager.delete_room(user_room)
     
-    msg = f"{user_info['user_name']} 认输！恭喜 {winner_info['user_name']} 获胜！"
-    
-    # 保存最终棋盘
-    board_image = create_board_image(game)
-    
-    await handle_send(bot, event, msg, md_type="游戏", k1="开始", v1="开始五子棋", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-    await bot.send(event, MessageSegment.image(board_image))
-    
-    # 清理房间
-    room_manager.delete_room(user_room)
+    return
 
 # 棋局信息命令
 @gomoku_info.handle(parameterless=[Cooldown(cd_time=1.4)])

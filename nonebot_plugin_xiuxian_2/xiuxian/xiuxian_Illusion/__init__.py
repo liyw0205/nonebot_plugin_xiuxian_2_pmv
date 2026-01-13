@@ -155,21 +155,44 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 计算当前选择的占比
     percentage = choice_count / total_choices * 100 if total_choices > 0 else 100
     
-    # 根据占比给予奖励
-    reward_msg = ""
+    base_weight = 25
+
+    # 根据选择占比确定权重调整
     if percentage < 30:  # 少数派
+        exp_weight = base_weight
+        stone_weight = base_weight
+        item_weight = base_weight + 25
+    elif 30 <= percentage <= 70:  # 平均派
+        exp_weight = base_weight
+        stone_weight = base_weight
+        item_weight = base_weight
+    else:  # 多数派
+        exp_weight = base_weight
+        stone_weight = base_weight + 25
+        item_weight = base_weight
+
+    # 权重列表和对应的奖励类型
+    weights = [exp_weight, stone_weight, item_weight]
+    reward_types = ['exp', 'stone', 'item']
+
+    # 根据权重随机选择奖励类型
+    selected_reward_type = random.choices(reward_types, weights=weights, k=1)[0]
+
+    # 根据选择的奖励类型给予相应奖励
+    reward_msg = ""
+    if selected_reward_type == 'exp':  # 修为奖励
         user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
         exp_reward = int(user_info["exp"] * 0.01 * min(0.1 * user_rank, 1))
         sql_message.update_exp(user_id, exp_reward)
-        reward_msg = f"你的选择是第{user_rank}受欢迎的(第{choice_count}位道友)，获得修为：{number_to(exp_reward)}点"
-    elif 30 <= percentage <= 70:  # 中数派
-        item_msg = _give_random_item(user_id, user_info["level"])
-        reward_msg = f"你的选择是第{user_rank}受欢迎的(第{choice_count}位道友)，获得：{item_msg}"
-    else:  # 多数派
-        stone_reward = random.randint(1000000, 10000000)
+        reward_msg = f"你的选择是少数派的选择(第{choice_count}位道友)，获得修为：{number_to(exp_reward)}点"
+    elif selected_reward_type == 'stone':  # 灵石奖励
+        stone_reward = int(random.randint(1000000, 10000000) * (1 + min(choice_count * 0.1, 2.0)))
         sql_message.update_ls(user_id, stone_reward, 1)
-        reward_msg = f"你的选择是第{user_rank}受欢迎的(第{choice_count}位道友)，获得灵石：{number_to(stone_reward)}枚"
-    
+        reward_msg = f"你的选择是多数派的选择(第{choice_count}位道友)，获得灵石：{number_to(stone_reward)}枚"
+    elif selected_reward_type == 'item':  # 物品奖励
+        item_msg = _give_random_item(user_id, user_info["level"])
+        reward_msg = f"你的选择是平均派的选择(第{choice_count}位道友)，获得：{item_msg}"
+
     msg = (
         f"\n═══  幻境寻心  ════\n"
         f"今日问题：{question_data['question']}\n"

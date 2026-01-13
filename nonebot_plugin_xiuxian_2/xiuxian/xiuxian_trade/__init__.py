@@ -654,11 +654,14 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             msg += f" 限售:{item['quantity']}"
         
         msg_list.append(msg)
-    
-    msg_list.append(f"\n第 {current_page}/{total_pages} 页")
-    await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title)
+    pages = f"\n第 {current_page}/{total_pages} 页"
+    msg_list.append(pages)
+
     if total_pages > 1:
-        await handle_send(bot, event, " ", md_type="交易", k1="翻页", v1=f"{next_page_cmd}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+        page = ["翻页", f"仙肆查看{item_type} {current_page + 1}", "我的", "我的仙肆", "购买", "仙肆购买", f"{current_page}/{total_pages}"]
+        await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title, page=page)
+    else:
+        await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title)
     await xiuxian_shop_view.finish()
 
 @my_xian_shop.handle(parameterless=[Cooldown(cd_time=1.4)])

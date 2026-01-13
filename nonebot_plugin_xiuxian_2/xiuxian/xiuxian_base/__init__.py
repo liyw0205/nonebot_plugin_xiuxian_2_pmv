@@ -35,7 +35,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     CommandObjectID,
-    Txt2Img, send_msg_handler, handle_send, handle_send_md, get_logs, log_message, get_statistics_data, update_statistics_value
+    Txt2Img, send_msg_handler, handle_send, handle_send_md, generate_command, get_logs, log_message, get_statistics_data, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import BANNED_ITEM_IDS
@@ -439,18 +439,18 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         title_param = {
         "key": "t1",
         "values": [
-                "🌟 启程修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)\r📊 存档查询\r> [",
-                "我的修仙信息](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r\r📅 每日签到\r> [",
-                "修仙签到](mqqapi://aio/inlinecmd?command=修仙签到&enter=false&reply=false)\r\r✏️ 修改道号\r> [",
-                "修仙改名+道号](mqqapi://aio/inlinecmd?command=修仙改名&enter=false&reply=false)\r\r📚 功法体系\r> [",
-                "境界](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false)/[",
-                "灵根](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false)/[",
-                "品阶](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)\r\r🧘 修炼方式\r> [",
-                "修炼](mqqapi://aio/inlinecmd?command=修炼&enter=false&reply=false)/[",
-                "闭关](mqqapi://aio/inlinecmd?command=闭关&enter=false&reply=false)\r\r---\r\r",
-                "[***必死之境机逢仙缘，修仙之路波澜壮阔！***"
+                generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r> "),
+                generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r> "),
+                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r> "),
+                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r> "),
+                generate_command("境界", command="境界帮助", status="start", msg2="/"),
+                generate_command("灵根", command="灵根帮助", status="start", msg2="/"),
+                generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r> "),
+                generate_command("修炼", command="修炼", status="start", msg2="/"),
+                generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
+                generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
             ]}
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id2, title_param=title_param)
+        await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, title_param=title_param)
         await help_in.finish()
     else:    
         await handle_send(bot, event, msg)

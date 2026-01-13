@@ -315,10 +315,10 @@ def get_treasure_info(user_info, rift_rank):
     
     elif rift_type == "灵石":
         stone_base = STORY['宝物']['灵石']['stone']
-        user_rank = random.randint(1, 10)  # 随机等级
+        user_rank = random.randint(1, 3)  # 随机等级
         give_stone = (rift_rank + user_rank) * stone_base
         sql_message.update_ls(user_info['user_id'], give_stone, 1)
-        temp_msg = f"灵石：{give_stone}枚！"
+        temp_msg = f"灵石：{number_to(give_stone)}枚！"
         msg = random.choice(TREASUREMSG_4).format(temp_msg)
 
     return item_name, msg

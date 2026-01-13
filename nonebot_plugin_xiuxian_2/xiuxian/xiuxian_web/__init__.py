@@ -1850,13 +1850,7 @@ CONFIG_EDITABLE_FIELDS = {
     },
     "markdown_id2": {
         "name": "模板ID2",
-        "description": "用于发送markdown代码块",
-        "type": "str",
-        "category": "消息设置"
-    },
-    "markdown_id3": {
-        "name": "模板ID3",
-        "description": "用于发送markdown文本和蓝字",
+        "description": "用于发送markdown蓝字",
         "type": "str",
         "category": "消息设置"
     },

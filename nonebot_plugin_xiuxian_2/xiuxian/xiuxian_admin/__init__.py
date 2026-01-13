@@ -34,10 +34,10 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user, number_to, get_msg_pic, handle_send
+    check_user, number_to, get_msg_pic, handle_send, generate_command
 )
 from ..xiuxian_utils.item_json import Items
-
+from ..xiuxian_utils.markdown_segment import MessageSegmentPlus, markdown_param
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -857,3 +857,68 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(bot, event, help_msg)
     await super_help.finish()
+
+mb_template_test = on_command("md模板", permission=SUPERUSER, priority=5, block=True)
+@mb_template_test.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    使用自定义Markdown模板发送消息，并支持按钮
+    """
+    args_str = args.extract_plain_text().strip()
+    args_str = args_str.replace("\\r", "\r")
+    if not args_str:
+        await bot.send(event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
+        return
+
+    id_match = re.search(r'mid=([^\s]+)', args_str)
+    template_id = id_match.group(1) if id_match else None
+    button_id_match = re.search(r'bid=([^\s]+)', args_str)
+    button_id = button_id_match.group(1) if button_id_match else None
+
+    if id_match:
+        args_str = args_str.replace(id_match.group(0), '').strip()
+    if button_id_match:
+        args_str = args_str.replace(button_id_match.group(0), '').strip()
+
+    if not template_id:
+        await bot.send(event, "请提供模板ID (id=模板ID)")
+        return
+
+    arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
+
+    params: List[Dict[str, List[str]]] = []
+
+    for arg in arg_parts:
+        if '=' not in arg:
+            continue
+        
+        key, value = arg.split('=', 1)
+        key = key.strip()
+
+        if value.startswith('\r'):
+            value = value.strip()
+            value = '\r' + value
+        else:
+            value = value.strip()
+        value = value.replace('\n', '\r')
+
+        if value.startswith('[') and value.endswith(']'):
+            # 去除外层的方括号
+            inner_value = value[1:-1].strip()
+            # 分割内部的各个元素，假设元素之间用逗号分隔，并且可能包含空格
+            elements = [v.strip().strip('"\'') for v in inner_value.split(',') if v.strip()]
+            params.append({"key": key, "values": elements})
+        else:
+            # 对于普通值，确保值作为一个列表中的单个元素
+            if not value:
+                value = " "
+            params.append(markdown_param(key, value))
+
+    if button_id:
+        msg = MessageSegmentPlus.markdown_template_with_button(template_id, params, button_id)
+    else:
+        msg = MessageSegmentPlus.markdown_template(template_id, params)
+
+    await bot.send(event, f"传入：\n{args_str}\n\n解析：\n{params}")
+    # 发送消息
+    await bot.send(event, msg)

@@ -44,7 +44,6 @@ class XiuConfig:
         # 是否开启模板
         self.markdown_id = ""
         self.markdown_id2 = ""
-        self.markdown_id3 = ""
         # 模板ID
 
         self.web_status = True

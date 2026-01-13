@@ -1,22 +1,14 @@
-<div align="center">
-  <br>
-</div>
-
-<div align="center">
-
 # 🎉 修仙2.2魔改版
 
-_✨ QQ群聊修仙文字游戏✨_
-
-<p align="center">
-</p>
-</div>
+### ✨ QQ群聊修仙文字游戏✨
 
 # 📖 介绍
 
 一款适用于QQ群的修仙插件,设定征集中，有好的想法可以推送给我哦~~~
 
-原插件地址：https://github.com/MyXiaoNan/nonebot_plugin_xiuxian_2_pmv
+# 支持
+[✅] 野生机器人（napcat）
+[✅] 官方机器人（gsk）
  
 # 💿 配置
 
