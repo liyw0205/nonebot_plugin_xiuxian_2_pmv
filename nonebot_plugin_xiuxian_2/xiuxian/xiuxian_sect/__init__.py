@@ -2313,7 +2313,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     end_idx = start_idx + items_per_page
     current_page_items = sorted_items[start_idx:end_idx]
     
-    msg_list = [f"\n道友目前拥有的宗门贡献度：{number_to(user_info['sect_contribution'])}点"]
+    title = f"\n道友目前拥有的宗门贡献度：{number_to(user_info['sect_contribution'])}点"
+    msg_list = []
     msg_list.append(f"════════════\n【宗门商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
@@ -2329,10 +2330,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"════════════"
         )
     
-    if total_pages > 1:
-        msg_list.append(f"提示：发送 宗门商店+页码 查看其他页（共{total_pages}页）")
-    
-    await send_msg_handler(bot, event, "宗门商店", bot.self_id, msg_list)
+    msg_list.append(f"提示：发送 宗门商店+页码 查看其他页（共{total_pages}页）")
+    page = ["翻页", f"宗门商店 {page + 1}", "宗门", "我的宗门", "兑换", "宗门兑换", f"{page}/{total_pages}"]    
+    await send_msg_handler(bot, event, "宗门商店", bot.self_id, msg_list, title=title, page=page)
     await sect_shop.finish()
 
 @sect_buy.handle(parameterless=[Cooldown(cd_time=1.4)])

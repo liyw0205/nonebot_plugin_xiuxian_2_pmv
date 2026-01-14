@@ -434,7 +434,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
-    impart_exp_up2 = impart_lv * 0.15
+    impart_exp_up2 = impart_lv * 0.1
     
     # 计算每分钟基础经验
     exp_per_minute = int(XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up) * (1 + impart_exp_up2))))
@@ -505,7 +505,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
     
     impart_time = impart_data_draw['exp_day']
-    impart_exp_up = impart_lv * 0.15
+    impart_exp_up = impart_lv * 0.1
     impart_name_new = impart_level.get(impart_lv, "未知秘境")
     msg += f"\n现位于：{impart_name_new}（LV {impart_lv}）"
     msg += f"\n虚神界修炼时间：{impart_time} 分钟"
@@ -568,14 +568,14 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     impart_name = impart_level.get(impart_lv, "未知秘境")
     if impart_lv == 30:
         msg = f"\n已登临{impart_name}！"
-        impart_exp_up = impart_lv * 0.15
+        impart_exp_up = impart_lv * 0.1
         msg += f"\n获得虚神界终极加持：修为增益{int(impart_exp_up * 100)}%"
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_go.finish()
     else:
         if impart_data_draw['exp_day'] < 100:
             msg = f"\n道友探索虚神界时间不足，难以突破{impart_name}的禁制！"
-            impart_exp_up = impart_lv * 0.15
+            impart_exp_up = impart_lv * 0.1
             msg += f"\n当前区域加持：修为增益{int(impart_exp_up * 100)}%"
             await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
             await impart_pk_go.finish()
@@ -656,7 +656,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     xiuxian_impart.update_impart_lv(user_id, impart_lv)
     impart_pk.update_user_impart_lv(user_info['user_id'])
     
-    impart_exp_up = impart_lv * 0.15
+    impart_exp_up = impart_lv * 0.1
     impart_name_new = impart_level.get(impart_lv, "未知秘境")
     msg += f"\n现位于：{impart_name_new}"
     msg += f"\n消耗虚神界时间：{impart_time} 分钟"
@@ -746,7 +746,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     impart_exp_up = impart_data['impart_exp_up'] if impart_data is not None else 0
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
-    impart_exp_up2 = impart_lv * 0.15
+    impart_exp_up2 = impart_lv * 0.1
 
     # 计算基础经验倍率
     base_exp_rate = XiuConfig().closing_exp * (

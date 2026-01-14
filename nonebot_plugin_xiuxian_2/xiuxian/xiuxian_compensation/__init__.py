@@ -29,6 +29,7 @@ from ..xiuxian_utils.utils import (
     get_msg_pic,
     CommandObjectID,
     handle_send,
+    send_msg_handler,
     number_to
 )
 
@@ -39,29 +40,29 @@ sql_message = XiuxianDateManage()  # sql类
 # 通用类型定义
 # ======================
 ItemType = Literal["补偿", "礼包", "兑换码"]
-
+DATA_PATH = Path(__file__).parent / "compensation_data"
 # ======================
 # 文件路径配置
 # ======================
 DATA_CONFIG = {
     "补偿": {
-        "data_path": Path(__file__).parent / "compensation_data" / "compensation_records.json",
-        "claimed_path": Path(__file__).parent / "compensation_data" / "claimed_records.json",
-        "records_folder": Path(__file__).parent / "compensation_data",
+        "data_path": DATA_PATH / "compensation" / "compensation_records.json",
+        "claimed_path": DATA_PATH / "compensation" / "claimed_records.json",
+        "records_folder": DATA_PATH / "compensation",
         "type_key": "补偿",
         "type_field": "type"  # 补偿没有特定的 type 字段
     },
     "礼包": {
-        "data_path": Path(__file__).parent / "gift_package_data" / "gift_package_records.json",
-        "claimed_path": Path(__file__).parent / "gift_package_data" / "claimed_gift_packages.json",
-        "records_folder": Path(__file__).parent / "gift_package_data",
+        "data_path": DATA_PATH / "gift_package" / "gift_package_records.json",
+        "claimed_path": DATA_PATH / "gift_package" / "claimed_gift_packages.json",
+        "records_folder": DATA_PATH / "gift_package",
         "type_key": "礼包",
         "type_field": "type"  # 礼包有 "type": "gift"
     },
     "兑换码": {
-        "data_path": Path(__file__).parent / "redeem_code_data" / "redeem_codes.json",
-        "claimed_path": Path(__file__).parent / "redeem_code_data" / "claimed_redeem_codes.json",
-        "records_folder": Path(__file__).parent / "redeem_code_data",
+        "data_path": DATA_PATH / "redeem_code" / "redeem_codes.json",
+        "claimed_path": DATA_PATH / "redeem_code" / "claimed_redeem_codes.json",
+        "records_folder": DATA_PATH / "redeem_code",
         "type_key": "兑换码",
         "type_field": "type"  # 兑换码有 "type": "redeem_code"
     }
@@ -70,6 +71,8 @@ DATA_CONFIG = {
 # ======================
 # 初始化数据文件夹和文件
 # ======================
+if not DATA_PATH.exists():
+    os.makedirs(DATA_PATH, exist_ok=True)
 for config in DATA_CONFIG.values():
     config["records_folder"].mkdir(exist_ok=True)
     if not config["data_path"].exists():
@@ -216,12 +219,14 @@ async def send_success_message(bot: Bot, event: MessageEvent, config: Dict[str, 
     usage_msg = "无限次" if usage_limit == 0 else f"{usage_limit}次" if usage_limit is not None else "未指定"
     msg = f"\n成功新增{config['type_key']} {comp_id}\n"
     msg += f"物品: {', '.join(items_msg)}\n"
-    msg += f"原因: {reason}\n"
+
+    if config['type_key'] == "兑换码":
+        msg += f"🔄 使用上限: {usage_msg}\n"
+    else:
+        msg += f"原因: {reason}\n"
     msg += f"⏰ 有效期至: {expire_msg}\n"
     msg += f"🕒 生效时间: {start_msg}\n"
-    if usage_limit is not None:
-        msg += f"🔄 使用限制: {usage_msg}\n"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="compensation", k1="领取", v1=f"领取{config['type_key']} {comp_id}", k2="列表", v2=f"{config['type_key']}列表", k3="帮助", v3=f"{config['type_key']}帮助")
 
 def is_expired(item_info: Dict[str, Any], config: Dict[str, Any]) -> bool:
     """检查是否过期"""
@@ -302,13 +307,17 @@ async def claim_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, u
 
 async def list_items(config: Dict[str, Any], bot: Bot, event: MessageEvent) -> None:
     """通用列表展示逻辑"""
+    if config['type_key'] == "兑换码":
+        await handle_list_redeem_codes(bot, event)
+        return    
     data = load_data(config)
     if not data:
         msg = f"当前没有可用的{config['type_key']}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="compensation", k1="领取", v1=f"领取{config['type_key']}", k2="列表", v2=f"{config['type_key']}列表", k3="帮助", v3=f"{config['type_key']}帮助")
         return
     current_time = datetime.now()
-    msg_lines = [f"📋 {config['type_key']}列表 📋", "====================", "【有效】"]
+    title = f"📋 {config['type_key']}列表 📋"
+    msg_lines = ["====================", "【有效】"]
     valid_items = []
     expired_items = []
     not_yet_started_items = []
@@ -388,9 +397,9 @@ async def list_items(config: Dict[str, Any], bot: Bot, event: MessageEvent) -> N
                 f"🕒 生效时间: {start_msg}",
                 "------------------"
             ])
-    msg_lines.append(f"\n⏱ 当前服务器时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    msg = "\n".join(msg_lines)
-    await handle_send(bot, event, msg)
+
+    page = ["领取", f"领取{config['type_key']}", "列表", f"{config['type_key']}列表", "帮助", f"{config['type_key']}帮助", f"时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}"]
+    await send_msg_handler(bot, event, f"{config['type_key']}列表", bot.self_id, msg_lines, title=title, page=page)
 
 def delete_item(item_id: str, config: Dict[str, Any]) -> None:
     """通用删除逻辑"""
@@ -499,8 +508,9 @@ def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
                 "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S") if start_time else None,
             }
+            usage_limit = None
             if config["type_key"] == "兑换码":
-                usage_limit_str = parts[2]  # 根据实际情况调整索引
+                usage_limit_str = parts[2]
                 try:
                     usage_limit = int(usage_limit_str)
                 except ValueError:
@@ -508,7 +518,7 @@ def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
                 data[item_id]["usage_limit"] = usage_limit
                 data[item_id]["used_count"] = 0
             save_data(config, data)
-            await send_success_message(bot, event, config, item_id, items_list, reason, expire_time, start_time)
+            await send_success_message(bot, event, config, item_id, items_list, reason, expire_time, start_time, usage_limit)
         except Exception as e:
             await handle_send(bot, event, f"新增{item_type}出错: {str(e)}")
 
@@ -631,8 +641,6 @@ async def claim_redeem_code_cmd(bot: Bot, event: GroupMessageEvent | PrivateMess
     claimed_data[user_id].append(redeem_code)
     save_claimed_data(config, claimed_data)
 
-handle_list_redeem_codes = on_command("兑换码列表", permission=SUPERUSER, priority=5, block=True)
-@handle_list_redeem_codes.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     """列出所有兑换码(仅管理员可见)"""
     config = DATA_CONFIG["兑换码"]
@@ -640,10 +648,8 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
     if not data:
         return
     current_time = datetime.now()
-    msg_lines = [
-        "🎟 兑换码列表 🎟",
-        "===================="
-    ]
+    title = "🎟 兑换码列表 🎟"
+    msg_lines = ["===================="]
     valid_codes = []
     expired_codes = []
     not_yet_started_codes = []
@@ -679,13 +685,14 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
         for code, info in not_yet_started_codes:
             items_msg = create_item_message(info["items"])
             usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            used_count = info.get("used_count", 0)
             start_time_str = info.get("start_time", "未知")
             expire_time_str = info.get("expire_time", "未知")
             create_time_str = info.get("create_time", "未知")
             msg_lines.extend([
                 f"🎟 兑换码: {code}",
                 f"🎁 内容: {', '.join(items_msg)}",
-                f"🔄 使用限制: {usage_limit}",
+                f"🔄 使用情况: {used_count}/{usage_limit}",
                 f"⏰ 有效期至: {expire_time_str}",
                 f"🕒 生效时间: {start_time_str}",
                 f"🕒 创建时间: {create_time_str}",
@@ -696,13 +703,14 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
         for code, info in valid_codes:
             items_msg = create_item_message(info["items"])
             usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            used_count = info.get("used_count", 0)
             expire_time_str = info.get("expire_time", "未知")
             start_time_str = info.get("start_time", "未知")
             create_time_str = info.get("create_time", "未知")
             msg_lines.extend([
                 f"🎟 兑换码: {code}",
                 f"🎁 内容: {', '.join(items_msg)}",
-                f"🔄 使用限制: {usage_limit}",
+                f"🔄 使用情况: {used_count}/{usage_limit}",
                 f"⏰ 有效期至: {expire_time_str}",
                 f"🕒 生效时间: {start_time_str}",
                 f"🕒 创建时间: {create_time_str}",
@@ -713,21 +721,22 @@ async def handle_list_redeem_codes(bot: Bot, event: MessageEvent):
         for code, info in expired_codes:
             items_msg = create_item_message(info["items"])
             usage_limit = "无限次" if info.get("usage_limit", 0) == 0 else f"{info.get('usage_limit', 0)}次"
+            used_count = info.get("used_count", 0)
             expire_time_str = info.get("expire_time", "未知")
             start_time_str = info.get("start_time", "未知")
             create_time_str = info.get("create_time", "未知")
             msg_lines.extend([
                 f"🎟 兑换码: {code}",
                 f"🎁 内容: {', '.join(items_msg)}",
-                f"🔄 使用情况: {usage_limit}",
+                f"🔄 使用情况: {used_count}/{usage_limit}",
                 f"⏰ 过期时间: {expire_time_str}",
                 f"🕒 生效时间: {start_time_str}",
                 f"🕒 创建时间: {create_time_str}",
                 "------------------"
             ])
-    msg_lines.append(f"\n⏱ 当前服务器时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    msg = "\n".join(msg_lines)
-    await handle_send(bot, event, msg)
+
+    page = ["兑换", "兑换", "列表", f"{config['type_key']}列表", "帮助", f"{config['type_key']}帮助", f"时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}"]
+    await send_msg_handler(bot, event, f"{config['type_key']}列表", bot.self_id, msg_lines, title=title, page=page)
 
 def clean_expired_items():
     """自动清理所有过期（补偿、礼包、兑换码）"""
@@ -855,7 +864,7 @@ for item_type, config in DATA_CONFIG.items():
 # 邀请功能
 # ======================
 
-INVITATION_DATA_PATH = Path(__file__).parent / "invitation_data"
+INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
 INVITATION_RECORDS_FILE = INVITATION_DATA_PATH / "invitation_records.json"
 INVITATION_CLAIMED_FILE = INVITATION_DATA_PATH / "invitation_claimed.json"
@@ -960,18 +969,14 @@ handle_invitation_use = on_command("邀请码", priority=5, block=True)
 async def handle_invitation_use(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用邀请码"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info['user_id']
     inviter_id = args.extract_plain_text().strip()
     if not inviter_id:
         msg = "请输入邀请人的ID！格式：邀请码 [邀请人ID]"
-        await handle_send(bot, event, msg)
-        return
-    if not inviter_id.isdigit():
-        msg = "邀请人ID必须是数字！"
         await handle_send(bot, event, msg)
         return
     if str(user_id) == inviter_id:
@@ -996,9 +1001,9 @@ handle_invitation_check = on_command("邀请人", priority=5, block=True)
 async def handle_invitation_check(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看邀请人信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info['user_id']
     inviter_id = get_inviter_id(user_id)
@@ -1019,9 +1024,9 @@ handle_invitation_info = on_command("我的邀请", priority=5, block=True)
 async def handle_invitation_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的邀请信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info['user_id']
     count = get_user_invitation_count(user_id)
@@ -1044,9 +1049,9 @@ handle_invitation_claim = on_command("邀请奖励领取", priority=5, block=Tru
 async def handle_invitation_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """领取邀请奖励"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()

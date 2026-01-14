@@ -741,7 +741,7 @@ def generate_command(msg, status=None, command=None, msg2=None):
     else:
         return f"[{msg}"
 
-async def send_msg_handler(bot, event, *args, title=None, page=None):
+async def send_msg_handler(bot, event, *args, title=None, page=None, button_id=None):
     """
     统一消息发送处理器
     :param bot: 机器人实例
@@ -781,7 +781,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None):
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True)
+                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -793,7 +793,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None):
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True)
+                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -908,13 +908,13 @@ async def send_msg_handler(bot, event, *args, title=None, page=None):
         else:
             raise ValueError("参数数量或类型不匹配")
 
-async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None):
+async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None, button_id=None):
     """处理文本，根据配置发送文本或者图片消息"""
     if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().markdown_id2:
         if md_type:
-            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4)
+            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
             return
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title)
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, button_id=button_id)
         return
     if msg == " ":
         return
@@ -951,7 +951,7 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
                 user_id=event.user_id, message=msg
             )
 
-async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, title_param=None, msg_param=None):
+async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, title_param=None, msg_param=None, button_id=None):
     """发送md模板消息"""
     if not markdown_id:
         await handle_send(bot, event, msg)
@@ -985,7 +985,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         msg_param,
         shell_param,
     ]
-    msg = MessageSegmentPlus.markdown_template(markdown_id, param)
+    msg = MessageSegmentPlus.markdown_template(markdown_id, param, button_id)
     await bot.send(event=event, message=msg)
     
 def check_user_md_type(md_type, event):
@@ -1018,7 +1018,7 @@ def check_user_md_type(md_type, event):
     
     return k1, v1
 
-async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4):
+async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=None):
     """发送md模板消息"""
     if md_type in ["0", "1", "2", "3", "4", "5"]:
         k1, v1 = check_user_md_type(md_type, event)
@@ -1053,7 +1053,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
             f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"
             ]}
         ]
-    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id2, param)
+    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id2, param, button_id)
     await bot.send(event=event, message=msg)
     
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None):

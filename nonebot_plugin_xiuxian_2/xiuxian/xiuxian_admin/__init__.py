@@ -887,7 +887,16 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
 
     params: List[Dict[str, Any]] = []
-
+    def replace_url_format(input_str):
+        pattern = r'(\w+)\]\(([^)]+)\)'
+        def replacer(match):
+            param_a = match.group(1)
+            param_b = match.group(2)
+            if '://' in param_b:
+                return f'{param_a}]({param_b})'
+            return f'{param_a}](mqqapi://aio/inlinecmd?command={param_b}&enter=false&reply=false)'
+        return re.sub(pattern, replacer, input_str)
+    
     for arg in arg_parts:
         if '=' not in arg:
             continue
@@ -906,7 +915,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
         if value.startswith('[') and value.endswith(']'):
             # 处理列表值
-            inner_values = [v.strip().strip('\'"') for v in value[1:-1].split(',')]
+            inner_values = [replace_url_format(v.strip().strip('\'"')) for v in value[1:-1].split(',')]
             params.append({"key": key, "values": inner_values})
         else:
             # 处理普通值

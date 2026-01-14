@@ -1854,6 +1854,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "消息设置"
     },
+    "button_id": {
+        "name": "按钮ID1",
+        "description": "用于发送修炼按钮",
+        "type": "str",
+        "category": "消息设置"
+    },
     "merge_forward_send": {
         "name": "消息发送方式",
         "description": "1=长文本,2=合并转发,3=合并转长图,4=长文本合并转发",

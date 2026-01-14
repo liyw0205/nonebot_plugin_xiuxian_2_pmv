@@ -137,7 +137,7 @@ async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 ◆ 可传入灵石作为额外消耗(最多当前灵石的10%)
 ◆ 共享开启后，你的鉴石结果可能会影响其他共享开启的道友
 ◆ 共享事件可能带来连锁反应，福祸难料"""
-    await handle_send(bot, event, help_msg)
+    await handle_send(bot, event, help_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 # 共享开启
 @unseal_share_on.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -155,7 +155,7 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         msg = "成功开启鉴石结果共享！你的鉴石过程可能会对其他道友产生影响。"
         log_message(user_id, "开启了鉴石结果共享功能")
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="关闭", v3="鉴石共享关闭")
 
 # 共享关闭
 @unseal_share_off.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -173,7 +173,7 @@ async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = "成功关闭鉴石结果共享！你的鉴石过程将不再影响其他道友。"
         log_message(user_id, "关闭了鉴石结果共享功能")
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="开启", v3="鉴石共享开启")
 
 # 处理共享事件
 async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, current_cost: int, total_cost: int, result_type: str):
@@ -297,7 +297,7 @@ async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         f"最后更新: {data['last_update']}"
     )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 # 鉴石主逻辑
 @unseal.handle(parameterless=[Cooldown(stamina_cost=20)])
@@ -315,12 +315,12 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if current_stone < 100000000:
         needed = 100000000 - current_stone
         msg = f"金银阁暂不接待灵石不足的道友，还需{number_to(needed)}灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
     
     if str(send_group_id) in BANNED_UNSEAL_IDS:
         msg = f"本群不可鉴石！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
     
     # 处理传入的灵石参数
@@ -338,7 +338,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     
     if current_stone < cost:
         msg = f"解封需要{cost}枚灵石作为法力消耗，当前仅有{current_stone}枚！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
     
     # 扣除消耗
@@ -403,7 +403,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     ]
     
     final_msg = "\n".join(full_msg)
-    await handle_send(bot, event, final_msg)
+    await handle_send(bot, event, final_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
     
     # 处理共享事件
     if is_sharing_user(user_id):
@@ -417,7 +417,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 result_type=result
             )
             if shared_event_msg:
-                await handle_send(bot, event, shared_event_msg)
+                await handle_send(bot, event, shared_event_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
                 # 根据结果类型更新统计
                 if result in ["great_success", "success"]:
                     unseal_data["sharing_info"]["shared_profit"] += amount
@@ -433,7 +433,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 result_type=result
             )
             if shared_event_msg:
-                await handle_send(bot, event, shared_event_msg)
+                await handle_send(bot, event, shared_event_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
                 # 根据结果类型更新统计
                 if result in ["great_success", "success"]:
                     unseal_data["sharing_info"]["shared_profit"] += amount

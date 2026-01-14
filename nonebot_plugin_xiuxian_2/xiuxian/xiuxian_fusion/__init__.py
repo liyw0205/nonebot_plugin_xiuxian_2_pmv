@@ -47,7 +47,7 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         
     msg = fusion_help_text
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_help.finish()
 
 @fusion_item.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -64,11 +64,11 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     equipment_id, equipment = items.get_data_by_item_name(args_str)
     if equipment is None:
         msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await fusion_item.finish()
     
     # 检查是否是必定成功ID，如果是则跳过福缘石检测
-    if int(equipment_id) not in FIXED_SUCCESS_IDS:
+    if int(equipment_id) not in FIXED_SUCCESS_IDS or str(equipment['type']) != "特殊道具":
         # 检查是否有福缘石
         back_msg = sql_message.get_back_msg(user_id)
         has_protection = False
@@ -79,11 +79,11 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         
         if not has_protection:
             msg = "道友没有福缘石，合成失败可能会损失材料！\n使用【强行合成】命令确认操作。"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
             await fusion_item.finish()
     
     success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_item.finish()
 
 @force_fusion.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -100,11 +100,11 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     equipment_id, equipment = items.get_data_by_item_name(args_str)
     if equipment is None:
         msg = f"未找到可合成的物品：{args_str}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await force_fusion.finish()
     
     success, msg = await general_fusion(user_id, equipment_id, equipment)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await force_fusion.finish()
 
 async def general_fusion(user_id, equipment_id, equipment):
@@ -203,7 +203,7 @@ async def general_fusion(user_id, equipment_id, equipment):
             return False, "道友还缺少：\n" + "\n".join(missing_names)
     
     # 检查是否必定成功
-    if int(equipment_id) in FIXED_SUCCESS_IDS:
+    if int(equipment_id) in FIXED_SUCCESS_IDS or str(equipment['type']) == "特殊道具":
         # 必定成功，直接扣除材料并添加物品
         sql_message.update_ls(user_id, int(fusion_info.get('need_stone', 0)), 2)  # 扣灵石
         for item_id, amount_needed in needed_items.items():
@@ -266,7 +266,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not all_fusion_items:
         msg = "目前没有可合成的物品。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await available_fusion.finish()
     
     # 检查参数是否为数字（分页请求）
@@ -291,7 +291,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         # 检查请求的页数是否有效
         if page_num < 1 or page_num > total_pages:
             msg = f"页码无效，请输入1-{total_pages}之间的数字"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
             await available_fusion.finish()
         
         # 获取当前页的类型
@@ -310,7 +310,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg_parts.append("\n【查看可合成物品 页数】")
         msg_parts.append("【查看可合成物品 物品名/类型】")
         
-        await handle_send(bot, event, "\n".join(msg_parts))
+        await handle_send(bot, event, "\n".join(msg_parts), md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await available_fusion.finish()
     
     # 有参数且不是数字：匹配物品名、类型和物品类型
@@ -324,7 +324,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not matched_items:
         msg = f"未找到匹配【{args_str}】的可合成物品"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await available_fusion.finish()
     
     # 如果匹配的是类型，显示该类型下的所有物品
@@ -341,7 +341,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         
         msg_parts.append("\n【查看可合成物品 物品名】")
         
-        await handle_send(bot, event, "\n".join(msg_parts))
+        await handle_send(bot, event, "\n".join(msg_parts), md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await available_fusion.finish()
     
     # 如果匹配多个物品名，显示列表
@@ -351,7 +351,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             msg_parts.append(f"• {item['name']}")
         msg_parts.append("\n请使用更精确的名称查看详细信息")
         
-        await handle_send(bot, event, "\n".join(msg_parts))
+        await handle_send(bot, event, "\n".join(msg_parts), md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await available_fusion.finish()
     
     # 显示单个物品的详细信息
@@ -394,7 +394,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg_parts.append(f"最多可合成: {limit}个")
     
     # 成功率信息
-    if int(item_id) in FIXED_SUCCESS_IDS:
+    if int(item_id) in FIXED_SUCCESS_IDS or str(item['type']) == "特殊道具":
         msg_parts.append("\n【成功率】")
         msg_parts.append("必定成功")
     else:
@@ -402,6 +402,6 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg_parts.append("30%成功率")
         msg_parts.append("(失败会消耗材料，使用福缘石可避免损失)")
     
-    await handle_send(bot, event, "\n".join(msg_parts))
+    await handle_send(bot, event, "\n".join(msg_parts), md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await available_fusion.finish()
 

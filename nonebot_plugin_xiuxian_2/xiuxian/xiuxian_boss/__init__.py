@@ -899,11 +899,9 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             l_msg.append(msg)
     else:
         l_msg.append(f"世界积分商店内空空如也！")
-    
-    # 添加翻页提示
-    if total_pages > 1:
-        l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
-    
+
+    l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
+    page = ["翻页", f"世界BOSS商店 {page + 1}", "信息", "世界BOSS信息", "兑换", "世界BOSS兑换", f"{page}/{total_pages}"]
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg, title=title)
     await boss_integral_store.finish()
 

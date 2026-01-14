@@ -45,6 +45,8 @@ class XiuConfig:
         self.markdown_id = ""
         self.markdown_id2 = ""
         # 模板ID
+        self.button_id = ""
+        # 按钮ID
 
         self.web_status = True
         # 修仙管理面板是否开启

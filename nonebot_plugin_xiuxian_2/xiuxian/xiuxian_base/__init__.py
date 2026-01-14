@@ -176,7 +176,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     if not user_name:
         if user_info['stone'] < XiuConfig().remaname:
             msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
             await remaname.finish()
 
         # 生成不重复的道号
@@ -198,26 +198,26 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
                 
         if not has_item:
             msg = "修改道号需要消耗1个易名符！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
             await remaname.finish()
             
         # 检查名字长度（7个中文字符）
         if len(user_name) > 7:
             msg = "道号长度不能超过7个字符！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
             await remaname.finish()
             
         # 检查道号是否已存在
         if sql_message.get_user_info_with_name(user_name):
             msg = "该道号已被使用，请选择其他道号！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
             await remaname.finish()
         
         # 扣除易名符
         sql_message.update_back_j(user_id, 20011, use_key=1)
     result = sql_message.update_user_name(user_id, user_name)
     msg += result
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await remaname.finish()
 
 
@@ -248,7 +248,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 sql_message.update_user_hp(user_id)
             await asyncio.sleep(1)
             msg = f"你获得了随机道号：{user_name}\n耳边响起一个神秘人的声音：不要忘记仙途奇缘！\n不知道怎么玩的话可以发送 修仙帮助 喔！！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="帮助", v1="修仙帮助", k2="存档", v2="我的修仙信息", k3="仙途奇缘", v3="仙途奇缘帮助")
     except ActionFailed:
         await run_xiuxian.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
@@ -268,7 +268,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if user_info['is_sign'] == 1:
         await handle_send(bot, event, result)
         await sign_in.finish()
-     # 2. 自动参与"借运"抽奖
+     # 2. 自动参与"鸿运"抽奖
     lottery_result = await handle_lottery(user_info)
     
     # 3. 组合签到结果和抽奖结果
@@ -277,7 +277,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     try:
         log_message(user_id, msg)
         update_statistics_value(user_id, "修仙签到")
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
     except ActionFailed:
         await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
@@ -302,11 +302,11 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     msg += "\n※ 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await hongyun.finish()
 
 async def handle_lottery(user_info: dict):
-    """处理借运抽奖逻辑"""
+    """处理鸿运抽奖逻辑"""
     user_id = user_info['user_id']
     user_name = user_info['user_name']
     
@@ -398,41 +398,28 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 功法体系: 发送"境界/品阶/灵根帮助"
 - 轮回重修: 发送"轮回重修帮助"
 - 渡劫系统: 发送"渡劫"查看渡劫信息
-- 天命渡劫: 使用"天命渡劫丹"必定成功
-- 心魔挑战: 发送"渡心魔劫"提升成功率
 
 🔧 系统功能
 - 交易功能: 发送"交易帮助"
 - 宗门体系: 发送"宗门帮助"
 - 灵庄系统: 发送"灵庄帮助"
 - 秘境探索: 发送"秘境帮助"
-
-🧪 生活技能
 - 炼丹指南: 发送"炼丹帮助"
 - 灵田管理: 发送"灵田帮助"
 - 物品合成: 发送"合成帮助"
-- 批量祈愿: 发送"传承祈愿 1000"
+- 仙缘奇遇: 发送"仙途奇缘帮助"
+- 虚神界: 发送"虚神界帮助"
+- 仙缘帮助: 发送"仙缘帮助"
 
 🎯 任务系统
 - 悬赏任务: 发送"悬赏令帮助"
 - 无限爬塔: 发送"通天塔帮助"
-- 明我心志: 发送"幻境寻心"
-- 仙缘奇遇: 发送"仙途奇缘帮助"
-
-🤝 社交互动
-- 赠送仙缘: 发送"送仙缘"
-- 抢夺仙缘: 发送"抢仙缘"
-- 查看仙缘: 发送"仙缘列表"
-- 仙缘帮助: 发送"仙缘帮助"
+- 炼心明志: 发送"幻境寻心"
+- 仙路历练: 发送"历练帮助"
 
 🐉 世界挑战
 - 世界BOSS: 发送"世界boss帮助"
 - 通天塔: 发送"通天塔帮助"
-- 虚神界: 发送"虚神界帮助"
-
-💡 小贴士
-- 每次签到自动参与"鸿运"抽奖
-- 每日有灵石赠送和接收额度限制
 """
     
     if XiuConfig().markdown_status:
@@ -450,7 +437,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
                 generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
             ]}
-        await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, title_param=title_param)
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title_param=title_param, shell=True)
         await help_in.finish()
     else:    
         await handle_send(bot, event, msg)
@@ -528,7 +515,8 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         state["user_id"] = user_id
         msg = f"{linggen_list_msg}\n\n请从以上灵根中选择一个:\n请输入对应的数字选择 (1-10):"
         state["linggen_options"] = linggen_options
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="手动选择", v1=" ", k2="自动最好", v2="最好", k3="刷新", v3="0")
+        
 
 @restart.receive()
 async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
@@ -539,12 +527,18 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     if user_choice.isdigit(): # 判断数字
         user_choice = int(user_choice)
-        if 1 <= user_choice <= 10:
+        if user_choice == 0:
+            await restart_(bot, event, state)
+            return
+        elif 1 <= user_choice <= 10:
             selected_name, selected_root_type = linggen_options[user_choice - 1]
             msg = f"你选择了 {selected_name} 呢！\n"
     else:
-        msg = "输入有误，帮你自动选择最佳灵根了嗷！\n"
-
+        if user_choice == "最好":
+            msg = "帮你自动选择最佳灵根了嗷！\n"        
+        else:
+            msg = "输入有误，帮你自动选择最佳灵根了嗷！\n"
+   
     msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
 
     try:
@@ -3139,7 +3133,7 @@ async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 async def reset_lottery_participants():
     lottery_pool.reset_daily()
-    logger.opt(colors=True).info(f"<green>每日借运参与者已重置！</green>")
+    logger.opt(colors=True).info(f"<green>每日鸿运参与者已重置！</green>")
     
 async def reset_stone_limits():
     stone_limit.reset_limits()

@@ -146,27 +146,17 @@ async def two_exp_cd_up():
 async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     """功法帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]
-        await handle_send(bot, event, msg)
-        await buff_help.finish()
-    else:
-        msg = __buff_help__
-        await handle_send(bot, event, msg)
-        await buff_help.finish()
+    msg = __buff_help__
+    await handle_send(bot, event, msg, md_type="buff", k1="功法", v1="我的功法", k2="道侣", v2="道侣帮助", k3="福地", v3="洞天福地")
+    await buff_help.finish()
 
 @double_cultivation_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def double_cultivation_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
-    """功法帮助"""
+    """双修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]
-        await handle_send(bot, event, msg)
-        await double_cultivation_help.finish()
-    else:
-        msg = __double_cultivation_help__
-        await handle_send(bot, event, msg)
-        await double_cultivation_help.finish()
+    msg = __double_cultivation_help__
+    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+    await double_cultivation_help.finish()
 
 @blessed_spot_creat.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -179,11 +169,11 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) != 0:
         msg = f"道友已经拥有洞天福地了，请发送洞天福地查看吧~"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     if user_info['stone'] < BLESSEDSPOTCOST:
         msg = f"道友的灵石不足{BLESSEDSPOTCOST}枚，无法购买洞天福地"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     else:
         sql_message.update_ls(user_id, BLESSEDSPOTCOST, 2)
@@ -194,7 +184,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         msg = f"恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
         msg += f"默认名称为：{user_info['user_name']}道友的家"
         sql_message.update_user_blessed_spot_name(user_id, f"{user_info['user_name']}道友的家")
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
 
 
@@ -209,7 +199,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
         msg = f"道友还没有洞天福地呢，请发送洞天福地购买来购买吧~"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_info.finish()
     msg = f"\n道友的洞天福地:\n"
     user_buff_data = UserBuffDate(user_id).BuffInfo
@@ -222,7 +212,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg += f"修炼速度：增加{user_buff_data['blessed_spot'] * 0.5 * 100}%\n"
     msg += f"药材速度：增加{mix_elixir_info['药材速度'] * 100}%\n"
     msg += f"灵田数量：{mix_elixir_info['灵田数量']}"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="收取", v1="灵田收取", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_info.finish()
 
 
@@ -237,7 +227,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
         msg = f"道友还没有洞天福地呢，请发送洞天福地购买吧~"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await ling_tian_up.finish()
     LINGTIANCONFIG = {
         "1": {
@@ -281,7 +271,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             mix_elixir_info['灵田数量'] = now_num + 1
             save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
             sql_message.update_ls(user_id, cost, 2)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await ling_tian_up.finish()
 
 
@@ -296,20 +286,20 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     user_id = user_info['user_id']
     if int(user_info['blessed_spot_flag']) == 0:
         msg = f"道友还没有洞天福地呢，请发送洞天福地购买吧~"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_rename.finish()
     arg = args.extract_plain_text().strip()
     arg = str(arg)
     if arg == "":
         msg = "请输入洞天福地的名字！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="改名", v2="洞天福地改名", k3="开垦", v3="灵田开垦")
         await blessed_spot_rename.finish()
     if len(arg) > 9:
         msg = f"洞天福地的名字不可大于9位,请重新命名"
     else:
         msg = f"道友的洞天福地成功改名为：{arg}"
         sql_message.update_user_blessed_spot_name(user_id, arg)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 
 
@@ -331,7 +321,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     if give_qq:
         if give_qq == str(user_id):
             msg = "道友不会左右互搏之术！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
             await qc.finish()
     else:
         arg = args.extract_plain_text().strip()
@@ -349,7 +339,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
         
     if user1 and user2:
@@ -367,11 +357,11 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             else:
                 update_statistics_value(player2['user_id'], "切磋胜利")
                 update_statistics_value(player1['user_id'], "切磋失败")
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
     else:
         msg = "修仙界没有对方的信息，快邀请对方加入修仙界吧！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
 
 
@@ -412,7 +402,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         target_info = sql_message.get_user_real_info(existing_invite)
         remaining_time = 60 - (datetime.now().timestamp() - invite_cache[existing_invite]['timestamp'])
         msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
     # 检查是否有未处理的邀请（作为被邀请者）
@@ -422,7 +412,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         inviter_info = sql_message.get_user_real_info(inviter_id)
         remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(user_id)]['timestamp'])
         msg = f"道友已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请先处理！\n发送【同意双修】或【拒绝双修】"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
     two_qq = None
@@ -447,12 +437,12 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     if two_qq is None:
         msg = "请指定双修对象！格式：双修 道号 [次数]"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
     if int(user_id) == int(two_qq):
         msg = "道友无法与自己双修！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
     # 检查对方是否已经作为邀请者发出过邀请
@@ -467,7 +457,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         target_info = sql_message.get_user_real_info(target_existing_invite)
         remaining_time = 60 - (datetime.now().timestamp() - invite_cache[target_existing_invite]['timestamp'])
         msg = f"对方已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后再试！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
     # 检查对方是否有未处理的邀请（作为被邀请者）
@@ -477,7 +467,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         inviter_info = sql_message.get_user_real_info(inviter_id)
         remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(two_qq)]['timestamp'])
         msg = f"对方已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请稍后再试！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
     # 检查自己的双修次数限制
@@ -490,7 +480,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     if max_count_1 <= 0:
         msg = "你的双修次数已用尽，无法发送邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
     # 判断是否为道侣
@@ -503,7 +493,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_2_info = sql_message.get_user_real_info(two_qq)
     if user_2_info['exp'] > user_1['exp']:
         msg = "修仙大能看了看你，不屑一顾，扬长而去！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
     # 检查对方的双修保护状态
@@ -511,14 +501,14 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     if protection_status == "refusal":
         msg = "对方已设置拒绝所有双修邀请，无法进行双修！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
     elif protection_status == "on":
         # 对方开启保护，需要发送邀请
         # 检查邀请是否已存在（再次确认，防止并发）
         if str(two_qq) in invite_cache:
             msg = "对方已有未处理的双修邀请，请稍后再试！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
             await two_exp_invite.finish()
         
         # 检查对方双修次数是否足够
@@ -531,7 +521,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
         if max_count_2 <= 0:
             msg = "对方今日双修次数已用尽，无法邀请！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
             await two_exp_invite.finish()
         
         exp_count = max(exp_count, 1)
@@ -549,7 +539,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
         user_2_info = sql_message.get_user_real_info(two_qq)
         msg = f"已向{user_2_info['user_name']}发送双修邀请（{min(exp_count, max_count_2)}次），等待对方回应..."
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
     else:
         # 对方关闭保护，直接进行双修
@@ -585,7 +575,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
     
     if not user_1 or not user_2:
         msg = "无法获取玩家信息，无法进行双修。"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         return
     
     level_1 = user_1['level']
@@ -613,12 +603,12 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
     
     if max_count_1 <= 0:
         msg = "你的双修次数不足，无法进行双修！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         return
 
     if max_count_2 <= 0:
         msg = "对方的双修次数不足，无法进行双修！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         return
 
     # 取最小可用次数
@@ -626,7 +616,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
     
     if actual_count <= 0:
         msg = "没有足够的双修次数进行双修！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         return
     
     # 进行双修
@@ -689,7 +679,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
             save_partner(user_id_1, partner_data_1)
             save_partner(user_id_2, partner_data_2)
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
 
 async def process_two_exp(user_id_1, user_id_2, is_partner=False):
     user_1 = sql_message.get_user_real_info(user_id_1)
@@ -795,7 +785,7 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 检查是否有邀请
     if str(user_id) not in invite_cache:
         msg = "没有待处理的双修邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_accept.finish()
         
     invite_data = invite_cache[str(user_id)]
@@ -815,7 +805,7 @@ async def expire_invite(user_id, invite_id, bot, event):
         inviter_id = invite_cache[str(user_id)]['inviter']
         # 发送过期提示
         msg = f"双修邀请已过期！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         # 删除过期的邀请
         del invite_cache[str(user_id)]
 
@@ -832,7 +822,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     if str(user_id) not in invite_cache:
         msg = "没有待处理的双修邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_reject.finish()
         
     invite_data = invite_cache[str(user_id)]
@@ -844,7 +834,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 删除邀请
     del invite_cache[str(user_id)]
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
     await two_exp_reject.finish()
 
 @two_exp_protect.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -879,16 +869,16 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         }
         current_status_display = status_map.get(current_status, "已关闭 (允许直接双修)")
         msg = f"双修保护状态：{current_status_display}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     else:
         msg = "请使用：双修保护 开启/关闭/拒绝/状态"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     
     # 保存用户数据
     save_player_user(user_id, current_status)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()
 
 @reset_exp.handle(parameterless=[Cooldown(cd_time=60)])
@@ -903,7 +893,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     is_type, msg = check_user_type(user_id, user_type)
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type=f"{user_type}", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
         await reset_exp.finish()
     msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
@@ -912,7 +902,7 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if is_type:
         sql_message.in_closing(user_id, 0)
         msg = "已重置修炼状态！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="修炼", v1="修炼", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     await reset_exp.finish()
         
     
@@ -943,7 +933,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_cd_message = sql_message.get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="重置修炼", v3="重置修炼状态")
         await up_exp.finish()
     else:
         level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
@@ -970,7 +960,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             give_stone_num = int(give_stone * exp_rate)
             sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
             msg = f"挖矿结束，增加灵石：{give_stone_num}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
@@ -987,7 +977,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"修炼结束，本次修炼到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
             # 用户获取的修为没有到达上限
@@ -997,7 +987,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"修炼结束，增加修为：{number_to(exp)}{result_msg[0]}{result_msg[1]}"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
 
  
@@ -1030,12 +1020,12 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         pass
     else:
         msg = "请输入正确的灵石数量！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
     stone_num = int(stone_num[0])
     if use_stone <= stone_num:
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
 
     exp = int(stone_num / 10)
@@ -1046,7 +1036,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"修炼结束，本次修炼到达上限，共增加修为：{user_get_exp_max},消耗灵石：{user_get_exp_max * 10}"
         sql_message.update_ls(user_id, int(user_get_exp_max * 10), 2)
         update_statistics_value(user_id, "灵石修炼", increment=user_get_exp_max * 10)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
     else:
         sql_message.update_exp(user_id, exp)
@@ -1054,7 +1044,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"修炼结束，本次修炼共增加修为：{exp},消耗灵石：{stone_num}"
         sql_message.update_ls(user_id, int(stone_num), 2)
         update_statistics_value(user_id, "灵石修炼", increment=stone_num)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
 
 
@@ -1071,15 +1061,15 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_type, msg = check_user_type(user_id, 0)
     if user_info['root_type'] == '伪灵根':
         msg = "凡人无法闭关！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="重入仙途", v1="重入仙途", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
     if is_type:  # 符合
         sql_message.in_closing(user_id, user_type)
         msg = "进入闭关状态，如需出关，发送【出关】！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="出关", v1="出关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
     else:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
         await in_closing.finish()
 
 
@@ -1110,7 +1100,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_cd_message = sql_message.get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 1)
     if not is_type:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="1", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
         await out_closing.finish()
     else:
         # 用户状态为1
@@ -1144,7 +1134,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
             update_statistics_value(user_id, "闭关时长", increment=exp_time)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await out_closing.finish()
         else:
             # 用户获取的修为没有到达上限
@@ -1164,7 +1154,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{int(exp / 2)}枚{result_msg[0]}{result_msg[1]}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
-                    await handle_send(bot, event, msg)
+                    await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
                 else:
                     exp = exp + user_stone
@@ -1177,7 +1167,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
-                    await handle_send(bot, event, msg)
+                    await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
             else:
                 sql_message.in_closing(user_id, user_type)
@@ -1187,7 +1177,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
                 msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
                 update_statistics_value(user_id, "闭关时长", increment=exp_time)
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                 await out_closing.finish()
 
 @mind_state.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1324,10 +1314,9 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%
 会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
-双修保护状态：{current_status_display}
-"""
+双修保护状态：{current_status_display}"""
     sql_message.update_last_check_info_time(user_id)
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="修为", v3="我的修为")
     await mind_state.finish()
 
 @my_exp.handle(parameterless=[Cooldown(cd_time=10)])
@@ -1373,7 +1362,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent):
     msg += f"概率：下一次突破成功概率为{jsondata.level_rate_data()[level_name] + leveluprate + main_buff_number_buff}%\n"
     msg += f"效率：{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%"
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
     await my_exp.finish()
 
 @buffinfo.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1429,7 +1418,7 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 {effect2buffmsg}
 """
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
     await buffinfo.finish()
 
 
@@ -1470,7 +1459,7 @@ async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if num <= 0:
         num = 0
     msg = f"道友剩余双修次数{num}次！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="存档", v3="我的存档")
     await my_exp_num.finish()
 
 async def use_two_exp_token(bot, event, item_id, num):
@@ -1502,7 +1491,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     else:
         msg = "当前剩余双修次数已满！"
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
 @daily_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1737,7 +1726,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     partner_data = load_partner(user_id)
     if partner_data and partner_data.get('partner_id') is not None:
         msg = "你已经有了道侣，请先解除道侣关系再绑定新的道侣！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     arg = args.extract_plain_text().strip()
@@ -1758,14 +1747,14 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if not partner_user_id:
         msg = "未找到指定的道侣，请检查道号或艾特是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     # 检查对方是否已经有道侣
     partner_partner_data = load_partner(partner_user_id)
     if partner_partner_data and partner_partner_data.get('partner_id') is not None:
         msg = "对方已经有道侣了，无法绑定新的道侣！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     # 检查是否已经有未处理的邀请（作为被邀请者）
@@ -1774,7 +1763,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         inviter_info = sql_message.get_user_real_info(inviter_id)
         remaining_time = 60 - (datetime.now().timestamp() - partner_invite_cache[str(user_id)]['timestamp'])
         msg = f"你已有来自{inviter_info['user_name']}的道侣绑定邀请（剩余{int(remaining_time)}秒），请先处理！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     # 检查是否已经发出过邀请（作为邀请者）
@@ -1788,7 +1777,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         target_info = sql_message.get_user_real_info(existing_invite)
         remaining_time = 60 - (datetime.now().timestamp() - partner_invite_cache[existing_invite]['timestamp'])
         msg = f"你已经向{target_info['user_name']}发送了道侣绑定邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     # 创建绑定邀请
@@ -1804,7 +1793,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     partner_info = sql_message.get_user_real_info(partner_user_id)
     msg = f"已向{partner_info['user_name']}发送道侣绑定邀请，等待对方回应..."
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
     await bind_partner.finish()
 
 async def expire_partner_invite(user_id, invite_id, bot, event):
@@ -1814,7 +1803,7 @@ async def expire_partner_invite(user_id, invite_id, bot, event):
         inviter_id = partner_invite_cache[str(user_id)]['inviter']
         # 发送过期提示
         msg = f"道侣绑定邀请已过期！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         # 删除过期的邀请
         del partner_invite_cache[str(user_id)]
 
@@ -1832,7 +1821,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否有邀请
     if str(user_id) not in partner_invite_cache:
         msg = "没有待处理的道侣绑定邀请！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await agree_bind.finish()
         
     invite_data = partner_invite_cache[str(user_id)]
@@ -1885,7 +1874,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     if not partner_data or partner_data.get('partner_id') is None:
         msg = "你还没有道侣！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="解除", v1="断绝关系", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await unbind_partner.finish()
     
     partner_user_id = partner_data["partner_id"]
@@ -1906,7 +1895,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             if days_difference < 7:
                 remaining_days = 7 - days_difference
                 msg = f"你与道侣的绑定时间不足7天，还需等待{remaining_days}天才能解绑道侣。"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="buff", k1="解除", v1="断绝关系", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
                 await unbind_partner.finish()
         except ValueError:
             # 如果 bind_time 格式不正确，视为异常，允许解绑
@@ -1922,7 +1911,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     save_partner(partner_user_id, {'partner_id': None, 'bind_time': None, 'affection': None})
     
     msg = f"你已与道侣断绝关系。"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
     
     await unbind_partner.finish()
 
@@ -1954,7 +1943,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if not partner_data or partner_data.get('partner_id') is None:
         msg = "你还没有道侣！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await my_partner.finish()
     
     partner_user_id = partner_data["partner_id"]

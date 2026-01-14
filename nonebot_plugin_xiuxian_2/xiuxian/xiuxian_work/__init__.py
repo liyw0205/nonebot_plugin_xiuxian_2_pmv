@@ -541,7 +541,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             f"悬赏名称：{task_name}\n"
             f"请努力完成悬赏！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
         await do_work.finish()
 
     elif mode == "重置":

@@ -200,10 +200,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"════════════"
         )
     
-    if total_pages > 1:
-        msg_list.append(f"提示：发送 历练商店+页码 查看其他页（共{total_pages}页）")
-    
-    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title)
+    msg_list.append(f"提示：发送 历练商店+页码 查看其他页（共{total_pages}页）")
+    page = ["翻页", f"历练商店 {page + 1}", "状态", "历练状态", "兑换", "历练兑换", f"{page}/{total_pages}"]
+    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title, page=page)
     await training_shop.finish()
 
 @training_buy.handle(parameterless=[Cooldown(cd_time=1.4)])

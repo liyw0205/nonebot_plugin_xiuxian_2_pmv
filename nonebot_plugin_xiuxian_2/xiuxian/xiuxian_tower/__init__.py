@@ -254,10 +254,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 f"════════════"
             )
     
-    if total_pages > 1:
-        msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
-    
-    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title)
+    msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
+    page = ["翻页", f"通天塔商店 {page + 1}", "信息", "通天塔信息", "兑换", "通天塔兑换", f"{page}/{total_pages}"]
+    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title, page=page)
     await tower_shop.finish()
 
 @tower_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
