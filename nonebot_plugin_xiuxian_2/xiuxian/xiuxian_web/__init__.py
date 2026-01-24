@@ -9,7 +9,7 @@ from pathlib import Path
 from nonebot.log import logger
 from datetime import datetime
 from nonebot import get_driver
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, send_from_directory, abort
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -31,8 +31,9 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # 用于会话加密
 
 # 配置
-DATABASE = Path() / "data" / "xiuxian" / "xiuxian.db"
-IMPART_DB = Path() / "data" / "xiuxian" / "xiuxian_impart.db"
+XIUXIANDATA = Path() / "data"
+DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
+IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
 ADMIN_IDS = get_driver().config.superusers
 PORT = XiuConfig().web_port
 HOST = XiuConfig().web_host
@@ -2336,6 +2337,23 @@ def search_users():
     results = execute_sql(DATABASE, sql, (f"%{query}%",))
     
     return jsonify([{"id": r['user_id'], "name": r['user_name']} for r in results])
+
+@app.route('/download/<path:filepath>')
+def download_file(filepath):
+    # 构建文件的完整路径
+    full_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "cache" / filepath
+    full_path = full_path.absolute()
+    # 检查文件是否存在
+    if not full_path.exists():
+        abort(404)  # 文件不存在，返回404错误
+    
+    # 检查文件是否在允许的目录下，防止目录遍历攻击
+    if not full_path.is_relative_to(Path().absolute()):
+        abort(403)  # 文件不在允许的目录下，返回403错误
+    
+    # 发送文件
+    return send_file(str(full_path))
+
 
 import threading
 

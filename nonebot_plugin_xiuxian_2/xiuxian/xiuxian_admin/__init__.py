@@ -864,8 +864,8 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     """
     使用自定义Markdown模板发送消息，并支持按钮
     """
-    args_str = re.sub(r'mqqapi:/', 'mqqapi://', args.extract_plain_text())
-    args_str = args_str.replace("\\r", "\r").replace('\\"', '"')
+    args_str = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
+    args_str = args_str.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://')
     if not args_str:
         await bot.send(event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
         return
@@ -888,6 +888,8 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     params: List[Dict[str, Any]] = []
     def replace_url_format(input_str):
+        if not input_str:
+            return " "
         pattern = r'(\w+)\]\(([^)]+)\)'
         def replacer(match):
             param_a = match.group(1)
@@ -905,7 +907,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         key = key.strip()
 
         # 处理值中的特殊字符
-        value = raw_value.replace("\\'", "'").replace('\\"', '"')  # 处理单引号和双引号
+        value = raw_value.replace("\\'", "'").replace('\\"', '"').replace("\\=", "=")  # 处理单引号和双引号
         if value.startswith('\r'):
             value = value.strip()
             value = '\r' + value
@@ -923,11 +925,6 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 value = " "
             params.append({"key": key, "values": [value]})
 
-    if button_id:
-        msg = MessageSegmentPlus.markdown_template_with_button(template_id, params, button_id)
-    else:
-        msg = MessageSegmentPlus.markdown_template(template_id, params)
+    msg = MessageSegmentPlus.markdown_template(template_id, params, button_id)
     print(f"传入：\n{args_str}\n\n解析：\n{params}")
-    await bot.send(event, f"传入：\n{args_str}\n\n解析：\n{params}")
-    # 发送消息
     await bot.send(event, msg)

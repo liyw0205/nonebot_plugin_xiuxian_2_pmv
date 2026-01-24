@@ -509,11 +509,10 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     # 添加分页信息
     msg += f"\n\n第{page}/{total_pages}页"
+    msg += f"\n输入【传承背包+页码】查看其他页"
     l_msg.append(msg)
-    if total_pages > 1:
-        msg += f"\n输入【传承背包+页码】查看其他页"
-    await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title)
-    await handle_send(bot, event, " ", md_type="传承", k1="翻页", v1=f"传承背包 {page + 1}", k2="信息", v2="传承信息", k3="卡图", v3="传承卡图")
+    page = ["翻页", f"传承背包 {page + 1}", "信息", "传承信息", "卡图", "传承卡图", f"{page}/{total_pages}"]    
+    await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title, page=page)
 
 @re_impart_load.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import (
     PrivateMessageEvent, MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, handle_pic_send, handle_pic_msg_send, number_to, log_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from datetime import datetime, timedelta
 from .games.gomoku import *
@@ -90,7 +90,7 @@ async def gomoku_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     )
     
     await handle_send(bot, event, msg, md_type="游戏", k1="加入", v1=f"加入五子棋 {room_id}", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-    await bot.send(event, MessageSegment.image(board_image))
+    await handle_pic_send(bot, event, board_image)
     
     # 启动房间超时任务
     await start_room_timeout(bot, event, room_id)
@@ -158,7 +158,7 @@ async def gomoku_single_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     )
     
     await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-    await bot.send(event, MessageSegment.image(board_image))
+    await handle_pic_send(bot, event, board_image)
 
 # 加入五子棋命令
 @gomoku_join.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -221,7 +221,7 @@ async def gomoku_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     )
     
     await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-    await bot.send(event, MessageSegment.image(board_image))
+    await handle_pic_send(bot, event, board_image)
     
     # 启动落子超时任务
     await start_move_timeout(bot, event, room_id)
@@ -298,7 +298,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 # 保存最终棋盘
                 board_image = create_board_image(game)
                 await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                await bot.send(event, MessageSegment.image(board_image))
+                await handle_pic_send(bot, event, board_image)
                 
                 # 清理房间
                 room_manager.delete_room(user_room)
@@ -313,13 +313,10 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 # 更新棋盘图片
                 board_image = create_board_image(game)
                 
-                msg = f"玩家落子在 {position_to_coordinate(x, y)}，轮到 {NICKNAME}的回合。"
+                msg = f"{user_info['user_name']}落子在 {position_to_coordinate(x, y)}，轮到 {NICKNAME}的回合"
                 await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                await bot.send(event, MessageSegment.image(board_image))
                 
-                # 调用AI函数进行AI落子
-                await asyncio.sleep(1)  # 延迟以模拟思考
-                ai_move = find_best_move(game, 2)  # AI为白棋，player=2
+                ai_move = find_best_move_enhanced(game, 2)  # AI为白棋，player=2
                 if ai_move:
                     x_ai, y_ai= ai_move
                     if game.board[y_ai][x_ai] == 0:
@@ -340,7 +337,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                             # 保存最终棋盘
                             board_image = create_board_image(game)
                             await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                            await bot.send(event, MessageSegment.image(board_image))
+                            await handle_pic_send(bot, event, board_image)
                             
                             # 清理房间
                             room_manager.delete_room(user_room)
@@ -349,7 +346,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                             # 切换回合
                             game.current_player = game.player_black  # 玩家的回合
                             next_player_info = user_info
-                            msg = f"{NICKNAME} 落子在 {position_to_coordinate(x_ai, y_ai)}，轮到 {next_player_info['user_name']} 的回合。"
+                            msg = f"{NICKNAME} 落子在 {position_to_coordinate(x_ai, y_ai)}，轮到 {next_player_info['user_name']} 的回合"
                             
                             # 保存游戏状态
                             room_manager.save_room(user_room)
@@ -357,13 +354,12 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                             # 更新棋盘图片
                             board_image = create_board_image(game)
                             
-                            await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                            await bot.send(event, MessageSegment.image(board_image))
+                            await handle_pic_msg_send(bot, event, board_image, msg)
                     else:
                         # AI无法落子，跳过（理论上不会发生）
                         game.current_player = game.player_black  # 玩家的回合
                         next_player_info = user_info
-                        msg = f"{NICKNAME}无法落子，轮到 {next_player_info['user_name']} 的回合。"
+                        msg = f"{NICKNAME}无法落子，轮到 {next_player_info['user_name']} 的回合"
                         
                         # 保存游戏状态
                         room_manager.save_room(user_room)
@@ -372,7 +368,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                         board_image = create_board_image(game)
                         
                         await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                        await bot.send(event, MessageSegment.image(board_image))
+                        await handle_pic_send(bot, event, board_image)
                 else:
                     # AI无法找到落子位置，结束游戏
                     game.status = "finished"
@@ -384,14 +380,14 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                     # 保存最终棋盘
                     board_image = create_board_image(game)
                     await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                    await bot.send(event, MessageSegment.image(board_image))
+                    await handle_pic_send(bot, event, board_image)
                     
                     # 清理房间
                     room_manager.delete_room(user_room)
                     return
         else:
             # AI的回合已经在玩家落子后处理，这里不需要额外处理
-            msg = "现在不是您的回合！请等待AI落子。"
+            msg = f"现在不是您的回合！请等待{NICKNAME}落子。"
             await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
             return
     else:
@@ -435,7 +431,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             # 切换回合
             game.current_player = game.player_white if user_id == game.player_black else game.player_black
             next_player_info = sql_message.get_user_info_with_id(game.current_player)
-            msg = f"落子成功！轮到 {next_player_info['user_name']} 的回合。"
+            msg = f"落子成功！轮到 {next_player_info['user_name']} 的回合"
         
         # 保存游戏状态
         room_manager.save_room(user_room)
@@ -449,7 +445,7 @@ async def gomoku_move_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             msg += f"🎉 恭喜 {winner_name} 获胜！"
         
         await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
-        await bot.send(event, MessageSegment.image(board_image))
+        await handle_pic_send(bot, event, board_image)
         
         # 如果游戏结束，清理房间
         if game.status == "finished":
@@ -500,12 +496,12 @@ async def gomoku_surrender_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             # 保存最终棋盘
             board_image = create_board_image(game)
             await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-            await bot.send(event, MessageSegment.image(board_image))
+            await handle_pic_send(bot, event, board_image)
             
             # 清理房间
             room_manager.delete_room(user_room)
         else:
-            msg = "只有玩家可以认输，AI不会认输！"
+            msg = f"只有玩家可以认输，{NICKNAME}不会认输！"
             await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
     else:
         # 双人模式
@@ -539,7 +535,7 @@ async def gomoku_surrender_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         # 保存最终棋盘
         board_image = create_board_image(game)
         await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-        await bot.send(event, MessageSegment.image(board_image))
+        await handle_pic_send(bot, event, board_image)
         
         # 清理房间
         room_manager.delete_room(user_room)
@@ -622,7 +618,7 @@ async def gomoku_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     board_image = create_board_image(game)
     
     await handle_send(bot, event, msg, md_type="游戏", k1="落子", v1="落子", k2="信息", v2="棋局信息", k3="认输", v3="认输")
-    await bot.send(event, MessageSegment.image(board_image))
+    await handle_pic_send(bot, event, board_image)
 
 # 退出五子棋命令
 @gomoku_quit.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1065,7 +1061,7 @@ async def start_move_timeout(bot: Bot, event: GroupMessageEvent | PrivateMessage
                     board_image = create_board_image(game)
                     
                     await handle_send(bot, event, msg, md_type="游戏", k1="开始", v1="开始五子棋", k2="信息", v2="棋局信息", k3="帮助", v3="五子棋帮助")
-                    await bot.send(event, MessageSegment.image(board_image))
+                    await handle_pic_send(bot, event, board_image)
                     
                     # 清理房间
                     room_manager.delete_room(room_id)

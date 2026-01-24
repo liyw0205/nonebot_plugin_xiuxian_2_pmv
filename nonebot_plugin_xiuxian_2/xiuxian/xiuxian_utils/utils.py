@@ -720,8 +720,6 @@ def optimize_md(msg: Union[Message, str]) -> str:
     msg_text = msg_text.replace('\n', '\r')
     msg_text = msg_text.replace('[', '')
     msg_text = msg_text.replace(']', '')
-    msg_text = msg_text.replace('<', '')
-    msg_text = msg_text.replace('>', '')
     return msg_text
 
 def generate_command(msg, status=None, command=None, msg2=None):
@@ -741,7 +739,7 @@ def generate_command(msg, status=None, command=None, msg2=None):
     else:
         return f"[{msg}"
 
-async def send_msg_handler(bot, event, *args, title=None, page=None, button_id=None):
+async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=None, button_id=None):
     """
     统一消息发送处理器
     :param bot: 机器人实例
@@ -781,7 +779,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, button_id=N
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True, button_id=button_id)
+                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -793,7 +791,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, button_id=N
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
             if XiuConfig().markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, shell=True, button_id=button_id)
+                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -951,17 +949,21 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
                 user_id=event.user_id, message=msg
             )
 
-async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, title_param=None, msg_param=None, button_id=None):
+async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息"""
     if not markdown_id:
         await handle_send(bot, event, msg)
     msg = optimize_md(msg)
-    
+
+    is_group = isinstance(event, GroupMessageEvent)
     shell_param = markdown_param("s1", " ")
     if not title:
         title = " "
     if not page:
-        page = markdown_param("t2", " ")
+        if page_param:
+            page = markdown_param("t2", page_param)
+        else:
+            page = markdown_param("t2", " ")
     else:
         page = {
         "key": "t2",
@@ -971,15 +973,18 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         generate_command(f"{page[4]}", command=f"{page[5]}", status="end", msg2=f"\r"),
         generate_command(f"{page[6]}")
         ]}
+    if shell:
+        shell_param = markdown_param("s1", "python\r" + msg)
+        msg_param = page
+    else:
+        open_id = get_real_id(event.user_id)
+        if open_id and is_group and XiuConfig().at_sender and at_msg:
+            title = f"<@{open_id}>\r{title}"
     if not title_param:
         title = optimize_md(title)
         title_param = markdown_param("t1", title)
     if not msg_param:
         msg_param = markdown_param("t2", msg)
-    if shell:
-        shell_param = markdown_param("s1", "python\r" + msg)
-        msg_param = page
-        
     param = [        
         title_param,
         msg_param,
@@ -1031,8 +1036,12 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         v3 = f"{XiuConfig().qqq}"
 
     msg = optimize_md(msg)
+    is_group = isinstance(event, GroupMessageEvent)
+    open_id = get_real_id(event.user_id)
+    if open_id and is_group and XiuConfig().at_sender:
+        msg = f"<@{open_id}>\r{msg}"
     param = [
-        markdown_param("t1", msg),
+        markdown_param("t1", msg+ '\r\r---\r\r'),
         markdown_param("button_text_1", v1),
         markdown_param("button_show_1", k1),
         markdown_param("button_text_2", v2),
@@ -1042,7 +1051,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     ]
     if k4:
         param = [
-            markdown_param("t1", msg),
+            markdown_param("t1", msg+ '\r\r---\r\r'),
             markdown_param("button_text_1", v1),
             markdown_param("button_show_1", k1),
             markdown_param("button_text_2", v2),
@@ -1131,7 +1140,7 @@ async def handle_pic_msg_send(bot, event, imgpath: Union[str, Path, BytesIO, Ima
         
         # 添加文字内容
         if text:
-            message.append(MessageSegment.text(text))
+            message.append(MessageSegment.text("\n" + text))
         
         # 处理图片内容
         if imgpath is not None:
@@ -1237,31 +1246,49 @@ def log_message(user_id: str, msg: str):
 
 def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 10) -> dict:
     """
-    获取用户日志（带分页功能）
+    获取用户日志 - 支持自动查找最近日志和智能分页
     
     参数:
         user_id: 用户ID
-        date_str: 日期字符串(格式: 年月日，如250820)，不传则获取今天
-        page: 当前页码，默认为1
+        date_str: 日期字符串(格式: 年月日，如250820)，不传则自动查找最近有日志的日期
+        page: 当前页码，默认为1，超出范围自动调整为最后一页
         per_page: 每页显示的日志数量，默认为10
         
     返回:
-        包含分页信息的字典:
-        {
-            "logs": 日志列表,
-            "total": 总日志数,
-            "total_pages": 总页数,
-            "current_page": 当前页码
-        }
+        日志信息字典
     """
+    def find_recent_log_date(user_id):
+        """查找用户最近有日志记录的日期"""
+        try:
+            logs_dir = PLAYERSDATA / str(user_id) / "logs"
+            if not logs_dir.exists():
+                return None
+                
+            # 获取所有日志文件并按日期排序（最新的在前）
+            log_files = sorted(logs_dir.glob("*.log"), key=lambda x: x.stem, reverse=True)
+            return log_files[0].stem if log_files else None
+        except:
+            return None
+    
     try:
-        # 确定日期
-        if date_str is None:
-            date_str = datetime.now().strftime("%y%m%d")
-        else:
-            # 验证日期格式是否正确
+        # 确定日期：优先使用指定日期，否则查找最近有日志的日期
+        target_date = date_str
+        if target_date is None:
+            target_date = find_recent_log_date(user_id)
+            if target_date is None:
+                return {
+                    "logs": [],
+                    "total": 0,
+                    "total_pages": 0,
+                    "current_page": 1,
+                    "message": "暂无任何日志记录",
+                    "available_dates": []
+                }
+        
+        # 验证日期格式
+        if target_date:
             try:
-                datetime.strptime(date_str, "%y%m%d")
+                datetime.strptime(target_date, "%y%m%d")
             except ValueError:
                 return {
                     "logs": [],
@@ -1272,46 +1299,78 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
                 }
         
         # 构建日志文件路径
-        log_file = PLAYERSDATA / str(user_id) / "logs" / f"{date_str}.log"
+        log_file = PLAYERSDATA / str(user_id) / "logs" / f"{target_date}.log"
         
-        # 如果文件不存在，返回空结果
+        # 如果指定日期的文件不存在，尝试查找可用的日志日期
         if not log_file.exists():
-            return {
-                "logs": [],
-                "total": 0,
-                "total_pages": 0,
-                "current_page": page,
-                "error": f"未找到{date_str}的日志记录"
-            }
+            available_dates = []
+            logs_dir = PLAYERSDATA / str(user_id) / "logs"
+            if logs_dir.exists():
+                available_dates = sorted([f.stem for f in logs_dir.glob("*.log")], reverse=True)
+            
+            if available_dates:
+                # 自动使用最近的可用日期
+                recent_date = available_dates[0]
+                log_file = PLAYERSDATA / str(user_id) / "logs" / f"{recent_date}.log"
+                if log_file.exists():
+                    target_date = recent_date  # 更新为目标日期
+                else:
+                    return {
+                        "logs": [],
+                        "total": 0,
+                        "total_pages": 0,
+                        "current_page": 1,
+                        "message": f"指定日期{target_date}无日志，发现以下可用日期：{', '.join(available_dates[:5])}",
+                        "available_dates": available_dates
+                    }
+            else:
+                return {
+                    "logs": [],
+                    "total": 0,
+                    "total_pages": 0,
+                    "current_page": 1,
+                    "message": "暂无任何日志记录",
+                    "available_dates": []
+                }
         
         # 读取日志文件
         with open(log_file, "r", encoding="utf-8") as f:
             all_logs = json.load(f)
         
         total_logs = len(all_logs)
-        total_pages = (total_logs + per_page - 1) // per_page
+        total_pages = max(1, (total_logs + per_page - 1) // per_page)  # 确保至少1页
         
-        # 检查页码是否有效
-        if page < 1 or page > total_pages:
-            return {
-                "logs": [],
-                "total": total_logs,
-                "total_pages": total_pages,
-                "current_page": page,
-                "error": f"页码错误，有效范围为1~{total_pages}页"
-            }
+        # 智能页码调整：超出范围自动跳到最后一页
+        adjusted_page = page
+        if page < 1:
+            adjusted_page = 1
+        elif page > total_pages:
+            adjusted_page = total_pages
         
         # 计算分页范围
-        start_index = (page - 1) * per_page
+        start_index = (adjusted_page - 1) * per_page
         end_index = start_index + per_page
         paged_logs = all_logs[start_index:end_index]
         
-        return {
+        # 获取所有可用日期
+        available_dates = []
+        logs_dir = PLAYERSDATA / str(user_id) / "logs"
+        if logs_dir.exists():
+            available_dates = sorted([f.stem for f in logs_dir.glob("*.log")], reverse=True)
+        
+        result = {
             "logs": paged_logs,
             "total": total_logs,
             "total_pages": total_pages,
-            "current_page": page
+            "current_page": adjusted_page,
+            "date": target_date,
+            "available_dates": available_dates
         }
+        
+        if date_str is None and target_date != datetime.now().strftime("%y%m%d"):
+            result["date_auto_selected"] = f"已自动选择最近日志日期：{target_date}"
+        
+        return result
         
     except Exception as e:
         logger.error(f"获取日志失败: {e}")
@@ -1320,7 +1379,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "total": 0,
             "total_pages": 0,
             "current_page": page,
-            "error": f"获取日志失败: {e}"
+            "error": f"获取日志失败: {str(e)}"
         }
 
 def clean_old_logs(keep_days=10):
@@ -1405,3 +1464,24 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
             
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
+
+import requests
+
+def get_real_id(id_str):
+    """
+    调用API接口获取真实ID
+
+    :param id_str: 要查询的ID字符串
+    :return: 真实ID (str) 或 None
+    """
+    if not XiuConfig().web_link:
+        return None
+
+    url = f"{XiuConfig().gsk_link}/getid?type=2&id={id_str}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # 检查请求是否成功
+        data = response.json()
+        return data.get('id')  # 如果 'id' 不存在则返回 None
+    except Exception:
+        return None

@@ -292,8 +292,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     await complete_rift.finish()
                 elif rift_type == "Boss战斗":
                     result, msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
-                    await send_msg_handler(bot, event, result)
-                    await handle_send(bot, event, msg)
+                    await send_msg_handler(bot, event, result, title=msg)
                     log_message(user_id, msg)
                     update_statistics_value(user_id, "秘境打怪")
                     await complete_rift.finish()
@@ -375,21 +374,23 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         battle_type = get_battle_type()
         if battle_type == "掉血事件":
             result_msg = get_dxsj_info("掉血事件", user_info)
+            await handle_send(bot, event, result_msg)
         elif battle_type == "Boss战斗":
             result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
             update_statistics_value(user_id, "秘境打怪")
-            await send_msg_handler(bot, event, result)
+            await send_msg_handler(bot, event, result, title=result_msg)
     elif rift_type == "宝物":
         result_name, result_msg = get_treasure_info(user_info, rift_rank)
+        if result_name:
+            await handle_send(bot, event, msg, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
+        else:
+            await handle_send(bot, event, result_msg)
 
     # 消耗秘境钥匙
     sql_message.update_back_j(user_id, item_id)
-    msg = f"秘境 {rift_info['name']} 已结算！\n" + result_msg
+    msg = f"秘境 {rift_info['name']} 已结算！"
     log_message(user_id, result_msg)
-    if result_name:
-        await handle_send(bot, event, msg, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
-    else:
-        await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg)
     return
 
 async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -421,14 +422,13 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     rift_rank = rift_info["rank"]
     result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
     update_statistics_value(user_id, "秘境打怪")
-    await send_msg_handler(bot, event, result)
+    await send_msg_handler(bot, event, result, title=result_msg)
 
     # 消耗斩妖令
     sql_message.update_back_j(user_id, item_id)
     msg = f"秘境 {rift_info['name']} 已结算！"
     log_message(user_id, result_msg)
     await handle_send(bot, event, msg)
-    await handle_send(bot, event, result_msg)
     return
 
 async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):

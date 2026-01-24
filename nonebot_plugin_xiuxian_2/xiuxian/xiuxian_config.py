@@ -46,7 +46,12 @@ class XiuConfig:
         self.markdown_id2 = ""
         # 模板ID
         self.button_id = ""
+        self.button_id2 = ""
         # 按钮ID
+        self.gsk_link = ""
+        # gsk地址获取真实ID用于md模板艾特
+        self.web_link = ""
+        # 修仙管理面板地址用于获取修仙信息图片
 
         self.web_status = True
         # 修仙管理面板是否开启

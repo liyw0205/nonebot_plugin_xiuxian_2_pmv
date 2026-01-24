@@ -107,7 +107,7 @@ __level_help__ = """
    ▪ 异灵根
    ▪ 真灵根
    ▪ 伪灵根
-======================
+
 注：灵根品质影响修炼速度
 """.strip()
 
@@ -426,18 +426,18 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         title_param = {
         "key": "t1",
         "values": [
-                generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r> "),
-                generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r> "),
-                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r> "),
-                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r> "),
+                generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r\r> "),
+                generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r\r> "),
+                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r\r> "),
+                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r\r> "),
                 generate_command("境界", command="境界帮助", status="start", msg2="/"),
                 generate_command("灵根", command="灵根帮助", status="start", msg2="/"),
-                generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r> "),
+                generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r\r> "),
                 generate_command("修炼", command="修炼", status="start", msg2="/"),
                 generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
                 generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
             ]}
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title_param=title_param, shell=True)
+        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title_param=title_param, shell=True, button_id=XiuConfig().button_id2)
         await help_in.finish()
     else:    
         await handle_send(bot, event, msg)
@@ -682,7 +682,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await tribulation_info.finish()
 
     if current_index == 0:  # 已经是最高境界
@@ -726,7 +726,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                     f"请继续修炼，待修为足够后再来渡劫！"
                 )
     
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
     await tribulation_info.finish()
 
 @fusion_destiny_pill.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -876,7 +876,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await start_tribulation.finish()
 
     if current_index == 0:  # 已经是最高境界
@@ -892,7 +892,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查渡劫条件：境界圆满且修为达标
     if not level_name.endswith('圆满'):
         msg = f"当前境界：{user_info['level']}\n道友境界尚未圆满，无法渡劫！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await start_tribulation.finish()
     if not (current_exp >= required_exp):
         remaining_exp = max(0, required_exp - current_exp)
@@ -905,7 +905,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await start_tribulation.finish()
     
     # 检查是否有天命丹
@@ -927,7 +927,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             hours = remaining // 3600
             minutes = (remaining % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await start_tribulation.finish()
 
     # 开始渡劫
@@ -967,7 +967,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             )
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)    
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
     await start_tribulation.finish()
 
 @destiny_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1004,12 +1004,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             hours = (tribulation_cd - cd) // 3600
             minutes = ((tribulation_cd - cd) % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await destiny_tribulation.finish()
                 
     if not has_item:
         msg = f"道友天命渡劫丹不足！\n请发送【融合天命渡劫丹】获得"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="融合", v3="融合天命渡劫丹")
         await destiny_tribulation.finish()
     
     # 检查境界是否可以渡劫
@@ -1020,7 +1020,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await destiny_tribulation.finish()
 
     if current_index == 0:  # 已经是最高境界
@@ -1036,7 +1036,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查渡劫条件：境界圆满且修为达标
     if not level_name.endswith('圆满'):
         msg = f"当前境界：{user_info['level']}\n道友境界尚未圆满，无法渡劫！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await destiny_tribulation.finish()
     if not (current_exp >= required_exp):
         remaining_exp = max(0, required_exp - current_exp)
@@ -1049,7 +1049,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await destiny_tribulation.finish()
     
     # 使用天命渡劫丹
@@ -1062,7 +1062,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     msg = (
         f"✨天命所归，渡劫成功✨\n"
-        f"借助天命渡劫丹之力，道友轻松突破至{next_level}！\n"
+        f"道友轻松突破至{next_level}！\n"
         f"当前境界：{next_level}"
     )
     
@@ -1092,7 +1092,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             "心魔已消，道友道心澄明如镜！",
             "恭喜道友，心魔已无法侵扰你的道心！"
         ])
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
     
     # 检查心魔劫次数
@@ -1114,7 +1114,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) < levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}无需渡劫，请使用【突破】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await heart_devil_tribulation.finish()
 
     if current_index == 0:  # 已经是最高境界
@@ -1139,7 +1139,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
     
     # 检查是否有天命丹
@@ -1160,7 +1160,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             hours = (tribulation_cd - cd) // 3600
             minutes = ((tribulation_cd - cd) % 3600) // 60
             msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await heart_devil_tribulation.finish()
         
     # 随机决定渡劫类型 (1:直接成功, 2:直接失败, 3:战斗判断)
@@ -1177,7 +1177,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"道友福缘深厚，渡过了心魔劫！\n"
             f"渡劫成功率提升至{new_rate}%！"
         )
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
         
     elif tribulation_type == 2:  # 直接失败
@@ -1199,7 +1199,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             )
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
         
     else:  # 战斗判断
@@ -1291,8 +1291,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 )
             tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             save_user_tribulation_info(user_id, tribulation_data)        
-        await send_msg_handler(bot, event, result)
-        await handle_send(bot, event, msg)
+        await send_msg_handler(bot, event, result, )
+        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
 
 @level_up.handle(parameterless=[Cooldown(stamina_cost=1)])
@@ -1318,7 +1318,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 12, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up.finish()
     else:
         pass
@@ -1329,7 +1329,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up.finish()
 
     level_rate = jsondata.level_rate_data()[level_name]  # 对应境界突破的概率
@@ -1349,11 +1349,11 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     if pause_flag:
         msg = f"由于检测到背包有丹药：{elixir_name}，效果：{elixir_desc}，突破已经准备就绪\n请发送 ，【渡厄突破】 或 【直接突破】来选择是否使用丹药突破！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
     else:
         msg = f"由于检测到背包没有【渡厄丹】，突破已经准备就绪\n请发送，【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
 
 @level_up_zj.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1378,7 +1378,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 6, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
     else:
         pass
@@ -1389,7 +1389,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_zj.finish()
 
     level_name = user_msg['level']  # 用户境界
@@ -1417,7 +1417,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
         sql_message.update_levelrate(user_id, leveluprate + update_rate)
         msg = f"道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
 
     elif type(le) == list:
@@ -1428,7 +1428,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
     else:
         # 最高境界
@@ -1459,7 +1459,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 6, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_lx.finish()
 
     level_name = user_msg['level']  # 用户境界
@@ -1468,7 +1468,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_lx.finish()
 
     level_name = user_msg['level']
@@ -1551,7 +1551,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 4, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd.finish()
     else:
         pass
@@ -1562,7 +1562,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
     elixir_name = "渡厄金丹"
@@ -1585,7 +1585,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
         sql_message.update_user_stamina(user_id, 4, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
     if le == "失败":
@@ -1616,7 +1616,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
     elif type(le) == list:
@@ -1629,7 +1629,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         now_exp = int(int(exp) * 0.1)
         sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
         msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
     else:
         # 最高境界
@@ -1660,7 +1660,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             # 如果cd小于配置的cd，返回等待时间
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 8, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr.finish()
     else:
         pass
@@ -1671,7 +1671,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
     elixir_name = "渡厄丹"
@@ -1694,7 +1694,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
         sql_message.update_user_stamina(user_id, 8, 1)
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
     if le == "失败":
@@ -1723,7 +1723,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
     elif type(le) == list:
@@ -1734,7 +1734,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
     else:
         # 最高境界
@@ -1765,7 +1765,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 15, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr_lx.finish()
 
     level_name = user_msg['level']  # 用户境界
@@ -1774,7 +1774,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_dr_lx.finish()
 
     level_name = user_msg['level']
@@ -1794,7 +1794,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     
     if dr_pill_count < 1:
         msg = f"渡厄突破至少需要1个！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr_lx.finish()
     
     success = False
@@ -1857,6 +1857,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     result_msg += f"\n本次连续突破共消耗{pills_used}个渡厄丹，剩余{dr_pill_count - pills_used}个"
     
     await handle_send(bot, event, result_msg)
+    await handle_send(bot, event, result_msg, md_type="修仙", k1="速锁", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
     await level_up_dr_lx.finish()
 
 @level_up_drjd_lx.handle(parameterless=[Cooldown(stamina_cost=15)])
@@ -1882,7 +1883,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 15, 1)
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd_lx.finish()
 
     level_name = user_msg['level']  # 用户境界
@@ -1891,7 +1892,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     # 检查是否需要渡劫
     if level_name.endswith('圆满') and levels.index(level_name) >= levels.index(XiuConfig().tribulation_min_level):
         msg = f"道友当前境界{level_name}需要渡劫才能突破，请使用【渡劫】指令！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="渡劫", v1="渡劫", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await level_up_drjd_lx.finish()
 
     level_name = user_msg['level']
@@ -1911,7 +1912,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     
     if drjd_pill_count < 1:
         msg = f"渡厄金丹突破至少需要1个！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd_lx.finish()
     
     success = False
@@ -2000,7 +2001,7 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number =  main_rate_buff['number'] if main_rate_buff is not None else 0
     msg = f"道友下一次突破成功概率为{level_rate + leveluprate + number}%"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
     await user_leveluprate.finish()
 
 
@@ -2442,7 +2443,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
 
 @view_logs.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """查看修仙日志"""
+    """查看修仙日志（增强版）"""
     args = args.extract_plain_text().split()
     date_str = None
     page = 1
@@ -2462,21 +2463,50 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     user_id = event.get_user_id()
     logs_data = get_logs(user_id, date_str=date_str, page=page)
     
+    # 处理各种情况
+    if "error" in logs_data:
+        msg = f"获取日志失败：{logs_data['error']}"
+        await handle_send(bot, event, msg)
+        await view_logs.finish()
+    
     if not logs_data["logs"]:
-        msg = "没有找到日志记录！"
-        if "error" in logs_data:
-            msg += f"\n错误：{logs_data['error']}"
+        if logs_data.get("available_dates"):
+            # 有可用日期但当前日期无数据
+            recent_dates = ", ".join(logs_data["available_dates"][:3])
+            msg = f"{logs_data.get('message', '当前日期无日志')}\n最近有日志的日期：{recent_dates}"
+        else:
+            msg = logs_data.get('message', '暂无日志记录')
         await handle_send(bot, event, msg)
         await view_logs.finish()
     
     # 构建日志消息
-    date_display = date_str if date_str else datetime.now().strftime("%y%m%d")
-    msg = [f"\n修仙日志 - {date_display}\n第{page}页/共{logs_data['total_pages']}页\n═════════════"]
+    date_display = logs_data.get('date', '未知日期')
+    current_page = logs_data['current_page']
+    total_pages = logs_data['total_pages']
+    
+    # 添加提示信息
+    header = f"✨修仙日志 - {date_display}✨\n第{current_page}页/共{total_pages}页\n"
+    if logs_data.get('date_auto_selected'):
+        header += f"📅{logs_data['date_auto_selected']}\n"
+    
+    header += "═════════════"
+    
+    msg_parts = [header]
     
     for log in logs_data["logs"]:
-        msg.append(f"{log['timestamp']}\n{log['message']}\n═════════════")
+        timestamp = log.get('timestamp', '未知时间')
+        message = log.get('message', '')
+        msg_parts.append(f"⏰{timestamp}\n{message}\n═════════════")
     
-    await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg)
+    # 添加翻页提示
+    if total_pages > 1:
+        page_hint = f"📖发送【修仙日志 {date_display} 页码】查看其他页"
+        if logs_data.get('available_dates'):
+            recent_dates = "、".join(logs_data['available_dates'][:3])
+            page_hint += f"\n🗓️其他可用日期：{recent_dates}"
+        msg_parts.append(page_hint)
+    
+    await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg_parts)
     await view_logs.finish()
 
 @view_data.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -2491,14 +2521,16 @@ async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await view_data.finish()
     
     sorted_keys = sorted(stats_data.keys())
-    stats_message = "═══ 修仙统计数据 ════\n"
+    title = "═══ 修仙统计数据 ════\n"
+    stats_message = ""
     for key in sorted_keys:
         value = stats_data[key]
         formatted_value = str(value)
         stats_message += f"◈ {key}: {number_to(formatted_value)}\n"
     
-    msg = stats_message
-    await handle_send(bot, event, msg)
+    msg_list = []
+    msg_list.append(stats_message)
+    await send_msg_handler(bot, event, '统计数据', bot.self_id, msg_list, title=title)
     await view_data.finish()
 
 def generate_daohao():

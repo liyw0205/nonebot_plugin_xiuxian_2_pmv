@@ -439,9 +439,9 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     display_msg = result_msg[:20]
     if len(result_msg) > 20:
         display_msg.append(f"...等共{len(result_msg)}件物品")
-    display_msg.append(f"\n✨ 成功上架 {success_count} 件物品\n")
-    display_msg.append(f"💎 总手续费: {number_to(total_fee)}灵石")
-    await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg, title=title)
+    msg = f"\n✨ 成功上架 {success_count} 件物品\n"
+    msg += f"💎 总手续费: {number_to(total_fee)}灵石"
+    await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg, title=title, page_param=msg)
     await xianshi_auto_add.finish()
 
 @xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=10)])
@@ -709,9 +709,8 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg_list.append(msg)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
-    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title)
-    if total_pages > 1:
-        await handle_send(bot, event, " ", md_type="交易", k1="翻页", v1=f"我的仙肆 {current_page + 1}", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+    page = ["翻页", f"我的仙肆 {current_page + 1}", "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title, page=page)
     await my_xian_shop.finish()
 
 @xian_shop_remove.handle(parameterless=[Cooldown(cd_time=1.4)])

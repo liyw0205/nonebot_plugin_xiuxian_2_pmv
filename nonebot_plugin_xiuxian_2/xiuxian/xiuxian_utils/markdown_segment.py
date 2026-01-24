@@ -118,4 +118,7 @@ params = [markdown_param("title", "标题"),
 markdown = MessageSegmentPlus.markdown_template("123456_789456", params)
 # bot.send(event, markdown)
 
+按钮范例
+markdown = MessageSegmentPlus.markdown_template("123456_789456", params, "123456_789456")
+# bot.send(event, markdown)
 """

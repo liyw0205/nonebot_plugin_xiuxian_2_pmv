@@ -18,6 +18,7 @@ from .draw_changelog import get_commits, create_changelog_image
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from io import BytesIO
+from pathlib import Path
 
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
@@ -200,11 +201,17 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         img_res = await draw_user_info_img(user_info['user_id'], detail_map)
     else:
         img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
-    
-    if isinstance(event, GroupMessageEvent):
-        await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
+    if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().web_link:
+        msg_param = {
+        "key": "t2",
+        "values": ["](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",f"img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",f"道号：[{user_info['user_name']}"]
+        }
+        await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
     else:
-        await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
+        if isinstance(event, GroupMessageEvent):
+            await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(img_res))
+        else:
+            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
 
 @changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

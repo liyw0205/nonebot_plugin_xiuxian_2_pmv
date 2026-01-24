@@ -185,30 +185,30 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
     # 检查用户是否已注册修仙
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await check_item_effect.finish()
 
     # 获取用户输入的物品名或ID
     input_str = args.extract_plain_text().strip()
     if not input_str:
         msg = "请输入物品名称或ID！\n例如：查看效果 渡厄丹 或 查看效果 1999"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
         await check_item_effect.finish()
 
     # 判断输入是ID还是名称
     goods_id, goods_info = items.get_data_by_item_name(input_str)
     if not goods_id:
         msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
         return
     item_msg = get_item_msg(goods_id, user_info['user_id'])
     if goods_id == 15053 or input_str == "补偿":
         await check_item_effect.finish()
     # 构造返回消息
     msg = f"\nID：{goods_id}\n{item_msg}"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
     await check_item_effect.finish()
     
 @back_help.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -728,8 +728,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     bidder = sql_message.get_user_info_with_id(bid["bidder_id"])
                     time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                     msg.append(f"{i+1}. {bidder['user_name'] if bidder else bid['bidder_id']}: {number_to(bid['price'])}灵石 {time_str}")
-            
-            await handle_send(bot, event, "\n".join(msg))
+            await send_msg_handler(bot, event, '拍卖品', bot.self_id, msg)
             return
         
         # 查历史记录
@@ -756,8 +755,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 start_time = datetime.fromtimestamp(record["start_time"]).strftime("%Y-%m-%d %H:%M")
                 end_time = datetime.fromtimestamp(record["end_time"]).strftime("%Y-%m-%d %H:%M")
                 msg.append(f"时间: {start_time} 至 {end_time}")
-                
-                await handle_send(bot, event, "\n".join(msg))
+                await send_msg_handler(bot, event, '拍卖品', bot.self_id, msg)
                 return
         
         await handle_send(bot, event, "未找到该拍卖品！")
@@ -771,13 +769,14 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg = "当前没有拍卖品展示！"
         if auction_status["active"]:
             msg += "\n拍卖正在进行中，请稍后再试或查看指定ID"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
         return
     
     items_list = list(display_auctions["items"].values())
     items_list.sort(key=lambda x: -x["current_price"])
     
-    msg = [f"\n☆------拍卖物品列表------☆"]
+    title = f"\n☆------拍卖物品列表------☆"
+    msg = []
     for item in items_list[:10]:  # 最多显示10个
         status = ""
         if display_auctions.get("is_history"):
@@ -794,33 +793,35 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"物品: {item['name']}\n"
             f"当前价: {number_to(item['current_price'])}灵石{status}"
         )
-    
     if display_auctions.get("is_history"):
-        end_time = datetime.fromtimestamp(display_auctions["end_time"]).strftime("%Y-%m-%d %H:%M")
+        start_time = datetime.fromtimestamp(display_auctions["last_refresh"]).strftime("%H:%M")
+        end_time = datetime.fromtimestamp(display_auctions["end_time"]).strftime("%H:%M")
         msg.append(f"\n☆------历史拍卖记录------☆")
         msg.append(f"拍卖结束时间: {end_time}")
     elif auction_status["active"]:
+        start_time = auction_status["start_time"].strftime("%H:%M")
         end_time = auction_status["end_time"].strftime("%H:%M")
         msg.append(f"\n拍卖进行中，预计{end_time}结束")
     else:
         msg.append("\n拍卖当前未开启")
     
     msg.append("\n输入【拍卖查看 ID】查看详情")
-    await handle_send(bot, event, "\n".join(msg))
+    page = ["查看", "拍卖查看", "竞拍", "拍卖竞拍", "灵石", "灵石", f"{start_time}/{end_time}"]
+    await send_msg_handler(bot, event, '拍卖品', bot.self_id, msg, title=title, page=page)
 
 @auction_bid.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """参与拍卖竞拍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     args = args.extract_plain_text().split()
     if len(args) < 2:
         msg = "格式错误！正确格式：拍卖竞拍 [拍卖品ID] [出价]"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="竞拍", v1="拍卖竞拍", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     auction_id, price = args[0], args[1]
@@ -828,7 +829,7 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         price = int(price)
     except ValueError:
         msg = "出价必须是整数！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="竞拍", v1="拍卖竞拍", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     success, result = place_bid(
@@ -843,9 +844,9 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """上架物品到拍卖（限制ITEM_TYPES类型）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     # 检查拍卖状态
@@ -858,7 +859,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if len(args) < 2:
         rules = get_auction_rules()
         msg = f"格式错误！正确格式：拍卖上架 [物品名] [起拍价]\n最低起拍价：{rules['min_price']}灵石"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     item_name, price = args[0], args[1]
@@ -867,31 +868,31 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         price = max(price, MIN_PRICE)
     except ValueError:
         msg = "价格必须是整数！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
 
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     # 检查物品类型是否允许
     if goods_info['type'] not in ITEM_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     # 检查禁止交易的物品
     if str(goods_id) in BANNED_ITEM_IDS:
         msg = f"物品 {item_name} 禁止交易！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
 
     # 从背包移除
@@ -911,9 +912,9 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """下架拍卖品（仅在非拍卖期间有效）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
     # 检查拍卖状态
@@ -925,7 +926,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     item_name = args.extract_plain_text().strip()
     if not item_name:
         msg = "请输入要下架的物品名！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助")
         return
     
     # 下架物品
@@ -957,9 +958,9 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我上架的拍卖物品（不显示ID）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await my_auction.finish()
     
     user_id = user_info['user_id']
@@ -970,7 +971,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if not user_items:
         msg = "您当前没有上架任何拍卖物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
         await my_auction.finish()
     
     # 构建消息
@@ -1142,7 +1143,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     args = args.extract_plain_text().split()
     if args is None:
         msg = "请输入要炼化的物品！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
         
     # 判断输入是ID还是名称
@@ -1151,17 +1152,17 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         return
 
     if get_item_msg_rank(goods_id) == 520:
         msg = "此类物品不支持！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
     num = 1
     try:
@@ -1172,22 +1173,22 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     price = get_recover(goods_id, num)
     if price <= 0:
         msg = f"物品：{item_name}炼金失败，凝聚{number_to(price)}枚灵石！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
 
     sql_message.update_back_j(user_id, goods_id, num=num)
     sql_message.update_ls(user_id, price, 1)
     msg = f"物品：{item_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
     await goods_re_root.finish()
 
 @fast_alchemy.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """快速炼金（支持装备/药材/全部类型 + 全部品阶，以及回血丹）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await fast_alchemy.finish()
     
     user_id = user_info['user_id']
@@ -1198,7 +1199,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         back_msg = sql_message.get_back_msg(user_id)
         if not back_msg:
             msg = "💼 道友的背包空空如也！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
             await fast_alchemy.finish()
         
         # 筛选回血丹（buff_type为hp的丹药）
@@ -1219,7 +1220,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         if not elixirs:
             msg = "🔍 背包中没有回血丹！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
             await fast_alchemy.finish()
         
         # 执行炼金
@@ -1255,7 +1256,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg = "指令格式：快速炼金 [类型] [品阶]\n" \
               "▶ 类型：装备|法器|防具|药材|回血丹|全部\n" \
               "▶ 品阶：全部|人阶|黄阶|...|上品通天法器（输入'品阶帮助'查看完整列表）"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     item_type = args[0]  # 物品类型
@@ -1263,19 +1264,19 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if item_type not in type_mapping:
         msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     if rank_name not in rank_map:
         msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     # === 获取背包物品 ===
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     # === 筛选物品 ===
@@ -1326,7 +1327,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if not items_to_alchemy:
         msg = f"🔍 背包中没有符合条件的【{item_type}·{rank_name}】物品"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     # === 自动炼金逻辑 ===
@@ -1386,7 +1387,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     back_msg = sql_message.get_back_msg(user_id)  # 背包sql信息,list(back)
     if back_msg is None:
         msg = "道友的背包空空如也！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await no_use_zb.finish()
     in_flag = False  # 判断指令是否正确，道具是否在背包内
     goods_id = None
@@ -1399,7 +1400,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             break
     if not in_flag:
         msg = f"请检查道具 {arg} 是否在背包内！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await no_use_zb.finish()
 
     if goods_type == "装备":
@@ -1412,15 +1413,15 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             if item_type == "防具":
                 sql_message.updata_user_armor_buff(user_id, 0)
             msg = f"成功卸载装备{arg}！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await no_use_zb.finish()
         else:
             msg = "装备没有被使用，无法卸载！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await no_use_zb.finish()
     else:
         msg = "目前只支持卸载装备！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await no_use_zb.finish()
 
 @use.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1435,7 +1436,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     args = args.extract_plain_text().split()
     if not args:
         msg = "请输入要使用的物品名称！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use.finish()
     
     item_name = args[0]  # 物品名称
@@ -1443,12 +1444,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
     
     # 处理使用数量的通用逻辑
@@ -1458,7 +1459,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             num = int(args[1])
         elif len(args) > 1 and int(args[1]) > int(goods_num):
             msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await use.finish()
     except ValueError:
         num = 1
@@ -1607,16 +1608,16 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = "该类型物品调试中，未开启！"
 
     # 发送结果消息
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
     await use.finish()
 
 @use_item.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """道具使用"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await use_item.finish()
     
     user_id = user_info['user_id']
@@ -1628,7 +1629,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     if not args_text:
         msg = "请输入要使用的道具名称！格式：道具使用 物品名 [数量]"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use_item.finish()
     
     # 解析物品名和数量
@@ -1642,19 +1643,19 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             quantity = max(1, min(quantity, 100))  # 限制使用数量1-10
         except ValueError:
             msg = "请输入有效的数量！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await use_item.finish()
     
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
     goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
     
     # 检查数量是否足够
@@ -1678,7 +1679,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handler_func(bot, event, goods_id, quantity)
     else:
         msg = f"{item_name} 不可直接使用！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use_item.finish()
 
 async def use_lottery_talisman(bot, event, item_id, num):
@@ -1776,7 +1777,7 @@ async def chakan_wupin_(
             item_type = args_str
         else:
             msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|特殊物品|神物】！！！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="背包", k1="物品", v1="查看修仙界物品", k2="效果", v2="查看效果", k3="帮助", v3="修仙帮助")
             await chakan_wupin.finish()
     
     # 获取物品数据
@@ -2193,9 +2194,9 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 @compare_items.handle(parameterless=[Cooldown(cd_time=30)])
 async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = check_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await compare_items.finish()
     
     user_id = user_info['user_id']

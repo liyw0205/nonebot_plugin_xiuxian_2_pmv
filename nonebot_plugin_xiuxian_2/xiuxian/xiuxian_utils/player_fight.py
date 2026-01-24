@@ -329,18 +329,18 @@ ST2 = {
 
 def generate_hp_bar(current_hp, max_hp):
     """生成血量条显示
-    ⬛️代表有血量，⬜️代表已损失血量
-    每10%血量显示一个方块
+    ▬代表有血量，▭代表已损失血量
+    每10%血量显示一个方块，四舍五入
     """
     if max_hp <= 0:
-        return "⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️⬜️ 0%"
+        return "▭▭▭▭▭▭▭▭▭▭ 0%"
     
     # 计算当前血量百分比
     hp_percentage = max(0, min(100, (current_hp / max_hp) * 100))
     percentage_int = int(hp_percentage)
     
-    # 计算应该显示多少个⬛️（每10%一个）
-    filled_blocks = int(percentage_int // 10)
+    # 四舍五入计算应该显示多少个▬（每10%一个）
+    filled_blocks = round(percentage_int / 10)
     filled_blocks = max(0, min(10, filled_blocks))  # 限制在0-10之间
     
     # 生成血量条字符串

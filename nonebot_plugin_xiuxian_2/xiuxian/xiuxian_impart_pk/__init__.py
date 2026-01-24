@@ -513,7 +513,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg += f"\n今日可探索次数：{impart_num}"
     msg += f"\n今日可对决次数：{pk_num}"
     msg += f"\n思恋结晶：{stone_num}"
-    await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="探索", v2="虚神界探索", k3="帮助", v3="虚神界帮助")
+    await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="探索", v2="虚神界探索", k3="修炼", v3="虚神界修炼")
     await impart_pk_info.finish()
 
 def get_rates_by_floor(floor):

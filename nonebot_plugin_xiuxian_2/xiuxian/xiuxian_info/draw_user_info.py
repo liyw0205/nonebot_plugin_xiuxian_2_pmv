@@ -138,7 +138,6 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
         tasks3.append(_draw_sect_info_line(img, key, value, DETAIL_sectinfo))
     await asyncio.gather(*tasks3)
     img.convert("RGB")
-    res = await convert_img(img)
     
     paihang = Image.open(TEXT_PATH / 'line2.png').resize((900, 100)).convert("RGBA")
     paihangword = '【排行信息】'
@@ -156,6 +155,10 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
     for key, value in DETAIL_paihang.items():
         tasks4.append(_draw_ph_info_line(img, key, value, DETAIL_paihang))
     await asyncio.gather(*tasks4)
+    output_dir = Path(__file__).parent / "cache"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    image_path = output_dir / f"user_xiuxian_info_{user_id}.png"
+    img.save(image_path)
     res = await convert_img(img)
     return res
 
