@@ -2225,7 +2225,6 @@ async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     item_type = item1_info['item_type']
 
     basic_info = format_basic_info(item_name1, item1_info, item_name2, item2_info, item_type)
-    await handle_send(bot, event, basic_info)
 
     if item_type == '功法':
         comparison_result = compare_main(item_name1, item1_info, item_name2, item2_info)
@@ -2236,8 +2235,11 @@ async def compare_items_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     else:
         await handle_send(bot, event, f"暂不支持类型 '{item_type}' 的物品对比！")
         return
-
-    await handle_send(bot, event, comparison_result)
+    msg = []
+    msg.append(basic_info)
+    msg.append(comparison_result)
+    await send_msg_handler(bot, event, '快速对比', bot.self_id, msg)
+    await compare_items.finish()
 
 def get_skill_type(skill_type):
     if skill_type == 1:
