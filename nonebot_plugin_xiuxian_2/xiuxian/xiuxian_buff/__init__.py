@@ -343,20 +343,18 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
         
     if user1 and user2:
-        player1 = sql_message.get_player_data(user1['user_id'])
-        player2 = sql_message.get_player_data(user2['user_id'])
         result, victor = Player_fight(user1['user_id'], user2['user_id'], 1, bot.self_id)
         await send_msg_handler(bot, event, result)
         msg = f"获胜的是{victor}"
         if victor == "没有人":
             msg = f"{victor}获胜"
         else:
-            if victor == player1['道号']:
-                update_statistics_value(player1['user_id'], "切磋胜利")
-                update_statistics_value(player2['user_id'], "切磋失败")
+            if victor == user1['user_name']:
+                update_statistics_value(user1['user_id'], "切磋胜利")
+                update_statistics_value(user2['user_id'], "切磋失败")
             else:
-                update_statistics_value(player2['user_id'], "切磋胜利")
-                update_statistics_value(player1['user_id'], "切磋失败")
+                update_statistics_value(user2['user_id'], "切磋胜利")
+                update_statistics_value(user1['user_id'], "切磋失败")
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
     else:

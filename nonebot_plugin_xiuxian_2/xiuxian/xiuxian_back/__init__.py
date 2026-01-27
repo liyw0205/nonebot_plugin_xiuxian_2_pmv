@@ -1868,15 +1868,16 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    final_msg = [f"\n☆------{title}------☆"]
+    title = f"\n☆------{title}------☆"
+    final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
         next_page_cmd = f"我的背包 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '背包', bot.self_id, final_msg)
+    page = ["翻页", f"我的背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '背包', bot.self_id, final_msg, title=title, page=page)
     await main_back.finish()
 
 @yaocai_back.handle(parameterless=[Cooldown(cd_time=5)])
@@ -1912,15 +1913,16 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    final_msg = [f"\n☆------{title}------☆"]
+    title = f"\n☆------{title}------☆"
+    final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
         next_page_cmd = f"药材背包 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg)
+    page = ["翻页", f"药材背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg, title=title, page=page)
     await yaocai_back.finish()
 
 @danyao_back.handle(parameterless=[Cooldown(cd_time=5)])
@@ -1956,15 +1958,16 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    final_msg = [f"\n☆------{title}------☆"]
+    title = f"\n☆------{title}------☆"
+    final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
         next_page_cmd = f"丹药背包 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg)
+    page = ["翻页", f"丹药背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg, title=title, page=page)
     await danyao_back.finish()
 
 @my_equipment.handle(parameterless=[Cooldown(cd_time=5)])
@@ -2000,15 +2003,16 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    final_msg = [f"\n☆------{title}------☆"]
+    title = f"\n☆------{title}------☆"
+    final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
         next_page_cmd = f"我的装备 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg)
+    page = ["翻页", f"我的装备 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg, title=title, page=page)
     await my_equipment.finish()
 
 @yaocai_detail_back.handle(parameterless=[Cooldown(cd_time=5)])
@@ -2044,15 +2048,16 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    final_msg = [f"\n☆------{title}------☆"]
+    title = f"\n☆------{title}------☆"
+    final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
         next_page_cmd = f"药材背包详情 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg)
+    page = ["翻页", f"药材背包详情 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg, title=title, page=page)
     await yaocai_detail_back.finish()
 
 check_user_equipment = on_fullmatch("装备检测", priority=4, permission=SUPERUSER, block=True)

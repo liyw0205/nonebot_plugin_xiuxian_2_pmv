@@ -1,6 +1,7 @@
 from nonebot import require
 from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, backup_db_files
+from ..xiuxian_arena import reset_arena_daily_challenges
 from ..xiuxian_base import reset_lottery_participants, reset_stone_limits, reset_xiangyuan_daily
 from ..xiuxian_boss import set_boss_limits_reset
 from ..xiuxian_buff import two_exp_cd_up
@@ -35,7 +36,8 @@ async def _():# 每天0点
     logger.opt(colors=True).info(f"<green>每日炼丹次数重置成功！</green>")
     xiuxian_impart.impart_num_reset()
     logger.opt(colors=True).info(f"<green>每日传承抽卡次数重置成功！</green>")
-    await reset_lottery_participants()  # 借运/鸿运
+    await reset_arena_daily_challenges()  # 竞技场
+    await reset_lottery_participants()  # 鸿运
     await reset_stone_limits()  # 送灵石额度
     await reset_xiangyuan_daily()  # 送仙缘
     await set_boss_limits_reset()  # 世界BOSS额度

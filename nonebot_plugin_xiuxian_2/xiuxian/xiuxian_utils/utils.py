@@ -1246,7 +1246,7 @@ def log_message(user_id: str, msg: str):
 
 def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 10) -> dict:
     """
-    获取用户日志 - 支持自动查找最近日志和智能分页
+    获取用户日志（增强版）- 支持自动查找最近日志和智能分页
     
     参数:
         user_id: 用户ID
@@ -1255,7 +1255,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
         per_page: 每页显示的日志数量，默认为10
         
     返回:
-        日志信息字典
+        增强后的日志信息字典
     """
     def find_recent_log_date(user_id):
         """查找用户最近有日志记录的日期"""
@@ -1314,6 +1314,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
                 log_file = PLAYERSDATA / str(user_id) / "logs" / f"{recent_date}.log"
                 if log_file.exists():
                     target_date = recent_date  # 更新为目标日期
+                    date_str = None
                 else:
                     return {
                         "logs": [],
@@ -1352,7 +1353,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
         end_index = start_index + per_page
         paged_logs = all_logs[start_index:end_index]
         
-        # 获取所有可用日期
+        # 获取所有可用日期（用于前端显示）
         available_dates = []
         logs_dir = PLAYERSDATA / str(user_id) / "logs"
         if logs_dir.exists():
@@ -1366,6 +1367,10 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "date": target_date,
             "available_dates": available_dates
         }
+        
+        # 添加提示信息
+        if adjusted_page != page:
+            result["page_adjusted"] = f"页码已从{page}自动调整为{adjusted_page}"
         
         if date_str is None and target_date != datetime.now().strftime("%y%m%d"):
             result["date_auto_selected"] = f"已自动选择最近日志日期：{target_date}"
