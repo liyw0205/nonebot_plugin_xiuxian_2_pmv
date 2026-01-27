@@ -99,7 +99,7 @@ __sect_help__ = f"""
   • 我的宗门 - 查看当前宗门信息
   • 宗门列表 - 浏览全服宗门
   • 创建宗门 - 消耗{XiuConfig().sect_create_cost}灵石（需境界{XiuConfig().sect_min_level}）
-  • 加入宗门 [ID] - 申请加入指定宗门
+  • 加入宗门 [ID/名称] - 申请加入指定宗门
   • 宗门战力排行 - 查看战力前50的宗门
 
 👑 宗主专属：
@@ -1644,7 +1644,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         f"宗门编号为{new_sect['sect_id']}。\n"
         f"为道友贺！为仙道贺！"
     )
-    await handle_send(bot, event, msg, md_type="宗门", k1="帮助", v1="宗门帮助", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+    await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1=f"宗门加入 {sect_name}", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
     await create_sect.finish()
 
 @sect_kick_out.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1912,7 +1912,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
 
 @join_sect.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """加入宗门"""
+    """加入宗门（支持宗门ID和宗门名）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1926,32 +1926,57 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await join_sect.finish()
     
-    sect_no = args.extract_plain_text().strip()
-    sql_sects = sql_message.get_all_sects_id_scale()
-    sects_all = [tup[0] for tup in sql_sects]
+    sect_input = args.extract_plain_text().strip()
+    if not sect_input:
+        msg = "请输入宗门编号或宗门名称！"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await join_sect.finish()
     
-    if not sect_no.isdigit():
-        msg = f"申请加入的宗门编号解析异常，应全为数字!"
-    elif int(sect_no) not in sects_all:
-        msg = f"申请加入的宗门编号似乎有误，未在宗门名录上发现!"
+    # 判断输入是宗门ID还是宗门名
+    target_sect_id = None
+    target_sect_name = None
+    
+    if sect_input.isdigit():
+        # 输入的是数字，按宗门ID处理
+        target_sect_id = int(sect_input)
+        sect_info = sql_message.get_sect_info(target_sect_id)
+        if sect_info:
+            target_sect_name = sect_info['sect_name']
     else:
-        sect_info = sql_message.get_sect_info(int(sect_no))
-        can_join, reason = can_join_sect(sect_info['sect_id'])
-        if can_join:
-            # 检查人数上限
-            max_members = get_sect_member_limit(sect_info['sect_scale'])
-            current_members = len(sql_message.get_all_users_by_sect_id(int(sect_no)))
-            if current_members >= max_members:
-                msg = f"该宗门人数已满（{current_members}/{max_members}），无法加入！"
-            else:
-                owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
-                owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 12
-                sql_message.update_usr_sect(user_info['user_id'], int(sect_no), owner_position)
-                new_sect = sql_message.get_sect_info_by_id(int(sect_no))
-                msg = f"欢迎{user_info['user_name']}师弟入我{new_sect['sect_name']}，共参天道。当前宗门人数：{current_members + 1}/{max_members}"
-        else:
-            msg = reason
+        # 输入的是字符串，按宗门名处理
+        target_sect_id = sql_message.get_sect_name(sect_input)
+        if target_sect_id:
+            sect_info = sql_message.get_sect_info(target_sect_id)
+            target_sect_name = sect_info['sect_name'] if sect_info else None
     
+    # 检查宗门是否存在
+    if not target_sect_id or not target_sect_name:
+        msg = f"未找到名为【{sect_input}】的宗门，请检查输入是否正确！"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await join_sect.finish()
+    
+    # 检查宗门是否可以加入
+    can_join, reason = can_join_sect(target_sect_id)
+    if not can_join:
+        msg = f"宗门【{target_sect_name}】{reason}，无法加入！"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await join_sect.finish()
+    
+    # 检查人数上限
+    max_members = get_sect_member_limit(sql_message.get_sect_info(target_sect_id)['sect_scale'])
+    current_members = len(sql_message.get_all_users_by_sect_id(target_sect_id))
+    
+    if current_members >= max_members:
+        msg = f"该宗门人数已满（{current_members}/{max_members}），无法加入！"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await join_sect.finish()
+    
+    # 执行加入宗门
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 12
+    sql_message.update_usr_sect(user_info['user_id'], target_sect_id, owner_position)
+    
+    msg = f"欢迎{user_info['user_name']}道友加入【{target_sect_name}】！当前宗门人数：{current_members + 1}/{max_members}"
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await join_sect.finish()
 
@@ -2237,13 +2262,7 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_position == owner_position:
-        # 1. 获取所有成员
-        members = sql_message.get_all_users_by_sect_id(sect_id)
-        # 2. 踢出所有成员
-        for member in members:
-            sql_message.update_usr_sect(member['user_id'], None, None)
-            sql_message.update_user_sect_contribution(member['user_id'], 0)
-        # 3. 删除宗门
+        # 删除宗门
         sql_message.delete_sect(sect_id)
         
         msg = f"宗门已解散！所有成员已被移除。"

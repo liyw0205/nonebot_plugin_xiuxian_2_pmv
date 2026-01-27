@@ -916,11 +916,52 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.conn.commit()
 
     def delete_sect(self, sect_id):
-        """删除宗门"""
-        sql = f"DELETE FROM sects WHERE sect_id=?"
+        """删除宗门并踢出所有成员"""
         cur = self.conn.cursor()
-        cur.execute(sql, (sect_id,))
-        self.conn.commit()
+    
+        try:
+            # 1. 先获取所有宗门成员
+            members_sql = "SELECT user_id FROM user_xiuxian WHERE sect_id = ?"
+            cur.execute(members_sql, (sect_id,))
+            members = cur.fetchall()
+            
+            # 2. 踢出所有成员（重置宗门信息）
+            if members:
+                update_sql = """
+                    UPDATE user_xiuxian 
+                    SET sect_id = NULL, sect_position = NULL, sect_contribution = 0 
+                    WHERE sect_id = ?
+                """
+                cur.execute(update_sql, (sect_id,))
+                logger.opt(colors=True).info(f"<green>已踢出宗门 {sect_id} 的所有成员，共 {len(members)} 人</green>")
+        
+            # 3. 删除宗门记录
+            delete_sql = "DELETE FROM sects WHERE sect_id = ?"
+            cur.execute(delete_sql, (sect_id,))
+        
+            self.conn.commit()
+            logger.opt(colors=True).info(f"<green>宗门 {sect_id} 解散成功，已清理所有成员数据</green>")
+            return True
+        
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"解散宗门 {sect_id} 时发生错误: {str(e)}")
+            return False
+
+    def get_sect_name(self, sect_name):
+        """
+        通过宗门名称获取宗门ID
+        :param sect_name: 宗门名称
+        :return: 宗门ID，如果不存在返回None
+        """
+        cur = self.conn.cursor()
+        sql = "SELECT sect_id FROM sects WHERE sect_name = ?"
+        cur.execute(sql, (sect_name,))
+        result = cur.fetchone()
+        if result:
+            return result[0]  # 返回宗门ID
+        else:
+            return None
         
     def get_all_sect_id(self):
         """获取全部宗门id"""
