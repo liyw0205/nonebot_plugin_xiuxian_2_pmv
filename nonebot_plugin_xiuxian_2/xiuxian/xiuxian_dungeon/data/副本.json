@@ -1,0 +1,235 @@
+[
+  {
+    "id": "dungeon_001",
+    "name": "幽冥古墓",
+    "type": "explore",
+    "description": "一座被幽冥之气笼罩的上古修士墓穴，传说其中埋藏着逆天功法，但也有无数修士葬身其中。",
+    "total_layers": 5,
+    "events": [
+      {
+        "event_id": "trap",
+        "weight": 10,
+        "description": "你不慎触发了古墓机关！",
+        "damage": [0.1, 0.2]
+      },
+      {
+        "event_id": "monster",
+        "weight": 50,
+        "description": "遭遇了墓穴中的守卫",
+        "battle": {
+          "template_type": "random",
+          "num_monsters": [1, 3],
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.2
+        }
+      },
+      {
+        "event_id": "treasure",
+        "weight": 10,
+        "description": "你发现了一处密室，里面放着一些物品",
+        "reward": {
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 20,
+            "辅修功法": 5,
+            "法器": 5,
+            "防具": 5
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "weight": 10,
+        "description": "你在角落的瓦罐中发现了一小堆灵石",
+        "reward": {
+          "spirit_stone": [1, 2]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "weight": 20,
+        "description": "此层墓道空旷，除了幽暗的灯火与自己的脚步声，什么也没有发生",
+        "effect": {}
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["幽冥", "阴煞", "腐魂"],
+        "base_names": ["游魂", "尸傀", "怨鬼"],
+        "hp_range": [55, 60],
+        "mp_range": [1, 2],
+        "attack_range": [0.1, 0.15],
+        "skill_pool": [14003, 14004],
+        "reward": {
+          "spirit_stone": [0.1, 0.3],
+          "experience": 0.001,
+          "drop_chance": 0.01,
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["古墓守卫", "冥府"],
+        "base_names": ["幽冥战尸", "怨魂统领"],
+        "hp_range": [75, 80],
+        "mp_range": [1, 2],
+        "attack_range": [0.15, 0.2],
+        "skill_pool": [14003, 14004, 14005],
+        "reward": {
+          "spirit_stone": [0.3, 0.6],
+          "experience": 0.005,
+          "drop_chance": 0.05,
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "幽冥墓主",
+      "hp_range": [175, 180],
+      "mp_range": [1, 3],
+      "attack_range": [0.25, 0.3],
+      "skills": [14006, 14007, 14008],
+      "reward": {
+        "spirit_stone": [0.6, 1.5],
+        "experience": 0.01,
+        "drop_chance": 0.9,
+        "drop_items": {
+          "功法": 55,
+          "神通": 15,
+          "药材": 15,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "dungeon_002",
+    "name": "雷殛天渊",
+    "type": "explore",
+    "description": "终年被雷霆笼罩的深渊，传说有渡劫失败的雷修在此地化为雷灵，威压惊人。",
+    "total_layers": 6,
+    "events": [
+      {
+        "event_id": "trap",
+        "weight": 10,
+        "description": "天雷劈落！",
+        "damage": [0.2, 0.3],
+        "effect": {
+          "stun": [0.5, 1.5]
+        }
+      },
+      {
+        "event_id": "monster",
+        "weight": 50,
+        "description": "雷灵化形，携天地之威袭来",
+        "battle": {
+          "template_type": "random",
+          "num_monsters": [1, 3],
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.25
+        }
+      },
+      {
+        "event_id": "treasure",
+        "weight": 10,
+        "description": "雷击木中藏着上古雷修的遗物",
+        "reward": {
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 20,
+            "辅修功法": 5,
+            "法器": 5,
+            "防具": 5
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "weight": 10,
+        "description": "蕴含雷霆之力的灵石",
+        "reward": {
+          "spirit_stone": [1, 2]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "weight": 20,
+        "description": "雷声渐歇，只有电弧在空气中滋滋作响",
+        "effect": {}
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["雷霆", "闪雷", "狂电"],
+        "base_names": ["雷蛇", "电隼", "雷精"],
+        "hp_range": [50,55],
+        "mp_range": [1, 2],
+        "attack_range": [0.15, 0.2],
+        "skill_pool": [14009, 14010],
+        "reward": {
+          "spirit_stone": [0.1, 0.3],
+          "experience": 0.002,
+          "drop_chance": 0.012,
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["天雷", "雷劫"],
+        "base_names": ["雷暴巨灵", "电蛟"],
+        "hp_range": [70, 75],
+        "mp_range": [1, 2],
+        "attack_range": [0.2, 0.25],
+        "skill_pool": [14009, 14010, 14011],
+        "reward": {
+          "spirit_stone": [0.5, 1],
+          "experience": 0.006,
+          "drop_chance": 0.06,
+          "drop_items": {
+            "功法": 50,
+            "神通": 15,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "雷殛尊者残念",
+      "hp_range": [165, 170],
+      "mp_range": [1, 3],
+      "attack_range": [0.35, 0.38],
+      "skills": [14012, 14013, 14014],
+      "reward": {
+        "spirit_stone": [0.6, 1.5],
+        "experience": 0.01,
+        "drop_chance": 0.9,
+        "drop_items": {
+          "功法": 55,
+          "神通": 15,
+          "药材": 15,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 5
+        }
+      }
+    }
+  }
+]
