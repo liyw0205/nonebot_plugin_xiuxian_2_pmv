@@ -52,12 +52,11 @@ def Player_fight(user1, user2, type_in=1, bot_id=0):
     battle = BattleSystem([player1], [player2], bot_id)
     play_list, winner, status_list = battle.run_battle()
 
-    # 平局处理
     if winner == 0:
         suc = player1_data["属性"]["nickname"]
     elif winner == 1:
         suc = player2_data["属性"]["nickname"]
-    else:
+    else:    # 平局处理
         suc = "没有人"
 
     if type_in == 2:
