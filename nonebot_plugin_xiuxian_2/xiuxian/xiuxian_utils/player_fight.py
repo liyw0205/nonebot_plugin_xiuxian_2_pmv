@@ -607,8 +607,8 @@ def generate_boss_buff(boss):
 
 
 def load_json_file(filename="data.json"):
-    """从当前脚本目录加载JSON文件"""
-    filepath = Path(__file__).parent.absolute() / filename
+    """加载BOSS神通"""
+    filepath = Path() / "data" / "xiuxian" / "功法" / filename
 
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)

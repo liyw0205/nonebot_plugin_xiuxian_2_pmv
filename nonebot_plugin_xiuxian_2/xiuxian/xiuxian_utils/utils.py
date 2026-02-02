@@ -959,6 +959,9 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     shell_param = markdown_param("s1", " ")
     if not title:
         title = " "
+        if not shell:
+            title = msg
+            msg = " "
     if not page:
         if page_param:
             page = markdown_param("t2", page_param)

@@ -1543,19 +1543,19 @@ CONFIG_EDITABLE_FIELDS = {
         "name": "屏蔽群聊",
         "description": "屏蔽的群聊ID列表",
         "type": "list[str]",
-        "category": "群聊设置"
+        "category": "基础设置"
     },
     "response_group": {
         "name": "反转屏蔽",
         "description": "是否反转屏蔽的群聊（仅响应这些群的消息）",
         "type": "bool",
-        "category": "群聊设置"
+        "category": "基础设置"
     },
     "shield_private": {
         "name": "屏蔽私聊",
         "description": "是否屏蔽私聊消息",
         "type": "bool",
-        "category": "私聊设置"
+        "category": "基础设置"
     },
     "admin_debug": {
         "name": "管理员调试模式",
@@ -1609,7 +1609,7 @@ CONFIG_EDITABLE_FIELDS = {
         "name": "私聊功能",
         "description": "私聊功能开关",
         "type": "bool",
-        "category": "私聊设置"
+        "category": "基础设置"
     },
     "web_port": {
         "name": "管理面板端口",
@@ -1838,43 +1838,43 @@ CONFIG_EDITABLE_FIELDS = {
         "name": "markdown模板",
         "description": "是否发送模板信息（野机请勿打开）",
         "type": "bool",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "markdown_id": {
         "name": "模板ID1",
         "description": "用于发送markdown文本",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "markdown_id2": {
         "name": "模板ID2",
         "description": "用于发送markdown蓝字",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "button_id": {
         "name": "按钮ID1",
         "description": "用于发送修炼按钮",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "button_id2": {
         "name": "按钮ID2",
         "description": "用于发送修仙帮助按钮",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "gsk_link": {
         "name": "gsk地址",
         "description": "用于发送md模板艾特",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "web_link": {
         "name": "修仙管理面板地址",
         "description": "用于发送md图片",
         "type": "str",
-        "category": "消息设置"
+        "category": "MD设置"
     },
     "merge_forward_send": {
         "name": "消息发送方式",
@@ -2154,8 +2154,7 @@ def get_config_category_icon(category):
     """获取配置分类对应的图标"""
     icon_map = {
         "基础设置": "fas fa-cube",
-        "群聊设置": "fas fa-users",
-        "私聊设置": "fas fa-user",
+        "MD设置": "fas fa-palette",
         "调试设置": "fas fa-bug",
         "消息设置": "fas fa-comment",
         "Web设置": "fas fa-globe",

@@ -420,7 +420,7 @@ class UpdateManager:
     def enhanced_backup_current_version(self):
         """备份当前版本"""
         try:
-            backup_dir = Path() / "data" / "backups"
+            backup_dir = Path() / "data" / "xiuxian" / "backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -476,7 +476,7 @@ class UpdateManager:
                     config_values[field_name] = value
             
             # 创建备份目录
-            backup_dir = Path() / "data" / "config_backups"
+            backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
             
             # 生成备份文件名
@@ -693,7 +693,7 @@ class UpdateManager:
 
     def get_backups(self):
         """获取所有备份文件"""
-        backup_dir = Path() / "data" / "backups"
+        backup_dir = Path() / "data" / "xiuxian" / "backups"
         backups = []
         
         if backup_dir.exists():
@@ -719,7 +719,7 @@ class UpdateManager:
     def restore_backup(self, backup_filename):
         """从备份恢复"""
         try:
-            backup_dir = Path() / "data" / "backups"
+            backup_dir = Path() / "data" / "xiuxian" / "backups"
             backup_path = backup_dir / backup_filename
             
             if not backup_path.exists():

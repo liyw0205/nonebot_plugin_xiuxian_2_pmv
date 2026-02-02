@@ -3328,7 +3328,7 @@ def number_count(num):
 
 def backup_db_files():
     """
-    备份数据库文件到 Path() / "data" / "db_backup"，并压缩为zip格式
+    备份数据库文件并压缩为zip格式
     可以被定时任务调用
     """
     try:
@@ -3339,7 +3339,7 @@ def backup_db_files():
             DATABASE / "player.db"
         ]
         
-        backup_dir = Path() / "data" / "db_backup"
+        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
         
         # 创建备份目录（如果不存在）
         backup_dir.mkdir(parents=True, exist_ok=True)
