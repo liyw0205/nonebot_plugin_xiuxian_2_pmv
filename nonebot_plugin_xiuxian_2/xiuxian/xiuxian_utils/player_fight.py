@@ -39,7 +39,7 @@ async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None):
     return play_list, winner, status_list
 
 
-async def Player_fight(user1, user2, type_in=1, bot_id=0):
+def Player_fight(user1, user2, type_in=1, bot_id=0):
     player1_data = get_players_attributes(user1)  # 获取玩家数据
     player2_data = get_players_attributes(user2)
 
