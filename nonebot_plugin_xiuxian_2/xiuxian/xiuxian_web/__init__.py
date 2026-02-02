@@ -7,7 +7,7 @@ import psutil
 import time
 from pathlib import Path
 from nonebot.log import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, send_from_directory, abort
 from ..xiuxian_utils.item_json import Items
@@ -15,9 +15,6 @@ from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart
-import os
-from datetime import datetime
-
 import os
 
 def log_to_file(message):
@@ -2192,11 +2189,26 @@ def get_stats():
             "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (today,))
         active_users = active_users_result[0]['COUNT(DISTINCT user_id)'] if active_users_result else 0
         
+        # 获取昨日活跃用户数
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        yesterday_users_result = execute_sql(DATABASE, 
+            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (yesterday,))
+        yesterday_users = yesterday_users_result[0]['COUNT(DISTINCT user_id)'] if yesterday_users_result else 0
+        
+        # 获取7天前的日期
+        seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
+        # 注意：这里使用 >= 条件，统计从7天前到今天（共7天）的数据
+        seven_days_avg_result = execute_sql(DATABASE, 
+            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) >= ?", (seven_days_ago,))
+        seven_days_avg = seven_days_avg_result[0]['COUNT(DISTINCT user_id)'] if seven_days_avg_result else 0
+        
         return jsonify({
             "success": True,
             "total_users": total_users,
             "total_sects": total_sects,
-            "active_users": active_users
+            "active_users": active_users,
+            "yesterday_users": yesterday_users,
+            "seven_days_avg": seven_days_avg
         })
         
     except Exception as e:
@@ -2359,7 +2371,7 @@ def search_users():
 @app.route('/download/<path:filepath>')
 def download_file(filepath):
     # 构建文件的完整路径
-    full_path = Path() / "src" / "plugins" / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "cache" / filepath
+    full_path = Path() / "data" / "xiuxian" / "cache" / filepath
     full_path = full_path.absolute()
     # 检查文件是否存在
     if not full_path.exists():

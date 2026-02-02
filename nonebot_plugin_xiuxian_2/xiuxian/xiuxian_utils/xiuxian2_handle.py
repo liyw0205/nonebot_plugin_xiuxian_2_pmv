@@ -227,6 +227,33 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return 0
 
+    def yesterday_active_users(self):
+        """获取昨日活跃用户数（昨天有操作记录的用户）"""
+        cur = self.conn.cursor()
+        # 获取昨天的日期
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?"
+        cur.execute(sql, (yesterday,))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            return 0
+
+    def last_7days_active_users(self):
+        """获取近七日活跃用户数（最近7天内有操作记录的用户）"""
+        cur = self.conn.cursor()
+        # 获取7天前的日期
+        seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
+        # 注意：这里使用 >= 条件，统计从7天前到今天（共7天）的数据
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) >= ?"
+        cur.execute(sql, (seven_days_ago,))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            return 0
+
     def all_users(self):
         """获取全部用户数"""
         cur = self.conn.cursor()

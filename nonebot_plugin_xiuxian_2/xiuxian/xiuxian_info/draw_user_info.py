@@ -155,7 +155,7 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
     for key, value in DETAIL_paihang.items():
         tasks4.append(_draw_ph_info_line(img, key, value, DETAIL_paihang))
     await asyncio.gather(*tasks4)
-    output_dir = Path(__file__).parent / "cache"
+    output_dir = Path() / "data" / "xiuxian" / "cache"
     output_dir.mkdir(parents=True, exist_ok=True)
     image_path = output_dir / f"user_xiuxian_info_{user_id}.png"
     img.save(image_path)

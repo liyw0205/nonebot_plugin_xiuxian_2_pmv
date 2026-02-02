@@ -152,6 +152,8 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     group_id = str(event.group_id) if is_group else "私聊"
     all_users = sql_message.all_users()
     active_users = sql_message.today_active_users()
+    yesterday_active_users = sql_message.yesterday_active_users()
+    last_7days_active_users = sql_message.last_7days_active_users()
     total_items_quantity = sql_message.total_items_quantity()
     total_goods_quantity = trade_manager.total_goods_quantity()
     # 获取Bot运行时间
@@ -184,6 +186,8 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg += "\n\n【🧘 修仙数据】\n"
     msg += f"全部用户：{all_users}"
     msg += f"\n活跃用户：{active_users}"
+    msg += f"\n昨日活跃：{yesterday_active_users}"
+    msg += f"\n七日活跃：{last_7days_active_users}"
     msg += f"\n用户物品：{total_items_quantity}({number_to(total_items_quantity)})"
     msg += f"\n交易物品：{total_goods_quantity}({number_to(total_goods_quantity)})"
     return msg

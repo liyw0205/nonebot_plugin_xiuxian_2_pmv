@@ -4,38 +4,48 @@
 <div class="card">
     <h2>欢迎, 管理员 {{ admin_id }}</h2>
     
-    <!-- 统计数据 -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(45deg, #4CAF50, #81C784);">
-                <i class="fas fa-users"></i>
-            </div>
-            <div class="stat-content">
-                <h3 id="total-users">加载中...</h3>
-                <p>总用户数</p>
-            </div>
+<!-- 统计数据 -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(45deg, #4CAF50, #81C784);">
+            <i class="fas fa-users"></i>
         </div>
-        
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(45deg, #2196F3, #64B5F6);">
-                <i class="fas fa-landmark"></i>
-            </div>
-            <div class="stat-content">
-                <h3 id="total-sects">加载中...</h3>
-                <p>宗门数量</p>
-            </div>
+        <div class="stat-content">
+            <h3 id="total-users">加载中...</h3>
+            <p>总用户数</p>
         </div>
-        
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(45deg, #FF9800, #FFB74D);">
-                <i class="fas fa-chart-line"></i>
-            </div>
-            <div class="stat-content">
-                <h3 id="active-users">加载中...</h3>
-                <p>今日活跃用户</p>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(45deg, #2196F3, #64B5F6);">
+            <i class="fas fa-landmark"></i>
+        </div>
+        <div class="stat-content">
+            <h3 id="total-sects">加载中...</h3>
+            <p>宗门数量</p>
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(45deg, #FF9800, #FFB74D);">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="stat-content">
+            <h3 id="active-users">加载中...</h3>
+            <p>今日活跃用户</p>
+            <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span>昨日:</span>
+                    <span id="yesterday-users">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>7天:</span>
+                    <span id="seven-days-avg">0.0</span>
+                </div>
             </div>
         </div>
     </div>
+</div>
     
     <!-- 系统监控 -->
     <div class="card" style="margin-top: 20px;">
@@ -461,6 +471,8 @@ async function loadStats() {
             document.getElementById('total-users').textContent = data.total_users.toLocaleString();
             document.getElementById('total-sects').textContent = data.total_sects.toLocaleString();
             document.getElementById('active-users').textContent = data.active_users.toLocaleString();
+            document.getElementById('yesterday-users').textContent = data.yesterday_users.toLocaleString();
+            document.getElementById('seven-days-avg').textContent = data.seven_days_avg.toLocaleString();
         }
     } catch (error) {
         console.error('获取统计信息失败:', error);
@@ -653,7 +665,6 @@ document.addEventListener('DOMContentLoaded', function() {
     getProcessInfo();
     
     // 定时刷新
-    setInterval(loadStats, 10000);
     setInterval(loadSystemMonitor, 2000);
     setInterval(getProcessInfo, 5000);
     setInterval(loadSystemInfo, 10000);
