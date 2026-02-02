@@ -1,1781 +1,1905 @@
+import json
 import random
+from enum import IntEnum
+from pathlib import Path
+from nonebot.log import logger
+
 from .xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from ..xiuxian_config import convert_rank
 from .utils import number_to
 from .item_json import Items
+
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-from nonebot.log import logger
-
-class BossBuff:
-    def __init__(self):
-        self.boss_zs = 0
-        self.boss_hx = 0
-        self.boss_bs = 0
-        self.boss_xx = 0
-        self.boss_jg = 0
-        self.boss_jh = 0
-        self.boss_jb = 0
-        self.boss_xl = 0
-        self.boss_cj = 0
-        self.boss_js = 0
 
 
-class UserRandomBuff:
-    def __init__(self):
-        self.random_break = 0
-        self.random_xx = 0
-        self.random_hx = 0
-        self.random_def = 0
+async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None):
+    user_data = []
+    monster_data = []
 
-class UserBattleBuffDate:  # 辅修功法14
-    def __init__(self, user_id):
-        """用户战斗Buff数据"""
-        self.user_id = user_id
-        # 攻击buff
-        self.atk_buff = 0
-        # 攻击buff
-        self.atk_buff_time = -1
+    for u in user:
+        player_data = get_players_attributes(u, level_ratios)
+        player = Entity(player_data["属性"], team_id=0)
+        apply_player_buffs(player, player_data)  # 添加buff和技能
+        user_data.append(player)  # 添加列表
+    for m in monster:
+        enemy_data = get_boss_attributes(m, bot_id)
+        enemy = Entity(enemy_data["属性"], team_id=1, is_boss=True)
+        enemy.start_skills.extend(generate_boss_buff(m))  # 添加buff
+        generate_boss_skill(enemy, m.get("skills", []))  # 添加技能
+        monster_data.append(enemy)
 
-        # 暴击率buff
-        self.crit_buff = 0
-        # 暴击率buff
-        self.crit_buff_time = -1
+    battle = BattleSystem(user_data, monster_data, bot_id)
+    play_list, winner, status_list = battle.run_battle()
 
-        # 暴击伤害buff
-        self.crit_dmg_buff = 0
-        # 暴击伤害buff
-        self.crit_dmg__buff_time = -1
+    if type_in == 2:
+        update_all_user_status(status_list, bot_id, level_ratios)  # 更新玩家数据
 
-        # 回血buff
-        self.health_restore_buff = 0
-        self.health_restore_buff_time = -1
-        # 回蓝buff
-        self.mana_restore_buff = 0
-        self.mana_restore_buff_time = -1
+    return play_list, winner, status_list
 
-        # 吸血buff
-        self.health_stolen_buff = 0
-        self.health_stolen_buff_time = -1
-        # 吸蓝buff
-        self.mana_stolen_buff = 0
-        self.mana_stolen_buff_time = -1
-        # 反伤buff
-        self.thorns_buff = 0
-        self.thorns_buff_time = -1
 
-        # 破甲buff
-        self.armor_break_buff = 0
-        self.armor_break_buff_time = -1
+def Player_fight(user1, user2, type_in=1, bot_id=0):
+    player1_data = get_players_attributes(user1)  # 获取玩家数据
+    player2_data = get_players_attributes(user2)
 
-empty_boss_buff = BossBuff()
-empty_ussr_random_buff = UserRandomBuff()
+    player1 = Entity(player1_data["属性"], team_id=0)
+    player2 = Entity(player2_data["属性"], team_id=1)
 
-def Player_fight(user1, user2, type_in, bot_id):
-    """玩家对决"""
-    engine = BattleEngine(bot_id)
-    
-    # 初始化战斗参与者
-    combatant1 = engine.init_combatant(user1)
-    combatant2 = engine.init_combatant(user2)
-    random_buff1 = get_player_random_buff(combatant1)
-    random_buff2 = get_player_random_buff(combatant2)
-    combatant1['random_buff'] = random_buff1
-    combatant2['random_buff'] = random_buff2
-    # 在战斗循环开始前处理辅修功法效果
-    user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(
-        combatant1['sub_open'], 
-        combatant1['sub_buff_data'], 
-        combatant1['battle_buff'],
-        combatant2['sub_open'], 
-        combatant2['sub_buff_data'], 
-        combatant2['battle_buff']
-    )
-    
-    if msg:
-        formatted_msg = f"{combatant1['player']['道号']}" + msg
-        engine.add_message(combatant1, formatted_msg)
-    add_special_buffs(engine, combatant1, bot_id)
-    add_special_buffs(engine, combatant2, bot_id)
-    max_turns = 20
-    turn_count = 1
-    winner = None
-    
-    # 战斗循环
-    while turn_count <= max_turns and not winner:
-        # 玩家1回合
-        result = engine.execute_turn(combatant1, combatant2, "player")
-        if result == "attacker_win":
-            winner = combatant1
-            break
-            
-        # 检查玩家2是否死亡
-        if combatant2['player']['气血'] <= 0:
-            winner = combatant1
-            break
-            
-        # 玩家2回合
-        result = engine.execute_turn(combatant2, combatant1, "player")
-        if result == "attacker_win":
-            winner = combatant2
-            break
-            
-        # 检查玩家1是否死亡
-        if combatant1['player']['气血'] <= 0:
-            winner = combatant2
-            break
-            
-        # 检查双方都无法行动的情况
-        if not combatant1['turn_skip'] and not combatant2['turn_skip']:
-            engine.add_system_message("双方都动弹不得！")
-            combatant1['turn_skip'] = True
-            combatant2['turn_skip'] = True
-            
-        turn_count += 1
-        
-    # 平局处理
-    if not winner:
-        engine.add_system_message("你们打到了天昏地暗，被大能叫停！")
+    apply_player_buffs(player1, player1_data)
+    apply_player_buffs(player2, player2_data)
+
+    battle = BattleSystem([player1], [player2], bot_id)
+    play_list, winner, status_list = battle.run_battle()
+
+    if winner == 0:
+        suc = player1_data["属性"]["nickname"]
+    elif winner == 1:
+        suc = player2_data["属性"]["nickname"]
+    else:    # 平局处理
         suc = "没有人"
-    else:
-        suc = winner['player']['道号']
-    
-    # 战斗结束处理
-    if type_in == 2:  # 实际战斗，更新气血真元
-        update_player_stats(combatant1, combatant2, winner, type_in)
-    
-    return engine.play_list, suc
+
+    if type_in == 2:
+        update_all_user_status(status_list, bot_id)
+
+    return play_list, suc
+
 
 async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
     """BOSS战斗"""
-    engine = BattleEngine(bot_id)
-    
-    # 初始化玩家
-    player_combatant = engine.init_combatant(user1, is_boss=True)
-    
-    # 检查是否为稻草人
-    is_scarecrow = boss.get('is_scarecrow', False) or boss['name'] == "稻草人"
-    
-    # 初始化BOSS，如果是稻草人则使用特殊逻辑
-    if is_scarecrow:
-        boss_combatant = init_scarecrow_combatant(boss)
+    # --- 1. 获取数据 ---
+    player1_data = get_players_attributes(user1)  # 获取玩家数据
+    boss_data = get_boss_attributes(boss, bot_id)  # 获取BOSS数据
+
+    # --- 2. 初始化 ---
+    player1 = Entity(player1_data["属性"], team_id=0)
+    boss1 = Entity(boss_data["属性"], team_id=1, is_boss=True)
+
+    apply_player_buffs(player1, player1_data)  # 添加buff和技能
+
+    # boss添加buff
+    boss1.start_skills.extend(generate_boss_buff(boss))
+
+    if not boss['name'] == "稻草人":  # 稻草人不加技能
+        # boss添加技能
+        generate_boss_skill(boss1, [14001, 14002])  # 添加技能
+
+    # --- 3. 运行 ---
+    battle = BattleSystem([player1], [boss1], bot_id)
+    play_list, winner, status_list = battle.run_battle()
+
+    # 更新boss数据
+    update_data_boss_status(boss, status_list)
+
+    if winner == 0:
+        suc = "群友赢了"
     else:
-        boss_combatant = init_boss_combatant(boss)
-    
-    # 获取玩家随机buff
-    random_buff = get_player_random_buff(player_combatant)
-    player_combatant['random_buff'] = random_buff
-    
-    # 在战斗循环开始前处理辅修功法效果
-    user1_battle_buff_date, user2_battle_buff_date, msg = start_sub_buff_handle(
-        player_combatant['sub_open'], 
-        player_combatant['sub_buff_data'], 
-        player_combatant['battle_buff'],
-        False, 
-        {}, 
-        {}
-    )
-    
-    if msg:
-        formatted_msg = f"{player_combatant['player']['道号']}" + msg
-        engine.add_message(player_combatant, formatted_msg)
-    
-    # 如果不是稻草人，添加BOSS特殊buff消息
-    if not is_scarecrow:
-        add_boss_special_buffs(engine, boss_combatant, player_combatant, bot_id)
-    else:
-        # 稻草人特殊消息
-        engine.add_system_message("这是一个训练用的稻草人，不会反击，尽情练习吧！")
-    add_special_buffs(engine, player_combatant, bot_id, si_boss=True, boss_combatant=boss_combatant)
-    max_turns = 20
-    turn_count = 1
-    winner = None
-    boss_init_hp = boss_combatant['player']['气血']
-    
-    # 战斗循环
-    while turn_count <= max_turns and not winner:
-        # 玩家回合
-        result = engine.execute_turn(player_combatant, boss_combatant, "boss")
-        if result == "attacker_win":
-            winner = player_combatant
-            break
-            
-        # 检查BOSS是否死亡
-        if boss_combatant['player']['气血'] <= 0:
-            winner = player_combatant
-            break
-            
-        # 如果不是稻草人，BOSS才行动
-        if not is_scarecrow:
-            result = execute_boss_turn(engine, boss_combatant, player_combatant, boss_init_hp)
-            if result == "attacker_win":
-                winner = boss_combatant
-                break
-        else:
-            # 稻草人回合，只显示信息不攻击
-            boss_name = boss_combatant['player']['name']
-            turn_msg = f"☆------{boss_name}的回合------☆"
-            engine.add_boss_message(boss_combatant['player'], turn_msg, boss_init_hp)
-            engine.add_boss_message(boss_combatant['player'], "稻草人静静地站着，没有任何反应...", boss_init_hp)
-            
-        # 检查玩家是否死亡
-        if player_combatant['player']['气血'] <= 0:
-            winner = boss_combatant
-            break
-            
-        turn_count += 1
-        
-    # 平局处理
-    if not winner:
-        if not is_scarecrow:
-            winner = player_combatant
-            engine.add_system_message("你们打到了天昏地暗，被大能叫停！")
-            suc = "Boss赢了"
-        else:
-            engine.add_system_message("训练时间结束！")
-            suc = "没有人"
-    else:
-        if winner == player_combatant:
-            suc = "群友赢了"
-        else:
-            suc = "Boss赢了"
-    
-    # 战斗结束处理
-    if type_in == 2:  # 实际战斗，更新玩家状态
-        update_boss_fight_stats(player_combatant, winner, type_in)
-    
-    return engine.play_list, suc, boss_combatant['player']
+        suc = "Boss赢了"
 
-def check_hit(attacker_hit, defender_dodge):
-    """
-    判断攻击是否命中
-    attacker_hit: 攻击方命中率
-    defender_dodge: 防御方闪避率
-    return: True命中, False闪避
-    """
-    actual_hit_rate = max(0, min(100, attacker_hit - defender_dodge))
-    return random.randint(0, 100) <= actual_hit_rate
+    if type_in == 2:
+        update_all_user_status(status_list, bot_id)  # 更新玩家数据
 
-def calculate_damage(attacker, defender, base_damage):
-    """
-    统一的伤害计算函数
-    battle_type: "player"玩家对决, "boss_attack"BOSS攻击玩家, "player_attack_boss"玩家攻击BOSS
-    """
-    # 获取基础属性
-    attacker_break = attacker.get('random_buff', empty_ussr_random_buff).random_break  # 攻击方穿甲 
-    defender_def = defender.get('random_buff', empty_ussr_random_buff).random_def  # 防御方减伤
-    
-    # 获取辅修功法穿甲
-    sub_break = 0
-    if attacker.get('sub_open', False) and attacker.get('sub_buff_data', {}).get('buff_type') == '14':
-        sub_break = attacker['sub_buff_data'].get('break', 0)
-    
-    if 'boss_cj' in defender:
-        battle_type = "player_attack_boss"
-    elif 'boss_cj' in attacker:
-        battle_type = "boss_attack_player"
-    else:
-        battle_type = "player"     
-
-    # 根据战斗类型选择不同的计算方式
-    if battle_type == "player":
-        # 玩家对决：伤害 * (对方减伤 - 对方随机减伤buff + 辅修穿甲 + 自己随机穿甲)
-        defense_factor = defender['current_js'] - defender_def + sub_break + attacker_break
-    elif battle_type == "player_attack_boss":
-        # 玩家攻击BOSS：伤害 * (对方减伤 + 辅修穿甲 + 自己随机穿甲)
-        defense_factor = defender['current_js'] + sub_break + attacker_break
-    elif battle_type == "boss_attack_player":
-        # BOSS攻击玩家：伤害 * (对方减伤 - 对方随机减伤buff + 自己随机穿甲)
-        defense_factor = defender['current_js'] - defender_def + attacker['boss_cj']
-
-    # 限制减伤系数在合理范围内
-    if int(defender['current_js']) == 1:
-        defense_factor = defender['current_js']
-    else:
-        defense_factor = max(min(defense_factor, 1.0), 0.05)
-    actual_damage = int(base_damage * defense_factor)
-    return actual_damage
-
-ST1 = {
-    "攻击": {
-        "type_rate": 50,
-    },
-    "会心": {
-        "type_rate": 50,
-    },
-    "暴伤": {
-        "type_rate": 50,
-    },
-    "禁血": {
-        "type_rate": 50,
-    }
-}
-
-ST2 = {
-    "降攻": {
-        "type_rate": 50,
-    },
-    "降会": {
-        "type_rate": 50,
-    },
-    "降暴": {
-        "type_rate": 50,
-    },
-    "禁蓝": {
-        "type_rate": 50,
-    }
-}
-
-def generate_hp_bar(current_hp, max_hp):
-    """生成血量条显示
-    ▬代表有血量，▭代表已损失血量
-    每10%血量显示一个方块，四舍五入
-    """
-    if max_hp <= 0:
-        return "▭▭▭▭▭▭▭▭▭▭ 0%"
-    
-    # 计算当前血量百分比
-    hp_percentage = max(0, min(100, (current_hp / max_hp) * 100))
-    percentage_int = int(hp_percentage)
-    
-    # 四舍五入计算应该显示多少个▬（每10%一个）
-    filled_blocks = round(percentage_int / 10)
-    filled_blocks = max(0, min(10, filled_blocks))  # 限制在0-10之间
-    
-    # 生成血量条字符串
-    hp_bar = "▬" * filled_blocks + "▭" * (10 - filled_blocks)
-    return f"{hp_bar} {percentage_int}%"
-
-def get_msg_dict(player, player_init_hp, msg):
-    return {
-        "type": "node", 
-        "data": {
-            "name": f"{player['道号']}，当前血量：{number_to(int(player['气血']))} / {number_to(int(player_init_hp))}",
-            "uin": int(player['user_id']), "content": msg
-                }
-            }
+    return play_list, suc, boss
 
 
-def get_boss_dict(boss, boss_init_hp, msg, bot_id):
-    return {
-        "type": "node",
-        "data": {
-            "name": f"{boss['name']}当前血量：{number_to(int(boss['气血']))} / {number_to(int(boss_init_hp))}", 
-            "uin": int(bot_id),
-            "content": msg
-                }
-            }
+# ---------- 玩家数据部分 ----------
+def get_players_attributes(user_id, level_ratios=None):
+    """获取玩家数据"""
+    # 获取用户所有装备功法buff数据
+    buff_data_info = UserBuffDate(user_id).BuffInfo
+    buffs = {}
+    ratio = 1
+    if level_ratios:
+        ratio = level_ratios.get(user_id, 1)
 
-
-def get_user_def_buff(user_id):
-    user_armor_data = UserBuffDate(user_id).get_user_armor_buff_data()  # 防具减伤
-    user_weapon_data = UserBuffDate(user_id).get_user_weapon_data()  # 武器减伤
-    user_main_data = UserBuffDate(user_id).get_user_main_buff_data()  # 功法减伤
-    if user_weapon_data is not None:
-        weapon_def = user_weapon_data['def_buff']  # 武器减伤
-    else:
-        weapon_def = 0
-    if user_main_data is not None:
-        main_def = user_main_data['def_buff']  # 功法减伤
-    else:
-        main_def = 0
-    if user_armor_data is not None:
-        def_buff = user_armor_data['def_buff']  # 防具减伤
-    else:
-        def_buff = 0
-    return round(1 - (def_buff + weapon_def + main_def), 2)  # 初始减伤率
-
-
-def get_turnatk(player, buff=0, user_battle_buff_date={},
-                boss_buff: BossBuff = empty_boss_buff,
-                random_buff: UserRandomBuff = empty_ussr_random_buff):  # 辅修功法14
-    sub_atk = 0
-    sub_crit = 0
-    sub_dmg = 0
-    zwsh = 0
-
-    user_id = player['user_id']
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    user_buff_data = UserBuffDate(user_id)
-    weapon_critatk_data = user_buff_data.get_user_weapon_data()  # 武器会心伤害
-    weapon_zw = user_buff_data.get_user_weapon_data()
-    main_zw = user_buff_data.get_user_main_buff_data()
-    # 专武伤害，其实叫伴生武器更好。。。
-    if weapon_zw and main_zw:
-        zwsh = 0.5 if main_zw["ew"] != 0 and weapon_zw["zw"] != 0 and main_zw["ew"] == weapon_zw["zw"] else 0
-    main_critatk_data = user_buff_data.get_user_main_buff_data()  # 功法会心伤害
-    sub_buff_data = {}
-    buff_type = None
-    if user_buff_data.get_user_sub_buff_data() is not None:
-        sub_buff_data = user_buff_data.get_user_sub_buff_data()
-        buff_value = int(sub_buff_data['buff'])
-        buff_type = sub_buff_data['buff_type']
-    if buff_type == '1':
-        sub_atk = buff_value / 100
-    else:
-        sub_atk = 0
-    if buff_type == '2':
-        sub_crit = buff_value / 100
-    else:
-        sub_crit = 0
-    if buff_type == '3':
-        sub_dmg = buff_value / 100
-    else:
-        sub_dmg = 0
-    impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
-    impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
-    weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0  # 武器会心伤害
-    main_critatk = main_critatk_data['critatk'] if main_critatk_data is not None else 0  # 功法会心伤害
-    isCrit = False
-    turnatk = int(round(random.uniform(0.95, 1.05), 2)
-                  * (player['攻击'] * (buff + sub_atk + 1) * (1 - boss_buff.boss_jg)) * (1 + zwsh))  # 攻击波动,buff是攻击buff
-    if random.randint(0, 100) <= player['会心'] + (
-            impart_know_per + sub_crit - boss_buff.boss_jh + random_buff.random_hx) * 100:  # 会心判断
-        turnatk = int(turnatk * (
-                    1.5 + impart_burst_per + weapon_critatk + main_critatk + sub_dmg - boss_buff.boss_jb))  # boss战、切磋、秘境战斗会心伤害公式（不包含抢劫）
-        isCrit = True
-    turnatk = int(round(turnatk))
-    return isCrit, turnatk
-
-
-def get_turnatk_boss(player, buff=0, user_battle_buff_date={},
-                     boss_buff: BossBuff = empty_boss_buff):  # boss伤害计算公式
-    isCrit = False
-    turnatk = int(round(random.uniform(0.95, 1.05), 2)
-                  * (player['攻击'] * (buff + 1)))  # 攻击波动,buff是攻击buff
-    if random.randint(0, 100) <= 0.3 + boss_buff.boss_hx * 100:  # 会心判断
-        turnatk = int(turnatk * (1.5 + boss_buff.boss_bs))  # boss战、切磋、秘境战斗会心伤害公式（不包含抢劫）
-        isCrit = True
-    turnatk = int(round(turnatk))
-    return isCrit, turnatk
-
-def isEnableUserSikll(player, hpcost, mpcost, turncost, skillrate):  # 是否满足技能释放条件
-    skill = False
-    if turncost < 0:  # 判断是否进入休息状态
-        return skill
-
-    if player['气血'] > hpcost and player['真元'] >= mpcost:  # 判断血量、真元是否满足
-        if random.randint(0, 100) <= skillrate:  # 随机概率释放技能
-            skill = True
-    return skill
-
-
-def get_skill_hp_mp_data(player, secbuffdata):
-    """获取技能消耗气血、真元、技能类型、技能释放概率"""
-    user_id = player['user_id']
-    weapon_data = UserBuffDate(user_id).get_user_weapon_data()
-    if weapon_data is not None and "mp_buff" in weapon_data:
-        weapon_mp = max(weapon_data["mp_buff"], 0)
-    else:
-        weapon_mp = 0
-
-    hpcost = int(secbuffdata['hpcost'] * player['气血']) if secbuffdata['hpcost'] != 0 else 0
-    mpcost = int(secbuffdata['mpcost'] * player['exp'] * (1 - weapon_mp)) if secbuffdata['mpcost'] != 0 else 0
-    return hpcost, mpcost, secbuffdata['skill_type'], secbuffdata['rate']
-
-
-def calculate_skill_cost(player, hpcost, mpcost):
-    player['气血'] = player['气血'] - hpcost  # 气血消耗
-    player['真元'] = player['真元'] - mpcost  # 真元消耗
-
-    return player
-
-def get_skill_sh_data(attacker, defender, turn_type, secbuffdata):
-    skillmsg = ''
-    player = attacker['player']
-    cost_msgs = []
-    if secbuffdata['hpcost'] != 0:
-        cost_msgs.append(f"气血{number_to(secbuffdata['hpcost'] * player['气血'])}点")
-    if secbuffdata['mpcost'] != 0:
-        cost_msgs.append(f"真元{number_to(secbuffdata['mpcost'] * player['exp'])}点")
-        
-    cost_msg = "、".join(cost_msgs)
-    cost_prefix = f"消耗{cost_msg}，" if cost_msgs else ""
-
-    if secbuffdata['skill_type'] == 1:  # 连续攻击类型
-        turncost = -secbuffdata['turncost']
-        atk_buff = attacker.get('atk_buff', 0)
-        if turn_type == "boss":
-            boss_buff = defender.get('boss_buff', empty_boss_buff)
-            random_buff = attacker.get('random_buff', empty_ussr_random_buff)
-            isCrit, turnatk = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'], boss_buff, random_buff)
-        else:
-            isCrit, turnatk = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'])
-        atkvalue = secbuffdata['atkvalue']  # 列表
-        turnatks = int(calculate_damage(attacker, defender, turnatk))
-        skillsh = 0
-        atkmsg = ''
-        for value in atkvalue:
-            atkmsg += f"{number_to(value * turnatks)}伤害、"
-            skillsh += int(value * turnatk)
-
-        if turncost == 0:
-            turnmsg = '!'
-        else:
-            turnmsg = f"，休息{secbuffdata['turncost']}回合！"
-
-        if isCrit:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
-        else:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{atkmsg[:-1]}{turnmsg}"
-
-        return skillmsg, skillsh, turncost
-
-    elif secbuffdata['skill_type'] == 2:  # 持续伤害类型
-        turncost = secbuffdata['turncost']
-        skillsh = int(secbuffdata['atkvalue'] * player['攻击'])  # 改动
-        turnatk = int(skillsh * min(0.2 + defender['current_js'], 1.0))
-        atkmsg = ''
-
-        skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{number_to(turnatk)}点伤害，持续{turncost}回合！"
-
-        return skillmsg, skillsh, turncost
-
-    elif secbuffdata['skill_type'] == 3:  # 持续buff类型
-        turncost = secbuffdata['turncost']
-        skillsh = secbuffdata['buffvalue']
-        atkmsg = ''
-
-        if secbuffdata['bufftype'] == 1:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力增加{skillsh}倍，持续{turncost}回合！"
-        elif secbuffdata['bufftype'] == 2:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}获得{skillsh * 100}%的减伤，持续{turncost}回合！"
-
-        return skillmsg, skillsh, turncost
-
-    elif secbuffdata['skill_type'] == 4:  # 封印类技能
-        turncost = secbuffdata['turncost']
-
-        if random.randint(0, 100) <= secbuffdata['success']:  # 命中
-            skillsh = True
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}使对手动弹不得,持续{turncost}回合！"
-        else:  # 未命中
-            skillsh = False
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}但是被对手躲避！"
-
-        return skillmsg, skillsh, turncost
-        
-    elif secbuffdata['skill_type'] == 5:  # 随机伤害类型技能
-        turncost = -secbuffdata['turncost']
-        isCrit, turnatk = get_turnatk(player)
-        atkvalue = secbuffdata['atkvalue']  # 最低伤害
-        atkvalue2 = secbuffdata['atkvalue2']  # 最高伤害
-        value = random.uniform(atkvalue, atkvalue2)
-        atkmsg = f"{number_to(value * turnatk)}伤害、"
-        skillsh = int(value * turnatk)
-
-        if turncost == 0:
-            turnmsg = '!'
-        else:
-            turnmsg = f"，休息{secbuffdata['turncost']}回合！"
-
-        if isCrit:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}💥并且发生了会心一击，造成{atkmsg[:-1]}{turnmsg}"
-        else:
-            skillmsg = f"{secbuffdata['desc']}{cost_prefix}造成{atkmsg[:-1]}{turnmsg}"
-
-        return skillmsg, skillsh, turncost
-
-    elif secbuffdata['skill_type'] == 6:  # 叠加类型技能
-        turncost = secbuffdata['turncost']
-        skillsh = secbuffdata['buffvalue']
-
-        skillmsg = f"{secbuffdata['desc']}{cost_prefix}攻击力叠加{skillsh}倍，持续{turncost}回合！"
-
-        return skillmsg, skillsh, turncost
-        
-        
-# 处理开局的辅修功法效果
-def apply_buff(user_battle_buff, subbuffdata, player_sub_open, is_opponent=False):
-    if not player_sub_open:
-        return ""
-    buff_type_to_attr = {
-        '1': ('atk_buff', "攻击力"),
-        '2': ('crit_buff', "暴击率"),
-        '3': ('crit_dmg_buff', "暴击伤害"),
-        '4': ('health_restore_buff', "气血回复"),
-        '5': ('mana_restore_buff', "真元回复"),
-        '6': ('health_stolen_buff', "气血吸取"),
-        '7': ('mana_stolen_buff', "真元吸取"),
-        '8': ('thorns_buff', "中毒"),
-        '9': ('hm_stolen_buff', "气血真元吸取"),
-        '10': ('jx_buff', "重伤效果"),
-        '11': ('fan_buff', "抵消效果"),
-        '12': ('stone_buff', "聚宝效果"),
-        '13': ('break_buff', "斗战效果"),
-        '14': ('break_buff', "穿甲效果"),
+    # 定义buff类型映射
+    buff_types = {
+        'main_buff': '主功法',
+        'sub_buff': '辅修功法',
+        'sec_buff': '神通技能',
+        'effect1_buff': '身法',
+        'effect2_buff': '瞳术',
+        'faqi_buff': '法器',
+        'armor_buff': '防具'
     }
 
-    attr, desc = buff_type_to_attr[subbuffdata['buff_type']]
-    break_buff_desc = int(round(subbuffdata['break'] * 100))
-    setattr(user_battle_buff, attr, subbuffdata['buff'])
-    if int(subbuffdata['buff_type']) >= 0 and int(subbuffdata['buff_type']) <= 9:
-        sub_msg = f"提升{subbuffdata['buff']}%{desc}"
-    elif int(subbuffdata['buff_type']) == 14:
-        sub_msg = f"提升{break_buff_desc}%{desc}"
-    else:
-        sub_msg = f"获得了{desc}！！"
-    prefix = f"\n对手" if is_opponent else ""
-    return f"{prefix}使用{subbuffdata['name']}, {sub_msg}"
+    for key, display_name in buff_types.items():
+        item_id = buff_data_info.get(key, 0)
+        if item_id != 0:
+            item_data = items.get_data_by_item_id(item_id)
+            buffs[display_name] = item_data
 
-def start_sub_buff_handle(player1_sub_open, subbuffdata1, user1_battle_buff_date,
-                          player2_sub_open, subbuffdata2, user2_battle_buff_date):
-    msg1 = apply_buff(user1_battle_buff_date, subbuffdata1, player1_sub_open) if player1_sub_open else ""
-    msg2 = apply_buff(user2_battle_buff_date, subbuffdata2, player2_sub_open, is_opponent=True) if player2_sub_open else ""
+    # 玩家属性
+    user_info = sql_message.get_user_info_with_id(user_id)
+    user_impart_info = xiuxian_impart.get_user_impart_info_with_id(user_id)
 
-    return user1_battle_buff_date, user2_battle_buff_date, msg1 + msg2
+    # 法器防具加成 - 使用.get()方法避免KeyError
+    faqi_data = buffs.get('法器', {})
+    armor_data = buffs.get('防具', {})
+    main_gongfa_data = buffs.get('主功法', {})
+
+    weapon_mp_cost_modifier = faqi_data.get('mp_buff', 0)
+    weapon_atk_buff = faqi_data.get('atk_buff', 0)
+    armor_atk_buff = armor_data.get('atk_buff', 0)
+    weapon_crit_buff = faqi_data.get('crit_buff', 0)
+    armor_crit_buff = armor_data.get('crit_buff', 0)
+    weapon_critatk = faqi_data.get('critatk', 0)
+    weapon_def = faqi_data.get('def_buff', 0)
+    armor_def = armor_data.get('def_buff', 0)
+
+    # 功法加成
+    main_hp_buff = main_gongfa_data.get('hpbuff', 0)
+    main_mp_buff = main_gongfa_data.get('mpbuff', 0)
+    main_atk_buff = main_gongfa_data.get('atkbuff', 0)
+    main_crit_buff = main_gongfa_data.get('crit_buff', 0)
+    main_critatk = main_gongfa_data.get('critatk', 0)
+    main_def = main_gongfa_data.get('def_buff', 0)
+
+    # 宗门修炼加成
+    hppractice = user_info['hppractice'] * 0.05
+    mppractice = user_info['mppractice'] * 0.05
+    atkpractice = user_info['atkpractice'] * 0.04
+
+    # 虚神界加成
+    impart_hp_per = user_impart_info['impart_hp_per']
+    impart_mp_per = user_impart_info['impart_mp_per']
+    impart_atk_per = user_impart_info['impart_atk_per']
+    impart_know_per = user_impart_info['impart_know_per']
+    impart_burst_per = user_impart_info['impart_burst_per']
+    boss_atk = user_impart_info['boss_atk']
+
+    # 计算最终属性
+    max_hp = int((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice))
+    hp = int(user_info['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
+    max_mp = int(user_info['exp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
+    mp = int(user_info['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
+    atk = int((user_info['atk'] * (atkpractice + 1) * (1 + main_atk_buff) * (1 + weapon_atk_buff) * (
+            1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(buff_data_info.get('atk_buff', 0))
+    crit = max(0, min(1, weapon_crit_buff + armor_crit_buff + main_crit_buff + impart_know_per))
+    critatk = 1.5 + impart_burst_per + weapon_critatk + main_critatk
+    dr = armor_def + weapon_def + main_def
+    hit = 100  # 基础命中
+    dodge = 0  # 基础闪避
+    ap = 0  # 基础穿甲
+    speed = 10  # 玩家基础速度
+
+    attributes = {
+        "user_id": user_id,  # 用户唯一标识符
+        "nickname": user_info['user_name'],  # 用户昵称
+        "max_hp": int(max_hp * ratio),  # 生命值上限
+        "current_hp": int(hp * ratio),  # 当前生命值
+        "max_mp": int(max_mp * ratio),  # 真元值上限
+        "current_mp": int(mp * ratio),  # 当前真元值
+        "mp_cost_modifier": weapon_mp_cost_modifier,  # 真元消耗修正
+        "attack": int(atk * ratio),  # 攻击力
+        "exp": int(user_info['exp'] * ratio),  # 当前经验值
+        "critical_rate": crit,  # 暴击率 (0-1范围)
+        "critical_damage": critatk,  # 暴击伤害倍数
+        "boss_damage_bonus": boss_atk,  # 对BOSS伤害加成
+        "damage_reduction": dr,  # 伤害减免率
+        "armor_penetration": ap,  # 穿甲值
+        "accuracy": hit,  # 命中率 (百分比)
+        "dodge": dodge,  # 闪避率 (百分比)
+        "speed": speed,  # 速度系数
+        "start_skills": []  # 初始技能
+    }
+
+    # 将三个数据合成一个列表输出
+    buffs["属性"] = attributes
+    buffs["其他"] = buff_data_info
+
+    # 返回结果
+    return buffs
 
 
-# 处理攻击后辅修功法效果
-def after_atk_sub_buff_handle(player1_sub_open, player1, user1_main_buff_data, subbuffdata1, damage1, player2,
-                             boss_buff: BossBuff = empty_boss_buff,
-                             random_buff: UserRandomBuff = empty_ussr_random_buff,
-                             hp_buff=0, mp_buff=0):
-    """处理攻击后的辅修功法效果（优化版）"""
-    msg = None
-    health_stolen_msg = None
-    mana_stolen_msg = None
-    other_msg = None
+def apply_player_buffs(player, player_data):
+    """
+    根据 player_data 自动生成并添加各种 buff。
+    """
+    # --- 定义 buff 生成配置 ---
+    buff_config = [
+        ("主功法", generate_main_buff, lambda d: (d, player_data.get("其他", {}).get("faqi_buff", 0))),
+        ("辅修功法", generate_sub_buff, lambda d: (d, buff_type_mapping)),
+        ("身法", generate_effect_buff, lambda d: (d,)),
+        ("瞳术", generate_effect_buff, lambda d: (d,))
+    ]
 
-    if not player1_sub_open:
-        return player1, player2, msg
-    
-    # 计算最大气血和真元
-    max_hp = int(player1['exp'] / 2 * (1 + hp_buff))
-    max_mp = int(player1['exp'] * (1 + mp_buff))
-    
-    buff_value = int(subbuffdata1['buff'])
-    buff_type = subbuffdata1['buff_type']
-    
-    # 获取对方辅修功法信息
-    player2_sub_buff_data = UserBuffDate(player2['user_id']).get_user_sub_buff_data() if player2.get('user_id') else None
-    player2_sub_buff_jin = player2_sub_buff_data.get('jin', 0) if player2_sub_buff_data else 0
+    # --- 通用 buff 添加 ---
+    for key, generator, args_builder in buff_config:
+        if data := player_data.get(key):
+            args = args_builder(data)
+            buffs = generator(*args)
+            player.start_skills.extend(buffs)
 
-    # 处理不同类型的辅修效果
-    if buff_type == '4':  # 回血
-        restore_health = max_hp * buff_value / 100
-        if player2_sub_buff_jin > 0:
-            restore_health = 0
-        if restore_health > 0:
-            player1['气血'] = min(player1['气血'] + int(restore_health), max_hp)
-            other_msg = f"❤️回复气血:{number_to(int(restore_health))}"
-        
-    elif buff_type == '5':  # 回蓝
-        restore_mana = max_mp * buff_value / 100
-        if player2_sub_buff_jin > 0:
-            restore_mana = 0
-        if restore_mana > 0:
-            player1['真元'] = min(player1['真元'] + int(restore_mana), max_mp)
-            other_msg = f"💙回复真元:{number_to(int(restore_mana))}"
-        
-    elif buff_type == '6':  # 吸血
-        if damage1 > 0:  # 只有命中才吸血
-            health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
-            if player2_sub_buff_jin > 0:
-                health_stolen = 0
-            health_stolen = max(health_stolen, 0)
-            player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
-            if health_stolen > 0:
-                health_stolen_msg = f"🩸吸取气血:{number_to(int(health_stolen))}"
-                
-    elif buff_type == '7':  # 吸蓝
-        if damage1 > 0:  # 只有命中才吸蓝
-            mana_stolen = (damage1 * buff_value / 100) * (1 - boss_buff.boss_xl)
-            if player2_sub_buff_jin > 0:
-                mana_stolen = 0
-            mana_stolen = max(mana_stolen, 0)
-            player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
-            if mana_stolen > 0:
-                mana_stolen_msg = f"🩵吸取真元:{number_to(int(mana_stolen))}"
-                
-    elif buff_type == '8':  # 中毒
-        poison_damage = player2['气血'] / 100 * buff_value
-        player2['气血'] = max(player2['气血'] - int(poison_damage), 0)
-        if poison_damage > 0:
-            other_msg = f"🌀对手中毒消耗血量:{number_to(int(poison_damage))}"
-            
-    elif buff_type == '9':  # 双吸
-        if damage1 > 0:  # 只有命中才有效
-            health_stolen = (damage1 * ((buff_value / 100) + random_buff.random_xx)) * (1 - boss_buff.boss_xx)
-            mana_stolen = (damage1 * int(subbuffdata1['buff2']) / 100) * (1 - boss_buff.boss_xl)
-            
-            if player2_sub_buff_jin > 0:
-                health_stolen = 0
-                mana_stolen = 0
-            
-            health_stolen = max(health_stolen, 0)
-            mana_stolen = max(mana_stolen, 0)
-            
-            player1['气血'] = min(player1['气血'] + int(health_stolen), max_hp)
-            player1['真元'] = min(player1['真元'] + int(mana_stolen), max_mp)
-            
-            if health_stolen > 0:
-                health_stolen_msg = f"🩸吸取气血:{number_to(int(health_stolen))}"
-            if mana_stolen > 0:
-                mana_stolen_msg = f"🩵吸取真元:{number_to(int(mana_stolen))}"
-    
-    # 组合消息
-    if health_stolen_msg and mana_stolen_msg:
-        msg = f"{health_stolen_msg}, {mana_stolen_msg}"
-    elif health_stolen_msg:
-        msg = health_stolen_msg
-    elif mana_stolen_msg:
-        msg = mana_stolen_msg
-    elif other_msg:
-        msg = other_msg
-    
-    return player1, player2, msg
+    # --- 神通技能（非 buff，独立逻辑）---
+    if st_data := player_data.get("神通技能"):
+        player.skills.append(Skill(st_data))
 
-class BattleEngine:
-    def __init__(self, bot_id):
-        self.bot_id = bot_id
-        self.play_list = []
-        
-    def init_combatant(self, user_id, is_boss=False):
-        """初始化战斗参与者数据"""
-        if is_boss:
-            player = sql_message.get_player_data(user_id, boss=True)
-        else:
-            player = sql_message.get_player_data(user_id)
-            
-        buff_data = UserBuffDate(player['user_id'])
-        main_buff_data = buff_data.get_user_main_buff_data()
-        
-        # 获取各种buff数据
-        hp_buff = main_buff_data['hpbuff'] if main_buff_data else 0
-        mp_buff = main_buff_data['mpbuff'] if main_buff_data else 0
-        
-        # 获取传承数据
-        try:
-            impart_data = xiuxian_impart.get_user_impart_info_with_id(player['user_id'])
-            impart_hp = impart_data['impart_hp_per'] if impart_data else 0
-            impart_mp = impart_data['impart_mp_per'] if impart_data else 0
-        except:
-            impart_hp, impart_mp = 0, 0
-            
-        # 获取修炼数据
-        user_info = sql_message.get_user_info_with_id(player['user_id'])
-        hppractice = user_info['hppractice'] * 0.05 if user_info['hppractice'] else 0
-        mppractice = user_info['mppractice'] * 0.05 if user_info['mppractice'] else 0
-        
-        # 计算最终buff
-        total_hp_buff = hp_buff + impart_hp + hppractice
-        total_mp_buff = mp_buff + impart_mp + mppractice
-        max_hp = int(player['exp'] / 2 * (1 + total_hp_buff))
-        # 获取身法和瞳术数据
-        effect1_data = buff_data.get_user_effect1_buff_data()  # 身法
-        effect2_data = buff_data.get_user_effect2_buff_data()  # 瞳术
-        
-        hit = 100  # 基础命中
-        dodge = 0   # 基础闪避
-        
-        if effect2_data and effect2_data['buff_type'] == '2':
-            hit_buff = random.uniform(float(effect2_data['buff2']), float(effect2_data['buff']))
-            hit += int(hit_buff)
-            self.add_system_message(f"{user_info['user_name']}{effect2_data['desc']}！增加{int(hit_buff)}%命中！")
-            
-        if effect1_data and effect1_data['buff_type'] == '1':
-            dodge_buff = random.uniform(float(effect1_data['buff2']), float(effect1_data['buff']))
-            dodge += int(dodge_buff)
-            self.add_system_message(f"{user_info['user_name']}{effect1_data['desc']}！获得{int(dodge_buff)}%闪避！")
-            
-        # 获取技能数据
-        skill_data = None
-        skill_open = False
-        if buff_data.get_user_sec_buff_data() is not None:
-            skill_data = buff_data.get_user_sec_buff_data()
-            skill_open = True
-            if skill_data['skill_type'] == 7:  # 随机技能
-                goods_id = random.choice(skill_data['skill_content'])
-                skill_data = items.get_data_by_item_id(goods_id)
-                
-        # 获取辅修功法数据
-        sub_buff_data = {}
-        sub_open = False
-        if buff_data.get_user_sub_buff_data() is not None:
-            sub_buff_data = buff_data.get_user_sub_buff_data()
-            sub_open = True
-            
-        return {
-            'player': player,
-            'buff_data': buff_data,
-            'main_buff_data': main_buff_data,
-            'hp_buff': total_hp_buff,
-            'mp_buff': total_mp_buff,
-            'hit': hit,
-            'dodge': dodge,
-            'skill_data': skill_data,
-            'skill_open': skill_open,
-            'sub_buff_data': sub_buff_data,
-            'sub_open': sub_open,
-            'turn_cost': 0,
-            'turn_skip': True,
-            'buff_turn': True,
-            'battle_buff': UserBattleBuffDate(player['user_id']),
-            'init_hp': max_hp,
-            'def_js': get_user_def_buff(player['user_id']),
-            'current_js': get_user_def_buff(player['user_id']),
-            'skill_sh': 0
+
+def generate_sub_buff(skill, buff_type_mapping):
+    """根据技能配置自动生成 buff 列表"""
+
+    name = skill["name"]
+    buff_type_id = int(skill["buff_type"])
+    v1 = float(skill["buff"]) / 100
+    v2 = float(skill["buff2"]) / 100
+    is_debuff = False
+    if buff_type_id == 13 or buff_type_id == 14:
+        v1 = skill["break"]
+    if buff_type_id == 8 or buff_type_id == 10:
+        is_debuff = True
+
+    mapped = buff_type_mapping.get(buff_type_id)
+
+    buffs = []
+
+    # 映射不存在
+    if not mapped:
+        return buffs
+
+    # 情况 1：只是一种 buff（不是 list）
+    if not isinstance(mapped, list):
+        buffs.append({
+            "name": name,
+            "type": mapped,
+            "value": v1,
+            "coefficient": 1,
+            "is_debuff": is_debuff,
+            "duration": 99,
+            "skill_type": 0
+        })
+        return buffs
+
+    # 情况 2：多个 buff（例如双吸、双禁止）
+    # 多个 buff 需要同时从 buff / buff2 取值
+    if buff_type_id == 10:
+        v1, v2 = 1, 1
+    values = [v1, v2]
+
+    for i, t in enumerate(mapped):
+        # 避免 value = 0 的无效 buff
+        if i < len(values) and values[i] > 0:
+            buffs.append({
+                "name": name,
+                "type": t,
+                "value": values[i],
+                "coefficient": 1,
+                "is_debuff": is_debuff,
+                "duration": 99,
+                "skill_type": 0
+            })
+
+    return buffs
+
+
+def generate_effect_buff(data: dict):
+    """根据瞳术和身法配置自动生成 buff 列表"""
+    buff_type_map = {
+        "1": BuffType.EVASION_UP,
+        "2": BuffType.ACCURACY_UP
+    }
+
+    low = int(data["buff"])
+    high = int(data["buff2"])
+    if low > high:
+        low, high = high, low
+
+    return [{
+        "name": data["name"],
+        "type": buff_type_map[data["buff_type"]],
+        "value": random.randint(low, high),
+        "coefficient": 1,
+        "is_debuff": False,
+        "duration": 99,
+        "skill_type": 0
+    }]
+
+
+def generate_main_buff(data, weapon_id):
+    """生成主功法相关的buff"""
+    buffs = []
+
+    # 判断ew是否大于0且等于武器ID
+    if data.get("ew", 0) > 0 and data["ew"] == weapon_id:
+        buffs.append({
+            'name': data["name"],
+            'type': BuffType.ATTACK_UP,
+            'value': 0.5,
+            'coefficient': 1,
+            'is_debuff': False,
+            'duration': 99,
+            'skill_type': 0
+        })
+
+    # 判断random_buff是否为1
+    if data.get("random_buff") == 1:
+        configs = [
+            (BuffType.ARMOR_PENETRATION_UP, (15, 40)),
+            (BuffType.LIFESTEAL_UP, (2, 10)),
+            (BuffType.CRIT_RATE_UP, (5, 40)),
+            (BuffType.DAMAGE_REDUCTION_UP, (5, 15))
+        ]
+
+        index = random.randint(0, 3)
+        buff_type, (min_val, max_val) = configs[index]
+
+        buffs.append({
+            "name": "无上战意",
+            "type": buff_type,
+            "value": random.uniform(min_val, max_val) / 100,
+            "coefficient": 1,
+            "is_debuff": False,
+            "duration": 99,
+            "skill_type": 0
+        })
+
+    return buffs
+
+
+def update_all_user_status(status_list, bot_id, level_ratios=None):
+    """
+    遍历 status_list 更新所有玩家 hp/mp
+    排除 user_id=0 和 user_id=bot_id
+    hp/mp < 1 则替换为 1
+    """
+    for item in status_list:
+        for name, attr in item.items():
+            user_id = attr.get("user_id", 0)
+
+            # 排除无效与机器人
+            if user_id == 0 or user_id == bot_id:
+                continue
+
+            ratio = 1
+            if level_ratios:
+                ratio = level_ratios.get(user_id, 1)
+
+            hp_multiplier = attr.get("hp_multiplier", 1)
+            mp_multiplier = attr.get("mp_multiplier", 1)
+            # 确保除数不为0，如果为0则使用1
+            safe_hp_multiplier = hp_multiplier if hp_multiplier != 0 else 1
+            safe_mp_multiplier = mp_multiplier if mp_multiplier != 0 else 1
+            safe_ratio = ratio if ratio != 0 else 1
+
+            hp = attr.get("hp", 1) / safe_hp_multiplier / safe_ratio
+            mp = attr.get("mp", 1) / safe_mp_multiplier / safe_ratio
+
+            # hp/mp 最小为 1
+            if hp < 1:
+                hp = 1
+            if mp < 1:
+                mp = 1
+
+            # 更新数据库
+            # print("test",user_id,int(hp),int(mp))
+            sql_message.update_user_hp_mp(
+                user_id,
+                int(hp),
+                int(mp)
+            )
+
+
+# ---------- BOSS数据部分 ----------
+def get_boss_attributes(boss, bot_id):
+    """获取boss数据"""
+    buffs = {}
+
+    attributes = {
+        "user_id": bot_id,
+        "nickname": boss['name'],
+        "max_hp": boss['总血量'],
+        "current_hp": boss['气血'],
+        "max_mp": boss['真元'],
+        "current_mp": boss['真元'],
+        "attack": boss['攻击'],
+        "exp": 2,
+        "critical_rate": 0,
+        "critical_damage": 1.5,
+        "boss_damage_bonus": 0,
+        "damage_reduction": 0,
+        "armor_penetration": 0,
+        "accuracy": 100,
+        "dodge": 0,
+        "speed": 0,
+        "start_skills": [],
+        'monster_type': boss.get("monster_type", "boss")
+    }
+
+    buffs["属性"] = attributes
+    buffs["其他"] = boss
+
+    return buffs
+
+
+def generate_boss_buff(boss):
+    """初始化BOSS的特殊buff (优化版)"""
+    # 初始化buff字典
+    boss_buff = {
+        'boss_zs': 0,
+        'boss_hx': 0,
+        'boss_bs': 0,
+        'boss_xx': 0,
+        'boss_jg': 0,
+        'boss_jh': 0,
+        'boss_jb': 0,
+        'boss_xl': 0,
+        'boss_cj': 0,
+        'boss_js': 0,
+        'boss_sb': 0
+    }
+
+    boss_buff_map = {
+        'boss_zs': [BuffType.ATTACK_UP, "真龙九变"],
+        'boss_hx': [BuffType.CRIT_RATE_UP, "无瑕七绝剑"],
+        'boss_bs': [BuffType.CRIT_DAMAGE_UP, "太乙剑诀"],
+        'boss_xx': [DebuffType.LIFESTEAL_DOWN, "七煞灭魂聚血杀阵"],
+        'boss_jg': [DebuffType.ATTACK_DOWN, "子午安息香"],
+        'boss_jh': [DebuffType.CRIT_RATE_DOWN, "玄冥剑气"],
+        'boss_jb': [DebuffType.CRIT_DAMAGE_DOWN, "大德琉璃金刚身"],
+        'boss_xl': [DebuffType.MANA_STEAL_DOWN, "千煌锁灵阵"],
+        'boss_cj': [BuffType.ARMOR_PENETRATION_UP, "钉头七箭书"],
+        'boss_js': [BuffType.DAMAGE_REDUCTION_UP, "护身罡气"],
+        'boss_sb': [BuffType.EVASION_UP, "虚无道则残片"]
+    }
+
+    boss_level = boss["jj"]
+
+    # 1. 预计算当前BOSS的境界值，简化后续判断
+    current_rank_val = convert_rank(boss_level + '中期')[0]
+
+    def get_rank_val(name):
+        return convert_rank(name)[0]
+
+    # 2. 定义辅助函数：处理随机属性组 (每组4个选项，等概率随机一个)
+    def apply_random_group(attr_names, value_options):
+        """
+        attr_names: 属性名列表 ['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx']
+        value_options: 对应的值列表，支持固定值或函数(lambda)
+        """
+        # 随机选中一个属性名及其对应的索引
+        selected_attr = random.choice(attr_names)
+        idx = attr_names.index(selected_attr)
+
+        # 获取值（如果是函数则调用它生成随机数，否则直接使用）
+        val = value_options[idx]
+        final_val = val() if callable(val) else val
+
+        # 设置到 boss_buff 字典上
+        boss_buff[selected_attr] = final_val
+
+    # 3. 定义各境界的配置数据 (数据驱动)
+    cfg = None
+
+    # --- 境界判断逻辑 ---
+
+    # 祭道境 (最高级)
+    if boss_level == "祭道境" or current_rank_val < get_rank_val('祭道境初期'):
+        cfg = {
+            'js': 0.05,
+            'cj': (25, 50),
+            # 对应: zs, hx, bs, xx
+            'g1': [1, 0.7, 2, 1],
+            # 对应: jg, jh, jb, xl
+            'g2': [0.7, 0.7, 1.5, 1]
         }
 
-    def execute_turn(self, attacker, defender, turn_type="player"):
-        """执行单个回合的战斗逻辑"""
-        turn_msg = f"☆------{attacker['player']['道号']}的回合------☆"
-        self.add_message(attacker, turn_msg)
-        
-        # 处理辅修功法效果
-        self.process_sub_buffs(attacker, defender)
-        
-        if not attacker['turn_skip']:
-            skip_msg = f"☆------{attacker['player']['道号']}动弹不得！------☆"
-            self.add_message(attacker, skip_msg)
-            if attacker['turn_cost'] > 0:
-                attacker['turn_cost'] -= 1
-            if attacker['turn_cost'] == 0 and attacker['buff_turn']:
-                attacker['turn_skip'] = True
-            return None
-                
-        if attacker['skill_open']:
-            result = self.execute_skill_attack(attacker, defender, turn_type)
+    # 至尊 ~ 斩我 (中级)
+    elif get_rank_val('至尊境初期') < current_rank_val < get_rank_val('斩我境圆满'):
+        cfg = {
+            'js': (50, 55),
+            'cj': (15, 30),
+            'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100],
+            'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100]
+        }
+
+    # 微光 ~ 遁一
+    elif get_rank_val('微光境初期') < current_rank_val < get_rank_val('遁一境圆满'):
+        cfg = {
+            'js': (40, 45),
+            'cj': (20, 40),
+            'g1': [0.4, 0.2, 0.7, lambda: random.randint(10, 100) / 100],
+            'g2': [0.4, 0.4, 0.7, lambda: random.randint(10, 100) / 100]
+        }
+
+    # 星芒 ~ 至尊
+    elif get_rank_val('星芒境初期') < current_rank_val < get_rank_val('至尊境圆满'):
+        cfg = {
+            'js': (30, 35),
+            'cj': (20, 40),
+            'g1': [0.6, 0.35, 1.1, lambda: random.randint(30, 100) / 100],
+            'g2': [0.5, 0.5, 0.9, lambda: random.randint(30, 100) / 100]
+        }
+
+    # 月华 ~ 微光
+    elif get_rank_val('月华境初期') < current_rank_val < get_rank_val('微光境圆满'):
+        cfg = {
+            'js': (20, 25),
+            'cj': (20, 40),
+            'g1': [0.7, 0.45, 1.3, lambda: random.randint(40, 100) / 100],
+            'g2': [0.55, 0.6, 1.0, lambda: random.randint(40, 100) / 100]
+        }
+
+    # 耀日 ~ 星芒
+    elif get_rank_val('耀日境初期') < current_rank_val < get_rank_val('星芒境圆满'):
+        cfg = {
+            'js': (10, 15),
+            'cj': (25, 45),
+            'g1': [0.85, 0.5, 1.5, lambda: random.randint(50, 100) / 100],
+            'g2': [0.6, 0.65, 1.1, lambda: random.randint(50, 100) / 100]
+        }
+
+    # 祭道 ~ 月华
+    elif get_rank_val('祭道境初期') < current_rank_val < get_rank_val('月华境圆满'):
+        cfg = {
+            'js': 0.1,
+            'cj': (25, 45),
+            'g1': [0.9, 0.6, 1.7, lambda: random.randint(60, 100) / 100],
+            'g2': [0.62, 0.67, 1.2, lambda: random.randint(60, 100) / 100]
+        }
+
+    # 4. 统一应用配置
+    if cfg:
+        # 应用减伤 (JS) - 支持固定值或随机范围
+        if isinstance(cfg['js'], tuple):
+            boss_buff['boss_js'] = random.randint(*cfg['js']) / 100
         else:
-            result = self.execute_normal_attack(attacker, defender, turn_type)
-        
-        # 检查战斗是否结束
-        battle_result = self.check_battle_end(attacker, defender)
-        if battle_result:
-            return battle_result
-            
-        # 处理回合结束的状态
-        if attacker['turn_cost'] < 0:
-            attacker['turn_skip'] = False
-            attacker['turn_cost'] += 1
-            
-        return None
+            boss_buff['boss_js'] = cfg['js']
 
-    def execute_skill_attack(self, attacker, defender, turn_type):
-        """执行技能攻击"""
-        player = attacker['player']
-        skill_data = attacker['skill_data']
-        
-        hp_cost, mp_cost, skill_type, skill_rate = get_skill_hp_mp_data(player, skill_data)
-        
-        if attacker['turn_cost'] == 0:  # 首次释放技能
-            attacker['current_js'] = attacker['def_js']  # 恢复减伤
-            attacker['atk_buff'] = 0  # 恢复攻击
-            
-            if isEnableUserSikll(player, hp_cost, mp_cost, attacker['turn_cost'], skill_rate):
-                skill_msg, skill_sh, turn_cost = get_skill_sh_data(attacker, defender, turn_type, skill_data)
-                attacker['turn_cost'] = turn_cost
-                attacker['skill_sh'] = skill_sh
-                
-                # 根据技能类型处理不同的攻击逻辑
-                success = self.handle_skill_type(attacker, defender, skill_type, skill_msg, skill_sh, 
-                                               hp_cost, mp_cost, turn_type)
-                if not success:  # 技能释放失败或未命中，使用普通攻击
-                    self.execute_normal_attack_base(attacker, defender, turn_type)
-            else:  # 不满足技能条件，使用普通攻击
-                self.execute_normal_attack_base(attacker, defender, turn_type)
-        else:  # 持续性技能后续回合
-            self.handle_persistent_skill(attacker, defender, skill_type, turn_type)
+        # 应用暴击 (CJ)
+        boss_buff['boss_cj'] = random.randint(*cfg['cj']) / 100
 
-    def execute_normal_attack(self, attacker, defender, turn_type):
-        """执行普通攻击"""
-        self.execute_normal_attack_base(attacker, defender, turn_type)
+        # 应用两组随机属性
+        apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
+        apply_random_group(['boss_jg', 'boss_jh', 'boss_jb', 'boss_xl'], cfg['g2'])
 
-    def execute_normal_attack_base(self, attacker, defender, turn_type, rate=1.0):
-        """普通攻击基础逻辑"""
-        # 根据战斗类型选择不同的伤害计算函数
-        atk_buff = attacker.get('atk_buff', 0)
-        if turn_type == "boss":
-            boss_buff = defender.get('boss_buff', empty_boss_buff)
-            random_buff = attacker.get('random_buff', empty_ussr_random_buff)
-            is_crit, damage = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'], boss_buff, random_buff)
+    else:
+        # 低级BOSS / 默认处理
+        boss_buff['boss_js'] = 1.0
+        boss_buff['boss_cj'] = 0
+        # 其他属性默认为0，已初始化
+
+    # 计算BOSS闪避率 和 减伤率
+    boss_buff['boss_sb'] = int((1 - boss_buff['boss_js']) * 100 * random.uniform(0.1, 0.5))
+    boss_buff['boss_js'] = 1 - boss_buff['boss_js']
+
+    result = []
+
+    for key, value in boss_buff.items():
+        if value == 0:
+            continue  # 跳过无效果
+
+        if key not in boss_buff:
+            continue
+
+        effect_type, effect_name = boss_buff_map[key]
+
+        # 修复判断逻辑：判断是否是DebuffType枚举
+        is_debuff = isinstance(effect_type, DebuffType)
+
+        result.append({
+            "name": effect_name,
+            "type": effect_type,
+            "value": value,
+            "is_debuff": is_debuff
+        })
+
+    return result
+
+
+def load_json_file(filename="data.json"):
+    """从当前脚本目录加载JSON文件"""
+    filepath = Path(__file__).parent.absolute() / filename
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+skill_data_cache = None  # 全局缓存
+
+
+def get_skill_data():
+    """获取技能数据（带缓存）"""
+    global skill_data_cache
+    if skill_data_cache is None:
+        skill_data_cache = load_json_file("boss神通.json")
+    return skill_data_cache
+
+
+def generate_boss_skill(enemy, skills):
+    skill_data = get_skill_data()  # 第一次加载，后续使用缓存
+    for skill in skills:
+        skill_str = str(skill)
+        if skill_str not in skill_data:
+            continue
+        enemy.skills.append(Skill(skill_data[skill_str]))
+
+
+def update_data_boss_status(data, status_list):
+    target_name = data["name"]
+
+    for item in status_list:
+        for name, attr in item.items():
+            if name == target_name:
+                # 将 status 中的 hp/mp 写回 data
+                data["气血"] = attr.get("hp", data.get("气血"))
+                data["真元"] = attr.get("mp", data.get("真元"))
+                return True
+    return False
+
+
+# ---------- 战斗部分 ----------
+class SkillType(IntEnum):
+    MULTI_HIT = 1  # 连续攻击
+    DOT = 2  # 持续伤害 (毒/火)
+    BUFF_STAT = 3  # 属性增益
+    CONTROL = 4  # 封印/控制
+    RANDOM_HIT = 5  # 波动伤害
+    STACK_BUFF = 6  # 叠加Buff
+    RANDOM_ACQUIRE = 7  # 随机获取技能
+
+    # ====== BOSS特殊技能 ======
+    MULTIPLIER_PERCENT_HP = 101  # 倍数伤害+无视防御
+    MULTIPLIER_DEF_IGNORE = 102  # 倍数伤害+目标百分比生命值伤害
+    CC = 103  # 控制类型（眩晕、沉默、定身等）
+    SUMMON = 104  # 召唤类型技能
+
+    TRIGGER_HP_BELOW = 104  # 血量低于阈值时触发
+    FIELD = 105  # 领域类型
+
+
+class TargetType(IntEnum):
+    SINGLE = 1  # 单体
+    AOE = 2  # 群体
+    MULTI = 3  # 固定数量多目标
+
+
+class BuffType(IntEnum):
+    """增益效果类型枚举类"""
+    # 基础属性增益
+    ATTACK_UP = 1  # 攻击提升
+    DEFENSE_UP = 2  # 防御提升
+    CRIT_RATE_UP = 3  # 暴击率提升
+    CRIT_DAMAGE_UP = 4  # 暴击伤害提升
+    DAMAGE_REDUCTION_UP = 5  # 伤害减免提升
+    ARMOR_PENETRATION_UP = 6  # 护甲穿透提升
+    ACCURACY_UP = 7  # 命中率提升
+    EVASION_UP = 8  # 闪避率提升
+    LIFESTEAL_UP = 9  # 生命偷取提升
+    MANA_STEAL_UP = 10  # 法力偷取提升
+    DEBUFF_IMMUNITY = 11  # 免疫减益
+    HP_REGEN_PERCENT = 12  # 百分比回血
+    MP_REGEN_PERCENT = 13  # 百分比回蓝
+    REFLECT_DAMAGE = 14  # 伤害反弹
+    SHIELD = 15  # 护盾
+
+
+class DebuffType(IntEnum):
+    """减益效果类型枚举类"""
+    # 属性降低类
+    ATTACK_DOWN = 1  # 攻击力降低
+    CRIT_RATE_DOWN = 2  # 暴击率降低
+    CRIT_DAMAGE_DOWN = 3  # 暴击伤害降低
+    DEFENSE_DOWN = 4  # 防御降低
+    ACCURACY_DOWN = 5  # 命中率降低
+    EVASION_DOWN = 6  # 闪避率降低
+    LIFESTEAL_DOWN = 7  # 生命偷取降低
+    MANA_STEAL_DOWN = 8  # 法力偷取降低
+    LIFESTEAL_BLOCK = 9  # 禁止生命吸取
+    MANA_STEAL_BLOCK = 10  # 禁止法力吸取
+    POISON_DOT = 11  # 中毒
+    SKILL_DOT = 12  # 技能持续伤害
+    BLEED_DOT = 13  # 流血
+    BURN_DOT = 14  # 灼烧
+
+    # 控制类
+    FATIGUE = 15  # 疲劳
+    STUN = 16  # 眩晕
+    FREEZE = 17  # 冰冻
+    PETRIFY = 18  # 石化
+    SLEEP = 19  # 睡眠
+    ROOT = 20  # 定身
+    FEAR = 21  # 恐惧
+    SEAL = 22  # 封印
+    PARALYSIS = 23  # 麻痹
+    SILENCE = 24  # 沉默
+
+
+buff_type_mapping = {
+    1: BuffType.ATTACK_UP,  # 攻击提升
+    2: BuffType.CRIT_RATE_UP,  # 暴击率提升
+    3: BuffType.CRIT_DAMAGE_UP,  # 暴击伤害提升
+    4: BuffType.HP_REGEN_PERCENT,  # 气血回复
+    5: BuffType.MP_REGEN_PERCENT,  # 真元回复
+    6: BuffType.LIFESTEAL_UP,  # 吸气血
+    7: BuffType.MANA_STEAL_UP,  # 吸真元
+    8: DebuffType.POISON_DOT,  # 中毒
+    9: [BuffType.LIFESTEAL_UP, BuffType.MANA_STEAL_UP],  # 双吸（同时提升两种偷取）
+    10: [DebuffType.LIFESTEAL_BLOCK, DebuffType.MANA_STEAL_BLOCK],  # 禁止吸取（同时禁止两种偷取）
+    11: BuffType.DEBUFF_IMMUNITY,  # 抵消
+    12: "",  # 聚宝
+    13: BuffType.ARMOR_PENETRATION_UP,  # 斗战
+    14: BuffType.ARMOR_PENETRATION_UP  # 穿甲
+}
+
+BUFF_DESC_TEMPLATES = {
+    BuffType.ATTACK_UP: "攻击力提升 {value}",
+    BuffType.DEFENSE_UP: "防御力提升 {value}",
+    BuffType.CRIT_RATE_UP: "会心率提升 {value}",
+    BuffType.CRIT_DAMAGE_UP: "会心伤害提升 {value}",
+    BuffType.DAMAGE_REDUCTION_UP: "伤害减免提升 {value}",
+    BuffType.ARMOR_PENETRATION_UP: "护甲穿透提升 {value}",
+    BuffType.ACCURACY_UP: "命中率提升 {value}",
+    BuffType.EVASION_UP: "闪避率提升 {value}",
+    BuffType.LIFESTEAL_UP: "生命偷取提升 {value}",
+    BuffType.MANA_STEAL_UP: "法力偷取提升 {value}",
+    BuffType.DEBUFF_IMMUNITY: "获得免疫减益效果",
+    BuffType.HP_REGEN_PERCENT: "每回合回复 {value} 生命值",
+    BuffType.MP_REGEN_PERCENT: "每回合回复 {value} 法力值",
+    BuffType.REFLECT_DAMAGE: "反弹 {value} 伤害",
+    BuffType.SHIELD: "获得 {value} 点护盾",
+}
+
+DEBUFF_DESC_TEMPLATES = {
+    DebuffType.ATTACK_DOWN: "攻击力降低 {value}",
+    DebuffType.CRIT_RATE_DOWN: "会心率降低 {value}",
+    DebuffType.CRIT_DAMAGE_DOWN: "会心伤害降低 {value}",
+    DebuffType.DEFENSE_DOWN: "防御力降低 {value}",
+    DebuffType.ACCURACY_DOWN: "命中率降低 {value}",
+    DebuffType.EVASION_DOWN: "闪避率降低 {value}",
+    DebuffType.LIFESTEAL_DOWN: "生命偷取降低 {value}",
+    DebuffType.MANA_STEAL_DOWN: "法力偷取降低 {value}",
+    DebuffType.LIFESTEAL_BLOCK: "无法进行生命偷取",
+    DebuffType.MANA_STEAL_BLOCK: "无法进行法力偷取",
+
+    DebuffType.POISON_DOT: "中毒，每回合受到 {value} 点伤害",
+    DebuffType.SKILL_DOT: "持续技能伤害，每回合受到 {value} 点伤害",
+    DebuffType.BLEED_DOT: "流血，每回合受到 {value} 点伤害",
+    DebuffType.BURN_DOT: "灼烧，每回合受到 {value} 点伤害",
+
+    DebuffType.FATIGUE: "陷入疲劳状态",
+    DebuffType.STUN: "眩晕，无法行动",
+    DebuffType.FREEZE: "冰冻，无法行动",
+    DebuffType.PETRIFY: "石化，无法行动",
+    DebuffType.SLEEP: "睡眠，无法行动",
+    DebuffType.ROOT: "定身，无法行动",
+    DebuffType.FEAR: "恐惧，无法行动",
+    DebuffType.SEAL: "封印，无法行动",
+    DebuffType.PARALYSIS: "麻痹，无法行动",
+    DebuffType.SILENCE: "沉默，无法施放法术",
+}
+
+VALID_FIELDS = {"name", "type", "value", "coefficient", "is_debuff", "duration", "skill_type"}
+
+
+class StatusEffect:
+    def __init__(self, name, effect_type, value, coefficient, is_debuff, duration=99, skill_type=0):
+        self.name = name  # 技能名称
+        self.type = effect_type  # 效果类型
+        self.value = value  # 效果数值
+        self.coefficient = coefficient  # 效果系数
+        self.is_debuff = is_debuff  # 是否为负面效果（True为负面，False为正面）
+        self.duration = duration  # 效果持续回合数
+        self.skill_type = skill_type  # 技能类型
+
+    def __repr__(self):  # 定义对象的字符串表示形式
+        # 返回可读的状态效果信息
+        return f"[{'Debuff' if self.is_debuff else 'Buff'}:{self.name}|{self.type}|{self.value}|{self.duration}|{self.skill_type}]"
+
+
+class Skill:
+    def __init__(self, data):
+        self.name = data.get("name")  # 技能名称
+        self.desc = data.get("desc", "")  # 技能介绍
+        self.skill_type = int(data.get("skill_type", 1))  # 技能类型
+        self.target_type = int(data.get("target_type", 1))  # 目标类型
+        self.multi_count = int(data.get("multi_count", 1))  # 目标数量
+        self.hp_condition = float(data.get("hp_condition", 1))  # 触发血量
+
+        # 消耗
+        self.hp_cost_rate = float(data.get("hpcost", 0))  # 消耗气血
+        self.mp_cost_rate = float(data.get("mpcost", 0))  # 消耗真元
+
+        # 通用参数
+        self.turn_cost = int(data.get("turncost", 0))  # 持续回合 或 休息回合
+        self.rate = float(data.get("rate", 0))  # 触发率
+        self.cd = float(data.get("cd", 0))  # 触发率
+        self.remain_cd = float(data.get("remain_cd", 0))  # 剩余冷却（回合）
+
+        # 类型特定参数
+        self.atk_values = data.get("atkvalue", [])  # 攻击参数 1
+        self.atk_coefficient = float(data.get("atkvalue2", 0))  # 攻击参数 2
+        self.skill_buff_type = int(data.get("bufftype", 0))  # BUFF类型
+        self.skill_buff_value = float(data.get("buffvalue", 0))  # BUFF参数
+        self.success_rate = float(data.get("success", 0))  # 概率参数
+        self.skill_content = data.get("skill_content", [])  # 随机神通参数
+
+    def is_available(self):
+        """检查技能是否可用（冷却完成）"""
+        return self.remain_cd <= 0
+
+    def trigger_cd(self):
+        """触发技能冷却"""
+        self.remain_cd = self.cd
+
+    def tick_cd(self):
+        """冷却计数减少（每回合调用）"""
+        if self.remain_cd > 0:
+            self.remain_cd -= 1
+
+    def __str__(self):
+        """字符串表示"""
+        return f"{self.name}(cd:{self.cd},rem:{self.remain_cd})"
+
+
+# --- 实体类 (角色/怪物) ---
+class Entity:
+    def __init__(self, data, team_id, is_boss=False):
+        self.data = data
+        self.id = data.get("user_id")
+        self.name = data.get("nickname", "Unknown")
+        self.team_id = team_id
+        self.is_boss = is_boss
+        self.type = data.get("monster_type", "player")
+
+        # 基础属性
+        self.max_hp = float(data.get("max_hp", 1))
+        self.hp = float(data.get("current_hp", 1))
+        self.max_mp = float(data.get("max_mp", 1))
+        self.mp = float(data.get("current_mp", 1))
+        self.mp_cost_modifier = float(data.get("mp_cost_modifier", 0))
+        self.exp = float(data.get("exp", 1))
+        self.boss_damage = float(data.get("boss_damage_bonus", 0))
+
+        # 进阶属性
+        self.base_atk = float(data.get("attack", 1))  # 基础攻击
+        self.base_crit = float(data.get("critical_rate", 0))  # 基础暴击率
+        self.base_crit_dmg = float(data.get("critical_damage", 1.5))  # 基础暴击伤害倍数
+        self.base_damage_reduction = float(data.get("damage_reduction", 0))  # 基础减伤
+        self.base_armor_pen = float(data.get("armor_penetration", 0))  # 基础穿甲
+        self.base_accuracy = float(data.get("accuracy", 100))  # 基础命中率
+        self.base_dodge = float(data.get("dodge", 0))  # 基础闪避率
+        self.base_speed = float(data.get("speed", 10))  # 基础速度
+
+        # 状态管理
+        self.buffs = []
+        self.debuffs = []
+        # 初始buff配置 (用于Round One)
+        self.start_skills = data.get("start_skills", [])
+        self.skills = data.get("skills", [])  # 存放技能参数
+        self.total_dmg = 0
+
+    # -------- buff管理函数 --------
+
+    def has_buff(self, field: str, value) -> bool:
+        """
+        检查 buffs 中是否存在某个字段等于指定值的 buff
+        """
+        if field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+
+        return any(getattr(buff, field, None) == value for buff in self.buffs)
+
+    def has_debuff(self, field: str, value) -> bool:
+        """
+        检查 debuffs 中是否存在某个字段等于指定值的 debuff
+        """
+        if field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+
+        return any(getattr(debuff, field, None) == value for debuff in self.debuffs)
+
+    def get_buff_field(self, match_field: str, return_field: str, match_value):
+        """
+        在 buffs 中查找 match_field == match_value 的效果，
+        找到后返回 return_field 的值。
+        """
+        if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+
+        for buff in self.buffs:
+            if getattr(buff, match_field, None) == match_value:
+                return getattr(buff, return_field, None)
+
+        return None  # 找不到则返回 None
+
+    def get_debuff_field(self, match_field: str, return_field: str, match_value):
+        """
+        在 debuffs 中查找 match_field == match_value 的效果，
+        找到后返回 return_field 的值。
+        """
+        if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+
+        for debuff in self.debuffs:
+            if getattr(debuff, match_field, None) == match_value:
+                return getattr(debuff, return_field, None)
+
+        return None  # 找不到则返回 None
+
+    def set_buff_field(self, match_field: str, target_field: str, match_value, new_value) -> bool:
+        """
+        在 buffs 中查找 match_field == match_value 的效果，
+        并将 target_field 的值修改为 new_value。
+        返回 True 表示修改成功，False 表示未找到。
+        """
+        if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+
+        for buff in self.buffs:
+            if getattr(buff, match_field, None) == match_value:
+                setattr(buff, target_field, new_value)
+                return True
+        return False  # 没找到
+
+    def set_debuff_field(self, match_field: str, target_field: str, match_value, new_value) -> bool:
+        """
+        在 debuffs 中查找 match_field == match_value 的效果，
+        并将 target_field 的值修改为 new_value。
+        返回 True 表示修改成功，False 表示未找到。
+        """
+        if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+
+        for debuff in self.debuffs:
+            if getattr(debuff, match_field, None) == match_value:
+                setattr(debuff, target_field, new_value)
+                return True
+        return False  # 没找到
+
+    def get_buffs(self, field: str, value):
+        """
+        根据任意字段获取所有匹配的 buff 列表。
+        field 必须属于 VALID_FIELDS。
+        """
+        if field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+
+        return [b for b in self.buffs if getattr(b, field, None) == value]
+
+    def get_debuffs(self, field: str, value):
+        """
+        根据任意字段获取所有匹配的 debuff 列表。
+        """
+        if field not in VALID_FIELDS:
+            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+
+        return [d for d in self.debuffs if getattr(d, field, None) == value]
+
+    def get_buff(self, field: str, value):
+        """返回第一个匹配的 buff，没有则返回 None"""
+        buffs = self.get_buffs(field, value)
+        return buffs[0] if buffs else None
+
+    def get_debuff(self, field: str, value):
+        """返回第一个匹配的 debuff，没有则返回 None"""
+        debuffs = self.get_debuffs(field, value)
+        return debuffs[0] if debuffs else None
+
+    # -------- 数值类计算 --------
+
+    def _get_effect_value(self, buff_type, debuff_type=None):
+        """计算 (所有增益值 - 所有减益值)"""
+        val = 0.0
+        # 加 Buff
+        for b in self.buffs:
+            if b.type == buff_type: val += b.value
+        # 减 Debuff
+        if debuff_type:
+            for d in self.debuffs:
+                if d.type == debuff_type: val -= d.value
+        return val
+
+    def _get_effect_value_mixed(self, buff_type, debuff_type=None):
+        """混合计算：增益加法叠加，减益乘法叠加"""
+        # 增益部分：加法叠加
+        buff_sum = 0.0
+        for b in self.buffs:
+            if b.type == buff_type:
+                buff_sum += b.value  # 直接相加，假设value是百分比
+
+        # 计算基础系数 (1 + 总增益百分比)
+        multiplier = 0 + buff_sum
+
+        # 减益部分：乘法叠加
+        if debuff_type:
+            for d in self.debuffs:
+                if d.type == debuff_type:
+                    multiplier *= (1 - d.value)  # 乘法叠加
+
+        return multiplier
+
+    def update_stat(self, stat: str, op: int, value: float):
+        """
+        stat: "hp" 或 "mp"
+        op: 1=加，2=减
+        value: 数值
+        """
+        if stat not in ("hp", "mp"):
+            raise ValueError("stat 必须是 'hp' 或 'mp'")
+        # 选择对应属性
+        current = getattr(self, stat)
+        max_value = getattr(self, f"max_{stat}")
+        # 操作加减
+        if op == 1:  # 加
+            current += value
+        elif op == 2:  # 减
+            current -= value
         else:
-            is_crit, damage = get_turnatk(attacker['player'], atk_buff, attacker['battle_buff'])
+            raise ValueError("op 必须是 1(加) 或 2(减)")
+        # 限制范围：0 ~ 最大值
+        current = min(current, max_value)
+        # 更新属性
+        setattr(self, stat, current)
 
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
-        else:
-            defender_name = defender['player']['name']
-        
-        attacker_name = attacker['player']['道号']
-        actual_damage = 0
-        if check_hit(attacker['hit'], defender['dodge']):
-            if is_crit:
-                msg = "{}发起💥会心一击，造成了{}伤害"
-            else:
-                msg = "{}发起攻击，造成了{}伤害"
-                
-            actual_damage = int(calculate_damage(attacker, defender, damage * rate))
-            defender['player']['气血'] -= actual_damage
-            
-            attack_msg = msg.format(attacker_name, number_to(actual_damage))
-            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
-            
-            self.add_message(attacker, attack_msg)
-            self.process_after_attack_buffs(attacker, defender, actual_damage)
-            self.add_message(attacker, hp_msg)
-        else:
-            miss_msg = f"{attacker_name}的攻击被{defender_name}闪避了！"
-            self.add_message(attacker, miss_msg)
-            self.process_after_attack_buffs(attacker, defender, actual_damage)
+    def pay_cost(self, hp_cost, mp_cost, deduct=False):
+        if self.hp <= hp_cost or self.mp < mp_cost:
+            return False
+        if deduct:
+            self.hp -= hp_cost
+            self.mp -= mp_cost
+        return True
 
-    def handle_skill_type(self, attacker, defender, skill_type, skill_msg, skill_sh, hp_cost, mp_cost, turn_type):
-        """处理不同类型的技能"""
-        if skill_type in [1, 2, 5]:  # 直接伤害、持续伤害、随机伤害技能
-            return self.handle_damage_skill(attacker, defender, skill_type, skill_msg, skill_sh, 
-                                          hp_cost, mp_cost, turn_type)
-        elif skill_type == 3:  # buff类技能
-            return self.handle_buff_skill(attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost, turn_type)
-        elif skill_type == 4:  # 封印类技能
-            return self.handle_seal_skill(attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost)
-        elif skill_type == 6:  # 叠加类技能
-            return self.handle_stack_skill(attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost, turn_type)
-        
+    def show_bar(self, stat: str, length: int = 10):
+        """
+        显示一个血条或蓝条
+        stat: 'hp' 或 'mp'
+        length: 血条长度（单位：字符）
+        """
+        if stat not in ("hp", "mp"):
+            raise ValueError("stat 必须是 'hp' 或 'mp'")
+        current_data = getattr(self, stat)
+        current = max(0, current_data)
+        max_value = getattr(self, f"max_{stat}")
+
+        ratio = current / max_value if max_value > 0 else 0
+        filled = int(ratio * length)
+        empty = length - filled
+        # 进度条
+        bar = "▬" * filled + "▭" * empty
+        # 打印
+        return f"{self.name}剩余血量{number_to(int(current_data))}\n{stat.upper()} {bar} {int(ratio * 100)}%"
+
+    @property
+    def is_alive(self):
+        return self.hp > 0
+
+    @property
+    def atk_rate(self):
+        # 攻击力 = 基础 * (1 + 攻击提升Buff - 攻击降低Debuff)
+        pct = self._get_effect_value(BuffType.ATTACK_UP, DebuffType.ATTACK_DOWN)
+        return max(0, self.base_atk * (1 + pct))
+
+    @property
+    def crit_rate(self):
+        # 暴击率 = 基础 + 暴击Buff - 暴击Debuff
+        val = self.base_crit + self._get_effect_value(BuffType.CRIT_RATE_UP, DebuffType.CRIT_RATE_DOWN)
+        return max(0, val)
+
+    @property
+    def crit_dmg_rate(self):
+        # 暴击伤害 = 基础 + 暴击伤害Buff - 暴击伤害Debuff
+        val = self.base_crit_dmg + self._get_effect_value(BuffType.CRIT_DAMAGE_UP, DebuffType.CRIT_DAMAGE_DOWN)
+        return max(0, val)
+
+    @property
+    def damage_reduction_rate(self):
+        # 减伤率 = 基础 + 减伤Buff
+        # 注意：这里假设 defense_down 会减少减伤率
+        val = self.base_damage_reduction + self._get_effect_value(BuffType.DAMAGE_REDUCTION_UP)
+        return min(0.95, val)  # 限制范围 0% - 95%
+
+    @property
+    def armor_pen_rate(self):
+        # 穿甲
+        val = self.base_armor_pen + self._get_effect_value(BuffType.ARMOR_PENETRATION_UP)
+        return max(0, val)
+
+    @property
+    def accuracy_rate(self):
+        # 命中率
+        val = self.base_accuracy + self._get_effect_value(BuffType.ACCURACY_UP)
+        return max(0, val)
+
+    @property
+    def dodge_rate(self):
+        # 闪避
+        val = self.base_dodge + self._get_effect_value(BuffType.EVASION_UP)
+        return min(180, max(0, val))
+
+    @property
+    def lifesteal_rate(self):
+        # 基础生命偷取假设为0，完全靠Buff
+        if self.has_debuff("type", DebuffType.LIFESTEAL_BLOCK):
+            return 0
+        val = self._get_effect_value_mixed(BuffType.LIFESTEAL_UP, DebuffType.LIFESTEAL_DOWN)
+        return max(0, val)
+
+    @property
+    def mana_steal_rate(self):
+        # 基础法力偷取假设为0，完全靠Buff
+        if self.has_debuff("type", DebuffType.MANA_STEAL_BLOCK):
+            return 0
+        val = self._get_effect_value_mixed(BuffType.MANA_STEAL_UP, DebuffType.MANA_STEAL_DOWN)
+        return max(0, val)
+
+    @property
+    def poison_dot_dmg(self):
+        """所有中毒伤害的总和（基于当前生命值）"""
+        total = 0.0
+        for debuff in self.debuffs:
+            if debuff.type == DebuffType.POISON_DOT:
+                # 假设debuff.value是百分比（如0.05表示5%）
+                total += self.hp * debuff.value
+        return int(total)
+
+    @property
+    def hp_regen_rate(self):
+        """所有HP恢复的总和（基于最大生命值）"""
+        total = 0.0
+        for buff in self.buffs:
+            if buff.type == BuffType.HP_REGEN_PERCENT:
+                # 假设debuff.value是百分比（如0.05表示5%）
+                total += self.max_hp * buff.value
+        return int(total)
+
+    @property
+    def mp_regen_rate(self):
+        """所有MP恢复的总和（基于最大生命值）"""
+        total = 0.0
+        for buff in self.buffs:
+            if buff.type == BuffType.MP_REGEN_PERCENT:
+                # 假设debuff.value是百分比（如0.05表示5%）
+                total += self.max_mp * buff.value
+        return int(total)
+
+    # --- 状态管理 ---
+    def remove_skill_by_name(self, skill_name):
+        """删除指定名称的技能"""
+        for i, skill in enumerate(self.skills):
+            if skill.name == skill_name:
+                del self.skills[i]
+                return True
         return False
 
-    def handle_damage_skill(self, attacker, defender, skill_type, skill_msg, skill_sh, hp_cost, mp_cost, turn_type):
-        """处理伤害类技能"""
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
+    def has_skill(self, skill_name):
+        """检查是否拥有某个技能"""
+        return any(skill.name == skill_name for skill in self.skills)
+
+    def check_and_clear_debuffs_by_immunity(self):
+        # 检查是否有debuff免疫效果，如果有则清空所有debuffs
+        if self.has_buff("type", BuffType.DEBUFF_IMMUNITY):
+            self.debuffs.clear()
+
+    def add_status(self, effect):
+        if effect.is_debuff:
+            self.debuffs.append(effect)
         else:
-            defender_name = defender['player']['name']
-        actual_damage = 0
-        if not check_hit(attacker['hit'], defender['dodge']):
-            miss_msg = f"{attacker['player']['道号']}的技能被{defender_name}闪避了！"
-            self.add_message(attacker, miss_msg)
-            attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-            self.process_after_attack_buffs(attacker, defender, actual_damage)
-            if skill_type == 2:  # 持续性技能未命中不进入持续状态
-                attacker['turn_cost'] = 0
-            return False
-            
-        self.add_message(attacker, skill_msg)
-        attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-        
-        # 计算实际伤害
-        if skill_type == 2:  # 持续性伤害有额外系数
-            attacker['turn_cost'] -= 1  # 立即消耗一回合
-            actual_damage = int(skill_sh * min(0.2 + defender['current_js'], 1.0))
-        else:
-            actual_damage = int(calculate_damage(attacker, defender, skill_sh))
-            
-        defender['player']['气血'] -= actual_damage
-        hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-        hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
-        self.process_after_attack_buffs(attacker, defender, actual_damage)
-        self.add_message(attacker, hp_msg)
-        return True
+            self.buffs.append(effect)
 
-    def handle_buff_skill(self, attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost, turn_type):
-        """处理buff类技能"""
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
-        else:
-            defender_name = defender['player']['name']
-    
-        self.add_message(attacker, skill_msg)
-        attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-        attacker['turn_cost'] -= 1  # 立即消耗一回合
-        # 根据buff类型设置效果
-        buff_type = attacker['skill_data']['bufftype']
-        if buff_type == 1:  # 攻击类buff
-            # 存储攻击buff到战斗状态
-            attacker['atk_buff'] = skill_sh
-            attacker['atk_buff_turns'] = attacker['skill_data']['turncost']
-        elif buff_type == 2:  # 减伤buff
-            attacker['current_js'] = max(attacker['def_js'] - skill_sh, 0.05)
-            attacker['js_buff_turns'] = attacker['skill_data']['turncost']
-    
-        # 执行普通攻击（应用buff效果）
-        self.execute_normal_attack_base(attacker, defender, turn_type)
-        
-        return True
+    def update_status_effects(self):
+        # 处理技能CD
+        for skill in self.skills[:]:
+            skill.tick_cd()
 
-    def handle_seal_skill(self, attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost):
-        """处理封印类技能"""
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
-        else:
-            defender_name = defender['player']['name']
-        if skill_sh:  # 技能命中
-            self.add_message(attacker, skill_msg)
-            defender['turn_skip'] = False
-            defender['buff_turn'] = False
-        else:
-            miss_msg = f"{attacker['player']['道号']}的封印技能被{defender_name}闪避了！"
-            self.add_message(attacker, miss_msg)
-            
-        attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-        return True
+        # 处理 Buff
+        for buff in self.buffs[:]:  # 用 [:] 防止删除时影响遍历
+            buff.duration -= 1
+            if buff.duration < 0:
+                self.buffs.remove(buff)
 
-    def handle_stack_skill(self, attacker, defender, skill_msg, skill_sh, hp_cost, mp_cost, turn_type):
-        """处理叠加类技能"""
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
-        else:
-            defender_name = defender['player']['name']
-        if not check_hit(attacker['hit'], defender['dodge']):
-            miss_msg = f"{attacker['player']['道号']}的技能被{defender_name}闪避了！"
-            self.add_message(attacker, miss_msg)
-            attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-            attacker['turn_cost'] = 0  # 未命中不进入叠加状态
-            return False
-            
-        self.add_message(attacker, skill_msg)
-        attacker['player'] = calculate_skill_cost(attacker['player'], hp_cost, mp_cost)
-        
-        # 叠加类技能的特殊攻击计算
-        base_damage = int(round(random.uniform(0.95, 1.05), 2) * attacker['player']['攻击'] * 1.5)
-        
-        # 根据剩余回合数计算叠加伤害
-        current_stack = attacker['skill_data']['turncost'] - attacker['turn_cost']
-        stack_multiplier = max(attacker['skill_sh'] * current_stack, 1.0)
-        actual_damage = int(calculate_damage(attacker, defender, int(base_damage + (base_damage * stack_multiplier))))
-        defender['player']['气血'] -= actual_damage
-        
-        msg = "{}发起攻击，造成了{}伤害"
-        hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-        attack_msg = msg.format(attacker['player']['道号'], number_to(actual_damage))
-        hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
-        
-        self.add_message(attacker, attack_msg)
-        self.add_message(attacker, hp_msg)
-        
-        return True
+        # 处理 Debuff
+        for debuff in self.debuffs[:]:
+            debuff.duration -= 1
+            if debuff.duration < 0:
+                self.debuffs.remove(debuff)
 
-    def handle_persistent_skill(self, attacker, defender, skill_type, turn_type):
-        """处理持续性技能的后续回合"""
-        if '道号' in defender['player']:
-            defender_name = defender['player']['道号']
-        else:
-            defender_name = defender['player']['name']
-        if skill_type == 2:  # 持续性伤害
-            attacker['turn_cost'] -= 1
-            
-            # 持续性伤害部分
-            persistent_damage = int(attacker['skill_sh'] * min(0.2 + defender['current_js'], 1.0))
-            defender['player']['气血'] -= persistent_damage
 
-            skill_msg = f"{attacker['skill_data']['name']}持续造成{number_to(persistent_damage)}伤害，剩余回合：{attacker['turn_cost']}!"
-            self.add_message(attacker, skill_msg)
-            self.execute_normal_attack_base(attacker, defender, turn_type, rate=0.5)
-            
-        elif skill_type == 3:  # buff类持续效果
-            attacker['turn_cost'] -= 1
-            buff_type = attacker['skill_data']['bufftype']
-            
-            if buff_type == 1:  # 攻击buff
-                self.execute_normal_attack_base(attacker, defender, turn_type)
-                self.add_message(attacker, f"{attacker['skill_data']['name']}增伤剩余:{attacker['turn_cost']}回合")
-            elif buff_type == 2:  # 减伤buff
-                attacker['current_js'] = max(attacker['def_js'] - attacker['skill_sh'], 0.05)
-                self.execute_normal_attack_base(attacker, defender, turn_type)
-                self.add_message(attacker, f"{attacker['skill_data']['name']}减伤剩余{attacker['turn_cost']}回合")
-        elif skill_type == 4:  # 封印持续效果
-            attacker['turn_cost'] -= 1            
-            self.execute_normal_attack_base(attacker, defender, turn_type)
+# --- 战斗引擎 (核心逻辑整合) ---
+class BattleSystem:
+    def __init__(self, team_a, team_b, bot_id):
+        self.bot_id = bot_id
+        self.team_a = team_a
+        self.team_b = team_b
+        self.play_list = []
+        self.round = 0
+        self.max_rounds = 50
 
-            skill_msg = f"{attacker['player']['道号']}的封印技能：{attacker['skill_data']['name']}，剩余回合：{attacker['turn_cost']}!"
-            self.add_message(attacker, skill_msg)
-            # 封印结束判断
-            if attacker['turn_cost'] == 0:
-                defender['turn_skip'] = True
-                defender['buff_turn'] = True
-                
-        elif skill_type == 6:  # 叠加类持续效果
-            attacker['turn_cost'] -= 1
-            current_stack = attacker['skill_data']['turncost'] - attacker['turn_cost']
-            stack_multiplier = attacker['skill_sh'] * current_stack
-            
-            # 叠加伤害计算
-            base_damage = int(round(random.uniform(0.95, 1.05), 2) * attacker['player']['攻击'] * 1.5)
-            actual_damage = int(calculate_damage(attacker, defender, int(base_damage + (base_damage * stack_multiplier))))
-            defender['player']['气血'] -= actual_damage
-            
-            msg = "{}发起攻击，造成了{}伤害"
-            hp_bar = generate_hp_bar(defender['player']['气血'], defender['init_hp'])
-            attack_msg = msg.format(attacker['player']['道号'], number_to(actual_damage))
-            hp_msg = f"{defender_name}剩余血量{number_to(defender['player']['气血'])}\n{hp_bar}"
-            
-            self.add_message(attacker, attack_msg)
-            self.add_message(attacker, f"{attacker['skill_data']['name']}叠伤剩余:{attacker['turn_cost']}回合，当前{round(stack_multiplier, 1)}倍")
-            self.add_message(attacker, hp_msg)
-
-    def process_sub_buffs(self, attacker, defender):
-        """处理辅修功法效果"""
-        # 确保defender有必要的属性
-        if 'sub_open' not in defender:
-            defender['sub_open'] = False
-        if 'sub_buff_data' not in defender:
-            defender['sub_buff_data'] = {}
-        if 'battle_buff' not in defender:
-            defender['battle_buff'] = UserBattleBuffDate("temp")
-        
-        if not attacker['sub_open'] and not defender['sub_open']:
-            return
-    
-    def process_after_attack_buffs(self, attacker, defender, damage_dealt):
-        """处理攻击后的辅修功法效果"""
-        if not attacker['sub_open']:
-            return
-            
-        player1, player2, msg = after_atk_sub_buff_handle(
-            attacker['sub_open'], 
-            attacker['player'], 
-            attacker['main_buff_data'],
-            attacker['sub_buff_data'], 
-            damage_dealt, 
-            defender['player'],
-            defender.get('boss_buff', empty_boss_buff),
-            attacker.get('random_buff', empty_ussr_random_buff),
-            hp_buff=attacker['hp_buff'],
-            mp_buff=attacker['mp_buff']
-        )
-        
-        if msg:
-            self.add_message(attacker, msg)
-            
-        # 更新玩家状态
-        attacker['player'] = player1
-        defender['player'] = player2
-
-    def check_battle_end(self, attacker, defender):
-        """检查战斗是否结束"""
-        if defender['player']['气血'] <= 0:
-            winner_msg = f"{attacker['player']['道号']}胜利"
-            self.add_system_message(winner_msg)
-            return "attacker_win"
-        return None
-
-    def add_message(self, combatant, message):
+    def add_message(self, unit, message):
         """添加战斗消息"""
-        msg_dict = get_msg_dict(combatant['player'], combatant['init_hp'], message)
-        self.play_list.append(msg_dict)
-
-    def add_system_message(self, message):
-        """添加系统消息"""
         msg_dict = {
-            "type": "node", 
+            "type": "node",
             "data": {
-                "name": "Bot", 
-                "uin": int(self.bot_id), 
+                "name": f"{unit.name} 当前血量：{number_to(int(unit.hp))} / {number_to(int(unit.max_hp))}",
+                "uin": int(unit.id),
                 "content": message
             }
         }
         self.play_list.append(msg_dict)
 
-    def add_boss_message(self, boss, message, boss_init_hp):
-        """添加BOSS消息"""
-        msg_dict = get_boss_dict(boss, boss_init_hp, message, self.bot_id)
+    def add_system_message(self, message):
+        """添加系统消息"""
+        msg_dict = {
+            "type": "node",
+            "data": {
+                "name": "Bot",
+                "uin": int(self.bot_id),
+                "content": message
+            }
+        }
         self.play_list.append(msg_dict)
 
-def init_scarecrow_combatant(boss):
-    """初始化稻草人战斗参与者"""
-    # 稻草人特殊属性：无减伤、不攻击、无buff
-    scarecrow_combatant = {
-        'player': boss,
-        'boss_buff': BossBuff(),  # 空的BOSS buff
-        'hit': 0,  # 稻草人命中率为0，不会命中
-        'dodge': 0,  # 稻草人闪避率为0，容易被命中
-        'turn_skip': False,  # 稻草人永远无法行动
-        'buff_turn': False,
-        'turn_cost': 0,
-        'current_js': 1.0,  # 稻草人减伤为1.0（无减伤）
-        'def_js': 1.0,  # 基础减伤也为1.0
-        'init_hp': boss['气血'],
-        'boss_cj': 0,  # 无穿甲
-        'sub_open': False,
-        'sub_buff_data': {},
-        'battle_buff': None,
-        'main_buff_data': None,
-        'skill_open': False,
-        'skill_data': None,
-        'hp_buff': 0,
-        'mp_buff': 0,
-        'is_scarecrow': True  # 标记为稻草人
-    }
-    
-    return scarecrow_combatant
+    def get_effect_desc(self, effect_type, is_db, value=None):
+        """buff统一生成显示文本"""
+        if effect_type in BUFF_DESC_TEMPLATES and not is_db:
+            template = BUFF_DESC_TEMPLATES[effect_type]
+        elif effect_type in DEBUFF_DESC_TEMPLATES:
+            template = DEBUFF_DESC_TEMPLATES[effect_type]
+        else:
+            return "未知效果"
 
-def add_boss_special_buffs(engine, boss_combatant, player_combatant, bot_id):
-    """添加BOSS的特殊buff消息"""
-    boss = boss_combatant['player']  # 现在可以正确访问了
-    boss_buff = boss_combatant['boss_buff']
+        if value is None:
+            return template
 
-    boss_js = boss_combatant['current_js']
-    
-    # BOSS减伤消息
-    if boss_js <= 0.6 and boss['name'] in BOSSDEF:
-        effect_name = BOSSDEF[boss['name']]
-        engine.add_system_message(f"{effect_name},获得了{int((1 - boss_js) * 100)}%减伤!")
-    
-    # BOSS攻击buff消息
-    if boss_buff.boss_zs > 0:
-        engine.add_system_message(f"{boss['name']}使用了真龙九变,提升了{int(boss_buff.boss_zs * 100)}%攻击力!")
-    
-    # BOSS会心buff消息
-    if boss_buff.boss_hx > 0:
-        engine.add_system_message(f"{boss['name']}使用了无瑕七绝剑,提升了{int(boss_buff.boss_hx * 100)}%会心率!")
-    
-    # BOSS暴伤buff消息
-    if boss_buff.boss_bs > 0:
-        engine.add_system_message(f"{boss['name']}使用了太乙剑诀,提升了{int(boss_buff.boss_bs * 100)}%会心伤害!")
-    
-    # BOSS吸血削弱消息
-    if boss_buff.boss_xx > 0:
-        engine.add_system_message(f"{boss['name']}使用了七煞灭魂聚血杀阵,降低了{player_combatant['player']['道号']}{int((boss_buff.boss_xx) * 100)}%气血吸取!")
-    
-    # BOSS降攻消息
-    if boss_buff.boss_jg > 0:
-        engine.add_system_message(f"{boss['name']}使用了子午安息香,降低了{player_combatant['player']['道号']}{int((boss_buff.boss_jg) * 100)}%伤害!")
-    
-    # BOSS降会消息
-    if boss_buff.boss_jh > 0:
-        engine.add_system_message(f"{boss['name']}使用了玄冥剑气,降低了{player_combatant['player']['道号']}{int((boss_buff.boss_jh) * 100)}%会心率!")
-    
-    # BOSS降暴消息
-    if boss_buff.boss_jb > 0:
-        engine.add_system_message(f"{boss['name']}使用了大德琉璃金刚身,降低了{player_combatant['player']['道号']}{int((boss_buff.boss_jb) * 100)}%会心伤害!")
-    
-    # BOSS禁蓝消息
-    if boss_buff.boss_xl > 0:
-        engine.add_system_message(f"{boss['name']}使用了千煌锁灵阵,降低了{player_combatant['player']['道号']}{int((boss_buff.boss_xl) * 100)}%真元吸取!")
-    
-    # BOSS闪避消息
-    boss_dodge = boss_combatant['dodge']
-    if boss_dodge > 0:
-        engine.add_system_message(f"{boss['name']}使用虚无道则残片,提升了{int(boss_dodge)}%闪避!")
-    
-    # BOSS穿甲消息
-    boss_cj = boss_combatant.get('boss_cj', 0)
-    if boss_cj > 0:
-        engine.add_system_message(f"{boss['name']}使用了钉头七箭书,提升了{int(boss_cj * 100)}%穿甲！")
+        return template.format(value=value)
 
-def add_special_buffs(engine, player_combatant, bot_id, si_boss=False, boss_combatant=None):
-    """添加玩家随机buff消息及BOSS特殊buff处理"""
-    random_buff = player_combatant.get('random_buff', empty_ussr_random_buff)
-    
-    # 处理玩家随机buff消息
-    # 玩家穿甲buff消息
-    if random_buff.random_break > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,获得了{int((random_buff.random_break) * 100)}%穿甲！")
-    
-    # 玩家吸血buff消息
-    if random_buff.random_xx > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,提升了{int((random_buff.random_xx) * 100)}%吸血效果！")
-    
-    # 玩家会心buff消息
-    if random_buff.random_hx > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,提升了{int((random_buff.random_hx) * 100)}%会心率！")
-    
-    # 玩家减伤buff消息
-    if random_buff.random_def > 0:
-        engine.add_system_message(f"{player_combatant['player']['道号']}施展了无上战意,获得了{int((random_buff.random_def) * 100)}%减伤！")
-    
-    # 玩家随机技能消息
-    if player_combatant.get('player1_random_sec', 0) > 0:
-        player1_sec_name = player_combatant.get('player1_sec_name', '')
-        player1_sec_desc = player_combatant.get('player1_sec_desc', '')
-        user1_skill_data = player_combatant.get('skill_data', {})
-        engine.add_system_message(f"{player_combatant['player']['道号']}发动了{player1_sec_name},{player1_sec_desc}获得了{user1_skill_data.get('name', '')}！")
-    
-    # 处理BOSS特殊buff消息
-    if si_boss and boss_combatant is not None:
-        boss_buff = boss_combatant.get('boss_buff', empty_boss_buff)
-        sub_buff_data = player_combatant.get('sub_buff_data')
-        fan_data = sub_buff_data.get('fan', '0') if sub_buff_data and isinstance(sub_buff_data, dict) else 0
-        
-        if int(fan_data) > 0:
-            # 将BOSS的特定负面Buff设置为0
-            boss_buff.boss_xl = 0
-            boss_buff.boss_jb = 0
-            boss_buff.boss_jh = 0
-            boss_buff.boss_jg = 0
-            boss_buff.boss_xx = 0
-            engine.add_system_message(f"{player_combatant['player']['道号']}发动了反咒禁制，无效化了BOSS的负面效果！")
+    def add_after_last_damage(self, msg, add_text):
+        """
+        在最后一个"伤害！"后面添加指定字符串
+        """
+        # 使用partition从右边分割，避免索引错误
+        before_last, separator, after_last = msg.rpartition("伤害！")
 
-def init_boss_combatant(boss):
-    """初始化BOSS战斗参与者"""
-    # 创建BOSS战斗参与者对象
-    boss_buff = init_boss_buff(boss)
-    boss_combatant = {
-        'player': boss,  # BOSS数据
-        'boss_buff': boss_buff,  # BOSS的特殊buff
-        'hit': 100,  # BOSS命中率
-        'dodge': 0,  # BOSS闪避率
-        'turn_skip': True,  # BOSS是否可以行动
-        'buff_turn': True,  # BOSS buff回合标志
-        'turn_cost': 0,  # BOSS回合计数
-        'current_js': boss_buff.boss_js,  # BOSS当前减伤
-        'def_js': boss_buff.boss_js,  # BOSS基础减伤
-        'init_hp': boss['气血'],  # BOSS初始血量
-        'boss_cj': boss_buff.boss_cj,  # BOSS穿甲
-        'sub_open': False,  # BOSS没有辅修功法
-        'sub_buff_data': {},  # 空的辅修功法数据
-        'battle_buff': None,  # BOSS的战斗buff
-        'main_buff_data': None,  # BOSS没有主修功法数据
-        'skill_open': False,  # BOSS没有技能
-        'skill_data': None,  # BOSS没有技能数据
-        'hp_buff': 0,  # BOSS没有气血buff
-        'mp_buff': 0  # BOSS没有真元buff
-    }
-    
-    # 计算BOSS闪避率
-    boss_js = boss_combatant['current_js']
-    boss_combatant['dodge'] = int((1 - boss_js) * 100 * random.uniform(0.1, 0.5))
-    
-    return boss_combatant
+        if separator:  # 找到了"伤害！"
+            return before_last + "伤害！" + add_text + after_last
+        else:  # 没有找到"伤害！"
+            return msg
 
-def init_boss_buff(boss):
-    """初始化BOSS的特殊buff"""
-    boss_buff = BossBuff()
-    boss_level = boss["jj"]
-    
-    # 根据BOSS境界设置不同的buff强度
-    if boss_level == "祭道境" or convert_rank((boss_level + '中期'))[0] < convert_rank('祭道境初期')[0]:
-        # 最高级BOSS拥有最强buff
-        boss_buff.boss_js = 0.05  # boss减伤率
-        boss_buff.boss_cj = random.randint(25, 50) / 100
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 1
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.7
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 2
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = 1
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.7
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.7
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 1.5
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = 1
+    def _calc_raw_damage(self, attacker, defender, multiplier, penetration=False):
+        """基础伤害计算公式"""
+        # 命中判定
+        status = "Hit"
+        if random.uniform(0, 100) > (attacker.accuracy_rate - defender.dodge_rate):
+            status = "Miss"
 
-    elif convert_rank('至尊境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('斩我境圆满')[0]:
-        boss_buff.boss_js = random.randint(50, 55) / 100  # boss减伤率
-        boss_buff.boss_cj = random.randint(15, 30) / 100
-        # 中级BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.3
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.1
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 0.5
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(5, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.3
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.3
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 0.5
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(5, 100) / 100
-            
-    elif convert_rank('微光境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('遁一境圆满')[0]:
-        boss_buff.boss_js = random.randint(40, 45) / 100  # boss减伤率
-        boss_buff.boss_cj = random.randint(20, 40) / 100
-        # 微光境BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.4
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.2
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 0.7
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(10, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.4
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.4
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 0.7
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(10, 100) / 100
-            
-    elif convert_rank('星芒境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('至尊境圆满')[0]:
-        boss_buff.boss_js = random.randint(30, 35) / 100  # boss减伤率
-        boss_buff.boss_cj = random.randint(20, 40) / 100
-        # 星芒境BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.6
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.35
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 1.1
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(30, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.5
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.5
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 0.9
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(30, 100) / 100
-            
-    elif convert_rank('月华境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('微光境圆满')[0]:
-        boss_buff.boss_js = random.randint(20, 25) / 100  # boss减伤率
-        boss_buff.boss_cj = random.randint(20, 40) / 100
-        # 月华境BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.7
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.45
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 1.3
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(40, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.55
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.6
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 1.0
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(40, 100) / 100
-            
-    elif convert_rank('耀日境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('星芒境圆满')[0]:
-        boss_buff.boss_js = random.randint(10, 15) / 100  # boss减伤率
-        boss_buff.boss_cj = random.randint(25, 45) / 100
-        # 耀日境BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.85
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.5
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 1.5
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(50, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.6
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.65
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 1.1
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(50, 100) / 100
-            
-    elif convert_rank('祭道境初期')[0] < convert_rank((boss_level + '中期'))[0] < convert_rank('月华境圆满')[0]:
-        boss_buff.boss_js = 0.1  # boss减伤率
-        boss_buff.boss_cj = random.randint(25, 45) / 100
-        # 祭道境初级BOSS
-        boss_st1 = random.randint(0, 100)
-        if 0 <= boss_st1 <= 25:
-            boss_buff.boss_zs = 0.9
-        elif 26 <= boss_st1 <= 50:
-            boss_buff.boss_hx = 0.6
-        elif 51 <= boss_st1 <= 75:
-            boss_buff.boss_bs = 1.7
-        elif 76 <= boss_st1 <= 100:
-            boss_buff.boss_xx = random.randint(60, 100) / 100
-            
-        boss_st2 = random.randint(0, 100)
-        if 0 <= boss_st2 <= 25:
-            boss_buff.boss_jg = 0.62
-        elif 26 <= boss_st2 <= 50:
-            boss_buff.boss_jh = 0.67
-        elif 51 <= boss_st2 <= 75:
-            boss_buff.boss_jb = 1.2
-        elif 76 <= boss_st2 <= 100:
-            boss_buff.boss_xl = random.randint(60, 100) / 100
-            
-    else:  # 低级BOSS
-        boss_buff.boss_js = 1.0  # boss减伤率
-        boss_buff.boss_cj = 0
-        boss_buff.boss_zs = 0
-        boss_buff.boss_hx = 0
-        boss_buff.boss_bs = 0
-        boss_buff.boss_xx = 0
-        boss_buff.boss_jg = 0
-        boss_buff.boss_jh = 0
-        boss_buff.boss_jb = 0
-        boss_buff.boss_xl = 0
-    
-    return boss_buff
+        # 暴击判定
+        is_crit = random.random() < attacker.crit_rate
+        crit_mult = attacker.crit_dmg_rate if is_crit else 1.0
 
-def get_player_random_buff(player_combatant):
-    """获取玩家的随机buff"""
-    random_buff = UserRandomBuff()
-    main_buff_data = player_combatant['main_buff_data']
-    
-    if main_buff_data and main_buff_data['random_buff'] == 1:
-        user1_main_buff = random.randint(0, 100)
-        if 0 <= user1_main_buff <= 25:
-            random_buff.random_break = random.randint(15, 40) / 100
-        elif 26 <= user1_main_buff <= 50:
-            random_buff.random_xx = random.randint(2, 10) / 100
-        elif 51 <= user1_main_buff <= 75:
-            random_buff.random_hx = random.randint(5, 40) / 100
-        elif 76 <= user1_main_buff <= 100:
-            random_buff.random_def = random.randint(5, 15) / 100
-            
-    return random_buff
+        if defender.damage_reduction_rate < 0:
+            dr_eff = defender.damage_reduction_rate  # 负减伤（伤害加深）
+        elif penetration:
+            dr_eff = 0  # 完全无视减伤
+        else:
+            dr_eff = max(0, defender.damage_reduction_rate - attacker.armor_pen_rate)  # 减伤率减去穿透，且不低于0
+        # 伤害公式: 攻击 * 倍率 * 暴击 * (1 - (敌方减伤 - 我方穿甲))
+        damage = attacker.atk_rate * multiplier * crit_mult * (1 - dr_eff)
 
-def execute_boss_turn(engine, boss_combatant, player_combatant, boss_init_hp):
-    """执行BOSS的回合"""
-    if not boss_combatant['turn_skip']:
-        # BOSS被封印，无法行动
-        boss_name = boss_combatant['player']['name']
-        turn_msg = f"☆------{boss_name}的回合------☆"
-        engine.add_boss_message(boss_combatant['player'], turn_msg, boss_init_hp)
-        engine.add_boss_message(boss_combatant['player'], f"☆------{boss_name}动弹不得！------☆", boss_init_hp)
-        
-        if boss_combatant.get('turn_cost', 0) > 0:
-            boss_combatant['turn_cost'] -= 1
-        if boss_combatant.get('turn_cost', 0) == 0 and boss_combatant.get('buff_turn', True):
-            boss_combatant['turn_skip'] = True
+        # BOSS加成
+        if defender.is_boss:
+            damage *= (1 + attacker.boss_damage)
+
+        # 伤害浮动 - 添加0.95到1.05的随机浮动，使伤害结果更自然
+        damage *= random.uniform(0.95, 1.05)
+
+        return int(damage), is_crit, status
+
+    def _get_all_enemies(self, entity):
+        """获取指定实体的所有敌方单位（存活状态）"""
+        if entity.team_id == 0:
+            # 如果实体在队伍0，返回队伍1的所有存活单位
+            return [e for e in self.team_b if e.is_alive]
+        else:
+            # 如果实体在队伍1，返回队伍0的所有存活单位
+            return [e for e in self.team_a if e.is_alive]
+
+    def _get_all_allies(self, entity):
+        """获取指定实体的所有友方单位（存活状态，不包括自己）"""
+        if entity.team_id == 0:
+            # 队伍0的所有存活单位，排除自己
+            return [e for e in self.team_a if e.is_alive and e.id != entity.id]
+        else:
+            # 队伍1的所有存活单位，排除自己
+            return [e for e in self.team_b if e.is_alive and e.id != entity.id]
+
+    def _apply_round_one_skills(self, caster, targets, skills_dict):
+        """
+        处理开局技能字典
+        caster: 施法者
+        targets: 目标列表（单个或多个）
+        skills_dict: 技能字典 {{'type':..., 'value':..., 'is_debuff':...}}
+        """
+        if not skills_dict:
+            return
+
+        for data in skills_dict:
+            name = data['name']
+            b_type = data['type']
+            val = data['value']
+            is_db = data['is_debuff']
+
+            if is_db and caster.type == "minion":
+                continue
+
+            # 创建效果对象
+            effect = StatusEffect(name, b_type, val, 1, is_db, duration=99, skill_type=0)
+
+            if is_db:
+                for target in targets:
+                    target.add_status(effect)
+            else:
+                # 是 Buff -> 给自己
+                caster.add_status(effect)
+
+            val_msg = None
+            if val > 0:
+                val_msg = f"{val * 100:.0f}%"
+            if not is_db and (data['type'] == BuffType.ACCURACY_UP or data['type'] == BuffType.EVASION_UP):
+                val_msg = f"{val:.0f}%"
+
+            buff_msg = self.get_effect_desc(b_type, is_db, val_msg)
+            msg = f"{caster.name}使用{name}，{buff_msg}"
+            if caster.type != "minion":
+                self.add_message(caster, msg)
+
+    def choose_skill(self, caster, skills, enemies):
+        usable_skills = []
+        # ---------- 先过滤不可用技能 ----------
+        for sk in skills:
+            if sk.skill_type == SkillType.RANDOM_ACQUIRE:  # Type 7: 随机获取技能
+                skill_id = random.choice(sk.skill_content)
+                skill_data = items.get_data_by_item_id(skill_id)
+                sk_data = Skill(skill_data)
+                caster.skills.append(sk_data)  # 添加随机的技能
+                caster.remove_skill_by_name(sk.name)  # 删除当前技能
+                skill_data_name = skill_data["name"]
+                self.add_message(caster, f"{sk.desc} 随机获得了{skill_data_name}神通!")
+                if self._skill_available(caster, sk_data, enemies):
+                    usable_skills.append(sk_data)
+            elif self._skill_available(caster, sk, enemies):
+                usable_skills.append(sk)
+        if not usable_skills:
+            return None  # 没技能可用，普攻/跳过
+
+        # ---------- 触发血量类型技能优先 ----------
+        not_hp1_skills = [sk for sk in usable_skills if sk.hp_condition != 1]
+        if not_hp1_skills:
+            return not_hp1_skills[0]  # 优先返回hp_condition不等于1的技能
+
+        # ---------- BUFF 技能优先 ----------
+        buff_list = [sk for sk in usable_skills if sk.skill_type == SkillType.BUFF_STAT]
+        if buff_list:
+            return buff_list[0]  # 或按权重选择
+
+        # ---------- 随机技能 ----------
+        return random.choice(usable_skills)
+
+    def _skill_available(self, caster, skill, enemies):
+        """
+        判断技能是否可以被使用：
+        1. 冷却
+        2. HP/MP 消耗
+        3. DOT 技能是否重复
+        4. BUFF 是否重复
+        """
+        # ---------- 1. 冷却 ----------
+        if not skill.is_available():
+            return False
+
+        # ---------- 2. hp触发条件 ----------
+        hp_percentage = caster.hp / caster.max_hp
+        if hp_percentage > skill.hp_condition:
+            return False
+
+        # ---------- 3. 资源消耗检查 ----------
+        hp_cost = caster.hp * skill.hp_cost_rate
+        mp_cost = caster.exp * skill.mp_cost_rate * (1 - caster.mp_cost_modifier)
+        if not caster.pay_cost(hp_cost, mp_cost, deduct=False):
+            return False
+
+        # ---------- 4. 技能：检查是否所有敌人都已经有这个debuff ----------
+        if skill.skill_type in (SkillType.DOT, SkillType.CC, SkillType.CONTROL):
+            enemies_without_debuff = [e for e in enemies if not e.has_debuff("name", skill.name)]
+            if not enemies_without_debuff:
+                return False
+
+        # ---------- 5. BUFF 技能：不能重复施放相同 Buff ----------
+        if skill.skill_type == SkillType.BUFF_STAT or skill.skill_type == SkillType.STACK_BUFF:
+            if caster.has_buff("name", skill.name):
+                return False
+
+        return True
+
+    def _select_targets(self, enemies, skill, is_boss=False):
+        alive = [e for e in enemies if e.is_alive]
+
+        if skill.target_type == TargetType.SINGLE:
+            if skill.skill_type == SkillType.DOT:
+                alive = [a for a in alive if not a.has_debuff("name", skill.name)]
+            if is_boss:
+                return random.sample(alive, k=1)  # boss攻击随机挑选
+            return [min(alive, key=lambda x: x.hp)]  # 玩家攻击选血最少
+
+
+        elif skill.target_type == TargetType.AOE:
+            return alive  # 所有敌人
+
+        elif skill.target_type == TargetType.MULTI:
+            if skill.skill_type == SkillType.DOT:
+                alive = [a for a in alive if not a.has_debuff("name", skill.name)]
+            n = getattr(skill, 'multi_count', 2)
+            # 按血量排序取前 N 个
+
+            if is_boss:
+                return random.sample(alive, k=n)  # boss攻击随机挑选
+            return sorted(alive, key=lambda x: x.hp)[:n]  # 玩家攻击选血最少
+
+        return []
+
+    def _execute_skill(self, caster, targets, skill):
+        """
+        处理开局技能字典
+        caster: 施法者
+        targets: 目标列表（单个或多个）
+        skills_dict: 技能字典 {'name': {'type':..., 'value':..., 'is_debuff':...}}
+        """
+
+        # 计算释放概率
+        if not random.uniform(0, 100) <= skill.rate:
+            skill_msg, total_dmg = self._normal_attack(caster, min(targets, key=lambda x: x.hp))
+            return skill_msg, total_dmg
+
+        # 计算消耗
+        hp_cost = caster.hp * skill.hp_cost_rate
+        mp_cost = caster.exp * skill.mp_cost_rate * (1 - caster.mp_cost_modifier)
+        caster.pay_cost(hp_cost, mp_cost, deduct=True)  # 扣除消耗
+
+        parts = []
+        if hp_cost > 0:
+            parts.append(f"气血{number_to(int(hp_cost))}点")
+        if mp_cost > 0:
+            parts.append(f"真元{number_to(int(mp_cost))}点")
+        if parts:  # 如果有消耗
+            cost_msg = f"消耗{'、'.join(parts)}，"
+        else:  # 没有消耗
+            cost_msg = ""
+
+        skill_msg = f"{skill.desc} {cost_msg}"
+        total_dmg = 0  # 记录总伤害
+        skill.trigger_cd()  # 添加cd
+
+        # --- 核心逻辑分支 (对应你的6种类型) ---
+        # Type 1: 连续攻击 (Multi-Hit)
+        if skill.skill_type == SkillType.MULTI_HIT:
+            hits = skill.atk_values if isinstance(skill.atk_values, list) else [skill.atk_values]
+            skill_msg += f"对{targets[0].name}造成"
+            for mult in hits:  # 遍历每一次攻击
+                # 计算单次攻击伤害
+                dmg, is_crit, status = self._calc_raw_damage(caster, targets[0], float(mult))
+                if status == "Hit":
+                    crit_str = "💥" if is_crit else ""
+                    skill_msg += f"{crit_str}{number_to(int(dmg))}伤害、"
+                    targets[0].update_stat("hp", 2, dmg)
+                    total_dmg += dmg
+                else:
+                    skill_msg += f"miss、"
+
+            if total_dmg > 0:
+                skill_msg = skill_msg[:-1] + "！"
+            else:
+                skill_msg = f"{caster.name}的技能被{targets[0].name}闪避了！"
+
+            if skill.turn_cost > 0:  # 释放后回气休息
+                effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
+                caster.add_status(effect)
+                skill_msg += f"\n{caster.name}力竭，需休息{skill.turn_cost}回合"
+            return skill_msg, total_dmg
+
+        # Type 2: 持续伤害 (DoT)
+        elif skill.skill_type == SkillType.DOT:
+            # dot_damage = skill.atk_values * caster.atk_rate  # 攻击倍率 × 实时攻击力
+
+            target_names = []
+            for target in targets:
+                target_names.append(target.name)
+                effect = StatusEffect(skill.name, DebuffType.SKILL_DOT, skill.atk_values, caster.name, True,
+                                      skill.turn_cost,
+                                      skill.skill_type)
+                target.add_status(effect)
+            target_name_msg = "、".join(target_names)
+            skill_msg += f"对{target_name_msg}造成每回合{skill.atk_values}倍攻击力持续伤害，持续{skill.turn_cost}回合"
+            return skill_msg, total_dmg
+
+        # Type 3: 属性增益 (Stat Buff / Damage Reduction)
+        elif skill.skill_type == SkillType.BUFF_STAT:
+            if skill.skill_buff_type == 1:  # 攻击力增加
+                effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost,
+                                      skill.skill_type)
+                caster.add_status(effect)  # 给自己添加Buff
+                skill_msg += f"提升了{skill.skill_buff_value * 100:.0f}%攻击力，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
+            elif skill.skill_buff_type == 2:  # 减伤加成
+                effect = StatusEffect(skill.name, BuffType.DAMAGE_REDUCTION_UP, skill.skill_buff_value, 1, False,
+                                      skill.turn_cost, skill.skill_type)
+                caster.add_status(effect)  # 给自己添加Buff
+                skill_msg += f"提升了{skill.skill_buff_value * 100:.0f}%伤害减免，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
+            attack_msg, total_dmg = self._normal_attack(caster, targets[0])
+            skill_msg += attack_msg
+            return skill_msg, total_dmg
+
+        # Type 4: 封印/控制 (Control)
+        elif skill.skill_type == SkillType.CONTROL:
+            chance = skill.success_rate
+            target_names_success = []
+            target_names_failure = []
+            for target in targets:
+                if random.uniform(0, 100) <= chance:
+                    effect = StatusEffect(skill.name, DebuffType.SEAL, 0, 1, True, skill.turn_cost, skill.skill_type)
+                    target.add_status(effect)
+                    target_names_success.append(target.name)
+                else:  # 封印失败
+                    target_names_failure.append(target.name)
+            if target_names_success:
+                target_name_msg = "、".join(target_names_success)
+                skill_msg += f"{target_name_msg}被封印了！动弹不得，持续{skill.turn_cost}回合\n"
+            if target_names_failure:
+                target_name_msg = "、".join(target_names_failure)
+                skill_msg += f"封印失败，被{target_name_msg}抵抗了！\n"
+            attack_msg, total_dmg = self._normal_attack(caster, targets[0])
+            skill_msg += attack_msg
+            return skill_msg, total_dmg
+
+        # Type 5: 随机波动伤害 (Random Hit)
+        elif skill.skill_type == SkillType.RANDOM_HIT:
+            min_mult = float(skill.atk_values)
+            max_mult = float(skill.atk_coefficient)
+            rand_mult = random.uniform(min_mult, max_mult)
+            rand_mult = round(rand_mult, 2)  # 保留两位小数
+            dmg, is_crit, status = self._calc_raw_damage(caster, targets[0], rand_mult)
+
+            if status == "Hit":
+                crit_str = "💥并且发生了会心一击，" if is_crit else ""
+                total_dmg = dmg
+                skill_msg += f"获得{rand_mult}倍加成，{crit_str}造成{number_to(int(total_dmg))}伤害！"
+                targets[0].update_stat("hp", 2, total_dmg)
+            else:
+                skill_msg = f"{caster.name}的技能被{targets[0].name}闪避了！"
+
+            if skill.turn_cost > 0:  # 释放后回气休息
+                effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
+                caster.add_status(effect)
+                skill_msg += f"\n{caster.name}力竭，需休息{skill.turn_cost}回合"
+            return skill_msg, total_dmg
+
+        # Type 6: 叠加 Buff (Stacking)
+        elif skill.skill_type == SkillType.STACK_BUFF:
+            effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost - 1,
+                                  skill.skill_type)
+            caster.add_status(effect)  # 给自己添加Buff
+            skill_msg += f"每回合叠加{skill.skill_buff_value}倍攻击力，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
+            attack_msg, total_dmg = self._normal_attack(caster, targets[0])
+            skill_msg += attack_msg
+            return skill_msg, total_dmg
+
+
+        # Type 101: BOSS专属技能紫玄掌
+        elif skill.skill_type == SkillType.MULTIPLIER_PERCENT_HP:
+            # 特殊技能1：造成5倍伤害并附加30%最大生命值的伤害
+            skill_miss_msg = ""
+            for target in targets:
+                dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values)
+                if status == "Hit":
+                    crit_str = "💥并且发生了会心一击，" if is_crit else ""
+                    dmg = dmg + (target.max_hp * skill.atk_coefficient)
+                    skill_msg += f"{crit_str}对{target.name}造成{number_to(int(dmg))}伤害！"
+                    target.update_stat("hp", 2, dmg)
+                    total_dmg += dmg
+                else:
+                    skill_miss_msg += f"{caster.name}的技能被{target.name}闪避了！"
+            if total_dmg > 0:
+                if skill_miss_msg:
+                    skill_msg += f"\n{skill_miss_msg}"
+            else:
+                skill_msg = f"{caster.name}的技能被敌人闪避了！"
+            return skill_msg, total_dmg
+
+        # Type 102: BOSS专属技能子龙朱雀
+        elif skill.skill_type == SkillType.MULTIPLIER_DEF_IGNORE:
+            # 特殊技能2：穿透护甲，造成3倍伤害
+            skill_miss_msg = ""
+            for target in targets:
+                dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values, True)
+                if status == "Hit":
+                    crit_str = "💥并且发生了会心一击，" if is_crit else ""
+                    skill_msg += f"{crit_str}对{target.name}造成{number_to(int(dmg))}伤害！"
+                    target.update_stat("hp", 2, dmg)
+                    total_dmg += dmg
+                else:
+                    skill_msg = f"{caster.name}的技能被{target.name}闪避了！"
+            if total_dmg > 0:
+                if skill_miss_msg:
+                    skill_msg += f"\n{skill_miss_msg}"
+            else:
+                skill_msg = f"{caster.name}的技能被敌人闪避了！"
+            return skill_msg, total_dmg
+
+        # Type 103: 控制类型
+        elif skill.skill_type == SkillType.CC:
+            buff_msg = self.get_effect_desc(skill.skill_buff_type, True)
+            chance = skill.success_rate
+            target_names_success = []
+            target_names_failure = []
+            for target in targets:
+                if random.uniform(0, 100) <= chance:
+                    effect = StatusEffect(skill.name, skill.skill_buff_type, 0, 1, True, skill.turn_cost,
+                                          skill.skill_type)
+                    target.add_status(effect)
+                    target_names_success.append(target.name)
+                else:  # 封印失败
+                    target_names_failure.append(target.name)
+            if target_names_success:
+                target_name_msg = "、".join(target_names_success)
+                skill_msg += f"{target_name_msg}被{buff_msg}！持续{skill.turn_cost}回合\n"
+            if target_names_failure:
+                target_name_msg = "、".join(target_names_failure)
+                skill_msg += f"{skill.name}被{target_name_msg}抵抗了！\n"
+            return skill_msg, total_dmg
+
+        # Type 104: 召唤类型
+        elif skill.skill_type == SkillType.SUMMON:
+            copy_ratio = skill.atk_values  # 召唤物属性倍率
+            summon_count = int(skill.atk_coefficient)  # 召唤数量
+
+            for i in range(summon_count):
+                # 创建召唤物的数据字典
+                summon_data = {}
+
+                # 1. 复制基础信息
+                summon_data["user_id"] = self.bot_id
+                summon_data["nickname"] = f"{caster.name}的召唤物"
+                summon_data["monster_type"] = "summon"
+
+                # 2. 复制并缩放基础属性
+                summon_data["max_hp"] = caster.max_hp * copy_ratio
+                summon_data["current_hp"] = caster.max_hp * copy_ratio
+                summon_data["max_mp"] = caster.max_mp * copy_ratio
+                summon_data["current_mp"] = caster.max_mp * copy_ratio
+                summon_data["attack"] = caster.base_atk * copy_ratio
+                summon_data["armor_penetration"] = caster.base_armor_pen * copy_ratio
+                summon_data["damage_reduction"] = caster.base_damage_reduction * copy_ratio
+                summon_data["critical_rate"] = caster.base_crit
+                summon_data["accuracy"] = caster.base_accuracy
+                summon_data["dodge"] = caster.base_dodge
+                summon_data["speed"] = caster.base_speed
+
+                # 3. 召唤物特有设置
+                summon_data["start_skills"] = []  # 召唤物没有初始技能
+                summon_data["skills"] = []  # 召唤物没有技能，只能普通攻击
+
+                # 如果是BOSS的召唤物，保留BOSS标识
+                if hasattr(caster, 'is_boss') and caster.is_boss:
+                    summon_data["is_boss"] = True
+                else:
+                    summon_data["is_boss"] = False
+
+                summon = Entity(
+                    data=summon_data,
+                    team_id=caster.team_id,  # 与召唤者同队
+                    is_boss=summon_data.get("is_boss", False)
+                )
+
+                if caster.team_id == 0:
+                    self.team_a.append(summon)
+                else:
+                    self.team_b.append(summon)
+
+            skill_msg += f"生成{summon_count}个召唤物！"
+            return skill_msg, total_dmg
+
+        else:
+            return skill_msg, total_dmg
+
+    def _normal_attack(self, caster, targets):
+        skill_msg = ""
+        total_dmg = 0
+        dmg, is_crit, accuracy = self._calc_raw_damage(caster, targets, 1)
+        if accuracy == "Hit":
+            total_dmg = dmg
+            if is_crit:
+                skill_msg += f"{caster.name}发起攻击，💥并且发生了会心一击，对{targets.name}造成{number_to(int(total_dmg))}伤害！"
+            else:
+                skill_msg += f"{caster.name}发起攻击，对{targets.name}造成{number_to(int(total_dmg))}伤害！"
+            targets.update_stat("hp", 2, total_dmg)
+        else:
+            skill_msg += f"{caster.name}使用普通攻击，被{targets.name}躲开了"
+
+        return skill_msg, total_dmg
+
+    def check_unit_control(self, unit):
+        """检查单位的控制状态"""
+        # 所有会导致跳过回合的控制效果
+        SKIP_TURN_CONTROLS = {
+            DebuffType.FATIGUE: ("😫", "正在调息，跳过回合"),
+            DebuffType.STUN: ("🌀", "被眩晕，跳过回合"),
+            DebuffType.FREEZE: ("❄️", "被冰冻，跳过回合"),
+            DebuffType.PETRIFY: ("🗿", "被石化，跳过回合"),
+            DebuffType.SLEEP: ("💤", "正在沉睡，跳过回合"),
+            DebuffType.ROOT: ("🌿", "被定身，跳过回合"),
+            DebuffType.FEAR: ("😱", "陷入恐惧，跳过回合"),
+            DebuffType.SEAL: ("🔒", "被封印，跳过回合"),
+            DebuffType.PARALYSIS: ("⚡", "全身麻痹，跳过回合"),
+        }
+
+        # 检查每种控制效果
+        for debuff_type, (emoji, description) in SKIP_TURN_CONTROLS.items():
+            if unit.has_debuff("type", debuff_type):
+                duration = unit.get_debuff_field("type", "duration", debuff_type)
+                return f"{emoji}{unit.name}{description}（剩余{duration}回合）"
+
         return None
-    
-    # BOSS正常行动
-    boss_name = boss_combatant['player']['name']
-    turn_msg = f"☆------{boss_name}的回合------☆"
-    engine.add_boss_message(boss_combatant['player'], turn_msg, boss_init_hp)
-    
-    # BOSS有概率使用特殊技能
-    boss_sub = random.randint(0, 100)
-    
-    if boss_sub <= 6:  # 特殊技能1
-        execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_init_hp)
-    elif 6 < boss_sub <= 12:  # 特殊技能2
-        execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_init_hp)
-    else:  # 普通攻击
-        execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_init_hp)
-    
-    # 检查战斗是否结束
-    if player_combatant['player']['气血'] <= 0:
-        engine.add_system_message(f"{boss_combatant['player']['name']}胜利")
-        return "attacker_win"
-    
-    return None
 
-def execute_boss_normal_attack(engine, boss_combatant, player_combatant, boss_init_hp):
-    """BOSS普通攻击"""
-    boss = boss_combatant['player']
-    player = player_combatant['player']
-    boss_buff = boss_combatant['boss_buff']
-    random_buff = player_combatant.get('random_buff', empty_ussr_random_buff)
-    
-    # 计算BOSS攻击
-    is_crit, boss_damage = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)
-    
-    # 检查命中
-    if check_hit(boss_combatant['hit'], player_combatant['dodge']):
-        # 计算实际伤害（考虑玩家减伤和BOSS穿甲）
-        player_js = player_combatant['current_js']
-        actual_damage = int(boss_damage * (1 + boss_buff.boss_zs))
-        actual_damage = calculate_damage(boss_combatant, player_combatant, actual_damage)
-        
-        if is_crit:
-            effect_name = boss['name']
-            if boss['name'] in BOSSATK:
-                effect_name = BOSSATK[boss['name']]
-            msg = f"{effect_name}发起💥会心一击，造成了{number_to(actual_damage)}伤害"
-        else:
-            msg = f"{boss['name']}发起攻击，造成了{number_to(actual_damage)}伤害"
-            
-        player['气血'] -= actual_damage
-        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])
-        engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
-    else:
-        engine.add_boss_message(boss, f"{boss['name']}的攻击被{player['道号']}闪避了！", boss_init_hp)
+    def process_turn(self):
+        self.round += 1
+        # 获取所有存活单位并按速度排序
+        units = [u for u in self.team_a + self.team_b if u.is_alive]
+        units.sort(key=lambda x: x.base_speed, reverse=True)
 
-def execute_boss_special_skill1(engine, boss_combatant, player_combatant, boss_init_hp):
-    """BOSS特殊技能1"""
-    boss = boss_combatant['player']
-    player = player_combatant['player']
-    boss_buff = boss_combatant['boss_buff']
-    random_buff = player_combatant.get('random_buff', empty_ussr_random_buff)
-    
-    is_crit, boss_damage = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)
-    
-    if check_hit(boss_combatant['hit'], player_combatant['dodge']):
-        # 特殊技能1：造成5倍伤害并附加30%最大生命值的伤害
-        player_js = player_combatant['current_js']
-        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * 5)
-        special_damage = calculate_damage(boss_combatant, player_combatant, special_damage)
-        extra_damage = int(player['气血'] * 0.3)
-        total_damage = special_damage + extra_damage
-        
-        player['气血'] -= total_damage
-        
-        if is_crit:
-            msg = f"{boss['name']}：紫玄掌！！紫星河！！！💥并且发生了会心一击，造成了{number_to(total_damage)}伤害"
-        else:
-            msg = f"{boss['name']}：紫玄掌！！紫星河！！！造成了{number_to(total_damage)}伤害"
-        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
-        engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
-    else:
-        engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
+        if self.round == 1:  # 开局释放buff
+            for unit in units:
+                enemies = self._get_all_enemies(unit)  # 获取全部敌人
+                self._apply_round_one_skills(unit, enemies, unit.start_skills)
 
-def execute_boss_special_skill2(engine, boss_combatant, player_combatant, boss_init_hp):
-    """BOSS特殊技能2"""
-    boss = boss_combatant['player']
-    player = player_combatant['player']
-    boss_buff = boss_combatant['boss_buff']
-    random_buff = player_combatant.get('random_buff', empty_ussr_random_buff)
-    
-    is_crit, boss_damage = get_turnatk_boss(boss, 0, UserBattleBuffDate("9999999"), boss_buff)
-    
-    if check_hit(boss_combatant['hit'], player_combatant['dodge']):
-        player_js = player_combatant['current_js']
-        boss_cj = boss_combatant['boss_cj']
-        boss_combatant['boss_cj'] += 0.5
-        # 特殊技能2：穿透护甲，造成3倍伤害
-        special_damage = int(boss_damage * (1 + boss_buff.boss_zs) * 3)
-        special_damage = calculate_damage(boss_combatant , player_combatant, special_damage)
-        boss_combatant['boss_cj'] = boss_cj
-        
-        player['气血'] -= special_damage
-        
-        if is_crit:
-            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！💥并且发生了会心一击，造成了{number_to(special_damage)}伤害"
-        else:
-            msg = f"{boss['name']}：子龙朱雀！！！穿透了对方的护甲！造成了{number_to(special_damage)}伤害"
-        hp_bar = generate_hp_bar(player['气血'], player_combatant['init_hp'])            
-        engine.add_boss_message(boss, msg, boss_init_hp)
-        engine.add_boss_message(boss, f"{player['道号']}剩余血量{number_to(player['气血'])}\n{hp_bar}", boss_init_hp)
-    else:
-        engine.add_boss_message(boss, f"{boss['name']}的技能被{player['道号']}闪避了！", boss_init_hp)
+        # print(f"\n----- 第 {self.round} 回合 -----")
+        for unit in units:
+            if not unit.is_alive: continue  # 如果死亡跳过
+            enemies = self._get_all_enemies(unit)  # 获取全部敌人
+            if not enemies: break  # 没有敌人推出循环
 
-def update_boss_fight_stats(player_combatant, winner, type_in):
-    """更新BOSS战斗后的玩家状态"""
-    if type_in != 2:  # 只有实际战斗才更新
-        return
-        
-    player = player_combatant['player']
-    hp_buff = player_combatant['hp_buff']
-    mp_buff = player_combatant['mp_buff']
-    
-    if winner == player_combatant:  # 玩家胜利
-        if player['气血'] <= 0:
-            player['气血'] = 1
-        sql_message.update_user_hp_mp(
-            player['user_id'],
-            int(player['气血'] / (1 + hp_buff)),
-            int(player['真元'] / (1 + mp_buff))
-        )
-    else:  # BOSS胜利
-        sql_message.update_user_hp_mp(
-            player['user_id'], 
-            1, 
-            int(player['真元'] / (1 + mp_buff))
-        )
+            if self.round == 1:
+                unit.check_and_clear_debuffs_by_immunity()  # 检查是否有debuff免疫效果
 
-BOSSDEF = {
-        "衣以候": "衣以侯布下了禁制镜花水月，",
-        "金凰儿": "金凰儿使用了神通：金凰天火罩！",
-        "九寒": "九寒使用了神通：寒冰八脉！",
-        "莫女": "莫女使用了神通：圣灯启语诀！",
-        "术方": "术方使用了神通：天罡咒！",
-        "卫起": "卫起使用了神通：雷公铸骨！",
-        "血枫": "血枫使用了神通：混世魔身！",
-        "以向": "以向使用了神通：云床九练！",
-        "砂鲛鲛": "不说了！开鳖！",
-        "神风王": "不说了！开鳖！",
-        "鲲鹏": "鲲鹏使用了神通：逍遥游！",
-        "天龙": "天龙使用了神通：真龙九变！",
-        "历飞雨": "厉飞雨使用了神通：天煞震狱功！",
-        "外道贩卖鬼": "不说了！开鳖！",
-        "元磁道人": "元磁道人使用了法宝：元磁神山！",
-        "散发着威压的尸体": "尸体周围爆发了出强烈的罡气！",
-        "贪欲心魔": "贪欲心魔施展七情六欲大法，勾起修士内心贪念！",
-        "嗔怒心魔": "嗔怒心魔催动无明业火，点燃修士心中怒火！",
-        "痴妄心魔": "痴妄心魔布下颠倒梦想阵，迷惑修士心智！",
-        "傲慢心魔": "傲慢心魔施展唯我独尊功，助长修士骄矜之气！",
-        "嫉妒心魔": "嫉妒心魔发动红眼诅咒，激发修士妒火中烧！",
-        "恐惧心魔": "恐惧心魔唤起九幽幻象，引发修士内心恐惧！",
-        "懒惰心魔": "懒惰心魔布下浑噩迷雾，消磨修士意志！",
-        "七情心魔": "七情心魔操控喜怒忧思悲恐惊，扰乱修士心神！",
-        "六欲心魔": "六欲心魔激发眼耳鼻舌身意之欲，迷惑修士五感！",
-        "天魔幻象": "域外天魔投影幻象，直击修士道心破绽！",
-        "心魔劫主": "心魔之主显化本体，万劫之源侵蚀修士神魂！"
-}
+            self.add_message(unit, f"☆------{unit.name}的回合------☆")
+            unit.update_status_effects()  # 更新buff状态
 
-BOSSATK = {
-        "衣以候": "衣以侯布下了禁制镜花水月，",
-        "金凰儿": "金凰儿使用了神通：金凰天火罩！",
-        "九寒": "九寒使用了神通：寒冰八脉！",
-        "莫女": "莫女使用了神通：圣灯启语诀！",
-        "术方": "术方使用了神通：天罡咒！",
-        "卫起": "卫起使用了神通：雷公铸骨！",
-        "血枫": "血枫使用了神通：混世魔身！",
-        "以向": "以向使用了神通：云床九练！",
-        "砂鲛鲛": "不说了！开鳖！",
-        "神风王": "不说了！开鳖！",
-        "鲲鹏": "鲲鹏使用了神通：逍遥游！",
-        "天龙": "天龙使用了神通：真龙九变！",
-        "历飞雨": "厉飞雨使用了神通：天煞震狱功！",
-        "外道贩卖鬼": "不说了！开鳖！",
-        "元磁道人": "元磁道人使用了法宝：元磁神山！",
-        "散发着威压的尸体": "尸体周围爆发了出强烈的罡气！",
-        "贪欲心魔": "贪欲心魔施展七情六欲大法，勾起修士内心贪念！",
-        "嗔怒心魔": "嗔怒心魔催动无明业火，点燃修士心中怒火！",
-        "痴妄心魔": "痴妄心魔布下颠倒梦想阵，迷惑修士心智！",
-        "傲慢心魔": "傲慢心魔施展唯我独尊功，助长修士骄矜之气！",
-        "嫉妒心魔": "嫉妒心魔发动红眼诅咒，激发修士妒火中烧！",
-        "恐惧心魔": "恐惧心魔唤起九幽幻象，引发修士内心恐惧！",
-        "懒惰心魔": "懒惰心魔布下浑噩迷雾，消磨修士意志！",
-        "七情心魔": "七情心魔操控喜怒忧思悲恐惊，扰乱修士心神！",
-        "六欲心魔": "六欲心魔激发眼耳鼻舌身意之欲，迷惑修士五感！",
-        "天魔幻象": "域外天魔投影幻象，直击修士道心破绽！",
-        "心魔劫主": "心魔之主显化本体，万劫之源侵蚀修士神魂！"
-}
+            if unit.poison_dot_dmg > 0:
+                self.add_message(unit, f"{unit.name}☠️中毒消耗气血{number_to(int(unit.poison_dot_dmg))}点")
+                unit.update_stat("hp", 2, unit.poison_dot_dmg)
 
-def update_player_stats(combatant1, combatant2, winner, type_in):
-    """更新玩家状态到数据库"""
-    if type_in != 2:  # 只有实际战斗才更新
-        return
-        
-    # 更新胜者状态
-    if winner == combatant1:
-        if combatant1['player']['气血'] <= 0:
-            combatant1['player']['气血'] = 1
-        sql_message.update_user_hp_mp(
-            combatant1['player']['user_id'],
-            int(combatant1['player']['气血'] / (1 + combatant1['hp_buff'])),
-            int(combatant1['player']['真元'] / (1 + combatant1['mp_buff']))
-        )
-        sql_message.update_user_hp_mp(
-            combatant2['player']['user_id'], 
-            1, 
-            int(combatant2['player']['真元'] / (1 + combatant2['mp_buff']))
-        )
-    else:  # combatant2胜利
-        sql_message.update_user_hp_mp(
-            combatant1['player']['user_id'], 
-            1, 
-            int(combatant1['player']['真元'] / (1 + combatant1['mp_buff']))
-        )
-        if combatant2['player']['气血'] <= 0:
-            combatant2['player']['气血'] = 1
-        sql_message.update_user_hp_mp(
-            combatant2['player']['user_id'],
-            int(combatant2['player']['气血'] / (1 + combatant2['hp_buff'])),
-            int(combatant2['player']['真元'] / (1 + combatant2['mp_buff']))
-        )
+            if unit.has_debuff("type", DebuffType.SKILL_DOT):
+                for skill_dot_info in unit.get_debuffs("type", DebuffType.SKILL_DOT):
+                    for enemy in enemies:
+                        if enemy.name == skill_dot_info.coefficient:
+                            dmg, is_crit, status = self._calc_raw_damage(enemy, unit, skill_dot_info.value)
+                            unit.update_stat("hp", 2, dmg)
+                            crit_str = "💥会心一击，" if is_crit else ""
+                            self.add_message(unit, f"{skill_dot_info.name}{crit_str}造成{number_to(int(dmg))}伤害！"
+                                                   f"（剩余{skill_dot_info.duration}回合）")
+
+            # 扣血deBuff结算后检查是否死亡
+            if not unit.is_alive:
+                self.add_message(unit, f"{unit.name}💀倒下了！")
+                continue
+
+            if unit.hp_regen_rate > 0:
+                self.add_message(unit, f"{unit.name}❤️回复气血{number_to(int(unit.hp_regen_rate))}点")
+                unit.update_stat("hp", 1, unit.hp_regen_rate)
+
+            if unit.mp_regen_rate > 0:
+                self.add_message(unit, f"{unit.name}💙回复真元{number_to(int(unit.mp_regen_rate))}点")
+                unit.update_stat("mp", 1, unit.mp_regen_rate)
+
+            if unit.has_buff("skill_type", 3):
+                skill_buffs = unit.get_buffs("skill_type", 3)
+                for skill_buff in skill_buffs:
+                    buff_msg = self.get_effect_desc(skill_buff.type, False, f"{skill_buff.value * 100:.0f}%")
+                    self.add_message(unit, f"{skill_buff.name}{buff_msg}，剩余{skill_buff.duration}回合")
+
+            if unit.has_buff("skill_type", 6):
+                skill_buff = unit.get_buff("skill_type", 6)
+                skill_value = skill_buff.value + skill_buff.value / skill_buff.coefficient
+                unit.set_buff_field("name", "value", skill_buff.name, skill_value)
+                unit.set_buff_field("name", "coefficient", skill_buff.name, (skill_buff.coefficient + 1))
+                self.add_message(unit,
+                                 f"{skill_buff.name}提升了{skill_value:.2f}倍攻击力，剩余{skill_buff.duration}回合")
+
+            control_message = self.check_unit_control(unit)  # 控制类debuff
+            if control_message:
+                self.add_message(unit, control_message)
+                continue  # 跳过这个单位的回合
+
+            # --- 攻击流程 ---
+            skill_msg = ""
+            total_dmg = 0
+            # 1. 选择技能（BUFF 优先）
+            skill = self.choose_skill(unit, unit.skills, enemies)
+            if skill:  # 释放技能
+                targets = self._select_targets(enemies, skill, unit.is_boss)
+                skill_msg, total_dmg = self._execute_skill(unit, targets, skill)  # 释放技能
+            else:  # 普通攻击
+                targets = min(enemies, key=lambda x: x.hp)  # 选择血最少的
+                skill_msg, total_dmg = self._normal_attack(unit, targets)
+
+            if total_dmg > 0:
+                lifesteal_msg = ""
+                if unit.has_buff("type", BuffType.LIFESTEAL_UP) and unit.lifesteal_rate > 0:
+                    lifesteal = int(total_dmg * unit.lifesteal_rate)
+                    lifesteal_msg = f"（❤️吸取气血{number_to(int(lifesteal))}点）"
+                    unit.update_stat("hp", 1, lifesteal)
+
+                mana_steal_msg = ""
+                if unit.has_buff("type", BuffType.MANA_STEAL_UP) and unit.mana_steal_rate > 0:
+                    mana_steal = int(total_dmg * unit.mana_steal_rate)
+                    mana_steal_msg = f"（💙吸取真元{number_to(int(mana_steal))}点）"
+                    unit.update_stat("mp", 1, mana_steal)
+
+                skill_msg = self.add_after_last_damage(skill_msg, f"{lifesteal_msg}{mana_steal_msg}")
+
+            self.add_message(unit, skill_msg)
+            unit.total_dmg += total_dmg
+            if total_dmg > 0:
+                if isinstance(targets, list):
+                    hp_msgs = [t.show_bar("hp") for t in targets]
+                    self.add_message(unit, "\n".join(hp_msgs))
+                else:
+                    self.add_message(unit, targets.show_bar("hp"))
+
+    def get_final_status_list(self):
+        status = []
+        for u in self.team_a + self.team_b:
+            status.append({
+                u.name: {
+                    "hp": int(u.hp),
+                    "mp": int(u.mp),
+                    "user_id": u.id,
+                    "hp_multiplier": u.max_hp / (u.exp / 2 if u.exp > 0 else 1),
+                    "mp_multiplier": u.max_mp / (u.exp if u.exp > 0 else 1),
+                    "team_id": u.team_id,
+                    "total_dmg": int(u.total_dmg)
+                }
+            })
+        return status
+
+    def run_battle(self):
+        while self.round < self.max_rounds:
+
+            alive_a_units = [u for u in self.team_a if u.is_alive]
+            alive_b_units = [u for u in self.team_b if u.is_alive]
+
+            alive_a = len(alive_a_units) > 0
+            alive_b = len(alive_b_units) > 0
+
+            if not alive_a:
+                winner_name = alive_b_units[0].name if alive_b_units else "未知"
+                winner = 1
+                self.add_system_message(f"战斗结束: {winner_name} 方获胜!")
+                return self.play_list, winner, self.get_final_status_list()
+
+            if not alive_b:
+                winner_name = alive_a_units[0].name if alive_a_units else "未知"
+                winner = 0
+                self.add_system_message(f"战斗结束: {winner_name} 方获胜!")
+                return self.play_list, winner, self.get_final_status_list()
+
+            self.process_turn()
+
+        self.add_system_message("平局")
+        winner = 2
+        return self.play_list, winner, self.get_final_status_list()

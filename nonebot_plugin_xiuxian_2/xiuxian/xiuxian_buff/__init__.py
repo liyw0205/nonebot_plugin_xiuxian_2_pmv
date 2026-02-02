@@ -2082,6 +2082,7 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "收取等级", mix_elixir_info.get("收取等级", 0))
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "灵田数量", mix_elixir_info.get("灵田数量", 1))
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "药材速度", mix_elixir_info.get("药材速度", 0))
+            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "灵田傀儡", mix_elixir_info.get("灵田傀儡", 0))
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药控火", mix_elixir_info.get("丹药控火", 0))
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药耐药性", mix_elixir_info.get("丹药耐药性", 0))
             player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "炼丹记录", json.dumps(mix_elixir_info.get("炼丹记录", {})))

@@ -1709,6 +1709,8 @@ async def clear_expired_baitan_():
     
     # 清空所有用户的鬼市订单
     guishi_orders = trade_manager.get_guishi_orders()  # 获取所有订单
+    if not guishi_orders:  # 检查空值
+        guishi_orders = []
     expired_count = 0
     for guishi_order in guishi_orders:
         quantity = guishi_order['quantity'] - guishi_order['filled_quantity']
