@@ -1,0 +1,155 @@
+{
+  "14001": {
+    "name": "紫玄掌",
+    "skill_type": 101,
+    "desc": "紫玄掌！！紫星河！！！",
+    "atkvalue": 5,
+    "atkvalue2": 0.3,
+    "target_type": 2,
+    "cd": 3,
+    "remain_cd": 3,
+    "rate": 15
+  },
+  "14002": {
+    "name": "子龙朱雀",
+    "skill_type": 102,
+    "desc": "子龙朱雀！！！穿透了对方的护甲！",
+    "atkvalue": 3,
+    "target_type": 2,
+    "cd": 3,
+    "remain_cd": 3,
+    "rate": 15
+  },
+  "14003": {
+    "name": "恐惧咆哮",
+    "skill_type": 103,
+    "desc": "仰天长啸，声音中蕴含无尽幽冥之力，音波所及之处，敌人心神俱颤！",
+    "target_type": 1,
+    "bufftype": 21,
+    "turncost": 3,
+    "cd": 20,
+    "rate": 20,
+    "success": 60
+  },
+  "14004": {
+    "name": "魂击",
+    "skill_type": 102,
+    "desc": "眼中幽光一闪，一道无形魂力化作利刃直刺敌人魂魄，无视肉身防御！",
+    "atkvalue": 3,
+    "target_type": 1,
+    "cd": 5,
+    "rate": 15
+  },
+  "14005": {
+    "name": "阴气侵蚀",
+    "skill_type": 2,
+    "desc": "掌心凝聚起森森阴气，化作无数黑色丝线缠绕向敌人，阴寒之气渗入骨髓！",
+    "atkvalue": 1.5,
+    "turncost": 3,
+    "target_type": 1,
+    "cd": 5,
+    "rate": 20
+  },
+  "14006": {
+    "name": "亡魂召唤",
+    "skill_type": 104,
+    "desc": "掐诀念咒，周围空间扭曲，从幽冥之地召唤出数道亡魂虚影，阴风阵阵！",
+    "atkvalue": 0.3,
+    "atkvalue2": 1,
+    "target_type": 1,
+    "cd": 15,
+    "rate": 20
+  },
+  "14007": {
+    "name": "魂爆",
+    "skill_type": 101,
+    "desc": "凝聚大量魂力于一点，随后猛然引爆，狂暴的灵魂冲击席卷四方！",
+    "atkvalue": 3,
+    "atkvalue2": 0.3,
+    "target_type": 2,
+    "cd": 50,
+    "hp_condition": 0.3,
+    "rate": 100
+  },
+  "14008": {
+    "name": "百鬼夜行",
+    "skill_type": 101,
+    "desc": "冥府洞开，百鬼侵袭！",
+    "atkvalue": 2.5,
+    "target_type": 1,
+    "cd": 5,
+    "remain_cd": 3,
+    "rate": 15
+  },
+  "14009": {
+    "name": "雷击",
+    "skill_type": 102,
+    "desc": "雷灵双手高举，一道蓝色闪电从天而降，直劈而下！",
+    "atkvalue": 2.5,
+    "target_type": 1,
+    "cd": 5,
+    "rate": 15
+  },
+  "14010": {
+    "name": "麻痹电弧",
+    "skill_type": 103,
+    "desc": "噼啪作响的电弧在敌人周身缠绕，使其动作变得迟缓僵硬！",
+    "target_type": 1,
+    "bufftype": 23,
+    "turncost": 2,
+    "cd": 20,
+    "rate": 20,
+    "success": 80
+  },
+  "14011": {
+    "name": "雷暴降临",
+    "skill_type": 101,
+    "desc": "头顶乌云密布，无数细小闪电如雨点般倾泻而下！",
+    "atkvalue": 1.5,
+    "target_type": 2,
+    "cd": 5,
+    "remain_cd": 3,
+    "rate": 15
+  },
+  "14012": {
+    "name": "雷灵召唤",
+    "skill_type": 104,
+    "desc": "双手结印，从虚空中召唤出两只浑身电光闪烁的雷元素生物！",
+    "atkvalue": 0.3,
+    "atkvalue2": 2,
+    "target_type": 1,
+    "cd": 25,
+    "rate": 20
+  },
+  "14013": {
+    "name": "万雷朝宗",
+    "skill_type": 101,
+    "desc": "见识一下真正的天威吧！万千道雷霆同时轰落！",
+    "atkvalue": 3,
+    "atkvalue2": 0.3,
+    "target_type": 2,
+    "cd": 50,
+    "hp_condition": 0.35,
+    "rate": 100
+  },
+  "14014": {
+    "name": "九天雷劫",
+    "skill_type": 1,
+    "desc": "燃烧本源，引动九天神雷！第一道、第二道、第三道……接连九道天雷轰然落下！",
+    "atkvalue": [
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "target_type": 1,
+    "cd": 5,
+    "remain_cd": 3,
+    "rate": 20
+  }
+}
