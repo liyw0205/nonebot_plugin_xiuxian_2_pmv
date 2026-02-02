@@ -1728,6 +1728,53 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.conn.commit()
 
 
+    def _ensure_puppet_column(self):
+        """确保 user_xiuxian 表中存在 puppet_status 字段，没有就创建"""
+        cur = self.conn.cursor()
+        # 检查字段是否存在
+        cur.execute("PRAGMA table_info(user_xiuxian)")
+        columns = [row[1] for row in cur.fetchall()]
+        if "puppet_status" not in columns:
+            # 添加新字段 默认 0
+            cur.execute("ALTER TABLE user_xiuxian ADD COLUMN puppet_status INTEGER DEFAULT 0")
+            self.conn.commit()
+
+    def check_puppet_status(self, user_id):
+        """查询灵田傀儡状态，没有字段会自动创建"""
+        self._ensure_puppet_column()
+
+        sql = "SELECT puppet_status FROM user_xiuxian WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (user_id,))
+        result = cur.fetchone()
+
+        # 若没有该用户记录 返回 0
+        if not result:
+            return 0
+
+        return result[0]
+
+    def set_puppet_status(self, user_id, status):
+        """设置灵田傀儡状态 status: 0关闭 1开启"""
+        self._ensure_puppet_column()
+
+        sql = "UPDATE user_xiuxian SET puppet_status=? WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (status, user_id))
+        self.conn.commit()
+
+    def get_all_enabled_puppets(self):
+        """获取所有开启灵田傀儡的玩家 user_id 列表"""
+        self._ensure_puppet_column()
+
+        sql = "SELECT user_id FROM user_xiuxian WHERE puppet_status=1"
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+
+        return [r[0] for r in rows]
+
+
 class XiuxianJsonDate:
     def __init__(self):
         self.root_jsonpath = DATABASE / "灵根.json"
@@ -3194,7 +3241,7 @@ def get_effect_info_msg(id): #身法、瞳术
     msg = f"{effectmsg}"
     return effectbuff, msg
 
-mix_elixir_infoconfigkey = ["收取时间", "收取等级", "灵田数量", '药材速度', "丹药控火", "丹药耐药性", "炼丹记录", "炼丹经验"]
+mix_elixir_infoconfigkey = ["收取时间", "收取等级", "灵田数量", '药材速度', '灵田傀儡', "丹药控火", "丹药耐药性", "炼丹记录", "炼丹经验"]
 
 def read_player_info(user_id, info_name):
     player_data_manager = PlayerDataManager()
@@ -3221,6 +3268,7 @@ def get_player_info(user_id, info_name):
             "收取等级": 0,
             "灵田数量": 1,
             '药材速度': 0,
+            '灵田傀儡': 0,
             "丹药控火": 0,
             "丹药耐药性": 0,
             "炼丹记录": {},
