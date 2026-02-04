@@ -624,7 +624,7 @@ def backup_config():
             backup_data = {field: config_values[field] for field in selected_fields if field in config_values}
         
         # 创建备份目录
-        backup_dir = Path() / "data" / "config_backups"
+        backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         
         # 生成备份文件名
@@ -658,7 +658,7 @@ def get_config_backups():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        backup_dir = Path() / "data" / "config_backups"
+        backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
         backups = []
         
         if backup_dir.exists():
@@ -699,7 +699,7 @@ def restore_config_backup():
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = Path() / "data" / "config_backups" / backup_filename
+        backup_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / backup_filename
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
@@ -764,7 +764,7 @@ def download_backup(filename):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
     
-    backup_path = Path() / "data" / "backups" / filename
+    backup_path = Path() / "data" / "xiuxian" / "backups" / filename
     
     if not backup_path.exists():
         return "备份文件不存在", 404
@@ -788,7 +788,7 @@ def delete_backup():
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = Path() / "data" / "backups" / backup_filename
+        backup_path = Path() / "data" / "xiuxian" / "backups" / backup_filename
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
@@ -816,7 +816,7 @@ def delete_config_backup():
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
 
-        backup_path = Path() / "data" / "config_backups" / backup_filename
+        backup_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / backup_filename
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})

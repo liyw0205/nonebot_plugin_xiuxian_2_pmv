@@ -426,12 +426,21 @@ class UpdateManager:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = backup_dir / f"backup_{timestamp}_{self.current_version}.zip"
             
+            # 定义要跳过的目录名
+            skip_dirs = {"backups", "config_backups", "db_backup", "cache", "boss_img", "font", "卡图", "__pycache__"}
+            
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # 备份data目录（排除backups目录本身）
+                # 备份data目录
                 data_dir = Path() / "data" / "xiuxian"
                 if data_dir.exists():
                     for root, dirs, files in os.walk(data_dir):
-                        if any(x in root.split(os.sep) for x in ["backups", "config_backups", "db_backup", "cache", "boss_img", "font", "卡图"]):
+                        # 使用Path对象进行更可靠的路径检查
+                        root_path = Path(root)
+                        
+                        # 检查当前路径或其父路径是否包含要跳过的目录
+                        should_skip = any(skip_dir in root_path.parts for skip_dir in skip_dirs)
+                        
+                        if should_skip:
                             continue
                         
                         for file in files:
@@ -442,10 +451,16 @@ class UpdateManager:
                             except Exception as e:
                                 logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
                 
-                # 备份插件目录
+                # 备份插件目录（同样应用跳过逻辑）
                 plugin_dir = Xiu_Plugin
                 if plugin_dir.exists():
                     for root, dirs, files in os.walk(plugin_dir):
+                        root_path = Path(root)
+                        should_skip = any(skip_dir in root_path.parts for skip_dir in skip_dirs)
+                        
+                        if should_skip:
+                            continue
+                        
                         for file in files:
                             file_path = Path(root) / file
                             try:

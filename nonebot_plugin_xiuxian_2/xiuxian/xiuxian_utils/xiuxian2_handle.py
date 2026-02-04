@@ -3336,7 +3336,8 @@ def backup_db_files():
         db_files = [
             DATABASE / "xiuxian.db",
             DATABASE / "xiuxian_impart.db",
-            DATABASE / "player.db"
+            DATABASE / "player.db",
+            DATABASE / "trade.db"
         ]
         
         backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
