@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import string
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from nonebot.log import logger
 from .data_source import jsondata
@@ -3336,8 +3336,7 @@ def backup_db_files():
         db_files = [
             DATABASE / "xiuxian.db",
             DATABASE / "xiuxian_impart.db",
-            DATABASE / "player.db",
-            DATABASE / "trade.db"
+            DATABASE / "player.db"
         ]
         
         backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
