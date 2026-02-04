@@ -1421,6 +1421,50 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return 0
 
+    def unbind_item(self, user_id, goods_id, quantity=1):
+        """解绑物品，减少绑定数量
+        :param user_id: 用户ID
+        :param goods_id: 物品ID
+        :param quantity: 解绑数量，默认1
+        :return: 成功返回True，失败返回False
+        """
+        try:
+            cur = self.conn.cursor()
+            
+            # 获取当前物品信息
+            sql = "SELECT goods_num, bind_num FROM back WHERE user_id=? AND goods_id=?"
+            cur.execute(sql, (user_id, goods_id))
+            result = cur.fetchone()
+            
+            if not result:
+                return False
+            
+            current_goods_num = result[0]
+            current_bind_num = result[1]
+            
+            # 检查绑定数量是否足够
+            if current_bind_num < quantity:
+                return False
+            
+            # 更新绑定数量（减少）
+            new_bind_num = current_bind_num - quantity
+            
+            # 确保绑定数量不为负数
+            new_bind_num = max(0, new_bind_num)
+            
+            # 更新数据库
+            update_sql = "UPDATE back SET bind_num=?, update_time=? WHERE user_id=? AND goods_id=?"
+            now_time = datetime.now()
+            cur.execute(update_sql, (new_bind_num, now_time, user_id, goods_id))
+            self.conn.commit()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"解绑物品时发生错误: {str(e)}")
+            self.conn.rollback()
+            return False
+
     def get_all_user_exp(self, level):
         """查询所有对应大境界玩家的修为"""
         sql = f"SELECT exp FROM user_xiuxian  WHERE level like '{level}%'"

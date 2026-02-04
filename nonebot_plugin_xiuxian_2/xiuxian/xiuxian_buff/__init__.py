@@ -40,6 +40,7 @@ from ..xiuxian_rift import group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
 from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
+from ..xiuxian_dungeon.dungeon_manager import DungeonManager
 from .two_exp_cd import two_exp_cd
 
 
@@ -49,6 +50,7 @@ partner_invite_cache = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
+dungeon_manager = DungeonManager()
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 two_exp_limit = 3 # 默认双修次数上限，修仙之人一天3次也不奇怪（
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
@@ -1690,8 +1692,29 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         else:
             illusion_msg = "可参与"
     
+    # 13. 获取副本状态信息（新增）
+    dungeon_msg = "未开始"
+    try:
+        # 获取玩家副本状态
+        player_dungeon_data = dungeon_manager.get_player_status(user_id)
+        
+        if player_dungeon_data:
+            dungeon_status = player_dungeon_data.get("dungeon_status", "not_started")
+            current_layer = player_dungeon_data.get("current_layer", 0)
+            total_layers = player_dungeon_data.get("total_layers", 0)
+            
+            if dungeon_status == "completed":
+                dungeon_msg = f"已完成({current_layer}/{total_layers})"
+            elif dungeon_status == "exploring":
+                dungeon_msg = f"进行中({current_layer}/{total_layers})"
+            else:
+                dungeon_msg = "可挑战"
+    except Exception as e:
+        # 如果副本功能未启用或出现错误，显示默认状态
+        dungeon_msg = "未开启"
+
     msg = f"""
-═══  日常中心  ═════
+═══  日常中心  ══════
 修仙签到：{sign_msg}
 灵田状态：{lingtian_msg}
 秘境状态：{rift_status}
@@ -1704,10 +1727,12 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 虚神界探索：{impart_msg}
 历练状态：{training_msg}
 幻境寻心：{illusion_msg}
+副本状态：{dungeon_msg}
 ════════════
 """
     await handle_send(bot, event, msg)
     await daily_info.finish()
+
 
 @bind_partner.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

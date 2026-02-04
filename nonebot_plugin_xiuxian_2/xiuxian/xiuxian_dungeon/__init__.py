@@ -17,7 +17,7 @@ from nonebot.adapters.onebot.v11 import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, CommandObjectID
 from ..xiuxian_utils.player_fight import pve_fight
-from ..xiuxian_utils.lay_out import assign_bot
+from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
 
@@ -44,8 +44,29 @@ kick_team_cmd = on_command("踢出队伍", aliases={"移除队员"}, priority=5)
 disband_team_cmd = on_command("解散队伍", aliases={"解散组队"}, priority=5)
 view_team_cmd = on_command("查看队伍", aliases={"队伍信息", "我的队伍"}, priority=5)
 help_team_cmd = on_command("队伍帮助", aliases={"组队帮助", "组队指令"}, priority=5)
+# ----------副本----------
+# 副本
+dungeon_info = on_command("副本信息", aliases={"今日副本"}, priority=5, block=True)
+explore_dungeon = on_command("探索副本", aliases={"副本探索", "挑战副本"}, priority=5, block=True)
+dungeon_status = on_command("我的副本状态", aliases={"副本状态", "我的副本信息"}, priority=5, block=True)
+reset_command = on_command("重置副本", aliases={"手动重置"}, priority=5, block=True, permission=SUPERUSER)
+help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5)
+
+scheduler = require("nonebot_plugin_apscheduler").scheduler
+# 初始化副本管理器
+dungeon_manager = DungeonManager()
+items = Items()
 
 cache_team_help = {}
+cache_dungeon_help = {}
+
+__dungeon_help__ = f"""
+【副本指令列表】📜
+副本信息 - 查看今日开放的副本
+探索副本 - 开始挑战副本
+我的副本状态 - 查看个人副本进度
+副本帮助 - 显示本帮助信息
+""".strip()
 
 __team_help__ = f"""
 【组队指令列表】📜
@@ -61,7 +82,7 @@ __team_help__ = f"""
 """.strip()
 
 
-@help_team_cmd.handle()
+@help_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_team_help:
@@ -74,14 +95,14 @@ async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await help_team_cmd.finish()
 
 
-@create_team_cmd.handle()
+@create_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
                               args: Message = CommandArg()):
     """创建队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await create_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -112,14 +133,14 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await create_team_cmd.finish()
 
 
-@invite_team_cmd.handle()
+@invite_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
                               args: Message = CommandArg()):
     """邀请成员组队"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await invite_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -205,13 +226,13 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await invite_team_cmd.finish()
 
 
-@agree_team_cmd.handle()
+@agree_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     """同意组队邀请"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await agree_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -260,13 +281,13 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     await agree_team_cmd.finish()
 
 
-@reject_team_cmd.handle()
+@reject_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     """拒绝组队邀请"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await reject_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -284,13 +305,13 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await reject_team_cmd.finish()
 
 
-@leave_team_cmd.handle()
+@leave_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     """离开队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await leave_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -322,14 +343,14 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     await leave_team_cmd.finish()
 
 
-@kick_team_cmd.handle()
+@kick_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
                             args: Message = CommandArg()):
     """踢出队伍成员"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await kick_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -393,13 +414,13 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     await kick_team_cmd.finish()
 
 
-@disband_team_cmd.handle()
+@disband_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     """解散队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await disband_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -429,13 +450,13 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
     await disband_team_cmd.finish()
 
 
-@view_team_cmd.handle()
+@view_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     """查看队伍信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await view_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
@@ -478,30 +499,6 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     await view_team_cmd.finish()
 
 
-# ----------副本----------
-# 副本
-dungeon_info = on_command("副本信息", aliases={"今日副本"}, priority=5, block=True)
-explore_dungeon = on_command("探索副本", aliases={"副本探索"}, priority=5, block=True)
-dungeon_status = on_command("我的副本状态", aliases={"副本状态", "我的副本信息"}, priority=5, block=True)
-reset_command = on_command("重置副本", aliases={"手动重置"}, priority=5, block=True, permission=SUPERUSER)
-help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5)
-
-scheduler = require("nonebot_plugin_apscheduler").scheduler
-# 初始化副本管理器
-dungeon_manager = DungeonManager()
-items = Items()
-
-cache_dungeon_help = {}
-
-__dungeon_help__ = f"""
-【副本指令列表】📜
-副本信息 - 查看今日开放的副本
-探索副本 - 开始挑战副本
-我的副本状态 - 查看个人副本进度
-副本帮助 - 显示本帮助信息
-""".strip()
-
-
 # 每日零点自动重置副本
 @scheduler.scheduled_job("cron", hour=0, minute=1)
 async def daily_dungeon_reset():
@@ -510,7 +507,7 @@ async def daily_dungeon_reset():
     dungeon_manager.clear_all_player_status()
 
 
-@reset_command.handle()
+@reset_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """手动重置副本和玩家状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -522,7 +519,7 @@ async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await reset_command.finish()
 
 
-@help_dungeon_cmd.handle()
+@help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def help_dungeon_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                             session_id: int = CommandObjectID()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -536,23 +533,23 @@ async def help_dungeon_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await help_dungeon_cmd.finish()
 
 
-@dungeon_info.handle()
+@dungeon_info.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看副本信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     dungeon_data = dungeon_manager.get_dungeon_progress()
 
     msg = (
-        "==========✨ 今日副本 ✨ ==========\n"
-        f"副本名称：{dungeon_data['name']}\n"
-        f"副本描述：{dungeon_data['description']}\n"
+        "═══  ✨ 今日副本 ✨  ═══\n"
+        f"{dungeon_data['name']}\n"
+        f"\n> {dungeon_data['description']}\n\n"
         f"总层数：{dungeon_data['total_layers']}层\n"
         f"副本日期：{dungeon_data['date']}\n"
-        "===================================\n"
+        "════════════\n"
         "🎮 使用「探索副本」指令开始冒险！"
     )
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="副本", k1="探索", v1="探索副本", k2="状态", v2="副本状态", k3="帮助", v3="副本帮助")
     await dungeon_info.finish()
 
 
@@ -633,13 +630,13 @@ def check_user_state(user_info):
     return False, "正常"
 
 
-@explore_dungeon.handle()
+@explore_dungeon.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索副本"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await explore_dungeon.finish()
 
     user_id = user_info["user_id"]
@@ -648,7 +645,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     player_data = dungeon_manager.get_player_status(user_id)
     if player_data["dungeon_status"] == "completed":
         msg = f"今日副本已完成，请等待明日刷新！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="副本", k1="探索", v1="探索副本", k2="状态", v2="副本状态", k3="帮助", v3="副本帮助")
         await explore_dungeon.finish()
 
     user_data = [user_id]
@@ -693,7 +690,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             await send_msg_handler(bot, event, result)
         except ActionFailed:
             msg += f"\nBoss战消息发送错误,可能被风控!"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="副本", k1="探索", v1="探索副本", k2="状态", v2="副本状态", k3="帮助", v3="副本帮助")
         await explore_dungeon.finish()
 
     # 触发事件
@@ -738,20 +735,20 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     msg += "！\n"
     msg += f"当前：第{player_data['current_layer'] + 1}层\n"
-    msg += "使用'探索副本'进入下一层！"
+    msg += "使用「探索副本」进入下一层！"
     dungeon_manager.update_player_progress(user_id)  # 更新副本状态
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="副本", k1="探索", v1="探索副本", k2="状态", v2="副本状态", k3="帮助", v3="副本帮助")
     await explore_dungeon.finish()
 
 
-@dungeon_status.handle()
+@dungeon_status.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """副本状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="我要修仙")
         await dungeon_status.finish()
 
     user_id = user_info["user_id"]
@@ -767,13 +764,13 @@ async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMess
     )
 
     msg = (
-        f"========== 副本信息 ==========\n"
+        f"═══  副本信息  ══════\n"
         f"副本：{name}\n"
         f"状态：{status}\n"
         f"层数：{current}/{total}层\n"
         f"进度：{(current / total * 100) if total > 0 else 0:.1f}%\n"
-        f"============================="
+        f"════════════"
     )
 
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="副本", k1="探索", v1="探索副本", k2="信息", v2="副本信息", k3="帮助", v3="副本帮助")
     await dungeon_status.finish()

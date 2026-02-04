@@ -16,6 +16,7 @@
 - xiuxian_boss ：世界BOSS
 - xiuxian_buff ：双修/修炼/闭关/切磋/洞天福地
 - xiuxian_dufang ：鉴石
+- xiuxian_dungeon ：组队/副本
 - xiuxian_fusion ：合成
 - xiuxian_Illusion ：幻境寻心
 - xiuxian_impart ：传承
@@ -23,6 +24,7 @@
 - xiuxian_info ：修仙信息
 - xiuxian_lunhui ：轮回重修
 - xiuxian_mixelixir ：炼丹
+- xiuxian_puppet ：灵田傀儡
 - xiuxian_rift ：秘境
 - xiuxian_sect ：宗门
 - xiuxian_tower ：通天塔

@@ -1672,7 +1672,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20010: use_lottery_talisman,
         20014: use_work_order,
         20015: use_work_capture_order,
-        20017: use_two_exp_token
+        20017: use_two_exp_token,
+        20019: use_unbind_charm
     }
     handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
@@ -1741,6 +1742,69 @@ async def use_lottery_talisman(bot, event, item_id, num):
     except ActionFailed:
         await handle_send(bot, event, "使用灵签宝箓结果发送失败！")
     return
+
+async def use_unbind_charm(bot, event, item_id, num):
+    """使用解绑符解除物品绑定状态"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    user_id = user_info["user_id"]
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    
+    # 解析参数，获取要解绑的物品名称
+    args_text = event.get_plaintext().strip()
+    parts = args_text.split()
+    
+    if len(parts) < 3:
+        msg = f"格式错误！正确格式：道具使用 解绑符 [数量] 物品名\n例如：道具使用 解绑符 1 天罪"
+        await handle_send(bot, event, msg)
+        return
+    
+    target_item_name = parts[3]  # 要解绑的物品名称
+    
+    # 检查要解绑的物品是否存在
+    target_goods_id, target_goods_info = items.get_data_by_item_name(target_item_name)
+    if not target_goods_id:
+        msg = f"物品 {target_item_name} 不存在，请检查名称是否正确！"
+        await handle_send(bot, event, msg)
+        return
+
+    if target_goods_info['type'] not in ["技能", "装备"]:
+        msg = f"物品 {target_item_name} 类型不支持解绑，请更换物品！"
+        await handle_send(bot, event, msg)
+        return
+
+    # 检查背包中是否有要解绑的物品
+    target_goods_num = sql_message.goods_num(user_id, target_goods_id)
+    if target_goods_num <= 0:
+        msg = f"背包中没有 {target_item_name} ！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 检查物品的绑定数量
+    bind_num = sql_message.goods_num(user_id, target_goods_id, num_type='bind')
+    if bind_num <= 0:
+        msg = f"{target_item_name} 没有绑定数量，无需解绑！"
+        await handle_send(bot, event, msg)
+        return
+    
+    # 计算实际可解绑的数量
+    actual_unbind = min(num, bind_num)
+    
+    
+    # 使用解绑符解绑物品
+    success = sql_message.unbind_item(user_id, target_goods_id, actual_unbind)
+    
+    if success:
+        # 消耗解绑符
+        sql_message.update_back_j(user_id, item_id, num=actual_unbind)
+        
+        msg = f"成功使用解绑符，解除了 {target_item_name} 的 {actual_unbind} 个绑定状态！"
+    else:
+        msg = "解绑失败，请稍后重试！"
+    
+    await handle_send(bot, event, msg)
     
 @chakan_wupin.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def chakan_wupin_(

@@ -65,7 +65,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     num = args[1]  # 数值
     if mode is None:
         msg = __bank_help__
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     if mode == '存灵石' or mode == '取灵石':
@@ -73,11 +73,11 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             num = int(num)
             if num <= 0:
                 msg = f"请输入正确的金额！"
-                await handle_send(bot, event, msg)
+                await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
                 await bank.finish()
         except ValueError:
             msg = f"请输入正确的金额！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
     user_id = user_info['user_id']
     try:
@@ -92,7 +92,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     if mode == '存灵石':  # 存灵石逻辑
         if int(user_info['stone']) < num:
             msg = f"道友所拥有的灵石为{user_info['stone']}枚，金额不足，请重新输入！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
         max = BANKLEVEL[bankinfo['banklevel']]['savemax']
@@ -100,7 +100,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
         if num > nowmax:
             msg = f"道友当前灵庄会员等级为{BANKLEVEL[bankinfo['banklevel']]['level']}，可存储的最大灵石为{max}枚,当前已存{bankinfo['savestone']}枚灵石，可以继续存{nowmax}枚灵石！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
@@ -111,13 +111,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         bankinfo['savetime'] = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         savef(user_id, bankinfo)
         msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{give_stone}枚!\n道友存入灵石{num}枚，当前所拥有灵石{userinfonowstone + give_stone}枚，灵庄存有灵石{bankinfo['savestone']}枚"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     elif mode == '取灵石':  # 取灵石逻辑
         if int(bankinfo['savestone']) < num:
             msg = f"道友当前灵庄所存有的灵石为{bankinfo['savestone']}枚，金额不足，请重新输入！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
         # 先结算利息
@@ -128,20 +128,20 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         sql_message.update_ls(user_id, num + give_stone, 1)
         savef(user_id, bankinfo)
         msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{give_stone}枚!\n取出灵石{num}枚，当前所拥有灵石{userinfonowstone}枚，灵庄存有灵石{bankinfo['savestone']}枚!"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     elif mode == '升级会员':  # 升级会员逻辑
         userlevel = bankinfo["banklevel"]
         if userlevel == str(len(BANKLEVEL)):
             msg = f"道友已经是本灵庄最大的会员啦！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
         stonecost = BANKLEVEL[f"{int(userlevel)}"]['levelup']
         if int(user_info['stone']) < stonecost:
             msg = f"道友所拥有的灵石为{user_info['stone']}枚，当前升级会员等级需求灵石{stonecost}枚金额不足，请重新输入！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
             await bank.finish()
 
         sql_message.update_ls(user_id, stonecost, 2)
@@ -149,7 +149,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         savef(user_id, bankinfo)
         msg = f"道友成功升级灵庄会员等级，消耗灵石{stonecost}枚，当前为：{BANKLEVEL[str(int(userlevel) + 1)]['level']}，灵庄可存有灵石上限{BANKLEVEL[str(int(userlevel) + 1)]['savemax']}枚"
 
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
         await bank.finish()
 
     elif mode == '信息':  # 查询灵庄信息
@@ -160,7 +160,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 当前拥有灵石：{user_info['stone']}
 当前等级存储灵石上限：{BANKLEVEL[bankinfo['banklevel']]['savemax']}枚
 '''
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="结算", v3="灵庄结算")
         await bank.finish()
 
     elif mode == '结算':
@@ -169,7 +169,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         sql_message.update_ls(user_id, give_stone, 1)
         savef(user_id, bankinfo)
         msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{give_stone}枚！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
 
