@@ -151,5 +151,203 @@
     "cd": 5,
     "remain_cd": 3,
     "rate": 20
+  },
+  "14015": {
+    "name": "极寒突刺",
+    "skill_type": 102,
+    "desc": "凝聚数道冰刺急速射向敌人，冰冷刺骨！",
+    "atkvalue": 2.8,
+    "target_type": 1,
+    "cd": 4,
+    "rate": 15
+  },
+  "14016": {
+    "name": "霜冻新星",
+    "skill_type": 101,
+    "desc": "以自身为中心爆发出一圈寒冰能量，冻结周围的一切！",
+    "atkvalue": 2.0,
+    "target_type": 2,
+    "cd": 6,
+    "remain_cd": 3,
+    "rate": 15
+  },
+  "14017": {
+    "name": "永冻之域",
+    "skill_type": 103,
+    "desc": "创造一片极寒领域，进入其中的敌人行动将变得异常迟缓！",
+    "target_type": 2,
+    "bufftype": 23,
+    "turncost": 2,
+    "cd": 20,
+    "rate": 20,
+    "success": 70
+  },
+  "14018": {
+    "name": "冰龙吐息",
+    "skill_type": 101,
+    "desc": "模仿上古冰龙，喷吐出一道足以冻结灵魂的极寒龙息！",
+    "atkvalue": 3.5,
+    "target_type": 1,
+    "cd": 8,
+    "remain_cd": 4,
+    "rate": 20
+  },
+  "14019": {
+    "name": "绝对零度",
+    "skill_type": 103,
+    "desc": "将极寒之力注入敌人体内，使其从内到外迅速冻结！",
+    "target_type": 1,
+    "bufftype": 17,
+    "turncost": 1,
+    "cd": 30,
+    "rate": 15,
+    "success": 50
+  },
+  "14020": {
+    "name": "冰魄绝灭",
+    "skill_type": 101,
+    "desc": "引爆本源冰魄之力，释放出毁天灭地的冰爆！",
+    "atkvalue": 4.0,
+    "atkvalue2": 0.2,
+    "target_type": 2,
+    "cd": 50,
+    "hp_condition": 0.3,
+    "rate": 100
+  },
+  "14021": {
+    "name": "地火爆裂",
+    "skill_type": 101,
+    "desc": "引爆地火，对范围内的敌人造成巨大的火焰冲击！",
+    "atkvalue": 3.2,
+    "target_type": 2,
+    "cd": 5,
+    "remain_cd": 3,
+    "rate": 20
+  },
+  "14022": {
+    "name": "熔岩喷发",
+    "skill_type": 102,
+    "desc": "从地下召唤出灼热的熔岩柱，对单一目标造成毁灭性打击！",
+    "atkvalue": 4.0,
+    "target_type": 1,
+    "cd": 6,
+    "rate": 15
+  },
+  "14023": {
+    "name": "硫磺毒雾",
+    "skill_type": 103,
+    "desc": "喷吐出蕴含剧毒的硫磺雾气，使敌人持续受到灼烧和毒素伤害！",
+    "target_type": 2,
+    "bufftype": 11,
+    "turncost": 3,
+    "cd": 15,
+    "rate": 25,
+    "success": 80
+  },
+  "14024": {
+    "name": "烈焰风暴",
+    "skill_type": 101,
+    "desc": "召唤出狂暴的火焰旋风，吞噬路径上的一切敌人！",
+    "atkvalue": 2.5,
+    "atkvalue2": 1.5,
+    "target_type": 2,
+    "cd": 8,
+    "remain_cd": 4,
+    "rate": 20
+  },
+  "14025": {
+    "name": "熔核冲击",
+    "skill_type": 102,
+    "desc": "将核心的熔岩能量压缩后一次性轰出，威力巨大且无视部分防御！",
+    "atkvalue": 4.5,
+    "target_type": 1,
+    "cd": 10,
+    "rate": 15
+  },
+  "14026": {
+    "name": "焚世熔炉",
+    "skill_type": 101,
+    "desc": "展开领域，将战场化为熔炉，持续灼烧所有敌人！",
+    "atkvalue": [
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      2.5
+    ],
+    "target_type": 2,
+    "cd": 50,
+    "hp_condition": 0.4,
+    "rate": 100
+  },
+  "14027": {
+    "name": "迷魂雾霭",
+    "skill_type": 103,
+    "desc": "释放出致幻的雾气，使敌人陷入混乱，敌我不分！",
+    "target_type": 2,
+    "bufftype": 21,
+    "turncost": 2,
+    "cd": 18,
+    "rate": 25,
+    "success": 60
+  },
+  "14028": {
+    "name": "幻藤缠绕",
+    "skill_type": 102,
+    "desc": "从迷雾中伸出虚幻的藤蔓，束缚并绞杀敌人！",
+    "atkvalue": 2.2,
+    "target_type": 1,
+    "cd": 5,
+    "rate": 20
+  },
+  "14029": {
+    "name": "梦境投射",
+    "skill_type": 104,
+    "desc": "将敌人内心的恐惧化为实体，召唤出梦魇助战！",
+    "atkvalue": 0.4,
+    "atkvalue2": 2,
+    "target_type": 1,
+    "cd": 20,
+    "rate": 20
+  },
+  "14030": {
+    "name": "千幻迷踪",
+    "skill_type": 101,
+    "desc": "身形化作无数幻影，从四面八方同时发动攻击，令人防不胜防！",
+    "atkvalue": 1.8,
+    "atkvalue2": 0.5,
+    "target_type": 2,
+    "cd": 6,
+    "remain_cd": 3,
+    "rate": 20
+  },
+  "14031": {
+    "name": "摄魂幻瞳",
+    "skill_type": 103,
+    "desc": "眼中幽光闪烁，直视其目光者魂魄将被短暂剥离躯体！",
+    "target_type": 1,
+    "bufftype": 16,
+    "turncost": 1,
+    "cd": 25,
+    "rate": 15,
+    "success": 55
+  },
+  "14032": {
+    "name": "永沦幻境",
+    "skill_type": 101,
+    "desc": "将敌人拖入无尽的幻觉轮回，在虚幻中承受连绵不绝的精神冲击！",
+    "atkvalue": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0,
+      1.2,
+      1.4
+    ],
+    "target_type": 1,
+    "cd": 45,
+    "hp_condition": 0.25,
+    "rate": 100
   }
 }
