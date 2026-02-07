@@ -30,7 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
-from .bossconfig import get_boss_config, savef_boss
+from .bossconfig import get_boss_config
 from .old_boss_info import old_boss_info
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items

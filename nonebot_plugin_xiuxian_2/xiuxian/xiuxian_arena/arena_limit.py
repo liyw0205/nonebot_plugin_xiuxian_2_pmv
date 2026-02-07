@@ -89,7 +89,7 @@ class ArenaLimit:
         """获取用户当前排名"""
         all_users = self.get_arena_ranking(limit=1000)  # 获取所有用户排名
         for i, (uid, score) in enumerate(all_users, 1):
-            if uid == str(user_id):
+            if str(uid) == str(user_id):
                 return i
         return 0  # 未找到用户
 

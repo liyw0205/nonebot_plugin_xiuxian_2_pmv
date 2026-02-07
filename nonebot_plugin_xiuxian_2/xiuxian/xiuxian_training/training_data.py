@@ -1,9 +1,3 @@
-import json
-import os
-from pathlib import Path
-
-TRAINING_CONFIG_PATH = Path(__file__).parent / "training_config.json"
-
 DEFAULT_CONFIG = {
     "商店商品": {
         "1999": {
@@ -70,23 +64,6 @@ class TrainingData:
     
     def get_training_config(self):
         """加载历练配置"""
-        try:
-            if not TRAINING_CONFIG_PATH.exists():
-                with open(TRAINING_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
-                return DEFAULT_CONFIG
-            
-            with open(TRAINING_CONFIG_PATH, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            
-            # 确保所有配置项都存在
-            for key in DEFAULT_CONFIG:
-                if key not in config:
-                    config[key] = DEFAULT_CONFIG[key]
-            
-            return config
-        except Exception as e:
-            print(f"加载历练配置失败: {e}")
-            return DEFAULT_CONFIG
+        return DEFAULT_CONFIG
     
 training_data = TrainingData()

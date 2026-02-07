@@ -1,8 +1,3 @@
-import json
-from pathlib import Path
-
-TOWER_CONFIG_PATH = Path(__file__).parent / "tower_config.json"
-
 DEFAULT_CONFIG = {
     "体力消耗": {
         "单层爬塔": 5,
@@ -94,23 +89,6 @@ class TowerData:
     
     def get_tower_config(self):
         """加载通天塔配置"""
-        try:
-            if not TOWER_CONFIG_PATH.exists():
-                with open(TOWER_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
-                return DEFAULT_CONFIG
-            
-            with open(TOWER_CONFIG_PATH, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            
-            # 确保所有配置项都存在
-            for key in DEFAULT_CONFIG:
-                if key not in config:
-                    config[key] = DEFAULT_CONFIG[key]
-            
-            return config
-        except Exception as e:
-            print(f"加载通天塔配置失败: {e}")
-            return DEFAULT_CONFIG
+        return DEFAULT_CONFIG
 
 tower_data = TowerData()

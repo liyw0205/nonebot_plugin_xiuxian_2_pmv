@@ -1,10 +1,3 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-import os
-from pathlib import Path
-
 configkey = ["Boss灵石", "Boss名字", "Boss倍率", "Boss生成时间参数", 'open', "世界积分商品"]
 CONFIG = {
     "open": {
@@ -242,39 +235,6 @@ CONFIG = {
 }
 
 
-CONFIGJSONPATH = Path(__file__).parent
-FILEPATH = CONFIGJSONPATH / 'config.json'
-
 def get_boss_config():
-    """加载配置，失败时返回默认配置但不覆盖文件"""
-    if not os.path.exists(FILEPATH):
-        # 如果文件不存在，保存默认配置
-        savef_boss(CONFIG)
-        return CONFIG
-    config = readf()
-    # 确保所有键存在
-    for key in configkey:
-        if key not in config:
-            config[key] = CONFIG[key]
-    return config
-
-def readf():
-    """读取配置文件"""
-    try:
-        with open(FILEPATH, "r", encoding="UTF-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"警告: 读取 {FILEPATH} 失败: {e}")
-        return CONFIG
-
-def savef_boss(data):
-    """保存配置"""
-    try:
-        # 确保目录存在
-        os.makedirs(CONFIGJSONPATH, exist_ok=True)
-        with open(FILEPATH, "w", encoding="UTF-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=3)
-        return True
-    except Exception as e:
-        print(f"错误: 保存 {FILEPATH} 失败: {e}")
-        return False
+    """加载配置"""
+    return CONFIG

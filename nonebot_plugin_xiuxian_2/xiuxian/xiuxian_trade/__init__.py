@@ -279,7 +279,6 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         try:
             trade_manager.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
             sql_message.update_back_j(user_id, goods_id, 1)
-            success_count += 1
         except Exception as e:
             logger.error(f"仙肆上架失败: {e}")
             msg = "上架过程中出现错误，请稍后再试！"
