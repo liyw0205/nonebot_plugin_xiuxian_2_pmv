@@ -36,14 +36,14 @@ from ..xiuxian_utils.utils import (
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 
-# ======================
+# ════════════
 # 通用类型定义
-# ======================
+# ════════════
 ItemType = Literal["补偿", "礼包", "兑换码"]
 DATA_PATH = Path(__file__).parent / "compensation_data"
-# ======================
+# ════════════
 # 文件路径配置
-# ======================
+# ════════════
 DATA_CONFIG = {
     "补偿": {
         "data_path": DATA_PATH / "compensation" / "compensation_records.json",
@@ -68,9 +68,9 @@ DATA_CONFIG = {
     }
 }
 
-# ======================
+# ════════════
 # 初始化数据文件夹和文件
-# ======================
+# ════════════
 if not DATA_PATH.exists():
     os.makedirs(DATA_PATH, exist_ok=True)
 for config in DATA_CONFIG.values():
@@ -82,9 +82,9 @@ for config in DATA_CONFIG.values():
         with open(config["claimed_path"], "w", encoding="utf-8") as f:
             json.dump({}, f, ensure_ascii=False, indent=4)
 
-# ======================
+# ════════════
 # 通用函数定义
-# ======================
+# ════════════
 
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
     """加载指定类型的数据"""
@@ -434,9 +434,9 @@ def clear_all_items(config: Dict[str, Any]) -> None:
     
     logger.info(f"已清空所有{config['type_key']}记录及其领取记录。")
 
-# ======================
+# ════════════
 # 通用命令处理
-# ======================
+# ════════════
 
 def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
     """注册通用命令"""
@@ -566,9 +566,9 @@ def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
             await handle_send(bot, event, __redeem_code_admin_help__)
         await handle_admin_help_cmd.finish()
 
-# ======================
+# ════════════
 # 特殊处理：兑换码的使用次数和领取逻辑
-# ======================
+# ════════════
 claim_redeem_code_cmd = on_command("兑换", priority=10, block=True)
 @claim_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def claim_redeem_code_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -853,16 +853,16 @@ def clean_expired_redeem_codes():
     else:
         logger.info("没有发现过期兑换码，无需清理")
 
-# ======================
+# ════════════
 # 注册通用命令
-# ======================
+# ════════════
 
 for item_type, config in DATA_CONFIG.items():
     register_common_commands(item_type, config)
 
-# ======================
+# ════════════
 # 邀请功能
-# ======================
+# ════════════
 
 INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
@@ -1217,9 +1217,9 @@ async def handle_invitation_reward_list(bot: Bot, event: MessageEvent):
     msg = "\n".join(msg_lines)
     await handle_send(bot, event, msg)
 
-# ======================
+# ════════════
 # 邀请帮助
-# ======================
+# ════════════
 
 invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
@@ -1260,9 +1260,9 @@ __invitation_admin_help__ = f"""
 2. 邀请奖励列表 - 查看所有邀请奖励设置
 """
 
-# ======================
+# ════════════
 # 自动清理任务
-# ======================
+# ════════════
 
 async def auto_clean_expired_items():
     """自动清理过期"""

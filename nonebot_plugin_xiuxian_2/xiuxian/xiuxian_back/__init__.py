@@ -1581,7 +1581,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = check_use_elixir(user_id, goods_id, num)
         
     elif goods_type == "特殊道具":
-        await use_item_(bot, event, f"{goods_info['name']} {num}")
+        msg = f"请输入：道具使用 {goods_info['name']}"
+        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1=f"道具使用 {goods_info['name']}", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use.finish()
     elif goods_type == "神物":
         user_info = sql_message.get_user_info_with_id(user_id)
@@ -1754,6 +1755,7 @@ async def use_unbind_charm(bot, event, item_id, num):
     
     # 解析参数，获取要解绑的物品名称
     args_text = event.get_plaintext().strip()
+    args_text = re.sub(r'^道具使用\s*', '', args_text).strip()
     parts = args_text.split()
     
     if len(parts) < 3:
@@ -1761,7 +1763,7 @@ async def use_unbind_charm(bot, event, item_id, num):
         await handle_send(bot, event, msg)
         return
     
-    target_item_name = parts[3]  # 要解绑的物品名称
+    target_item_name = parts[2]  # 要解绑的物品名称
     
     # 检查要解绑的物品是否存在
     target_goods_id, target_goods_info = items.get_data_by_item_name(target_item_name)

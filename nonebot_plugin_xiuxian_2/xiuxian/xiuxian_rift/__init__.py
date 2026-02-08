@@ -382,7 +382,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     elif rift_type == "宝物":
         result_name, result_msg = get_treasure_info(user_info, rift_rank)
         if result_name:
-            await handle_send(bot, event, msg, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
+            await handle_send(bot, event, result_msg, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
         else:
             await handle_send(bot, event, result_msg)
 

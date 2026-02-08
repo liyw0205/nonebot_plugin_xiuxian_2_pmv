@@ -309,6 +309,10 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         dan_name = parts[0]  # 丹药名
         remove_level_nums = set(map(int, parts[1:]))  # 如 {7,8}
         target_elixir_id, target_elixir = Items().get_data_by_item_name(dan_name)
+        if "elixir_config" not in target_elixir:
+            msg = f"{dan_name}不支持炼丹！"
+            await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+            await mix_elixir.finish()
         if not target_elixir_id:
             msg = "请输入有效丹药名称！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -316,6 +320,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         yaocai_dict = remove_herbs_by_levels(yaocai_dict, remove_level_nums)  # 删除指定品质药材
         mix_elixir_msgs = await get_elixir_recipe_msg(target_elixir_id, target_elixir, yaocai_dict, top_n=10)
     else:
+        dan_name = None
         yaocai_dict = await make_dict(yaocai_dict)
         mix_elixir_msgs = await get_mix_elixir_msg(yaocai_dict)  # 现在返回一个配方列表
 
