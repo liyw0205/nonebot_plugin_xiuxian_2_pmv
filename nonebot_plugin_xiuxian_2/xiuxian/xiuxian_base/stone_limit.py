@@ -1,68 +1,61 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-from pathlib import Path
-import os
-
+from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 class STONE_LIMIT(object):
     def __init__(self):
-        self.dir_path = Path(__file__).parent
-        self.data_path = os.path.join(self.dir_path, "stone_limit.json")
-        try:
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-        except:
-            self.info = {"send_limit": {}, "receive_limit": {}}
-            data = json.dumps(self.info, ensure_ascii=False, indent=4)
-            with open(self.data_path, mode="x", encoding="UTF-8") as f:
-                f.write(data)
-                f.close()
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
+        self.player_data_manager = PlayerDataManager()
+        self.table_name = "stone_limit"
 
-    def __save(self):
-        """保存数据"""
-        with open(self.data_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+    def __ensure_user_record(self, user_id):
+        """确保用户记录存在"""
+        user_id = str(user_id)
+        # 尝试获取记录，如果不存在则初始化
+        record = self.player_data_manager.get_fields(user_id, self.table_name)
+        if not record:
+            # 初始化默认值
+            self.player_data_manager.update_or_write_data(
+                user_id, self.table_name, "send_limit", 0
+            )
+            self.player_data_manager.update_or_write_data(
+                user_id, self.table_name, "receive_limit", 0
+            )
 
     def get_send_limit(self, user_id):
         """获取用户今日已送灵石额度"""
         user_id = str(user_id)
-        try:
-            return self.data["send_limit"].get(user_id, 0)
-        except KeyError:
-            self.data["send_limit"][user_id] = 0
-            self.__save()
-            return 0
+        self.__ensure_user_record(user_id)
+        value = self.player_data_manager.get_field_data(user_id, self.table_name, "send_limit")
+        return int(value) if value is not None else 0
 
     def get_receive_limit(self, user_id):
         """获取用户今日已收灵石额度"""
         user_id = str(user_id)
-        try:
-            return self.data["receive_limit"].get(user_id, 0)
-        except KeyError:
-            self.data["receive_limit"][user_id] = 0
-            self.__save()
-            return 0
+        self.__ensure_user_record(user_id)
+        value = self.player_data_manager.get_field_data(user_id, self.table_name, "receive_limit")
+        return int(value) if value is not None else 0
 
     def update_send_limit(self, user_id, amount):
         """更新用户今日已送灵石额度"""
         user_id = str(user_id)
-        self.data["send_limit"][user_id] = self.get_send_limit(user_id) + amount
-        self.__save()
+        self.__ensure_user_record(user_id)
+        current = self.get_send_limit(user_id)
+        new_value = current + amount
+        self.player_data_manager.update_or_write_data(
+            user_id, self.table_name, "send_limit", new_value
+        )
 
     def update_receive_limit(self, user_id, amount):
         """更新用户今日已收灵石额度"""
         user_id = str(user_id)
-        self.data["receive_limit"][user_id] = self.get_receive_limit(user_id) + amount
-        self.__save()
+        self.__ensure_user_record(user_id)
+        current = self.get_receive_limit(user_id)
+        new_value = current + amount
+        self.player_data_manager.update_or_write_data(
+            user_id, self.table_name, "receive_limit", new_value
+        )
 
     def reset_limits(self):
-        """重置所有额度"""
-        self.data = {"send_limit": {}, "receive_limit": {}}
-        self.__save()
-
+        """重置所有用户额度"""
+        self.player_data_manager.update_all_records(self.table_name, "send_limit", 0)
+        self.player_data_manager.update_all_records(self.table_name, "receive_limit", 0)
 
 stone_limit = STONE_LIMIT()

@@ -559,7 +559,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
         p_rank = sql_message.realm_top()
-        msg = f"\n✨位面境界排行榜TOP50✨\n"
+        msg = f"\n> ✨位面境界排行榜TOP50✨\n"
         num = 0
         for i in p_rank:
             num += 1
@@ -570,7 +570,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "灵石排行榜":
         a_rank = sql_message.stone_top()
-        msg = f"\n✨位面灵石排行榜TOP50✨\n"
+        msg = f"\n> ✨位面灵石排行榜TOP50✨\n"
         num = 0
         for i in a_rank:
             num += 1
@@ -581,7 +581,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "战力排行榜":
         c_rank = sql_message.power_top()
-        msg = f"\n✨位面战力排行榜TOP50✨\n"
+        msg = f"\n> ✨位面战力排行榜TOP50✨\n"
         num = 0
         for i in c_rank:
             num += 1
@@ -592,7 +592,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
         s_rank = sql_message.scale_top()
-        msg = f"\n✨位面宗门建设排行榜TOP50✨\n"
+        msg = f"\n> ✨位面宗门建设排行榜TOP50✨\n"
         num = 0
         for i in s_rank:
             num += 1
@@ -603,7 +603,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "轮回排行榜":
         r_rank = sql_message.root_top()
-        msg = f"\n✨轮回排行榜TOP50✨\n"
+        msg = f"\n> ✨轮回排行榜TOP50✨\n"
         num = 0
         for i in r_rank:
             num += 1

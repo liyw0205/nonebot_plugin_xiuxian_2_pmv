@@ -97,5 +97,3 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     raise IgnoredException("为屏蔽群消息,已忽略")
                 else:
                     pass
-        else:
-            raise IgnoredException("非主bot信息,已忽略")
