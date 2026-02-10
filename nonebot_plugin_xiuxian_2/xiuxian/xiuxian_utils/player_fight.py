@@ -658,8 +658,8 @@ class SkillType(IntEnum):
     RANDOM_ACQUIRE = 7  # 随机获取技能
 
     # ====== BOSS特殊技能 ======
-    MULTIPLIER_PERCENT_HP = 101  # 倍数伤害+无视防御
-    MULTIPLIER_DEF_IGNORE = 102  # 倍数伤害+目标百分比生命值伤害
+    MULTIPLIER_PERCENT_HP = 101  # 倍数伤害+目标百分比生命值伤害
+    MULTIPLIER_DEF_IGNORE = 102  # 倍数伤害+无视防御
     CC = 103  # 控制类型（眩晕、沉默、定身等）
     SUMMON = 104  # 召唤类型技能
 
