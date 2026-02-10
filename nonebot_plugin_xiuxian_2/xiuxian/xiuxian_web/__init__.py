@@ -1605,12 +1605,6 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
-    "private_chat_enabled": {
-        "name": "私聊功能",
-        "description": "私聊功能开关",
-        "type": "bool",
-        "category": "基础设置"
-    },
     "web_port": {
         "name": "管理面板端口",
         "description": "修仙管理面板端口号",
