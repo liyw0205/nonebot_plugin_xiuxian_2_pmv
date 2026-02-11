@@ -2519,7 +2519,8 @@ class PlayerDataManager:
         if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
             logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to INTEGER.</yellow>")
             data_type = 'INTEGER'
-        
+        self._ensure_table_exists(None, table_name)
+        self._ensure_field_exists(None, table_name, field, data_type=data_type)        
         value = str(value)
         conn = self._get_connection()
         cursor = conn.cursor()
