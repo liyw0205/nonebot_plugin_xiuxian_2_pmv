@@ -953,7 +953,13 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     """发送md模板消息"""
     if not markdown_id:
         await handle_send(bot, event, msg)
-    msg = optimize_md(msg)
+
+    if msg:
+        msg = optimize_md(msg)
+    if title:
+        title = optimize_md(title)
+    if page_param:
+        page_param = optimize_md(page_param)
 
     is_group = isinstance(event, GroupMessageEvent)
     shell_param = markdown_param("s1", " ")
@@ -982,7 +988,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     else:
         open_id = get_real_id(event.user_id)
         if open_id and is_group and XiuConfig().at_sender and at_msg:
-            title = f"<@{open_id}>\r{title}"
+            title = f"<@{open_id}>\n{title}"
     if not title_param:
         title = optimize_md(title)
         title_param = markdown_param("t1", title)
