@@ -378,7 +378,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         
         for user_id in all_users:
             try:
-                sql_message.send_back(user_id, goods_id, goods_name, goods_type, quantity, 1)
+                sql_message.send_back(user_id, goods_id, goods_name, goods_type, quantity)
                 success_count += 1
             except Exception as e:
                 logger.error(f"给用户 {user_id} 发放物品失败: {e}")
@@ -393,7 +393,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await handle_send(bot, event, msg)
             await cz.finish()
         
-        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity, 1)
+        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity)
         msg = f"成功向 {target} 发放 {goods_name} x{quantity}"
     
     else:
@@ -404,7 +404,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await handle_send(bot, event, msg)
             await cz.finish()
         
-        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity, 1)
+        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity)
         msg = f"成功向您发放 {goods_name} x{quantity}"
     
     await handle_send(bot, event, msg)

@@ -1897,8 +1897,9 @@ async def chakan_wupin_(
     if total_pages > 1:
         next_page_cmd = f"查看{item_type}{current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    
-    await send_msg_handler(bot, event, title, bot.self_id, final_msg)
+
+    page = ["翻页", f"查看修仙界物品{item_type} {current_page + 1}", "查看", "查看效果", "背包", "我的背包", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '修仙界物品', bot.self_id, paged_items, title=title, page=page)
     await chakan_wupin.finish()
 
 @main_back.handle(parameterless=[Cooldown(cd_time=5)])
