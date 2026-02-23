@@ -1488,8 +1488,6 @@ def get_real_id(id_str):
     :param id_str: 要查询的ID字符串
     :return: 真实ID (str) 或 None
     """
-    if not XiuConfig().web_link:
-        return None
 
     url = f"{XiuConfig().gsk_link}/getid?type=2&id={id_str}"
     try:
