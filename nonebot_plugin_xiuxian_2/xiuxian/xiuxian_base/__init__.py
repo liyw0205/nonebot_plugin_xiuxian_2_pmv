@@ -2700,6 +2700,14 @@ def generate_daohao():
     
     return daohao
 
+async def reset_lottery_participants():
+    lottery_pool.reset_daily()
+    logger.opt(colors=True).info(f"<green>每日鸿运参与者已重置！</green>")
+    
+async def reset_stone_limits():
+    stone_limit.reset_limits()
+    logger.opt(colors=True).info(f"<green>每日灵石赠送额度已重置！</green>")
+
 # 仙缘数据路径
 XIANGYUAN_DATA_PATH = Path(__file__).parent / "xiangyuan_data"
 XIANGYUAN_DATA_PATH.mkdir(parents=True, exist_ok=True)
@@ -3163,48 +3171,8 @@ async def reset_xiangyuan_daily():
     stone_limit.reset_xiangyuan_limits()
     logger.opt(colors=True).info(f"<green>每日仙缘次数限制已重置！</green>")
     
-    # 清理过期仙缘（24 小时过期）
-    for file in XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"):
-        group_id = file.stem.split("_")[1]
-        xiangyuan_data = get_xiangyuan_data(group_id)
-        
-        if not xiangyuan_data["gifts"]:
-            continue
-        
-        current_time = datetime.now()
-        expired_gifts = []
-        
-        for gift_id, gift in xiangyuan_data["gifts"].items():
-            expired_gifts.append(gift_id)
-        
-        # 删除过期仙缘并退回剩余资源
-        for gift_id in expired_gifts:
-            gift = xiangyuan_data["gifts"][gift_id]
-            giver_id = gift["giver_id"]
-            
-            if gift.get("remaining_stone", 0) > 0:
-                sql_message.update_ls(giver_id, gift["remaining_stone"], 1)
-                logger.info(f"仙缘过期：已退还群{group_id}用户{giver_id}灵石{number_to(gift['remaining_stone'])}")
-
-            if gift.get("items"):
-                for item in gift["items"]:
-                    if item.get("quantity", 0) > 0:
-                        sql_message.send_back(
-                            giver_id,
-                            item["goods_id"],
-                            item["name"],
-                            item["type"],
-                            item["quantity"],
-                            1
-                        )
-                        logger.info(f"仙缘过期：已退还群{group_id}用户{giver_id}物品{item['name']}x{item['quantity']}")
-            
-            del xiangyuan_data["gifts"][gift_id]
-        
-        # 保存更新后的数据
-        if expired_gifts:
-            save_xiangyuan_data(group_id, xiangyuan_data)
-            logger.info(f"仙缘系统：已为群{group_id}清理{len(expired_gifts)}个过期仙缘")
+    msg = await clear_all_xiangyuan()
+    logger.info(f"{msg}")
 
 async def clear_all_xiangyuan():
     """清空所有群的仙缘（超级管理员）"""
