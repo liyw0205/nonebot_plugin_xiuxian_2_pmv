@@ -2773,84 +2773,108 @@ def calculate_xiangyuan_reward(gift, is_last_receiver):
 
 def parse_xiangyuan_content(content_str: str, user_id: int):
     """
-    解析仙缘内容字符串
-    返回：(stone_amount, items_list, error_msg)
-    items_list 格式：[{'goods_id': int, 'name': str, 'type': str, 'quantity': int}]
+    支持以下写法：
+    送仙缘 1000000 5
+    送仙缘 灵石x1000000 5
+    送仙缘 1000000x灵石 5
+    送仙缘 灵石1000000 5
+    送仙缘 1000000灵石,精铁符剑x2 5
     """
     stone_amount = 0
     items_list = []
-    
-    # 分割内容部分 (支持 "1000000" 或"灵石 x1000000，精铁符剑 x1")
-    parts = content_str.split(',')
-    
+    error_msg = ""
+
+    # 替换中文逗号、顿号、全角空格 → 统一用英文逗号分割
+    content_str = content_str.replace('，', ',').replace('、', ',').replace('　', ' ')
+    parts = [p.strip() for p in content_str.split(',') if p.strip()]
+
     for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-            
-        if '灵石' in part:
-            # 解析灵石
-            if 'x' in part:
-                try:
-                    stone_amount = int(part.split('x')[-1].strip())
-                except:
-                    return 0, [], "灵石数量格式错误"
-            else:
-                # 兼容纯数字
-                if part.isdigit():
-                    stone_amount = int(part)
-                else:
-                    return 0, [], "灵石格式错误"
-        else:
-            # 解析物品
-            if 'x' not in part:
-                return 0, [], f"物品 {part} 缺少数量 (格式：物品名 x 数量)"
-            
-            item_name, qty_str = part.rsplit('x', 1)
-            item_name = item_name.strip()
+        # ------------------- 尝试当作纯灵石 -------------------
+        if part.isdigit() and int(part) > XIANGYUAN_MAX_RECEIVERS:  # 避免把人数误判
             try:
-                qty = int(qty_str.strip())
-                if qty < 1:
-                    return 0, [], f"物品 {item_name} 数量不能少于 1 个"
-                if qty > 10:
-                    return 0, [], f"物品 {item_name} 数量不能超过 10 个"
-                # ===========================================
+                num = int(part)
+                if stone_amount > 0:
+                    return 0, [], "出现了多个纯数字灵石段，请明确写'灵石x数量'"
+                stone_amount = num
+                continue
             except:
-                return 0, [], "物品数量格式错误"
-            
-            # 查询物品信息
-            goods_id, goods_info = items.get_data_by_item_name(item_name)
+                pass
+
+        # ------------------- 尝试 数量x物品 / 物品x数量 -------------------
+        if 'x' in part.lower():
+            left, right = part.split('x', 1)
+            left = left.strip()
+            right = right.strip()
+
+            # 尝试 数量x物品
+            if left.isdigit():
+                qty_str, name = left, right
+            # 尝试 物品x数量
+            elif right.isdigit():
+                name, qty_str = left, right
+            else:
+                continue  # 都不是数字×格式，跳过
+
+            try:
+                qty = int(qty_str)
+                if qty < 1 or qty > 10:
+                    return 0, [], f"物品数量需在1~10之间：{part}"
+            except:
+                continue
+
+            name = name.strip()
+            if not name:
+                continue
+
+            # 特殊处理纯“灵石”关键字
+            if name in ("灵石", "stone", "ls", "灵石x", "灵石X"):
+                if stone_amount > 0:
+                    return 0, [], "出现了多个灵石段"
+                stone_amount = qty
+                continue
+
+            # 其它物品
+            goods_id, goods_info = items.get_data_by_item_name(name)
             if not goods_id:
-                return 0, [], f"物品 {item_name} 不存在"
-            
-            # 校验物品类型 (仅限装备、技能)
+                error_msg = f"物品不存在：{name}"
+                continue
+
             item_type = goods_info.get('type', '')
             if item_type not in ['装备', '技能', '药材']:
-                return 0, [], f"物品 {item_name} 类型错误，仅限【装备/技能/药材】"
-            
-            # 校验品阶 (不可为无上)
-            item_level = goods_info.get('level', '')
-            if item_level == '无上':
-                return 0, [], f"物品 {item_name} 品阶为【无上】，禁止赠送"
-            
-            # 校验背包数量 (必须为非绑定)
+                error_msg = f"仅允许赠送【装备/技能/药材】，{name}类型不符合"
+                continue
+
+            if goods_info.get('level') == '无上':
+                error_msg = f"禁止赠送【无上】品阶物品：{name}"
+                continue
+
             trade_num = sql_message.goods_num(user_id, goods_id, num_type='trade')
-            available_num = trade_num
-            
-            if available_num < qty:
-                return 0, [], f"物品 {item_name} 不足，需{qty}个，可送{available_num}个"
-            
+            if trade_num < qty:
+                error_msg = f"{name} 可交易数量不足，仅剩{trade_num}个"
+                continue
+
             items_list.append({
                 'goods_id': goods_id,
-                'name': item_name,
+                'name': name,
                 'type': item_type,
                 'quantity': qty
             })
-    
+            continue
+
+        # ------------------- 尝试 灵石 + 纯数字 -------------------
+        if '灵石' in part:
+            num_part = part.replace('灵石', '').strip()
+            if num_part.isdigit():
+                num = int(num_part)
+                if stone_amount > 0:
+                    return 0, [], "出现了多个灵石段"
+                stone_amount = num
+                continue
+
     if stone_amount == 0 and not items_list:
-        return 0, [], "未指定有效的灵石或物品"
-        
-    return stone_amount, items_list, ""
+        error_msg = "未解析到任何有效的灵石或物品"
+
+    return stone_amount, items_list, error_msg
 
 @give_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
