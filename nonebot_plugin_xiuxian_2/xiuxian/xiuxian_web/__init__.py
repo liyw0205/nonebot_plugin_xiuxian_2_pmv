@@ -119,7 +119,7 @@ ADMIN_COMMANDS = {
 
 # 从配置类获取表结构信息
 def get_config_tables():
-    """从预设配置类获取表结构信息"""
+    """获取所有数据库的表结构，按数据库分组"""
     tables = {
         "主数据库": {
             "path": DATABASE,
@@ -128,9 +128,60 @@ def get_config_tables():
         "虚神界数据库": {
             "path": IMPART_DB,
             "tables": get_impart_table_structure(config_impart)
+        },
+        "游戏数据库": {
+            "path": Path() / "data" / "xiuxian" / "player.db",
+            "tables": get_dynamic_player_tables()
         }
     }
     return tables
+
+def get_dynamic_player_tables():
+    """动态获取 player.db 中所有存在的表及其字段信息"""
+    player_db_path = Path() / "data" / "xiuxian" / "player.db"
+    if not player_db_path.exists():
+        return {}
+
+    conn = None
+    try:
+        conn = sqlite3.connect(player_db_path)
+        cursor = conn.cursor()
+
+        # 获取所有表名
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        result = {}
+        for table_name in table_names:
+            # 获取字段列表
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            fields_info = cursor.fetchall()
+            fields = [row[1] for row in fields_info]
+
+            # 尝试找出主键
+            primary_key = "user_id" if "user_id" in fields else None
+            if not primary_key:
+                # 如果没有 user_id，找第一个 INTEGER PRIMARY KEY
+                for row in fields_info:
+                    if row[5] == 1:  # pk=1 表示主键
+                        primary_key = row[1]
+                        break
+
+            result[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key,
+                "is_dynamic": True    
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"获取 player.db 表结构失败: {e}")
+        return {}
+    finally:
+        if conn:
+            conn.close()
 
 def get_config_table_structure(config):
     """从XiuConfig获取表结构"""
@@ -894,81 +945,93 @@ def row_edit(table_name, row_id):
     # 确定表属于哪个数据库
     db_path = None
     table_info = None
+    is_dynamic_table = False
+    primary_key_field = None  # 主键字段名
     
     for db_name, db_info in all_tables_grouped.items():
         if table_name in db_info["tables"]:
             db_path = db_info["path"]
             table_info = db_info["tables"][table_name]
+            is_dynamic_table = db_info["tables"][table_name].get('is_dynamic', False)
             break
+    
+    if not db_path:
+        # 检查是否是 player.db 的动态表
+        player_db_path = Path() / "data" / "xiuxian" / "player.db"
+        if player_db_path.exists():
+            dynamic_tables = get_dynamic_player_tables()
+            if table_name in dynamic_tables:
+                db_path = player_db_path
+                table_info = dynamic_tables[table_name]
+                is_dynamic_table = True
     
     if not db_path:
         return "表不存在", 404
     
+    # 确定主键字段
+    pk = table_info.get('primary_key', 'user_id' if is_dynamic_table else 'id')
+    if isinstance(pk, list):
+        # 复合主键
+        primary_key_field = pk
+        is_composite_key = True
+    else:
+        # 单主键
+        primary_key_field = pk
+        is_composite_key = False
+    
     # 特殊处理复合主键表
     if table_name == "impart_cards":
-        # 解析复合主键（格式：user_id_card_name）
         key_parts = row_id.split('_')
         if len(key_parts) < 2:
             return "无效的主键格式", 400
-            
-        # 构建复合主键条件
         primary_conditions = {
             "user_id": key_parts[0],
             "card_name": "_".join(key_parts[1:])
         }
-    elif table_name == "back" and "composite_key" in table_info and table_info["composite_key"]:
-        # 其他复合主键表的处理
-        primary_keys = table_info["primary_key"]
+    elif is_composite_key:
         key_parts = row_id.split('_')
-        if len(key_parts) != len(primary_keys):
+        if len(key_parts) != len(primary_key_field):
             return "无效的主键格式", 400
-            
         primary_conditions = {}
-        for i, key in enumerate(primary_keys):
+        for i, key in enumerate(primary_key_field):
             primary_conditions[key] = key_parts[i]
     else:
-        # 普通单主键处理
-        primary_key = table_info.get('primary_key', 'id')
-        primary_conditions = {primary_key: row_id}
+        primary_conditions = {primary_key_field: row_id}
     
     # 确定数据库路径
-    db_path = IMPART_DB if table_name in get_database_tables(IMPART_DB) else DATABASE
+    if is_dynamic_table:
+        db_path = Path() / "data" / "xiuxian" / "player.db"
+    elif table_name in get_database_tables(IMPART_DB):
+        db_path = IMPART_DB
+    else:
+        db_path = DATABASE
     
     if request.method == 'POST':
-        # 处理更新或删除
         action = request.form.get('action')
         
         if action == 'update':
-            # 获取表单数据并进行空值转换
             update_data = {}
             for field in table_info['fields']:
-                if field in request.form:
+                if field in request.form and field not in primary_conditions.keys():
                     value = request.form[field]
-                    # 将空字符串转换为None（NULL）
                     if value == '':
                         update_data[field] = None
                     else:
                         update_data[field] = value
             
-            # 构建UPDATE语句
-            set_clause = ", ".join([f"{field} = ?" for field in update_data.keys()])
-            
-            # 构建WHERE条件（支持复合主键）
-            where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
-            
-            sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_conditions}"
-            
-            # 执行更新
-            params = list(update_data.values()) + list(primary_conditions.values())
-            result = execute_sql(db_path, sql, params)
-            
-            if 'error' in result:
-                return jsonify({"success": False, "error": result['error']})
+            if update_data:
+                set_clause = ", ".join([f"{field} = ?" for field in update_data.keys()])
+                where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+                sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_conditions}"
+                params = list(update_data.values()) + list(primary_conditions.values())
+                result = execute_sql(db_path, sql, params)
+                
+                if 'error' in result:
+                    return jsonify({"success": False, "error": result['error']})
             
             return jsonify({"success": True, "message": "更新成功"})
         
         elif action == 'delete':
-            # 构建DELETE语句（支持复合主键）
             where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
             sql = f"DELETE FROM {table_name} WHERE {where_conditions}"
             result = execute_sql(db_path, sql, list(primary_conditions.values()))
@@ -978,14 +1041,20 @@ def row_edit(table_name, row_id):
             
             return jsonify({"success": True, "message": "删除成功"})
     
-    # GET请求，获取行数据
+    # GET 请求，获取行数据
     where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
     sql = f"SELECT * FROM {table_name} WHERE {where_conditions}"
     row_data = execute_sql(db_path, sql, list(primary_conditions.values()))
     
-    if not row_data:
+    if not row_data or (isinstance(row_data, list) and len(row_data) == 0) or (isinstance(row_data, dict) and not row_data):
         return "记录不存在", 404
-
+    
+    if isinstance(row_data, dict):
+        row_data = [row_data]
+    
+    if not isinstance(row_data, list) or len(row_data) == 0:
+        return "记录不存在", 404
+    
     display_data = {}
     for key, value in row_data[0].items():
         if value is None:
@@ -993,12 +1062,21 @@ def row_edit(table_name, row_id):
         else:
             display_data[key] = value
     
+    # 传递主键字段名给模板（用于导出功能）
+    if is_composite_key:
+        primary_key_fields = primary_key_field  # 列表
+    else:
+        primary_key_fields = [primary_key_field]  # 转为列表
+    
     return render_template(
         'row_edit.html',
         table_name=table_name,
         table_info=table_info,
         row_data=display_data,
-        primary_key=primary_conditions  # 传递主键信息给模板
+        primary_key=primary_conditions,
+        primary_key_fields=primary_key_fields,
+        is_dynamic_table=is_dynamic_table,
+        is_composite_key=is_composite_key
     )
 
 @app.route('/batch_edit/<table_name>', methods=['POST'])
@@ -1012,20 +1090,32 @@ def batch_edit(table_name):
     # 确定表属于哪个数据库
     db_path = None
     table_info = None
+    is_dynamic_table = False  # 标记是否为动态表
     
     for db_name, db_info in all_tables_grouped.items():
         if table_name in db_info["tables"]:
             db_path = db_info["path"]
             table_info = db_info["tables"][table_name]
+            is_dynamic_table = db_info["tables"][table_name].get('is_dynamic', False)
             break
     
+    # 如果表不存在，检查是否是 player.db 的动态表
     if not db_path:
-        return "表不存在", 404
-            
+        player_db_path = Path() / "data" / "xiuxian" / "player.db"
+        if player_db_path.exists():
+            dynamic_tables = get_dynamic_player_tables()
+            if table_name in dynamic_tables:
+                db_path = player_db_path
+                table_info = dynamic_tables[table_name]
+                is_dynamic_table = True
+    
+    if not db_path:
+        return jsonify({"success": False, "error": f"表不存在：{table_name}"})
+    
     # 获取表单数据
     search_field = request.form.get('search_field')
     search_value = request.form.get('search_value')
-    search_condition = request.form.get('search_condition', '=')  # 获取搜索条件
+    search_condition = request.form.get('search_condition', '=')
     batch_field = request.form.get('batch_field')
     operation = request.form.get('operation')
     value = request.form.get('value')
@@ -1039,8 +1129,17 @@ def batch_edit(table_name):
     if (not search_field or search_field == '') and not batch_field:
         return jsonify({"success": False, "error": "全字段搜索时请选择要修改的字段"})
     
-    # 确定数据库路径
-    db_path = IMPART_DB if table_name in get_database_tables(IMPART_DB) else DATABASE
+    # 验证表是否存在
+    try:
+        conn = get_db_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"success": False, "error": f"表不存在：{table_name}"})
+        conn.close()
+    except Exception as e:
+        return jsonify({"success": False, "error": f"检查表失败：{str(e)}"})
     
     try:
         # 构建更新语句
@@ -1056,11 +1155,10 @@ def batch_edit(table_name):
         else:
             return jsonify({"success": False, "error": "无效的操作类型"})
         
-        # 添加WHERE条件
+        # 添加 WHERE 条件
         if not apply_to_all:
             if search_field and search_value:
                 if search_condition == '=':
-                    # 单字段搜索
                     values = search_value.split()
                     if len(values) > 1:
                         condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
@@ -1070,42 +1168,42 @@ def batch_edit(table_name):
                         sql += f" WHERE {search_field} LIKE ?"
                         params.append(f"%{search_value}%")
                 elif search_condition in ('>', '<'):
-                    # 数值比较
                     values = search_value.split()
                     if len(values) == 1:
-                        # 单个值，保持原样的匹配
                         if not search_value.replace('.', '', 1).isdigit():
                             return jsonify({"success": False, "error": "搜索值必须是数值"})
                         sql += f" WHERE {search_field} {search_condition} ?"
                         params.append(float(values[0]))
                     else:
-                        # 两个值，第一个用于比较，第二个用于全字段搜索
                         if not values[0].replace('.', '', 1).isdigit():
                             return jsonify({"success": False, "error": "第一个搜索值必须是数值"})
                         if not values[1]:
                             return jsonify({"success": False, "error": "第二个搜索值不能为空"})
-                        sql += f" WHERE {search_field} {search_condition} ? AND ({' OR '.join([f'{field} LIKE ?' for field in table_info.get('fields', []) if field != table_info.get('primary_key')])})"
-                        params.extend([float(values[0])] + [f"%{values[1]}%" for field in table_info.get('fields', []) if field != table_info.get('primary_key')])
+                        fields = table_info.get('fields', [])
+                        primary_key = table_info.get('primary_key', 'user_id')
+                        searchable_fields = [f for f in fields if f != primary_key]
+                        if searchable_fields:
+                            sql += f" WHERE {search_field} {search_condition} ? AND ({' OR '.join([f'{field} LIKE ?' for field in searchable_fields])})"
+                            params.extend([float(values[0])] + [f"%{values[1]}%" for field in searchable_fields])
+                        else:
+                            sql += f" WHERE {search_field} {search_condition} ?"
+                            params.append(float(values[0]))
                 else:
                     return jsonify({"success": False, "error": "无效的搜索条件"})
             elif search_value:
                 # 全字段搜索
-                tables = get_database_tables(db_path)
-                table_fields = tables.get(table_name, {}).get('fields', [])
-            
-                if table_fields:
+                fields = table_info.get('fields', [])
+                primary_key = table_info.get('primary_key', 'user_id')
+                searchable_fields = [f for f in fields if f != primary_key]
+                
+                if searchable_fields:
                     conditions = []
-                    for field in table_fields:
-                        if field != tables[table_name].get('primary_key'):
-                            conditions.append(f"{field} LIKE ?")
-                            params.append(f"%{search_value}%")
-                    
-                    # 确保有搜索条件时才添加WHERE
-                    if conditions:
-                        sql += f" WHERE ({' OR '.join(conditions)})"
-                    else:
-                        # 如果没有可搜索的字段，不执行任何操作
-                        return jsonify({"success": False, "error": "没有可搜索的字段"})
+                    for field in searchable_fields:
+                        conditions.append(f"{field} LIKE ?")
+                        params.append(f"%{search_value}%")
+                    sql += f" WHERE ({' OR '.join(conditions)})"
+                else:
+                    return jsonify({"success": False, "error": "没有可搜索的字段"})
         
         # 执行更新
         result = execute_sql(db_path, sql, params)
@@ -1121,7 +1219,7 @@ def batch_edit(table_name):
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": f"执行错误: {str(e)}"})
+        return jsonify({"success": False, "error": f"执行错误：{str(e)}"})
 
 @app.route('/commands')
 def commands():

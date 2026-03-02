@@ -39,6 +39,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import BANNED_ITEM_IDS
+from ..xiuxian_buff import trigger_partner_exp_share
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 
@@ -936,13 +937,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if roll <= success_rate:  # 渡劫成功
         sql_message.updata_level(user_id, next_level)
+        share_msg = trigger_partner_exp_share(user_id)
         sql_message.update_power2(user_id)
         clear_user_tribulation_info(user_id)
         
         msg = (
             f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
             f"历经九九雷劫，道友终成{next_level}！\n"
-            f"当前境界：{next_level}"
+            f"当前境界：{next_level}{share_msg}"
         )
     else:  # 渡劫失败
         if has_destiny_pill:  # 使用天命丹避免概率降低
@@ -1057,13 +1059,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 必定成功
     sql_message.updata_level(user_id, next_level)
+    share_msg = trigger_partner_exp_share(user_id)
     sql_message.update_power2(user_id)
     clear_user_tribulation_info(user_id)
     
     msg = (
         f"✨天命所归，渡劫成功✨\n"
         f"道友轻松突破至{next_level}！\n"
-        f"当前境界：{next_level}"
+        f"当前境界：{next_level}{share_msg}"
     )
     
     await handle_send(bot, event, msg)
@@ -1423,11 +1426,12 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
+        share_msg = trigger_partner_exp_share(user_id)
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
-        msg = f"恭喜道友突破{le[0]}成功！"
+        msg = f"恭喜道友突破{le[0]}成功！{share_msg}"
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
     else:
@@ -1515,10 +1519,11 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         elif isinstance(le, list):
             # 突破成功
             sql_message.updata_level(user_id, le[0])
+            share_msg = trigger_partner_exp_share(user_id)
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
-            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！"
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}"
             success = True
             break
     
@@ -1622,13 +1627,14 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
+        share_msg = trigger_partner_exp_share(user_id)
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         now_exp = int(int(exp) * 0.1)
         sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
-        msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！"
+        msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！{share_msg}"
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
     else:
@@ -1729,11 +1735,12 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
+        share_msg = trigger_partner_exp_share(user_id)
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
-        msg = f"恭喜道友突破{le[0]}成功"
+        msg = f"恭喜道友突破{le[0]}成功{share_msg}"
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
     else:
@@ -1840,10 +1847,11 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
             pills_used += 1
             sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
             sql_message.updata_level(user_id, le[0])
+            share_msg = trigger_partner_exp_share(user_id)
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
-            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！\n"
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}\n"
             success = True
             break
     
@@ -1962,6 +1970,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
             pills_used += 1
             sql_message.update_back_j(user_id, 1998, 1)  # 消耗1个渡厄金丹
             sql_message.updata_level(user_id, le[0])
+            share_msg = trigger_partner_exp_share(user_id)
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -1970,7 +1979,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
             now_exp = int(int(exp) * 0.1)
             sql_message.update_exp(user_id, now_exp)
             
-            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！修为增加{number_to(now_exp)}\n"
+            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！修为增加{number_to(now_exp)}{share_msg}\n"
             success = True
             break
     

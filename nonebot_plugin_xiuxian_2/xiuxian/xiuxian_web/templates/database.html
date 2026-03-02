@@ -38,13 +38,14 @@
         <h3><i class="fas fa-list"></i> 数据库列表</h3>
         
         {% for db_name, db_info in tables.items() %}
+        {% set db_id = db_name|replace(' ', '_')|replace('(', '')|replace(')', '')|replace('.', '_') %}
         <div class="database-card card animate-in delay-{{ loop.index + 2 }}">
-            <!-- 修改这里：将整个数据库头部区域设置为可点击 -->
-            <div class="database-header" onclick="toggleDatabase('{{ db_name }}')" style="cursor: pointer;">
+            <!-- 数据库头部区域 - 可点击展开/收起 -->
+            <div class="database-header" onclick="toggleDatabase('{{ db_id }}')" style="cursor: pointer;">
                 <div class="database-info">
                     <h4>
                         <a href="javascript:void(0)" class="db-toggle">
-                            <i class="fas fa-chevron-right"></i> {{ db_name }}
+                            <i class="fas fa-chevron-right" id="icon_{{ db_id }}"></i> {{ db_name }}
                         </a>
                     </h4>
                     <p class="database-path"><i class="fas fa-folder"></i> {{ db_info.path }}</p>
@@ -52,7 +53,9 @@
                 <span class="table-count">{{ db_info.tables|length }} 张表</span>
             </div>
             
-            <div id="{{ db_name }}_tables" class="database-tables" style="display: none;">
+            <!-- 表列表容器 -->
+            <div id="{{ db_id }}_tables" class="database-tables" style="display: none;">
+                {% if db_info.tables|length > 0 %}
                 <div class="tables-grid">
                     {% for table_name, table_info in db_info.tables.items() %}
                     <div class="table-card">
@@ -62,6 +65,9 @@
                         <div class="table-info">
                             <h5>{{ table_info.name }}</h5>
                             <p>{{ table_name }}</p>
+                            {% if table_info.get('is_dynamic') %}
+                            <span class="dynamic-badge" style="background: #FF9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7em;">动态表</span>
+                            {% endif %}
                         </div>
                         <div class="table-actions">
                             <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-primary btn-sm">
@@ -71,6 +77,12 @@
                     </div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <div style="padding: 20px; text-align: center; color: #666;">
+                    <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                    <p>暂无数据表</p>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -78,10 +90,10 @@
 </div>
 
 <script>
-function toggleDatabase(dbName) {
-    const tableContainer = document.getElementById(dbName + '_tables');
-    const toggleIcon = document.querySelector(`#${dbName}_tables`).previousElementSibling
-        .querySelector('.db-toggle i');
+// 数据库展开/收起功能
+function toggleDatabase(dbId) {
+    const tableContainer = document.getElementById(dbId + '_tables');
+    const toggleIcon = document.getElementById('icon_' + dbId);
     
     if (tableContainer.style.display === 'none') {
         tableContainer.style.display = 'block';
@@ -112,5 +124,68 @@ document.addEventListener('DOMContentLoaded', function() {
         card.style.animationDelay = `${index * 0.1}s`;
     });
 });
+
+// 添加滑动动画样式
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .dynamic-badge {
+        display: inline-block;
+        margin-top: 5px;
+    }
+    
+    .database-header {
+        transition: all 0.3s ease;
+    }
+    
+    .database-header:hover {
+        background: rgba(179, 224, 255, 0.2);
+        border-radius: 8px;
+    }
+    
+    .db-toggle {
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .db-toggle:hover {
+        color: var(--accent-color);
+    }
+    
+    .table-card {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .table-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: linear-gradient(180deg, var(--accent-color), #8ecfff);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .table-card:hover::before {
+        opacity: 1;
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}

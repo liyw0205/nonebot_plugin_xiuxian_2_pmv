@@ -2048,6 +2048,40 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, rank_msg)
     await partner_rank.finish()
 
+def trigger_partner_exp_share(user_id, new_level):
+    partner_data = load_partner(user_id)
+    if partner_data and partner_data.get('partner_id'):
+        partner_id = partner_data['partner_id']
+    
+        # 获取双方当前修为
+        self_exp = sql_message.get_user_info_with_id(user_id)['exp']
+        partner_info = sql_message.get_user_info_with_id(partner_id)
+        partner_exp = partner_info['exp']
+        partner_name = partner_info['user_name']
+    
+        # 计算可赠送的修为量：突破者当前修为的1%
+        give_exp = int(self_exp * 0.01)
+    
+        # 上限：不得超过道侣当前修为的10%
+        max_give = int(partner_exp * 0.10)
+        give_exp = min(give_exp, max_give)
+    
+        if give_exp > 0:
+            # 随机触发概率（基础5%，每1000亲密度+1%，上限50%）
+            affection = partner_data.get('affection', 0)
+            trigger_rate = min(40 + (affection // 1000), 50)
+        
+            if random.randint(1, 100) <= trigger_rate:
+                # 给道侣加修为
+                sql_message.update_exp(partner_id, give_exp)
+                sql_message.update_power2(partner_id)  # 更新战力
+            
+                # 记录日志
+                log_message(user_id, f"突破{new_level}，道侣共享修为：{number_to(give_exp)}")
+                log_message(partner_id, f"道侣突破{new_level}，获得共享修为：{number_to(give_exp)}")
+                return f"\n道侣{partner_name}感受到你的突破，获得{number_to(give_exp)}修为！"
+    return ""
+
 from nonebot.log import logger
 # 获取所有用户的 ID
 def get_all_user_ids():
