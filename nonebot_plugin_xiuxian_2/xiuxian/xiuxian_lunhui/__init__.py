@@ -201,7 +201,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await Infinite_reincarnation.finish()
 
-@retrieve_memory.handle()
+@retrieve_memory.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -231,7 +231,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
-@view_memory.handle()
+@view_memory.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)

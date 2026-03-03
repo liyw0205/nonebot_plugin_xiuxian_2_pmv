@@ -20,6 +20,7 @@ from nonebot.adapters.onebot.v11 import (
     ActionFailed
 )
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
+from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
@@ -39,7 +40,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_weapon_info_msg, get_armor_info_msg,
-    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
+    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate, OtherSet
 )
 from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_boss, use_rift_speedup, use_rift_big_speedup
 from ..xiuxian_impart import use_wishing_stone, use_love_sand
@@ -1674,7 +1675,10 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20014: use_work_order,
         20015: use_work_capture_order,
         20017: use_two_exp_token,
-        20019: use_unbind_charm
+        20019: use_unbind_charm,
+        20020: use_spirit_stone_bag,
+        20021: use_tianji_stone_trigger,
+        20022: use_three_cultivation_pill
     }
     handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
@@ -1807,7 +1811,183 @@ async def use_unbind_charm(bot, event, item_id, num):
         msg = "解绑失败，请稍后重试！"
     
     await handle_send(bot, event, msg)
+
+async def use_spirit_stone_bag(bot, event, item_id, num):
+    """使用灵石福袋"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info["user_id"]
+
+    tiers = [
+        (72,   5120000,  "普通"),
+        (23, 12800000,  "优质"),
+        (5,  64800000,  "极品！✨")
+    ]
+
+    total_stone = 0
+    results = []
+
+    for _ in range(num):
+        roll_stone = random.choices(
+            [t[1] for t in tiers],
+            weights=[t[0] for t in tiers],
+            k=1
+        )[0]
+
+        desc = next(t[2] for t in tiers if t[1] == roll_stone)
+        total_stone += roll_stone
+        results.append(f"{desc}档：获得 {number_to(roll_stone)} 灵石")
+
+    # 加灵石 & 扣道具
+    sql_message.update_ls(user_id, total_stone, 1)
+    sql_message.update_back_j(user_id, item_id, num=num)
+
+    # 消息
+    lines = [
+        f"☆── 灵石福袋 ×{num} ──☆",
+        f"累计获得：{number_to(total_stone)} 灵石",
+        "──────────────",
+        *results,
+        "──────────────",
+        "祝道友财源滚滚～"
+    ]
+
+    await handle_send(bot, event, "\n".join(lines))
+
+async def use_tianji_stone_trigger(bot, event, item_id, num):
+    """使用天机灵石引"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info["user_id"]
+
+    MIN_STONE = 10_000_000
+    MAX_STONE = 100_000_000
+    total_stone = 0
+    results = []
+
+    for i in range(num):
+        roll = random.randint(MIN_STONE, MAX_STONE)
+        total_stone += roll
+
+        if roll <= 15_000_000:
+            desc = "微薄"
+        elif roll <= 50_000_000:
+            desc = "尚可"
+        elif roll <= 75_000_000:
+            desc = "丰厚"
+        else:
+            desc = "惊人！✨"
+
+        results.append(f"第{i+1}次：{desc} → {number_to(roll)} 灵石")
+
+    # 加灵石 & 扣道具
+    sql_message.update_ls(user_id, total_stone, 1)
+    sql_message.update_back_j(user_id, item_id, num=num)
+
+    # 消息
+    lines = [
+        f"☆── 天机灵石引 ×{num} ──☆",
+        f"累计获得：{number_to(total_stone)} 灵石",
+        "──────────────",
+        *results,
+        "──────────────",
+        "天机莫测，道友保重……"
+    ]
+
+    await handle_send(bot, event, "\n".join(lines))
+
+async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int = 1):
+    """使用三转玄丹"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info['user_id']
+    user_mes = sql_message.get_user_info_with_id(user_id)
+
+    if not user_mes:
+        await handle_send(bot, event, "获取用户信息失败！")
+        return
+
+    level = user_mes['level']
+    current_exp = user_mes['exp']
+
+    # 获取单次修炼的修为
+    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)           # 灵根倍率
+    realm_rate = jsondata.level_data()[level]["spend"]                               # 境界倍率
+
+    user_buff_data = UserBuffDate(user_id)
+    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
+    mainbuffdata = user_buff_data.get_user_main_buff_data()
+    mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata else 0
+    mainbuffcloexp   = mainbuffdata['clo_exp']   if mainbuffdata else 0
+
+    # 单次普通修炼的修为
+    single_exp = int(
+        XiuConfig().closing_exp * 
+        (level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data))
+    )
     
+    exp_rate = random.uniform(0.9, 1.3)
+    single_exp = int(single_exp * exp_rate)
+
+    # 总共获得的修为
+    total_exp_gain = single_exp * num * 333
+
+    # 计算当前境界上限
+    max_exp = int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
+    can_gain = max_exp - current_exp
+    can_gain = max(0, can_gain)
+
+    # 实际增加的修为（不超过上限）
+    real_gain = min(total_exp_gain, can_gain)
+
+    # 更新修为
+    sql_message.update_exp(user_id, real_gain)
+    sql_message.update_power2(user_id)
+
+    # 更新气血真元
+    result_msg, result_hp_mp = OtherSet().send_hp_mp(
+        user_id, 
+        int(current_exp / 10), 
+        int(current_exp / 20)
+    )
+    sql_message.update_user_attribute(
+        user_id, 
+        result_hp_mp[0], 
+        result_hp_mp[1], 
+        int(result_hp_mp[2] / 10)
+    )
+
+    # 扣除道具
+    sql_message.update_back_j(user_id, item_id, num=num, use_key=1)
+
+    # 提示语
+    msg_lines = [
+        f"☆── 使用 三转玄丹 ×{num} ──☆",
+        f"获得：{number_to(real_gain)}修为{result_msg[0]}{result_msg[1]}"
+    ]
+
+    if real_gain < total_exp_gain:
+        msg_lines.append("（已达当前境界上限，剩余修为溢出）")
+
+    msg_lines.extend([
+        "──────────────",
+        "玄丹入腹，灵气暴涨，道友修为精进！"
+    ])
+
+    await handle_send(bot, event, "\n".join(msg_lines))
+
 @chakan_wupin.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def chakan_wupin_(
     bot: Bot, 
