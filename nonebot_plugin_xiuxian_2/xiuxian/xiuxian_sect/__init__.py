@@ -1180,7 +1180,9 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             
             # 按职位排序：宗主(0) > 副宗主(1) > 长老(2) > 护法(3) > 执事(4) > 亲传弟子(5) > 大师兄(6) > 大师姐(7) > 二师兄(8) > 小师弟(9) > 小师妹(10) > 内门弟子(11) > 外门弟子(12) > 守山弟子(13) > 记名弟子(14) > 杂役(15)
             sorted_users = sorted(userlist, key=lambda x: x['sect_position'])
-            
+
+            # 构建成员详细信息
+            title = [f"☆【{sect_info['sect_name']}】的成员信息☆"]          
             # 构建成员信息列表
             msg_list = []
             
@@ -1195,7 +1197,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     position_count[position] += 1
                 
                 # 显示职位人数统计
-                msg_list.append("☆------宗门职位统计------☆")
+                title.append("☆------宗门职位统计------☆")
                 
                 # 按职位编号顺序显示
                 for pos_id in sorted(position_count.keys()):
@@ -1204,26 +1206,18 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     max_count = pos_data.get("max_count", 0)
                     
                     count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
-                    msg_list.append(f"{pos_title}：{count_info}")
+                    title.append(f"{pos_title}：{count_info}")
                 
-                msg_list.append("")  # 空行分隔
+            title = "\n".join(title)
             
-            # 构建成员详细信息
-            title = f"☆【{sect_info['sect_name']}】的成员信息☆"
             
-            # 每15条消息为一页（第一页已经显示了统计信息，所以成员信息从第16条开始）
-            page_size = 15
+            # 每10条消息为一页（第一页已经显示了统计信息，所以成员信息从第16条开始）
+            page_size = 10
             start_idx = (current_page - 1) * page_size
             end_idx = start_idx + page_size
             
-            # 如果是第一页，需要调整显示数量（因为第一页已经显示了统计信息）
-            if current_page == 1:
-                # 第一页显示10个成员信息（为统计信息留出空间）
-                display_size = 10
-                current_msgs = sorted_users[start_idx:start_idx + display_size]
-            else:
-                # 其他页正常显示15个成员
-                current_msgs = sorted_users[start_idx:end_idx]
+            # 其他页正常显示10个成员
+            current_msgs = sorted_users[start_idx:end_idx]
             
             # 添加成员详细信息
             for idx, user in enumerate(current_msgs, start_idx + 1):
@@ -1234,18 +1228,12 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             
             # 计算总页数（考虑第一页的特殊情况）
             total_members = len(sorted_users)
-            if current_page == 1:
-                # 第一页：统计信息 + 10个成员
-                remaining_members = max(0, total_members - 10)
-                total_pages = 1 + (remaining_members + page_size - 1) // page_size
-            else:
-                # 其他页：每页15个成员
-                total_pages = (total_members + page_size - 1) // page_size
+            total_pages = (total_members + page_size - 1) // page_size
             
             # 添加页脚
             footer = f"发送'宗门成员查看 页码'查看其他页（共{total_pages}页）"
             msg_list.append(footer)
-            
+            page = ["翻页", f"查看宗门成员{current_page + 1}", "变更", "宗门职位变更", "踢出", "踢出宗门", f"{current_page}/{total_pages}"]
             # 发送消息
             try:
                 await send_msg_handler(
@@ -1254,7 +1242,8 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     '宗门成员', 
                     bot.self_id, 
                     msg_list,
-                    title=title
+                    title=title,
+                    page=page
                 )
             except ActionFailed:
                 # 如果转发消息失败，改为普通消息发送
