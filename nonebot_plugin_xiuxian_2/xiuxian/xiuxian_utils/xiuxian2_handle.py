@@ -265,6 +265,15 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         else:
             return 0
 
+    def get_user_count_by_level(self, level_name: str) -> int:
+        """查询指定境界的人数"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM user_xiuxian WHERE level = ?",
+            (level_name,)
+        )
+        return cursor.fetchone()[0]
+
     def total_items_quantity(self):
         """获取全部用户背包的物品数量总合"""
         cur = self.conn.cursor()
@@ -662,11 +671,50 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.conn.commit()
 
     def ban_user(self, user_id):
-        """小黑屋"""
-        sql = f"UPDATE user_xiuxian SET is_ban=1 WHERE user_id=?"
+        """
+        将用户关进小黑屋（设置 is_ban = 1）
+        """
         cur = self.conn.cursor()
+    
+        cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+    
+        if not result:
+            return False
+    
+        if result[0] == 1:
+            return False  # 已经是被封状态
+    
+        sql = "UPDATE user_xiuxian SET is_ban = 1 WHERE user_id = ?"
         cur.execute(sql, (user_id,))
         self.conn.commit()
+    
+        return True
+
+    def unban_user(self, user_id):
+        """
+        解除用户小黑屋状态（将 is_ban 设置为 0）
+        """
+        cur = self.conn.cursor()
+    
+        # 先检查用户是否存在且确实被封禁
+        cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+    
+        if not result:
+            # 用户不存在
+            return False
+    
+        if result[0] == 0:
+            # 本来就没被封禁
+            return False
+    
+        # 执行解除
+        sql = "UPDATE user_xiuxian SET is_ban = 0 WHERE user_id = ?"
+        cur.execute(sql, (user_id,))
+        self.conn.commit()
+    
+        return True
 
     def update_mixelixir_num(self, user_id):
         """增加炼丹次数"""

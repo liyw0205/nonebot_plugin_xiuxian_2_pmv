@@ -86,6 +86,7 @@ destiny_tribulation = on_command("天命渡劫", priority=6, block=True)
 heart_devil_tribulation = on_command("渡心魔劫", priority=6, block=True)
 fusion_destiny_tribulation_pill = on_command("融合天命渡劫丹", aliases={"合成天命渡劫丹"}, priority=5, block=True)
 fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"}, priority=5, block=True)
+xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
 【灵根体系】🌿
@@ -937,7 +938,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if roll <= success_rate:  # 渡劫成功
         sql_message.updata_level(user_id, next_level)
-        share_msg = trigger_partner_exp_share(user_id)
+        share_msg = trigger_partner_exp_share(user_id, next_level)
         sql_message.update_power2(user_id)
         clear_user_tribulation_info(user_id)
         
@@ -1059,7 +1060,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 必定成功
     sql_message.updata_level(user_id, next_level)
-    share_msg = trigger_partner_exp_share(user_id)
+    share_msg = trigger_partner_exp_share(user_id, next_level)
     sql_message.update_power2(user_id)
     clear_user_tribulation_info(user_id)
     
@@ -1426,7 +1427,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id)
+        share_msg = trigger_partner_exp_share(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1519,7 +1520,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         elif isinstance(le, list):
             # 突破成功
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id)
+            share_msg = trigger_partner_exp_share(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -1627,7 +1628,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id)
+        share_msg = trigger_partner_exp_share(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1735,7 +1736,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id)
+        share_msg = trigger_partner_exp_share(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1847,7 +1848,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
             pills_used += 1
             sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id)
+            share_msg = trigger_partner_exp_share(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -1970,7 +1971,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
             pills_used += 1
             sql_message.update_back_j(user_id, 1998, 1)  # 消耗1个渡厄金丹
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id)
+            share_msg = trigger_partner_exp_share(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -3281,3 +3282,31 @@ async def clear_all_xiangyuan():
             continue
     
     return f"已清空{total_groups}个群{total_gifts}个记录，退还灵石{number_to(total_refund_stone)}，物品{total_refund_items}个"
+
+@xiuxian_world_info.handle(parameterless=[])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """
+    修仙界信息
+    """
+
+    # 获取所有境界列表（从低到高）
+    _, all_ranks = convert_rank("江湖好手")
+
+    # 构建境界 → 人数 的映射
+    realm_count = {}
+    for rank in all_ranks:
+        count = sql_message.get_user_count_by_level(rank)
+        realm_count[rank] = count
+
+    total_users = sum(realm_count.values())
+
+    lines = []
+    lines_title = f"┌─── 修仙界概况 ───┐"
+    lines_title += f"  当前共有道友 {number_to(total_users)} 人"
+    lines_title += f"└────────────┘"
+    for rank in all_ranks:
+        cnt = realm_count.get(rank, 0)
+        if cnt > 0:
+            lines.append(f"  {rank.ljust(8)} : {number_to(cnt)} 人")
+                
+    await send_msg_handler(bot, event, '修仙界信息', bot.self_id, lines, title=lines_title)

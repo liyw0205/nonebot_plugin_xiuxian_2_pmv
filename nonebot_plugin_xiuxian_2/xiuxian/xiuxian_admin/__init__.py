@@ -34,7 +34,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user, number_to, get_msg_pic, handle_send, generate_command
+    check_user, number_to, get_msg_pic, handle_send, send_msg_handler, generate_command
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.markdown_segment import MessageSegmentPlus, markdown_param
@@ -63,130 +63,154 @@ training_reset = on_command("重置历练", permission=SUPERUSER, priority=6, bl
 boss_reset = on_command("重置世界BOSS", permission=SUPERUSER, priority=6, block=True)
 tower_reset = on_command("重置通天塔", permission=SUPERUSER, priority=5, block=True)
 items_refresh = on_command("重载items", permission=SUPERUSER, priority=5, block=True)
+blackhouse = on_command("小黑屋", permission=SUPERUSER, priority=10, block=True)
+unblackhouse = on_command("解除小黑屋", aliases={"放出小黑屋", "解禁"}, permission=SUPERUSER, priority=10, block=True)
+view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, permission=SUPERUSER, priority=10, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """神秘力量 - 给玩家或全服发放灵石"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if not args:
-        msg = f"请输入正确指令！例如：神秘力量 灵石数量\n：神秘力量 道号 灵石数量"
-        await handle_send(bot, event, msg)
-        await gm_command.finish()
-        
-    if len(arg_list) < 2:
-        stone_num = str(arg_list[0])  # 灵石数
-        nick_name = None
-    else:
-        stone_num = arg_list[1]  # 灵石数
-        nick_name = arg_list[0]  # 道号
+    """神秘力量 [数量] [目标]"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    
+    plain_args = args.extract_plain_text().strip().split()
+    if not plain_args:
+        await handle_send(bot, event, "用法：神秘力量 数量 [all/道号]\n示例：神秘力量 10000\n神秘力量 -5000 all")
+        return
 
-    give_stone_num = int(stone_num)
-    if int(stone_num) > 0:
-        give_stone_key = 1
+    # 数量必填，且是第一个参数
+    try:
+        amount_str = plain_args[0]
+        amount = int(amount_str)
+    except ValueError:
+        await handle_send(bot, event, "数量必须是整数（支持负数）")
+        return
+
+    # 目标解析（从第二个参数开始）
+    target = None
+    if len(plain_args) >= 2:
+        target = plain_args[1]
+
+    # 优先找艾特
+    at_qq = None
+    for seg in args:
+        if seg.type == "at":
+            at_qq = seg.data.get("qq", "")
+            break
+
+    if at_qq:
+        user_id = at_qq
+        user = sql_message.get_user_info_with_id(user_id)
+        if not user:
+            await handle_send(bot, event, "该艾特用户尚未踏入修仙界")
+            return
+        target_name = user['user_name']
+    elif target == "all":
+        user_id = None      # 代表全服
+        target_name = "全服"
+    elif target:
+        user = sql_message.get_user_info_with_name(target)
+        if not user:
+            await handle_send(bot, event, f"未找到道号为 {target} 的修士")
+            return
+        user_id = user['user_id']
+        target_name = user['user_name']
     else:
-        give_stone_key = 2
-    # 遍历Message对象，寻找艾特信息
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
-        if give_message:
-            give_qq = give_message['user_id']
-        else:
-            give_qq = "000000"
-    if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
-        if give_user:
-            sql_message.update_ls(give_qq, give_stone_num, give_stone_key)  # 增加用户灵石
-            msg = f"共赠送{number_to(int(give_stone_num))}枚灵石给{give_user['user_name']}道友！"
-            await handle_send(bot, event, msg)
-            await gm_command.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await gm_command.finish()
-    else:
-        sql_message.update_ls_all(give_stone_num)
-        msg = f"全服通告：赠送所有用户{number_to(int(give_stone_num))}灵石,请注意查收！"
+        # 默认给自己
+        _, user, _ = check_user(event)
+        if not user:
+            await handle_send(bot, event, "您尚未踏入修仙界，无法给自己发放")
+            return
+        user_id = user['user_id']
+        target_name = user['user_name']
+
+    # 执行发放/扣除
+    if user_id is None:  # 全服
+        sql_message.update_ls_all(amount)
+        action = "增加" if amount > 0 else "扣除"
+        msg = f"全服通告：{action}{number_to(abs(amount))}枚灵石，请注意查收！"
         await handle_send(bot, event, msg)
+        # 全服广播（原有逻辑）
         enabled_groups = JsonConfig().get_enabled_groups()
-        for group_id in enabled_groups:
-            bot = get_bot()
-            if int(group_id) == event.group_id:
+        for gid in enabled_groups:
+            if str(gid) == str(event.group_id):
                 continue
             try:
                 if XiuConfig().img:
                     pic = await get_msg_pic(msg)
-                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
+                    await bot.send_group_msg(group_id=int(gid), message=MessageSegment.image(pic))
                 else:
-                    await bot.send_group_msg(group_id=int(group_id), message=msg)
-            except ActionFailed:  # 发送群消息失败
-                continue
-    await gm_command.finish()
+                    await bot.send_group_msg(group_id=int(gid), message=msg)
+            except:
+                pass
+    else:  # 单人
+        key = 1 if amount > 0 else 2
+        sql_message.update_ls(user_id, abs(amount), key)
+        action = "赠送" if amount > 0 else "扣除"
+        msg = f"成功{action}{number_to(abs(amount))}枚灵石给 {target_name} 道友！"
+        await handle_send(bot, event, msg)
 
 # GM加思恋结晶
 @ccll_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """传承力量 - 给玩家或全服发放思恋结晶"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if not args:
-        msg = f"请输入正确指令！例如：传承力量 思恋结晶数量\n：传承力量 道号 思恋结晶数量"
-        await handle_send(bot, event, msg)
-        await ccll_command.finish()
-        
-    if len(arg_list) < 2:
-        stone_num = str(arg_list[0])  # 思恋结晶数
-        nick_name = None
-    else:
-        stone_num = arg_list[1]  # 思恋结晶数
-        nick_name = arg_list[0]  # 道号
+    """传承力量 [数量] [目标]"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    
+    plain_args = args.extract_plain_text().strip().split()
+    if not plain_args:
+        await handle_send(bot, event, "用法：传承力量 数量 [all/道号]\n示例：传承力量 888 all")
+        return
 
-    give_stone_num = stone_num
-    # 遍历Message对象，寻找艾特信息
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
-        if give_message:
-            give_qq = give_message['user_id']
-        else:
-            give_qq = "000000"
-    if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
-        if give_user:
-            xiuxian_impart.update_stone_num(give_stone_num, give_qq, 1)  # 增加用户思恋结晶
-            msg = f"共赠送{number_to(int(give_stone_num))}枚思恋结晶给{give_user['user_name']}道友！"
-            await handle_send(bot, event, msg)
-            await ccll_command.finish()
-        else:
-            msg = f"对方未踏入修仙界，不可赠送！"
-            await handle_send(bot, event, msg)
-            await ccll_command.finish()
+    try:
+        amount = int(plain_args[0])
+    except ValueError:
+        await handle_send(bot, event, "数量必须是整数（支持负数）")
+        return
+
+    target = plain_args[1] if len(plain_args) >= 2 else None
+
+    at_qq = None
+    for seg in args:
+        if seg.type == "at":
+            at_qq = seg.data.get("qq", "")
+            break
+
+    if at_qq:
+        user_id = at_qq
+        user = sql_message.get_user_info_with_id(user_id)
+        if not user:
+            await handle_send(bot, event, "该用户尚未踏入修仙界")
+            return
+        target_name = user['user_name']
+    elif target == "all":
+        user_id = None
+        target_name = "全服"
+    elif target:
+        user = sql_message.get_user_info_with_name(target)
+        if not user:
+            await handle_send(bot, event, f"未找到道号 {target}")
+            return
+        user_id = user['user_id']
+        target_name = user['user_name']
     else:
-        xiuxian_impart.update_impart_stone_all(give_stone_num)
-        msg = f"全服通告：赠送所有用户{number_to(int(give_stone_num))}思恋结晶,请注意查收！"
-        await handle_send(bot, event, msg)
-        enabled_groups = JsonConfig().get_enabled_groups()
-        for group_id in enabled_groups:
-            bot = get_bot()
-            if int(group_id) == event.group_id:
-                continue
-            try:
-                if XiuConfig().img:
-                    pic = await get_msg_pic(msg)
-                    await bot.send_group_msg(group_id=int(group_id), message=MessageSegment.image(pic))
-                else:
-                    await bot.send_group_msg(group_id=int(group_id), message=msg)
-            except ActionFailed:  # 发送群消息失败
-                continue
-    await ccll_command.finish()
+        _, user, _ = check_user(event)
+        if not user:
+            await handle_send(bot, event, "您尚未加入修仙界")
+            return
+        user_id = user['user_id']
+        target_name = user['user_name']
+
+    if user_id is None:  # 全服
+        xiuxian_impart.update_impart_stone_all(amount)
+        action = "增加" if amount > 0 else "扣除"
+        msg = f"全服通告：{action}{number_to(abs(amount))}枚思恋结晶，请查收！"
+    else:
+        key = 1 if amount > 0 else 2
+        xiuxian_impart.update_stone_num(abs(amount), user_id, key)
+        action = "赠送" if amount > 0 else "扣除"
+        msg = f"成功{action}{number_to(abs(amount))}枚思恋结晶给 {target_name}！"
+
+    await handle_send(bot, event, msg)
 
 @adjust_exp_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -250,86 +274,133 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
 @zaohua_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """造化力量 - 修改玩家境界"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if not args:
-        msg = f"请输入正确指令！例如：造化力量 道号 境界名"
-        await handle_send(bot, event, msg)
-        await zaohua_xiuxian.finish()
-    if len(arg_list) < 2:
-        jj_name = arg_list[0]
+    """
+    造化力量 境界名 [道号]
+    造化力量 境界名    ← 默认给自己
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+    plain_text = args.extract_plain_text().strip()
+    if not plain_text:
+        await handle_send(bot, event, "用法：造化力量 境界名 [道号]\n示例：造化力量 化神境圆满\n造化力量 祭道境 @某人")
+        return
+
+    parts = plain_text.split()
+    level_name = parts[0]
+
+    # 目标解析
+    target_user = None
+    target_qq = None
+
+    # 优先找艾特
+    for seg in args:
+        if seg.type == "at":
+            target_qq = seg.data.get("qq", "")
+            break
+
+    if target_qq:
+        target_user = sql_message.get_user_info_with_id(target_qq)
+    elif len(parts) >= 2:
+        # 最后一个参数视为道号
+        dao_name = parts[-1]
+        target_user = sql_message.get_user_info_with_name(dao_name)
+        if target_user:
+            target_qq = target_user['user_id']
     else:
-        jj_name = arg_list[1]
-        
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
-    else:
-        give_user = sql_message.get_user_info_with_name(arg_list[0])
-        give_qq = give_user['user_id']
-    if give_user:
-        level = jj_name
-        if len(jj_name) == 5:
-            level = jj_name
-        elif len(jj_name) == 3:
-            level = (jj_name + '圆满')
-        if convert_rank(level)[0] is None:
-            msg = f"境界错误，请输入正确境界名！"
-            await handle_send(bot, event, msg)
-            await zaohua_xiuxian.finish()
-        max_exp = int(jsondata.level_data()[level]["power"])
-        exp = give_user['exp']
-        now_exp = exp - 100
-        sql_message.update_j_exp(give_qq, now_exp) #重置用户修为
-        sql_message.update_exp(give_qq, max_exp)  # 更新修为
-        sql_message.updata_level(give_qq, level)  # 更新境界
-        sql_message.update_user_hp(give_qq)  # 重置用户状态
-        sql_message.update_power2(give_qq)  # 更新战力
-        msg = f"{give_user['user_name']}道友的境界已变更为{level}！"
-        await handle_send(bot, event, msg)
-        await zaohua_xiuxian.finish()
-    else:
-        msg = f"对方未踏入修仙界，不可修改！"
-        await handle_send(bot, event, msg)
-        await zaohua_xiuxian.finish()
+        # 默认给自己
+        _, user, _ = check_user(event)
+        if user:
+            target_user = user
+            target_qq = user['user_id']
+
+    if not target_user or not target_qq:
+        await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
+        return
+
+    # 境界处理
+    level = level_name
+    if len(level_name) == 3:
+        level = level_name + '圆满'
+    # elif len(level_name) == 5:  # 已经是完整境界名
+    #     pass
+
+    rank_info = convert_rank(level)
+    if rank_info[0] is None:
+        await handle_send(bot, event, f"境界「{level_name}」不存在或格式错误")
+        return
+
+    max_exp = int(jsondata.level_data()[level]["power"])
+    # 重置修为到该境界满经验
+    sql_message.update_j_exp(target_qq, target_user['exp'] - 100)   # 清掉多余修为
+    sql_message.update_exp(target_qq, max_exp)
+    sql_message.updata_level(target_qq, level)
+    sql_message.update_user_hp(target_qq)
+    sql_message.update_power2(target_qq)
+
+    msg = f"已将 {target_user['user_name']} 的境界变更为 【{level}】！"
+    await handle_send(bot, event, msg)
 
 @gmm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """轮回力量 - 修改玩家灵根"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
-    arg_list = args.extract_plain_text().split()
-    if not args:
-        msg = f"请输入正确指令！例如：轮回力量 道号 8(1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒,9为命运)"
-        await handle_send(bot, event, msg)
-        await gmm_command.finish()
-    if len(arg_list) < 2:
-        root_name_list = arg_list[0]
+    """
+    轮回力量 灵根编号 [道号]
+    轮回力量 8          ← 默认给自己改成永恒
+    轮回力量 3 @某人
+    灵根编号说明：
+    1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+    plain_text = args.extract_plain_text().strip()
+    if not plain_text:
+        await handle_send(bot, event,
+            "用法：轮回力量 灵根编号 [道号]\n"
+            "示例：轮回力量 8\n"
+            "轮回力量 3 @玩家\n"
+            "编号：1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运")
+        return
+
+    parts = plain_text.split()
+    try:
+        root_id = int(parts[0])
+        if root_id < 1 or root_id > 9:
+            raise ValueError
+    except:
+        await handle_send(bot, event, "第一个参数必须是1~9的整数（灵根编号）")
+        return
+
+    # 目标解析
+    target_user = None
+    target_qq = None
+
+    # 优先艾特
+    for seg in args:
+        if seg.type == "at":
+            target_qq = seg.data.get("qq", "")
+            break
+
+    if target_qq:
+        target_user = sql_message.get_user_info_with_id(target_qq)
+    elif len(parts) >= 2:
+        dao_name = parts[-1]
+        target_user = sql_message.get_user_info_with_name(dao_name)
+        if target_user:
+            target_qq = target_user['user_id']
     else:
-        root_name_list = arg_list[1]
-        
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
-    if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
-    else:
-        give_user = sql_message.get_user_info_with_name(arg_list[0])
-        give_qq = give_user['user_id']
-    if give_user:
-        root_name = sql_message.update_root(give_qq, root_name_list)
-        sql_message.update_power2(give_qq)
-        msg = f"{give_user['user_name']}道友的灵根已变更为{root_name}！"
-        await handle_send(bot, event, msg)
-        await gmm_command.finish()
-    else:
-        msg = f"对方未踏入修仙界，不可修改！"
-        await handle_send(bot, event, msg)
-        await gmm_command.finish()
+        # 默认给自己
+        _, user, _ = check_user(event)
+        if user:
+            target_user = user
+            target_qq = user['user_id']
+
+    if not target_user or not target_qq:
+        await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
+        return
+
+    # 执行修改
+    new_root = sql_message.update_root(target_qq, str(root_id))
+    sql_message.update_power2(target_qq)
+
+    msg = f"已将 {target_user['user_name']} 的灵根变更为 【{new_root}】！"
+    await handle_send(bot, event, msg)
 
 @cz.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -744,7 +815,106 @@ async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = "重载items完成"
     await handle_send(bot, event, msg)
     await items_refresh.finish()
+
+@blackhouse.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, _ = await assign_bot(bot=bot, event=event)
     
+    plain_text = args.extract_plain_text().strip()
+    if not plain_text:
+        await handle_send(bot, event, "用法：小黑屋 @某人 / 道号\n示例：小黑屋 @张三\n小黑屋 李四")
+        return
+
+    target_user_id = None
+    target_name = "未知"
+
+    # 优先找艾特
+    for seg in args:
+        if seg.type == "at":
+            target_user_id = seg.data.get("qq", "")
+            break
+
+    # 如果没艾特，就尝试用道号
+    if not target_user_id and plain_text:
+        user = sql_message.get_user_info_with_name(plain_text)
+        if user:
+            target_user_id = user['user_id']
+            target_name = user['user_name']
+
+    # 如果还是没有，就报错
+    if not target_user_id:
+        await handle_send(bot, event, "未找到目标用户！请正确艾特或输入道号。")
+        return
+
+    # 最终确认用户信息
+    target_user = sql_message.get_user_info_with_id(target_user_id)
+    if not target_user:
+        await handle_send(bot, event, "该用户尚未踏入修仙界！")
+        return
+
+    success = sql_message.ban_user(target_user_id)
+    if success:
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 已被关入小黑屋！")
+    else:
+        await handle_send(bot, event, f"操作失败：用户 {target_user['user_name']} 可能已被封禁或不存在。")
+
+
+@unblackhouse.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    
+    plain_text = args.extract_plain_text().strip()
+    if not plain_text:
+        await handle_send(bot, event, "用法：解除小黑屋 @某人 / 道号")
+        return
+
+    target_user_id = None
+
+    # 优先艾特
+    for seg in args:
+        if seg.type == "at":
+            target_user_id = seg.data.get("qq", "")
+            break
+
+    # 没艾特就用道号
+    if not target_user_id and plain_text:
+        user = sql_message.get_user_info_with_name(plain_text)
+        if user:
+            target_user_id = user['user_id']
+
+    if not target_user_id:
+        await handle_send(bot, event, "未找到目标用户！请正确艾特或输入道号。")
+        return
+
+    target_user = sql_message.get_user_info_with_id(target_user_id)
+    if not target_user:
+        await handle_send(bot, event, "该用户尚未踏入修仙界！")
+        return
+
+    success = sql_message.unban_user(target_user_id)
+    if success:
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 已从小黑屋释放，恢复自由！")
+    else:
+        await handle_send(bot, event, f"操作失败：用户 {target_user['user_name']} 可能未被封禁或不存在。")
+
+@view_blackhouse.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    
+    cur = sql_message.conn.cursor()
+    cur.execute("SELECT user_id, user_name FROM user_xiuxian WHERE is_ban=1")
+    banned_users = cur.fetchall()
+    
+    if not banned_users:
+        await handle_send(bot, event, "当前小黑屋空空如也～")
+        return
+    
+    msg = "【小黑屋在押人员】\n"
+    for uid, name in banned_users:
+        msg += f"· {name} (ID: {uid})\n"
+    
+    await handle_send(bot, event, msg)
+
 @super_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙管理帮助"""
@@ -756,11 +926,11 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 🌟 管理员专用指令
 
 ⚡ 资源管理：
-→ 神秘力量 [数量] - 全服发放灵石
-→ 神秘力量 [道号] [数量] - 给指定用户发灵石
+→ 神秘力量 [数量] all - 全服发放灵石
+→ 神秘力量 [数量] [道号] - 给指定用户发灵石
 - 可以负数来扣灵石
-→ 传承力量 [数量] - 全服发放思恋结晶
-→ 传承力量 [道号] [数量] - 给指定用户发思恋结晶
+→ 传承力量 [数量] all - 全服发放思恋结晶
+→ 传承力量 [数量]  [道号] - 给指定用户发思恋结晶
 - 可以负数来扣思恋结晶
 → 创造力量 [物品ID/名称] [数量] - 给自己发物品
 → 创造力量 [物品ID/名称] [数量] all - 全服发物品
@@ -770,8 +940,8 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 毁灭力量 [物品ID/名称] [数量] [道号] - 给指定用户扣物品
 
 ⚡ 境界管理：
-→ 造化力量 [道号] [境界] - 修改用户境界
-→ 轮回力量 [道号] [1-9] - 修改用户灵根
+→ 造化力量 [境界] [道号] - 修改用户境界
+→ 轮回力量 [1-9] [道号] - 修改用户灵根
    (1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运)
 → 修为调整 [修为数] - 全服发修为
 → 修为调整 [道号] [修为数] - 给指定用户发修为

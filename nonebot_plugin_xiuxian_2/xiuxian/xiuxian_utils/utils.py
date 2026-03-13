@@ -129,22 +129,25 @@ def check_user_type(user_id, need_type):
 
 def check_user(event: GroupMessageEvent):
     """
-    判断用户信息是否存在
-    :返回参数:
-      * `isUser: 是否存在
-      * `user_info: 用户
-      * `msg: 消息体
+    判断用户信息是否存在 + 是否被关小黑屋
+    返回: (isUser: bool, user_info: dict, msg: str)
     """
-
     isUser = False
     user_id = event.get_user_id()
     user_info = sql_message.get_user_info_with_id(user_id)
+    
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"
-    else:
-        isUser = True
-        msg = ""
+        return isUser, user_info, msg
 
+    isUser = True
+    
+    # 检查是否被关小黑屋
+    if user_info.get('is_ban', 0) == 1:
+        msg = "道友已被关入小黑屋，期间无法使用任何修仙指令！\n请等待管理员处理或联系管理员申诉。"
+        return False, user_info, msg   # 故意返回 False，让调用处认为“用户不可用”
+
+    msg = ""
     return isUser, user_info, msg
 
 

@@ -103,13 +103,10 @@ class Items:
             f.close()
 
     def refresh(self):
-        """重新加载所有物品数据，更新 self.items"""
         global ITEMS_CACHE
         ITEMS_CACHE.clear()
-        self.export_items_data()
-        asyncio.sleep(3)
-        self.revert_to_original_files()  
-        logger.info(f"重载items结束")
+        self.export_items_data()          # 只重新加载
+        logger.info("items 已从原始文件重新加载完成")
 
     def export_items_data(self):
         """导出所有物品数据"""
