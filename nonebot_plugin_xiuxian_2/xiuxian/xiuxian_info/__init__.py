@@ -203,7 +203,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
     if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().web_link:
         msg_param = {
-        "key": "t2",
+        "key": "t1",
         "values": ["](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",f"img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",f"道号：[{user_info['user_name']}"]
         }
         await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)

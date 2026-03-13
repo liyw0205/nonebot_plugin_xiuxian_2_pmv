@@ -3302,8 +3302,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     lines = []
     lines_title = f"┌─── 修仙界概况 ───┐"
-    lines_title += f"  当前共有道友 {number_to(total_users)} 人"
-    lines_title += f"└────────────┘"
+    lines_title += f"    当前共有道友 {total_users} 人"
+    lines_title += f"└───────────┘"
     for rank in all_ranks:
         cnt = realm_count.get(rank, 0)
         if cnt > 0:

@@ -797,7 +797,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
-                msg = title + msg
+                merged_content = title + merged_content
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             await handle_send(bot, event, merged_content)
@@ -870,6 +870,8 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
+            if title:
+                msg = title + msg
             if XiuConfig().message_optimization:
                 msg = optimize_message(msg, is_group)
             if msg.startswith('\n'):
@@ -888,6 +890,8 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
+            if title:
+                merged_content = title + merged_content
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             if merged_content.startswith('\n'):

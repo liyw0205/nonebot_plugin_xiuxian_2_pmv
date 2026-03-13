@@ -163,7 +163,7 @@ curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script
 cd ~
 python3 -m venv myenv
 source ~/myenv/bin/activate
-pip install nb-cli
+pip install nb-cli==1.5.0
 ```
 克隆项目
 ```
@@ -192,8 +192,8 @@ AIOHTTP (AIOHTTP 驱动器)
 - 选择 In a "src" folder（在src文件夹里）
 确定安装虚拟环境和依赖
 ```
-Create virtual environment? (Y/n) y
 Install dependencies now? (Y/n) y
+Create virtual environment? (Y/n) n
 ```
 选择 echo（默认安装插件）
 
@@ -207,7 +207,6 @@ mv  ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
 安装修仙2依赖
 ```
 cd ~/xiu2
-source ~/xiu2/.venv/bin/activate
 pip install -r requirements.txt
 ```
 修改nb配置
@@ -250,7 +249,7 @@ https://napneko.github.io/guide/napcat
 ```
 python -m venv myenv
 myenv/bin/activate
-pip install nb-cli
+pip install nb-cli==1.5.0
 ```
 下载最新的project.tar.gz
 ```
@@ -279,8 +278,8 @@ AIOHTTP (AIOHTTP 驱动器)
 - 选择 In a "src" folder（在src文件夹里）
 确定安装虚拟环境和依赖
 ```
-Create virtual environment? (Y/n) y
 Install dependencies now? (Y/n) y
+Create virtual environment? (Y/n) n
 ```
 选择 echo（默认安装插件）
 
@@ -299,7 +298,6 @@ Install dependencies now? (Y/n) y
 安装修仙2依赖
 ```
 cd xiu2
-.venv/bin/activate
 pip install -r requirements.txt
 ```
 修改nb配置
