@@ -821,32 +821,34 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, _ = await assign_bot(bot=bot, event=event)
     
     plain_text = args.extract_plain_text().strip()
-    if not plain_text:
-        await handle_send(bot, event, "用法：小黑屋 @某人 / 道号\n示例：小黑屋 @张三\n小黑屋 李四")
-        return
 
     target_user_id = None
-    target_name = "未知"
+    target_name = None
 
-    # 优先找艾特
+    # 1. 优先找艾特
+    at_qq = None
     for seg in args:
         if seg.type == "at":
-            target_user_id = seg.data.get("qq", "")
+            at_qq = seg.data.get("qq", "")
             break
 
-    # 如果没艾特，就尝试用道号
-    if not target_user_id and plain_text:
-        user = sql_message.get_user_info_with_name(plain_text)
+    if at_qq:
+        target_user_id = at_qq
+        user = sql_message.get_user_info_with_id(target_user_id)
+        if user:
+            target_name = user['user_name']
+    # 2. 没有艾特就用道号（参数里的最后一个词）
+    elif plain_text:
+        dao_name = plain_text.split()[-1]          # 防止前面有其他参数
+        user = sql_message.get_user_info_with_name(dao_name)
         if user:
             target_user_id = user['user_id']
             target_name = user['user_name']
 
-    # 如果还是没有，就报错
     if not target_user_id:
         await handle_send(bot, event, "未找到目标用户！请正确艾特或输入道号。")
         return
 
-    # 最终确认用户信息
     target_user = sql_message.get_user_info_with_id(target_user_id)
     if not target_user:
         await handle_send(bot, event, "该用户尚未踏入修仙界！")
@@ -864,21 +866,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, _ = await assign_bot(bot=bot, event=event)
     
     plain_text = args.extract_plain_text().strip()
-    if not plain_text:
-        await handle_send(bot, event, "用法：解除小黑屋 @某人 / 道号")
-        return
 
     target_user_id = None
 
-    # 优先艾特
+    at_qq = None
     for seg in args:
         if seg.type == "at":
-            target_user_id = seg.data.get("qq", "")
+            at_qq = seg.data.get("qq", "")
             break
 
-    # 没艾特就用道号
-    if not target_user_id and plain_text:
-        user = sql_message.get_user_info_with_name(plain_text)
+    if at_qq:
+        target_user_id = at_qq
+    elif plain_text:
+        dao_name = plain_text.split()[-1]
+        user = sql_message.get_user_info_with_name(dao_name)
         if user:
             target_user_id = user['user_id']
 
