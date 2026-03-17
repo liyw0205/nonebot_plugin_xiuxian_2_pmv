@@ -1,5 +1,4 @@
 import platform
-import psutil
 import asyncio
 import os
 import time
@@ -25,6 +24,44 @@ import re
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, TradeDataManager
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 
+psutil_available = False
+try:
+    import psutil
+    psutil_available = True
+except ImportError:
+    print("psutil模块未安装，部分系统信息和机器人信息功能将受限。")
+    class DummyPsutilProcess:
+        def create_time(self):
+            return 0
+
+    class DummyPsutil:
+        def Process(self, pid):
+            return DummyPsutilProcess()
+        def cpu_count(self, logical=True):
+            return "未知"
+        def cpu_percent(self):
+            return "未知"
+        def cpu_freq(self):
+            class Freq:
+                current = "未知"
+            return Freq()
+        def virtual_memory(self):
+            class Mem:
+                total = 0
+                used = 0
+                percent = "未知"
+            return Mem()
+        def disk_usage(self, path):
+            class Disk:
+                total = 0
+                used = 0
+                percent = "未知"
+            return Disk()
+        def boot_time(self):
+            return 0
+
+    psutil = DummyPsutil()
+
 update_manager = UpdateManager()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
@@ -39,6 +76,8 @@ check_update_cmd = on_command("检测更新", permission=SUPERUSER, priority=5, 
 
 def format_time(seconds: float) -> str:
     """将秒数格式化为 'X天X小时X分X秒'"""
+    if seconds <= 0:
+        return "未知"
     days, remainder = divmod(seconds, 86400)
     hours, remainder = divmod(remainder, 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -156,15 +195,20 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     last_7days_active_users = sql_message.last_7days_active_users()
     total_items_quantity = sql_message.total_items_quantity()
     total_goods_quantity = trade_manager.total_goods_quantity()
-    # 获取Bot运行时间
-    try:
-        current_time = time.time()
-        bot_uptime = {
-            "Bot 启动时间": f"{datetime.fromtimestamp(psutil.Process(os.getpid()).create_time()):%Y-%m-%d %H:%M:%S}",
-            "Bot 运行时间": format_time(current_time - psutil.Process(os.getpid()).create_time())
-        }
-    except Exception:
-        bot_uptime = {"Bot运行时间": "获取失败"}
+    
+    # 获取Bot运行时间, 仅在psutil可用时
+    if psutil_available:
+        try:
+            current_time = time.time()
+            process_create_time = psutil.Process(os.getpid()).create_time()
+            bot_uptime = {
+                "Bot 启动时间": f"{datetime.fromtimestamp(process_create_time):%Y-%m-%d %H:%M:%S}",
+                "Bot 运行时间": format_time(current_time - process_create_time)
+            }
+        except Exception:
+            bot_uptime = {"Bot启动时间": "获取失败", "Bot运行时间": "获取失败"}
+    else:
+        bot_uptime = {"Bot启动时间": "psutil未安装", "Bot运行时间": "psutil未安装"}
     
     # 获取当前插件版本号
     current_version = update_manager.get_current_version()
@@ -194,7 +238,7 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
 async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
     """获取系统信息"""
-    # 获取系统信息
+    # 获取系统信息 (platform模块不依赖psutil，所以始终可用)
     system_info = {
         "平台": platform.platform(),
         "系统": platform.system(),
@@ -204,51 +248,81 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "Python版本": platform.python_version(),
     }
     
-    # 获取CPU信息
-    try:
+    # 获取CPU信息, 仅在psutil可用时
+    if psutil_available:
+        try:
+            cpu_info = {
+                "物理核心数": psutil.cpu_count(logical=False),
+                "逻辑核心数": psutil.cpu_count(logical=True),
+                "CPU使用率": f"{psutil.cpu_percent()}%",
+                "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") and psutil.cpu_freq().current != '未知' else "未知"
+            }
+        except Exception:
+            cpu_info = {
+                "物理核心数": "获取失败", "逻辑核心数": "获取失败",
+                "CPU使用率": "获取失败", "CPU频率": "获取失败"
+            }
+    else:
         cpu_info = {
-            "物理核心数": psutil.cpu_count(logical=False),
-            "逻辑核心数": psutil.cpu_count(logical=True),
-            "CPU使用率": f"{psutil.cpu_percent()}%",
-            "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") else "未知"
+            "物理核心数": "psutil未安装", "逻辑核心数": "psutil未安装",
+            "CPU使用率": "psutil未安装", "CPU频率": "psutil未安装"
         }
-    except Exception:
-        cpu_info = {"CPU信息": "获取失败"}
     
-    # 获取内存信息
-    try:
-        mem = psutil.virtual_memory()
+    # 获取内存信息, 仅在psutil可用时
+    if psutil_available:
+        try:
+            mem = psutil.virtual_memory()
+            mem_info = {
+                "总内存": f"{mem.total / (1024**3):.2f}GB",
+                "已用内存": f"{mem.used / (1024**3):.2f}GB",
+                "内存使用率": f"{mem.percent}%"
+            }
+        except Exception:
+            mem_info = {
+                "总内存": "获取失败", "已用内存": "获取失败",
+                "内存使用率": "获取失败"
+            }
+    else:
         mem_info = {
-            "总内存": f"{mem.total / (1024**3):.2f}GB",
-            "已用内存": f"{mem.used / (1024**3):.2f}GB",
-            "内存使用率": f"{mem.percent}%"
+            "总内存": "psutil未安装", "已用内存": "psutil未安装",
+            "内存使用率": "psutil未安装"
         }
-    except Exception:
-        mem_info = {"内存信息": "获取失败"}
     
-    # 获取磁盘信息
-    try:
-        disk = psutil.disk_usage('/')
+    # 获取磁盘信息, 仅在psutil可用时
+    if psutil_available:
+        try:
+            disk = psutil.disk_usage('/')
+            disk_info = {
+                "总磁盘空间": f"{disk.total / (1024**3):.2f}GB",
+                "已用空间": f"{disk.used / (1024**3):.2f}GB",
+                "磁盘使用率": f"{disk.percent}%"
+            }
+        except Exception:
+            disk_info = {
+                "总磁盘空间": "获取失败", "已用空间": "获取失败",
+                "磁盘使用率": "获取失败"
+            }
+    else:
         disk_info = {
-            "总磁盘空间": f"{disk.total / (1024**3):.2f}GB",
-            "已用空间": f"{disk.used / (1024**3):.2f}GB",
-            "磁盘使用率": f"{disk.percent}%"
+            "总磁盘空间": "psutil未安装", "已用空间": "psutil未安装",
+            "磁盘使用率": "psutil未安装"
         }
-    except Exception:
-        disk_info = {"磁盘信息": "获取失败"}
     
-    # 获取系统启动时间
-    try:
-        boot_time = psutil.boot_time()
-        current_time = time.time()
-        uptime_seconds = current_time - boot_time
-        
-        system_uptime_info = {
-            "系统启动时间": f"{datetime.fromtimestamp(boot_time):%Y-%m-%d %H:%M:%S}",
-            "系统运行时间": format_time(uptime_seconds)
-        }
-    except Exception:
-        system_uptime_info = {"系统运行时间": "获取失败"}
+    # 获取系统启动时间, 仅在psutil可用时
+    if psutil_available:
+        try:
+            boot_time = psutil.boot_time()
+            current_time = time.time()
+            uptime_seconds = current_time - boot_time
+            
+            system_uptime_info = {
+                "系统启动时间": f"{datetime.fromtimestamp(boot_time):%Y-%m-%d %H:%M:%S}",
+                "系统运行时间": format_time(uptime_seconds)
+            }
+        except Exception:
+            system_uptime_info = {"系统启动时间": "获取失败", "系统运行时间": "获取失败"}
+    else:
+        system_uptime_info = {"系统启动时间": "psutil未安装", "系统运行时间": "psutil未安装"}
     
     # 组装系统信息
     msg = "\n☆------系统信息------☆\n"

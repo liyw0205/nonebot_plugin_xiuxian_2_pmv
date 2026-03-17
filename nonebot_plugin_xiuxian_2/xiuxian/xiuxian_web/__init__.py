@@ -3,7 +3,7 @@ import os
 import json
 import re
 import platform
-import psutil
+# import psutil # 旧的导入方式
 import time
 from pathlib import Path
 from nonebot.log import logger
@@ -21,6 +21,54 @@ def log_to_file(message):
     log_file_path = Path(__file__).parent / "log.txt"
     with open(log_file_path, 'a', encoding='utf-8') as log_file:
         log_file.write(message + '\n')
+
+# 尝试导入 psutil，如果成功则设置一个标志
+psutil_available = False
+try:
+    import psutil
+    psutil_available = True
+except ImportError:
+    logger.warning("psutil模块未安装，部分系统监控功能（如CPU、内存、磁盘、进程信息）将受限，显示为未知。")
+    # 如果 psutil 不可用，定义一个虚拟对象以避免运行时错误
+    class DummyPsutilProcess:
+        def create_time(self):
+            return 0  # 占位符，表示启动时间为0
+        def name(self):
+            return "未知进程"
+        def memory_info(self):
+            class MemInfo:
+                rss = 0
+            return MemInfo()
+    
+    class DummyPsutil:
+        def cpu_percent(self, interval=None):
+            return 0.0 # 虚拟CPU使用率
+        def virtual_memory(self):
+            class VirtualMemory:
+                percent = 0.0 # 虚拟内存使用率
+                total = 0
+                used = 0
+            return VirtualMemory()
+        def disk_usage(self, path):
+            class DiskUsage:
+                percent = 0.0 # 虚拟磁盘使用率
+                total = 0
+                used = 0
+            return DiskUsage()
+        def cpu_count(self, logical=True):
+            return "未知"
+        def cpu_freq(self):
+            class Freq:
+                current = "未知"
+            return Freq()
+        def boot_time(self):
+            return 0 # 占位符，表示系统启动时间为0
+        def process_iter(self, attrs=None):
+            return [] # 虚拟进程列表
+        def Process(self, pid):
+            return DummyPsutilProcess() # 返回虚拟进程对象
+
+    psutil = DummyPsutil() # 如果 psutil 不可用，则使用虚拟对象
 
 items = Items()
 update_manager = UpdateManager()
@@ -309,7 +357,8 @@ def execute_sql(db_path, sql, params=None):
     except Exception as e:
         return {"error": str(e)}
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
     """获取表数据（分页和搜索）"""
@@ -2307,11 +2356,21 @@ def get_stats():
 
 @app.route('/get_system_info')
 def get_system_info():
+    """此路由在 home.html 中未被直接调用，但保留以防万一。
+    更详细的系统信息由 /get_system_info_extended 提供。"""
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     
+    if not psutil_available:
+        return jsonify({
+            "success": False, 
+            "error": "psutil未安装，无法获取系统信息",
+            "cpu_usage": 0.0,
+            "memory_usage": 0.0,
+            "disk_usage": 0.0
+        })
+
     try:
-        
         # 获取CPU使用率
         cpu_usage = psutil.cpu_percent(interval=1)
         
@@ -2335,33 +2394,38 @@ def get_system_info():
 
 @app.route('/get_system_info_extended')
 def get_system_info_extended():
+    """获取详细系统信息，对psutil是否可用进行适配"""
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     
-    try:
-        
-        # 获取系统信息
-        system_info = {
-            "平台": platform.platform(),
-            "系统": platform.system(),
-            "版本": platform.version(),
-            "机器": platform.machine(),
-            "处理器": platform.processor(),
-            "Python版本": platform.python_version(),
-        }
-        
-        # 获取CPU信息
+    # 系统基本信息 (platform模块不依赖psutil，所以始终可用)
+    system_info = {
+        "平台": platform.platform(),
+        "系统": platform.system(),
+        "版本": platform.version(),
+        "机器": platform.machine(),
+        "处理器": platform.processor(),
+        "Python版本": platform.python_version(),
+    }
+    
+    # 获取CPU信息
+    if psutil_available:
         try:
             cpu_info = {
                 "物理核心数": psutil.cpu_count(logical=False),
                 "逻辑核心数": psutil.cpu_count(logical=True),
                 "CPU使用率": f"{psutil.cpu_percent()}%",
-                "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") else "未知"
+                "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") and psutil.cpu_freq().current != '未知' else "未知"
             }
         except Exception:
-            cpu_info = {"CPU信息": "获取失败"}
-        
-        # 获取内存信息
+            cpu_info = {"物理核心数": "获取失败", "逻辑核心数": "获取失败",
+                        "CPU使用率": "获取失败", "CPU频率": "获取失败"}
+    else:
+        cpu_info = {"物理核心数": "psutil未安装", "逻辑核心数": "psutil未安装",
+                    "CPU使用率": "psutil未安装", "CPU频率": "psutil未安装"}
+    
+    # 获取内存信息
+    if psutil_available:
         try:
             mem = psutil.virtual_memory()
             mem_info = {
@@ -2370,9 +2434,14 @@ def get_system_info_extended():
                 "内存使用率": f"{mem.percent}%"
             }
         except Exception:
-            mem_info = {"内存信息": "获取失败"}
-        
-        # 获取磁盘信息
+            mem_info = {"总内存": "获取失败", "已用内存": "获取失败",
+                        "内存使用率": "获取失败"}
+    else:
+        mem_info = {"总内存": "psutil未安装", "已用内存": "psutil未安装",
+                    "内存使用率": "psutil未安装"}
+    
+    # 获取磁盘信息
+    if psutil_available:
         try:
             disk = psutil.disk_usage('/')
             disk_info = {
@@ -2382,8 +2451,12 @@ def get_system_info_extended():
             }
         except Exception:
             disk_info = {"磁盘信息": "获取失败"}
-        
-        # 获取系统启动时间
+    else:
+        disk_info = {"总磁盘空间": "psutil未安装", "已用空间": "psutil未安装",
+                     "磁盘使用率": "psutil未安装"}
+    
+    # 获取系统启动时间
+    if psutil_available:
         try:
             boot_time = psutil.boot_time()
             current_time = time.time()
@@ -2394,25 +2467,32 @@ def get_system_info_extended():
                 "系统运行时间": format_time(uptime_seconds)
             }
         except Exception:
-            system_uptime_info = {"系统运行时间": "获取失败"}
-        
-        return jsonify({
-            "success": True,
-            "system_info": system_info,
-            "cpu_info": cpu_info,
-            "mem_info": mem_info,
-            "disk_info": disk_info,
-            "system_uptime": system_uptime_info
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": f"获取系统信息失败: {str(e)}"})
+            system_uptime_info = {"系统启动时间": "获取失败", "系统运行时间": "获取失败"}
+    else:
+        system_uptime_info = {"系统启动时间": "psutil未安装", "系统运行时间": "psutil未安装"}
 
+    return jsonify({
+        "success": True,
+        "system_info": system_info,
+        "cpu_info": cpu_info,
+        "mem_info": mem_info,
+        "disk_info": disk_info,
+        "system_uptime": system_uptime_info
+    })
+        
 @app.route('/get_process_info')
 def get_process_info():
+    """获取进程信息，对psutil是否可用进行适配"""
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     
+    if not psutil_available:
+        return jsonify({
+            "success": False, 
+            "error": "psutil未安装，无法获取进程信息",
+            "processes": []
+        })
+
     try:
         processes = []
         for proc in psutil.process_iter(['pid', 'name', 'memory_percent', 'create_time']):
@@ -2443,6 +2523,8 @@ def get_process_info():
 
 def format_time(seconds: float) -> str:
     """将秒数格式化为 'X天X小时X分X秒'"""
+    if seconds <= 0: # 适配psutil占位符可能导致的0秒
+        return "未知"
     days, remainder = divmod(seconds, 86400)
     hours, remainder = divmod(remainder, 3600)
     minutes, seconds = divmod(remainder, 60)

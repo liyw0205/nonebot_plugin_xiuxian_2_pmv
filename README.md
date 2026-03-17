@@ -8,6 +8,7 @@
 
 # 支持
 [✅] 野生机器人（napcat）
+
 [✅] 官方机器人（gsk）
  
 # 💿 配置
@@ -247,8 +248,10 @@ https://napneko.github.io/guide/napcat
 安装nb-cli
 - 在C/D盘根目录新建文件夹然后打开cmd
 ```
+mkdir C:\nb
+cd C:\nb #进入nb文件夹，
 python -m venv myenv
-myenv/bin/activate
+call myenv\bin\activate
 pip install nb-cli==1.5.0
 ```
 下载最新的project.tar.gz
@@ -257,8 +260,6 @@ https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest
 ```
 nb安装插件
 ```
-cd C:\nb #进入nb文件夹
-myenv/bin/activate #进入虚拟环境
 nb #打开nb命令行
 ```
 - 选择 Create a NoneBot project.（创建项目）
@@ -298,7 +299,7 @@ Create virtual environment? (Y/n) n
 安装修仙2依赖
 ```
 cd xiu2
-pip install -r requirements.txt
+pip install -r requirements.txt #失败可以把psutil删去重新安装
 ```
 修改nb配置
 ```
@@ -314,9 +315,9 @@ HOST = 127.0.0.1
 PORT = 8080 # 反代的8080端口，有需要自己改' > xiu2/.env.dev
 ```
 启动修仙2
-- 新建文件，改后缀`.bat`
+- 新建文件在`C:\nb`，改后缀`.bat`
 ```
-call myenv/bin/activate
+call myenv\bin\activate
 cd xiu2
 nb run --reload
 ```
