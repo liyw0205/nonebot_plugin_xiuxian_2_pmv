@@ -106,29 +106,7 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
 # 💿 安装
-
-<details>
-<summary>(安卓安装：Termux)</summary>
-
-安装Termux
-- [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
-- [Termux](https://github.com/termux/termux-app/releases)
-
-安装napcat
-```
-curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
-```
-进入容器
-```
-proot-distro login napcat
-```
-剩下看Linux安装，不需要安装napcat
-
-> 下次启动要先进入容器: proot-distro login napcat
-
-查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
- </details>
+### 新手请优先使用一键安装脚本
 
 <details>
 <summary>(Linux一键安装)</summary>
@@ -144,6 +122,15 @@ xiu命令
   status    - 查看 xiu2
   stop      - 停止 xiu2
   format [log_file] - 格式化日志文件（默认: /root/xiu2.log）
+```
+ </details>
+
+<details>
+<summary>(Windows一键安装)</summary>
+
+[点我下载](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0.1/install.bat)bat文件执行
+```
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0.1/install.bat
 ```
  </details>
 
@@ -251,7 +238,7 @@ https://napneko.github.io/guide/napcat
 mkdir C:\nb
 cd C:\nb #进入nb文件夹，
 python -m venv myenv
-call myenv\bin\activate
+call myenv\Scripts\activate
 pip install nb-cli==1.5.0
 ```
 下载最新的project.tar.gz
@@ -317,7 +304,7 @@ PORT = 8080 # 反代的8080端口，有需要自己改' > xiu2/.env.dev
 启动修仙2
 - 新建文件在`C:\nb`，改后缀`.bat`
 ```
-call myenv\bin\activate
+call myenv\Scripts\activate
 cd xiu2
 nb run --reload
 ```
@@ -326,6 +313,28 @@ nb run --reload
 
  </details>
 
+<details>
+<summary>(安卓安装：Termux)</summary>
+
+安装Termux
+- [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
+- [Termux](https://github.com/termux/termux-app/releases)
+
+安装napcat
+```
+curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
+```
+进入容器
+```
+proot-distro login napcat
+```
+剩下看Linux安装/一键安装，不需要安装napcat
+
+> 下次启动要先进入容器: proot-distro login napcat
+
+查看修仙2 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
+
+ </details>
 
 # 💿 连接QQ（Linux）
 
