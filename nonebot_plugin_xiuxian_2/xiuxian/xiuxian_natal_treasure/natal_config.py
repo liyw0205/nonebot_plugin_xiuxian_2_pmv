@@ -87,7 +87,7 @@ EFFECT_NAME_MAP = {
 # 对于概率类效果，值代表概率 (如0.05=5%)
 # min_single/max_single: 单效果法宝觉醒时，该效果基础值的随机范围
 # min_double/max_double: 双效果法宝觉醒时，该效果基础值的随机范围
-# growth: 效果每提升1级，增加的数值
+# growth: 效果每提升1级，增加的数值 (Effect Level Growth)
 EFFECT_BASE_AND_GROWTH = {
     NatalEffectType.BLEED:        {"min_single": 0.05, "max_single": 0.10, "min_double": 0.03, "max_double": 0.07, "growth": 0.015},
     NatalEffectType.ARMOR_BREAK:  {"min_single": 0.08, "max_single": 0.15, "min_double": 0.05, "max_double": 0.10, "growth": 0.02},
@@ -100,7 +100,7 @@ EFFECT_BASE_AND_GROWTH = {
     NatalEffectType.FATE:         {"min_single": 0.01, "max_single": 0.03, "min_double": 0.005, "max_double": 0.015, "growth": 0.005}, # 概率
     NatalEffectType.IMMORTAL:     {"min_single": 0.10, "max_single": 0.20, "min_double": 0.05, "max_double": 0.10, "growth": 0.02}, # 恢复百分比
     NatalEffectType.DEATH_STRIKE: {"min_single": 0.10, "max_single": 0.15, "min_double": 0.07, "max_double": 0.10, "growth": 0.01}, # 低血量阈值，值代表低于X%触发
-    NatalEffectType.INVINCIBLE:   {"min_single": 0.50, "max_single": 0.00, "min_double": 0.25, "max_double": 0.00, "growth": 0.01}, # min_single/double 为基础触发概率, growth 为每法宝总等级增加的概率
+    NatalEffectType.INVINCIBLE:   {"min_single": 0.50, "max_single": 0.00, "min_double": 0.25, "max_double": 0.00, "growth": 0.01}, # min_single/double 为基础触发概率, growth 为效果等级增加的概率
     # 双生效果：min_single/double 为触发概率, max_single/double 为额外伤害百分比 (固定100%), growth 为每效果等级增加的概率
     NatalEffectType.TWIN_STRIKE:  {"min_single": 0.12, "max_single": 1.0, "min_double": 0.08, "max_double": 1.0, "growth": 0.005},
 }
@@ -124,6 +124,8 @@ INVINCIBLE_COUNT_LIMIT = 1
 INVINCIBLE_FIRST_GAIN_CHANCE = 0.50 # 50%
 # 无敌后续获得概率 (基准值，不包括法宝总等级成长)
 INVINCIBLE_SUBSEQUENT_GAIN_CHANCE = 0.25 # 25%
+# 无敌效果，法宝总等级每提升1级，获得概率增加值 (Natal Treasure Level Growth for Invincible)
+INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE = 0.01 # 1%
 
 # 周期性真实伤害的基础值和每法宝总等级成长值
 PERIODIC_TRUE_DAMAGE_BASE = 0.01 # 1% (法宝0级时)

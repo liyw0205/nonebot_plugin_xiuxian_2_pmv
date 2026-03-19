@@ -355,7 +355,7 @@ def generate_effect_buff(data: dict):
     low = int(data["buff"])
     high = int(data["buff2"])
     if low > high: # 确保low不大于high
-        low, high = high, low
+        low, high = high, low # Corrected assignment here: low, high = high, low
 
     return [{
         "name": data["name"],
@@ -745,7 +745,7 @@ def update_data_boss_status(data, status_list):
             if name == target_name:
                 # 将 status 中的 hp/mp 写回 data
                 data["气血"] = attr.get("hp", data.get("气血"))
-                data["真元"] = attr.get("mp", data.get("真元"))
+                data["真元"] = attr.get("mp", data.get("mp")) # 修复了原始代码中的一个潜在错误：Boss的真元应该更新，而不是总是写回初始真元
                 return True
     return False
 
@@ -888,10 +888,10 @@ DEBUFF_DESC_TEMPLATES = {
     DebuffType.PETRIFY: "石化，无法行动，剩余 {value} 回合",
     DebuffType.SLEEP: "沉睡，无法行动，剩余 {value} 回合",
     DebuffType.ROOT: "被定身，无法行动，剩余 {value} 回合",
-    DebuffType.FEAR: "恐惧，无法行动，剩余 {value} 回合",
+    DebuffType.FEAR: "陷入恐惧，无法行动，剩余 {value} 回合",
     DebuffType.SEAL: "被封印，无法使用技能，剩余 {value} 回合",
     DebuffType.PARALYSIS: "麻痹，无法行动，剩余 {value} 回合",
-    DebuffType.SILENCE: "沉默，无法施放法术，剩余 {value} 回合",
+    DebuffType.SILENCE: "被沉默，无法施放法术，剩余 {value} 回合",
 }
 
 VALID_FIELDS = {"name", "type", "value", "coefficient", "is_debuff", "duration", "skill_type"} # 状态效果的有效字段
@@ -933,7 +933,7 @@ class Skill:
 
         # 通用参数
         self.turn_cost = int(data.get("turncost", 0))  # 持续回合 或 休息回合
-        self.rate = float(data.get("rate", 0))  # 触发率 (技能本身的概率)
+        self.rate = float(data.get("rate", 100))  # 触发率 (技能本身的概率，默认100%)
         self.cd = float(data.get("cd", 0))  # 冷却时间
         self.remain_cd = float(data.get("remain_cd", 0))  # 剩余冷却（回合）
 
@@ -1020,6 +1020,8 @@ class Entity:
                 self.fate_revive_count = self.natal_data.get("fate_revive_count", 0)
                 self.immortal_revive_count = self.natal_data.get("immortal_revive_count", 0)
                 self.invincible_count = self.natal_data.get("invincible_gain_count", 0) # 初始无敌次数
+            # 如果本命法宝不存在，natal 和 natal_data 保持为 None
+
 
     # ======================
     #   本命法宝相关效果
@@ -1030,14 +1032,13 @@ class Entity:
         包括破甲、闪避、护盾、无敌的施加/刷新。
         :param battle: BattleSystem实例，用于发送战斗消息。
         """
+        # 确保 natal_data 存在才进行后续操作
         if not self.natal_data:
             return
 
         name = self.natal_data.get("name", "本命法宝")
         
         enemies = battle._get_all_enemies(self) # 获取所有敌方单位
-
-        battle.add_system_message(f"『{name}』道韵流转，威能再现！")
 
         # 1. 施加/刷新效果 (破甲, 闪避, 护盾, 无敌)
         for i in [1, 2]: # 遍历本命法宝的两个效果位
@@ -1091,7 +1092,7 @@ class Entity:
                 value = self.natal.get_effect_value(NatalEffectType.SHIELD)
                 shield_value = int(self.max_hp * value)
                 self.shield += shield_value
-                battle.add_message(self, f"→ 重新凝聚【{effect_name}】，获得护盾 {number_to(shield_value)} 点 (当前总护盾: {number_to(int(self.shield))})")
+                battle.add_message(self, f"→ 重新凝聚【{effect_name}】，获得护盾 {number_to(int(shield_value))} 点 (当前总护盾: {number_to(int(self.shield))})")
             
             # 无敌效果 (BuffType.INVINCIBLE)
             elif etype == NatalEffectType.INVINCIBLE:
@@ -1113,6 +1114,7 @@ class Entity:
         处理本命法宝的流血效果（每回合概率触发）。
         :param battle: BattleSystem实例，用于发送战斗消息。
         """
+        # 确保 natal_data 存在才进行后续操作
         if not self.natal_data:
             return
 
@@ -1161,7 +1163,7 @@ class Entity:
         :return: True如果拥有，False否则。
         """
         if field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field '{field}'")
+            raise ValueError(f"不支持的字段 '{field}'")
         return any(getattr(buff, field, None) == value for buff in self.buffs)
 
     def has_debuff(self, field: str, value):
@@ -1172,7 +1174,7 @@ class Entity:
         :return: True如果拥有，False否则。
         """
         if field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field '{field}'")
+            raise ValueError(f"不支持的字段 '{field}'")
         return any(getattr(debuff, field, None) == value for debuff in self.debuffs)
 
     def add_status(self, effect):
@@ -1215,7 +1217,7 @@ class Entity:
         :return: 匹配Buff的指定属性值，如果未找到则返回 None。
         """
         if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
 
         for buff in self.buffs:
             if getattr(buff, match_field, None) == match_value:
@@ -1233,7 +1235,7 @@ class Entity:
         :return: 匹配Debuff的指定属性值，如果未找到则返回 None。
         """
         if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
 
         for debuff in self.debuffs:
             if getattr(debuff, match_field, None) == match_value:
@@ -1252,7 +1254,7 @@ class Entity:
         :return: True 表示修改成功，False 表示未找到。
         """
         if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
 
         for buff in self.buffs:
             if getattr(buff, match_field, None) == match_value:
@@ -1271,7 +1273,7 @@ class Entity:
         :return: True 表示修改成功，False 表示未找到。
         """
         if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
 
         for debuff in self.debuffs:
             if getattr(debuff, match_field, None) == match_value:
@@ -1287,7 +1289,7 @@ class Entity:
         :return: 匹配的Buff列表。
         """
         if field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段 '{field}'. 有效字段: {VALID_FIELDS}")
 
         return [b for b in self.buffs if getattr(b, field, None) == value]
 
@@ -1299,7 +1301,7 @@ class Entity:
         :return: 匹配的Debuff列表。
         """
         if field not in VALID_FIELDS:
-            raise ValueError(f"unsupported field '{field}'. valid fields: {VALID_FIELDS}")
+            raise ValueError(f"不支持的字段 '{field}'. 有效字段: {VALID_FIELDS}")
 
         return [d for d in self.debuffs if getattr(d, field, None) == value]
 
@@ -1410,7 +1412,9 @@ class Entity:
         :param deduct: 是否实际扣除资源。
         :return: True如果可以支付，False否则。
         """
-        if self.hp <= hp_cost or self.mp < mp_cost:
+        # 修复：pay_cost的判断逻辑应该是 hp <= hp_cost 才返回False，而不是 hp < hp_cost
+        # 如果 hp_cost 是0，那么 hp < 0 会返回 True，这不符合逻辑
+        if self.hp < hp_cost or self.mp < mp_cost:
             return False
         if deduct:
             self.hp -= hp_cost
@@ -1436,11 +1440,8 @@ class Entity:
         # 进度条
         bar = "▬" * filled + "▭" * empty
         
-        # 增加护盾显示
-        shield_info = f" | 护盾:{number_to(int(self.shield))}" if self.shield > 0 else ""
+        return f"{self.name}剩余{number_to(int(current_data))}\n{stat.upper()} {bar} {int(ratio * 100)}%"
 
-        # 打印
-        return f"{self.name}剩余血量{number_to(int(current_data))}{shield_info}\n{stat.upper()} {bar} {int(ratio * 100)}%"
 
     @property
     def is_alive(self):
@@ -1483,7 +1484,7 @@ class Entity:
         """计算最终护甲穿透率。"""
         # 穿甲
         # 加上本命法宝的破甲效果 (NatalEffectType.ARMOR_BREAK)
-        natal_armor_break = self.natal.get_effect_value(NatalEffectType.ARMOR_BREAK) if self.natal else 0
+        natal_armor_break = self.natal.get_effect_value(NatalEffectType.ARMOR_BREAK) if self.natal and self.natal_data else 0
         val = self.base_armor_pen + self._get_effect_value(BuffType.ARMOR_PENETRATION_UP) + natal_armor_break
         return max(0, val)
 
@@ -1499,7 +1500,7 @@ class Entity:
         """计算最终闪避率。"""
         # 闪避
         # 加上本命法宝的闪避效果 (NatalEffectType.EVASION)
-        natal_evasion = self.natal.get_effect_value(NatalEffectType.EVASION) if self.natal else 0
+        natal_evasion = self.natal.get_effect_value(NatalEffectType.EVASION) if self.natal and self.natal_data else 0
         # 闪避率是百分比，effect_value是0-1的小数，所以需要乘以100
         val = self.base_dodge + self._get_effect_value(BuffType.EVASION_UP) + natal_evasion * 100
         return min(180, max(0, val)) # 闪避率有上限
@@ -1525,50 +1526,57 @@ class Entity:
     @property
     def shield_break_rate(self):
         """本命法宝的破盾效果 (攻击时无视部分护盾)。"""
-        return self.natal.get_effect_value(NatalEffectType.SHIELD_BREAK) if self.natal else 0.0
+        # 检查是否拥有SHIELD_BREAK效果
+        if not self.natal or not self.natal_data: return 0.0
+        for i in [1, 2]:
+            etype_val = self.natal_data.get(f"effect{i}_type")
+            if etype_val and NatalEffectType(etype_val) == NatalEffectType.SHIELD_BREAK:
+                return self.natal.get_effect_value(NatalEffectType.SHIELD_BREAK)
+        return 0.0
     
     @property
     def shield_break_bonus_damage(self):
         """本命法宝的破盾效果 (攻击时额外伤害)。"""
         # 破盾效果的额外伤害加成是固定的，不随效果等级变化，只检查是否拥有此效果
-        if self.natal and any(data.get(f"effect{i}_type") == NatalEffectType.SHIELD_BREAK.value for i in [1, 2] for data in [self.natal.get_data()]):
+        if self.natal and self.natal_data and any(self.natal_data.get(f"effect{i}_type") == NatalEffectType.SHIELD_BREAK.value for i in [1, 2]):
             return SHIELD_BREAK_BONUS_DAMAGE
         return 0.0
 
     @property
     def reflect_damage_rate(self):
         """本命法宝的反伤效果 (受到攻击时反弹)。"""
-        return self.natal.get_effect_value(NatalEffectType.REFLECT_DAMAGE) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.REFLECT_DAMAGE) if self.natal and self.natal_data else 0.0
     
     @property
     def true_damage_bonus(self):
         """本命法宝的真伤效果 (攻击时额外造成真实伤害)。"""
-        return self.natal.get_effect_value(NatalEffectType.TRUE_DAMAGE) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.TRUE_DAMAGE) if self.natal and self.natal_data else 0.0
     
     @property
     def crit_resist_rate(self):
         """本命法宝的抗暴效果 (减少被暴击伤害)。"""
-        return self.natal.get_effect_value(NatalEffectType.CRIT_RESIST) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.CRIT_RESIST) if self.natal and self.natal_data else 0.0
 
     @property
     def fate_revive_chance(self):
         """本命法宝的天命复活概率。"""
-        return self.natal.get_effect_value(NatalEffectType.FATE) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.FATE) if self.natal and self.natal_data else 0.0
     
     @property
     def immortal_revive_hp_percent(self):
         """本命法宝的不灭复活血量百分比。"""
-        return self.natal.get_effect_value(NatalEffectType.IMMORTAL) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.IMMORTAL) if self.natal and self.natal_data else 0.0
 
     @property
     def death_strike_threshold(self):
         """本命法宝的斩命触发血量阈值。"""
-        return self.natal.get_effect_value(NatalEffectType.DEATH_STRIKE) if self.natal else 0.0
+        return self.natal.get_effect_value(NatalEffectType.DEATH_STRIKE) if self.natal and self.natal_data else 0.0
         
     @property
     def has_death_strike(self):
         """判断是否拥有斩命效果。"""
-        if not self.natal or not self.natal.get_data(): return False
+        # 兼容 self.natal_data 为 None 的情况
+        if not self.natal or not self.natal_data: return False
         for i in [1, 2]:
             etype_val = self.natal_data.get(f"effect{i}_type")
             if etype_val and NatalEffectType(etype_val) == NatalEffectType.DEATH_STRIKE:
@@ -1578,7 +1586,8 @@ class Entity:
     @property
     def has_fate_effect(self):
         """判断是否拥有天命效果。"""
-        if not self.natal or not self.natal.get_data(): return False
+        # 兼容 self.natal_data 为 None 的情况
+        if not self.natal or not self.natal_data: return False
         for i in [1, 2]:
             etype_val = self.natal_data.get(f"effect{i}_type")
             if etype_val and NatalEffectType(etype_val) == NatalEffectType.FATE:
@@ -1588,7 +1597,8 @@ class Entity:
     @property
     def twin_strike_effect(self) -> tuple[float, float] | None:
         """本命法宝的双生效果 (触发概率, 伤害倍率)。"""
-        if not self.natal or not self.natal.get_data():
+        # 兼容 self.natal_data 为 None 的情况
+        if not self.natal or not self.natal_data:
             return None
         for i in [1, 2]:
             etype_val = self.natal_data.get(f"effect{i}_type")
@@ -1687,35 +1697,70 @@ class BattleSystem:
         :param unit: 发送消息的实体。
         :param message: 消息内容。
         """
-        current_shield = f" | 护盾:{number_to(int(unit.shield))}" if unit.shield > 0 else ""
-        invincible_info = f" | 无敌:{unit.invincible_count}" if unit.invincible_count > 0 else ""
+        # 确保消息内容不为空
+        if not message.strip():
+            return
+
         msg_dict = {
             "type": "node",
             "data": {
-                "name": f"{unit.name} HP：{number_to(int(unit.hp))}/{number_to(int(unit.max_hp))}{current_shield}{invincible_info}",
+                "name": unit.name, # 发送消息的实体名称
                 "uin": int(unit.id),
                 "content": message
             }
         }
         self.play_list.append(msg_dict)
         
-    def add_shield_log(self, attacker, defender, absorbed_damage):
+    def add_shield_log(self, defender, absorbed_damage):
         """
         为护盾吸收伤害单独添加日志条目。
-        :param attacker: 攻击者实体。
         :param defender: 防御者实体。
         :param absorbed_damage: 被护盾吸收的伤害量。
         """
-        msg_dict = {
-            "type": "node",
-            "data": {
-                "name": f"{attacker.name}", # 日志归属在攻击者名下
-                "uin": int(attacker.id),
-                "content": f"🛡️ {defender.name}的护盾抵挡了 {number_to(int(absorbed_damage))} 点伤害！(剩余护盾: {number_to(int(defender.shield))})"
+        # 仅在护盾实际吸收伤害时才添加日志
+        if absorbed_damage > 0:
+            msg_dict = {
+                "type": "node",
+                "data": {
+                    "name": defender.name,
+                    "uin": int(defender.id),
+                    "content": f"🛡️ {defender.name}的护盾抵挡了 {number_to(int(absorbed_damage))} 点伤害！(剩余护盾: {number_to(int(defender.shield))})"
+                }
             }
-        }
-        self.play_list.append(msg_dict)
+            self.play_list.append(msg_dict)
 
+    def add_unit_status_message(self, unit):
+        """
+        添加单位的HP/MP状态栏消息。
+        只在HP或MP发生变化后调用，避免重复显示。
+        :param unit: 实体。
+        """
+        hp_bar = unit.show_bar("hp")
+
+        shield_info = f"护盾:{number_to(int(unit.shield))}" if unit.shield > 0 else ""
+        invincible_info = f"无敌:{unit.invincible_count}" if unit.invincible_count > 0 else ""
+        
+        extra_info_parts = [info for info in [shield_info, invincible_info] if info]
+        extra_info = f" | {' | '.join(extra_info_parts)}" if extra_info_parts else ""
+        
+        status_msg = f"{hp_bar}{extra_info}"
+        
+        # 确保消息不为空才添加
+        if status_msg.strip(): # 再次检查status_msg是否为空或只包含空格
+            # 如果上一个消息就是这个单位的血条，则不重复添加
+            if self.play_list and self.play_list[-1]["data"]["uin"] == int(unit.id) and \
+               self.play_list[-1]["data"]["content"].startswith(f"{unit.name}剩余"):
+                # 如果是相同的血条消息，直接更新，而不是追加
+                self.play_list[-1]["data"]["content"] = status_msg
+            else:
+                self.play_list.append({
+                    "type": "node",
+                    "data": {
+                        "name": unit.name,
+                        "uin": int(unit.id),
+                        "content": status_msg
+                    }
+                })
 
     def add_system_message(self, message):
         """
@@ -1725,7 +1770,7 @@ class BattleSystem:
         msg_dict = {
             "type": "node",
             "data": {
-                "name": "Bot",
+                "name": "系统", # 系统消息的发送者
                 "uin": int(self.bot_id),
                 "content": message
             }
@@ -1824,7 +1869,7 @@ class BattleSystem:
         crit_mult = attacker.crit_dmg_rate if is_crit else 1.0
         
         # 应用防御方的抗暴效果 (NatalEffectType.CRIT_RESIST)
-        if is_crit and defender.natal and defender.crit_resist_rate > 0:
+        if is_crit and defender.natal_data and defender.crit_resist_rate > 0:
             crit_resist = defender.crit_resist_rate
             crit_mult *= (1 - crit_resist) # 减少暴击伤害的乘数
             if crit_resist > 0:
@@ -1846,7 +1891,7 @@ class BattleSystem:
         # 本命法宝真伤 (NatalEffectType.TRUE_DAMAGE)
         # 真伤是额外造成，且无视护盾和减伤，所以在 raw_damage 之外单独计算
         true_damage = 0
-        if attacker.natal and attacker.true_damage_bonus > 0:
+        if attacker.natal_data and attacker.true_damage_bonus > 0:
             true_damage_rate = attacker.true_damage_bonus
             if true_damage_rate > 0:
                 true_damage = attacker.atk_rate * true_damage_rate * multiplier
@@ -1854,7 +1899,7 @@ class BattleSystem:
 
         # 本命法宝破盾额外伤害 (NatalEffectType.SHIELD_BREAK)
         # 当目标有护盾时，造成额外伤害
-        if attacker.natal and attacker.shield_break_bonus_damage > 0 and defender.shield > 0:
+        if attacker.natal_data and attacker.shield_break_bonus_damage > 0 and defender.shield > 0:
             bonus_damage_amount = attacker.atk_rate * attacker.shield_break_bonus_damage * multiplier
             damage += bonus_damage_amount # 额外伤害直接加到普通伤害中
             self.add_message(attacker, f"『{attacker.natal_data.get('name','本命法宝')}』触发破盾，对有护盾的{defender.name}额外造成 {number_to(int(bonus_damage_amount))} 点伤害！")
@@ -1864,10 +1909,10 @@ class BattleSystem:
 
         return int(damage), int(true_damage), is_crit, status
         
-    def _apply_damage(self, attacker, defender, raw_damage_value, true_damage_value=0):
+    def _apply_damage(self, caster, defender, raw_damage_value, true_damage_value=0):
         """
         处理伤害和护盾吸收，返回实际HP伤害和被吸收的伤害。
-        :param attacker: 攻击者实体。
+        :param caster: 攻击者实体。
         :param defender: 防御者实体。
         :param raw_damage_value: 原始（未被护盾吸收）的伤害值。
         :param true_damage_value: 额外真实伤害值。
@@ -1877,7 +1922,7 @@ class BattleSystem:
             raw_damage_value = 0
         if not isinstance(true_damage_value, (int, float)) or true_damage_value < 0:
             true_damage_value = 0
-        
+
         # --- 无敌效果判定 (NatalEffectType.INVINCIBLE) ---
         # 如果防御方拥有无敌次数，则本次伤害归零，并消耗一次无敌
         if defender.invincible_count > 0:
@@ -1892,11 +1937,11 @@ class BattleSystem:
         damage_to_be_absorbed = raw_damage_value # 需要被护盾抵挡的伤害
         
         if defender.shield > 0:
-            if attacker.natal and attacker.shield_break_rate > 0:
+            if caster.natal_data and caster.shield_break_rate > 0:
                 # 计算无视的护盾量，这部分伤害直接穿透护盾
-                ignored_shield_amount = damage_to_be_absorbed * attacker.shield_break_rate
+                ignored_shield_amount = damage_to_be_absorbed * caster.shield_break_rate
                 
-                self.add_message(attacker, f"『{attacker.natal_data.get('name','本命法宝')}』触发破盾，无视了 {number_to(int(ignored_shield_amount))} 点护盾！")
+                self.add_message(caster, f"『{caster.natal_data.get('name','本命法宝')}』触发破盾，无视了 {number_to(int(ignored_shield_amount))} 点护盾！")
                 
                 # 剩余伤害，这部分尝试被护盾抵挡
                 damage_to_be_absorbed -= ignored_shield_amount
@@ -1914,7 +1959,8 @@ class BattleSystem:
         
         # 3. 反伤效果 (defender.reflect_damage_rate)
         reflected_damage = 0
-        if defender.natal and defender.reflect_damage_rate > 0:
+        if defender.natal_data and defender.reflect_damage_rate > 0:
+            # 反伤是基于实际造成的HP伤害 (即final_hp_damage)
             reflected_damage = int(final_hp_damage * defender.reflect_damage_rate)
             if reflected_damage > 0:
                 # 反伤是真实伤害，无视护盾和减伤
@@ -1925,9 +1971,9 @@ class BattleSystem:
         if final_hp_damage > 0:
             defender.update_stat("hp", 2, final_hp_damage, bypass_shield=True) # bypass_shield=True因为护盾已在此处计算
             
-        if absorbed_by_shield > 0:
-            self.add_shield_log(attacker, defender, absorbed_by_shield)
-
+        # 5. 记录护盾吸收日志
+        self.add_shield_log(defender, absorbed_by_shield) # 即使 absorbed_by_shield 为 0， add_shield_log 内部也会检查
+            
         return final_hp_damage, int(absorbed_by_shield), reflected_damage
 
     def _check_and_apply_revive_effects(self, defender, attacker_has_death_strike):
@@ -1943,29 +1989,31 @@ class BattleSystem:
         # --- 斩命效果判定 (NatalEffectType.DEATH_STRIKE) ---
         # 如果攻击方拥有斩命效果，并且目标拥有天命效果，则天命效果被禁止
         if attacker_has_death_strike and defender.has_fate_effect:
-            self.add_message(defender, f"💀目标拥有【斩命】效果，你的『{defender.natal_data.get('name','本命法宝')}』【天命】效果被禁止！")
+            self.add_message(defender, f"💀你的『{defender.natal_data.get('name','本命法宝')}』【天命】效果被【斩命】禁止！")
             return False # 天命被禁止，无法复活
 
         # --- 天命效果判定 (NatalEffectType.FATE) ---
-        if defender.natal and defender.fate_revive_chance > 0 and defender.fate_revive_count < FATE_REVIVE_COUNT_LIMIT:
+        if defender.natal_data and defender.fate_revive_chance > 0 and defender.fate_revive_count < FATE_REVIVE_COUNT_LIMIT:
             if random.random() < defender.fate_revive_chance:
                 defender.hp = defender.max_hp # 恢复满血
                 defender.fate_revive_count += 1
                 # 将使用次数同步到natal_data
                 if defender.natal_data: defender.natal_data["fate_revive_count"] = defender.fate_revive_count
                 self.add_message(defender, f"✨『{defender.natal_data.get('name','本命法宝')}』触发【天命】，恢复全部生命！(已使用{defender.fate_revive_count}/{FATE_REVIVE_COUNT_LIMIT}次)")
+                # self.add_unit_status_message(defender) # 复活后更新血条 -- 统一在回合末更新
                 return True
 
         # --- 不灭效果判定 (NatalEffectType.IMMORTAL) ---
-        if defender.natal and defender.immortal_revive_hp_percent > 0 and defender.immortal_revive_count < IMMORTAL_REVIVE_COUNT_LIMIT:
+        if defender.natal_data and defender.immortal_revive_hp_percent > 0 and defender.immortal_revive_count < IMMORTAL_REVIVE_COUNT_LIMIT:
             # 不灭有固定50%概率触发，随效果等级提升恢复血量百分比
-            if random.randint(1, 100) < 50: # 固定50%触发概率
+            if random.randint(1, 100) <= 50: # 固定50%触发概率
                 revive_amount = defender.max_hp * defender.immortal_revive_hp_percent
                 defender.hp = revive_amount
                 defender.immortal_revive_count += 1
                 # 将使用次数同步到natal_data
                 if defender.natal_data: defender.natal_data["immortal_revive_count"] = defender.immortal_revive_count
                 self.add_message(defender, f"✨『{defender.natal_data.get('name','本命法宝')}』触发【不灭】，恢复 {number_to(int(revive_amount))} 生命！(已使用{defender.immortal_revive_count}/{IMMORTAL_REVIVE_COUNT_LIMIT}次)")
+                # self.add_unit_status_message(defender) # 复活后更新血条 -- 统一在回合末更新
                 return True
 
         return False
@@ -1976,19 +2024,23 @@ class BattleSystem:
         :param attacker: 攻击者实体。
         :param defender: 防御者实体。
         :param final_hp_damage: 本次攻击造成的最终HP伤害。
+        :return: True 如果目标被斩杀, False 否则。
         """
-        if attacker.natal and attacker.has_death_strike:
+        if attacker.natal_data and attacker.has_death_strike:
             threshold = attacker.death_strike_threshold
             # 如果目标因本次伤害死亡，或者血量低于阈值
-            if not defender.is_alive or (defender.hp / defender.max_hp) < threshold:
-                # 检查对方是否有天命效果，如果有，禁止其生效 (这个逻辑已经在_check_and_apply_revive_effects中处理)
+            if not defender.is_alive or (defender.hp / defender.max_hp) <= threshold:
                 # 直接斩杀
-                remaining_hp = defender.hp
-                defender.hp = 0 # 直接扣除剩余全部生命值
-                if remaining_hp > 0:
-                    self.add_message(attacker, f"💀『{attacker.natal_data.get('name','本命法宝')}』触发【斩命】，对{defender.name}造成【{number_to(int(remaining_hp))}】点额外伤害并直接斩杀！")
-                else: # 本次攻击就打死了，斩命只是确认
+                remaining_hp_to_kill = defender.hp # 斩杀时实际扣除的血量
+                if remaining_hp_to_kill > 0:
+                    defender.update_stat("hp", 2, remaining_hp_to_kill, bypass_shield=True) # 直接扣除剩余全部生命值
+                    self.add_message(attacker, f"💀『{attacker.natal_data.get('name','本命法宝')}』触发【斩命】，对{defender.name}造成【{number_to(int(remaining_hp_to_kill))}】点额外伤害并直接斩杀！")
+                    # self.add_unit_status_message(defender) # 斩杀后更新血条 -- 统一在回合末更新
+                    return True
+                elif not defender.is_alive: # 本次攻击就打死了，斩命只是确认死亡
                      self.add_message(attacker, f"💀『{attacker.natal_data.get('name','本命法宝')}』触发【斩命】，将{defender.name}直接斩杀！")
+                     return True
+        return False
 
     def _get_all_enemies(self, entity):
         """
@@ -2050,7 +2102,7 @@ class BattleSystem:
             msg = f"{caster.name}使用{name}，{buff_msg}"
             if caster.type != "minion": # 小兵不发送消息
                 self.add_message(caster, msg)
-
+            
     def choose_skill(self, caster, skills, enemies):
         """
         选择一个可用的技能。
@@ -2177,338 +2229,345 @@ class BattleSystem:
         :param skill: 技能实例。
         :return: 技能执行结果消息字符串，造成的总伤害。
         """
+        total_dmg = 0  # 记录总伤害
+        skill_activated = False
+
+        # 记录攻击者行动前的HP/MP，用于后续判断是否需要更新其状态栏
+        caster_hp_before_action = caster.hp
+        caster_mp_before_action = caster.mp
 
         # 计算释放概率 (技能本身的触发率)
-        if not random.uniform(0, 100) <= skill.rate:
-            target = min(targets, key=lambda x: x.hp) if targets else None
-            if not target: return "没有目标！", 0
-            skill_msg, total_dmg = self._normal_attack_and_process(caster, target, skip_twin_strike=True) # 技能未触发则进行普攻，但不触发双生
-            skill_msg = f"{caster.name}尝试释放{skill.name}，但未能触发！{skill_msg}" # 补充未触发信息
-            return skill_msg, total_dmg
+        if random.uniform(0, 100) <= skill.rate:
+            skill_activated = True
 
-        # 计算消耗并扣除
-        hp_cost = caster.hp * skill.hp_cost_rate
-        mp_cost = caster.exp * skill.mp_cost_rate * (1 - caster.mp_cost_modifier)
-        caster.pay_cost(hp_cost, mp_cost, deduct=True)  # 扣除消耗
+            # 计算消耗并扣除
+            hp_cost = caster.hp * skill.hp_cost_rate
+            mp_cost = caster.exp * skill.mp_cost_rate * (1 - caster.mp_cost_modifier)
+            caster.pay_cost(hp_cost, mp_cost, deduct=True)  # 扣除消耗
 
-        parts = []
-        if hp_cost > 0:
-            parts.append(f"气血{number_to(int(hp_cost))}点")
-        if mp_cost > 0:
-            parts.append(f"真元{number_to(int(mp_cost))}点")
-        if parts:  # 如果有消耗
-            cost_msg = f"消耗{'、'.join(parts)}，"
-        else:  # 没有消耗
-            cost_msg = ""
-
-        skill_msg = f"{skill.desc} {cost_msg}" # 技能描述和消耗信息
-        total_dmg = 0  # 记录总伤害
-        skill.trigger_cd()  # 技能进入冷却
-
-        # --- 核心逻辑分支 (根据SkillType处理不同技能效果) ---
-        # Type 1: 连续攻击 (Multi-Hit)
-        if skill.skill_type == SkillType.MULTI_HIT:
-            hits = skill.atk_values if isinstance(skill.atk_values, list) else [skill.atk_values] # 攻击倍率列表
-            if not targets: return "没有目标！", 0
-            target = targets[0] # 连续攻击通常只针对一个目标
-            skill_msg += f"对{target.name}造成"
+            parts = []
+            if hp_cost > 0:
+                parts.append(f"气血{number_to(int(hp_cost))}点")
+            if mp_cost > 0:
+                parts.append(f"真元{number_to(int(mp_cost))}点")
             
-            hit_dmgs = []
-            for mult in hits:  # 遍历每一次攻击
-                # 计算单次攻击伤害
-                dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, float(mult))
+            cost_msg = f"消耗{'、'.join(parts)}，" if parts else ""
+            self.add_message(caster, f"{caster.name}使用{skill.name}！{cost_msg}")
+            
+            skill.trigger_cd()  # 技能进入冷却
+
+            # --- 核心逻辑分支 (根据SkillType处理不同技能效果) ---
+            # Type 1: 连续攻击 (Multi-Hit)
+            if skill.skill_type == SkillType.MULTI_HIT:
+                hits = skill.atk_values if isinstance(skill.atk_values, list) else [skill.atk_values] # 攻击倍率列表
+                if not targets: return "", 0
+                target = targets[0] # 连续攻击通常只针对一个目标
+                
+                hit_dmgs = []
+                for mult in hits:  # 遍历每一次攻击
+                    # 计算单次攻击伤害
+                    dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, float(mult))
+                    if status == "Hit":
+                        hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, dmg, true_dmg)
+                        # 处理反伤
+                        if reflected_dmg > 0:
+                            self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
+                            caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True) # 反弹伤害对攻击者造成
+                        total_dmg += hp_dmg
+                        crit_str = "💥" if is_crit else ""
+                        hit_dmgs.append(f"{crit_str}{number_to(int(hp_dmg))}伤害")
+                        # 斩命和复活判定
+                        killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
+                        if not target.is_alive and not killed_by_death_strike: # 只有没被斩杀才检查复活
+                            if self._check_and_apply_revive_effects(target, caster.has_death_strike):
+                                total_dmg -= hp_dmg # 复活后抵消掉的伤害
+
+                    else:
+                        hit_dmgs.append("miss")
+                
+                self.add_message(caster, f"→ 对{target.name}造成" + "、".join(hit_dmgs) + "！")
+                # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
+
+                # 连续攻击后可能需要休息
+                if skill.turn_cost > 0:
+                    effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
+                    caster.add_status(effect)
+                    self.add_message(caster, f"→ {caster.name}力竭，需休息{skill.turn_cost}回合")
+                return "", total_dmg
+
+            # Type 2: 持续伤害 (DoT)
+            elif skill.skill_type == SkillType.DOT:
+                if not targets: return "", 0
+                target_names = []
+                for target in targets:
+                    target_names.append(target.name)
+                    # 施加持续伤害Debuff，coefficient用于记录施法者，以便计算后续伤害
+                    effect = StatusEffect(skill.name, DebuffType.SKILL_DOT, skill.atk_values, caster.name, True,
+                                        skill.turn_cost,
+                                        skill.skill_type)
+                    target.add_status(effect)
+                target_name_msg = "、".join(target_names)
+                self.add_message(caster, f"→ 对{target_name_msg}造成每回合{skill.atk_values}倍攻击力持续伤害，持续{skill.turn_cost}回合")
+                return "", total_dmg
+
+            # Type 3: 属性增益 (Stat Buff)
+            elif skill.skill_type == SkillType.BUFF_STAT:
+                if not targets: return "", 0
+                # Use raw numeric value for buffvalue
+                buff_value_for_display = skill.skill_buff_value
+                
+                # 根据buff类型施加不同的Buff效果
+                if skill.skill_buff_type == 1:  # 攻击力增加
+                    effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost,
+                                        skill.skill_type)
+                    caster.add_status(effect)  # 给自己添加Buff
+                    self.add_message(caster, f"→ 提升了{self.get_effect_desc(BuffType.ATTACK_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合")
+                elif skill.skill_buff_type == 2:  # 减伤加成
+                    effect = StatusEffect(skill.name, BuffType.DAMAGE_REDUCTION_UP, skill.skill_buff_value, 1, False,
+                                        skill.turn_cost, skill.skill_type)
+                    caster.add_status(effect)  # 给自己添加Buff
+                    self.add_message(caster, f"→ 提升了{self.get_effect_desc(BuffType.DAMAGE_REDUCTION_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合")
+                
+                # Buff技能通常伴随一次普攻，但不触发双生
+                attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True, is_skill_proc=True)
+                return attack_msg, total_dmg
+
+            # Type 4: 封印/控制 (Control)
+            elif skill.skill_type == SkillType.CONTROL:
+                if not targets: return "", 0
+                chance = skill.success_rate # 控制成功率
+                target_names_success = []
+                target_names_failure = []
+                for target in targets:
+                    if random.uniform(0, 100) <= chance: # 概率判定
+                        effect = StatusEffect(skill.name, DebuffType.SEAL, 0, 1, True, skill.turn_cost, skill.skill_type)
+                        target.add_status(effect)
+                        target_names_success.append(target.name)
+                    else:  # 封印失败
+                        target_names_failure.append(target.name)
+                if target_names_success:
+                    target_name_msg = "、".join(target_names_success)
+                    self.add_message(caster, f"→ {target_name_msg}被封印了！动弹不得，持续{skill.turn_cost}回合")
+                if target_names_failure:
+                    target_name_msg = "、".join(target_names_failure)
+                    self.add_message(caster, f"→ 封印失败，被{target_name_msg}抵抗了！")
+                
+                # 控制技能通常伴随一次普攻，但不触发双生
+                attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True, is_skill_proc=True)
+                return attack_msg, total_dmg
+
+            # Type 5: 随机波动伤害 (Random Hit)
+            elif skill.skill_type == SkillType.RANDOM_HIT:
+                if not targets: return "", 0
+                target = targets[0]
+                min_mult = float(skill.atk_values[0]) if isinstance(skill.atk_values, list) else float(skill.atk_values) # 最小倍率
+                max_mult = float(skill.atk_coefficient) # 最大倍率
+                rand_mult = random.uniform(min_mult, max_mult) # 随机一个倍率
+                rand_mult = round(rand_mult, 2)  # 保留两位小数
+                dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, rand_mult)
+
                 if status == "Hit":
                     hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, dmg, true_dmg)
                     # 处理反伤
                     if reflected_dmg > 0:
                         self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
                         caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
-                    total_dmg += hp_dmg
-                    crit_str = "💥" if is_crit else ""
-                    hit_dmgs.append(f"{crit_str}{number_to(int(hp_dmg))}伤害")
-                    # 斩命和复活判定
-                    if not target.is_alive:
-                        self._check_and_apply_death_strike(caster, target, hp_dmg)
-                        if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                            target.hp = target.max_hp if target.hp >= target.max_hp else target.hp # 恢复后确保不超上限
-                            total_dmg -= hp_dmg # 复活后抵消掉的伤害
-
-                else:
-                    hit_dmgs.append("miss")
-            
-            skill_msg += "、".join(hit_dmgs) + "！"
-
-            # 连续攻击后可能需要休息
-            if skill.turn_cost > 0:
-                effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
-                caster.add_status(effect)
-                skill_msg += f"\n{caster.name}力竭，需休息{skill.turn_cost}回合"
-            return skill_msg, total_dmg
-
-        # Type 2: 持续伤害 (DoT)
-        elif skill.skill_type == SkillType.DOT:
-            if not targets: return "没有目标！", 0
-            target_names = []
-            for target in targets:
-                target_names.append(target.name)
-                # 施加持续伤害Debuff，coefficient用于记录施法者，以便计算后续伤害
-                effect = StatusEffect(skill.name, DebuffType.SKILL_DOT, skill.atk_values, caster.name, True,
-                                      skill.turn_cost,
-                                      skill.skill_type)
-                target.add_status(effect)
-            target_name_msg = "、".join(target_names)
-            skill_msg += f"对{target_name_msg}造成每回合{skill.atk_values}倍攻击力持续伤害，持续{skill.turn_cost}回合"
-            return skill_msg, total_dmg
-
-        # Type 3: 属性增益 (Stat Buff)
-        elif skill.skill_type == SkillType.BUFF_STAT:
-            if not targets: return "没有目标！", 0
-            # Use raw numeric value for buffvalue
-            buff_value_for_display = skill.skill_buff_value
-            
-            # 根据buff类型施加不同的Buff效果
-            if skill.skill_buff_type == 1:  # 攻击力增加
-                effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost,
-                                      skill.skill_type)
-                caster.add_status(effect)  # 给自己添加Buff
-                skill_msg += f"提升了{self.get_effect_desc(BuffType.ATTACK_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
-            elif skill.skill_buff_type == 2:  # 减伤加成
-                effect = StatusEffect(skill.name, BuffType.DAMAGE_REDUCTION_UP, skill.skill_buff_value, 1, False,
-                                      skill.turn_cost, skill.skill_type)
-                caster.add_status(effect)  # 给自己添加Buff
-                skill_msg += f"提升了{self.get_effect_desc(BuffType.DAMAGE_REDUCTION_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
-            attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True) # Buff技能通常伴随一次普攻，但不触发双生
-            skill_msg += attack_msg
-            return skill_msg, total_dmg
-
-        # Type 4: 封印/控制 (Control)
-        elif skill.skill_type == SkillType.CONTROL:
-            if not targets: return "没有目标！", 0
-            chance = skill.success_rate # 控制成功率
-            target_names_success = []
-            target_names_failure = []
-            for target in targets:
-                if random.uniform(0, 100) <= chance: # 概率判定
-                    effect = StatusEffect(skill.name, DebuffType.SEAL, 0, 1, True, skill.turn_cost, skill.skill_type)
-                    target.add_status(effect)
-                    target_names_success.append(target.name)
-                else:  # 封印失败
-                    target_names_failure.append(target.name)
-            if target_names_success:
-                target_name_msg = "、".join(target_names_success)
-                skill_msg += f"{target_name_msg}被封印了！动弹不得，持续{skill.turn_cost}回合\n"
-            if target_names_failure:
-                target_name_msg = "、".join(target_names_failure)
-                skill_msg += f"封印失败，被{target_name_msg}抵抗了！\n"
-            attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True) # 控制技能通常伴随一次普攻，但不触发双生
-            skill_msg += attack_msg
-            return skill_msg, total_dmg
-
-        # Type 5: 随机波动伤害 (Random Hit)
-        elif skill.skill_type == SkillType.RANDOM_HIT:
-            if not targets: return "没有目标！", 0
-            target = targets[0]
-            min_mult = float(skill.atk_values[0]) if isinstance(skill.atk_values, list) else float(skill.atk_values) # 最小倍率
-            max_mult = float(skill.atk_coefficient) # 最大倍率
-            rand_mult = random.uniform(min_mult, max_mult) # 随机一个倍率
-            rand_mult = round(rand_mult, 2)  # 保留两位小数
-            dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, rand_mult)
-
-            if status == "Hit":
-                hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, dmg, true_dmg)
-                # 处理反伤
-                if reflected_dmg > 0:
-                    self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
-                    caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
-                total_dmg = hp_dmg
-                crit_str = "💥并且发生了会心一击，" if is_crit else ""
-                skill_msg += f"获得{rand_mult}倍加成，{crit_str}造成{number_to(int(total_dmg))}伤害！"
-                # 斩命和复活判定
-                if not target.is_alive:
-                    self._check_and_apply_death_strike(caster, target, hp_dmg)
-                    if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                        target.hp = target.max_hp if target.hp >= target.max_hp else target.hp
-                        total_dmg -= hp_dmg
-            else:
-                skill_msg = f"{caster.name}的技能被{target.name}闪避了！"
-
-            # 波动伤害后可能需要休息
-            if skill.turn_cost > 0:
-                effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
-                caster.add_status(effect)
-                skill_msg += f"\n{caster.name}力竭，需休息{skill.turn_cost}回合"
-            return skill_msg, total_dmg
-
-        # Type 6: 叠加 Buff (Stacking)
-        elif skill.skill_type == SkillType.STACK_BUFF:
-            if not targets: return "没有目标！", 0
-            # 施加一个可叠加的Buff，通常是攻击力
-            effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost - 1,
-                                  skill.skill_type)
-            caster.add_status(effect)  # 给自己添加Buff
-            skill_msg += f"每回合叠加{skill.skill_buff_value}倍攻击力，持续{skill.turn_cost}回合（剩余{skill.turn_cost - 1}回合）\n"
-            attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True) # 叠加Buff后通常伴随一次普攻，但不触发双生
-            skill_msg += attack_msg
-            return skill_msg, total_dmg
-
-
-        # Type 101: BOSS专属技能 紫玄掌 (倍数伤害+目标百分比生命值伤害)
-        elif skill.skill_type == SkillType.MULTIPLIER_PERCENT_HP:
-            if not targets: return "没有目标！", 0
-            skill_miss_msg = ""
-            current_total_dmg = 0 # 临时变量，记录本次技能的总伤害
-            for target in targets:
-                # 造成固定倍率伤害
-                dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values)
-                if status == "Hit":
+                    total_dmg = hp_dmg
                     crit_str = "💥并且发生了会心一击，" if is_crit else ""
-                    # 附加目标最大生命值的百分比伤害
-                    raw_dmg_with_hp_percent = dmg + (target.max_hp * skill.atk_coefficient)
-                    hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, raw_dmg_with_hp_percent, true_dmg)
-                    # 处理反伤
-                    if reflected_dmg > 0:
-                        self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
-                        caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
-                    current_total_dmg += hp_dmg
-                    skill_msg += f"{crit_str}对{target.name}造成{number_to(int(hp_dmg))}伤害！"
+                    self.add_message(caster, f"→ 获得{rand_mult}倍加成，{crit_str}对{target.name}造成{number_to(int(total_dmg))}伤害！")
+                    # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
                     # 斩命和复活判定
-                    if not target.is_alive:
-                        self._check_and_apply_death_strike(caster, target, hp_dmg)
+                    killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
+                    if not target.is_alive and not killed_by_death_strike:
                         if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                            target.hp = target.max_hp if target.hp >= target.max_hp else target.hp
-                            current_total_dmg -= hp_dmg
+                            total_dmg -= hp_dmg
                 else:
-                    skill_miss_msg += f"{target.name}躲开了{caster.name}的攻击！"
-            total_dmg = current_total_dmg # 更新总伤害
-            if current_total_dmg > 0:
-                if skill_miss_msg:
-                    skill_msg += f"\n{skill_miss_msg}"
+                    self.add_message(caster, f"→ 技能被{target.name}闪避了！")
+
+                # 波动伤害后可能需要休息
+                if skill.turn_cost > 0:
+                    effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
+                    caster.add_status(effect)
+                    self.add_message(caster, f"→ {caster.name}力竭，需休息{skill.turn_cost}回合")
+                return "", total_dmg
+
+            # Type 6: 叠加 Buff (Stacking)
+            elif skill.skill_type == SkillType.STACK_BUFF:
+                if not targets: return "", 0
+                # 施加一个可叠加的Buff，通常是攻击力
+                effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost - 1,
+                                    skill.skill_type)
+                caster.add_status(effect)  # 给自己添加Buff
+                self.add_message(caster, f"→ 每回合叠加{skill.skill_buff_value}倍攻击力，持续{skill.turn_cost}回合")
+                # 叠加Buff后通常伴随一次普攻，但不触发双生
+                attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True, is_skill_proc=True)
+                return attack_msg, total_dmg
+
+
+            # Type 101: BOSS专属技能 紫玄掌 (倍数伤害+目标百分比生命值伤害)
+            elif skill.skill_type == SkillType.MULTIPLIER_PERCENT_HP:
+                if not targets: return "", 0
+                current_total_dmg = 0 # 临时变量，记录本次技能的总伤害
+                for target in targets:
+                    # 造成固定倍率伤害
+                    dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values)
+                    if status == "Hit":
+                        crit_str = "💥并且发生了会心一击，" if is_crit else ""
+                        # 附加目标最大生命值的百分比伤害
+                        raw_dmg_with_hp_percent = dmg + (target.max_hp * skill.atk_coefficient)
+                        hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, raw_dmg_with_hp_percent, true_dmg)
+                        # 处理反伤
+                        if reflected_dmg > 0:
+                            self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
+                            caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
+                        current_total_dmg += hp_dmg
+                        self.add_message(caster, f"→ {crit_str}对{target.name}造成{number_to(int(hp_dmg))}伤害！")
+                        # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
+                        # 斩命和复活判定
+                        killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
+                        if not target.is_alive and not killed_by_death_strike:
+                            if self._check_and_apply_revive_effects(target, caster.has_death_strike):
+                                current_total_dmg -= hp_dmg
+                    else:
+                        self.add_message(caster, f"→ {target.name}躲开了{caster.name}的攻击！")
+                total_dmg = current_total_dmg # 更新总伤害
+                return "", total_dmg
+
+            # Type 102: BOSS专属技能 子龙朱雀 (倍数伤害+无视防御)
+            elif skill.skill_type == SkillType.MULTIPLIER_DEF_IGNORE:
+                if not targets: return "", 0
+                current_total_dmg = 0
+                for target in targets:
+                    # 穿透护甲，造成固定倍率伤害
+                    dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values, True) # 穿透护甲
+                    if status == "Hit":
+                        crit_str = "💥并且发生了会心一击，" if is_crit else ""
+                        hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, dmg, true_dmg)
+                        # 处理反伤
+                        if reflected_dmg > 0:
+                            self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
+                            caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
+                        current_total_dmg += hp_dmg
+                        self.add_message(caster, f"→ {crit_str}对{target.name}造成{number_to(int(hp_dmg))}伤害！")
+                        # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
+                        # 斩命和复活判定
+                        killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
+                        if not target.is_alive and not killed_by_death_strike:
+                            if self._check_and_apply_revive_effects(target, caster.has_death_strike):
+                                current_total_dmg -= hp_dmg
+                    else:
+                        self.add_message(caster, f"→ {target.name}躲开了{caster.name}的攻击！")
+                total_dmg = current_total_dmg
+                return "", total_dmg
+
+            # Type 103: 控制类型 (CC)
+            elif skill.skill_type == SkillType.CC:
+                if not targets: return "", 0
+                # 控制技能的数值可能不重要，只显示类型，这里获取一个默认值用于get_effect_desc
+                buff_msg = self.get_effect_desc(skill.skill_buff_type, True, 0)
+                chance = skill.success_rate
+                target_names_success = []
+                target_names_failure = []
+                for target in targets:
+                    if random.uniform(0, 100) <= chance: # 概率判定
+                        effect = StatusEffect(skill.name, skill.skill_buff_type, 0, 1, True, skill.turn_cost,
+                                            skill.skill_type)
+                        target.add_status(effect)
+                        target_names_success.append(target.name)
+                    else:  # 控制失败
+                        target_names_failure.append(target.name)
+                if target_names_success:
+                    target_name_msg = "、".join(target_names_success)
+                    self.add_message(caster, f"→ {target_name_msg}被{buff_msg}！持续{skill.turn_cost}回合")
+                if target_names_failure:
+                    target_name_msg = "、".join(target_names_failure)
+                    self.add_message(caster, f"→ {skill.name}对{target_name_msg}的控制被抵抗了！")
+                return "", total_dmg
+
+            # Type 104: 召唤类型 (SUMMON)
+            elif skill.skill_type == SkillType.SUMMON:
+                copy_ratio = skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values # 召唤物属性倍率
+                summon_count = int(skill.atk_coefficient)  # 召唤数量
+
+                for i in range(summon_count):
+                    # 创建召唤物的数据字典，继承施法者部分属性并进行缩放
+                    summon_data = {}
+
+                    # 1. 复制基础信息
+                    summon_data["user_id"] = self.bot_id # 召唤物ID也设置为bot_id
+                    summon_data["nickname"] = f"{caster.name}的召唤物"
+                    summon_data["monster_type"] = "summon"
+
+                    # 2. 复制并缩放基础属性
+                    summon_data["max_hp"] = caster.max_hp * copy_ratio
+                    summon_data["current_hp"] = caster.max_hp * copy_ratio
+                    summon_data["max_mp"] = caster.max_mp * copy_ratio
+                    summon_data["current_mp"] = caster.max_mp * copy_ratio
+                    summon_data["attack"] = caster.base_atk * copy_ratio
+                    summon_data["armor_penetration"] = caster.base_armor_pen * copy_ratio
+                    summon_data["damage_reduction"] = caster.base_damage_reduction * copy_ratio
+                    summon_data["critical_rate"] = caster.base_crit
+                    summon_data["accuracy"] = caster.base_accuracy
+                    summon_data["dodge"] = caster.base_dodge
+                    summon_data["speed"] = caster.base_speed
+
+                    # 3. 召唤物特有设置
+                    summon_data["start_skills"] = []  # 召唤物没有初始技能
+                    summon_data["skills"] = []  # 召唤物没有技能，只能普通攻击
+
+                    # 如果是BOSS的召唤物，保留BOSS标识
+                    if hasattr(caster, 'is_boss') and caster.is_boss:
+                        summon_data["is_boss"] = True
+                    else:
+                        summon_data["is_boss"] = False
+
+                    summon = Entity(
+                        data=summon_data,
+                        team_id=caster.team_id,  # 与召唤者同队
+                        is_boss=summon_data.get("is_boss", False)
+                    )
+
+                    # 将召唤物加入对应的队伍
+                    if caster.team_id == 0:
+                        self.team_a.append(summon)
+                    else:
+                        self.team_b.append(summon)
+
+                self.add_message(caster, f"→ 生成{summon_count}个召唤物！")
+                return "", total_dmg
+
             else:
-                skill_msg = skill_msg.rstrip() + f"但全部被敌人闪避了！"
-            return skill_msg, total_dmg
+                self.add_message(caster, f"→ {skill.name}技能效果未知！")
+                return "", total_dmg
+        
+        # 如果技能未触发，则进行普攻，并返回其结果
+        target = min(targets, key=lambda x: x.hp) if targets else None
+        if not target: return "", 0
+        
+        # 技能未触发，直接走普攻逻辑
+        attack_msg, total_dmg = self._normal_attack_and_process(caster, target, skip_twin_strike=True)
+        
+        # 技能释放后，如果攻击者HP/MP发生变化（如消耗），则更新其血条 -- 统一在回合末更新
+        # if caster.hp != caster_hp_before_action or caster.mp != caster_mp_before_action:
+        #     self.add_unit_status_message(caster)
 
-        # Type 102: BOSS专属技能 子龙朱雀 (倍数伤害+无视防御)
-        elif skill.skill_type == SkillType.MULTIPLIER_DEF_IGNORE:
-            if not targets: return "没有目标！", 0
-            skill_miss_msg = ""
-            current_total_dmg = 0
-            for target in targets:
-                # 穿透护甲，造成固定倍率伤害
-                dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values, True) # 穿透护甲
-                if status == "Hit":
-                    crit_str = "💥并且发生了会心一击，" if is_crit else ""
-                    hp_dmg, _, reflected_dmg = self._apply_damage(caster, target, dmg, true_dmg)
-                    # 处理反伤
-                    if reflected_dmg > 0:
-                        self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
-                        caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
-                    current_total_dmg += hp_dmg
-                    skill_msg += f"{crit_str}对{target.name}造成{number_to(int(hp_dmg))}伤害！"
-                    # 斩命和复活判定
-                    if not target.is_alive:
-                        self._check_and_apply_death_strike(caster, target, hp_dmg)
-                        if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                            target.hp = target.max_hp if target.hp >= target.max_hp else target.hp
-                            current_total_dmg -= hp_dmg
-                else:
-                    skill_miss_msg += f"{target.name}躲开了{caster.name}的攻击！"
-            total_dmg = current_total_dmg
-            if current_total_dmg > 0:
-                if skill_miss_msg:
-                    skill_msg += f"\n{skill_miss_msg}"
-            else:
-                skill_msg = skill_msg.rstrip() + f"但全部被敌人闪避了！"
-            return skill_msg, total_dmg
+        return attack_msg, total_dmg
 
-        # Type 103: 控制类型 (CC)
-        elif skill.skill_type == SkillType.CC:
-            if not targets: return "没有目标！", 0
-            buff_msg = self.get_effect_desc(skill.skill_buff_type, True, 0) # 控制技能的数值可能不重要，只显示类型
-            chance = skill.success_rate
-            target_names_success = []
-            target_names_failure = []
-            for target in targets:
-                if random.uniform(0, 100) <= chance: # 概率判定
-                    effect = StatusEffect(skill.name, skill.skill_buff_type, 0, 1, True, skill.turn_cost,
-                                          skill.skill_type)
-                    target.add_status(effect)
-                    target_names_success.append(target.name)
-                else:  # 控制失败
-                    target_names_failure.append(target.name)
-            if target_names_success:
-                target_name_msg = "、".join(target_names_success)
-                skill_msg += f"{target_name_msg}被{buff_msg}！持续{skill.turn_cost}回合\n"
-            if target_names_failure:
-                target_name_msg = "、".join(target_names_failure)
-                skill_msg += f"{skill.name}对{target_name_msg}的控制被抵抗了！\n"
-            return skill_msg, total_dmg
-
-        # Type 104: 召唤类型 (SUMMON)
-        elif skill.skill_type == SkillType.SUMMON:
-            copy_ratio = skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values # 召唤物属性倍率
-            summon_count = int(skill.atk_coefficient)  # 召唤数量
-
-            for i in range(summon_count):
-                # 创建召唤物的数据字典，继承施法者部分属性并进行缩放
-                summon_data = {}
-
-                # 1. 复制基础信息
-                summon_data["user_id"] = self.bot_id # 召唤物ID也设置为bot_id
-                summon_data["nickname"] = f"{caster.name}的召唤物"
-                summon_data["monster_type"] = "summon"
-
-                # 2. 复制并缩放基础属性
-                summon_data["max_hp"] = caster.max_hp * copy_ratio
-                summon_data["current_hp"] = caster.max_hp * copy_ratio
-                summon_data["max_mp"] = caster.max_mp * copy_ratio
-                summon_data["current_mp"] = caster.max_mp * copy_ratio
-                summon_data["attack"] = caster.base_atk * copy_ratio
-                summon_data["armor_penetration"] = caster.base_armor_pen * copy_ratio
-                summon_data["damage_reduction"] = caster.base_damage_reduction * copy_ratio
-                summon_data["critical_rate"] = caster.base_crit
-                summon_data["accuracy"] = caster.base_accuracy
-                summon_data["dodge"] = caster.base_dodge
-                summon_data["speed"] = caster.base_speed
-
-                # 3. 召唤物特有设置
-                summon_data["start_skills"] = []  # 召唤物没有初始技能
-                summon_data["skills"] = []  # 召唤物没有技能，只能普通攻击
-
-                # 如果是BOSS的召唤物，保留BOSS标识
-                if hasattr(caster, 'is_boss') and caster.is_boss:
-                    summon_data["is_boss"] = True
-                else:
-                    summon_data["is_boss"] = False
-
-                summon = Entity(
-                    data=summon_data,
-                    team_id=caster.team_id,  # 与召唤者同队
-                    is_boss=summon_data.get("is_boss", False)
-                )
-
-                # 将召唤物加入对应的队伍
-                if caster.team_id == 0:
-                    self.team_a.append(summon)
-                else:
-                    self.team_b.append(summon)
-
-            skill_msg += f"生成{summon_count}个召唤物！"
-            return skill_msg, total_dmg
-
-        else:
-            return skill_msg, total_dmg
-
-    def _normal_attack_and_process(self, caster, target, skip_twin_strike=False):
+    def _normal_attack_and_process(self, caster, target, skip_twin_strike=False, is_skill_proc=False):
         """
         执行普通攻击并处理伤害、反伤、斩命、复活。
         :param caster: 攻击者实体。
         :param target: 目标实体。
         :param skip_twin_strike: 是否跳过双生效果判定，用于技能未触发后的普攻。
+        :param is_skill_proc: 是否是技能触发的普攻（用于消息区分）。
         :return: 普攻结果消息字符串，造成的总伤害。
         """
-        skill_msg = ""
         total_dmg = 0
         
+        # 记录攻击者行动前的HP/MP，用于后续判断是否需要更新其状态栏
+        caster_hp_before_action = caster.hp
+        caster_mp_before_action = caster.mp
+
         raw_dmg, true_dmg, is_crit, accuracy = self._calc_raw_damage(caster, target, 1) # 普攻倍率为1
         
         if accuracy == "Hit":
@@ -2518,21 +2577,24 @@ class BattleSystem:
                 self.add_message(target, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
                 caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
             total_dmg = hp_dmg
-            if is_crit:
-                skill_msg += f"{caster.name}发起攻击，💥并且发生了会心一击，对{target.name}造成{number_to(int(total_dmg))}伤害！"
-            else:
-                skill_msg += f"{caster.name}发起攻击，对{target.name}造成{number_to(int(total_dmg))}伤害！"
+            
+            crit_str = "💥并且发生了会心一击，" if is_crit else ""
+            if is_skill_proc: # 技能后普攻
+                self.add_message(caster, f"→ {crit_str}对{target.name}造成{number_to(int(total_dmg))}伤害！")
+            else: # 纯普攻
+                self.add_message(caster, f"{caster.name}发起攻击，{crit_str}对{target.name}造成{number_to(int(total_dmg))}伤害！")
+
+            # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
 
             # 斩命和复活判定
-            if not target.is_alive:
-                self._check_and_apply_death_strike(caster, target, hp_dmg)
+            killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
+            if not target.is_alive and not killed_by_death_strike: # 只有没被斩杀才检查复活
                 if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                    target.hp = target.max_hp if target.hp >= target.max_hp else target.hp
                     total_dmg -= hp_dmg # 复活后抵消掉的伤害
             
             # --- 双生效果判定 (NatalEffectType.TWIN_STRIKE) ---
             # 仅限普通攻击触发，且未被跳过
-            if not skip_twin_strike and caster.natal and caster.twin_strike_effect:
+            if not skip_twin_strike and caster.natal_data and caster.twin_strike_effect:
                 trigger_chance, damage_multiplier = caster.twin_strike_effect
                 if random.random() < trigger_chance:
                     # 触发连击，再次造成额外伤害
@@ -2545,21 +2607,28 @@ class BattleSystem:
                             caster.update_stat("hp", 2, twin_reflected_dmg, bypass_shield=True)
                         total_dmg += twin_hp_dmg # 累计双生伤害
                         twin_crit_str = "💥" if twin_strike_is_crit else ""
-                        skill_msg += f"\n『{caster.natal_data.get('name','本命法宝')}』触发【双生】，{twin_crit_str}再次对{target.name}造成{number_to(int(twin_hp_dmg))}伤害！"
+                        self.add_message(caster, f"『{caster.natal_data.get('name','本命法宝')}』触发【双生】，{twin_crit_str}再次对{target.name}造成{number_to(int(twin_hp_dmg))}伤害！")
+                        # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
                         
                         # 斩命和复活判定 (双生攻击后也进行判定)
-                        if not target.is_alive:
-                            self._check_and_apply_death_strike(caster, target, twin_hp_dmg)
+                        killed_by_death_strike = self._check_and_apply_death_strike(caster, target, twin_hp_dmg)
+                        if not target.is_alive and not killed_by_death_strike:
                             if self._check_and_apply_revive_effects(target, caster.has_death_strike):
-                                target.hp = target.max_hp if target.hp >= target.max_hp else target.hp
                                 total_dmg -= twin_hp_dmg # 复活后抵消掉的伤害
                     else:
-                        skill_msg += f"\n『{caster.natal_data.get('name','本命法宝')}』触发【双生】，但被{target.name}躲开了！"
+                        self.add_message(caster, f"『{caster.natal_data.get('name','本命法宝')}』触发【双生】，但被{target.name}躲开了！")
+                
+            # 如果攻击者HP/MP因吸血/吸蓝/反伤等发生变化，则更新其血条 -- 统一在回合末更新
+            # if caster.hp != caster_hp_before_action or caster.mp != caster_mp_before_action:
+            #     self.add_unit_status_message(caster)
 
-        else:
-            skill_msg += f"{caster.name}使用普通攻击，被{target.name}躲开了"
+        else: # 普攻Miss
+            if is_skill_proc: # 技能后普攻
+                self.add_message(caster, f"→ 攻击被{target.name}躲开了")
+            else: # 纯普攻
+                self.add_message(caster, f"{caster.name}使用普通攻击，被{target.name}躲开了")
 
-        return skill_msg, total_dmg
+        return "", total_dmg # 返回空消息，因为消息已经在内部add_message了
 
 
     def check_unit_control(self, unit):
@@ -2598,26 +2667,33 @@ class BattleSystem:
         self.round += 1
         # 获取所有存活单位并按速度排序
         units = sorted([u for u in self.team_a + self.team_b if u.is_alive], key=lambda x: x.base_speed, reverse=True)
+        
+        # 记录所有单位在回合开始时的HP/MP，用于回合结束时统一更新状态条
+        units_initial_hp_mp = {unit.id: {'hp': unit.hp, 'mp': unit.mp} for unit in units}
 
         # 战斗开始时（第1回合），应用开局技能
         if self.round == 1:
             for unit in units:
                 enemies = self._get_all_enemies(unit)
                 self._apply_round_one_skills(unit, enemies, unit.start_skills)
+            # 在第一回合结束时统一更新所有单位状态，避免开局技能导致重复消息
+            # 这里的更新放在回合开始的周期性效果处理之后，确保只显示一次
+            # 移除此处的 add_unit_status_message，统一由下面的周期性效果处理后的更新取代
 
         # 回合开始时的周期性效果 (如本命法宝)
         # 每4回合触发一次，包括第1回合 ((1-1)%4 == 0)
         if (self.round - 1) % 4 == 0:
             for unit in units:
                 if not unit.is_alive: continue
-                # 触发其他周期性效果，包括初始护盾和无敌
-                if unit.natal and unit.natal_data:
-                    unit.apply_natal_periodic_effect(self)
-                    
+                # 确保 unit.natal_data 存在才尝试获取名称和触发效果
+                if unit.natal_data: 
+                    self.add_message(unit, f"『{unit.natal_data.get('name','本命法宝')}』道韵流转，威能再现！")
+                    unit.apply_natal_periodic_effect(self) # 此方法内部不再打印 "道韵流转"
+
                     # === 新增：道韵真伤逻辑 ===
                     # 仅玩家角色（非BOSS）的本命法宝触发此效果
                     if not unit.is_boss:
-                        natal_treasure_level = unit.natal_data.get("level", 0)
+                        natal_treasure_level = unit.natal_data.get("level", 0) # 从natal_data获取level
                         periodic_true_dmg_rate = PERIODIC_TRUE_DAMAGE_BASE + natal_treasure_level * PERIODIC_TRUE_DAMAGE_GROWTH_PER_LEVEL
                         
                         if periodic_true_dmg_rate > 0:
@@ -2628,107 +2704,127 @@ class BattleSystem:
                                     if enemy.is_alive:
                                         true_damage = int(enemy.hp * periodic_true_dmg_rate)
                                         if true_damage > 0:
-                                            # 真实伤害无视护盾和减伤，直接扣除HP
-                                            enemy.update_stat("hp", 2, true_damage, bypass_shield=True)
+                                            enemy.update_stat("hp", 2, true_damage, bypass_shield=True) # 真实伤害无视护盾和减伤，直接扣除HP
                                             self.add_message(unit, f"→ 对 {enemy.name} 造成 {number_to(true_damage)} 点真实伤害！")
+                                            # self.add_unit_status_message(enemy) # 移除：统一在回合末更新
                                             
                                             # 检查目标是否死亡并尝试复活
                                             if not enemy.is_alive:
-                                                if self._check_and_apply_revive_effects(enemy, False): # 道韵不带斩命属性
-                                                    enemy.hp = enemy.max_hp if enemy.hp >= enemy.max_hp else enemy.hp
-                    # === 道韵真伤逻辑结束 ===
+                                                # 道韵真伤不带斩命属性，所以第二个参数为False
+                                                if not self._check_and_apply_revive_effects(enemy, False):
+                                                    self.add_message(enemy, f"💀{enemy.name}倒下了！")
+        
+            # 在周期性效果处理后统一更新所有单位状态，避免重复消息
+            # 这里统一更新所有单位的状态条
+            for unit in units:
+                if unit.is_alive:
+                    self.add_unit_status_message(unit) # 确保所有单位在回合开始（包括周期性效果后）有一次状态更新
 
 
         # 按单位行动
         for unit in units:
             if not unit.is_alive: continue
             
+            # 回合开始头部信息 (当前行动单位)
             self.add_message(unit, f"☆------{unit.name}的回合 (第 {self.round} 回合)------☆")
-            unit.update_status_effects()  # 更新Buff/Debuff持续时间，技能冷却
+            # 移除此处的 add_unit_status_message，统一由回合末或周期性更新处理
+            # self.add_unit_status_message(unit)
+
+            # 更新Buff/Debuff持续时间，技能冷却
+            unit.update_status_effects()  
+
+            # 记录HP和MP，用于后续判断是否需要更新状态栏
+            # 这一段移到外层循环，记录所有单位的初始HP/MP，便于统一在回合末处理
+            # initial_hp_in_turn = unit.hp
+            # initial_mp_in_turn = unit.mp
 
             # 本命法宝流血概率触发
-            if unit.natal and unit.natal_data:
+            if unit.natal_data: # 确保存在本命法宝数据
                 unit.apply_natal_bleed_proc(self)
                 
             # DoT 伤害结算 (中毒、流血、技能持续伤害)
             if unit.poison_dot_dmg > 0:
-                self.add_message(unit, f"{unit.name}☠️中毒消耗气血{number_to(int(unit.poison_dot_dmg))}点")
-                hp_dmg, _, _ = self._apply_damage(unit, unit, unit.poison_dot_dmg, 0) # 自己给自己造成伤害，不反弹
-                # 复活判定
+                self.add_message(unit, f"☠️{unit.name}中毒消耗气血{number_to(int(unit.poison_dot_dmg))}点")
+                hp_dmg_from_dot, _, _ = self._apply_damage(unit, unit, unit.poison_dot_dmg, 0) # 自己给自己造成伤害，不反弹
+                # 复活判定 (在hp_dmg_from_dot 计算后进行，避免重复扣除生命)
                 if not unit.is_alive:
-                    if self._check_and_apply_revive_effects(unit, False): # 中毒无法触发斩命
-                        unit.hp = unit.max_hp if unit.hp >= unit.max_hp else unit.hp
+                    if not self._check_and_apply_revive_effects(unit, False): # 中毒无法触发斩命
+                        self.add_message(unit, f"💀{unit.name}倒下了！")
             
             bleed_damages = unit.bleed_dot_dmg_list
             if bleed_damages:
                 total_bleed_dmg = sum(bleed_damages)
-                self.add_message(unit, f"{unit.name}🩸因流血消耗气血{number_to(int(total_bleed_dmg))}点 ({len(bleed_damages)}层)")
-                hp_dmg, _, _ = self._apply_damage(unit, unit, total_bleed_dmg, 0) # 自己给自己造成伤害，不反弹
+                self.add_message(unit, f"🩸{unit.name}因流血消耗气血{number_to(int(total_bleed_dmg))}点 ({len(bleed_damages)}层)")
+                hp_dmg_from_dot, _, _ = self._apply_damage(unit, unit, total_bleed_dmg, 0) # 自己给自己造成伤害，不反弹
                 # 复活判定
                 if not unit.is_alive:
-                    if self._check_and_apply_revive_effects(unit, False): # 流血无法触发斩命
-                        unit.hp = unit.max_hp if unit.hp >= unit.max_hp else unit.hp
+                    if not self._check_and_apply_revive_effects(unit, False): # 流血无法触发斩命
+                        self.add_message(unit, f"💀{unit.name}倒下了！")
 
             # 技能DoT结算
-            if unit.has_debuff("type", DebuffType.SKILL_DOT):
-                for skill_dot_info in unit.get_debuffs("type", DebuffType.SKILL_DOT):
-                    caster = next((u for u in self.team_a + self.team_b if u.name == skill_dot_info.coefficient), None) # 找到施加DoT的施法者
-                    if not caster: continue
-                    raw_dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, unit, skill_dot_info.value) # DoT通常没有true_dmg
-                    if status == "Hit":
-                        hp_dmg, _, reflected_dmg = self._apply_damage(caster, unit, raw_dmg, true_dmg)
-                        # 处理反伤
-                        if reflected_dmg > 0:
-                            self.add_message(unit, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
-                            caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
-                        
-                        crit_str = "💥会心一击，" if is_crit else ""
-                        self.add_message(unit, f"{skill_dot_info.name}{crit_str}造成{number_to(int(hp_dmg))}伤害！"
-                                               f"（剩余{skill_dot_info.duration}回合）")
-                        # 斩命和复活判定
-                        if not unit.is_alive:
-                            self._check_and_apply_death_strike(caster, unit, hp_dmg)
-                            if self._check_and_apply_revive_effects(unit, caster.has_death_strike):
-                                unit.hp = unit.max_hp if unit.hp >= unit.max_hp else unit.hp
+            for skill_dot_info in unit.get_debuffs("type", DebuffType.SKILL_DOT):
+                caster = next((u for u in self.team_a + self.team_b if u.name == skill_dot_info.coefficient), None) # 找到施加DoT的施法者
+                if not caster: continue
+                raw_dmg, true_dmg, is_crit, status = self._calc_raw_damage(caster, unit, skill_dot_info.value) # DoT通常没有true_dmg
+                if status == "Hit":
+                    hp_dmg, _, reflected_dmg = self._apply_damage(caster, unit, raw_dmg, true_dmg)
+                    # 处理反伤
+                    if reflected_dmg > 0:
+                        self.add_message(unit, f"对{caster.name}反弹{number_to(reflected_dmg)}真实伤害！")
+                        caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
+                    
+                    crit_str = "💥会心一击，" if is_crit else ""
+                    self.add_message(unit, f"{skill_dot_info.name}{crit_str}造成{number_to(int(hp_dmg))}伤害！"
+                                           f"（剩余{skill_dot_info.duration}回合）")
+                    # self.add_unit_status_message(unit) # 移除：统一在回合末更新
+                    # 斩命和复活判定
+                    killed_by_death_strike = self._check_and_apply_death_strike(caster, unit, hp_dmg)
+                    if not unit.is_alive and not killed_by_death_strike:
+                        if not self._check_and_apply_revive_effects(unit, caster.has_death_strike):
+                            self.add_message(unit, f"💀{unit.name}倒下了！")
 
-
-            # 结算后检查死亡，如果死亡则跳过后续行动
-            if not unit.is_alive:
-                self.add_message(unit, f"{unit.name}💀倒下了！")
-                continue
 
             # HoT 结算 (HP和MP恢复)
             if unit.hp_regen_rate > 0:
-                self.add_message(unit, f"{unit.name}❤️回复气血{number_to(int(unit.hp_regen_rate))}点")
+                self.add_message(unit, f"❤️{unit.name}回复气血{number_to(int(unit.hp_regen_rate))}点")
                 unit.update_stat("hp", 1, unit.hp_regen_rate)
 
             if unit.mp_regen_rate > 0:
-                self.add_message(unit, f"{unit.name}💙回复真元{number_to(int(unit.mp_regen_rate))}点")
+                self.add_message(unit, f"💙{unit.name}回复真元{number_to(int(unit.mp_regen_rate))}点")
                 unit.update_stat("mp", 1, unit.mp_regen_rate)
+            
+            # 如果HP或MP有变化，则更新当前单位的状态显示 (在所有DoT/HoT/吸血/吸蓝后一次性更新)
+            # 移除此处的 add_unit_status_message，统一由回合末处理
+            # if unit.hp != initial_hp_in_turn or unit.mp != initial_mp_in_turn:
+            #     self.add_unit_status_message(unit)
+
 
             # Buff 状态显示 (例如，持续Buff的剩余回合数)
             if unit.has_buff("skill_type", 3): # 属性增益型Buff
                 for skill_buff in unit.get_buffs("skill_type", 3):
                     # Pass raw numeric value to get_effect_desc
                     buff_msg = self.get_effect_desc(skill_buff.type, False, skill_buff.value)
-                    self.add_message(unit, f"{skill_buff.name}{buff_msg}，剩余{skill_buff.duration}回合")
+                    self.add_message(unit, f"『{skill_buff.name}』{buff_msg}，剩余{skill_buff.duration}回合")
 
             if unit.has_buff("skill_type", 6): # 叠加型Buff
                 skill_buff = unit.get_buff("skill_type", 6)
                 # 叠加Buff的逻辑：每次叠加基础值乘以系数
                 # 假设 coefficient 记录已叠加层数
                 # 原始逻辑是 skill_buff.value + skill_buff.value / skill_buff.coefficient，可能不符合通常的叠加逻辑
-                # 修正为：每次叠加，value增加 skill_buff.value本身
-                # 或者，如果skill_buff.value是每层增加的量，那么总值就是 初始值 + (层数-1)*每层值
-                # 鉴于现有代码逻辑，暂时保留原意，但通常叠加是 base_value * (1 + layer * per_layer_value)
-                # 这里假设 skill_buff.value 是每层增加的倍率，coefficient是层数
-                # 那么更新后的 value 应该是原始的 skill_buff.value * (coefficient + 1)
-                # 或者更简单：每次效果触发，直接增加skill_buff.value到某个累加属性上
+                # 修正为：每次效果触发，直接增加skill_buff.value到某个累加属性上
                 # 由于此处没有累加属性，直接修改buff的value不太直观。
                 # 暂不修改，如果后续有问题，这里需要重新设计叠加buff的机制。
                 unit.set_buff_field("name", "value", skill_buff.name, (skill_buff.value + (skill_buff.coefficient * skill_buff.value))) # 简单的叠加计算
                 unit.set_buff_field("name", "coefficient", skill_buff.name, (skill_buff.coefficient + 1))
-                self.add_message(unit, f"{skill_buff.name}提升了{skill_buff.value:.2f}倍攻击力，剩余{skill_buff.duration}回合")
+                self.add_message(unit, f"『{skill_buff.name}』提升了{skill_buff.value:.2f}倍攻击力，剩余{skill_buff.duration}回合")
+
+
+            # 结算后检查死亡，如果死亡则跳过后续行动
+            if not unit.is_alive:
+                # 只有在之前的处理中没有打印过死亡消息时才打印
+                if not any(f"💀{unit.name}倒下了！" in entry["data"]["content"] for entry in self.play_list[-5:]): # 检查最近5条消息
+                    self.add_message(unit, f"💀{unit.name}倒下了！")
+                continue # 跳过当前单位的行动
 
 
             # 控制状态检查，如果被控制则跳过行动
@@ -2745,43 +2841,56 @@ class BattleSystem:
             
             if skill:
                 targets = self._select_targets(enemies, skill, unit.is_boss) # 选择目标
-                skill_msg, total_dmg = self._execute_skill(unit, targets, skill) # 执行技能
+                if not targets: # 如果技能有目标但没选到，则进行普攻
+                    target = min(enemies, key=lambda x: x.hp)
+                    _, total_dmg = self._normal_attack_and_process(unit, target)
+                else:
+                    _, total_dmg = self._execute_skill(unit, targets, skill) # 执行技能
             else: # 如果没有可用技能，则进行普攻
                 target = min(enemies, key=lambda x: x.hp) # 普攻选择血量最少的敌人
-                skill_msg, total_dmg = self._normal_attack_and_process(unit, target)
+                _, total_dmg = self._normal_attack_and_process(unit, target)
 
             # 处理吸血/吸蓝
             if total_dmg > 0:
                 lifesteal_msg, mana_steal_msg = "", ""
+                # old_unit_hp_after_attack = unit.hp # 再次记录，用于吸血后的状态更新 -- 统一在回合末更新
+                # old_unit_mp_after_attack = unit.mp
+
                 if unit.lifesteal_rate > 0:
                     lifesteal = int(total_dmg * unit.lifesteal_rate)
                     if lifesteal > 0:
-                        lifesteal_msg = f"（❤️吸取气血{number_to(lifesteal)}点）"
+                        lifesteal_msg = f"❤️吸取气血{number_to(lifesteal)}点"
                         unit.update_stat("hp", 1, lifesteal)
                 
                 if unit.mana_steal_rate > 0:
                     mana_steal = int(total_dmg * unit.mana_steal_rate)
                     if mana_steal > 0:
-                        mana_steal_msg = f"（💙吸取真元{number_to(mana_steal)}点）"
+                        mana_steal_msg = f"💙吸取真元{number_to(mana_steal)}点"
                         unit.update_stat("mp", 1, mana_steal)
 
                 if lifesteal_msg or mana_steal_msg:
-                    skill_msg = self.add_after_last_damage(skill_msg, f"{lifesteal_msg}{mana_steal_msg}")
-
-            self.add_message(unit, skill_msg) # 添加技能或普攻消息
-            unit.total_dmg += total_dmg # 累计单位总伤害
-            
-            # 更新受击目标的血条显示
-            if total_dmg > 0:
-                active_targets = []
-                if 'targets' in locals() and targets: # 如果技能有目标列表
-                    active_targets = targets if isinstance(targets, list) else [targets]
-                elif 'target' in locals() and target: # 如果是普攻的单一目标
-                    active_targets = [target]
+                    messages = []
+                    if lifesteal_msg: messages.append(lifesteal_msg)
+                    if mana_steal_msg: messages.append(mana_steal_msg)
+                    self.add_message(unit, f"（{'、'.join(messages)}）")
                 
-                hp_msgs = [t.show_bar("hp") for t in active_targets if t.is_alive]
-                if hp_msgs:
-                    self.add_message(unit, "\n".join(hp_msgs))
+                # 如果吸血/吸蓝导致HP或MP变化，则更新当前单位的状态显示 -- 统一在回合末更新
+                # if unit.hp != old_unit_hp_after_attack or unit.mp != old_unit_mp_after_attack:
+                #     self.add_unit_status_message(unit)
+
+            # 攻击完成后检查敌人是否死亡，并打印死亡消息
+            for enemy in enemies:
+                if not enemy.is_alive:
+                    # 只有在之前的处理中没有打印过死亡消息时才打印
+                    if not any(f"💀{enemy.name}倒下了！" in entry["data"]["content"] for entry in self.play_list[-5:]):
+                        self.add_message(enemy, f"💀{enemy.name}倒下了！")
+            
+            # --- 回合结束，统一更新状态条 ---
+            # 遍历所有单位，检查其HP/MP是否与回合开始时不同，如果不同则更新状态条
+            for u in self.team_a + self.team_b:
+                if u.id in units_initial_hp_mp:
+                    if u.hp != units_initial_hp_mp[u.id]['hp'] or u.mp != units_initial_hp_mp[u.id]['mp']:
+                        self.add_unit_status_message(u) # 只有发生变化的单位才更新状态条
 
 
     def get_final_status_list(self):

@@ -26,6 +26,7 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items # 导入 Items
 
 from .natal_data import * # 导入本命法宝数据管理类和相关配置
+from .natal_config import INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE # 导入无敌总等级成长系数
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -71,20 +72,24 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     # 预计算可能的返还，以判断是否足够进行重塑（至少要能支付基础消耗）
     old_nt_data = nt.get_data()
+    
+    # 计算效果升阶的返还数量
     refund_from_effect_upgrades = 0
-    if old_nt_data.get("effect1_level", 0) > 1: # 如果效果1等级大于1，则计算返还
+    # 效果1的返还（如果等级大于1）
+    if old_nt_data.get("effect1_level", 0) > 1:
+        # 每个效果等级大于1的部分返还1个神秘经书
         refund_from_effect_upgrades += (old_nt_data["effect1_level"] - 1)
-    if old_nt_data.get("effect2_level", 0) > 1: # 如果效果2等级大于1，则计算返还
+    # 效果2的返还（如果存在且等级大于1）
+    if old_nt_data.get("effect2_type", 0) != 0 and old_nt_data.get("effect2_level", 0) > 1:
         refund_from_effect_upgrades += (old_nt_data["effect2_level"] - 1)
     
     # 实际需要消耗的神秘经书 = 基础消耗 - 效果升阶返还
-    # 如果是净获得，则无需检查库存；如果净消耗，则需要检查库存
+    # 如果结果为负数，表示重塑后会有神秘经书返还，不需检查库存
     net_cost_to_check = scripture_cost_for_reawaken - refund_from_effect_upgrades
-    if net_cost_to_check < 0: # 如果是净获得，则不需检查库存
-        net_cost_to_check = 0
-        
+    
     scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID) # 获取用户背包中的神秘经书数量
-    if scripture_num < net_cost_to_check: # 如果经书数量不足以支付净消耗
+    
+    if net_cost_to_check > 0 and scripture_num < net_cost_to_check: # 只有当净消耗大于0时才检查库存
         await handle_send(bot, event, f"重塑本命法宝需要消耗{net_cost_to_check}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个，无法重塑！",
                            md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="法宝", v2="我的本命法宝", k3="升阶", v3="本命法宝升阶")
         await natal_awaken.finish()
@@ -92,7 +97,14 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     msg = f"你已拥有本命法宝：\n\n{current_desc}\n\n"
     msg += f"重新觉醒将会【完全随机重塑名称、形态与效果】，旧法宝将被覆盖，同时法宝等级和效果等级将被重置。\n"
     
-    msg += "确定要重塑本命法宝吗？\n\n"
+    if net_cost_to_check > 0:
+        msg += f"本次重塑需要消耗 {net_cost_to_check} 个【{mysterious_scripture_info['name']}】。"
+    elif net_cost_to_check < 0:
+        msg += f"本次重塑将返还 {abs(net_cost_to_check)} 个【{mysterious_scripture_info['name']}】。"
+    else:
+        msg += f"本次重塑无需额外消耗【{mysterious_scripture_info['name']}】。"
+    
+    msg += "\n确定要重塑本命法宝吗？\n\n"
     msg += "回复：【确定】 继续重塑\n"
     msg += "回复：【取消】 或其他内容 放弃操作"
 
@@ -124,7 +136,7 @@ async def natal_awaken_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessa
         refund_from_effect_upgrades = 0
         if old_nt_data.get("effect1_level", 0) > 1:
             refund_from_effect_upgrades += (old_nt_data["effect1_level"] - 1)
-        if old_nt_data.get("effect2_level", 0) > 1:
+        if old_nt_data.get("effect2_type", 0) != 0 and old_nt_data.get("effect2_level", 0) > 1: # 效果2存在才计算
             refund_from_effect_upgrades += (old_nt_data["effect2_level"] - 1)
 
         # 计算最终的神秘经书变动 (负数表示消耗，正数表示获得)
@@ -244,11 +256,11 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         exp_to_add = int(exp_amount_str) if exp_amount_str else 1 # 默认增加1点经验
         if exp_to_add <= 0:
             await handle_send(bot, event, "养成的经验数量必须是正整数！",
-                               md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝")
+                               md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
             return
     except ValueError:
         await handle_send(bot, event, "养成的经验数量必须是整数！",
-                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝")
+                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
         return
 
     # **新增逻辑：限制经验传参上限，使其不超过当前等级所需的剩余经验**
@@ -256,18 +268,20 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     max_exp_for_current_level_up = nt_data.get("max_exp", 100) # 当前等级升阶所需的总经验
     remaining_exp_needed = max_exp_for_current_level_up - current_exp # 当前等级还需多少经验才能升级
     
-    if remaining_exp_needed <= 0: # 如果当前经验已满或溢出
+    # 如果当前经验已满，则直接提示，避免继续计算和扣费
+    if remaining_exp_needed <= 0:
         await handle_send(bot, event, "你的本命法宝当前等级经验已满，请等待自动升级或继续养成以触发升级。",
-                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶")
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="养成", v3="养成本命法宝")
         return
 
     # 实际要增加的经验不能超过当前等级升级所需的剩余经验
     original_exp_to_add = exp_to_add
     if exp_to_add > remaining_exp_needed:
         exp_to_add = remaining_exp_needed
-        await handle_send(bot, event, f"你本次最多只能再增加{remaining_exp_needed}点经验达到当前等级上限，已为你调整为{exp_to_add}点。",
-                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝")
         # 这里发送提示后，继续执行扣费和加经验逻辑
+        await handle_send(bot, event, f"你本次最多只能再增加{remaining_exp_needed}点经验达到当前等级上限，已为你调整为{exp_to_add}点。",
+                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
+
 
     # 养成方案：每次养成操作消耗灵石，增加1点经验
     base_cost_per_exp = 1_000_000 # 从0级到1级时，获得1点经验所需的基础灵石
@@ -354,33 +368,20 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     """
     处理本命法宝帮助命令，显示系统说明。
     """
-    _nt_temp = NatalTreasure(1) # 仅用于获取常量，不进行数据操作，user_id设为1
-    _nt_temp_data = _nt_temp.get_data() # 获取默认数据以模拟法宝等级 (可能为None，需处理)
-    if _nt_temp_data:
-        _nt_temp_data["level"] = 1 # 假设法宝等级为1级用于描述
-        _nt_temp.natal_data = _nt_temp_data
-    else: # 如果_nt_temp_data为None，则创建一个模拟数据
-        _nt_temp.natal_data = {"level": 1, "effect1_type": NatalEffectType.DEATH_STRIKE.value, "effect1_level": 1,
-                               "effect1_base_value": EFFECT_BASE_AND_GROWTH[NatalEffectType.DEATH_STRIKE]["min_single"]} # 模拟一个斩命效果用于描述
-
+    # 仅用于获取常量，不进行数据操作
+    # 斩命和破盾的基础值需要直接从配置中获取，因为它们没有Effect Level Growth来显示
+    death_strike_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.DEATH_STRIKE]["min_single"] * 100
+    shield_break_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.SHIELD_BREAK]["min_single"] * 100
 
     # 获取无敌和双生的初始值和成长值
-    invincible_config = EFFECT_BASE_AND_GROWTH[NatalEffectType.INVINCIBLE]
-    invincible_first_base_chance = INVINCIBLE_FIRST_GAIN_CHANCE
-    invincible_sub_base_chance = INVINCIBLE_SUBSEQUENT_GAIN_CHANCE
-    invincible_growth_per_level = invincible_config.get("growth", 0.0)
+    invincible_first_base_chance = INVINCIBLE_FIRST_GAIN_CHANCE * 100
+    invincible_sub_base_chance = INVINCIBLE_SUBSEQUENT_GAIN_CHANCE * 100
+    invincible_growth_per_level = INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE * 100 # 无敌是法宝总等级成长
 
     twin_strike_config = EFFECT_BASE_AND_GROWTH[NatalEffectType.TWIN_STRIKE]
-    twin_strike_base_chance_single = twin_strike_config["min_single"]
-    twin_strike_effect_growth = twin_strike_config.get("growth", 0.0)
-    twin_strike_damage_multiplier = twin_strike_config["max_single"] # 双生伤害倍率固定100%
-
-    # 斩命效果的描述需要其基础值，这里从配置中直接获取一个默认值
-    death_strike_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.DEATH_STRIKE]["min_single"]
-    
-    # 破盾效果的基础值
-    shield_break_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.SHIELD_BREAK]["min_single"]
-
+    twin_strike_base_chance_single = twin_strike_config["min_single"] * 100
+    twin_strike_effect_growth = twin_strike_config.get("growth", 0.0) * 100 # 双生是效果等级成长
+    twin_strike_damage_multiplier = twin_strike_config["max_single"] * 100 # 双生伤害倍率固定100%
 
     msg = f"""
 【本命法宝】
@@ -397,13 +398,13 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
    例如：【养成本命法宝 50】，默认【养成本命法宝 1】
    每次养成消耗灵石（消耗随法宝总等级递增），增加指定数量的法宝经验。
    经验满后法宝总等级提升1级。
-   法宝总等级上限{_nt_temp.max_treasure_level}级。
+   法宝总等级上限{MAX_TREASURE_LEVEL}级。
 
 3. 升阶 (提升法宝效果等级)
 >   发送：【本命法宝升阶】
    每次升阶消耗1个【神秘经书】，提升一个法宝效果的等级。
    法宝有多个效果时，优先等级较低的效果升阶；如果等级相同，则随机选择一个。
-   单效果等级上限{_nt_temp.max_effect_level_single}级，双效果每个等级上限{_nt_temp.max_effect_level_double}级。
+   单效果等级上限{MAX_EFFECT_LEVEL_SINGLE}级，双效果每个等级上限{MAX_EFFECT_LEVEL_DOUBLE}级。
 
 4. 效果类型说明
 >   共有{len(NatalEffectType)}种效果：
@@ -411,15 +412,15 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
    • 破甲：降低敌方防御，提升自身穿甲。
    • 闪避：提升自身闪避率。
    • 护盾：战斗开局获得护盾，周期性刷新。
-   • 破盾：攻击时有护盾的敌人时，部分伤害无视护盾（初始{round(shield_break_base_value * 100, 2)}%）并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
+   • 破盾：攻击有护盾的敌人时，无视其{round(shield_break_base_value, 2)}%护盾并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
    • 反伤：被攻击时反还部分伤害给攻击者。
    • 真伤：攻击时额外造成真实伤害，无视减伤和护盾。
    • 抗暴：减少被暴击时受到的伤害。
    • 天命：生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
    • 不灭：生命值低于0时有50%概率触发恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
-   • 斩命：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value*100:.0f}%时，对其造成致命打击直接斩杀。
-   • 无敌：周期性获得无敌效果，可免疫下次所受到的所有伤害，每场战斗上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance*100, 2)}%，后续获得概率{round(invincible_sub_base_chance*100, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level*100, 2)}%。
-   • 双生：普通攻击时有{round(twin_strike_base_chance_single*100, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier*100, 2)}%伤害的攻击。效果等级每提升1级，触发概率增加{round(twin_strike_effect_growth*100, 2)}%。
+   • 斩命：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
+   • 无敌：周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
+   • 双生：普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。效果等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
 
 5. 战斗中效果触发
 >   • 道韵：每4回合对所有敌方造成当前生命 {round(PERIODIC_TRUE_DAMAGE_BASE * 100, 2)}% + 法宝总等级x{round(PERIODIC_TRUE_DAMAGE_GROWTH_PER_LEVEL * 100, 2)}% 的真实伤害。
@@ -431,4 +432,4 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
    发送：【我的本命法宝】或【法宝信息】查看法宝详情。
 """
     await handle_send(bot, event, msg,
-                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="养成", v2="养成本命法宝", k3="养成", v3="本命法宝升阶")
+                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")

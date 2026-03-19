@@ -1,4 +1,3 @@
-# natal_data.py
 import random
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .natal_config import *
@@ -50,12 +49,21 @@ class NatalTreasure:
         
         # 逐个检查字段是否存在并添加，以兼容旧数据
         record = player_data.get_fields(self.user_id, self.table)
-        if not record: # 如果用户在表中完全没有记录
+        
+        # 记录是否存在（判断是否是首次创建）
+        is_new_record = not bool(record)
+
+        if is_new_record: # 如果用户在表中完全没有记录，则创建
             for field, default_value in default_data.items():
                 player_data.update_or_write_data(self.user_id, self.table, field, default_value, data_type=type(default_value).__name__.upper())
         else: # 如果记录已存在，检查并添加新字段
             for field, default_value in default_data.items():
-                if field not in record: # 如果新版本添加了字段，旧数据中没有，则添加
+                # 判断字段是否存在，或者值是否为None（可能因旧数据结构导致）
+                # 注意：player_data.get_fields返回的字典中，如果某个字段不存在，则不会有这个key
+                # 如果这个字段在数据库中存在但值为NULL，则get_fields可能会返回None
+                if field not in record or record.get(field) is None: 
+                    # 只有当字段不存在于record中，或者其值为None时，才设置默认值
+                    # 这里更新了player_data.update_or_write_data的调用方式，确保是真正的写入或更新
                     player_data.update_or_write_data(self.user_id, self.table, field, default_value, data_type=type(default_value).__name__.upper())
         self._natal_data_cache = None # 清除缓存，以便下次从数据库加载最新数据
 
@@ -126,7 +134,8 @@ class NatalTreasure:
                 
                 # 特殊处理无敌和双生，其base_value存储的是概率
                 if etype == NatalEffectType.INVINCIBLE or etype == NatalEffectType.TWIN_STRIKE:
-                    base_value = base_value_min # base_value存基础概率
+                    # 对于无敌和双生，base_value存储的是配置中的min_single/min_double（基础概率）
+                    base_value = base_value_min 
                 else:
                     # 对于其他效果，随机生成一个基础数值
                     base_value = round(random.uniform(base_value_min, base_value_max), 3) # 增加精度
@@ -301,9 +310,8 @@ class NatalTreasure:
                 
                 # 特殊处理无敌效果的获得概率
                 if effect_type == NatalEffectType.INVINCIBLE:
-                    # base_value 存储的是配置里的 min_single/double (基础概率)
                     # total_level_growth 是法宝总等级带来的额外概率
-                    total_level_growth = natal_treasure_level * growth_per_level
+                    total_level_growth = natal_treasure_level * INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE # 使用专门的无敌总等级成长系数
                     
                     if is_first_gain: # 首次获得无敌时，使用首次获得的基础概率
                         return INVINCIBLE_FIRST_GAIN_CHANCE + total_level_growth
@@ -368,8 +376,10 @@ class NatalTreasure:
                 elif natal_effect_type == NatalEffectType.INVINCIBLE:
                     # 无敌不直接有值，只在 periodic_effect 中计算次数和概率
                     # 这里显示基础获得概率和总等级成长概率
-                    config = EFFECT_BASE_AND_GROWTH.get(natal_effect_type)
-                    total_level_growth = level * config.get("growth", 0.0) # 法宝总等级带来的额外概率
+                    
+                    # 获取当前法宝总等级（用于显示描述）
+                    current_natal_treasure_level_for_desc = data.get("level", 0)
+                    total_level_growth = current_natal_treasure_level_for_desc * INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE # 法宝总等级带来的额外概率
                     
                     lines.append(f"  └─ {effect_name} Lv.{effect_level}/{current_max_effect_level}：首次获得概率{round((INVINCIBLE_FIRST_GAIN_CHANCE + total_level_growth) * 100, 2)}%，后续获得概率{round((INVINCIBLE_SUBSEQUENT_GAIN_CHANCE + total_level_growth) * 100, 2)}%")
                 elif natal_effect_type == NatalEffectType.TWIN_STRIKE:
