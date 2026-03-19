@@ -797,7 +797,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
-                merged_content = title + merged_content
+                msg = title + msg
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             await handle_send(bot, event, merged_content)
@@ -870,8 +870,6 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         if len(args) == 3:
             name, uin, msgs = args
             msg = "\n".join(msgs)
-            if title:
-                msg = title + msg
             if XiuConfig().message_optimization:
                 msg = optimize_message(msg, is_group)
             if msg.startswith('\n'):
@@ -890,8 +888,6 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
-            if title:
-                merged_content = title + merged_content
             if XiuConfig().message_optimization:
                 merged_content = optimize_message(merged_content, is_group)
             if merged_content.startswith('\n'):
@@ -956,6 +952,43 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
                 user_id=event.user_id, message=msg
             )
 
+def generate_page_param(page_list: list) -> dict:
+    values = []
+    buttons = []
+
+    # 先收集所有按钮对
+    i = 0
+    while i + 1 < len(page_list):
+        buttons.append((page_list[i], page_list[i+1]))
+        i += 2
+
+    # ===================== 关键修改：最多取 9 组（18个参数） =====================
+    MAX_BUTTON_PAIRS = 9
+    display_buttons = buttons[:MAX_BUTTON_PAIRS]
+
+    # 每3对一组
+    for group_idx in range(0, len(display_buttons), 3):
+        group = display_buttons[group_idx:group_idx+3]
+
+        for j, (text, cmd) in enumerate(group):
+            if j == len(group) - 1 and group_idx + 3 >= len(display_buttons):
+                status = "end"
+                msg2 = "\r"
+            else:
+                status = "start"
+                msg2 = " " if j < 2 else "\r"
+
+            cmd_str = generate_command(text, command=cmd, status=status, msg2=msg2)
+            values.append(cmd_str)
+
+    # 永远把页码文字放在最后（即使被截断了也要显示）
+    if len(page_list) % 2 == 1:
+        values.append(generate_command(page_list[-1]))
+
+    result = {"key": "t2", "values": values}
+    
+    return result
+
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息"""
     if not markdown_id:
@@ -981,14 +1014,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         else:
             page = markdown_param("t2", " ")
     else:
-        page = {
-        "key": "t2",
-        "values": [
-        generate_command(f"{page[0]}", command=f"{page[1]}", status="start", msg2=f" "),
-        generate_command(f"{page[2]}", command=f"{page[3]}", status="start", msg2=f" "),
-        generate_command(f"{page[4]}", command=f"{page[5]}", status="end", msg2=f"\r"),
-        generate_command(f"{page[6]}")
-        ]}
+        page = generate_page_param(page)
     if shell:
         shell_param = markdown_param("s1", "python\r" + msg)
         msg_param = page
