@@ -371,7 +371,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     today_stone = int(boss_limit.get_stone(user_id))
     
     # 设置每日上限
-    integral_limit = 6000
+    integral_limit = 12000
     stone_limit = 300000000
     
     # 初始化奖励变量
@@ -923,7 +923,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     today_battle_count = boss_limit.get_battle_count(user_id)
     
     # 设置每日上限
-    integral_limit = 6000
+    integral_limit = 12000
     stone_limit = 300000000
     battle_count = 30
     
