@@ -1,5 +1,0 @@
-{{.t1}}
-```python
-{{.t2}}
-```
-<qqbot-cmd-input text="{{.button_text_1}}" show=" {{.button_show_1}}" reference="false" /> | <qqbot-cmd-input text="{{.button_text_2}}" show="{{.button_show_2}}" reference="false"/> I <qqbot-cmd-input text="{{.button_text_3}}" show="{{.button_show_3}}" reference="false" />

@@ -230,7 +230,7 @@ def get_players_attributes(user_id, level_ratios=None):
         "nickname": user_info['user_name'],  # 用户昵称
         "max_hp": int(max_hp * ratio),  # 生命值上限
         "current_hp": int(hp * ratio),  # 当前生命值
-        "max_mp": int(max_mp * ratio),  # 真元值上限
+        "max_mp": int(max_mp * ratio),  # 最大真元值
         "current_mp": int(mp * ratio),  # 当前真元值
         "mp_cost_modifier": weapon_mp_cost_modifier,  # 真元消耗修正
         "attack": int(atk * ratio),  # 攻击力
@@ -886,7 +886,7 @@ BUFF_DESC_TEMPLATES = {
     BuffType.LIFESTEAL_UP: "生命偷取提升 {value_display}",
     BuffType.MANA_STEAL_UP: "真元偷取提升 {value_display}",
     BuffType.DEBUFF_IMMUNITY: "免疫所有减益效果",
-    BuffType.HP_REGEN_PERCENT: "每回合回复最大生命 {value_display}",
+    BuffType.HP_REGEN_PERCENT: "每回合回复最大生命 {value_display}", # 模板正确，使用 value_display
     BuffType.MP_REGEN_PERCENT: "每回合回复最大真元 {value_display}",
     BuffType.REFLECT_DAMAGE: "受到伤害时反弹 {value_display}",
     BuffType.SHIELD: "获得 {value_display_raw} 点护盾", # 护盾是点数
@@ -1244,8 +1244,10 @@ class Entity:
         :param match_value: 用于匹配的属性值。
         :return: 匹配Buff的指定属性值，如果未找到则返回 None。
         """
-        if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
-            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
+        if match_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{match_field}'")
+        if return_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{return_field}'")
 
         for buff in self.buffs:
             if getattr(buff, match_field, None) == match_value:
@@ -1262,8 +1264,10 @@ class Entity:
         :param match_value: 用于匹配的属性值。
         :return: 匹配Debuff的指定属性值，如果未找到则返回 None。
         """
-        if match_field not in VALID_FIELDS or return_field not in VALID_FIELDS:
-            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
+        if match_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{match_field}'")
+        if return_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{return_field}'")
 
         for debuff in self.debuffs:
             if getattr(debuff, match_field, None) == match_value:
@@ -1281,8 +1285,10 @@ class Entity:
         :param new_value: 新的属性值。
         :return: True 表示修改成功，False 表示未找到。
         """
-        if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
-            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
+        if match_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{match_field}'")
+        if target_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{target_field}'")
 
         for buff in self.buffs:
             if getattr(buff, match_field, None) == match_value:
@@ -1300,8 +1306,10 @@ class Entity:
         :param new_value: 新的属性值。
         :return: True 表示修改成功，False 表示未找到。
         """
-        if match_field not in VALID_FIELDS or target_field not in VALID_FIELDS:
-            raise ValueError(f"不支持的字段。有效字段: {VALID_FIELDS}")
+        if match_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{match_field}'")
+        if target_field not in VALID_FIELDS:
+            raise ValueError(f"不支持的字段 '{target_field}'")
 
         for debuff in self.debuffs:
             if getattr(debuff, match_field, None) == match_value:
@@ -2719,7 +2727,7 @@ class BattleSystem:
         if (self.round - 1) % 4 == 0:
             for unit in units:
                 if not unit.is_alive: continue
-                # 确保 unit.natal_data 存在才尝试获取名称和触发效果
+                # 确保 unit.natal_data 为 None 时不会尝试获取名称和触发效果
                 if unit.natal_data: 
                     self.add_message(unit, f"『{unit.natal_data.get('name','本命法宝')}』道韵流转，威能再现！")
                     unit.apply_natal_periodic_effect(self) # 此方法内部不再打印 "道韵流转"

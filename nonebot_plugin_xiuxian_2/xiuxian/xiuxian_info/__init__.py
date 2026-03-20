@@ -20,6 +20,9 @@ from nonebot.params import CommandArg
 from io import BytesIO
 from pathlib import Path
 
+# 导入本命法宝数据管理类
+from ..xiuxian_natal_treasure.natal_data import NatalTreasure # 新增：导入 NatalTreasure
+
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
@@ -64,6 +67,7 @@ async def get_user_xiuxian_info(user_id):
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
         else:
             exp_meg = f"可突破！"
+    
     partner_data = load_partner(user_id)
     if not partner_data or partner_data.get('partner_id') is None:
         partner_info = "无"
@@ -118,6 +122,12 @@ async def get_user_xiuxian_info(user_id):
     leveluprate = int(user_info['level_up_rate'])  # 用户失败次数加成
     number =  main_rate_buff["number"] if main_rate_buff is not None else 0
     
+    nt = NatalTreasure(user_id)
+    natal_name_level = "无" # 默认显示无
+    if nt.exists():
+        natal_data = nt.get_data()
+        natal_name_level = f"{natal_data.get('name', '未知法宝')} (Lv.{natal_data.get('level', 0)})"
+
     DETAIL_MAP = {
         "ID": f"{user_id}",
         "道号": f"{user_name}",
@@ -136,11 +146,14 @@ async def get_user_xiuxian_info(user_id):
         "副修神通": sec_buff_name,
         "法器": weapon_name,
         "防具": armor_name,
+        "道侣": partner_info,
+        "本命法宝": natal_name_level, # 添加本命法宝名称和等级
         "注册位数": f"第{int(user_num)}人",
         "修为排行": f"第{int(user_rank)}位",
         "灵石排行": f"第{int(user_stone)}位",
     }
     
+    # 格式化文本消息，本命法宝只显示名称和等级
     text_msg = f"""
 ID：{user_id}
 道号: {user_name}
@@ -164,6 +177,7 @@ ID：{user_id}
 法器: {weapon_name}
 防具: {armor_name}
 道侣：{partner_info}
+本命法宝: {natal_name_level}
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
 灵石排行: 第{int(user_stone)}位"""

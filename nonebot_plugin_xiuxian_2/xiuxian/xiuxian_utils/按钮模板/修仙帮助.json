@@ -1,0 +1,258 @@
+{
+  "rows": [
+    {
+      "buttons": [
+        {
+          "id": "1",
+          "render_data": {
+            "label": "灵庄",
+            "visited_label": "灵庄",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "灵庄帮助"
+          }
+        },
+        {
+          "id": "2",
+          "render_data": {
+            "label": "灵田",
+            "visited_label": "灵田",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "灵田帮助"
+          }
+        },
+        {
+          "id": "3",
+          "render_data": {
+            "label": "秘境",
+            "visited_label": "秘境",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "秘境帮助"
+          }
+        },
+        {
+          "id": "4",
+          "render_data": {
+            "label": "历练",
+            "visited_label": "历练",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "历练帮助"
+          }
+        }
+      ]
+    },
+    {
+      "buttons": [
+        {
+          "id": "5",
+          "render_data": {
+            "label": "通天塔",
+            "visited_label": "通天塔",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "通天塔帮助"
+          }
+        },
+        {
+          "id": "6",
+          "render_data": {
+            "label": "悬赏令",
+            "visited_label": "悬赏令",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "悬赏令帮助"
+          }
+        },
+        {
+          "id": "7",
+          "render_data": {
+            "label": "世界boss",
+            "visited_label": "世界boss",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "世界boss帮助"
+          }
+        },
+        {
+          "id": "8",
+          "render_data": {
+            "label": "幻境寻心",
+            "visited_label": "幻境寻心",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "幻境寻心"
+          }
+        }
+      ]
+    },
+    {
+      "buttons": [
+        {
+          "id": "11",
+          "render_data": {
+            "label": "物品交易",
+            "visited_label": "物品交易",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "交易帮助"
+          }
+        },
+        {
+          "id": "10",
+          "render_data": {
+            "label": "炼丹",
+            "visited_label": "炼丹",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "炼丹帮助"
+          }
+        },
+        {
+          "id": "11",
+          "render_data": {
+            "label": "传承",
+            "visited_label": "传承",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "传承帮助"
+          }
+        },
+        {
+          "id": "12",
+          "render_data": {
+            "label": "虚神界",
+            "visited_label": "虚神界",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "虚神界帮助"
+          }
+        }
+      ]
+    },
+    {
+      "buttons": [
+        {
+          "id": "13",
+          "render_data": {
+            "label": "官群",
+            "visited_label": "官群",
+            "style": 1
+          },
+          "action": {
+            "type": 0,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "https://qm.qq.com/q/3lCqHy4QgU"
+          }
+        },
+        {
+          "id": "14",
+          "render_data": {
+            "label": "赞助",
+            "visited_label": "赞助",
+            "style": 1
+          },
+          "action": {
+            "type": 0,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂",
+            "data": "https://afdian.com/a/liyw0205"
+          }
+        }
+      ]
+    }
+  ]
+}

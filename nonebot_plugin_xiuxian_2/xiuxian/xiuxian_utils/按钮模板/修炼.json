@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "buttons": [
+        {
+          "id": "1",
+          "render_data": {
+            "label": "修炼",
+            "visited_label": "修炼",
+            "style": 1
+          },
+          "action": {
+            "type": 2,
+            "enter": true,
+            "permission": {
+              "type": 2
+            },
+            "unsupport_tips": "堂堂修仙",
+            "data": "修炼"
+          }
+        }
+      ]
+    }
+  ]
+}
