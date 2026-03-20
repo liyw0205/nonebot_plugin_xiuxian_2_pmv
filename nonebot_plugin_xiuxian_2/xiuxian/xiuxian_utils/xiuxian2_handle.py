@@ -1706,7 +1706,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def day_num_reset(self):
         """重置丹药每日使用次数"""
-        sql = f"UPDATE back SET day_num=0 WHERE goods_type='丹药'"
+        sql = f"UPDATE back SET day_num=0 where goods_type='丹药'"
         cur = self.conn.cursor()
         cur.execute(sql, )
         self.conn.commit()
@@ -2146,6 +2146,7 @@ class TradeDataManager:
     def _check_data(self):
         """检查数据完整性"""
         c = self.conn.cursor()
+        # 仙肆商品表
         c.execute("""
             CREATE TABLE IF NOT EXISTS xianshi_item (
                 id TEXT PRIMARY KEY,
@@ -2157,6 +2158,7 @@ class TradeDataManager:
                 quantity INTEGER
             )
         """)
+        # 鬼市求购/摆摊表
         c.execute("""
             CREATE TABLE IF NOT EXISTS guishi_item (
                 id TEXT PRIMARY KEY,
@@ -2169,6 +2171,7 @@ class TradeDataManager:
                 filled_quantity INTEGER DEFAULT 0
             )
         """)
+        # 鬼市用户账户表 (灵石和暂存物品)
         c.execute("""
             CREATE TABLE IF NOT EXISTS guishi_info (
                 user_id INTEGER PRIMARY KEY,
@@ -2176,6 +2179,61 @@ class TradeDataManager:
                 items TEXT DEFAULT '{}'
             )
         """)
+        # 拍卖玩家上架物品等待区
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS auction_player_upload (
+                user_id INTEGER NOT NULL,
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                start_price INTEGER NOT NULL,
+                user_name TEXT NOT NULL,
+                PRIMARY KEY (user_id, item_id)
+            )
+        """)
+        # 当前拍卖品表
+        # 新增 bid_times 字段用于存储出价时间戳
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS auction_current (
+                id TEXT PRIMARY KEY,
+                item_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                start_price INTEGER NOT NULL,
+                current_price INTEGER NOT NULL,
+                seller_id INTEGER NOT NULL, -- 0 for system
+                seller_name TEXT NOT NULL,
+                bids TEXT DEFAULT '{}', -- JSON string of {user_id: bid_price}
+                bid_times TEXT DEFAULT '{}', -- JSON string of {user_id: timestamp}
+                is_system INTEGER DEFAULT 0, -- 0 for user, 1 for system
+                last_bid_time REAL DEFAULT NULL -- Unix timestamp
+            )
+        """)
+        # 拍卖历史记录表
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS auction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                auction_id TEXT NOT NULL,
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                start_price INTEGER NOT NULL,
+                final_price INTEGER,
+                seller_id INTEGER NOT NULL,
+                seller_name TEXT NOT NULL,
+                winner_id INTEGER,
+                winner_name TEXT,
+                status TEXT NOT NULL, -- '成交' or '流拍'
+                fee INTEGER,
+                seller_earnings INTEGER,
+                start_time REAL NOT NULL,
+                end_time REAL NOT NULL
+            )
+        """)
+        # 原有的 auction_settings 表不再由 TradeDataManager 管理，此处移除创建语句。
+        # c.execute("""
+        #     CREATE TABLE IF NOT EXISTS auction_settings (
+        #         key TEXT PRIMARY KEY,
+        #         value TEXT
+        #     )
+        # """)
         self.conn.commit()
 
     def total_goods_quantity(self):
@@ -2198,30 +2256,29 @@ class TradeDataManager:
         else:
             return 0
 
-    def generate_unique_id(self):
-        """生成唯一的 unique_id"""
-        while True:
-            timestamp_part = int(time.time() % 10000)
-            random_part = random.randint(100, 99999)
-            new_id = int(f"{timestamp_part}{random_part}") % 10**10  # 确保不超过10位
-        
-            # 限制在6-10位
-            unique_id = max(100000, min(new_id, 9999999999))
-            if not self._unique_id_exists(unique_id):
-                return unique_id
-
-    def _unique_id_exists(self, unique_id):
-        """检查 unique_id 是否已经存在于数据库中"""
+    def generate_unique_id(self, table_name):
+        """生成唯一的 unique_id，检查指定表中的ID"""
         cur = self.conn.cursor()
-        cur.execute("SELECT id FROM xianshi_item WHERE id = ?", (unique_id,))
-        if cur.fetchone():
-            return True
-        cur.execute("SELECT id FROM guishi_item WHERE id = ?", (unique_id,))
-        return cur.fetchone() is not None
+        while True:
+            # 生成6-10位随机数字作为字符串
+            # 保证至少6位，最多10位，且首位不为0
+            first_digit = str(random.randint(1, 9))
+            remaining_digits = ''.join(random.choices(string.digits, k=random.randint(5, 9)))
+            new_id_str = first_digit + remaining_digits
+            unique_id = int(new_id_str) # 转换为整数，但存储时通常会保持文本，此处为兼容旧代码
+
+            # 确保ID在6到10位数字之间
+            if not (100000 <= unique_id <= 9999999999):
+                continue
+        
+            # 检查unique_id是否已存在于数据库中
+            cur.execute(f"SELECT id FROM {table_name} WHERE id = ?", (unique_id,))
+            if not cur.fetchone():
+                return str(unique_id) # 返回字符串以匹配现有id TEXT类型
 
     def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
         """增加仙肆物品"""
-        unique_id = self.generate_unique_id()
+        unique_id = self.generate_unique_id("xianshi_item")
         
         sql = f"""
             INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
@@ -2232,7 +2289,7 @@ class TradeDataManager:
 
     def add_guishi_order(self, user_id, item_id, item_name, item_type, price, quantity):
         """新增鬼市求购订单/摊位"""
-        unique_id = self.generate_unique_id()
+        unique_id = self.generate_unique_id("guishi_item")
         sql = f"""
             INSERT INTO guishi_item (id, user_id, item_id, item_name, item_type, price, quantity)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -2295,7 +2352,7 @@ class TradeDataManager:
         conditions = []
         params = []
         
-        if user_id:
+        if user_id is not None:
             conditions.append("user_id = ?")
             params.append(user_id)
         
@@ -2332,7 +2389,7 @@ class TradeDataManager:
         """获取鬼市订单"""
         conditions = []
         params = []
-        if user_id:
+        if user_id is not None:
             conditions.append("user_id = ?")
             params.append(user_id)
         if name:
@@ -2396,7 +2453,7 @@ class TradeDataManager:
                current_sum = current
         
         # 更新数量
-        current_items[item_id] = current_sum + quantity
+        current_items[str(item_id)] = current_sum + quantity # 确保key是字符串
         
         # 序列化物品信息
         items_json = json.dumps(current_items)
@@ -2424,8 +2481,8 @@ class TradeDataManager:
         result = cur.fetchone()
         if result:
             items = json.loads(result[0]) if result[0] else {}
-            if item_id in items:
-                del items[item_id]
+            if str(item_id) in items: # 确保key是字符串
+                del items[str(item_id)]
                 sql = "UPDATE guishi_info SET items = ? WHERE user_id = ?"
                 cur.execute(sql, (json.dumps(items), user_id))
                 self.conn.commit()
@@ -2443,12 +2500,153 @@ class TradeDataManager:
             cur.execute(sql_insert, (user_id, amount))
         self.conn.commit()
 
+    # ====== 拍卖相关方法 ======
+    # 这些方法将不再直接管理 auction_settings 表
+    # auction_settings 将由 __init__.py 直接通过 JSON 文件管理
+
+    def add_player_auction_item(self, user_id, item_id, item_name, start_price, user_name):
+        """添加玩家上架物品到拍卖等待区"""
+        sql = """
+            INSERT INTO auction_player_upload (user_id, item_id, item_name, start_price, user_name)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        self.conn.execute(sql, (user_id, item_id, item_name, start_price, user_name))
+        self.conn.commit()
+
+    def get_player_auction_items(self, user_id=None):
+        """获取玩家上架物品列表，可选按user_id筛选"""
+        cur = self.conn.cursor()
+        if user_id is None:
+            sql = "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload"
+            cur.execute(sql)
+        else:
+            sql = "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload WHERE user_id = ?"
+            cur.execute(sql, (user_id,))
+        
+        results = cur.fetchall()
+        columns = ["user_id", "item_id", "item_name", "start_price", "user_name"]
+        return [dict(zip(columns, row)) for row in results]
+
+    def remove_player_auction_item(self, user_id, item_id):
+        """从拍卖等待区移除玩家上架物品"""
+        sql = "DELETE FROM auction_player_upload WHERE user_id = ? AND item_id = ?"
+        self.conn.execute(sql, (user_id, item_id))
+        self.conn.commit()
+    
+    def clear_player_auctions(self):
+        """清空所有玩家上架物品"""
+        sql = "DELETE FROM auction_player_upload"
+        self.conn.execute(sql)
+        self.conn.commit()
+
+    def set_current_auction(self, auction_items: list):
+        """
+        设置当前拍卖品列表
+        auction_items: list of dict, each dict represents an auction item.
+        """
+        self.clear_current_auction() # 清空旧的拍卖
+        cur = self.conn.cursor()
+        for item_data in auction_items:
+            # 确保 bids 和 bid_times 是 JSON 字符串
+            bids_json = json.dumps(item_data.get('bids', {}))
+            bid_times_json = json.dumps(item_data.get('bid_times', {}))
+            
+            sql = """
+                INSERT INTO auction_current (id, item_id, name, start_price, current_price, seller_id, seller_name, bids, bid_times, is_system, last_bid_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            cur.execute(sql, (
+                item_data['id'], item_data['item_id'], item_data['name'], item_data['start_price'], item_data['current_price'],
+                item_data['seller_id'], item_data['seller_name'], bids_json, bid_times_json,
+                1 if item_data['is_system'] else 0, item_data['last_bid_time']
+            ))
+        self.conn.commit()
+
+    def get_current_auction(self, auction_id=None):
+        """
+        获取当前拍卖品列表或单个拍卖品详情
+        Returns: list of dict if auction_id is None, dict if auction_id is specified, None if not found.
+        """
+        cur = self.conn.cursor()
+        if auction_id is None:
+            sql = "SELECT * FROM auction_current"
+            cur.execute(sql)
+            results = cur.fetchall()
+            columns = [col[0] for col in cur.description]
+            parsed_results = []
+            for row in results:
+                item = dict(zip(columns, row))
+                item['bids'] = json.loads(item['bids']) # Deserialize JSON strings
+                item['bid_times'] = json.loads(item['bid_times'])
+                item['is_system'] = bool(item['is_system'])
+                parsed_results.append(item)
+            return parsed_results
+        else:
+            sql = "SELECT * FROM auction_current WHERE id = ?"
+            cur.execute(sql, (auction_id,))
+            result = cur.fetchone()
+            if result:
+                columns = [col[0] for col in cur.description]
+                item = dict(zip(columns, result))
+                item['bids'] = json.loads(item['bids'])
+                item['bid_times'] = json.loads(item['bid_times'])
+                item['is_system'] = bool(item['is_system'])
+                return item
+            return None
+
+    def update_auction_bid(self, auction_id, new_current_price, new_bids, new_bid_times, new_last_bid_time):
+        """更新拍卖品的当前出价和出价记录"""
+        # 确保 bids 和 bid_times 是 JSON 字符串
+        bids_json = json.dumps(new_bids)
+        bid_times_json = json.dumps(new_bid_times)
+        
+        sql = """
+            UPDATE auction_current
+            SET current_price = ?, bids = ?, bid_times = ?, last_bid_time = ?
+            WHERE id = ?
+        """
+        self.conn.execute(sql, (new_current_price, bids_json, bid_times_json, new_last_bid_time, auction_id))
+        self.conn.commit()
+
+    def clear_current_auction(self):
+        """清空当前拍卖品表"""
+        sql = "DELETE FROM auction_current"
+        self.conn.execute(sql)
+        self.conn.commit()
+
+    def add_auction_history_record(self, record: dict):
+        """添加拍卖历史记录"""
+        sql = """
+            INSERT INTO auction_history (auction_id, item_id, item_name, start_price, final_price, seller_id, seller_name, winner_id, winner_name, status, fee, seller_earnings, start_time, end_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        self.conn.execute(sql, (
+            record['auction_id'], record['item_id'], record['item_name'], record['start_price'], record['final_price'],
+            record['seller_id'], record['seller_name'], record.get('winner_id'), record.get('winner_name'), record['status'],
+            record.get('fee'), record.get('seller_earnings'), record['start_time'], record['end_time']
+        ))
+        self.conn.commit()
+
+    def get_auction_history(self, auction_id=None):
+        """获取拍卖历史记录，可选按auction_id筛选"""
+        cur = self.conn.cursor()
+        if auction_id is None:
+            sql = "SELECT * FROM auction_history ORDER BY end_time DESC"
+            cur.execute(sql)
+        else:
+            sql = "SELECT * FROM auction_history WHERE auction_id = ? ORDER BY end_time DESC"
+            cur.execute(sql, (auction_id,))
+        
+        results = cur.fetchall()
+        columns = [col[0] for col in cur.description]
+        return [dict(zip(columns, row)) for row in results]
+    
     def close(self):
         """关闭数据库连接"""
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
             logger.opt(colors=True).info(f"<green>trade数据库关闭！</green>")
-    
+
 # 这里是Player部分
 class PlayerDataManager:
     global player_num
@@ -3161,7 +3359,7 @@ def final_user_data(user_data, columns):
   
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
     impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
-    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
+    impart_mp_per = impart = impart_data['impart_mp_per'] if impart_data is not None else 0
     impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
     
     user_buff_data = UserBuffDate(user_dict['user_id']).BuffInfo

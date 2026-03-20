@@ -239,7 +239,7 @@ def get_players_attributes(user_id, level_ratios=None):
         "critical_damage": critatk,  # 暴击伤害倍数
         "boss_damage_bonus": boss_atk,  # 对BOSS伤害加成
         "damage_reduction": dr,  # 伤害减免率
-        "armor_penetration": ap,  # 穿甲值
+        "armor_penetration": ap,  # 护甲穿透值
         "accuracy": hit,  # 命中率 (百分比)
         "dodge": dodge,  # 闪避率 (百分比)
         "speed": speed,  # 速度系数
@@ -290,13 +290,30 @@ def generate_sub_buff(skill, buff_type_mapping_param):
 
     name = skill["name"]
     buff_type_id = int(skill["buff_type"])
-    v1 = float(skill["buff"]) / 100
-    v2 = float(skill["buff2"]) / 100
+    
+    # 原始的 buff 和 buff2 值
+    raw_buff_value = float(skill["buff"])
+    raw_buff2_value = float(skill["buff2"])
+
+    v1 = raw_buff_value / 100 # 大多数百分比属性需要除以100
+    v2 = raw_buff2_value / 100
+
     is_debuff = False
-    if buff_type_id == 13 or buff_type_id == 14: # 斗战或穿甲，其值是直接的破甲值
-        v1 = skill["break"]
-    if buff_type_id == 8 or buff_type_id == 10: # 中毒或禁止吸取
+    
+    # 特殊处理：斗战或穿甲，其值是直接的破甲值 (0-1范围)，不需要除以100
+    if buff_type_id == 13 or buff_type_id == 14: 
+        v1 = float(skill["break"]) # 'break'字段已经是0-1的小数
+        
+    # 特殊处理：中毒或禁止吸取，这些是状态而非数值buff，value可能用于持续时间或强度
+    if buff_type_id == 8 or buff_type_id == 10: 
         is_debuff = True
+        # 对于中毒，v1是伤害百分比，通常是0-1的小数，所以这里需要除以100
+        if buff_type_id == 8:
+            v1 = raw_buff_value / 100
+        # 对于禁止吸取，v1和v2是固定的1，不需要除以100
+        elif buff_type_id == 10:
+            v1, v2 = 1, 1
+
 
     mapped = buff_type_mapping_param.get(buff_type_id)
 
@@ -320,10 +337,7 @@ def generate_sub_buff(skill, buff_type_mapping_param):
         return buffs
 
     # 情况 2：多个 buff（例如双吸、双禁止）
-    # 多个 buff 需要同时从 buff / buff2 取值
-    if buff_type_id == 10: # 禁止吸取，v1和v2是固定的1
-        v1, v2 = 1, 1
-    values = [v1, v2]
+    values = [v1, v2] # 已经处理过除以100的v1和v2
 
     for i, t in enumerate(mapped):
         # 避免 value = 0 的无效 buff
@@ -352,15 +366,16 @@ def generate_effect_buff(data: dict):
         "2": BuffType.ACCURACY_UP  # 命中
     }
 
-    low = int(data["buff"])
-    high = int(data["buff2"])
-    if low > high: # 确保low不大于high
-        low, high = high, low # Corrected assignment here: low, high = high, low
+    low = float(data["buff"]) / 100  # 假设原始buff值是百分比，转为0-1小数
+    high = float(data["buff2"]) / 100
+
+    if low > high: 
+        low, high = high, low 
 
     return [{
         "name": data["name"],
         "type": buff_type_map[data["buff_type"]],
-        "value": random.randint(low, high), # 随机一个范围内的值
+        "value": random.uniform(low, high), # 随机一个0-1范围内的值
         "coefficient": 1,
         "is_debuff": False,
         "duration": 99,
@@ -555,7 +570,7 @@ def generate_boss_buff(boss):
     def apply_random_group(attr_names, value_options):
         """
         attr_names: 属性名列表 ['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx']
-        value_options: 对应的值列表，支持固定值或函数(lambda)
+        value_options: 对应的值列表，支持固定值(0-1比例)或函数(lambda，返回0-1比例)
         """
         # 随机选中一个属性名及其对应的索引
         selected_attr = random.choice(attr_names)
@@ -576,28 +591,28 @@ def generate_boss_buff(boss):
     # 祭道境 (最高级)
     if boss_level == "祭道境" or current_rank_val >= get_rank_val('祭道境初期'): # 修正判断逻辑，祭道境及以上
         cfg = {
-            'js': 0.95, # 伤害减免
-            'cj': (25, 50), # 护甲穿透
-            # 对应: zs, hx, bs, xx (攻击提升, 暴击率提升, 暴击伤害提升, 生命偷取降低)
-            'g1': [1, 0.7, 2, 1],
-            # 对应: jg, jh, jb, xl (攻击力降低, 暴击率降低, 暴击伤害降低, 真元偷取降低)
-            'g2': [0.7, 0.7, 1.5, 1]
+            'js': 0.95, # 伤害减免 95%
+            'cj': (0.25, 0.50), # 护甲穿透 25%-50%
+            # 对应: zs(攻击提升), hx(暴击率提升), bs(暴击伤害提升), xx(生命偷取降低)
+            'g1': [1.0, 0.7, 2.0, 1.0], # 攻击提升100%, 暴击率70%, 暴击伤害200%, 生命偷取降低100%
+            # 对应: jg(攻击力降低), jh(暴击率降低), jb(暴击伤害降低), xl(真元偷取降低)
+            'g2': [0.7, 0.7, 1.5, 1.0] # 攻击力降低70%, 暴击率70%, 暴击伤害50%, 真元偷取降低100%
         }
 
     # 至尊 ~ 斩我 (中级)
     elif get_rank_val('至尊境初期') <= current_rank_val <= get_rank_val('斩我境圆满'):
         cfg = {
-            'js': (50, 55),
-            'cj': (15, 30),
-            'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100],
-            'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100]
+            'js': (0.50, 0.55), # 伤害减免 50%-55%
+            'cj': (0.15, 0.30), # 护甲穿透 15%-30%
+            'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100], # 攻击提升30%, 暴击率10%, 暴击伤害50%, 生命偷取降低5%-100%
+            'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100] # 攻击降低30%, 暴击率30%, 暴击伤害50%, 真元偷取降低5%-100%
         }
 
     # 微光 ~ 遁一
     elif get_rank_val('微光境初期') <= current_rank_val <= get_rank_val('遁一境圆满'):
         cfg = {
-            'js': (40, 45),
-            'cj': (20, 40),
+            'js': (0.40, 0.45),
+            'cj': (0.20, 0.40),
             'g1': [0.4, 0.2, 0.7, lambda: random.randint(10, 100) / 100],
             'g2': [0.4, 0.4, 0.7, lambda: random.randint(10, 100) / 100]
         }
@@ -605,8 +620,8 @@ def generate_boss_buff(boss):
     # 星芒 ~ 至尊
     elif get_rank_val('星芒境初期') <= current_rank_val <= get_rank_val('至尊境圆满'):
         cfg = {
-            'js': (30, 35),
-            'cj': (20, 40),
+            'js': (0.30, 0.35),
+            'cj': (0.20, 0.40),
             'g1': [0.6, 0.35, 1.1, lambda: random.randint(30, 100) / 100],
             'g2': [0.5, 0.5, 0.9, lambda: random.randint(30, 100) / 100]
         }
@@ -614,8 +629,8 @@ def generate_boss_buff(boss):
     # 月华 ~ 微光
     elif get_rank_val('月华境初期') <= current_rank_val <= get_rank_val('微光境圆满'):
         cfg = {
-            'js': (20, 25),
-            'cj': (20, 40),
+            'js': (0.20, 0.25),
+            'cj': (0.20, 0.40),
             'g1': [0.7, 0.45, 1.3, lambda: random.randint(40, 100) / 100],
             'g2': [0.55, 0.6, 1.0, lambda: random.randint(40, 100) / 100]
         }
@@ -623,8 +638,8 @@ def generate_boss_buff(boss):
     # 耀日 ~ 星芒
     elif get_rank_val('耀日境初期') <= current_rank_val <= get_rank_val('星芒境圆满'):
         cfg = {
-            'js': (10, 15),
-            'cj': (25, 45),
+            'js': (0.10, 0.15),
+            'cj': (0.25, 0.45),
             'g1': [0.85, 0.5, 1.5, lambda: random.randint(50, 100) / 100],
             'g2': [0.6, 0.65, 1.1, lambda: random.randint(50, 100) / 100]
         }
@@ -634,8 +649,8 @@ def generate_boss_buff(boss):
     # 假设这里是最低的境界范围，低于耀日境初期
     else: # 默认最低境界
         cfg = {
-            'js': (5, 10), # 更低的减伤
-            'cj': (20, 40), # 更低的穿透
+            'js': (0.05, 0.10), # 更低的减伤
+            'cj': (0.20, 0.40), # 更低的穿透
             'g1': [0.9, 0.6, 1.7, lambda: random.randint(60, 100) / 100],
             'g2': [0.62, 0.67, 1.2, lambda: random.randint(60, 100) / 100]
         }
@@ -644,12 +659,19 @@ def generate_boss_buff(boss):
     if cfg:
         # 应用减伤 (JS) - 支持固定值或随机范围
         if isinstance(cfg['js'], tuple):
-            boss_buff['boss_js'] = random.randint(*cfg['js']) / 100
+            boss_buff['boss_js'] = random.uniform(*cfg['js']) # 直接取0-1范围内的浮点数
         else:
-            boss_buff['boss_js'] = cfg['js'] / 100 # 固定值也转为小数
+            boss_buff['boss_js'] = cfg['js'] # 直接使用0-1比例值
 
         # 应用护甲穿透 (CJ)
-        boss_buff['boss_cj'] = random.randint(*cfg['cj']) / 100
+        # 这里钉头七箭书的护甲穿透是29.0%，那么原始值是0.29
+        # 如果cfg['cj']是 (25, 50)，那么这里是 random.randint(25, 50) / 100，即0.25-0.5
+        # 这样和日志的29.0%一致
+        if isinstance(cfg['cj'], tuple):
+            boss_buff['boss_cj'] = random.uniform(*cfg['cj']) # 直接取0-1范围内的浮点数
+        else:
+            boss_buff['boss_cj'] = cfg['cj'] # 直接使用0-1比例值
+
 
         # 应用两组随机属性
         apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
@@ -662,8 +684,12 @@ def generate_boss_buff(boss):
         # 其他属性默认为0，已初始化
 
     # 计算BOSS闪避率
-    boss_buff['boss_sb'] = int((1 - boss_buff['boss_js']) * 100 * random.uniform(0.1, 0.5))
-    # boss_js 已经是0-1的小数，直接使用即可
+    # 这里的 boss_sb 应该是一个百分比值，而不是一个固定值
+    # 如果 cfg['sb'] 是 (10, 20)，那么 boss_buff['boss_sb'] = random.randint(10, 20) / 100
+    # 原始代码是 int((1 - boss_buff['boss_js']) * 100 * random.uniform(0.1, 0.5))
+    # 假设闪避率也是一个0-1的浮点数
+    boss_buff['boss_sb'] = random.uniform(0.1, 0.5) # 0.1-0.5 的随机浮点数，代表10%-50%闪避
+    # boss_sb 是直接的0-1浮点数，用于内部计算，外部显示时转换为百分比
 
     result = []
 
@@ -682,7 +708,7 @@ def generate_boss_buff(boss):
         result.append({
             "name": effect_name,
             "type": effect_type,
-            "value": value,
+            "value": value, # 值已经是0-1的浮点数
             "is_debuff": is_debuff,
             "coefficient": 1, # BOSS Buff通常没有系数
             "duration": 99,   # BOSS Buff通常持续整场战斗
@@ -846,52 +872,54 @@ buff_type_mapping = {
 }
 
 # 统一BUFF/DEBUFF显示模板，确保百分号在模板中
+# Values are expected to be in 0-1 range for percentage-based buffs,
+# or raw values for non-percentage buffs like crit damage multiplier, shield points, duration.
 BUFF_DESC_TEMPLATES = {
-    BuffType.ATTACK_UP: "攻击力提升 {value}倍",
-    BuffType.DEFENSE_UP: "防御力提升 {value}倍",
-    BuffType.CRIT_RATE_UP: "暴击率提升 {value}倍", # 暴击率通常是百分比，这里写倍可能是指效果系数
-    BuffType.CRIT_DAMAGE_UP: "暴击伤害提升 {value}倍",
-    BuffType.DAMAGE_REDUCTION_UP: "伤害减免提升 {value}%",
-    BuffType.ARMOR_PENETRATION_UP: "护甲穿透提升 {value}%",
-    BuffType.ACCURACY_UP: "命中率提升 {value}%",
-    BuffType.EVASION_UP: "闪避率提升 {value}%",
-    BuffType.LIFESTEAL_UP: "生命偷取提升 {value}%",
-    BuffType.MANA_STEAL_UP: "真元偷取提升 {value}%",
+    BuffType.ATTACK_UP: "攻击力提升 {value_display}",
+    BuffType.DEFENSE_UP: "防御力提升 {value_display}",
+    BuffType.CRIT_RATE_UP: "暴击率提升 {value_display}", 
+    BuffType.CRIT_DAMAGE_UP: "暴击伤害提升 {value_display_raw} 倍", # 暴击伤害是倍数
+    BuffType.DAMAGE_REDUCTION_UP: "伤害减免提升 {value_display}",
+    BuffType.ARMOR_PENETRATION_UP: "护甲穿透提升 {value_display}",
+    BuffType.ACCURACY_UP: "命中率提升 {value_display}",
+    BuffType.EVASION_UP: "闪避率提升 {value_display}",
+    BuffType.LIFESTEAL_UP: "生命偷取提升 {value_display}",
+    BuffType.MANA_STEAL_UP: "真元偷取提升 {value_display}",
     BuffType.DEBUFF_IMMUNITY: "免疫所有减益效果",
-    BuffType.HP_REGEN_PERCENT: "每回合回复最大生命 {value}%",
-    BuffType.MP_REGEN_PERCENT: "每回合回复最大真元 {value}%",
-    BuffType.REFLECT_DAMAGE: "受到伤害时反弹 {value}%",
-    BuffType.SHIELD: "获得 {value} 点护盾",
-    BuffType.INVINCIBLE: "获得无敌效果", # 无敌次数显示在战斗日志中，这里只表示状态
+    BuffType.HP_REGEN_PERCENT: "每回合回复最大生命 {value_display}",
+    BuffType.MP_REGEN_PERCENT: "每回合回复最大真元 {value_display}",
+    BuffType.REFLECT_DAMAGE: "受到伤害时反弹 {value_display}",
+    BuffType.SHIELD: "获得 {value_display_raw} 点护盾", # 护盾是点数
+    BuffType.INVINCIBLE: "获得无敌效果", 
 }
 
 DEBUFF_DESC_TEMPLATES = {
-    DebuffType.ATTACK_DOWN: "攻击力降低 {value}%",
-    DebuffType.CRIT_RATE_DOWN: "暴击率降低 {value}%",
-    DebuffType.CRIT_DAMAGE_DOWN: "暴击伤害降低 {value}倍",
-    DebuffType.DEFENSE_DOWN: "防御力降低 {value}%", # 注意这里的DEFENSE_DOWN在代码中被用于影响damage_reduction_rate
-    DebuffType.ACCURACY_DOWN: "命中率降低 {value}%",
-    DebuffType.EVASION_DOWN: "闪避率降低 {value}%",
-    DebuffType.LIFESTEAL_DOWN: "生命偷取降低 {value}%",
-    DebuffType.MANA_STEAL_DOWN: "真元偷取降低 {value}%",
+    DebuffType.ATTACK_DOWN: "攻击力降低 {value_display}",
+    DebuffType.CRIT_RATE_DOWN: "暴击率降低 {value_display}",
+    DebuffType.CRIT_DAMAGE_DOWN: "暴击伤害降低 {value_display_raw} 倍",
+    DebuffType.DEFENSE_DOWN: "防御力降低 {value_display}", 
+    DebuffType.ACCURACY_DOWN: "命中率降低 {value_display}",
+    DebuffType.EVASION_DOWN: "闪避率降低 {value_display}",
+    DebuffType.LIFESTEAL_DOWN: "生命偷取降低 {value_display}",
+    DebuffType.MANA_STEAL_DOWN: "真元偷取降低 {value_display}",
     DebuffType.LIFESTEAL_BLOCK: "无法进行生命偷取",
     DebuffType.MANA_STEAL_BLOCK: "无法进行真元偷取",
 
-    DebuffType.POISON_DOT: "中毒，每回合损失最大生命 {value}%",
-    DebuffType.SKILL_DOT: "持续受到 {value}倍攻击的技能伤害",
-    DebuffType.BLEED_DOT: "流血，每回合损失最大生命 {value}%",
-    DebuffType.BURN_DOT: "灼烧，每回合损失最大生命 {value}%",
+    DebuffType.POISON_DOT: "中毒，每回合损失当前生命 {value_display}", # 之前是最大生命，但实际代码是当前生命
+    DebuffType.SKILL_DOT: "持续受到 {value_display_raw} 倍攻击的技能伤害", # 技能DoT是倍数
+    DebuffType.BLEED_DOT: "流血，每回合损失最大生命 {value_display}",
+    DebuffType.BURN_DOT: "灼烧，每回合损失最大生命 {value_display}",
 
-    DebuffType.FATIGUE: "力竭，需休息 {value} 回合",
-    DebuffType.STUN: "眩晕，无法行动，剩余 {value} 回合",
-    DebuffType.FREEZE: "冰冻，无法行动，剩余 {value} 回合",
-    DebuffType.PETRIFY: "石化，无法行动，剩余 {value} 回合",
-    DebuffType.SLEEP: "沉睡，无法行动，剩余 {value} 回合",
-    DebuffType.ROOT: "被定身，无法行动，剩余 {value} 回合",
-    DebuffType.FEAR: "陷入恐惧，无法行动，剩余 {value} 回合",
-    DebuffType.SEAL: "被封印，无法使用技能，剩余 {value} 回合",
-    DebuffType.PARALYSIS: "麻痹，无法行动，剩余 {value} 回合",
-    DebuffType.SILENCE: "被沉默，无法施放法术，剩余 {value} 回合",
+    DebuffType.FATIGUE: "力竭，需休息 {value_display_raw} 回合", # 持续时间是回合数
+    DebuffType.STUN: "眩晕，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.FREEZE: "冰冻，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.PETRIFY: "石化，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.SLEEP: "沉睡，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.ROOT: "被定身，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.FEAR: "陷入恐惧，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.SEAL: "被封印，无法使用技能，剩余 {value_display_raw} 回合",
+    DebuffType.PARALYSIS: "麻痹，无法行动，剩余 {value_display_raw} 回合",
+    DebuffType.SILENCE: "被沉默，无法施放法术，剩余 {value_display_raw} 回合",
 }
 
 VALID_FIELDS = {"name", "type", "value", "coefficient", "is_debuff", "duration", "skill_type"} # 状态效果的有效字段
@@ -1057,7 +1085,7 @@ class Entity:
 
 
             # 破甲效果 (DebuffType.DEFENSE_DOWN)
-            if etype == NatalEffectType.ARMOR_BREAK:
+            elif etype == NatalEffectType.ARMOR_BREAK:
                 if not enemies: continue # 没有敌人则不施加
                 value = self.natal.get_effect_value(NatalEffectType.ARMOR_BREAK)
                 for enemy in enemies:
@@ -1082,7 +1110,7 @@ class Entity:
                 else:
                     effect = StatusEffect(
                         name=f"{name}·{effect_name}", effect_type=BuffType.EVASION_UP,
-                        value=value * 100, coefficient=1, is_debuff=False, duration=99 # 闪避值是百分比，effect_value是0-1
+                        value=value, coefficient=1, is_debuff=False, duration=99 # 闪避值是0-1的小数
                     )
                     self.add_status(effect)
                 battle.add_message(self, f"→ 获得【{effect_name}】，提升了自身闪避！")
@@ -1501,8 +1529,8 @@ class Entity:
         # 闪避
         # 加上本命法宝的闪避效果 (NatalEffectType.EVASION)
         natal_evasion = self.natal.get_effect_value(NatalEffectType.EVASION) if self.natal and self.natal_data else 0
-        # 闪避率是百分比，effect_value是0-1的小数，所以需要乘以100
-        val = self.base_dodge + self._get_effect_value(BuffType.EVASION_UP) + natal_evasion * 100
+        # 闪避率是0-1的小数，EffectValue也是0-1，所以直接相加即可
+        val = self.base_dodge + self._get_effect_value(BuffType.EVASION_UP) + natal_evasion * 100 # base_dodge是百分比，effect_value是0-1的小数，所以这里需要乘以100
         return min(180, max(0, val)) # 闪避率有上限
 
     @property
@@ -1681,7 +1709,7 @@ class Entity:
 # --- 战斗引擎 (核心逻辑整合) ---
 class BattleSystem:
     """
-    战斗系统核心类，管理战斗回合、单位行动、伤害计算和状态更新。
+    战斗系统核心类，管理战斗回合、单位行动、状态更新、伤害计算和胜负判定。
     """
     def __init__(self, team_a, team_b, bot_id):
         self.bot_id = bot_id # 机器人ID
@@ -1782,7 +1810,7 @@ class BattleSystem:
         获取状态效果的描述字符串。
         :param effect_type: 效果类型 (BuffType或DebuffType枚举)。
         :param is_debuff: 是否为负面效果。
-        :param value: 效果值。
+        :param value: 效果值 (预期为0-1的浮点数，或整数)。
         :return: 格式化的效果描述字符串。
         """
         if value is None:
@@ -1792,46 +1820,40 @@ class BattleSystem:
             val = float(value)
         except (TypeError, ValueError):
             val = 0.0
-    
-        display_str = ""
         
-        # 根据效果类型格式化显示数值
-        if effect_type in {BuffType.CRIT_DAMAGE_UP, DebuffType.CRIT_DAMAGE_DOWN}:
-            display_str = f"{val:.2f}"
-        elif effect_type == DebuffType.SKILL_DOT:
-            display_str = f"{val:.1f}"
-        elif effect_type == BuffType.SHIELD:
-            display_str = f"{int(val)}"
-        elif effect_type in {BuffType.ACCURACY_UP, BuffType.EVASION_UP}: # 命中和闪避可能是整数也可能是小数百分比
-            if 0 < val <= 1:
-                display_str = f"{val * 100:.0f}" if (val * 100).is_integer() else f"{val * 100:.1f}"
-            else:
-                display_str = f"{int(val)}"
-        elif effect_type in { # 其他百分比或整数值
-            BuffType.ATTACK_UP, BuffType.DEFENSE_UP, BuffType.CRIT_RATE_UP, BuffType.DAMAGE_REDUCTION_UP,
-            BuffType.ARMOR_PENETRATION_UP, BuffType.LIFESTEAL_UP, BuffType.MANA_STEAL_UP,
-            BuffType.HP_REGEN_PERCENT, BuffType.MP_REGEN_PERCENT, BuffType.REFLECT_DAMAGE,
-            DebuffType.ATTACK_DOWN, DebuffType.CRIT_RATE_DOWN, DebuffType.DEFENSE_DOWN, DebuffType.ACCURACY_DOWN,
-            DebuffType.EVASION_DOWN, DebuffType.LIFESTEAL_DOWN, DebuffType.MANA_STEAL_DOWN,
-            DebuffType.POISON_DOT, DebuffType.BLEED_DOT, DebuffType.BURN_DOT
-        }:
-            if 0 < val <= 1: # 如果是0-1之间的小数，则显示为百分比
-                display_str = f"{val * 100:.0f}" if (val * 100).is_integer() else f"{val * 100:.1f}"
-            else: # 否则显示为整数或一位小数
-                display_str = f"{int(val)}" if val == int(val) else f"{val:.1f}"
-        else: # 对于无敌等没有直接数值的buff
-            display_str = ""
-    
-        # 获取模板并填充数值
+        # Determine the template based on effect type
+        template = ""
         if is_debuff:
-            template = DEBUFF_DESC_TEMPLATES.get(effect_type, "未知减益 {value}")
+            template = DEBUFF_DESC_TEMPLATES.get(effect_type, "未知减益")
         else:
-            template = BUFF_DESC_TEMPLATES.get(effect_type, "未知增益 {value}")
+            template = BUFF_DESC_TEMPLATES.get(effect_type, "未知增益")
         
-        # 对于没有数值的模板，直接返回模板内容
-        if '{value}' not in template:
-            return template
-        return template.format(value=display_str)
+        # Format raw value for display in some templates
+        value_display_raw = f"{val:.2f}" if val != int(val) else f"{int(val)}"
+
+        # Default percentage formatting
+        value_display = ""
+        # Check if template explicitly uses value_display_raw for certain types
+        # and has a specific format like "倍" or "回合"
+        if effect_type in {BuffType.CRIT_DAMAGE_UP, DebuffType.CRIT_DAMAGE_DOWN, # 暴击伤害是倍数
+                           DebuffType.SKILL_DOT, # 技能持续伤害是倍数
+                           BuffType.SHIELD, # 护盾是点数
+                           DebuffType.FATIGUE, DebuffType.STUN, DebuffType.FREEZE, DebuffType.PETRIFY,
+                           DebuffType.SLEEP, DebuffType.ROOT, DebuffType.FEAR, DebuffType.SEAL,
+                           DebuffType.PARALYSIS, DebuffType.SILENCE # 控制效果持续时间是回合数
+                          }:
+            value_display = value_display_raw
+        else: # Most other buffs are percentages (0-1 -> X%)
+            # Convert to percentage and format
+            display_val = val * 100
+            if display_val == int(display_val):
+                value_display = f"{int(display_val)}%"
+            else:
+                value_display = f"{display_val:.1f}%"
+        
+        # Fill the template, passing both raw and percentage-formatted values
+        # This allows templates to choose which format to use
+        return template.format(value_display=value_display, value_display_raw=value_display_raw)
 
     def add_after_last_damage(self, msg, add_text):
         """
@@ -1859,6 +1881,7 @@ class BattleSystem:
         """
         # 命中判定
         status = "Hit"
+        # base_accuracy是100，dodge_rate是0-1的小数（代表百分比，但未经转换），所以这里需要统一转换为百分比进行比较
         if random.uniform(0, 100) > (attacker.accuracy_rate - defender.dodge_rate):
             status = "Miss"
 
@@ -2169,15 +2192,20 @@ class BattleSystem:
         # ---------- 4. 技能：检查是否所有敌人都已经有这个debuff ----------
         if skill.skill_type in (SkillType.DOT, SkillType.CC, SkillType.CONTROL):
             enemies_without_debuff = [e for e in enemies if not e.has_debuff("name", skill.name)]
-            if not enemies_without_debuff: # 如果所有敌人都已有此Debuff，则不释放
+            if not enemies_without_debuff: # If all enemies already have this Debuff, do not cast
                 return False
 
         # ---------- 5. BUFF 技能：不能重复施放相同 Buff ----------
         if skill.skill_type == SkillType.BUFF_STAT or skill.skill_type == SkillType.STACK_BUFF:
-            if caster.has_buff("name", skill.name): # 如果已有同名Buff，则不释放
+            # For STACK_BUFF, check if there's already a buff with the same name and skill_type,
+            # indicating it's already active and stacking (or just needs to be refreshed, not recast).
+            # The current logic assumes a simple buff without complex stacking management here.
+            # A more robust stacking system might check for 'stacks' property of the buff.
+            if caster.has_buff("name", skill.name): 
                 return False
 
         return True
+
 
     def _select_targets(self, enemies, skill, is_boss=False):
         """
@@ -2307,7 +2335,9 @@ class BattleSystem:
                                         skill.skill_type)
                     target.add_status(effect)
                 target_name_msg = "、".join(target_names)
-                self.add_message(caster, f"→ 对{target_name_msg}造成每回合{skill.atk_values}倍攻击力持续伤害，持续{skill.turn_cost}回合")
+                # 使用 get_effect_desc 格式化显示伤害倍率
+                damage_desc = self.get_effect_desc(DebuffType.SKILL_DOT, True, skill.atk_values[0] if isinstance(skill.atk_values, list) else skill.atk_values)
+                self.add_message(caster, f"→ 对{target_name_msg}施加持续伤害，{damage_desc}，持续{skill.turn_cost}回合")
                 return "", total_dmg
 
             # Type 3: 属性增益 (Stat Buff)
@@ -2317,13 +2347,13 @@ class BattleSystem:
                 buff_value_for_display = skill.skill_buff_value
                 
                 # 根据buff类型施加不同的Buff效果
-                if skill.skill_buff_type == 1:  # 攻击力增加
-                    effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost,
+                if skill.skill_buff_type == 1:  # 攻击力增加 (BuffType.ATTACK_UP)
+                    effect = StatusEffect(skill.name, BuffType.ATTACK_UP, buff_value_for_display, 1, False, skill.turn_cost,
                                         skill.skill_type)
                     caster.add_status(effect)  # 给自己添加Buff
                     self.add_message(caster, f"→ 提升了{self.get_effect_desc(BuffType.ATTACK_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合")
-                elif skill.skill_buff_type == 2:  # 减伤加成
-                    effect = StatusEffect(skill.name, BuffType.DAMAGE_REDUCTION_UP, skill.skill_buff_value, 1, False,
+                elif skill.skill_buff_type == 2:  # 减伤加成 (BuffType.DAMAGE_REDUCTION_UP)
+                    effect = StatusEffect(skill.name, BuffType.DAMAGE_REDUCTION_UP, buff_value_for_display, 1, False,
                                         skill.turn_cost, skill.skill_type)
                     caster.add_status(effect)  # 给自己添加Buff
                     self.add_message(caster, f"→ 提升了{self.get_effect_desc(BuffType.DAMAGE_REDUCTION_UP, False, buff_value_for_display)}，持续{skill.turn_cost}回合")
@@ -2340,14 +2370,17 @@ class BattleSystem:
                 target_names_failure = []
                 for target in targets:
                     if random.uniform(0, 100) <= chance: # 概率判定
-                        effect = StatusEffect(skill.name, DebuffType.SEAL, 0, 1, True, skill.turn_cost, skill.skill_type)
+                        effect = StatusEffect(skill.name, DebuffType.SEAL, skill.turn_cost, 1, True, skill.turn_cost, skill.skill_type) # Value is duration
                         target.add_status(effect)
                         target_names_success.append(target.name)
                     else:  # 封印失败
                         target_names_failure.append(target.name)
+                
+                # 使用 get_effect_desc 格式化显示控制效果
+                control_desc = self.get_effect_desc(DebuffType.SEAL, True, skill.turn_cost)
                 if target_names_success:
                     target_name_msg = "、".join(target_names_success)
-                    self.add_message(caster, f"→ {target_name_msg}被封印了！动弹不得，持续{skill.turn_cost}回合")
+                    self.add_message(caster, f"→ {target_name_msg}{control_desc}！")
                 if target_names_failure:
                     target_name_msg = "、".join(target_names_failure)
                     self.add_message(caster, f"→ 封印失败，被{target_name_msg}抵抗了！")
@@ -2386,7 +2419,7 @@ class BattleSystem:
 
                 # 波动伤害后可能需要休息
                 if skill.turn_cost > 0:
-                    effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
+                    effect = StatusEffect(skill.name, DebuffType.FATIGUE, skill.turn_cost, 1, True, skill.turn_cost, skill.skill_type) # Value is duration
                     caster.add_status(effect)
                     self.add_message(caster, f"→ {caster.name}力竭，需休息{skill.turn_cost}回合")
                 return "", total_dmg
@@ -2395,10 +2428,12 @@ class BattleSystem:
             elif skill.skill_type == SkillType.STACK_BUFF:
                 if not targets: return "", 0
                 # 施加一个可叠加的Buff，通常是攻击力
-                effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost - 1,
+                effect = StatusEffect(skill.name, BuffType.ATTACK_UP, skill.skill_buff_value, 1, False, skill.turn_cost,
                                     skill.skill_type)
                 caster.add_status(effect)  # 给自己添加Buff
-                self.add_message(caster, f"→ 每回合叠加{skill.skill_buff_value}倍攻击力，持续{skill.turn_cost}回合")
+                # 使用 get_effect_desc 格式化显示叠加Buff效果
+                buff_desc = self.get_effect_desc(BuffType.ATTACK_UP, False, skill.skill_buff_value)
+                self.add_message(caster, f"→ 每回合叠加{buff_desc}，持续{skill.turn_cost}回合")
                 # 叠加Buff后通常伴随一次普攻，但不触发双生
                 attack_msg, total_dmg = self._normal_attack_and_process(caster, targets[0], skip_twin_strike=True, is_skill_proc=True)
                 return attack_msg, total_dmg
@@ -2449,7 +2484,7 @@ class BattleSystem:
                             caster.update_stat("hp", 2, reflected_dmg, bypass_shield=True)
                         current_total_dmg += hp_dmg
                         self.add_message(caster, f"→ {crit_str}对{target.name}造成{number_to(int(hp_dmg))}伤害！")
-                        # self.add_unit_status_message(target) # 更新目标血条 -- 统一在回合末更新
+                        # self.add_unit_status_message(target) # 更新目标血条 --统一在回合末更新
                         # 斩命和复活判定
                         killed_by_death_strike = self._check_and_apply_death_strike(caster, target, hp_dmg)
                         if not target.is_alive and not killed_by_death_strike:
@@ -2463,22 +2498,23 @@ class BattleSystem:
             # Type 103: 控制类型 (CC)
             elif skill.skill_type == SkillType.CC:
                 if not targets: return "", 0
-                # 控制技能的数值可能不重要，只显示类型，这里获取一个默认值用于get_effect_desc
-                buff_msg = self.get_effect_desc(skill.skill_buff_type, True, 0)
                 chance = skill.success_rate
                 target_names_success = []
                 target_names_failure = []
                 for target in targets:
                     if random.uniform(0, 100) <= chance: # 概率判定
-                        effect = StatusEffect(skill.name, skill.skill_buff_type, 0, 1, True, skill.turn_cost,
+                        effect = StatusEffect(skill.name, skill.skill_buff_type, skill.turn_cost, 1, True, skill.turn_cost, # Value is duration
                                             skill.skill_type)
                         target.add_status(effect)
                         target_names_success.append(target.name)
                     else:  # 控制失败
                         target_names_failure.append(target.name)
+                
+                # 使用 get_effect_desc 格式化显示控制效果
+                control_desc = self.get_effect_desc(skill.skill_buff_type, True, skill.turn_cost)
                 if target_names_success:
                     target_name_msg = "、".join(target_names_success)
-                    self.add_message(caster, f"→ {target_name_msg}被{buff_msg}！持续{skill.turn_cost}回合")
+                    self.add_message(caster, f"→ {target_name_msg}{control_desc}！")
                 if target_names_failure:
                     target_name_msg = "、".join(target_names_failure)
                     self.add_message(caster, f"→ {skill.name}对{target_name_msg}的控制被抵抗了！")
@@ -2540,18 +2576,15 @@ class BattleSystem:
                 self.add_message(caster, f"→ {skill.name}技能效果未知！")
                 return "", total_dmg
         
-        # 如果技能未触发，则进行普攻，并返回其结果
+        # If the skill didn't activate, perform a normal attack
         target = min(targets, key=lambda x: x.hp) if targets else None
         if not target: return "", 0
         
-        # 技能未触发，直接走普攻逻辑
+        # Skill did not activate, fall back to normal attack logic
         attack_msg, total_dmg = self._normal_attack_and_process(caster, target, skip_twin_strike=True)
         
-        # 技能释放后，如果攻击者HP/MP发生变化（如消耗），则更新其血条 -- 统一在回合末更新
-        # if caster.hp != caster_hp_before_action or caster.mp != caster_mp_before_action:
-        #     self.add_unit_status_message(caster)
-
         return attack_msg, total_dmg
+
 
     def _normal_attack_and_process(self, caster, target, skip_twin_strike=False, is_skill_proc=False):
         """
@@ -2666,6 +2699,7 @@ class BattleSystem:
         """
         self.round += 1
         # 获取所有存活单位并按速度排序
+        # 修复：将 'u for u u in' 改为 'u for u in'
         units = sorted([u for u in self.team_a + self.team_b if u.is_alive], key=lambda x: x.base_speed, reverse=True)
         
         # 记录所有单位在回合开始时的HP/MP，用于回合结束时统一更新状态条
@@ -2814,9 +2848,13 @@ class BattleSystem:
                 # 修正为：每次效果触发，直接增加skill_buff.value到某个累加属性上
                 # 由于此处没有累加属性，直接修改buff的value不太直观。
                 # 暂不修改，如果后续有问题，这里需要重新设计叠加buff的机制。
-                unit.set_buff_field("name", "value", skill_buff.name, (skill_buff.value + (skill_buff.coefficient * skill_buff.value))) # 简单的叠加计算
-                unit.set_buff_field("name", "coefficient", skill_buff.name, (skill_buff.coefficient + 1))
-                self.add_message(unit, f"『{skill_buff.name}』提升了{skill_buff.value:.2f}倍攻击力，剩余{skill_buff.duration}回合")
+                # Use skill_buff.value for display as it's the base value of each stack
+                buff_msg = self.get_effect_desc(BuffType.ATTACK_UP, False, skill_buff.value)
+                # The actual effect value in the buff should reflect the sum of stacks
+                # Assuming 'coefficient' is the current stack count, and 'value' is the base per stack
+                # When applying, you'd iterate through buffs and sum up values for the total effect.
+                # For display here, we show the 'per stack' value.
+                self.add_message(unit, f"『{skill_buff.name}』{buff_msg}，剩余{skill_buff.duration}回合")
 
 
             # 结算后检查死亡，如果死亡则跳过后续行动
@@ -2875,7 +2913,7 @@ class BattleSystem:
                     self.add_message(unit, f"（{'、'.join(messages)}）")
                 
                 # 如果吸血/吸蓝导致HP或MP变化，则更新当前单位的状态显示 -- 统一在回合末更新
-                # if unit.hp != old_unit_hp_after_attack or unit.mp != old_unit_mp_after_attack:
+                # if unit.hp != old_unit_hp_after_attack or unit.mp != old_unit_mp_in_action:
                 #     self.add_unit_status_message(unit)
 
             # 攻击完成后检查敌人是否死亡，并打印死亡消息

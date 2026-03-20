@@ -38,7 +38,7 @@ from ..xiuxian_utils.utils import (
     Txt2Img, send_msg_handler, handle_send, handle_send_md, generate_command, get_logs, log_message, get_statistics_data, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_back import BANNED_ITEM_IDS
+from ..xiuxian_trade import BANNED_ITEM_IDS
 from ..xiuxian_buff import trigger_partner_exp_share
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
@@ -2023,7 +2023,7 @@ async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await user_stamina.finish()
-    msg = f"当前体力：{user_info['user_stamina']}"
+    msg = f"当前体力：{user_info['user_stamina']}\n每分钟回复：{XiuConfig().stamina_recovery_points}"
     await handle_send(bot, event, msg)
     await user_stamina.finish()
 
