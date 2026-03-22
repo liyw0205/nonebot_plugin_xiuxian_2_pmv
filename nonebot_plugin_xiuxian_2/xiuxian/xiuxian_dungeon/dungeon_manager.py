@@ -2,13 +2,15 @@ import json
 import random
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
+from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager # 导入 PlayerDataManager
 
 item_s = Items()
+player_data = PlayerDataManager() # PlayerDataManager实例
 
 jinjie_list = [
     "感气境",
@@ -140,91 +142,85 @@ class DungeonTemplate:
 class DungeonManager:
     """副本管理器"""
 
+    DUNGEON_GLOBAL_STATE_TABLE = "dungeon_global_state" # 全局副本状态表
+    PLAYER_DUNGEON_STATUS_TABLE = "player_dungeon_status" # 玩家副本状态表
+    GLOBAL_USER_ID = "0" # 用于存储全局信息的伪user_id
+
     def __init__(self):
         self.data_path = Path(__file__).parent.absolute()
         self.dungeon_data_path = self.data_path / "data"
-        self.config_file = self.data_path / "data" / "副本.json"
-        self.dungeon_info_file = self.data_path / "data" / "current_dungeon.json"
-        self.player_status_path = self.data_path / "data" / "player_status.json"
+        self.config_file = self.dungeon_data_path / "副本.json" # 副本模板配置
 
         # 创建目录
         self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
 
-        # 加载副本模板
+        # 加载副本模板 (从本地JSON文件加载)
         self.dungeon_templates = self._load_dungeon_templates()
 
-        # 当前活跃副本
-        self.current_dungeon = None
-
-        # 玩家状态
-        self.player_status = {}
-
-        # 加载玩家状态
-        self.load_player_status()
-
-        # 初始化副本
-        self.reset_dungeon()
+        # 当前活跃副本 (从数据库加载或生成)
+        self.current_dungeon: Optional[DungeonTemplate] = None
+        
+        # 初始化或加载副本状态
+        self.reset_dungeon() # 启动时调用一次以确保状态最新
 
     def _get_current_date(self) -> str:
         """获取当前日期字符串（YYYY-MM-DD）"""
         return datetime.now().strftime("%Y-%m-%d")
 
     def _load_dungeon_templates(self) -> List[DungeonTemplate]:
-        """加载副本模板"""
+        """从本地JSON文件加载副本模板"""
         templates = []
-
-        # 尝试从文件加载
-        config_file = self.config_file
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-
-        # 创建模板对象
-        for template_data in config_data:
-            templates.append(DungeonTemplate(template_data))
-
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                for template_data in config_data:
+                    templates.append(DungeonTemplate(template_data))
+            except Exception as e:
+                print(f"加载副本模板失败: {e}")
         return templates
 
     def reset_dungeon(self) -> None:
-        """重置副本（每日调用）- 优化版"""
-        # 定义副本信息文件的保存路径
-        dungeon_info_file = self.dungeon_info_file
-
+        """
+        重置副本（每日调用）
+        从 PlayerDataManager 加载全局副本信息，如果日期不匹配或无记录，则选择新副本。
+        """
         current_date = self._get_current_date()
+        global_dungeon_state = player_data.get_fields(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE)
 
-        if dungeon_info_file.exists():
-            try:
-                with open(dungeon_info_file, 'r', encoding='utf-8') as f:
-                    dungeon_info = json.load(f)
-
-                if dungeon_info.get("date") == current_date:
-                    saved_dungeon_id = dungeon_info.get("dungeon_id", "")
-
-                    for template in self.dungeon_templates:
-                        if template.id == saved_dungeon_id:
-                            self.current_dungeon = template
-                            return  # 找到后直接返回，不再重新选择
-
-                    self.current_dungeon = random.choice(self.dungeon_templates)
-                else:
-                    self.current_dungeon = random.choice(self.dungeon_templates)
-
-            except (json.JSONDecodeError, FileNotFoundError):
-                self.current_dungeon = random.choice(self.dungeon_templates)
+        if global_dungeon_state and global_dungeon_state.get("date") == current_date:
+            # 日期匹配，加载已保存的副本
+            saved_dungeon_id = global_dungeon_state.get("dungeon_id")
+            for template in self.dungeon_templates:
+                if template.id == saved_dungeon_id:
+                    self.current_dungeon = template
+                    return # 找到并设置，直接返回
+            # 如果saved_dungeon_id对应的模板没找到，则重新随机
+            self.current_dungeon = random.choice(self.dungeon_templates)
         else:
+            # 日期不匹配或无记录，选择新副本
             self.current_dungeon = random.choice(self.dungeon_templates)
 
-        dungeon_info = {
-            "dungeon_id": self.current_dungeon.id if self.current_dungeon else "",
+        # 保存新的全局副本状态到数据库
+        dungeon_info_to_save = {
+            "dungeon_id": self.current_dungeon.id,
+            "dungeon_name": self.current_dungeon.name,
             "date": current_date
         }
+        for key, value in dungeon_info_to_save.items():
+            player_data.update_or_write_data(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE, key, value)
+        
+        # 清空所有玩家的副本进度，因为副本已经重置
+        self.clear_all_player_status()
 
-        with open(dungeon_info_file, 'w', encoding='utf-8') as f:
-            json.dump(dungeon_info, f, ensure_ascii=False, indent=2)
 
     def get_dungeon_progress(self) -> Dict[str, Any]:
         """获取当前副本进度信息"""
         if not self.current_dungeon:
-            return {}
+            # 如果 current_dungeon 尚未初始化，尝试再次加载或重置
+            self.reset_dungeon()
+            if not self.current_dungeon: # 如果仍然没有，说明有问题
+                return {"name": "未知副本", "description": "副本数据加载失败", "total_layers": 0, "date": self._get_current_date()}
 
         return {
             "name": self.current_dungeon.name,
@@ -233,76 +229,81 @@ class DungeonManager:
             "date": self._get_current_date(),
         }
 
-    def load_player_status(self) -> None:
-        """从文件加载玩家状态"""
-        if self.player_status_path.exists():
-            try:
-                with open(self.player_status_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    # 简洁转换：尝试将所有键转为整数，失败则保持原样
-                    self.player_status = {}
-                    for k, v in data.items():
-                        try:
-                            self.player_status[int(k)] = v
-                        except ValueError:
-                            self.player_status[k] = v
-            except Exception as e:
-                print(f"加载玩家状态失败: {e}")
-                self.player_status = {}
-        else:
-            self.player_status = {}
+    def get_player_status(self, user_id) -> Dict[str, Any]:
+        """
+        获取玩家副本状态。
+        如果玩家状态不存在或已过期，则初始化。
+        """
+        user_id_str = str(user_id)
+        player_status_record = player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
 
-    def save_player_status(self) -> None:
-        """保存玩家状态到文件"""
-        try:
-            with open(self.player_status_path, 'w', encoding='utf-8') as f:
-                # 简洁转换：所有键转为字符串
-                json.dump(
-                    {str(k): v for k, v in self.player_status.items()},
-                    f, ensure_ascii=False, indent=2
-                )
-        except Exception as e:
-            print(f"保存玩家状态失败: {e}")
+        current_dungeon_id = self.current_dungeon.id if self.current_dungeon else "unknown"
+        current_date = self._get_current_date()
 
-    def get_player_status(self, user_id):
-        """获取玩家副本状态"""
-        if user_id not in self.player_status:
-            # 初始化玩家状态
-            self.player_status[user_id] = {
-                "dungeon_id": self.current_dungeon.id if self.current_dungeon else "",
-                "dungeon_name": self.current_dungeon.name if self.current_dungeon else "",
+        if not player_status_record or \
+           player_status_record.get("dungeon_id") != current_dungeon_id or \
+           player_status_record.get("last_reset_date") != current_date:
+            # 玩家状态不存在，或副本ID不匹配，或日期不匹配，需要重新初始化
+            new_status = {
+                "dungeon_id": current_dungeon_id,
+                "dungeon_name": self.current_dungeon.name if self.current_dungeon else "未知副本",
                 "dungeon_status": "not_started",  # not_started, exploring, completed
                 "current_layer": 0,
                 "total_layers": self.current_dungeon.total_layers if self.current_dungeon else 0,
-                "last_reset_date": self._get_current_date()
+                "last_reset_date": current_date
             }
-            self.save_player_status()
+            # 保存到数据库
+            for key, value in new_status.items():
+                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value)
+            return new_status
+        
+        return player_status_record
 
-        return self.player_status[user_id]
 
-    def update_player_progress(self, user_id, layer_increment=1, status=None):
-        """更新玩家进度"""
-        if user_id in self.player_status:
-            player_data = self.player_status[user_id]
+    def update_player_progress(self, user_id, layer_increment=1, status: Optional[str] = None):
+        """
+        更新玩家副本进度。
+        :param user_id: 玩家QQ号。
+        :param layer_increment: 层数增量，默认为1。
+        :param status: 强制设置的副本状态（如 "completed"）。
+        """
+        user_id_str = str(user_id)
+        player_data_record = self.get_player_status(user_id) # 确保获取到最新的状态
 
-            if status:
-                player_data["dungeon_status"] = status
-
+        if status:
+            player_data_record["dungeon_status"] = status
+        
+        # 只有在未完成或探索中状态下才更新层数
+        if player_data_record["dungeon_status"] != "completed":
             if layer_increment > 0:
-                player_data["dungeon_status"] = "exploring"
-                player_data["current_layer"] += layer_increment
+                player_data_record["dungeon_status"] = "exploring"
+                player_data_record["current_layer"] += layer_increment
 
                 # 检查是否完成副本
-                if player_data["current_layer"] >= player_data["total_layers"]:
-                    player_data["dungeon_status"] = "completed"
-                    player_data["current_layer"] = player_data["total_layers"]
+                if player_data_record["current_layer"] >= player_data_record["total_layers"]:
+                    player_data_record["dungeon_status"] = "completed"
+                    player_data_record["current_layer"] = player_data_record["total_layers"]
+        
+        # 将更新后的数据保存回数据库
+        for key, value in player_data_record.items():
+            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value)
 
-            self.save_player_status()
 
     def clear_all_player_status(self) -> None:
-        """清空所有玩家状态"""
-        self.player_status = {}
-        self.save_player_status()
+        """
+        清空所有玩家的副本状态。
+        这应该在每日副本重置时调用，以确保所有玩家的进度都被重置。
+        """
+        # 简单粗暴的方式：删除整个表的所有记录
+        # 更温和的方式：遍历所有记录，更新其状态为“未开始”，并重置层数
+        # 这里选择删除记录，因为每次重置都会重新初始化状态
+        player_data._ensure_table_exists(self.PLAYER_DUNGEON_STATUS_TABLE) # 确保表存在，否则删除会失败
+        conn = player_data._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM {self.PLAYER_DUNGEON_STATUS_TABLE}")
+        conn.commit()
+        conn.close()
+
 
     def generate_drop_item(self, user_level, drop_items):
         """根据用户等级和掉落权重生成随机物品ID"""
@@ -412,7 +413,7 @@ class DungeonManager:
 
         elif event.event_type == "spirit_stone":
             stone = round(random.uniform(event.stones[0], event.stones[1]), 2)
-            stone = (convert_rank('江湖好手')[0] - convert_rank(user_level)[0]) * 100000 * stone
+            stone = (convert_rank('江湖好手')[0] - convert_rank(user_level)[0] + 1) * 100000 * stone
             result["stones"] = stone
 
         return result

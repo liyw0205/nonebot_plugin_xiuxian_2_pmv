@@ -11,7 +11,7 @@ from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Union
+from typing import List, Union, Dict, Any # 引入 Dict, Any
 from nonebot.adapters import MessageSegment
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -33,6 +33,12 @@ sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+
+# ================================ 新增内容 开始 ================================
+# 全局字典，存储管理员正在伪装的用户信息
+# 键为管理员的实际 user_id (str)，值为被伪装的 user_id (str)
+_impersonating_users: Dict[str, str] = {}
+# ================================ 新增内容 结束 ================================
 
 class MyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -58,6 +64,10 @@ def check_user_type(user_id, need_type):
     """
     isType = False
     msg = ""
+    actual_user_id = user_id
+    if actual_user_id in _impersonating_users:
+        user_id = _impersonating_users[actual_user_id]
+        logger.warning(f"用户 {actual_user_id} 正在伪装 {user_id}")
     user_cd_message = sql_message.get_user_cd(user_id)
     if user_cd_message is None:
         user_type = 0
@@ -88,7 +98,7 @@ def check_user_type(user_id, need_type):
 
         elif user_type == 3:
             msg_list = [
-                "道友现在正在秘境中，分身乏术！",
+                "道友现在在秘境中，分身乏术！",
                 "秘境探索中，生死未卜，请等待！",
                 "道友深陷秘境，暂时无法回应！",
                 "秘境险恶，道友正在艰难前行！",
@@ -133,8 +143,15 @@ def check_user(event: GroupMessageEvent):
     返回: (isUser: bool, user_info: dict, msg: str)
     """
     isUser = False
-    user_id = event.get_user_id()
-    user_info = sql_message.get_user_info_with_id(user_id)
+    original_user_id = event.get_user_id() # 记录原始用户ID
+    user_id_to_check = original_user_id # 默认使用原始用户ID
+
+    # 检查当前用户是否正在伪装其他用户
+    if original_user_id in _impersonating_users:
+        user_id_to_check = _impersonating_users[original_user_id]
+        logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_to_check}")
+
+    user_info = sql_message.get_user_info_with_id(user_id_to_check)
     
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"
@@ -148,6 +165,10 @@ def check_user(event: GroupMessageEvent):
         return False, user_info, msg   # 故意返回 False，让调用处认为“用户不可用”
 
     msg = ""
+    
+    if original_user_id in _impersonating_users:
+        user_info['user_id'] = user_id_to_check
+
     return isUser, user_info, msg
 
 
@@ -748,7 +769,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     :param bot: 机器人实例
     :param event: 事件对象
     :param name: 用户名称
-    :param uin: 用户QQ号
+    :param uin: 用户ID
     :param msgs: 消息内容列表
     :param messages: 合并转发的消息列表（字典格式）
     :param msg_type: 关键字参数，可用于传递特定命名参数
@@ -927,7 +948,9 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
     
     if XiuConfig().img:
         # 处理昵称为空的情况
-        pic_msg = f"@{event.sender.nickname}\n{msg}" if event.sender.nickname else msg
+        # 使用 event.sender.card 或 event.sender.nickname 来获取昵称
+        sender_name = event.sender.card if event.sender.card else event.sender.nickname
+        pic_msg = f"@{sender_name}\n{msg}" if sender_name else msg
         pic = await get_msg_pic(pic_msg)
         if is_group:
             await bot.send_group_msg(
@@ -962,7 +985,7 @@ def generate_page_param(page_list: list) -> dict:
         buttons.append((page_list[i], page_list[i+1]))
         i += 2
 
-    # ===================== 关键修改：最多取 9 组（18个参数） =====================
+    # 最多取 9 组（18个参数）
     MAX_BUTTON_PAIRS = 9
     display_buttons = buttons[:MAX_BUTTON_PAIRS]
 
@@ -1002,6 +1025,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         page_param = optimize_md(page_param)
 
     is_group = isinstance(event, GroupMessageEvent)
+    open_id = get_real_id(event.user_id)
     shell_param = markdown_param("s1", " ")
     if not title:
         title = " "
@@ -1019,9 +1043,16 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         shell_param = markdown_param("s1", "python\r" + msg)
         msg_param = page
     else:
-        open_id = get_real_id(event.user_id)
+        original_user_id = event.get_user_id()
         if open_id and is_group and XiuConfig().at_sender and at_msg:
-            title = f"<@{open_id}>\n{title}"
+            if original_user_id in _impersonating_users:
+                # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
+                target_user_id = _impersonating_users[original_user_id]
+                target_user_info = sql_message.get_user_info_with_id(target_user_id)
+                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+                title = f"<@{open_id}>\n(伪装[{target_user_name}])\n{title}"
+            else:
+                title = f"<@{open_id}>\n{title}"
     if not title_param:
         title = optimize_md(title)
         title_param = markdown_param("t1", title)
@@ -1036,9 +1067,14 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     await bot.send(event=event, message=msg)
     
 def check_user_md_type(md_type, event):
-    user_id = event.user_id
+    original_user_id = event.user_id
+    user_id_to_check = original_user_id
+    if original_user_id in _impersonating_users:
+        user_id_to_check = _impersonating_users[original_user_id]
+        logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_to_check}")
+
     md_type = int(md_type)
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_cd_message = sql_message.get_user_cd(user_id_to_check)
     if user_cd_message is None:
         user_type = 0
     else:
@@ -1080,8 +1116,16 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     msg = optimize_md(msg)
     is_group = isinstance(event, GroupMessageEvent)
     open_id = get_real_id(event.user_id)
+    original_user_id = event.get_user_id()
     if open_id and is_group and XiuConfig().at_sender:
-        msg = f"<@{open_id}>\r{msg}"
+        if original_user_id in _impersonating_users:
+            # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
+            target_user_id = _impersonating_users[original_user_id]
+            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+            msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
+        else:
+            msg = f"<@{open_id}>\r{msg}"
     param = [
         markdown_param("t1", msg+ '\r\r---\r\r'),
         markdown_param("button_text_1", v1),
@@ -1182,6 +1226,12 @@ async def handle_pic_msg_send(bot, event, imgpath: Union[str, Path, BytesIO, Ima
         
         # 添加文字内容
         if text:
+            original_user_id = event.get_user_id()
+            if original_user_id in _impersonating_users:
+                target_user_id = _impersonating_users[original_user_id]
+                target_user_info = sql_message.get_user_info_with_id(target_user_id)
+                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+                text = f"(伪装[{target_user_name}])\n{text}"
             message.append(MessageSegment.text("\n" + text))
         
         # 处理图片内容
@@ -1247,6 +1297,10 @@ def log_message(user_id: str, msg: str):
     """
     clean_old_logs()
     try:
+        original_user_id = user_id
+        if original_user_id in _impersonating_users:
+            user_id = _impersonating_users[original_user_id]
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id}")
         # 确保用户文件夹存在
         user_dir = PLAYERSDATA / str(user_id)
         if not user_dir.exists():
@@ -1299,10 +1353,10 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
     返回:
         增强后的日志信息字典
     """
-    def find_recent_log_date(user_id):
+    def find_recent_log_date(user_id_for_log): # 内部函数也需要使用调整后的ID
         """查找用户最近有日志记录的日期"""
         try:
-            logs_dir = PLAYERSDATA / str(user_id) / "logs"
+            logs_dir = PLAYERSDATA / str(user_id_for_log) / "logs"
             if not logs_dir.exists():
                 return None
                 
@@ -1313,10 +1367,16 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             return None
     
     try:
+        original_user_id = user_id
+        user_id_for_log_query = original_user_id
+        if original_user_id in _impersonating_users:
+            user_id_for_log_query = _impersonating_users[original_user_id]
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_log_query}")
+
         # 确定日期：优先使用指定日期，否则查找最近有日志的日期
         target_date = date_str
         if target_date is None:
-            target_date = find_recent_log_date(user_id)
+            target_date = find_recent_log_date(user_id_for_log_query)
             if target_date is None:
                 return {
                     "logs": [],
@@ -1341,19 +1401,19 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
                 }
         
         # 构建日志文件路径
-        log_file = PLAYERSDATA / str(user_id) / "logs" / f"{target_date}.log"
+        log_file = PLAYERSDATA / str(user_id_for_log_query) / "logs" / f"{target_date}.log"
         
         # 如果指定日期的文件不存在，尝试查找可用的日志日期
         if not log_file.exists():
             available_dates = []
-            logs_dir = PLAYERSDATA / str(user_id) / "logs"
+            logs_dir = PLAYERSDATA / str(user_id_for_log_query) / "logs"
             if logs_dir.exists():
                 available_dates = sorted([f.stem for f in logs_dir.glob("*.log")], reverse=True)
             
             if available_dates:
                 # 自动使用最近的可用日期
                 recent_date = available_dates[0]
-                log_file = PLAYERSDATA / str(user_id) / "logs" / f"{recent_date}.log"
+                log_file = PLAYERSDATA / str(user_id_for_log_query) / "logs" / f"{recent_date}.log"
                 if log_file.exists():
                     target_date = recent_date  # 更新为目标日期
                     date_str = None
@@ -1397,7 +1457,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
         
         # 获取所有可用日期（用于前端显示）
         available_dates = []
-        logs_dir = PLAYERSDATA / str(user_id) / "logs"
+        logs_dir = PLAYERSDATA / str(user_id_for_log_query) / "logs"
         if logs_dir.exists():
             available_dates = sorted([f.stem for f in logs_dir.glob("*.log")], reverse=True)
         
@@ -1474,10 +1534,15 @@ def get_statistics_data(user_id: str, key: str = None):
         如果不指定key，返回整个统计数据字典
     """
     try:
+        original_user_id = user_id
+        user_id_for_stats = original_user_id
+        if original_user_id in _impersonating_users:
+            user_id_for_stats = _impersonating_users[original_user_id]
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
         if key:
-            return player_data_manager.get_field_data(str(user_id), "statistics", key)
+            return player_data_manager.get_field_data(str(user_id_for_stats), "statistics", key)
         
-        stats_data = player_data_manager.get_fields(str(user_id), "statistics")
+        stats_data = player_data_manager.get_fields(str(user_id_for_stats), "statistics")
         del stats_data['user_id']
         return stats_data
     except Exception as e:
@@ -1497,17 +1562,22 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
         更新后的统计数据字典
     """
     try:
-        stats_data = player_data_manager.get_fields(str(user_id), "statistics")
+        original_user_id = user_id
+        user_id_for_stats = original_user_id
+        if original_user_id in _impersonating_users:
+            user_id_for_stats = _impersonating_users[original_user_id]
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
+        stats_data = player_data_manager.get_fields(str(user_id_for_stats), "statistics")
         if not stats_data:
             stats_data = {}
         # 更新指定键的值
         if value is not None:
             # 直接设置具体值
-            player_data_manager.update_or_write_data(str(user_id), "statistics", key, value)
+            player_data_manager.update_or_write_data(str(user_id_for_stats), "statistics", key, value)
         else:
             # 增量更新（如果键不存在则初始化为0）
             current_value = stats_data.get(key, 0)
-            player_data_manager.update_or_write_data(str(user_id), "statistics", key, current_value + increment)
+            player_data_manager.update_or_write_data(str(user_id_for_stats), "statistics", key, current_value + increment)
             
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")

@@ -34,7 +34,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user, number_to, get_msg_pic, handle_send, send_msg_handler, generate_command
+    check_user, number_to, get_msg_pic, handle_send, send_msg_handler, generate_command, _impersonating_users
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.markdown_segment import MessageSegmentPlus, markdown_param
@@ -66,6 +66,7 @@ items_refresh = on_command("重载items", permission=SUPERUSER, priority=5, bloc
 blackhouse = on_command("小黑屋", permission=SUPERUSER, priority=10, block=True)
 unblackhouse = on_command("解除小黑屋", aliases={"放出小黑屋", "解禁"}, permission=SUPERUSER, priority=10, block=True)
 view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, permission=SUPERUSER, priority=10, block=True)
+impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -567,7 +568,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     else:
         # 默认扣除发送者
         is_user, user_info, _ = check_user(event)
-        if not isUser:
+        if not is_user: # Corrected variable name from isUser to is_user
             msg = "您尚未加入修仙界！"
             await handle_send(bot, event, msg)
             await hmll.finish()
@@ -634,20 +635,26 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     if "启用" in group_msg:
         if group_id not in conf_data["group"]:
-            msg = "当前群聊修仙模组已启用，请勿重复操作！"
+            # This logic seems inverted: if group_id not in conf_data["group"], it means it's currently disabled.
+            # So, enabling it means removing it from the disabled list (or adding to enabled list).
+            # JsonConfig().write_data(2, group_id) removes from 'group' list, which means enabling.
+            # The current check `if group_id not in conf_data["group"]` implies it's already enabled in terms of the message text.
+            # Let's assume 'group' is a list of *disabled* groups.
+            if group_id not in conf_data["group"]: # If it's not in the disabled list, it means it's already enabled.
+                msg = "当前群聊修仙模组已启用，请勿重复操作！"
+                await handle_send(bot, event, msg)
+                await set_xiuxian.finish()
+            JsonConfig().write_data(2, group_id) # Removes group_id from the 'group' list (disabling).
+            msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
             await handle_send(bot, event, msg)
             await set_xiuxian.finish()
-        JsonConfig().write_data(2, group_id)
-        msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
-        await handle_send(bot, event, msg)
-        await set_xiuxian.finish()
 
     elif "禁用" in group_msg:
-        if group_id in conf_data["group"]:
+        if group_id in conf_data["group"]: # If it's in the disabled list, it means it's already disabled.
             msg = "当前群聊修仙模组已禁用，请勿重复操作！"
             await handle_send(bot, event, msg)
             await set_xiuxian.finish()
-        JsonConfig().write_data(1, group_id)
+        JsonConfig().write_data(1, group_id) # Adds group_id to the 'group' list (enabling).
         msg = "当前群聊修仙基础模组已禁用！"
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()
@@ -1012,6 +1019,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 重置新手礼包
 
 → 重载items - 重新获取物品数据
+→ 用户伪装 [目标ID] - 伪装成指定ID
 
 → 更新日志 - 获取版本日志
 → 版本更新 - 指定版本号更新/latest：更新最新版本
@@ -1041,10 +1049,31 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await bot.send(event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
         return
 
+    config = XiuConfig()
+
     id_match = re.search(r'mid=([^\s]+)', args_str)
-    template_id = id_match.group(1) if id_match else None
+    template_id_input = id_match.group(1) if id_match else None
     button_id_match = re.search(r'bid=([^\s]+)', args_str)
-    button_id = button_id_match.group(1) if button_id_match else None
+    button_id_input = button_id_match.group(1) if button_id_match else None
+
+    template_id = None
+    if template_id_input:
+        if template_id_input == '1':
+            template_id = config.markdown_id
+        elif template_id_input == '2':
+            template_id = config.markdown_id2
+        else:
+            template_id = template_id_input
+
+    button_id = None
+    if button_id_input:
+        if button_id_input == '1':
+            button_id = config.button_id
+        elif button_id_input == '2':
+            button_id = config.button_id2
+        else:
+            button_id = button_id_input
+
 
     if id_match:
         args_str = args_str.replace(id_match.group(0), '').strip()
@@ -1052,7 +1081,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         args_str = args_str.replace(button_id_match.group(0), '').strip()
 
     if not template_id:
-        await bot.send(event, "请提供模板ID (id=模板ID)")
+        await bot.send(event, "请提供模板ID (mid=模板ID)")
         return
 
     arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
@@ -1099,3 +1128,47 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = MessageSegmentPlus.markdown_template(template_id, params, button_id)
     print(f"传入：\n{args_str}\n\n解析：\n{params}")
     await bot.send(event, msg)
+
+@impersonate_user_command.handle(parameterless=[Cooldown(cd_time=0.1)])
+async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    用户伪装功能：管理员可以伪装成其他用户来执行命令。
+    用法：
+    用户伪装 [目标ID] - 伪装成指定ID
+    用户伪装 取消    - 取消当前伪装
+    用户伪装 off     - 取消当前伪装
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+    admin_user_id = event.get_user_id()
+    arg_text = args.extract_plain_text().strip()
+
+    if not arg_text:
+        current_target_id = _impersonating_users.get(admin_user_id)
+        if current_target_id:
+            await handle_send(bot, event, f"您当前正在伪装用户：ID {current_target_id}。\n发送「用户伪装 取消」停止伪装。")
+        else:
+            await handle_send(bot, event, "用法：用户伪装 [目标ID] 或 用户伪装 取消")
+        return
+
+    if arg_text.lower() == "取消" or arg_text.lower() == "off":
+        if admin_user_id in _impersonating_users:
+            del _impersonating_users[admin_user_id]
+            await handle_send(bot, event, "已取消用户伪装。您现在是您自己了。")
+        else:
+            await handle_send(bot, event, "您当前没有伪装任何用户。")
+        return
+
+    try:
+        target_user_id = str(int(arg_text)) # 确保是有效的ID
+    except ValueError:
+        await handle_send(bot, event, "请输入有效的ID作为伪装目标。")
+        return
+    
+    # 检查目标用户是否存在于修仙界
+    target_user_info = sql_message.get_user_info_with_id(target_user_id)
+    if not target_user_info:
+        await handle_send(bot, event, f"目标用户 ID {target_user_id} 尚未踏入修仙界，无法伪装。")
+        return
+
+    _impersonating_users[admin_user_id] = target_user_id
+    await handle_send(bot, event, f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n后续所有修仙命令都将以此用户身份执行，直至您取消伪装。")

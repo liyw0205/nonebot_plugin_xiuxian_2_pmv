@@ -65,370 +65,6 @@
     </div>
 </div>
 
-<style>
-/* 更新状态样式 */
-.update-available, .no-update, .error {
-    padding: 20px;
-    border-radius: 8px;
-    margin: 15px 0;
-}
-
-.update-available {
-    background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
-    border: 1px solid #4CAF50;
-}
-
-.no-update {
-    background: #f5f5f5;
-    border: 1px solid #ddd;
-}
-
-.error {
-    background: #ffebee;
-    border: 1px solid #F44336;
-}
-
-/* 发布卡片样式 */
-.release-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.release-card.current-release {
-    border-color: #4CAF50;
-    background: #e8f5e8;
-}
-
-.release-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 10px;
-}
-
-.release-title {
-    flex: 1;
-}
-
-.release-actions {
-    flex-shrink: 0;
-}
-
-.tag {
-    background: linear-gradient(45deg, #2196F3, #64B5F6);
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.9em;
-    font-weight: 500;
-}
-
-.current-badge {
-    background: linear-gradient(45deg, #4CAF50, #81C784);
-    color: white;
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 0.9em;
-    font-weight: 500;
-}
-
-.release-date {
-    color: #666;
-    font-size: 0.9em;
-    margin-top: 5px;
-}
-
-/* 备份卡片样式 */
-.backup-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.backup-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 10px;
-}
-
-.backup-filename {
-    font-weight: 600;
-    color: #333;
-    font-size: 1.1em;
-    margin-bottom: 5px;
-}
-
-.backup-version {
-    background: #2196F3;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    margin-top: 5px;
-    display: inline-block;
-}
-
-.backup-details {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid #eee;
-}
-
-.backup-detail {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    font-size: 0.9em;
-}
-
-.backup-detail strong {
-    color: #666;
-    margin-right: 10px;
-}
-
-.backup-actions {
-    margin-top: 15px;
-    text-align: right;
-}
-
-/* 折叠内容样式 */
-.toggle-section {
-    margin: 10px 0;
-}
-
-.toggle-btn {
-    background: linear-gradient(45deg, #66b3ff, #8ecfff);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(102, 179, 255, 0.3);
-}
-
-.toggle-btn:hover {
-    background: linear-gradient(45deg, #4d94ff, #70b8ff);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 179, 255, 0.4);
-}
-
-.collapsible-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out;
-}
-
-.collapsible-content.expanded {
-    max-height: 500px;
-}
-
-/* 更新内容和资源文件样式 */
-.release-notes {
-    margin: 10px 0;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 6px;
-    border-left: 4px solid #2196F3;
-}
-
-.release-notes pre {
-    background: white;
-    padding: 15px;
-    border-radius: 5px;
-    border: 1px solid #ddd;
-    max-height: 200px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    font-family: 'Consolas', 'Monaco', monospace;
-    line-height: 1.4;
-}
-
-.assets-list {
-    margin-top: 10px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 6px;
-    border-left: 4px solid #FF9800;
-}
-
-.asset-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-    transition: background-color 0.3s ease;
-}
-
-.asset-item:last-child {
-    border-bottom: none;
-}
-
-.asset-item:hover {
-    background-color: #e3f2fd;
-}
-
-.asset-name {
-    font-weight: 500;
-    color: #333;
-    flex: 1;
-}
-
-.asset-size {
-    color: #666;
-    font-size: 12px;
-    margin-right: 15px;
-}
-
-.asset-download {
-    background: linear-gradient(45deg, #4CAF50, #81C784);
-    color: white;
-    text-decoration: none;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    transition: all 0.3s ease;
-}
-
-.asset-download:hover {
-    background: linear-gradient(45deg, #388E3C, #66BB6A);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
-}
-
-/* 模态框样式 */
-.modal {
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-content {
-    background-color: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-}
-
-.modal-header {
-    padding: 20px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.modal-header h3 {
-    margin: 0;
-    color: #333;
-}
-
-.close {
-    color: #aaa;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: color 0.3s ease;
-}
-
-.close:hover {
-    color: #333;
-}
-
-.modal-body {
-    padding: 20px;
-}
-
-.release-detail {
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-.release-header {
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #eee;
-}
-
-.release-assets {
-    margin-top: 15px;
-}
-
-.release-assets h5 {
-    margin-bottom: 10px;
-    color: #333;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin-top: 20px;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-    .release-header {
-        flex-direction: column;
-        gap: 10px;
-    }
-    
-    .release-actions {
-        align-self: flex-start;
-    }
-    
-    .modal-content {
-        width: 95%;
-        margin: 20px;
-    }
-    
-    .asset-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-    
-    .asset-size {
-        margin-right: 0;
-    }
-    
-    .asset-download {
-        align-self: flex-end;
-    }
-    
-    .backup-details {
-        grid-template-columns: 1fr;
-    }
-    
-    .backup-actions {
-        flex-direction: column;
-    }
-}
-</style>
-
 <script>
 // 全局变量
 let releasesListExpanded = false;
@@ -477,10 +113,10 @@ async function checkForUpdates() {
                 `;
             }
         } else {
-            statusDiv.innerHTML = `<div class="error">❌ 检查更新失败: ${data.error}</div>`;
+            statusDiv.innerHTML = `<div class="error-message">❌ 检查更新失败: ${data.error}</div>`;
         }
     } catch (error) {
-        statusDiv.innerHTML = `<div class="error">❌ 请求失败: ${error}</div>`;
+        statusDiv.innerHTML = `<div class="error-message">❌ 请求失败: ${error}</div>`;
     }
 }
 
@@ -553,10 +189,10 @@ async function viewAllReleases() {
             });
             container.innerHTML = html;
         } else {
-            container.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+            container.innerHTML = `<div class="error-message">加载失败: ${data.error}</div>`;
         }
     } catch (error) {
-        container.innerHTML = `<div class="error">请求失败: ${error}</div>`;
+        container.innerHTML = `<div class="error-message">请求失败: ${error}</div>`;
     }
 }
 
@@ -628,7 +264,7 @@ async function performUpdate(releaseTag) {
             `;
         } else {
             statusDiv.innerHTML = `
-                <div class="error">
+                <div class="error-message">
                     <h3 style="color: #F44336;">❌ 更新失败</h3>
                     <p>${data.message}</p>
                 </div>
@@ -636,7 +272,7 @@ async function performUpdate(releaseTag) {
         }
     } catch (error) {
         statusDiv.innerHTML = `
-            <div class="error">
+            <div class="error-message">
                 <h3 style="color: #4CAF50;">⏳ 更新进行中，连接已断开，重启后刷新页面即可</h3>
                 <p>${error}</p>
             </div>
@@ -699,10 +335,10 @@ async function loadBackups() {
                 backupsDiv.innerHTML = '<div class="no-backups">暂无备份文件</div>';
             }
         } else {
-            backupsDiv.innerHTML = `<div class="error">加载备份失败: ${data.error}</div>`;
+            backupsDiv.innerHTML = `<div class="error-message">加载备份失败: ${data.error}</div>`;
         }
     } catch (error) {
-        backupsDiv.innerHTML = `<div class="error">请求失败: ${error}</div>`;
+        backupsDiv.innerHTML = `<div class="error-message">请求失败: ${error}</div>`;
     }
 }
 
@@ -736,7 +372,7 @@ async function confirmRestore(backupFilename) {
             `;
         } else {
             statusDiv.innerHTML = `
-                <div class="error">
+                <div class="error-message">
                     <h3 style="color: #F44336;">❌ 恢复失败</h3>
                     <p>${data.error}</p>
                 </div>
@@ -744,7 +380,7 @@ async function confirmRestore(backupFilename) {
         }
     } catch (error) {
         statusDiv.innerHTML = `
-            <div class="error">
+            <div class="error-message">
                 <h3 style="color: #4CAF50;">⏳ 恢复进行中，连接已断开，重启后刷新页面即可</h3>
                 <p>${error}</p>
             </div>
@@ -787,7 +423,7 @@ async function manualBackup() {
             loadBackups();
         } else {
             statusDiv.innerHTML = `
-                <div class="error">
+                <div class="error-message">
                     <h3 style="color: #F44336;">❌ 手动备份失败</h3>
                     <p>${data.error}</p>
                 </div>
@@ -795,7 +431,7 @@ async function manualBackup() {
         }
     } catch (error) {
         statusDiv.innerHTML = `
-            <div class="error">
+            <div class="error-message">
                 <h3 style="color: #F44336;">❌ 请求失败</h3>
                 <p>${error}</p>
             </div>

@@ -5,587 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>修仙管理面板</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #e6f7ff;
-            --secondary-color: #b3e0ff;
-            --accent-color: #66b3ff;
-            --text-color: #333;
-            --light-text: #666;
-            --card-bg: rgba(255, 255, 255, 0.9);
-            --header-bg: rgba(230, 247, 255, 0.95);
-            --success-color: #4CAF50;
-            --error-color: #F44336;
-            --warning-color: #FF9800;
-            --info-color: #2196F3;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        body {
-            background: linear-gradient(135deg, #e6f7ff 0%, #b3e0ff 100%);
-            color: var(--text-color);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        #particles-js {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-        }
-
-        header {
-            background: var(--header-bg);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo-icon {
-            width: 40px;
-            height: 40px;
-            background: var(--accent-color);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.5rem;
-        }
-
-        .logo-text {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--text-color);
-        }
-
-        .menu-toggle {
-            display: none;
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: var(--text-color);
-            cursor: pointer;
-        }
-
-        nav ul {
-            display: flex;
-            list-style: none;
-            gap: 1.5rem;
-        }
-
-        nav a {
-            text-decoration: none;
-            color: var(--text-color);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-
-        nav a:hover, nav a.active {
-            background: var(--secondary-color);
-            color: var(--accent-color);
-        }
-
-        .container {
-            padding: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(179, 224, 255, 0.4);
-        }
-
-        .card-header {
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--secondary-color);
-        }
-
-        .card-title {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-            color: var(--text-color);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        h2, h3, h4, h5 {
-            margin-bottom: 1rem;
-            color: var(--text-color);
-        }
-
-        h2 {
-            font-size: 1.8rem;
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        h3 {
-            font-size: 1.4rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        h4 {
-            font-size: 1.2rem;
-        }
-
-        p {
-            margin-bottom: 1rem;
-            color: var(--light-text);
-        }
-
-        /* 标签导航 */
-        .tab-nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid var(--secondary-color);
-        }
-
-        .tab-link {
-            background: transparent;
-            border: none;
-            padding: 0.8rem 1.2rem;
-            cursor: pointer;
-            border-radius: 5px 5px 0 0;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: all 0.3s ease;
-            color: var(--light-text);
-        }
-
-        .tab-link:hover {
-            background: rgba(179, 224, 255, 0.3);
-        }
-
-        .tab-link.active {
-            background: var(--secondary-color);
-            color: var(--text-color);
-            font-weight: bold;
-        }
-
-        .tab-content {
-            margin-top: 1rem;
-        }
-
-        .tab-pane {
-            display: none;
-        }
-
-        .tab-pane.active {
-            display: block;
-            animation: fadeIn 0.5s ease;
-        }
-
-        /* 表单样式 */
-        .form-group {
-            margin-bottom: 1.2rem;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid var(--secondary-color);
-            border-radius: 5px;
-            background: white;
-            transition: all 0.3s ease;
-        }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(102, 179, 255, 0.2);
-        }
-
-        .form-actions {
-            margin-top: 1.5rem;
-            display: flex;
-            gap: 1rem;
-        }
-
-        /* 按钮样式 */
-        .btn {
-            padding: 0.8rem 1.5rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .btn-primary {
-            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
-            color: white;
-            box-shadow: 0 3px 8px rgba(102, 179, 255, 0.3);
-        }
-
-        .btn-primary:hover {
-            background: linear-gradient(45deg, #4d94ff, #70b8ff);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 12px rgba(102, 179, 255, 0.4);
-        }
-
-        .btn-success {
-            background: var(--success-color);
-            color: white;
-        }
-
-        .btn-info {
-            background: var(--info-color);
-            color: white;
-        }
-
-        .btn-danger {
-            background: var(--error-color);
-            color: white;
-        }
-
-        .btn-sm {
-            padding: 0.5rem 1rem;
-            font-size: 0.9rem;
-        }
-
-        /* 统计卡片 */
-        .stats-grid, .monitor-grid, .action-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card, .monitor-card, .action-card {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(230, 247, 255, 0.7) 100%);
-            border-radius: 12px;
-            padding: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
-            transition: all 0.3s ease;
-            border: 1px solid rgba(179, 224, 255, 0.4);
-        }
-
-        .action-card {
-            text-decoration: none;
-            color: inherit;
-        }
-
-        .stat-card:hover, .monitor-card:hover, .action-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(102, 179, 255, 0.15);
-        }
-
-        .stat-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8rem;
-            color: white;
-            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
-        }
-
-        .stat-content h3 {
-            font-size: 2rem;
-            margin: 0;
-            color: var(--text-color);
-        }
-
-        .stat-content p {
-            color: var(--light-text);
-            margin: 0;
-        }
-
-        /* 数据库卡片 */
-        .database-card {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 249, 255, 0.8) 100%);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
-            transition: all 0.3s ease;
-            border: 1px solid rgba(179, 224, 255, 0.4);
-        }
-
-        .database-card:hover {
-            box-shadow: 0 8px 20px rgba(102, 179, 255, 0.15);
-        }
-
-        .database-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid rgba(179, 224, 255, 0.5);
-        }
-
-        .database-info h4 {
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .database-info h4 a {
-            color: var(--text-color);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-
-        .database-info h4 a:hover {
-            color: var(--accent-color);
-        }
-
-        .database-path {
-            color: var(--light-text);
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .table-count {
-            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
-            color: white;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        /* 表格网格 */
-        .tables-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.2rem;
-        }
-
-        .table-card {
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            padding: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-            border: 1px solid rgba(179, 224, 255, 0.4);
-        }
-
-        .table-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 15px rgba(102, 179, 255, 0.15);
-        }
-
-        .table-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            color: white;
-            background: linear-gradient(45deg, var(--accent-color), #8ecfff);
-        }
-
-        .table-info h5 {
-            margin-bottom: 0.3rem;
-            font-size: 1rem;
-        }
-
-        .table-info p {
-            color: var(--light-text);
-            font-size: 0.85rem;
-            margin: 0;
-        }
-
-        .table-actions {
-            margin-left: auto;
-        }
-
-        /* 表格样式 */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1.5rem 0;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-        }
-
-        th, td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--secondary-color);
-        }
-
-        th {
-            background: rgba(179, 224, 255, 0.3);
-            font-weight: 600;
-        }
-
-        tr:hover {
-            background: rgba(179, 224, 255, 0.1);
-        }
-
-        /* 动画效果 */
-        .animate-in {
-            animation: fadeInUp 0.6s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* 响应式设计 */
-        @media (max-width: 768px) {
-            header {
-                padding: 1rem;
-            }
-            
-            .menu-toggle {
-                display: block;
-            }
-            
-            nav {
-                position: fixed;
-                top: 70px;
-                left: -100%;
-                width: 80%;
-                height: calc(100vh - 70px);
-                background: var(--header-bg);
-                backdrop-filter: blur(10px);
-                transition: left 0.3s ease;
-                z-index: 99;
-            }
-            
-            nav.active {
-                left: 0;
-            }
-            
-            nav ul {
-                flex-direction: column;
-                padding: 1rem;
-            }
-            
-            .container {
-                padding: 1rem;
-            }
-            
-            .stats-grid, .monitor-grid, .action-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .database-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 1rem;
-            }
-            
-            .tables-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .table-card {
-                flex-direction: column;
-                text-align: center;
-                gap: 0.8rem;
-            }
-            
-            .table-actions {
-                margin-left: 0;
-                margin-top: 0.5rem;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"> {# 链接到新的外部 CSS 文件 #}
 </head>
 
 <body>
     <div id="particles-js"></div>
     
     <header>
-        <div class="logo">
+        <a href="{{ url_for('home') }}" class="logo"> {# Make logo clickable to home #}
             <div class="logo-icon">
                 <i class="fas fa-mountain"></i>
             </div>
             <div class="logo-text">修仙管理面板</div>
-        </div>
+        </a>
         
         <button class="menu-toggle" id="menuToggle">
             <i class="fas fa-bars"></i>
         </button>
         
-<nav id="mainNav">
-    <ul>
-        <li><a href="{{ url_for('home') }}" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-home"></i> <span>首页</span></a></li>
-        <li><a href="{{ url_for('database') }}" {% if is_active(['database', 'table_view', 'row_edit', 'batch_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i> <span>数据库管理</span></a></li>
-        <li><a href="{{ url_for('commands') }}" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-terminal"></i> <span>管理员指令</span></a></li>
-        <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
-        <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
-        <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
-    </ul>
-</nav>
+        <nav id="mainNav">
+            <ul>
+                <li><a href="{{ url_for('home') }}" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-home"></i> <span>首页</span></a></li>
+                <li><a href="{{ url_for('database') }}" {% if is_active(['database', 'table_view', 'row_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i> <span>数据库管理</span></a></li>
+                <li><a href="{{ url_for('commands') }}" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-terminal"></i> <span>管理员指令</span></a></li>
+                <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
+                <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
+                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
+            </ul>
+            
+            {# Theme/Settings Dropdown #}
+            <div class="settings-dropdown">
+                <button class="settings-button" id="settingsButton">
+                    <i class="fas fa-palette"></i> 主题设置 <i class="fas fa-caret-down"></i>
+                </button>
+                <div class="dropdown-content" id="settingsDropdownContent">
+                    <label>
+                        <input type="radio" name="theme" value="light" checked>
+                        <i class="fas fa-sun"></i> 浅色模式
+                    </label>
+                    <label>
+                        <input type="radio" name="theme" value="dark">
+                        <i class="fas fa-moon"></i> 深色模式
+                    </label>
+                    <label>
+                        <input type="radio" name="theme" value="vibrant">
+                        <i class="fas fa-paint-roller"></i> 活力模式
+                    </label>
+                    <hr>
+                    <div class="color-picker-group">
+                        <label for="customAccentColorInput"><i class="fas fa-fill-drip"></i> 自定义强调色:</label>
+                        <input type="color" id="customAccentColorInput" value="#007bff">
+                    </div>
+                </div>
+            </div>
+        </nav>
     </header>
     
     <div class="container">
@@ -594,6 +67,83 @@
 
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
+        // --- Theme Switching & Custom Color Logic ---
+        const body = document.body;
+        const themeRadios = document.querySelectorAll('input[name="theme"]');
+        const customAccentColorInput = document.getElementById('customAccentColorInput');
+        const settingsButton = document.getElementById('settingsButton');
+        const settingsDropdownContent = document.getElementById('settingsDropdownContent');
+
+        function applyTheme(themeName) {
+            body.dataset.theme = themeName;
+            localStorage.setItem('theme', themeName);
+            // If a custom color is active, make sure it's applied
+            if (localStorage.getItem('customAccentColor')) {
+                applyCustomAccentColor(localStorage.getItem('customAccentColor'));
+            } else {
+                body.removeAttribute('data-custom-accent-color');
+                body.style.removeProperty('--custom-accent-color');
+            }
+        }
+
+        function applyCustomAccentColor(color) {
+            body.dataset.customAccentColor = 'true'; // Activate custom color override
+            body.style.setProperty('--custom-accent-color', color);
+            localStorage.setItem('customAccentColor', color);
+            // Ensure a theme is active (e.g., light if none selected)
+            if (!localStorage.getItem('theme')) {
+                applyTheme('light');
+            }
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const savedCustomColor = localStorage.getItem('customAccentColor');
+
+            // Apply saved theme
+            applyTheme(savedTheme);
+            document.querySelector(`input[name="theme"][value="${savedTheme}"]`).checked = true;
+
+            // Apply saved custom color
+            if (savedCustomColor) {
+                customAccentColorInput.value = savedCustomColor;
+                applyCustomAccentColor(savedCustomColor);
+            }
+        });
+
+        // Event listeners for theme radios
+        themeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                applyTheme(radio.value);
+                // When switching to a preset theme, disable custom color
+                body.removeAttribute('data-custom-accent-color');
+                body.style.removeProperty('--custom-accent-color');
+                localStorage.removeItem('customAccentColor'); // Clear custom color from storage
+            });
+        });
+
+        // Event listener for custom accent color picker
+        customAccentColorInput.addEventListener('input', (event) => {
+            applyCustomAccentColor(event.target.value);
+            // Uncheck preset themes when custom color is picked
+            themeRadios.forEach(radio => radio.checked = false);
+        });
+
+        // Toggle settings dropdown
+        settingsButton.addEventListener('click', (event) => {
+            settingsDropdownContent.classList.toggle('show');
+            event.stopPropagation(); // Prevent document click from closing it immediately
+        });
+
+        // Close dropdown if clicked outside
+        document.addEventListener('click', (event) => {
+            if (!settingsDropdownContent.contains(event.target) && !settingsButton.contains(event.target)) {
+                settingsDropdownContent.classList.remove('show');
+            }
+        });
+
+        // --- Existing JavaScript Logic ---
         // 移动端菜单切换
         document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('mainNav').classList.toggle('active');

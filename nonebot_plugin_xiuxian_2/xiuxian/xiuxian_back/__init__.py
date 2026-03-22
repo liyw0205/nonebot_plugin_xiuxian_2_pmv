@@ -827,11 +827,11 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     ITEM_HANDLERS = {
         20005: use_wishing_stone, # 祈愿石
         20016: use_love_sand,     # 思恋沙
-        20007: use_rift_explore,  # 虚神界探索令
-        20001: use_rift_key,      # 虚神界秘境钥匙
-        20018: use_rift_boss,     # 虚神界挑战令
-        20012: use_rift_speedup,  # 虚神界加速卡
-        20013: use_rift_big_speedup, # 虚神界高级加速卡
+        20007: use_rift_explore,  # 秘境探索令
+        20001: use_rift_key,      # 秘境钥匙
+        20018: use_rift_boss,     # 秘境挑战令
+        20012: use_rift_speedup,  # 秘境加速卡
+        20013: use_rift_big_speedup, # 秘境高级加速卡
         20010: use_lottery_talisman, # 灵签宝箓
         20014: use_work_order,       # 悬赏令
         20015: use_work_capture_order, # 捕获悬赏令

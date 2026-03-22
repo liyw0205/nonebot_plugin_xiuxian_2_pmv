@@ -11,10 +11,11 @@ from datetime import datetime, timedelta
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, send_from_directory, abort
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
-from ..xiuxian_utils.xiuxian2_handle import config_impart
+# 导入 xiuxian2_handle，以便获取 trade_manager
+from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
 import os
 
 def log_to_file(message):
@@ -79,6 +80,8 @@ app.secret_key = 'your_secret_key_here'  # 用于会话加密
 XIUXIANDATA = Path() / "data"
 DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
 IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
+PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db" # 新增：player.db 路径
+TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db" # 新增：trade.db 路径
 ADMIN_IDS = get_driver().config.superusers
 PORT = XiuConfig().web_port
 HOST = XiuConfig().web_host
@@ -178,15 +181,20 @@ def get_config_tables():
             "tables": get_impart_table_structure(config_impart)
         },
         "游戏数据库": {
-            "path": Path() / "data" / "xiuxian" / "player.db",
+            "path": PLAYER_DB, # 使用新增的常量
             "tables": get_dynamic_player_tables()
+        },
+        "交易数据库": { # 新增：交易数据库
+            "path": TRADE_DB, # 使用新增的常量
+            "tables": get_dynamic_trade_tables()
         }
     }
     return tables
 
 def get_dynamic_player_tables():
     """动态获取 player.db 中所有存在的表及其字段信息"""
-    player_db_path = Path() / "data" / "xiuxian" / "player.db"
+    # 路径使用常量
+    player_db_path = PLAYER_DB
     if not player_db_path.exists():
         return {}
 
@@ -226,6 +234,58 @@ def get_dynamic_player_tables():
 
     except Exception as e:
         logger.error(f"获取 player.db 表结构失败: {e}")
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+def get_dynamic_trade_tables():
+    """动态获取 trade.db 中所有存在的表及其字段信息"""
+    # 路径使用常量
+    trade_db_path = TRADE_DB
+    if not trade_db_path.exists():
+        return {}
+
+    conn = None
+    try:
+        conn = sqlite3.connect(trade_db_path)
+        cursor = conn.cursor()
+
+        # 获取所有表名
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        result = {}
+        for table_name in table_names:
+            # 获取字段列表
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            fields_info = cursor.fetchall()
+            fields = [row[1] for row in fields_info]
+
+            # 尝试找出主键
+            primary_key = None
+            for row in fields_info:
+                if row[5] == 1: # pk=1 表示主键
+                    primary_key = row[1]
+                    break
+            # 特殊处理，如果表有id字段且没有其他明确的主键，且id是Text类型，作为主键
+            if not primary_key and 'id' in fields:
+                for row in fields_info:
+                    if row[1] == 'id' and row[2].upper() == 'TEXT':
+                        primary_key = 'id'
+                        break
+
+            result[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key,
+                "is_dynamic": True    
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"获取 trade.db 表结构失败: {e}")
         return {}
     finally:
         if conn:
@@ -301,7 +361,10 @@ def get_tables():
 def get_database_tables(db_path):
     """动态获取数据库中的所有表及其字段信息，包括主键（备用函数）"""
     tables = {}
+    if not Path(db_path).exists(): # 添加文件存在性检查
+        return {}
     conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row # 使用行工厂，使结果可按列名访问
     cursor = conn.cursor()
     
     # 获取所有用户表
@@ -957,6 +1020,21 @@ def table_view(table_name):
             break
     
     if not db_path:
+        # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
+        
+        # 检查 player.db
+        dynamic_player_tables = get_dynamic_player_tables()
+        if table_name in dynamic_player_tables:
+            db_path = PLAYER_DB
+            table_info = dynamic_player_tables[table_name]
+        else:
+            # 检查 trade.db
+            dynamic_trade_tables = get_dynamic_trade_tables()
+            if table_name in dynamic_trade_tables:
+                db_path = TRADE_DB
+                table_info = dynamic_trade_tables[table_name]
+    
+    if not db_path:
         return "表不存在", 404
     
     page = int(request.args.get('page', 1))
@@ -997,6 +1075,7 @@ def row_edit(table_name, row_id):
     is_dynamic_table = False
     primary_key_field = None  # 主键字段名
     
+    # 优先从预设配置中查找
     for db_name, db_info in all_tables_grouped.items():
         if table_name in db_info["tables"]:
             db_path = db_info["path"]
@@ -1004,14 +1083,20 @@ def row_edit(table_name, row_id):
             is_dynamic_table = db_info["tables"][table_name].get('is_dynamic', False)
             break
     
+    # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
     if not db_path:
-        # 检查是否是 player.db 的动态表
-        player_db_path = Path() / "data" / "xiuxian" / "player.db"
-        if player_db_path.exists():
-            dynamic_tables = get_dynamic_player_tables()
-            if table_name in dynamic_tables:
-                db_path = player_db_path
-                table_info = dynamic_tables[table_name]
+        # 检查 player.db
+        dynamic_player_tables = get_dynamic_player_tables()
+        if table_name in dynamic_player_tables:
+            db_path = PLAYER_DB
+            table_info = dynamic_player_tables[table_name]
+            is_dynamic_table = True
+        else:
+            # 检查 trade.db
+            dynamic_trade_tables = get_dynamic_trade_tables()
+            if table_name in dynamic_trade_tables:
+                db_path = TRADE_DB
+                table_info = dynamic_trade_tables[table_name]
                 is_dynamic_table = True
     
     if not db_path:
@@ -1047,13 +1132,16 @@ def row_edit(table_name, row_id):
     else:
         primary_conditions = {primary_key_field: row_id}
     
-    # 确定数据库路径
-    if is_dynamic_table:
-        db_path = Path() / "data" / "xiuxian" / "player.db"
-    elif table_name in get_database_tables(IMPART_DB):
-        db_path = IMPART_DB
-    else:
-        db_path = DATABASE
+    # 确定数据库路径（这里冗余了，但确保了 db_path 的最终正确性）
+    # 实际上，db_path 已经在前面通过 all_tables_grouped、dynamic_player_tables 或 dynamic_trade_tables 确定
+    # if is_dynamic_table and table_name in get_dynamic_player_tables():
+    #     db_path = PLAYER_DB
+    # elif is_dynamic_table and table_name in get_dynamic_trade_tables():
+    #     db_path = TRADE_DB
+    # elif table_name in get_database_tables(IMPART_DB):
+    #     db_path = IMPART_DB
+    # else:
+    #     db_path = DATABASE
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -1141,6 +1229,7 @@ def batch_edit(table_name):
     table_info = None
     is_dynamic_table = False  # 标记是否为动态表
     
+    # 优先从预设配置中查找
     for db_name, db_info in all_tables_grouped.items():
         if table_name in db_info["tables"]:
             db_path = db_info["path"]
@@ -1148,14 +1237,20 @@ def batch_edit(table_name):
             is_dynamic_table = db_info["tables"][table_name].get('is_dynamic', False)
             break
     
-    # 如果表不存在，检查是否是 player.db 的动态表
+    # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
     if not db_path:
-        player_db_path = Path() / "data" / "xiuxian" / "player.db"
-        if player_db_path.exists():
-            dynamic_tables = get_dynamic_player_tables()
-            if table_name in dynamic_tables:
-                db_path = player_db_path
-                table_info = dynamic_tables[table_name]
+        # 检查 player.db
+        dynamic_player_tables = get_dynamic_player_tables()
+        if table_name in dynamic_player_tables:
+            db_path = PLAYER_DB
+            table_info = dynamic_player_tables[table_name]
+            is_dynamic_table = True
+        else:
+            # 检查 trade.db
+            dynamic_trade_tables = get_dynamic_trade_tables()
+            if table_name in dynamic_trade_tables:
+                db_path = TRADE_DB
+                table_info = dynamic_trade_tables[table_name]
                 is_dynamic_table = True
     
     if not db_path:
@@ -1452,23 +1547,30 @@ def execute_command():
             if item_input.isdigit():
                 goods_id = int(item_input)
                 # 检查物品是否存在
-                sql_item = "SELECT * FROM back WHERE goods_id = ? LIMIT 1"
+                # 这里假设 back 表中的 goods_id 是物品的唯一标识，我们需要一个方法来获取物品名称
+                # 可以查询 back 表中是否存在该 goods_id
+                sql_item = "SELECT goods_name FROM back WHERE goods_id = ? LIMIT 1"
                 item_check = execute_sql(DATABASE, sql_item, (goods_id,))
-                if not item_check:
-                    return jsonify({"success": False, "error": f"物品ID {goods_id} 不存在"})
+                if not item_check: # 如果back表中不存在，尝试从items中获取
+                    item_data = items.get_data_by_item_id(goods_id)
+                    if not item_data:
+                         return jsonify({"success": False, "error": f"物品ID {goods_id} 不存在于任何物品配置中"})
+                    else:
+                        goods_name = item_data['name']
+                        goods_type = item_data['type']
+                else:
+                    goods_name = item_check[0]['goods_name']
+                    # 从items中获取type，或者从back表中获取
+                    item_data = items.get_data_by_item_id(goods_id)
+                    goods_type = item_data['type'] if item_data else item_check[0].get('goods_type', '未知类型')
             else:
                 # 按名称查找物品
-                sql_item = "SELECT goods_id FROM back WHERE goods_name = ? LIMIT 1"
-                item_check = execute_sql(DATABASE, sql_item, (item_input,))
-                if not item_check:
+                item_data = items.get_data_by_item_name(item_input)
+                if not item_data:
                     return jsonify({"success": False, "error": f"物品 {item_input} 不存在"})
-                goods_id = item_check[0]['goods_id']
-            
-            # 获取物品信息
-            sql_item_info = "SELECT goods_name, goods_type FROM back WHERE goods_id = ? LIMIT 1"
-            item_info = execute_sql(DATABASE, sql_item_info, (goods_id,))[0]
-            goods_name = item_info['goods_name']
-            goods_type = item_info['goods_type']
+                goods_id = item_data['id']
+                goods_name = item_data['name']
+                goods_type = item_data['type']
             
             if target == "指定用户" and username:
                 user_info = get_user_by_name(username)
@@ -1541,22 +1643,23 @@ def execute_command():
             if item_input.isdigit():
                 goods_id = int(item_input)
                 # 检查物品是否存在
-                sql_item = "SELECT * FROM back WHERE goods_id = ? LIMIT 1"
+                sql_item = "SELECT goods_name FROM back WHERE goods_id = ? LIMIT 1"
                 item_check = execute_sql(DATABASE, sql_item, (goods_id,))
                 if not item_check:
                     return jsonify({"success": False, "error": f"物品ID {goods_id} 不存在"})
             else:
                 # 按名称查找物品
-                sql_item = "SELECT goods_id FROM back WHERE goods_name = ? LIMIT 1"
-                item_check = execute_sql(DATABASE, sql_item, (item_input,))
-                if not item_check:
+                item_data = items.get_data_by_item_name(item_input)
+                if not item_data:
                     return jsonify({"success": False, "error": f"物品 {item_input} 不存在"})
-                goods_id = item_check[0]['goods_id']
-            
+                goods_id = item_data['id']
+
             # 获取物品信息
             sql_item_info = "SELECT goods_name FROM back WHERE goods_id = ? LIMIT 1"
-            item_info = execute_sql(DATABASE, sql_item_info, (goods_id,))[0]
-            goods_name = item_info['goods_name']
+            item_info = execute_sql(DATABASE, sql_item_info, (goods_id,))
+            if not item_info:
+                return jsonify({"success": False, "error": f"物品ID {goods_id} 不存在于任何用户背包中"})
+            goods_name = item_info[0]['goods_name']
             
             if target == "指定用户" and username:
                 user_info = get_user_by_name(username)

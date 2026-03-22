@@ -1104,7 +1104,7 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     
     def realm_top(self):
-        """境界排行榜前50"""
+        """境界排行"""
         rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
     
         sql = """SELECT user_name, level, exp FROM user_xiuxian 
@@ -2072,7 +2072,7 @@ class OtherSet(XiuConfig):
             play_list.append(msg2.format(player2['道号'], play2_sh))
             player1['气血'] = player1['气血'] - play2_sh
             play_list.append(f"{player1['道号']}剩余血量{player1['气血']}\n")
-            XiuxianDateManage().update_user_hp_mp(player1['user_id'], player1['气血'], player1['真元'])
+            XiuxianDateManage().update_user_hp_mp(player1['user_id'], 1, player1['真元'])
 
             if player1['气血'] <= 0:
                 play_list.append(f"{player2['道号']}胜利")
@@ -2673,112 +2673,206 @@ class PlayerDataManager:
     def _get_connection(self):
         return sqlite3.connect(self.database_path, check_same_thread=False)
 
-    def _ensure_table_exists(self, user_id, table_name):
+    def _ensure_table_exists(self, table_name): # 移除 user_id 参数，表创建不需要user_id
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
         if cursor.fetchone() is None:
-            cursor.execute(f"CREATE TABLE {table_name} (user_id INTEGER PRIMARY KEY)")
+            # 统一使用 'user_id' 作为主键名称，即使对于非用户相关的表，例如 'dungeon_global_state'，它也可以只有一个 user_id=0 的记录
+            # 对于 'teams' 表，user_id 可以存储 team_id
+            cursor.execute(f"CREATE TABLE {table_name} (user_id TEXT PRIMARY KEY)")
             logger.opt(colors=True).info(f"<green>表 {table_name} 已创建！</green>")
         conn.commit()
         conn.close()
 
-    def _ensure_field_exists(self, user_id, table_name, field, data_type='INTEGER'):
+    def _ensure_field_exists(self, table_name, field, data_type='TEXT'): # 移除 user_id 参数
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(f"PRAGMA table_info({table_name})")
         fields = [col[1] for col in cursor.fetchall()]
         if field not in fields:
-            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {field} {data_type} DEFAULT 0")
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {field} {data_type} DEFAULT NULL") # 默认值改为NULL以区分未设置
             logger.opt(colors=True).info(f"<green>字段 {field} 已添加到表 {table_name}，类型为 {data_type}！</green>")
         conn.commit()
         conn.close()
 
-    def update_or_write_data(self, user_id, table_name, field, value, data_type='INTEGER'):
+    def update_or_write_data(self, user_id, table_name, field, value, data_type='TEXT'): # 默认数据类型改为TEXT
         if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
-            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to INTEGER.</yellow>")
-            data_type = 'INTEGER'
-        self._ensure_table_exists(user_id, table_name)
-        self._ensure_field_exists(user_id, table_name, field, data_type)
-        value = str(value)
+            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to TEXT.</yellow>")
+            data_type = 'TEXT'
+        self._ensure_table_exists(table_name) # 更新调用
+        self._ensure_field_exists(table_name, field, data_type) # 更新调用
+        
+        # 自动序列化复杂类型
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value)
+        else:
+            value = str(value) # 确保所有值都存储为字符串
+
         conn = self._get_connection()
         cursor = conn.cursor()
-        cursor.execute(f"UPDATE {table_name} SET {field}=? WHERE user_id=?", (value, user_id))
+        cursor.execute(f"UPDATE {table_name} SET {field}=? WHERE user_id=?", (value, str(user_id)))
         if cursor.rowcount == 0:
-            cursor.execute(f"INSERT INTO {table_name} (user_id, {field}) VALUES (?, ?)", (user_id, value))
+            cursor.execute(f"INSERT INTO {table_name} (user_id, {field}) VALUES (?, ?)", (str(user_id), value))
         conn.commit()
         conn.close()
 
     def get_fields(self, user_id, table_name):
         """通过user_id查看一个表这个主键的全部字段"""
-        if str(user_id) == "None":
+        if user_id is None: # 允许user_id为None，但会返回空字典或None
+            logger.warning(f"尝试获取表 {table_name} 的字段数据但 user_id 为 None")
             return None
             
-        self._ensure_table_exists(user_id, table_name)
+        self._ensure_table_exists(table_name) # 更新调用
         
         # 检查主键是否存在
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
+            cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (str(user_id),))
             result = cursor.fetchone()
         except Exception as e:
+            logger.error(f"查询表 {table_name} user_id {user_id} 时出错: {e}")
             result = None
+        
         if result is None:
-            logger.warning(f"用户ID {user_id} 在表 {table_name} 中不存在")
+            # logger.debug(f"用户ID {user_id} 在表 {table_name} 中不存在或无数据") # 调试时启用
             conn.close()
             return None
         
         columns = [column[0] for column in cursor.description]
-        user_dict = dict(zip(columns, result))
+        user_dict = {}
+        for col, val in zip(columns, result):
+            if isinstance(val, str):
+                try:
+                    # 尝试反序列化 JSON 字符串
+                    deserialized_val = json.loads(val)
+                    user_dict[col] = deserialized_val
+                except json.JSONDecodeError:
+                    user_dict[col] = val
+            else:
+                user_dict[col] = val
+        
         conn.close()
         return user_dict
 
     def get_field_data(self, user_id, table_name, field):
-        self._ensure_table_exists(user_id, table_name)
-        self._ensure_field_exists(user_id, table_name, field)
+        if user_id is None:
+            logger.warning(f"尝试获取表 {table_name} 字段 {field} 的数据但 user_id 为 None")
+            return None
+
+        self._ensure_table_exists(table_name) # 更新调用
+        self._ensure_field_exists(table_name, field) # 更新调用
         conn = self._get_connection()
         cursor = conn.cursor()
-        cursor.execute(f"SELECT {field} FROM {table_name} WHERE user_id=?", (user_id,))
+        cursor.execute(f"SELECT {field} FROM {table_name} WHERE user_id=?", (str(user_id),))
         result = cursor.fetchone()
         conn.close()
-        return result[0] if result else None
+        
+        if result and result[0] is not None:
+            val = result[0]
+            if isinstance(val, str):
+                try:
+                    # 尝试反序列化 JSON 字符串
+                    return json.loads(val)
+                except json.JSONDecodeError:
+                    pass
+            return val
+        return None
 
     def get_all_field_data(self, table_name, field):
-        self._ensure_table_exists(None, table_name)
-        self._ensure_field_exists(None, table_name, field)
+        self._ensure_table_exists(table_name) # 更新调用
+        self._ensure_field_exists(table_name, field) # 更新调用
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(f"SELECT user_id, {field} FROM {table_name}")
         result = cursor.fetchall()
         conn.close()
-        return result
+        
+        processed_results = []
+        for user_id_str, val in result:
+            if isinstance(val, str):
+                try:
+                    # 尝试反序列化 JSON 字符串
+                    processed_results.append((user_id_str, json.loads(val)))
+                except json.JSONDecodeError:
+                    processed_results.append((user_id_str, val))
+            else:
+                processed_results.append((user_id_str, val))
+        return processed_results
 
-    def update_all_records(self, table_name, field, value, data_type='INTEGER'):
+    def update_all_records(self, table_name, field, value, data_type='TEXT'): # 默认数据类型改为TEXT
         """
         更新指定表中所有记录的某个字段的值
         :param table_name: 表名
         :param field: 字段名
         :param value: 新值
-        :param data_type: 数据类型，默认为 INTEGER
+        :param data_type: 数据类型，默认为 TEXT
         """
         if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
-            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to INTEGER.</yellow>")
-            data_type = 'INTEGER'
-        self._ensure_table_exists(None, table_name)
-        self._ensure_field_exists(None, table_name, field, data_type=data_type)        
-        value = str(value)
+            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to TEXT.</yellow>")
+            data_type = 'TEXT'
+        self._ensure_table_exists(table_name) # 更新调用
+        self._ensure_field_exists(table_name, field, data_type=data_type)        
+        
+        # 自动序列化复杂类型
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value)
+        else:
+            value = str(value)
+
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(f"UPDATE {table_name} SET {field}=? ", (value,))
         conn.commit()
         conn.close()
 
+    def get_all_records(self, table_name) -> list[dict]:
+        """
+        获取指定表中的所有记录
+        :param table_name: 表名
+        :return: 包含所有记录的字典列表
+        """
+        self._ensure_table_exists(table_name)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+        conn.close()
+
+        results = []
+        for row in rows:
+            record = {}
+            for col, val in zip(columns, row):
+                if isinstance(val, str):
+                    try:
+                        record[col] = json.loads(val)  # 尝试反序列化JSON字符串
+                    except json.JSONDecodeError:
+                        record[col] = val
+                else:
+                    record[col] = val
+            results.append(record)
+        return results
+
+    def delete_record(self, user_id, table_name):
+        """
+        删除指定 user_id 在指定表中的记录
+        :param user_id: 记录的主键 (user_id/team_id 等)
+        :param table_name: 表名
+        """
+        self._ensure_table_exists(table_name)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM {table_name} WHERE user_id=?", (str(user_id),))
+        conn.commit()
+        conn.close()
+
     def close(self):
         """关闭数据库连接"""
-        if hasattr(self, 'conn') and self.conn:
-            self.conn.close()
-            logger.opt(colors=True).info(f"<green>player数据库关闭！</green>")
+        # PlayerDataManager的连接是在每次操作时创建和关闭的，
+        # 所以这里的close方法可以做一些清理工作，但不需要关闭全局连接
+        logger.opt(colors=True).info(f"<green>player数据库管理器已关闭！</green>")
     
 # 这里是虚神界部分
 class XIUXIAN_IMPART_BUFF:
@@ -3565,10 +3659,11 @@ def read_player_info(user_id, info_name):
     player_data_manager = PlayerDataManager()
     user_id_str = str(user_id)
     info = {}
-    for field in mix_elixir_infoconfigkey:
-        data = player_data_manager.get_field_data(user_id_str, info_name, field)
-        if data is not None:
-            info[field] = data
+    record = player_data_manager.get_fields(user_id_str, info_name) # 直接获取所有字段
+    if record:
+        for field in mix_elixir_infoconfigkey:
+            if field in record:
+                info[field] = record[field]
     return info
 
 def save_player_info(user_id, data, info_name):
@@ -3578,28 +3673,30 @@ def save_player_info(user_id, data, info_name):
         player_data_manager.update_or_write_data(user_id_str, info_name, field, value, data_type="TEXT")
 
 def get_player_info(user_id, info_name):
-    player_info = None
-    try:
-        nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-        MIXELIXIRINFOCONFIG = {
-            "收取时间": nowtime,
-            "收取等级": 0,
-            "灵田数量": 1,
-            '药材速度': 0,
-            '灵田傀儡': 0,
-            "丹药控火": 0,
-            "丹药耐药性": 0,
-            "炼丹记录": {},
-            "炼丹经验": 0
-        }
-        player_info = read_player_info(user_id, info_name)
-        for key in mix_elixir_infoconfigkey:
-            if key not in list(player_info.keys()):
-                player_info[key] = MIXELIXIRINFOCONFIG[key]
+    MIXELIXIRINFOCONFIG = {
+        "收取时间": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), # str
+        "收取等级": 0,
+        "灵田数量": 1,
+        '药材速度': 0,
+        '灵田傀儡': 0,
+        "丹药控火": 0,
+        "丹药耐药性": 0,
+        "炼丹记录": {},
+        "炼丹经验": 0
+    }
+    
+    player_info = read_player_info(user_id, info_name)
+    
+    # 检查并补全缺失字段
+    updated_info = False
+    for key in mix_elixir_infoconfigkey:
+        if key not in player_info:
+            player_info[key] = MIXELIXIRINFOCONFIG[key]
+            updated_info = True
+            
+    if updated_info: # 如果有更新，则保存
         save_player_info(user_id, player_info, info_name)
-    except Exception as e:
-        player_info = MIXELIXIRINFOCONFIG
-        save_player_info(user_id, player_info, info_name)
+        
     return player_info
 
 def number_count(num):
@@ -3726,5 +3823,5 @@ player_data_manager = PlayerDataManager()
 async def close_db():
     XiuxianDateManage().close()
     XIUXIAN_IMPART_BUFF().close()
-    PlayerDataManager().close()
+    # PlayerDataManager().close() # PlayerDataManager 的连接已改为按需打开和关闭
     TradeDataManager().close()
