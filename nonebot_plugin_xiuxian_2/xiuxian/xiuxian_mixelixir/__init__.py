@@ -220,7 +220,6 @@ async def my_mix_elixir_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if mix_elixir_info['炼丹记录'] != {}:
         l_msg.append(f"☆------道友的炼丹记录------☆")
         i = 1
-        mix_elixir_info['炼丹记录'] = json.loads(mix_elixir_info['炼丹记录'])
         for k, v in mix_elixir_info['炼丹记录'].items():
             msg = f"编号：{i},{v['name']}，炼成次数：{v['num']}次"
             l_msg.append(msg)
@@ -458,7 +457,6 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 sql_message.update_back_j(user_id, yaoyin_goods_id, yaoyin_num)
                 update_statistics_value(user_id, "炼丹次数")
                 sql_message.update_mixelixir_num(user_id)
-                mix_elixir_info['炼丹记录'] = json.loads(mix_elixir_info['炼丹记录'])
                 try:
                     var = mix_elixir_info['炼丹记录'][id]
                     now_num = mix_elixir_info['炼丹记录'][id]['num']  # now_num 已经炼制的丹药数量
@@ -478,7 +476,6 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     mix_elixir_info['炼丹记录'][id]['num'] = num
                     mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
                     msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
-                mix_elixir_info['炼丹记录'] = json.dumps(mix_elixir_info.get("炼丹记录", {}))
                 save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()

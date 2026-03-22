@@ -24,16 +24,14 @@ class BossLimit:
         if data is None:
             self._save_data(user_id, self.default_data)
             return self.default_data
-        data["weekly_purchases"] = json.loads(data["weekly_purchases"])
         return data
 
     def _save_data(self, user_id, data):
         """保存数据"""
-        weekly_purchases_json = json.dumps(data["weekly_purchases"])
         player_data_manager.update_or_write_data(user_id, "boss", "boss_integral", data["boss_integral"])
         player_data_manager.update_or_write_data(user_id, "boss", "boss_stone", data["boss_stone"])
         player_data_manager.update_or_write_data(user_id, "boss", "boss_battle_count", data["boss_battle_count"])
-        player_data_manager.update_or_write_data(user_id, "boss", "weekly_purchases", weekly_purchases_json)
+        player_data_manager.update_or_write_data(user_id, "boss", "weekly_purchases", data["weekly_purchases"])
 
     def get_integral(self, user_id):
         """获取用户今日已获得BOSS积分"""

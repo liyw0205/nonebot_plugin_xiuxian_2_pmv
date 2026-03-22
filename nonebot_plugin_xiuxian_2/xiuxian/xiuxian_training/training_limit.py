@@ -37,7 +37,6 @@ class TrainingLimit:
             user_info["last_time"] = None
         if user_info["last_time"] and isinstance(user_info["last_time"], str):
             user_info["last_time"] = datetime.strptime(user_info["last_time"], "%Y-%m-%d %H:%M:%S")
-        user_info["weekly_purchases"] = json.loads(user_info["weekly_purchases"])
         return user_info
     
     def save_user_training_info(self, user_id, data):
@@ -46,14 +45,13 @@ class TrainingLimit:
         save_data = data.copy()
         if isinstance(save_data["last_time"], datetime):
             save_data["last_time"] = save_data["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-        weekly_purchases_json = json.dumps(save_data["weekly_purchases"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "progress", save_data["progress"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "last_time", save_data["last_time"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "points", save_data["points"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "completed", save_data["completed"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "max_progress", save_data["max_progress"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "last_event", save_data["last_event"])
-        player_data_manager.update_or_write_data(user_id, self.table_name, "weekly_purchases", weekly_purchases_json)
+        player_data_manager.update_or_write_data(user_id, self.table_name, "weekly_purchases", save_data["weekly_purchases"])
 
     def get_weekly_purchases(self, user_id, item_id):
         """获取用户本周已购买某商品的数量"""

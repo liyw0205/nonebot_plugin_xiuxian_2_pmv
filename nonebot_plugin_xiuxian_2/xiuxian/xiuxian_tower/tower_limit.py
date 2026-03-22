@@ -27,18 +27,16 @@ class TowerLimit:
             player_data_manager.update_or_write_data(user_id, self.table_name, "weekly_purchases", default_data["weekly_purchases"])
             return default_data
         
-        user_info["weekly_purchases"] = json.loads(user_info["weekly_purchases"])
         return user_info
     
     def save_user_tower_info(self, user_id, data):
         """保存用户历练信息"""
         user_id = str(user_id)
         save_data = data.copy()
-        weekly_purchases_json = json.dumps(save_data["weekly_purchases"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "current_floor", save_data["current_floor"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "max_floor", save_data["max_floor"])
         player_data_manager.update_or_write_data(user_id, self.table_name, "score", save_data["score"])
-        player_data_manager.update_or_write_data(user_id, self.table_name, "weekly_purchases", weekly_purchases_json)
+        player_data_manager.update_or_write_data(user_id, self.table_name, "weekly_purchases", save_data["weekly_purchases"])
 
     def get_weekly_purchases(self, user_id, item_id):
         """获取用户本周已购买某商品的数量"""
