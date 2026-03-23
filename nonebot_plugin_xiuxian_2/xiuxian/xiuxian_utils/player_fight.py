@@ -589,7 +589,7 @@ def generate_boss_buff(boss):
     # --- 境界判断逻辑 ---
     # 从最高境界开始向下判断
     # 祭道境 (最高级)
-    if boss_level == "祭道境" or current_rank_val >= get_rank_val('祭道境初期'): # 修正判断逻辑，祭道境及以上
+    if boss_level == "祭道境" or current_rank_val < get_rank_val('祭道境初期'): # 修正判断逻辑，祭道境及以上
         cfg = {
             'js': 0.95, # 伤害减免 95%
             'cj': (0.25, 0.50), # 护甲穿透 25%-50%
@@ -2924,6 +2924,7 @@ class BattleSystem:
                 # if unit.hp != old_unit_hp_after_attack or unit.mp != old_unit_mp_in_action:
                 #     self.add_unit_status_message(unit)
 
+            unit.total_dmg += total_dmg
             # 攻击完成后检查敌人是否死亡，并打印死亡消息
             for enemy in enemies:
                 if not enemy.is_alive:
