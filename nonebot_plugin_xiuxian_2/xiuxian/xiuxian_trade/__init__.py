@@ -265,7 +265,7 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
                 sql_message.update_ls(item["seller_id"], seller_earnings, 1) # 1表示增加
             
             # 记录成交信息
-            winner_user_info = await sql_message.get_user_info_with_id(highest_bidder_id)
+            winner_user_info = sql_message.get_user_info_with_id(highest_bidder_id)
             result_record.update({
                 "final_price": final_price,
                 "winner_id": highest_bidder_id,
@@ -359,7 +359,7 @@ async def place_auction_bid(bot: Bot, user_id: int, user_name: str, auction_id: 
         return False, "不能竞拍自己上架的物品！"
 
     # 获取用户当前灵石
-    user_info = await sql_message.get_user_info_with_id(user_id)
+    user_info = sql_message.get_user_info_with_id(user_id)
     if not user_info:
         return False, "用户信息获取失败！"
     
@@ -397,7 +397,7 @@ async def place_auction_bid(bot: Bot, user_id: int, user_name: str, auction_id: 
     ]
     
     if "prev_winner_id" in locals() and prev_winner_id != user_id:
-        prev_winner_info = await sql_message.get_user_info_with_id(prev_winner_id)
+        prev_winner_info = sql_message.get_user_info_with_id(prev_winner_id)
         prev_winner_name = prev_winner_info["user_name"] if prev_winner_info else str(prev_winner_id)
         msg_list.append(f"已退还 {prev_winner_name} 的 {number_to(prev_price)} 灵石")
     
@@ -2214,7 +2214,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 
                 msg_list.append("\n☆------竞拍记录(最近5条)------☆")
                 for i, bid in enumerate(recent_bids):
-                    bidder_info = await sql_message.get_user_info_with_id(bid["bidder_id"])
+                    bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
                     bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
                     time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                     msg_list.append(f"{i+1}. {bidder_name}: {number_to(bid['price'])}灵石 ({time_str})")
@@ -2234,7 +2234,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 ]
                 
                 if record["status"] == "成交":
-                    winner_info = await sql_message.get_user_info_with_id(record["winner_id"])
+                    winner_info = sql_message.get_user_info_with_id(record["winner_id"])
                     winner_name = winner_info["user_name"] if winner_info else str(record["winner_id"])
                     msg_list.extend([
                         f"成交价: {number_to(record['final_price'])}灵石",
@@ -2601,7 +2601,7 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg_list = ["拍卖已结束！成交结果："]
     for result in results[:5]:  # 最多显示5条结果
         if result["status"] == "成交":
-            winner_info = await sql_message.get_user_info_with_id(result["winner_id"])
+            winner_info = sql_message.get_user_info_with_id(result["winner_id"])
             winner_name = winner_info["user_name"] if winner_info else str(result["winner_id"])
             msg_list.append(
                 f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 "
