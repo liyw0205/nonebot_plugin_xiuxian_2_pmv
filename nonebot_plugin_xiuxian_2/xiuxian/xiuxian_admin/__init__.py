@@ -1134,7 +1134,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     """
     用户伪装功能：管理员可以伪装成其他用户来执行命令。
     用法：
-    用户伪装 [目标ID] - 伪装成指定ID
+    用户伪装 [目标ID/@用户/道号] - 伪装成指定用户
     用户伪装 取消    - 取消当前伪装
     用户伪装 off     - 取消当前伪装
     """
@@ -1145,9 +1145,11 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     if not arg_text:
         current_target_id = _impersonating_users.get(admin_user_id)
         if current_target_id:
-            await handle_send(bot, event, f"您当前正在伪装用户：ID {current_target_id}。\n发送「用户伪装 取消」停止伪装。")
+            target_user_info = sql_message.get_user_info_with_id(current_target_id)
+            target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
+            await handle_send(bot, event, f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。")
         else:
-            await handle_send(bot, event, "用法：用户伪装 [目标ID] 或 用户伪装 取消")
+            await handle_send(bot, event, "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消")
         return
 
     if arg_text.lower() == "取消" or arg_text.lower() == "off":
@@ -1158,17 +1160,48 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             await handle_send(bot, event, "您当前没有伪装任何用户。")
         return
 
-    try:
-        target_user_id = str(int(arg_text)) # 确保是有效的ID
-    except ValueError:
-        await handle_send(bot, event, "请输入有效的ID作为伪装目标。")
-        return
-    
-    # 检查目标用户是否存在于修仙界
-    target_user_info = sql_message.get_user_info_with_id(target_user_id)
-    if not target_user_info:
-        await handle_send(bot, event, f"目标用户 ID {target_user_id} 尚未踏入修仙界，无法伪装。")
+    # 初始化目标用户ID和信息
+    target_user_id = None
+    target_user_info = None
+
+    # 1. 优先处理 @ 提及
+    at_qq = None
+    for seg in args:
+        if seg.type == "at":
+            at_qq = seg.data.get("qq", "")
+            break
+
+    if at_qq:
+        target_user_id = at_qq
+        target_user_info = sql_message.get_user_info_with_id(target_user_id)
+
+    # 2. 如果没有 @ 提及，尝试通过道号查找
+    if not target_user_info and arg_text: # 确保 arg_text 存在且之前未找到用户
+        # 尝试通过道号查找用户
+        temp_user_info_by_name = sql_message.get_user_info_with_name(arg_text)
+        if temp_user_info_by_name:
+            target_user_info = temp_user_info_by_name
+            target_user_id = target_user_info['user_id']
+
+    # 3. 如果 @ 和道号都未找到，最后尝试将文本作为用户ID
+    if not target_user_info and arg_text: # 确保 arg_text 存在且之前未找到用户
+        try:
+            potential_user_id = str(int(arg_text)) # 尝试转换为整数ID
+            target_user_info = sql_message.get_user_info_with_id(potential_user_id)
+            if target_user_info: # 只有当通过ID成功找到用户时才赋值
+                target_user_id = potential_user_id
+            else:
+                # 如果是有效的数字，但不是修仙用户，则 target_user_info 依然为 None
+                pass 
+        except ValueError:
+            # 如果 arg_text 既不是数字也不是道号，则会走到这里
+            pass
+            
+    if not target_user_id or not target_user_info:
+        await handle_send(bot, event, f"未找到目标用户 「{arg_text}」！请确保输入正确的ID、@用户或道号，且对方已踏入修仙界。")
         return
 
+    # 到这里，target_user_id 和 target_user_info 应该都已正确获取
     _impersonating_users[admin_user_id] = target_user_id
     await handle_send(bot, event, f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n后续所有修仙命令都将以此用户身份执行，直至您取消伪装。")
+    

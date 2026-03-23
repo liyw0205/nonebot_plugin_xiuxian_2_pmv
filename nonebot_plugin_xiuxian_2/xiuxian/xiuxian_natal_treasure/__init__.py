@@ -26,7 +26,14 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items # 导入 Items
 
 from .natal_data import * # 导入本命法宝数据管理类和相关配置
-from .natal_config import INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE # 导入无敌总等级成长系数
+from .natal_config import (
+    INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE, # 导入无敌总等级成长系数
+    MYSTERIOUS_SCRIPTURE_COST_ENGRAVE,          # 铭刻道纹消耗
+    MYSTERIOUS_SCRIPTURE_COST_FORGET,           # 遗忘道纹消耗
+    MAX_EFFECT_SLOTS,                           # 最大效果槽位
+    EFFECT_NAME_TO_TYPE,                        # 效果名称到枚举的映射
+    EFFECT_NAME_MAP                             # 效果类型到中文名称的映射
+)
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -56,8 +63,8 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if not nt.exists(): # 如果用户尚未觉醒本命法宝
         nt.awaken() # 执行首次觉醒
         desc = nt.get_effect_desc() # 获取法宝描述
-        await handle_send(bot, event, f"恭喜！本命法宝觉醒成功！\n{desc}",
-                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+        await handle_send(bot, event, f"恭喜！本命法宝觉醒成功！\n{desc}\n首次觉醒默认获得一个道纹，你可以通过铭刻道纹来增加效果槽位。",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝")
         await natal_awaken.finish()
 
     # 如果用户已拥有本命法宝，则进入重塑逻辑
@@ -75,13 +82,10 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     
     # 计算效果升阶的返还数量
     refund_from_effect_upgrades = 0
-    # 效果1的返还（如果等级大于1）
-    if old_nt_data.get("effect1_level", 0) > 1:
-        # 每个效果等级大于1的部分返还1个神秘经书
-        refund_from_effect_upgrades += (old_nt_data["effect1_level"] - 1)
-    # 效果2的返还（如果存在且等级大于1）
-    if old_nt_data.get("effect2_type", 0) != 0 and old_nt_data.get("effect2_level", 0) > 1:
-        refund_from_effect_upgrades += (old_nt_data["effect2_level"] - 1)
+    # 遍历所有效果槽位计算返还
+    for i in range(1, MAX_EFFECT_SLOTS + 1):
+        if old_nt_data.get(f"effect{i}_level", 0) > 1:
+            refund_from_effect_upgrades += (old_nt_data[f"effect{i}_level"] - 1)
     
     # 实际需要消耗的神秘经书 = 基础消耗 - 效果升阶返还
     # 如果结果为负数，表示重塑后会有神秘经书返还，不需检查库存
@@ -95,7 +99,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await natal_awaken.finish()
 
     msg = f"你已拥有本命法宝：\n\n{current_desc}\n\n"
-    msg += f"重新觉醒将会【完全随机重塑名称、形态与效果】，旧法宝将被覆盖，同时法宝等级和效果等级将被重置。\n"
+    msg += f"重新觉醒将会【完全随机重塑名称、形态与初始道纹】，旧法宝将被覆盖，同时法宝等级和所有道纹等级将被重置。\n"
     
     if net_cost_to_check > 0:
         msg += f"本次重塑需要消耗 {net_cost_to_check} 个【{mysterious_scripture_info['name']}】。"
@@ -134,10 +138,9 @@ async def natal_awaken_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessa
         # 获取旧法宝数据，计算返还
         old_nt_data = nt.get_data()
         refund_from_effect_upgrades = 0
-        if old_nt_data.get("effect1_level", 0) > 1:
-            refund_from_effect_upgrades += (old_nt_data["effect1_level"] - 1)
-        if old_nt_data.get("effect2_type", 0) != 0 and old_nt_data.get("effect2_level", 0) > 1: # 效果2存在才计算
-            refund_from_effect_upgrades += (old_nt_data["effect2_level"] - 1)
+        for i in range(1, MAX_EFFECT_SLOTS + 1): # 遍历所有效果槽位计算返还
+            if old_nt_data.get(f"effect{i}_level", 0) > 1:
+                refund_from_effect_upgrades += (old_nt_data[f"effect{i}_level"] - 1)
 
         # 计算最终的神秘经书变动 (负数表示消耗，正数表示获得)
         total_scripture_change = refund_from_effect_upgrades - scripture_cost_for_reawaken
@@ -172,7 +175,7 @@ async def natal_awaken_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
 
         await handle_send(bot, event, result_msg,
-                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝")
     
     else:
         # 取消或其他非确认输入
@@ -208,7 +211,7 @@ async def natal_info_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg = nt.get_effect_desc() # 统一通过类方法获取信息描述
 
     await handle_send(bot, event, msg,
-                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝")
 
 
 # 定义养成本命法宝命令
@@ -263,10 +266,10 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                            md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
         return
 
-    # **新增逻辑：限制经验传参上限，使其不超过当前等级所需的剩余经验**
-    current_exp = nt_data.get("exp", 0)
-    max_exp_for_current_level_up = nt_data.get("max_exp", 100) # 当前等级升阶所需的总经验
-    remaining_exp_needed = max_exp_for_current_level_up - current_exp # 当前等级还需多少经验才能升级
+    # 计算当前等级到下一级所需的总经验
+    max_exp_for_current_level_up = int(MAX_EXP_BASE + current_level * MAX_EXP_GROWTH_PER_LEVEL)
+    current_exp_gained = nt_data.get("exp", 0) # 已经获得的当前等级经验
+    remaining_exp_needed = max_exp_for_current_level_up - current_exp_gained # 当前等级还需多少经验才能升级
     
     # 如果当前经验已满，则直接提示，避免继续计算和扣费
     if remaining_exp_needed <= 0:
@@ -306,7 +309,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     final_msg = f"成功养成法宝，消耗灵石：{number_to(total_stone_cost)}\n{upgrade_msg}"
     await handle_send(bot, event, final_msg,
-                       md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+                       md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
 
 
 # 定义本命法宝效果升阶命令
@@ -351,85 +354,341 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
 
     if success:
         # 扣除神秘经书
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=scripture_cost) # num为正数时扣除
+        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost) # num为负数表示扣除
         await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n{upgrade_result_msg}",
-                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
         await handle_send(bot, event, f"效果升阶失败：{upgrade_result_msg}",
                            md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
 
 
-# 定义本命法宝帮助命令
-natal_help = on_command("本命法宝帮助", priority=25, block=True)
+# 定义铭刻道纹命令
+natal_engrave = on_command(
+    "铭刻道纹",
+    aliases={"铭刻", "法宝铭刻"},
+    priority=25,
+    block=True
+)
 
+@natal_engrave.handle(parameterless=[Cooldown(cd_time=5)])
+async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """
+    处理铭刻道纹命令。
+    消耗神秘经书1个，为本命法宝增加随机新效果，本命法宝效果上限（3）时不可铭刻。
+    """
+    isUser, user_info, msg = check_user(event) # 检查用户是否已注册修仙
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info['user_id']
+    nt = NatalTreasure(user_id) # 获取本命法宝实例
+
+    if not nt.exists(): # 检查是否已觉醒法宝
+        msg = "你尚未觉醒本命法宝，无法铭刻道纹！"
+        await handle_send(bot, event, msg,
+                           md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
+        return
+    
+    nt_data = nt.get_data()
+    current_effect_count = sum(1 for i in range(1, MAX_EFFECT_SLOTS + 1) if nt_data.get(f"effect{i}_type", 0) > 0)
+
+    if current_effect_count >= MAX_EFFECT_SLOTS:
+        await handle_send(bot, event, f"你的本命法宝效果槽位已满 ({MAX_EFFECT_SLOTS}个)，无法继续铭刻新的道纹。",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="帮助", v3="本命法宝帮助")
+        await natal_engrave.finish()
+
+    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_ENGRAVE # 铭刻道纹消耗
+    scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID) # 获取用户背包中的神秘经书数量
+    mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
+
+    if scripture_num < scripture_cost:
+        await handle_send(bot, event, f"铭刻道纹需要消耗{scripture_cost}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个！",
+                           md_type="法宝", k1="铭刻", v1="铭刻道纹", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
+        await natal_engrave.finish()
+
+    success, result_msg = nt.engrave_effect()
+
+    if success:
+        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost)
+        await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+    else:
+        await handle_send(bot, event, f"铭刻道纹失败：{result_msg}",
+                           md_type="法宝", k1="铭刻", v1="铭刻道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
+    await natal_engrave.finish()
+
+
+# 定义遗忘道纹命令
+natal_forget = on_command(
+    "遗忘道纹",
+    aliases={"遗忘", "法宝遗忘"},
+    priority=25,
+    block=True
+)
+
+@natal_forget.handle(parameterless=[Cooldown(cd_time=5)])
+async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    处理遗忘道纹命令。
+    消耗神秘经书3个，去除本命法宝指定的一个效果。
+    """
+    isUser, user_info, msg = check_user(event) # 检查用户是否已注册修仙
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info['user_id']
+    nt = NatalTreasure(user_id) # 获取本命法宝实例
+
+    if not nt.exists(): # 检查是否已觉醒法宝
+        msg = "你尚未觉醒本命法宝，无法遗忘道纹！"
+        await handle_send(bot, event, msg,
+                           md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
+        return
+
+    effect_name_to_forget = args.extract_plain_text().strip()
+    if not effect_name_to_forget:
+        await handle_send(bot, event, "请指定要遗忘的道纹名称，例如：遗忘道纹 流血",
+                           md_type="法宝", k1="遗忘", v1="遗忘道纹 流血", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
+        await natal_forget.finish()
+    
+    effect_type_to_forget = EFFECT_NAME_TO_TYPE.get(effect_name_to_forget)
+    if not effect_type_to_forget:
+        await handle_send(bot, event, f"未识别的道纹名称【{effect_name_to_forget}】，请检查输入或发送【本命法宝道纹帮助】了解所有道纹。", # 提示查看子帮助
+                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="帮助", v2="本命法宝帮助", k3="法宝", v3="我的本命法宝")
+        await natal_forget.finish()
+
+    nt_data = nt.get_data()
+    current_effect_count = sum(1 for i in range(1, MAX_EFFECT_SLOTS + 1) if nt_data.get(f"effect{i}_type", 0) > 0)
+
+    if current_effect_count <= 1:
+        await handle_send(bot, event, "你的本命法宝至少需要保留一个道纹，无法遗忘！",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="帮助", v3="本命法宝帮助")
+        await natal_forget.finish()
+
+    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_FORGET # 遗忘道纹消耗
+    scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID) # 获取用户背包中的神秘经书数量
+    mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
+
+    if scripture_num < scripture_cost:
+        await handle_send(bot, event, f"遗忘道纹需要消耗{scripture_cost}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个！",
+                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="铭刻", v3="铭刻道纹")
+        await natal_forget.finish()
+
+    success, result_msg = nt.forget_effect(effect_type_to_forget)
+
+    if success:
+        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost)
+        await handle_send(bot, event, f"遗忘道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="遗忘", v3="遗忘道纹")
+    else:
+        await handle_send(bot, event, f"遗忘道纹失败：{result_msg}",
+                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
+    await natal_forget.finish()
+
+
+# ==== 新增：本命法宝主帮助命令 ====
+natal_help = on_command("本命法宝帮助", aliases={"法宝帮助"}, priority=25, block=True)
 
 @natal_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
-    处理本命法宝帮助命令，显示系统说明。
+    处理本命法宝主帮助命令，提供所有子帮助的入口。
+    """
+    msg = """
+【本命法宝系统帮助】
+
+这里是你的专属本命法宝系统，助你叱咤修仙界！
+你可以通过以下命令了解更多：
+
+1.  **管理操作**：发送【本命法宝操作帮助】
+    > 觉醒、重塑、铭刻、遗忘道纹、养成、升阶
+
+2.  **道纹详情**：发送【本命法宝道纹帮助】
+    > 查看所有道纹的具体效果说明
+
+3.  **战斗机制**：发送【本命法宝战斗帮助】
+    > 了解法宝效果在战斗中如何触发和作用
+
+4.  **查看信息**：发送【我的本命法宝】
+    > 查看你的法宝当前状态
+
+"""
+    await handle_send(bot, event, msg,
+                       md_type="法宝", k1="操作帮助", v1="本命法宝操作帮助", k2="道纹帮助", v2="本命法宝道纹帮助", k3="战斗帮助", v3="本命法宝战斗帮助")
+
+
+# ==== 新增：本命法宝操作帮助命令 ====
+natal_operation_help = on_command("本命法宝操作帮助", aliases={"法宝操作帮助"}, priority=25, block=True)
+
+@natal_operation_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def natal_operation_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """
+    处理本命法宝操作帮助命令，专注于管理操作。
+    """
+    msg = f"""
+【本命法宝操作帮助】
+
+1.  **觉醒法宝**
+    >   发送：【觉醒本命法宝】
+    >   首次觉醒免费，随机获得形态和初始一个道纹。
+    >   再次发送【觉醒本命法宝】可以重塑（名称、形态与所有道纹全部随机），基础消耗1个【神秘经书】。
+    >   重塑时会根据旧法宝的道纹升阶情况，返还相应的【神秘经书】。
+    >   **注意：重塑会重置法宝等级、所有道纹等级和所有复活/无敌次数统计。**
+
+2.  **铭刻道纹** (增加效果槽位)
+    >   发送：【铭刻道纹】
+    >   消耗{MYSTERIOUS_SCRIPTURE_COST_ENGRAVE}个【神秘经书】，为本命法宝增加一个随机新道纹。
+    >   法宝最多可拥有{MAX_EFFECT_SLOTS}个道纹。
+
+3.  **遗忘道纹** (移除指定效果)
+    >   发送：【遗忘道纹 <道纹名称>】
+    >   例如：【遗忘道纹 流血】
+    >   消耗{MYSTERIOUS_SCRIPTURE_COST_FORGET}个【神秘经书】，去除法宝指定的某个道纹。
+    >   法宝至少需要保留一个道纹。
+
+4.  **养成法宝** (提升法宝总等级)
+    >   发送：【养成本命法宝 (数量)】
+    >   例如：【养成本命法宝 50】，默认【养成本命法宝 1】
+    >   每次养成消耗灵石（消耗随法宝总等级递增），增加指定数量的法宝经验。
+    >   经验满后法宝总等级提升1级，每级所需经验递增。
+    >   法宝总等级上限{MAX_TREASURE_LEVEL}级。
+
+5.  **道纹升阶** (提升法宝道纹等级)
+    >   发送：【本命法宝升阶】
+    >   每次升阶消耗1个【神秘经书】，提升一个法宝道纹的等级。
+    >   法宝有多个道纹时，优先等级较低的道纹升阶；如果等级相同，则随机选择一个。
+    >   所有道纹等级上限统一为{MAX_EFFECT_LEVEL_ALL_EFFECTS}级。
+
+"""
+    await handle_send(bot, event, msg,
+                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝")
+
+
+# ==== 新增：本命法宝道纹帮助命令 ====
+natal_effects_help = on_command("本命法宝道纹帮助", aliases={"法宝道纹帮助", "道纹帮助"}, priority=25, block=True)
+
+@natal_effects_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """
+    处理本命法宝道纹帮助命令，详细解释每种道纹效果。
     """
     # 仅用于获取常量，不进行数据操作
-    # 斩命和破盾的基础值需要直接从配置中获取，因为它们没有Effect Level Growth来显示
-    death_strike_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.DEATH_STRIKE]["min_single"] * 100
-    shield_break_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.SHIELD_BREAK]["min_single"] * 100
+    death_strike_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.DEATH_STRIKE]["min_value"] * 100
+    shield_break_base_value = EFFECT_BASE_AND_GROWTH[NatalEffectType.SHIELD_BREAK]["min_value"] * 100
 
-    # 获取无敌和双生的初始值和成长值
     invincible_first_base_chance = INVINCIBLE_FIRST_GAIN_CHANCE * 100
     invincible_sub_base_chance = INVINCIBLE_SUBSEQUENT_GAIN_CHANCE * 100
     invincible_growth_per_level = INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE * 100 # 无敌是法宝总等级成长
 
     twin_strike_config = EFFECT_BASE_AND_GROWTH[NatalEffectType.TWIN_STRIKE]
-    twin_strike_base_chance_single = twin_strike_config["min_single"] * 100
+    twin_strike_base_chance_single = twin_strike_config["min_value"] * 100
     twin_strike_effect_growth = twin_strike_config.get("growth", 0.0) * 100 # 双生是效果等级成长
-    twin_strike_damage_multiplier = twin_strike_config["max_single"] * 100 # 双生伤害倍率固定100%
+    twin_strike_damage_multiplier = twin_strike_config["max_value"] * 100 # 双生伤害倍率固定100%
+
+    sleep_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.SLEEP]["min_value"] * 100
+    sleep_duration = SLEEP_DURATION
+
+    petrify_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.PETRIFY]["min_value"] * 100
+    petrify_duration = PETRIFY_DURATION
+
+    stun_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.STUN]["min_value"] * 100
+    stun_duration = STUN_DURATION
+
+    fatigue_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.FATIGUE]["min_value"] * 100
+    fatigue_duration = FATIGUE_DURATION
+    fatigue_atk_reduction = FATIGUE_ATTACK_REDUCTION * 100
+
+    silence_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.SILENCE]["min_value"] * 100
+    silence_duration = SILENCE_DURATION
+
+    charge_bonus_base = CHARGE_BONUS_DAMAGE * 100
+    charge_effect_bonus_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.CHARGE]["min_value"] * 100
+
+    divine_power_bonus_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.DIVINE_POWER]["min_value"] * 100
+
+    nirvana_duration = NIRVANA_DURATION
+    nirvana_shield_base = NIRVANA_SHIELD_BASE * 100
+    nirvana_revive_limit = NIRVANA_REVIVE_LIMIT
+
+    soul_return_duration = SOUL_RETURN_DURATION
+    soul_return_hp_base = SOUL_RETURN_HP_BASE * 100
+    soul_return_revive_limit = SOUL_RETURN_REVIVE_LIMIT
+    
+    # 新增效果的配置
+    soul_summon_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.SOUL_SUMMON]["min_value"] * 100
+    enlightenment_chance_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.ENLIGHTENMENT]["min_value"] * 100
+    enlightenment_revive_hp = ENLIGHTENMENT_REVIVE_HP_PERCENT * 100
+
 
     msg = f"""
-【本命法宝】
+【本命法宝道纹帮助】
 
-1. 觉醒方式
->   发送：【觉醒本命法宝】
-   首次觉醒免费，随机获得形态和效果，有75%概率获得单效果，25%概率获得双效果。
-   再次发送【觉醒本命法宝】可以重塑（形态与效果全部随机），基础消耗1个【神秘经书】。
-   重塑时会根据旧法宝的效果升阶情况，返还相应的【神秘经书】。
-   注意：重塑会重置法宝等级、效果等级和所有复活/无敌次数统计。
+共有{len(NatalEffectType)}种道纹效果：
+• **{EFFECT_NAME_MAP[NatalEffectType.BLEED]}**：每回合对敌方造成最大生命值百分比的持续伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.ARMOR_BREAK]}**：降低敌方防御，提升自身穿甲。
+• **{EFFECT_NAME_MAP[NatalEffectType.EVASION]}**：提升自身闪避率。
+• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD]}**：开局获得护盾，周期性刷新。
+• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD_BREAK]}**：攻击有护盾的敌人时，无视其{round(shield_break_base_value, 2)}%护盾并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.REFLECT_DAMAGE]}**：被攻击时反还部分伤害给攻击者。
+• **{EFFECT_NAME_MAP[NatalEffectType.TRUE_DAMAGE]}**：攻击时额外造成真实伤害，无视减伤和护盾。
+• **{EFFECT_NAME_MAP[NatalEffectType.CRIT_RESIST]}**：减少被暴击时受到的伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.FATE]}**：生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.IMMORTAL]}**：生命值低于0时有50%概率恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.DEATH_STRIKE]}**：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
+• **{EFFECT_NAME_MAP[NatalEffectType.INVINCIBLE]}**：周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.TWIN_STRIKE]}**：普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。道纹等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SLEEP]}**：攻击时有{round(sleep_chance_base, 2)}%概率使目标睡眠{sleep_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.PETRIFY]}**：攻击时有{round(petrify_chance_base, 2)}%概率使目标石化{petrify_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.STUN]}**：攻击时有{round(stun_chance_base, 2)}%概率使目标眩晕{stun_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.FATIGUE]}**：攻击时有{round(fatigue_chance_base, 2)}%概率使目标疲劳{fatigue_duration}回合，攻击力降低{round(fatigue_atk_reduction, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SILENCE]}**：攻击时有{round(silence_chance_base, 2)}%概率使目标沉默{silence_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.CHARGE]}**：本回合不攻击，下回合攻击力额外提升{round(charge_bonus_base + charge_effect_bonus_base, 2)}%（基础{round(charge_bonus_base, 2)}% + 道纹等级提升）。
+• **{EFFECT_NAME_MAP[NatalEffectType.DIVINE_POWER]}**：攻击力额外提升{round(divine_power_bonus_base, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.NIRVANA]}**：阵亡时有队友在场，进入涅槃状态{nirvana_duration}回合后满血复活，并使友方全体获得最大生命{round(nirvana_shield_base, 2)}%护盾，仅{nirvana_revive_limit}次。涅槃期间免疫所有伤害，但若所有队友阵亡则复活失败。
+• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_RETURN]}**：阵亡时有队友在场，进入灵体状态{soul_return_duration}回合后回复最大生命{round(soul_return_hp_base, 2)}%复活，期间可正常攻击且免疫所有伤害，仅{soul_return_revive_limit}次。魂返期间只可进行普通攻击，且若所有队友阵亡则复活失败。
+• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_SUMMON]}**：攻击时有{round(soul_summon_chance_base, 2)}%概率让已死亡的队友进入魂返状态，仅队友战斗触发，每个队友仅可触发{SOUL_SUMMON_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.ENLIGHTENMENT]}**：攻击时有{round(enlightenment_chance_base, 2)}%概率让已死亡的队友回复{round(enlightenment_revive_hp, 2)}%生命值复活，仅队友战斗触发，每个队友仅可触发{ENLIGHTENMENT_LIMIT}次。
 
-2. 养成 (提升法宝总等级)
->   发送：【养成本命法宝 (数量)】
-   例如：【养成本命法宝 50】，默认【养成本命法宝 1】
-   每次养成消耗灵石（消耗随法宝总等级递增），增加指定数量的法宝经验。
-   经验满后法宝总等级提升1级。
-   法宝总等级上限{MAX_TREASURE_LEVEL}级。
-
-3. 升阶 (提升法宝效果等级)
->   发送：【本命法宝升阶】
-   每次升阶消耗1个【神秘经书】，提升一个法宝效果的等级。
-   法宝有多个效果时，优先等级较低的效果升阶；如果等级相同，则随机选择一个。
-   单效果等级上限{MAX_EFFECT_LEVEL_SINGLE}级，双效果每个等级上限{MAX_EFFECT_LEVEL_DOUBLE}级。
-
-4. 效果类型说明
->   共有{len(NatalEffectType)}种效果：
-   • 流血：每回合对敌方造成最大生命值百分比的持续伤害。
-   • 破甲：降低敌方防御，提升自身穿甲。
-   • 闪避：提升自身闪避率。
-   • 护盾：战斗开局获得护盾，周期性刷新。
-   • 破盾：攻击有护盾的敌人时，无视其{round(shield_break_base_value, 2)}%护盾并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
-   • 反伤：被攻击时反还部分伤害给攻击者。
-   • 真伤：攻击时额外造成真实伤害，无视减伤和护盾。
-   • 抗暴：减少被暴击时受到的伤害。
-   • 天命：生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
-   • 不灭：生命值低于0时有50%概率触发恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
-   • 斩命：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
-   • 无敌：周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
-   • 双生：普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。效果等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
-
-5. 战斗中效果触发
->   • 道韵：每4回合对所有敌方造成当前生命 {round(PERIODIC_TRUE_DAMAGE_BASE * 100, 2)}% + 法宝总等级x{round(PERIODIC_TRUE_DAMAGE_GROWTH_PER_LEVEL * 100, 2)}% 的真实伤害。
-   • 周期性效果（流血、护盾、无敌、破甲、闪避）：每4回合触发一次。
-   • 被动效果（破盾、反伤、真伤、抗暴、双生）：在攻击或受到伤害时自动生效。
-   • 复活/斩杀效果（天命、不灭、斩命）：在生命值变动或角色倒下时自动判定触发。
-
-6. 查看信息
-   发送：【我的本命法宝】或【法宝信息】查看法宝详情。
 """
     await handle_send(bot, event, msg,
-                       md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+                       md_type="法宝", k1="主帮助", v1="本命法宝帮助", k2="遗忘", v2="遗忘道纹", k3="查看", v3="我的本命法宝")
+
+# ==== 新增：本命法宝战斗帮助命令 ====
+natal_battle_help = on_command("本命法宝战斗帮助", aliases={"法宝战斗帮助", "战斗帮助"}, priority=25, block=True)
+
+@natal_battle_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def natal_battle_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """
+    处理本命法宝战斗帮助命令，解释战斗机制。
+    """
+    periodic_true_dmg_rate_base = PERIODIC_TRUE_DAMAGE_BASE * 100
+    periodic_true_dmg_growth_rate = PERIODIC_TRUE_DAMAGE_GROWTH_PER_LEVEL * 100
+
+    msg = f"""
+【本命法宝战斗帮助】
+
+本命法宝的道纹效果在战斗中会以不同方式触发：
+
+1.  **道韵效果**：
+    >   每4回合对所有敌方造成当前生命 **{round(periodic_true_dmg_rate_base, 2)}% + (法宝总等级 x {round(periodic_true_dmg_growth_rate, 2)}%)** 的真实伤害。
+
+2.  **周期性效果** (每4回合触发一次)：
+    >   流血、护盾、无敌、破甲、闪避等。
+
+3.  **被动效果** (在攻击或受到伤害时自动生效)：
+    >   破盾、反伤、真伤、抗暴、双生、控制类道纹（睡眠、石化、眩晕、疲劳、沉默）、蓄力、神力。
+
+4.  **复活/支援效果** (在生命值变动、角色倒下或攻击时判定触发)：
+    >   天命、不灭、斩命、涅槃、魂返、招魂、启明。
+
+5.  **石化Debuff**：
+    >   石化状态下被攻击伤害减免**{PETRIFY_DAMAGE_REDUCTION_PERCENT * 100:.0f}%**。
+
+6.  **特殊说明**：
+    >   某些效果可能存在内部冷却或每场战斗触发次数上限。具体请参阅【本命法宝道纹帮助】中各个道纹的详细描述。
+
+"""
+    await handle_send(bot, event, msg,
+                       md_type="法宝", k1="道纹帮助", v1="本命法宝道纹帮助", k2="操作帮助", v2="本命法宝操作帮助", k3="主帮助", v3="本命法宝帮助")

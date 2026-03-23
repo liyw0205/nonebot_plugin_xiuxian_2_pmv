@@ -11,11 +11,12 @@ from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Union, Dict, Any # 引入 Dict, Any
+from typing import List, Union, Dict, Any
 from nonebot.adapters import MessageSegment
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GroupMessageEvent,
+    PrivateMessageEvent,
     MessageSegment,
 )
 from nonebot.params import Depends
@@ -29,16 +30,14 @@ from nonebot.internal.adapter import Message
 from typing import Union
 from .markdown_segment import MessageSegmentPlus, markdown_param
 
-sql_message = XiuxianDateManage()  # sql类
+sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
-# ================================ 新增内容 开始 ================================
 # 全局字典，存储管理员正在伪装的用户信息
 # 键为管理员的实际 user_id (str)，值为被伪装的 user_id (str)
 _impersonating_users: Dict[str, str] = {}
-# ================================ 新增内容 结束 ================================
 
 class MyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -137,19 +136,27 @@ def check_user_type(user_id, need_type):
     return isType, msg
 
 
-def check_user(event: GroupMessageEvent):
+def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, str]):
     """
     判断用户信息是否存在 + 是否被关小黑屋
+    参数:
+        event_or_user_id: 可以是 MessageEvent 对象或用户QQ号字符串
     返回: (isUser: bool, user_info: dict, msg: str)
     """
     isUser = False
-    original_user_id = event.get_user_id() # 记录原始用户ID
-    user_id_to_check = original_user_id # 默认使用原始用户ID
+    original_user_id = None
+    user_id_to_check = None
 
-    # 检查当前用户是否正在伪装其他用户
-    if original_user_id in _impersonating_users:
-        user_id_to_check = _impersonating_users[original_user_id]
-        logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_to_check}")
+    if isinstance(event_or_user_id, (GroupMessageEvent, PrivateMessageEvent)):
+        original_user_id = event_or_user_id.get_user_id()
+        user_id_to_check = original_user_id
+        if original_user_id in _impersonating_users:
+            user_id_to_check = _impersonating_users[original_user_id]
+            logger.warning(f"管理员 {original_user_id} 正在伪装用户 {user_id_to_check} 执行命令")
+    elif isinstance(event_or_user_id, str):
+        user_id_to_check = event_or_user_id
+    else:
+        return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
     user_info = sql_message.get_user_info_with_id(user_id_to_check)
     
@@ -162,14 +169,14 @@ def check_user(event: GroupMessageEvent):
     # 检查是否被关小黑屋
     if user_info.get('is_ban', 0) == 1:
         msg = "道友已被关入小黑屋，期间无法使用任何修仙指令！\n请等待管理员处理或联系管理员申诉。"
-        return False, user_info, msg   # 故意返回 False，让调用处认为“用户不可用”
+        return False, user_info, msg
 
-    msg = ""
-    
-    if original_user_id in _impersonating_users:
+    # 如果是伪装状态，且传入的是事件对象，更新返回的user_info中的user_id为被伪装者的ID
+    # 以确保后续逻辑中使用的是被伪装者的ID
+    if isinstance(event_or_user_id, (GroupMessageEvent, PrivateMessageEvent)) and original_user_id in _impersonating_users:
         user_info['user_id'] = user_id_to_check
 
-    return isUser, user_info, msg
+    return isUser, user_info, ""
 
 
 class Txt2Img:
@@ -333,7 +340,7 @@ class Txt2Img:
         base64_str = "base64://" + b64encode(buf.getvalue()).decode()
         return base64_str
 
-    async def io_draw_to(self, text, boss_name="", scale=True):  # draw_to
+    async def io_draw_to(self, text, boss_name="", scale=True):
         loop = asyncio.get_running_loop()
         out_img = await loop.run_in_executor(
             None, self.sync_draw_to, text, boss_name, scale
@@ -429,7 +436,7 @@ class Txt2Img:
                 (0, 0), title, font=user_font, spacing=self.line_space
             )
             # 四元组(left, top, right, bottom)
-            user_w = user_bbox[2] - user_bbox[0]  # 宽度 = right - left
+            user_w = user_bbox[2] - user_bbox[0]
             user_h = user_bbox[3] - user_bbox[1]
             draw.text(
                 ((w - user_w) // 2, out_padding + padding),
@@ -472,7 +479,7 @@ class Txt2Img:
         img_byte_arr = io.BytesIO()
         compression_quality = max(
             1, min(100, 100 - XiuConfig().img_compression_limit)
-        )  # 质量从100到1
+        )
 
         if not (0 <= XiuConfig().img_compression_limit <= 100):
             compression_quality = 50
@@ -548,7 +555,7 @@ def format_number(num):
         # 有单位时保留1位小数，并去除末尾的".0"
         formatted = f"{num:.1f}"
         if formatted.endswith(".0"):
-            formatted = formatted[:-2]  # 去除".0"
+            formatted = formatted[:-2]
         return formatted
 
 def number_to(num):
@@ -668,30 +675,25 @@ async def handle_pagination(
     返回:
         分页后的消息列表或空提示消息
     """
-    # 检查列表是否为空
     if not item_list:
         return empty_msg
 
     total_items = len(item_list)
     total_pages = (total_items + per_page - 1) // per_page
     
-    # 页码有效性检查
     if current_page < 1 or current_page > total_pages:
         return f"页码错误，有效范围为1~{total_pages}页！"
     
-    # 计算当前页数据范围
     start_index = (current_page - 1) * per_page
     end_index = start_index + per_page
     paged_items = item_list[start_index:end_index]
     
-    # 构建消息内容
     final_msg = []
-    if title:  # 如果有标题则添加标题
+    if title:
         final_msg.append(f"{title}（第{current_page}/{total_pages}页）")
     
-    final_msg.extend(paged_items)  # 添加分页内容
+    final_msg.extend(paged_items)
     
-    # 添加页码提示
     final_msg.append(f"提示：发送 命令+页码 查看其他页（共{total_pages}页）")
     
     return final_msg
@@ -942,7 +944,6 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
         return
     is_group = isinstance(event, GroupMessageEvent)
     
-    # 应用信息优化
     if XiuConfig().message_optimization:
         msg = optimize_message(msg, is_group)
     
@@ -1080,6 +1081,7 @@ def check_user_md_type(md_type, event):
     else:
         user_type = int(user_cd_message["type"])
     
+    k1, v1 = " ", " "
     if user_type == 0 or md_type == user_type:
         k1 = "信息"
         v1 = "我的修仙信息"
@@ -1102,13 +1104,25 @@ def check_user_md_type(md_type, event):
     return k1, v1
 
 async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=None):
-    """发送md模板消息"""
+    """
+    发送md模板消息
+    为k2,v2,k3,v3,k4,v4提供默认值，避免在某些md_type下没有传入而导致报错
+    """
+    k2 = k2 if k2 is not None else "帮助"
+    v2 = v2 if v2 is not None else "修仙帮助"
+    k3 = k3 if k3 is not None else "存档"
+    v3 = v3 if v3 is not None else "我的修仙信息"
+
+    # 根据 md_type 调用 check_user_md_type 或设置特定按钮
     if md_type in ["0", "1", "2", "3", "4", "5"]:
-        k1, v1 = check_user_md_type(md_type, event)
+        _k1, _v1 = check_user_md_type(md_type, event)
+        # 如果k1,v1未被外部传入，则使用check_user_md_type返回的值
+        k1 = k1 if k1 is not None and k1 != " " else _k1
+        v1 = v1 if v1 is not None and v1 != " " else _v1
     elif md_type == "我要修仙":
         k1 = "我要修仙"
         v1 = "我要修仙"
-        k2 ="帮助"
+        k2 = "帮助"
         v2 = "修仙帮助"
         k3 = "官群"
         v3 = f"{XiuConfig().qqq}"
@@ -1126,8 +1140,10 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
             msg = f"<@{open_id}>\r{msg}"
+    
+    # 构造 param 列表
     param = [
-        markdown_param("t1", msg+ '\r\r---\r\r'),
+        markdown_param("t1", msg + '\r\r---\r\r'),
         markdown_param("button_text_1", v1),
         markdown_param("button_show_1", k1),
         markdown_param("button_text_2", v2),
@@ -1135,14 +1151,15 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         markdown_param("button_text_3", v3),
         markdown_param("button_show_3", k3),
     ]
-    if k4:
+
+    # 如果 k4 存在，则修改第三个按钮的构造方式，以支持第四个按钮
+    if k4 and v4 and k4 != " " and v4 != " ":
         param = [
-            markdown_param("t1", msg+ '\r\r---\r\r'),
+            markdown_param("t1", msg + '\r\r---\r\r'),
             markdown_param("button_text_1", v1),
             markdown_param("button_show_1", k1),
             markdown_param("button_text_2", v2),
             markdown_param("button_show_2", k2),
-            markdown_param("button_text_3", v3),
             {"key": "button_show_3",
             "values": [
             f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"
@@ -1188,7 +1205,7 @@ async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None)
             base64_str = "base64://" + b64encode(img_data.getvalue()).decode()
             pic = base64_str
         else:
-            pic = img_data  # 默认使用io方式
+            pic = img_data
             
         # 发送图片消息
         if isinstance(event, GroupMessageEvent):
@@ -1353,7 +1370,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
     返回:
         增强后的日志信息字典
     """
-    def find_recent_log_date(user_id_for_log): # 内部函数也需要使用调整后的ID
+    def find_recent_log_date(user_id_for_log):
         """查找用户最近有日志记录的日期"""
         try:
             logs_dir = PLAYERSDATA / str(user_id_for_log) / "logs"
@@ -1415,7 +1432,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
                 recent_date = available_dates[0]
                 log_file = PLAYERSDATA / str(user_id_for_log_query) / "logs" / f"{recent_date}.log"
                 if log_file.exists():
-                    target_date = recent_date  # 更新为目标日期
+                    target_date = recent_date
                     date_str = None
                 else:
                     return {
@@ -1441,7 +1458,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             all_logs = json.load(f)
         
         total_logs = len(all_logs)
-        total_pages = max(1, (total_logs + per_page - 1) // per_page)  # 确保至少1页
+        total_pages = max(1, (total_logs + per_page - 1) // per_page)
         
         # 智能页码调整：超出范围自动跳到最后一页
         adjusted_page = page
@@ -1495,7 +1512,7 @@ def clean_old_logs(keep_days=10):
     """
     try:
         current_time = datetime.now()
-        log_dirs = PLAYERSDATA.rglob("*/logs")  # 遍历所有用户的logs文件夹
+        log_dirs = PLAYERSDATA.rglob("*/logs")
 
         for log_dir in log_dirs:
             log_files = list(log_dir.glob("*.log"))
@@ -1595,8 +1612,8 @@ def get_real_id(id_str):
     url = f"{XiuConfig().gsk_link}/getid?type=2&id={id_str}"
     try:
         response = requests.get(url)
-        response.raise_for_status()  # 检查请求是否成功
+        response.raise_for_status()
         data = response.json()
-        return data.get('id')  # 如果 'id' 不存在则返回 None
+        return data.get('id')
     except Exception:
         return None
