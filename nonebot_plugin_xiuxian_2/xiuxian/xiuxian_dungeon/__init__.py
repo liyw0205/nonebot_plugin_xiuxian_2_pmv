@@ -72,11 +72,11 @@ __dungeon_help__ = f"""
 __team_help__ = f"""
 【组队指令列表】📜
 创建队伍 [队伍名] - 创建新队伍
-邀请组队 @某人 - 邀请其他人加入队伍
+邀请组队 道号 - 邀请其他人加入队伍
 同意组队 - 同意组队邀请
 拒绝组队 - 拒绝组队邀请
 离开队伍 - 离开当前队伍
-踢出队伍 @某人 - 踢出队员（队长权限）
+踢出队伍 道号 - 踢出队员（队长权限）
 解散队伍 - 解散队伍（队长权限）
 查看队伍 - 查看队伍信息
 组队帮助 - 查看指令
@@ -129,7 +129,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     # 创建队伍
     team_id = create_team(team_name, user_id, group_id)
 
-    msg = f"🎉 队伍【{team_name}】创建成功！\n队伍ID：{team_id}\n👑 队长：{user_info['user_name']}\n📢 使用【邀请组队 @成员】来邀请其他人加入！"
+    msg = f"🎉 队伍【{team_name}】创建成功！\n队伍ID：{team_id}\n👑 队长：{user_info['user_name']}\n📢 使用【邀请组队 道号】来邀请其他人加入！"
     await handle_send(bot, event, msg, md_type="team", k1="邀请组队", v1="邀请组队", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
     await create_team_cmd.finish()
 
@@ -203,7 +203,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     target_team = get_user_team(target_user_id)
     if target_team:
         target_name = target_user_info['user_name']
-        msg = f"{target_name}已经在队伍中了！"
+        msg = f"{target_name}已有队伍！"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
 
@@ -581,11 +581,11 @@ async def help_dungeon_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_dungeon_help:
         msg = cache_dungeon_help[session_id]
-        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="我的副本状态", v3="我的副本状态")
+        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
         await help_dungeon_cmd.finish()
     else:
         msg = __dungeon_help__
-        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="我的副本状态", v3="我的副本状态")
+        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
     await help_dungeon_cmd.finish()
 
 

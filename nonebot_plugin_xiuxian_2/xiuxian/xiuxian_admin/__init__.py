@@ -1142,16 +1142,6 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     admin_user_id = event.get_user_id()
     arg_text = args.extract_plain_text().strip()
 
-    if not arg_text:
-        current_target_id = _impersonating_users.get(admin_user_id)
-        if current_target_id:
-            target_user_info = sql_message.get_user_info_with_id(current_target_id)
-            target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
-            await handle_send(bot, event, f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。")
-        else:
-            await handle_send(bot, event, "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消")
-        return
-
     if arg_text.lower() == "取消" or arg_text.lower() == "off":
         if admin_user_id in _impersonating_users:
             del _impersonating_users[admin_user_id]
@@ -1198,7 +1188,13 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             pass
             
     if not target_user_id or not target_user_info:
-        await handle_send(bot, event, f"未找到目标用户 「{arg_text}」！请确保输入正确的ID、@用户或道号，且对方已踏入修仙界。")
+        current_target_id = _impersonating_users.get(admin_user_id)
+        if current_target_id:
+            target_user_info = sql_message.get_user_info_with_id(current_target_id)
+            target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
+            await handle_send(bot, event, f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。")
+        else:
+            await handle_send(bot, event, "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消")
         return
 
     # 到这里，target_user_id 和 target_user_info 应该都已正确获取

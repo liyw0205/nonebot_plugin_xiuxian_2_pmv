@@ -63,11 +63,20 @@ def check_user_type(user_id, need_type):
     """
     isType = False
     msg = ""
-    actual_user_id = user_id
+
+    # 先转字符串，避免int/str混用
+    actual_user_id = str(user_id)
+
+    # 先读取身外化身当前激活ID（如果没配置则返回本号）
+    active_id = player_data_manager.get_field_data(actual_user_id, "avatar", "active_id")
+    user_id_to_check = str(active_id) if active_id else actual_user_id
+
+    # 兼容管理员伪装逻辑（优先级高于化身）
     if actual_user_id in _impersonating_users:
-        user_id = _impersonating_users[actual_user_id]
-        logger.warning(f"用户 {actual_user_id} 正在伪装 {user_id}")
-    user_cd_message = sql_message.get_user_cd(user_id)
+        user_id_to_check = _impersonating_users[actual_user_id]
+        logger.warning(f"用户 {actual_user_id} 正在伪装 {user_id_to_check}")
+
+    user_cd_message = sql_message.get_user_cd(user_id_to_check)
     if user_cd_message is None:
         user_type = 0
     else:
@@ -135,7 +144,6 @@ def check_user_type(user_id, need_type):
 
     return isType, msg
 
-
 def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, str]):
     """
     判断用户信息是否存在 + 是否被关小黑屋
@@ -148,36 +156,47 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     user_id_to_check = None
 
     if isinstance(event_or_user_id, (GroupMessageEvent, PrivateMessageEvent)):
-        original_user_id = event_or_user_id.get_user_id()
-        user_id_to_check = original_user_id
+        original_user_id = str(event_or_user_id.get_user_id())
+
+        # 先走身外化身 active_id（没有则本号）
+        active_id = player_data_manager.get_field_data(original_user_id, "avatar", "active_id")
+        user_id_to_check = str(active_id) if active_id else original_user_id
+
+        # 兼容管理员伪装（优先级高于化身）
         if original_user_id in _impersonating_users:
             user_id_to_check = _impersonating_users[original_user_id]
             logger.warning(f"管理员 {original_user_id} 正在伪装用户 {user_id_to_check} 执行命令")
+
     elif isinstance(event_or_user_id, str):
-        user_id_to_check = event_or_user_id
+        # 传入字符串时，也支持化身映射
+        original_user_id = str(event_or_user_id)
+        active_id = player_data_manager.get_field_data(original_user_id, "avatar", "active_id")
+        user_id_to_check = str(active_id) if active_id else original_user_id
+
+        # 字符串场景也兼容伪装
+        if original_user_id in _impersonating_users:
+            user_id_to_check = _impersonating_users[original_user_id]
+            logger.warning(f"用户 {original_user_id} 正在伪装用户 {user_id_to_check} 执行命令")
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
     user_info = sql_message.get_user_info_with_id(user_id_to_check)
-    
+
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"
         return isUser, user_info, msg
 
     isUser = True
-    
+
     # 检查是否被关小黑屋
     if user_info.get('is_ban', 0) == 1:
         msg = "道友已被关入小黑屋，期间无法使用任何修仙指令！\n请等待管理员处理或联系管理员申诉。"
         return False, user_info, msg
 
-    # 如果是伪装状态，且传入的是事件对象，更新返回的user_info中的user_id为被伪装者的ID
-    # 以确保后续逻辑中使用的是被伪装者的ID
-    if isinstance(event_or_user_id, (GroupMessageEvent, PrivateMessageEvent)) and original_user_id in _impersonating_users:
-        user_info['user_id'] = user_id_to_check
+    # 确保后续逻辑使用当前生效ID（本号/化身/伪装）
+    user_info['user_id'] = user_id_to_check
 
     return isUser, user_info, ""
-
 
 class Txt2Img:
     """文字转图片"""
@@ -1153,13 +1172,14 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     ]
 
     # 如果 k4 存在，则修改第三个按钮的构造方式，以支持第四个按钮
-    if k4 and v4 and k4 != " " and v4 != " ":
+    if k4 and v4:
         param = [
             markdown_param("t1", msg + '\r\r---\r\r'),
             markdown_param("button_text_1", v1),
             markdown_param("button_show_1", k1),
             markdown_param("button_text_2", v2),
             markdown_param("button_show_2", k2),
+            markdown_param("button_text_3", v3),
             {"key": "button_show_3",
             "values": [
             f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"

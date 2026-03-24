@@ -27,7 +27,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, XiuxianJsonDate, OtherSet, 
+    XiuxianDateManage, PlayerDataManager, XiuxianJsonDate, OtherSet, 
     UserBuffDate, XIUXIAN_IMPART_BUFF, leave_harm_time
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
@@ -46,6 +46,7 @@ from .lottery_pool import lottery_pool
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
+player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 qqq = XiuConfig().qqq
@@ -227,33 +228,49 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
 async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我要修仙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_id = event.get_user_id()
-    
-    # 生成不重复的道号
+
+    # 先查当前激活身份是否已注册
+    isUser, user_info, msg = check_user(event)
+
+    # 已注册直接返回
+    if isUser:
+        await handle_send(bot, event, "您已踏入修仙世界，输入【我的修仙信息】查看数据吧！", md_type="修仙", k1="存档", v1="我的修仙信息", k2="帮助", v2="修仙帮助", k3="签到", v3="修仙签到")
+        await run_xiuxian.finish()
+
+    # 未注册时，不能从user_info取id，应从event获取当前执行ID
+    # 注意：这里要兼容身外化身active_id
+    active_id = player_data_manager.get_field_data(str(event.get_user_id()), "avatar", "active_id")
+    user_id = str(active_id) if active_id else str(event.get_user_id())
+
+    # 生成不重复道号
     while True:
         user_name = generate_daohao()
         if not sql_message.get_user_info_with_name(user_name):
             break
-    
-    root, root_type = XiuxianJsonDate().linggen_get()  # 获取灵根，灵根类型
-    rate = sql_message.get_root_rate(root_type, user_id)  # 灵根倍率
-    power = 100 * float(rate)  # 战力=境界的power字段 * 灵根的rate字段
+
+    root, root_type = XiuxianJsonDate().linggen_get()
+    rate = sql_message.get_root_rate(root_type, user_id)
+    power = 100 * float(rate)
     create_time = str(datetime.now())
-    is_new_user, msg = sql_message.create_user(
+
+    is_new_user, create_msg = sql_message.create_user(
         user_id, root, root_type, int(power), create_time, user_name
     )
-    try:
-        if is_new_user:
-            await handle_send(bot, event, msg)
-            isUser, user_msg, msg = check_user(event)
-            if user_msg['hp'] is None or user_msg['hp'] == 0 or user_msg['hp'] == 0:
-                sql_message.update_user_hp(user_id)
-            await asyncio.sleep(1)
-            msg = f"你获得了随机道号：{user_name}\n耳边响起一个神秘人的声音：不要忘记仙途奇缘！\n不知道怎么玩的话可以发送 修仙帮助 喔！！"
-        await handle_send(bot, event, msg, md_type="修仙", k1="帮助", v1="修仙帮助", k2="存档", v2="我的修仙信息", k3="仙途奇缘", v3="仙途奇缘帮助")
-    except ActionFailed:
-        await run_xiuxian.finish("修仙界网络堵塞，发送失败!", reply_message=True)
 
+    if is_new_user:
+        # 补全初始气血
+        new_user_info = sql_message.get_user_info_with_id(user_id)
+        if new_user_info and (new_user_info.get('hp') is None or new_user_info.get('hp') == 0):
+            sql_message.update_user_hp(user_id)
+
+    final_msg = (
+        f"{create_msg}\n"
+        f"你获得了随机道号：{user_name}\n"
+        f"耳边响起一个神秘人的声音：不要忘记仙途奇缘！\n"
+        f"不知道怎么玩可以发送【修仙帮助】"
+    )
+    await handle_send(bot, event, final_msg, md_type="修仙", k1="帮助", v1="修仙帮助", k2="存档", v2="我的修仙信息", k3="仙途奇缘", v3="仙途奇缘帮助")
+    await run_xiuxian.finish()
 
 @sign_in.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

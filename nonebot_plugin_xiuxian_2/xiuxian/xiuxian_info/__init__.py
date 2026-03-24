@@ -1,3 +1,5 @@
+import random
+from datetime import datetime
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -8,7 +10,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md
@@ -25,9 +27,11 @@ from ..xiuxian_natal_treasure.natal_data import NatalTreasure # 新增：导入 
 
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
+avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
 changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
 
 sql_message = XiuxianDateManage()  # sql类
+player_data_manager = PlayerDataManager()
 
 async def get_user_xiuxian_info(user_id):
     """获取用户修仙信息的公共函数"""
@@ -227,6 +231,34 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         else:
             await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
 
+@avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    # 分配bot
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    # 先校验本号是否是修仙用户（化身系统以本号为入口）
+    is_user, user_info, msg = check_user(str(event.user_id))
+    if not is_user:
+        await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！")
+        await avatar_switch_cmd.finish()
+
+    main_id = str(event.user_id)
+    role, info = toggle_avatar(main_id)
+
+    if role == "avatar":
+        avatar_id = info.get("avatar_id")
+        await handle_send(
+            bot, event,
+            f"✨ 身外化身已启用！\n已从【本号】切换至【化身】\n化身ID：{avatar_id}\n（后续修仙指令将作用于化身）"
+        )
+    else:
+        await handle_send(
+            bot, event,
+            f"🔁 已收回化身，回归本体！\n当前为【本号】状态\n（后续修仙指令将作用于本号）"
+        )
+
+    await avatar_switch_cmd.finish()
+
 @changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """处理更新日志命令"""
@@ -261,3 +293,57 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = f"生成更新日志图片时出错: {e}"
         await handle_send(bot, event, msg)
         await changelog.finish()
+
+def _generate_unique_avatar_id() -> str:
+    """生成不与现有修仙用户冲突的化身ID"""
+    # 可按需调整范围，尽量大一些避免碰撞
+    while True:
+        new_id = str(random.randint(10_000_000, 9_999_999_999))
+        # 不能和已有修仙用户重复
+        if not sql_message.get_user_info_with_id(new_id):
+            return new_id
+
+def get_active_user_id(user_id: str) -> str:
+    """获取当前激活ID（本号或化身）"""
+    active_id = player_data_manager.get_field_data(user_id, "avatar", "active_id")
+    return str(active_id) if active_id else str(user_id)
+
+def get_avatar_info(user_id: str) -> dict:
+    """获取玩家化身信息（以本号ID为键）"""
+    info = player_data_manager.get_fields(user_id, "avatar")
+    return info if info else {}
+
+def init_avatar_if_needed(main_id: str) -> dict:
+    """初始化化身信息（首次使用时创建）"""
+    info = get_avatar_info(main_id)
+    if info and info.get("avatar_id"):
+        return info
+
+    avatar_id = _generate_unique_avatar_id()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    player_data_manager.update_or_write_data(main_id, "avatar", "main_id", str(main_id))
+    player_data_manager.update_or_write_data(main_id, "avatar", "avatar_id", str(avatar_id))
+    player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
+    player_data_manager.update_or_write_data(main_id, "avatar", "create_time", now_str)
+
+    return get_avatar_info(main_id)
+
+def toggle_avatar(main_id: str) -> tuple[str, dict]:
+    """切换本号/化身，返回(当前激活身份, info)"""
+    info = init_avatar_if_needed(main_id)
+    main_id = str(info.get("main_id", main_id))
+    avatar_id = str(info.get("avatar_id"))
+    active_id = str(info.get("active_id", main_id))
+
+    # active是本号就切到化身，否则切回本号
+    if active_id == main_id:
+        new_active = avatar_id
+        role = "avatar"
+    else:
+        new_active = main_id
+        role = "main"
+
+    player_data_manager.update_or_write_data(main_id, "avatar", "active_id", new_active)
+    info["active_id"] = new_active
+    return role, info
