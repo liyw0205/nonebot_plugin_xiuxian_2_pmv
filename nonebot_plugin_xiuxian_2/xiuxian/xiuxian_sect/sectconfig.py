@@ -2,9 +2,9 @@ try:
     import ujson as json
 except ImportError:
     import json
-import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
+
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 configkey = [
@@ -19,6 +19,7 @@ configkey = [
     "宗门神通参数",
     "宗门丹房参数"
 ]
+
 CONFIG = {
     "LEVLECOST": {
         '0': 5000000, '1': 5000000, '2': 5000000, '3': 5000000, '4': 5000000,
@@ -303,41 +304,20 @@ CONFIG = {
             "name": "追捕令",
             "cost": 100_000_000,
             "weekly_limit": 3
+        },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 100_000_000,
+            "weekly_limit": 3
         }
     }
 }
 
 
 def get_config():
-    try:
-        config = readf()
-        for key in configkey:
-            if key not in list(config.keys()):
-                config[key] = CONFIG[key]
-        savef(config)
-    except:
-        config = CONFIG
-        savef(config)
-    return config
+    """直接返回内置配置，不再读取/写入 config.json"""
+    return CONFIG
 
-
-CONFIGJSONPATH = Path(__file__).parent
-FILEPATH = CONFIGJSONPATH / 'config.json'
-
-
-def readf():
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
-
-
-def savef(data):
-    data = json.dumps(data, ensure_ascii=False, indent=3)
-    savemode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=savemode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
-    return True
 
 def get_sect_weekly_purchases(user_id, item_id):
     """获取用户本周已购买宗门商店某商品的数量"""
@@ -352,7 +332,7 @@ def get_sect_weekly_purchases(user_id, item_id):
     with open(file_path, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
-            # 检查是否需要重置
+            # 检查是否需要按周重置
             if "_last_reset" in data:
                 last_reset = datetime.strptime(data["_last_reset"], "%Y-%m-%d")
                 current_week = datetime.now().isocalendar()[1]
@@ -361,24 +341,28 @@ def get_sect_weekly_purchases(user_id, item_id):
                 last_year = last_reset.year
 
                 if current_week != last_week or current_year != last_year:
-                    # 重置购买记录
+                    # 跨周或跨年时重置购买记录
                     init_sect_purchase_file(user_id)
                     return 0
             else:
-                # 没有重置日期，初始化
+                # 没有重置日期，直接初始化
                 init_sect_purchase_file(user_id)
                 return 0
 
             return data.get(str(item_id), 0)
         except:
-            # 文件损坏，重新初始化
+            # 文件损坏则重新初始化
             init_sect_purchase_file(user_id)
             return 0
+
 
 def init_sect_purchase_file(user_id):
     """初始化宗门商店购买记录文件"""
     user_id = str(user_id)
     file_path = PLAYERSDATA / user_id / "sect_purchases.json"
+
+    # 确保用户目录存在
+    file_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = {
         "_last_reset": datetime.now().strftime("%Y-%m-%d")
@@ -387,10 +371,14 @@ def init_sect_purchase_file(user_id):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
+
 def update_sect_weekly_purchase(user_id, item_id, quantity):
     """更新用户本周购买宗门商店某商品的数量"""
     user_id = str(user_id)
     file_path = PLAYERSDATA / user_id / "sect_purchases.json"
+
+    # 确保用户目录存在
+    file_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = {}
     if file_path.exists():

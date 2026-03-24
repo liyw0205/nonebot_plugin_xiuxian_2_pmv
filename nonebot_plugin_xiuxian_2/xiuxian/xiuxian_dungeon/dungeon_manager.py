@@ -148,6 +148,7 @@ class DungeonManager:
 
         # 当前活跃副本 (从数据库加载或生成)
         self.current_dungeon: Optional[DungeonTemplate] = None
+        self.reset_dungeon()
 
     def _get_current_date(self) -> str:
         """获取当前日期字符串（YYYY-MM-DD）"""

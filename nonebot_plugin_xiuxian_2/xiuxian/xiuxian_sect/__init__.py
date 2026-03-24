@@ -526,8 +526,8 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg_list.append(f"{mainbuff['level']}{mainbuff['name']}")
 
     # 发送消息
-    await send_msg_handler(bot, event, '宗门功法', bot.self_id, msg_list, title=title)
-    await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="学习", v3="宗门功法学习")
+    page = ["搜寻", f"宗门功法搜寻", "查看", "宗门功法查看", "学习", "宗门功法学习", "宗门功法"]    
+    await send_msg_handler(bot, event, '宗门功法', bot.self_id, msg_list, title=title, page=page)
     
     await sect_buff_info.finish()
 
@@ -574,8 +574,8 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         msg_list.append(f"{secbuff['level']}:{secbuff['name']}")
 
     # 发送消息
-    await send_msg_handler(bot, event, '宗门神通', bot.self_id, msg_list, title=title)
-    await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="学习", v3="宗门神通学习")
+    page = ["搜寻", f"宗门速通搜寻", "查看", "宗门速通查看", "学习", "宗门速通学习", "宗门速通"]    
+    await send_msg_handler(bot, event, '宗门速通', bot.self_id, msg_list, title=title, page=page)
     
     await sect_buff_info2.finish()
         

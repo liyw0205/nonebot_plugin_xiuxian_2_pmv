@@ -25,6 +25,11 @@ DEFAULT_CONFIG = {
             "cost": 2000,
             "weekly_limit": 10
         },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 2000,
+            "weekly_limit": 5
+        },        
         "15357": {
             "name": "八九玄功",
             "cost": 100000,

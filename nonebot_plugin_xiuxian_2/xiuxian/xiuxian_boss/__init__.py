@@ -902,7 +902,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
     page = ["翻页", f"世界BOSS商店 {page + 1}", "信息", "世界BOSS信息", "兑换", "世界BOSS兑换", f"{page}/{total_pages}"]
-    await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg, title=title)
+    await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg, title=title, page=page)
     await boss_integral_store.finish()
 
 @boss_integral_info.handle(parameterless=[Cooldown(cd_time=1.4)])

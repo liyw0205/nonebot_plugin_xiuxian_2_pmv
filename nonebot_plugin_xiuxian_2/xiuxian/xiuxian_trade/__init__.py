@@ -37,7 +37,8 @@ from ..xiuxian_back import type_mapping, rank_map, get_recover # 引用 xiuxian_
 from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank # 引用 xiuxian_back.back_util
 from ..xiuxian_config import XiuConfig, convert_rank
 from .auction_config import * # 显式导入模块，避免冲突和混乱
-
+from urllib.parse import quote
+from ..xiuxian_utils.markdown_segment import MessageSegmentPlus
 
 # 初始化全局组件
 items = Items()
@@ -48,7 +49,7 @@ auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的�
 
 # === 全局常量配置 ===
 BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止在仙肆/拍卖交易的物品ID
-ITEM_TYPES = ["药材", "装备", "丹药", "技能"] # 仙肆允许上架的物品类型
+ITEM_TYPES = ["技能", "装备", "药材", "丹药"] # 仙肆允许上架的物品类型
 MIN_PRICE = 600000 # 仙肆最大上架价格
 MAX_QUANTITY = 999 #仙肆最大上架数量
 
@@ -913,7 +914,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 情况1：无参数 - 显示可用类型
     if not args_str:
         msg = f"请指定查看类型：【{', '.join(ITEM_TYPES)}】"
-        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+        await handle_send(bot, event, msg, md_type="交易", k1="技能", v1="仙肆查看 技能", k2="装备", v2="仙肆查看 装备", k3="药材", v3="仙肆查看 药材", k4="丹药", v4="仙肆查看 丹药")
         await xiuxian_shop_view.finish()
     
     # 解析类型和页码
@@ -940,7 +941,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 检查类型有效性
     if item_type not in ITEM_TYPES:
         msg = f"无效类型！可用类型：【{', '.join(ITEM_TYPES)}】"
-        await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
+        await handle_send(bot, event, msg, md_type="交易", k1="技能", v1="仙肆查看 技能", k2="装备", v2="仙肆查看 装备", k3="药材", v3="仙肆查看 药材", k4="丹药", v4="仙肆查看 丹药")
         await xiuxian_shop_view.finish()
     
     type_items = trade_manager.get_xianshi_items(type=item_type)
@@ -982,6 +983,38 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     paged_items = items_list[start_idx:end_idx]
 
     # 构建消息内容
+    if XiuConfig().markdown_status:
+        # 构建 markdown 文本
+        lines = [f"☆------仙肆 {item_type}------☆", ""]
+
+        for item in paged_items:
+            price_str = number_to(item['price'])
+            xianshi_id = str(item["id"])
+
+            # 交互命令，建议url编码
+            cmd = quote(f"仙肆购买 {xianshi_id}")
+            id_md = f"[购买](mqqapi://aio/inlinecmd?command={cmd}&enter=false&reply=false)"
+            name_cmd = quote(f"查看效果 {item['name']}")
+            name_md = f"[{item['name']}](mqqapi://aio/inlinecmd?command={name_cmd}&enter=false&reply=false)"
+            line = f"> - {name_md} {price_str}灵石 {id_md}"
+            if item['quantity'] == -1:
+                line += " ｜ 不限量"
+            elif item['quantity'] > 1:
+                line += f" ｜ 剩余:{item['quantity']}"
+            lines.append(line)
+            lines.append("\r")
+
+        lines.append("")
+        lines.append(f"第 {current_page}/{total_pages} 页")
+        lines.append(
+            f"[下一页](mqqapi://aio/inlinecmd?command={quote(f'仙肆查看{item_type} {current_page + 1}')}&enter=false&reply=false)"
+        )
+
+        md_text = "\r".join(lines)  # QQ md更建议 \r
+        msg = MessageSegmentPlus.markdown(md_text)
+        await bot.send(event=event, message=msg)
+        await xiuxian_shop_view.finish()
+
     title = f"☆------仙肆 {item_type}------☆"
     msg_list = []
     for item in paged_items:

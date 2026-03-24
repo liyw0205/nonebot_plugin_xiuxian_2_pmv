@@ -153,12 +153,20 @@ async def natal_awaken_confirm(bot: Bot, event: GroupMessageEvent | PrivateMessa
                                    md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="法宝", v2="我的本命法宝", k3="升阶", v3="本命法宝升阶")
                 await natal_awaken.finish()
         
-        # 执行神秘经书增减
-        if total_scripture_change != 0:
-            # update_back_j的num是正数时扣除，负数时增加。
-            # 这里 total_scripture_change 如果是正数表示返还，负数表示消耗。
-            # 所以直接传入 total_scripture_change 的负数，即可实现正确的扣除或增加
-            sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-total_scripture_change) 
+        # 执行神秘经书增减（规范：扣除用update_back_j正数，增加用send_back）
+        if total_scripture_change < 0:
+            # 净消耗
+            sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=abs(total_scripture_change))
+        elif total_scripture_change > 0:
+            # 净返还
+            sql_message.send_back(
+                user_id,
+                MYSTERIOUS_SCRIPTURE_ID,
+                mysterious_scripture_info["name"],
+                mysterious_scripture_info["type"],
+                total_scripture_change,
+                0
+            )
 
         # 执行重塑 (force_new=True会清除所有效果和等级，以及次数统计)
         nt.awaken(force_new=True)
@@ -353,8 +361,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
     success, upgrade_result_msg = nt.upgrade_single_effect_level()
 
     if success:
-        # 扣除神秘经书
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost) # num为负数表示扣除
+        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=scripture_cost)
         await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n{upgrade_result_msg}",
                            md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
@@ -410,7 +417,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     success, result_msg = nt.engrave_effect()
 
     if success:
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost)
+        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=scripture_cost)
         await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
                            md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
     else:
@@ -432,6 +439,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     """
     处理遗忘道纹命令。
     消耗神秘经书3个，去除本命法宝指定的一个效果。
+    若该道纹有升阶，则返还对应升阶消耗（等级-1）。
     """
     isUser, user_info, msg = check_user(event) # 检查用户是否已注册修仙
     if not isUser:
@@ -467,20 +475,57 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
                            md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="帮助", v3="本命法宝帮助")
         await natal_forget.finish()
 
-    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_FORGET # 遗忘道纹消耗
+    # 计算要遗忘的道纹等级，用于返还升阶消耗
+    forget_effect_level = 0
+    for i in range(1, MAX_EFFECT_SLOTS + 1):
+        if nt_data.get(f"effect{i}_type", 0) == effect_type_to_forget.value:
+            forget_effect_level = nt_data.get(f"effect{i}_level", 1)
+            break
+
+    if forget_effect_level <= 0:
+        effect_name_cn = EFFECT_NAME_MAP.get(effect_type_to_forget, "未知效果")
+        await handle_send(bot, event, f"你的本命法宝上没有【{effect_name_cn}】这个道纹，无法遗忘。",
+                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="遗忘", v2="遗忘道纹", k3="帮助", v3="本命法宝帮助")
+        await natal_forget.finish()
+
+    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_FORGET # 遗忘道纹基础消耗
+    refund_scripture = max(0, forget_effect_level - 1) # 返还升阶消耗（等级-1）
+    net_scripture_change = refund_scripture - scripture_cost # >0返还，<0消耗
+
     scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID) # 获取用户背包中的神秘经书数量
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
 
-    if scripture_num < scripture_cost:
-        await handle_send(bot, event, f"遗忘道纹需要消耗{scripture_cost}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个！",
-                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="铭刻", v3="铭刻道纹")
-        await natal_forget.finish()
+    # 仅净消耗时检查库存
+    if net_scripture_change < 0:
+        need = abs(net_scripture_change)
+        if scripture_num < need:
+            await handle_send(bot, event, f"遗忘该道纹需净消耗{need}个【{mysterious_scripture_info['name']}】（遗忘消耗{scripture_cost}，返还{refund_scripture}），你目前只有{scripture_num}个！",
+                               md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="铭刻", v3="铭刻道纹")
+            await natal_forget.finish()
 
     success, result_msg = nt.forget_effect(effect_type_to_forget)
 
     if success:
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=-scripture_cost)
-        await handle_send(bot, event, f"遗忘道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
+        if net_scripture_change < 0:
+            sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=abs(net_scripture_change))
+        elif net_scripture_change > 0:
+            sql_message.send_back(
+                user_id,
+                MYSTERIOUS_SCRIPTURE_ID,
+                mysterious_scripture_info["name"],
+                mysterious_scripture_info["type"],
+                net_scripture_change,
+                0
+            )
+
+        if net_scripture_change < 0:
+            extra = f"净消耗{abs(net_scripture_change)}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
+        elif net_scripture_change > 0:
+            extra = f"净返还{net_scripture_change}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
+        else:
+            extra = f"本次刚好抵消（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
+
+        await handle_send(bot, event, f"遗忘道纹成功！\n{result_msg}\n{extra}",
                            md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="遗忘", v3="遗忘道纹")
     else:
         await handle_send(bot, event, f"遗忘道纹失败：{result_msg}",
@@ -488,7 +533,6 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await natal_forget.finish()
 
 
-# ==== 新增：本命法宝主帮助命令 ====
 natal_help = on_command("本命法宝帮助", aliases={"法宝帮助"}, priority=25, block=True)
 
 @natal_help.handle(parameterless=[Cooldown(cd_time=3)])
@@ -519,7 +563,6 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
                        md_type="法宝", k1="操作帮助", v1="本命法宝操作帮助", k2="道纹帮助", v2="本命法宝道纹帮助", k3="战斗帮助", v3="本命法宝战斗帮助")
 
 
-# ==== 新增：本命法宝操作帮助命令 ====
 natal_operation_help = on_command("本命法宝操作帮助", aliases={"法宝操作帮助"}, priority=25, block=True)
 
 @natal_operation_help.handle(parameterless=[Cooldown(cd_time=3)])
@@ -546,6 +589,7 @@ async def natal_operation_help_handler(bot: Bot, event: GroupMessageEvent | Priv
     >   发送：【遗忘道纹 <道纹名称>】
     >   例如：【遗忘道纹 流血】
     >   消耗{MYSTERIOUS_SCRIPTURE_COST_FORGET}个【神秘经书】，去除法宝指定的某个道纹。
+    >   若该道纹有升阶，返还对应升阶消耗（等级-1）。
     >   法宝至少需要保留一个道纹。
 
 4.  **养成法宝** (提升法宝总等级)
@@ -655,7 +699,6 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
     await handle_send(bot, event, msg,
                        md_type="法宝", k1="主帮助", v1="本命法宝帮助", k2="遗忘", v2="遗忘道纹", k3="查看", v3="我的本命法宝")
 
-# ==== 新增：本命法宝战斗帮助命令 ====
 natal_battle_help = on_command("本命法宝战斗帮助", aliases={"法宝战斗帮助", "战斗帮助"}, priority=25, block=True)
 
 @natal_battle_help.handle(parameterless=[Cooldown(cd_time=3)])
