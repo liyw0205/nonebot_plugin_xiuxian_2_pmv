@@ -232,17 +232,34 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(img_res))
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    身外化身命令
+    用法：
+    - 身外化身         -> 本号/化身互相切换
+    - 身外化身 本体    -> 强制切回本体
+    """
     # 分配bot
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    # 先校验本号是否是修仙用户（化身系统以本号为入口）
-    is_user, user_info, msg = check_user(str(event.user_id))
-    if not is_user:
-        await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！")
+    main_id = str(event.user_id)
+    arg_text = args.extract_plain_text().strip()
+
+    # 强制切回本体
+    if arg_text in ["本体", "回来", "返回", "切回"]:
+        info = init_avatar_if_needed(main_id)
+        player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
+        await handle_send(
+            bot, event,
+            f"🔁 已切回本体！\n当前为【本号】状态\n（后续修仙指令将作用于本号）"
+        )
         await avatar_switch_cmd.finish()
 
-    main_id = str(event.user_id)
+    is_user, user_info, msg = check_user(str(event.user_id))
+    if not is_user:
+        await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！\n切换回来：身外化身 本体")
+        await avatar_switch_cmd.finish()
+
     role, info = toggle_avatar(main_id)
 
     if role == "avatar":

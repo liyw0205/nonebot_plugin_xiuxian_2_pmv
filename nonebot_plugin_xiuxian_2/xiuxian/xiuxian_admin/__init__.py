@@ -67,6 +67,7 @@ blackhouse = on_command("小黑屋", permission=SUPERUSER, priority=10, block=Tr
 unblackhouse = on_command("解除小黑屋", aliases={"放出小黑屋", "解禁"}, permission=SUPERUSER, priority=10, block=True)
 view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, permission=SUPERUSER, priority=10, block=True)
 impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
+dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1200,4 +1201,29 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     # 到这里，target_user_id 和 target_user_info 应该都已正确获取
     _impersonating_users[admin_user_id] = target_user_id
     await handle_send(bot, event, f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n后续所有修仙命令都将以此用户身份执行，直至您取消伪装。")
-    
+
+@dm_command.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    发送原生Markdown内容
+    用法：
+    dm # 你好
+    dm ## 标题\n- 列表1\n- 列表2
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    text = args.extract_plain_text().strip()
+    if not text:
+        await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
+        return
+
+    # 兼容用户输入的 \n，转换为QQ markdown常用的 \r
+    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
+    text = text.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://').replace("\\n", "\r").replace("\n", "\r")
+
+    try:
+        msg = MessageSegmentPlus.markdown(text)
+        await bot.send(event, msg)
+    except Exception as e:
+        logger.error(f"dm发送markdown失败: {e}")
+        await handle_send(bot, event, "Markdown发送失败，请检查内容格式或平台是否支持。")
