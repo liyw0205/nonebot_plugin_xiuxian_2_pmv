@@ -35,7 +35,7 @@ class XiuConfig:
         self.admin_debug = False 
         # 管理员调试模式，开启后只响应超管指令
         self.at_response = False
-        # 艾特响应命令（官机请勿打开）
+        # 艾特响应命令（官机可能需要关闭）
         self.at_sender = True
         # 消息是否艾特
 

@@ -28,7 +28,7 @@ from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, XiuxianJsonDate, OtherSet, 
-    UserBuffDate, XIUXIAN_IMPART_BUFF, migrate_user_id_to_openid
+    UserBuffDate, XIUXIAN_IMPART_BUFF, migrate_user_id_to_openid, migrate_single_user_id, swap_two_user_ids
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
@@ -66,6 +66,8 @@ view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, per
 impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
 dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
 migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
+update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
+swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1124,9 +1126,61 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 value = " "
             params.append({"key": key, "values": [value]})
 
-    msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
     print(f"传入：\n{args_str}\n\n解析：\n{params}")
-    await bot.send(event, msg)
+    try:
+        msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
+        await bot.send(event, msg)
+    except Exception as e:
+        err = str(e)
+        logger.error(f"dm发送markdown模板失败: {err}")
+
+        reason = "Markdown模板发送失败，请检查内容格式或平台是否支持。"
+
+        m_msg = re.search(r"message=([^,>]+)", err)
+        m_code = re.search(r"code=(\d+)", err)
+
+        if m_msg:
+            reason = m_msg.group(1).strip()
+            if m_code:
+                reason = f"\n{reason}\n错误码：{m_code.group(1)}"
+        await handle_send(bot, event, f"Markdown模板发送失败：{reason}")
+
+@dm_command.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    发送原生Markdown内容
+    用法：
+    dm # 你好
+    dm ## 标题\n- 列表1\n- 列表2
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    text = args.extract_plain_text().strip()
+    if not text:
+        await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
+        return
+
+    # 兼容用户输入的 \n，转换为QQ markdown常用的 \r
+    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
+    text = text.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://').replace("\\n", "\r").replace("\n", "\r")
+
+    try:
+        msg = MessageSegment.markdown(bot, text)
+        await bot.send(event, msg)
+    except Exception as e:
+        err = str(e)
+        logger.error(f"dm发送markdown失败: {err}")
+
+        reason = "Markdown发送失败，请检查内容格式或平台是否支持。"
+
+        m_msg = re.search(r"message=([^,>]+)", err)
+        m_code = re.search(r"code=(\d+)", err)
+
+        if m_msg:
+            reason = m_msg.group(1).strip()
+            if m_code:
+                reason = f"\n{reason}\n错误码：{m_code.group(1)}"
+        await handle_send(bot, event, f"Markdown发送失败：{reason}")
 
 @impersonate_user_command.handle(parameterless=[Cooldown(cd_time=0.1)])
 async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1200,32 +1254,6 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     _impersonating_users[admin_user_id] = target_user_id
     await handle_send(bot, event, f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n后续所有修仙命令都将以此用户身份执行，直至您取消伪装。")
 
-@dm_command.handle(parameterless=[Cooldown(cd_time=0.5)])
-async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    发送原生Markdown内容
-    用法：
-    dm # 你好
-    dm ## 标题\n- 列表1\n- 列表2
-    """
-    bot, _ = await assign_bot(bot=bot, event=event)
-
-    text = args.extract_plain_text().strip()
-    if not text:
-        await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
-        return
-
-    # 兼容用户输入的 \n，转换为QQ markdown常用的 \r
-    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
-    text = text.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://').replace("\\n", "\r").replace("\n", "\r")
-
-    try:
-        msg = MessageSegment.markdown(bot, text)
-        await bot.send(event, msg)
-    except Exception as e:
-        logger.error(f"dm发送markdown失败: {e}")
-        await handle_send(bot, event, "Markdown发送失败，请检查内容格式或平台是否支持。")
-
 @migrate_qqid_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将数据库中的QQ user_id迁移为真实ID"""
@@ -1239,3 +1267,49 @@ async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     ok, msg = migrate_user_id_to_openid()
     await handle_send(bot, event, msg)
     await migrate_qqid_cmd.finish()
+
+@update_id_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def update_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    手动ID更新
+    用法：ID更新 ID1 ID2
+    规则：
+    - ID1不存在不更新
+    - ID2存在则提示并拒绝
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+    arg_list = args.extract_plain_text().strip().split()
+
+    if len(arg_list) != 2:
+        await handle_send(bot, event, "用法：ID更新 ID1 ID2\n示例：ID更新 123456 987654")
+        return
+
+    old_id, new_id = arg_list[0], arg_list[1]
+
+    await handle_send(bot, event, f"开始执行手动ID更新：{old_id} -> {new_id}\n正在备份并校验，请稍候...")
+
+    ok, msg = migrate_single_user_id(old_id, new_id)
+    await handle_send(bot, event, msg)
+    await update_id_cmd.finish()
+
+@swap_id_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """
+    ID交换
+    用法：ID交换 ID1 ID2
+    规则：ID1和ID2都必须存在
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+    arg_list = args.extract_plain_text().strip().split()
+
+    if len(arg_list) != 2:
+        await handle_send(bot, event, "用法：ID交换 ID1 ID2\n示例：ID交换 123456 654321")
+        return
+
+    id1, id2 = arg_list[0], arg_list[1]
+    await handle_send(bot, event, f"开始执行ID交换：{id1} - {id2}\n正在备份并校验，请稍候...")
+
+    ok, msg = swap_two_user_ids(id1, id2)
+    await handle_send(bot, event, msg)
+    await swap_id_cmd.finish()
+ 

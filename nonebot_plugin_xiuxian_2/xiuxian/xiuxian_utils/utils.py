@@ -21,6 +21,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
+from nonebot.adapters.onebot.v11 import Bot as OB11Bot
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
 from wcwidth import wcwidth
@@ -786,6 +787,11 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     """
     is_group = isinstance(event, GroupMessageEvent)
     MAX_LEN = 3800
+    
+    if isinstance(bot, OB11Bot):
+        markdown_status = False
+    else:
+        markdown_status = XiuConfig().markdown_status
 
     def split_to_groups(messages):
         """将消息列表分组，每组总字符数不超过限制"""
@@ -804,7 +810,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             groups.append(current)
         return groups
     merge_forward_send = XiuConfig().merge_forward_send
-    if XiuConfig().markdown_status:
+    if markdown_status:
         merge_forward_send = 1
         
     if merge_forward_send == 1:
@@ -812,7 +818,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             name, uin, msgs = args
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
-            if XiuConfig().markdown_status and XiuConfig().markdown_id:
+            if markdown_status and XiuConfig().markdown_id:
                 await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
@@ -824,7 +830,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
-            if XiuConfig().markdown_status and XiuConfig().markdown_id:
+            if markdown_status and XiuConfig().markdown_id:
                 await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
@@ -932,7 +938,13 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
 
 async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None, button_id=None):
     """处理文本，根据配置发送文本或者图片消息"""
-    if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().markdown_id2:
+
+    if isinstance(bot, OB11Bot):
+        markdown_status = False
+    else:
+        markdown_status = XiuConfig().markdown_status
+
+    if markdown_status and XiuConfig().markdown_id and XiuConfig().markdown_id2:
         if md_type:
             await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
             return
@@ -951,19 +963,14 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
         sender_name = event.sender.card if event.sender.card else event.sender.nickname
         pic_msg = f"@{sender_name}\n{msg}" if sender_name else msg
         pic = await get_msg_pic(pic_msg)
-        if is_group:
-            await bot.send(
-                event=event, message=MessageSegment.image(bot, pic)
-            )
-        else:
-            await bot.send(
-                event=event, message=MessageSegment.image(bot, pic)
-            )
+        await bot.send(
+            event=event, message=MessageSegment.image(bot, pic)
+        )
     else:
         if is_group:
             if XiuConfig().at_sender:
                 await bot.send(
-                    event=event, message=MessageSegment.at(event.get_user_id()) + msg
+                    event=event, message=MessageSegment.at(bot, event.get_user_id()) + msg
                 )
             else:
                 await bot.send(

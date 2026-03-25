@@ -4146,3 +4146,294 @@ def migrate_user_id_to_openid():
 
     except Exception as e:
         return False, f"迁移异常中止：{e}"
+
+def migrate_single_user_id(old_id: str, new_id: str):
+    """
+    手动迁移单个用户ID：old_id -> new_id
+    规则：
+    1) old_id不存在：不更新并提示
+    2) new_id已存在：不更新并提示
+    3) 执行前自动备份数据库
+    """
+    try:
+        old_id = str(old_id).strip()
+        new_id = str(new_id).strip()
+
+        if not old_id or not new_id:
+            return False, "参数错误：ID1 和 ID2 不能为空"
+
+        if old_id == new_id:
+            return False, "ID1 与 ID2 相同，无需更新"
+
+        db_paths = {
+            "xiuxian.db": DATABASE / "xiuxian.db",
+            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
+            "trade.db": DATABASE / "trade.db",
+            "player.db": DATABASE / "player.db",
+        }
+
+        # 各库需要迁移的字段（与批量迁移保持一致）
+        target_cols_by_db = {
+            "xiuxian.db": {"user_id"},
+            "xiuxian_impart.db": {"user_id"},
+            "trade.db": {"user_id"},
+            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
+        }
+
+        # 先判断 old_id 是否存在、new_id 是否已存在
+        old_exists = False
+        new_exists = False
+        old_exists_detail = []
+        new_exists_detail = []
+
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            try:
+                tables = _get_tables(conn)
+                target_cols = target_cols_by_db.get(db_name, {"user_id"})
+                cur = conn.cursor()
+
+                for table in tables:
+                    cols_info = _get_table_info(conn, table)
+                    cols = {c[1] for c in cols_info}
+                    hit_cols = cols.intersection(target_cols)
+                    if not hit_cols:
+                        continue
+
+                    for col in hit_cols:
+                        # 检查 old_id
+                        cur.execute(
+                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
+                            (old_id,)
+                        )
+                        if cur.fetchone():
+                            old_exists = True
+                            old_exists_detail.append(f"{db_name}.{table}.{col}")
+
+                        # 检查 new_id
+                        cur.execute(
+                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
+                            (new_id,)
+                        )
+                        if cur.fetchone():
+                            new_exists = True
+                            new_exists_detail.append(f"{db_name}.{table}.{col}")
+            finally:
+                conn.close()
+
+        if not old_exists:
+            return False, f"ID1（{old_id}）不存在，未执行更新"
+
+        if new_exists:
+            return False, f"ID2（{new_id}）已存在，禁止覆盖。\n命中位置：{', '.join(new_exists_detail[:10])}"
+
+        # 开始更新
+        total_updated = 0
+        logs = []
+        id_map = {old_id: new_id}
+
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                logs.append(f"{db_name}: 不存在，跳过")
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            cur = conn.cursor()
+
+            try:
+                cur.execute("BEGIN")
+                tables = _get_tables(conn)
+                target_cols = target_cols_by_db.get(db_name, {"user_id"})
+
+                db_updated = 0
+                for table in tables:
+                    db_updated += _update_ids_in_table(conn, table, target_cols, id_map)
+
+                conn.commit()
+                total_updated += db_updated
+                logs.append(f"{db_name}: 更新单元格={db_updated}")
+            except Exception as e:
+                conn.rollback()
+                logs.append(f"{db_name}: 更新失败 -> {e}")
+            finally:
+                conn.close()
+
+        # 可选：迁移 players 目录名
+        players_dir = DATABASE / "players"
+        rename_msg = "未处理"
+        if players_dir.exists():
+            old_p = players_dir / old_id
+            new_p = players_dir / new_id
+            if old_p.exists() and (not new_p.exists()):
+                try:
+                    old_p.rename(new_p)
+                    rename_msg = "已重命名"
+                except Exception as e:
+                    rename_msg = f"重命名失败: {e}"
+            elif not old_p.exists():
+                rename_msg = "旧目录不存在，跳过"
+            else:
+                rename_msg = "新目录已存在，跳过"
+
+        msg = (
+            f"手动ID更新完成：{old_id} -> {new_id}\n"
+            f"总更新单元格：{total_updated}\n"
+            f"players目录：{rename_msg}\n"
+            f"详情：\n" + "\n".join(logs)
+        )
+        return True, msg
+
+    except Exception as e:
+        return False, f"手动ID更新异常：{e}"
+
+def swap_two_user_ids(id1: str, id2: str):
+    """
+    交换两个用户ID：
+    1) id1 -> id1bak
+    2) id2 -> id1
+    3) id1bak -> id2
+
+    规则：
+    - id1、id2 都必须存在
+    - 执行前自动备份
+    - 任一步失败则回滚（按库事务）
+    """
+    try:
+        id1 = str(id1).strip()
+        id2 = str(id2).strip()
+
+        if not id1 or not id2:
+            return False, "参数错误：ID1 和 ID2 不能为空"
+        if id1 == id2:
+            return False, "ID1 与 ID2 相同，无法交换"
+
+        db_paths = {
+            "xiuxian.db": DATABASE / "xiuxian.db",
+            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
+            "trade.db": DATABASE / "trade.db",
+            "player.db": DATABASE / "player.db",
+        }
+
+        target_cols_by_db = {
+            "xiuxian.db": {"user_id"},
+            "xiuxian_impart.db": {"user_id"},
+            "trade.db": {"user_id"},
+            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
+        }
+
+        # 生成临时bak，避免冲突
+        id1_bak = f"{id1}__bak__{int(time.time())}"
+
+        # 前置存在性检查
+        id1_exists = False
+        id2_exists = False
+
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            try:
+                tables = _get_tables(conn)
+                target_cols = target_cols_by_db.get(db_name, {"user_id"})
+                cur = conn.cursor()
+
+                for table in tables:
+                    cols_info = _get_table_info(conn, table)
+                    cols = {c[1] for c in cols_info}
+                    hit_cols = cols.intersection(target_cols)
+                    if not hit_cols:
+                        continue
+
+                    for col in hit_cols:
+                        cur.execute(
+                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
+                            (id1,)
+                        )
+                        if cur.fetchone():
+                            id1_exists = True
+
+                        cur.execute(
+                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
+                            (id2,)
+                        )
+                        if cur.fetchone():
+                            id2_exists = True
+            finally:
+                conn.close()
+
+        if not id1_exists or not id2_exists:
+            return False, f"交换失败：ID1存在={id1_exists}，ID2存在={id2_exists}。要求两者都存在。"
+
+        total_updated = 0
+        logs = []
+
+        # 按库执行三步替换，每个库单独事务
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                logs.append(f"{db_name}: 不存在，跳过")
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            cur = conn.cursor()
+
+            try:
+                cur.execute("BEGIN")
+                tables = _get_tables(conn)
+                target_cols = target_cols_by_db.get(db_name, {"user_id"})
+
+                db_updated = 0
+                # 第一步：id1 -> id1_bak
+                for table in tables:
+                    db_updated += _update_ids_in_table(conn, table, target_cols, {id1: id1_bak})
+                # 第二步：id2 -> id1
+                for table in tables:
+                    db_updated += _update_ids_in_table(conn, table, target_cols, {id2: id1})
+                # 第三步：id1_bak -> id2
+                for table in tables:
+                    db_updated += _update_ids_in_table(conn, table, target_cols, {id1_bak: id2})
+
+                conn.commit()
+                total_updated += db_updated
+                logs.append(f"{db_name}: 更新单元格={db_updated}")
+            except Exception as e:
+                conn.rollback()
+                logs.append(f"{db_name}: 交换失败 -> {e}")
+                return False, f"ID交换失败并已回滚（{db_name}）：{e}"
+            finally:
+                conn.close()
+
+        # players目录也做交换
+        players_dir = DATABASE / "players"
+        rename_msg = "未处理"
+        if players_dir.exists():
+            p1 = players_dir / id1
+            p2 = players_dir / id2
+            pb = players_dir / id1_bak
+            try:
+                # 同样三步交换
+                if p1.exists():
+                    p1.rename(pb)
+                if p2.exists():
+                    p2.rename(p1)
+                if pb.exists():
+                    pb.rename(p2)
+                rename_msg = "已完成交换"
+            except Exception as e:
+                rename_msg = f"目录交换失败: {e}"
+
+        msg = (
+            f"ID交换完成：{id1} - {id2}\n"
+            f"总更新单元格：{total_updated}\n"
+            f"players目录：{rename_msg}\n"
+            f"详情：\n" + "\n".join(logs)
+        )
+        return True, msg
+
+    except Exception as e:
+        return False, f"ID交换异常：{e}"
