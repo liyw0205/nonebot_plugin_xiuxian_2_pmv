@@ -9,7 +9,7 @@
 # 支持
 [✅] 野生机器人（napcat）
 
-[✅] 官方机器人（gsk）
+[✅] 官方机器人（gsk/nonebot qq）
  
 # 💿 配置
 
@@ -34,7 +34,7 @@ PORT = 8080 # 反代的8080端口，有需要自己改
 - 在.env.dev文件中添加QQ官方机器人来启动
 
 
-私域频道机器人示例
+私域频道机器人示例：nonebot qq未测试
 
 ```dotenv
 QQ_BOTS='
@@ -53,7 +53,7 @@ QQ_BOTS='
 '
 ```
 
-公域群机器人示例
+公域群机器人示例：测试通过
 
 ```dotenv
 QQ_BOTS='
@@ -154,6 +154,10 @@ ws://127.0.0.1:8080/onebot/v11/ws
 安装命令
 ```
 curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash
+```
+更新命令
+```
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- update
 ```
 xiu命令
 ```

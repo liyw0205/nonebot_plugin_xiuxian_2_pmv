@@ -696,10 +696,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         else:
             boss_name = boss["name"]
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg, boss_name=boss_name)
-        if isinstance(event, GroupMessageEvent):
-           await bot.send_group_msg(group_id=event.group_id, message=MessageSegment.image(pic))
-        else:
-            await bot.send_private_msg(user_id=event.user_id, message=MessageSegment.image(pic))
+        await bot.send(event=event, message=MessageSegment.image(bot, pic))
         await boss_info.finish()
     else:
         i = 1

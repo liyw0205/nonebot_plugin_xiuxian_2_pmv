@@ -871,14 +871,9 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 img_data = await img.io_draw_to(messages)
             elif XiuConfig().img_send_type == "base64":
                 img_data = img.sync_draw_to(messages)
-            if isinstance(event, GroupMessageEvent):
-                await bot.send(
-                    event=event, message=MessageSegment.image(img_data)
-                )
-            else:
-                await bot.send(
-                    event=event, message=MessageSegment.image(img_data)
-                )
+            await bot.send(
+                event=event, message=MessageSegment.image(bot, img_data)
+            )
         elif len(args) == 1 and isinstance(args[0], list):
             messages = args[0]
             img = Txt2Img()
@@ -887,14 +882,9 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 img_data = await img.io_draw_to(messages)
             elif XiuConfig().img_send_type == "base64":
                 img_data = img.sync_draw_to(messages)
-            if isinstance(event, GroupMessageEvent):
-                await bot.send(
-                    event=event, message=MessageSegment.image(img_data)
-                )
-            else:
-                await bot.send(
-                    event=event, message=MessageSegment.image(img_data)
-                )
+            await bot.send(
+                event=event, message=MessageSegment.image(bot, img_data)
+            )
         else:
             raise ValueError("参数数量或类型不匹配")
     elif merge_forward_send == 4:
@@ -963,11 +953,11 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
         pic = await get_msg_pic(pic_msg)
         if is_group:
             await bot.send(
-                event=event, message=MessageSegment.image(pic)
+                event=event, message=MessageSegment.image(bot, pic)
             )
         else:
             await bot.send(
-                event=event, message=MessageSegment.image(pic)
+                event=event, message=MessageSegment.image(bot, pic)
             )
     else:
         if is_group:
@@ -1181,70 +1171,33 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
     await bot.send(event=event, message=msg)
     
-async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None):
+async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO, Image.Image] = None):
     """
     图片发送函数
-    
-    参数:
-        bot: 机器人实例
-        event: 事件对象
-        imgpath: 图片路径或BytesIO对象，可以是字符串、Path对象或BytesIO
     """
     try:
-        # 处理不同类型的图片输入
-        if isinstance(imgpath, (str, Path)):
-            # 检查图片文件是否存在
-            if not os.path.exists(imgpath):
-                logger.error(f"图片文件不存在: {imgpath}")
-                await bot.send(event, "图片文件不存在！")
-                return
-                
-            # 读取图片文件
-            with open(imgpath, 'rb') as f:
-                img_data = BytesIO(f.read())
-        elif isinstance(imgpath, BytesIO):
-            img_data = imgpath
-        else:
-            logger.error(f"不支持的图片类型: {type(imgpath)}")
-            await bot.send(event, "不支持的图片类型！")
-            return
-            
-        # 根据配置发送图片
-        if XiuConfig().img_send_type == "io":
-            pic = img_data
-        elif XiuConfig().img_send_type == "base64":
-            # 转换为base64格式
-            img_data.seek(0)
-            base64_str = "base64://" + b64encode(img_data.getvalue()).decode()
-            pic = base64_str
-        else:
-            pic = img_data
-            
-        # 发送图片消息
-        if isinstance(event, GroupMessageEvent):
-            await bot.send(
-                event=event,
-                message=MessageSegment.image(pic)
-            )
-        else:
-            await bot.send(
-                event=event,
-                message=MessageSegment.image(pic)
-            )
-            
+        seg = MessageSegment.image(bot, imgpath)
+        await bot.send(event=event, message=seg)
+
     except Exception as e:
         logger.error(f"发送图片失败: {e}")
         await bot.send(event, f"发送图片失败: {e}")
 
-async def handle_pic_msg_send(bot, event, imgpath: Union[str, Path, BytesIO, Image.Image] = None, text: str = None):
+
+async def handle_pic_msg_send(
+    bot,
+    event,
+    imgpath: Union[str, Path, BytesIO, Image.Image] = None,
+    text: str = None,
+):
     """
     增强版图片发送处理器，支持图文混合发送
-    
+
     参数:
         bot: 机器人实例
         event: 事件对象
         imgpath: 图片路径/对象，支持以下类型:
-            - str: 图片文件路径
+            - str: 图片文件路径 或 图片URL
             - Path: 图片Path对象
             - BytesIO: 内存中的图片数据
             - Image.Image: PIL图片对象
@@ -1252,67 +1205,47 @@ async def handle_pic_msg_send(bot, event, imgpath: Union[str, Path, BytesIO, Ima
         text: 要发送的文字内容(可选)
     """
     try:
-        message = []
-        
-        # 添加文字内容
+        message_parts = []
+
+        # 先处理文本
         if text:
             original_user_id = event.get_user_id()
             if original_user_id in _impersonating_users:
                 target_user_id = _impersonating_users[original_user_id]
                 target_user_info = sql_message.get_user_info_with_id(target_user_id)
-                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+                target_user_name = (
+                    target_user_info["user_name"]
+                    if target_user_info
+                    else f"QQ:{target_user_id}"
+                )
                 text = f"(伪装[{target_user_name}])\n{text}"
-            message.append(MessageSegment.text("\n" + text))
-        
-        # 处理图片内容
+
+            message_parts.append(MessageSegment.text(bot, "\n" + text))
+
+        # 再处理图片（交给适配层自动判断 URL / 本地）
         if imgpath is not None:
-            # 处理不同类型的图片输入
-            if isinstance(imgpath, (str, Path)):
-                if not os.path.exists(imgpath):
-                    logger.error(f"图片文件不存在: {imgpath}")
-                    await bot.send(event, "图片文件不存在！")
-                    return
-                
-                with open(imgpath, 'rb') as f:
-                    img_data = BytesIO(f.read())
-                    
-            elif isinstance(imgpath, BytesIO):
-                img_data = imgpath
-                
-            elif isinstance(imgpath, Image.Image):
-                img_data = BytesIO()
-                imgpath.save(img_data, format='PNG')
-                img_data.seek(0)
-                
+            # PIL 图片先转 bytes，其他类型直接交给 CompatMessageSegment
+            if isinstance(imgpath, Image.Image):
+                img_buf = BytesIO()
+                imgpath.save(img_buf, format="PNG")
+                img_buf.seek(0)
+                image_input = img_buf
             else:
-                logger.error(f"不支持的图片类型: {type(imgpath)}")
-                await bot.send(event, "不支持的图片类型！")
-                return
-            
-            # 根据配置转换图片格式
-            if XiuConfig().img_send_type == "io":
-                pic = img_data
-            elif XiuConfig().img_send_type == "base64":
-                img_data.seek(0)
-                base64_str = "base64://" + b64encode(img_data.getvalue()).decode()
-                pic = base64_str
-            else:
-                pic = img_data
-                
-            message.append(MessageSegment.image(pic))
-        
-        # 发送组合消息
-        if isinstance(event, GroupMessageEvent):
-            await bot.send(
-                event=event,
-                message=message
-            )
-        else:
-            await bot.send(
-                event=event,
-                message=message
-            )
-            
+                image_input = imgpath
+
+            message_parts.append(MessageSegment.image(bot, image_input))
+
+        # 都没有就不发
+        if not message_parts:
+            return
+
+        # 图文一起发（MessageSegment 支持相加）
+        msg = message_parts[0]
+        for part in message_parts[1:]:
+            msg = msg + part
+
+        await bot.send(event=event, message=msg)
+
     except Exception as e:
         logger.error(f"发送图文消息失败: {e}")
         await bot.send(event, f"发送消息失败: {e}")

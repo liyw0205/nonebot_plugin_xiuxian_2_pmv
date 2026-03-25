@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import random
+from io import BytesIO
+from pathlib import Path
 from typing import Optional, Union, Any
+from urllib.parse import urlparse
 
 from nonebot.permission import Permission
 from nonebot.adapters import Bot as BaseBot
 from nonebot.adapters import Event as BaseEvent
-
+from nonebot.log import logger
 # =========================
 # 可选导入：onebot v11
 # =========================
@@ -64,6 +67,39 @@ class CompatMessageSegment:
     """跨适配器消息段工厂"""
 
     @staticmethod
+    def _is_url(value: Any) -> bool:
+        # 只有字符串才可能是 URL
+        if not isinstance(value, str):
+            return False
+        value = value.strip()
+        if not value:
+            return False
+        try:
+            parsed = urlparse(value)
+            return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _to_bytes(data: Any) -> bytes:
+        # 统一转换为 bytes，供 QQ 的 file_* 使用
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, BytesIO):
+            return data.getvalue()
+        if isinstance(data, Path):
+            return data.read_bytes()
+        raise TypeError(f"不支持的本地文件类型: {type(data)}")
+
+    @staticmethod
+    def _is_qq_bot(bot: Any) -> bool:
+        return HAS_QQ and QQBot is not None and isinstance(bot, QQBot)
+
+    @staticmethod
+    def _is_ob11_bot(bot: Any) -> bool:
+        return HAS_OB11 and OB11Bot is not None and isinstance(bot, OB11Bot)
+
+    @staticmethod
     def markdown_param(key: str, value: str) -> dict[str, list[str]]:
         return {"key": key, "values": [value]}
 
@@ -74,8 +110,7 @@ class CompatMessageSegment:
         msg_body: list[dict[str, Any]],
         button_id: str = "",
     ):
-        # QQ：支持 markdown + keyboard
-        if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
+        if CompatMessageSegment._is_qq_bot(bot):
             md_seg = QQMessageSegment.markdown(  # type: ignore[union-attr]
                 MessageMarkdown(custom_template_id=md_id, params=msg_body)  # type: ignore[misc]
             )
@@ -84,78 +119,154 @@ class CompatMessageSegment:
                 return QQMessage(md_seg) + kb_seg  # type: ignore[call-arg]
             return md_seg
 
-        # OB11：走扩展 markdown 段
-        if HAS_OB11 and OB11MessageSegment is not None:
+        if CompatMessageSegment._is_ob11_bot(bot):
             data: dict[str, Any] = {
-                "markdown": {
-                    "custom_template_id": md_id,
-                    "params": msg_body,
-                }
+                "markdown": {"custom_template_id": md_id, "params": msg_body}
             }
             if button_id:
                 data["keyboard"] = {"id": button_id}
             return OB11MessageSegment("markdown", {"data": data})
 
-        raise RuntimeError("当前环境未安装 QQ 或 OB11 适配器，无法构造 markdown_template")
+        raise RuntimeError("无法根据 bot 判断适配器类型，markdown_template 构造失败")
 
     @staticmethod
-    def markdown(
-        bot: Any,
-        msg: str,
-        button_id: str = "",
-    ):
-        # QQ：支持 markdown + keyboard
-        if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
+    def markdown(bot: Any, msg: str, button_id: str = ""):
+        if CompatMessageSegment._is_qq_bot(bot):
             md_seg = QQMessageSegment.markdown(MessageMarkdown(content=msg))  # type: ignore[union-attr,misc]
             if button_id:
                 kb_seg = QQMessageSegment.keyboard(MessageKeyboard(id=button_id))  # type: ignore[union-attr,misc]
                 return QQMessage(md_seg) + kb_seg  # type: ignore[call-arg]
             return md_seg
 
-        # OB11：扩展 markdown 段
-        if HAS_OB11 and OB11MessageSegment is not None:
+        if CompatMessageSegment._is_ob11_bot(bot):
             data: dict[str, Any] = {"markdown": {"content": msg}}
             if button_id:
                 data["keyboard"] = {"id": button_id}
             return OB11MessageSegment("markdown", {"data": data})
 
-        raise RuntimeError("当前环境未安装 QQ 或 OB11 适配器，无法构造 markdown")
+        raise RuntimeError("无法根据 bot 判断适配器类型，markdown 构造失败")
 
     @staticmethod
-    def text(text: str):
-        # 优先 OB11，再 QQ，最后回退字符串
-        if HAS_OB11 and OB11MessageSegment is not None:
+    def text(bot_or_text: Any, text: Optional[str] = None):
+        # 兼容两种调用
+        # 新: text(bot, "xxx")
+        # 旧: text("xxx")
+        if text is None:
+            pure_text = str(bot_or_text)
+            if HAS_OB11 and OB11MessageSegment is not None:
+                return OB11MessageSegment.text(pure_text)
+            if HAS_QQ and QQMessageSegment is not None:
+                return QQMessageSegment.text(pure_text)
+            return pure_text
+
+        bot = bot_or_text
+        if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.text(text)
-        if HAS_QQ and QQMessageSegment is not None:
+        if CompatMessageSegment._is_qq_bot(bot):
             return QQMessageSegment.text(text)
         return text
 
     @staticmethod
-    def image(file: Any):
-        # 优先 OB11，再 QQ
+    def image(bot: Any, file: Any):
+        # QQ：URL -> image；本地 -> file_image
+        if CompatMessageSegment._is_qq_bot(bot):
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.image(file)  # type: ignore[union-attr]
+            return QQMessageSegment.file_image(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
+
+        # OB11：原生 image
+        if CompatMessageSegment._is_ob11_bot(bot):
+            return OB11MessageSegment.image(file)  # type: ignore[union-attr]
+
+        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.image(file)
         if HAS_QQ and QQMessageSegment is not None:
-            return QQMessageSegment.image(file)
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.image(file)
+            return QQMessageSegment.file_image(CompatMessageSegment._to_bytes(file))
         raise RuntimeError("当前环境未安装可用适配器，无法构造 image 消息段")
 
     @staticmethod
-    def at(user_id: str):
-        """
-        @消息兼容方法
-        - OB11: 返回正常的at消息段
-        - QQ适配器: 不支持at，返回空文本
-        """
-        # OB11支持at
+    def audio(bot: Any, file: Any):
+        # QQ：URL -> audio；本地 -> file_audio
+        if CompatMessageSegment._is_qq_bot(bot):
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.audio(file)  # type: ignore[union-attr]
+            return QQMessageSegment.file_audio(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
+
+        # OB11：record
+        if CompatMessageSegment._is_ob11_bot(bot):
+            return OB11MessageSegment.record(file)  # type: ignore[union-attr]
+
+        # 兜底
+        if HAS_OB11 and OB11MessageSegment is not None:
+            return OB11MessageSegment.record(file)
+        if HAS_QQ and QQMessageSegment is not None:
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.audio(file)
+            return QQMessageSegment.file_audio(CompatMessageSegment._to_bytes(file))
+        raise RuntimeError("当前环境未安装可用适配器，无法构造 audio 消息段")
+
+    @staticmethod
+    def video(bot: Any, file: Any):
+        # QQ：URL -> video；本地 -> file_video
+        if CompatMessageSegment._is_qq_bot(bot):
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.video(file)  # type: ignore[union-attr]
+            return QQMessageSegment.file_video(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
+
+        # OB11：video
+        if CompatMessageSegment._is_ob11_bot(bot):
+            return OB11MessageSegment.video(file)  # type: ignore[union-attr]
+
+        # 兜底
+        if HAS_OB11 and OB11MessageSegment is not None:
+            return OB11MessageSegment.video(file)
+        if HAS_QQ and QQMessageSegment is not None:
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.video(file)
+            return QQMessageSegment.file_video(CompatMessageSegment._to_bytes(file))
+        raise RuntimeError("当前环境未安装可用适配器，无法构造 video 消息段")
+
+    @staticmethod
+    def file(bot: Any, file: Any):
+        # QQ：URL -> file；本地 -> file_file
+        if CompatMessageSegment._is_qq_bot(bot):
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.file(file)  # type: ignore[union-attr]
+            return QQMessageSegment.file_file(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
+
+        # OB11：无严格对等段，这里保底走 image
+        if CompatMessageSegment._is_ob11_bot(bot):
+            return OB11MessageSegment.image(file)  # type: ignore[union-attr]
+
+        # 兜底
+        if HAS_OB11 and OB11MessageSegment is not None:
+            return OB11MessageSegment.image(file)
+        if HAS_QQ and QQMessageSegment is not None:
+            if CompatMessageSegment._is_url(file):
+                return QQMessageSegment.file(file)
+            return QQMessageSegment.file_file(CompatMessageSegment._to_bytes(file))
+        raise RuntimeError("当前环境未安装可用适配器，无法构造 file 消息段")
+
+    @staticmethod
+    def at(bot: Any, user_id: str):
+        # OB11 支持 at
+        if CompatMessageSegment._is_ob11_bot(bot):
+            return OB11MessageSegment.at(str(user_id))  # type: ignore[union-attr]
+
+        # QQ 不支持 at，返回空文本
+        if CompatMessageSegment._is_qq_bot(bot):
+            return QQMessageSegment.text("")  # type: ignore[union-attr]
+
+        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.at(str(user_id))
-
-        # QQ适配器不支持at，返回空文本避免报错
         if HAS_QQ and QQMessageSegment is not None:
             return QQMessageSegment.text("")
-
-        # 兜底返回空字符串
         return ""
+
 
 # =========================
 # 对外导出的兼容类型
@@ -246,10 +357,16 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "group_id", None)
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
-
-        # 兼容 OB11 习惯：补 message / plaintext
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
+
+        # 补齐 sender，兼容 event.sender.nickname / event.sender.card / event.sender.role
+        sender = type("CompatSender", (), {})()
+        sender.user_id = str(event.author.user_openid)
+        sender.nickname = str(event.author.id) if getattr(event, "author", None) else str(event.user_id)
+        sender.card = sender.nickname
+        sender.role = "member"
+        setattr(event, "sender", sender)
 
     elif HAS_QQ and isinstance(event, QQGroupMessageEvent):
         raw = event.content or ""
@@ -258,15 +375,31 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "group_id", str(event.group_openid))
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
-
-        # 兼容 OB11 习惯：补 message / plaintext
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
+        # 补齐 sender，供 OB11 风格代码复用
+        sender = type("CompatSender", (), {})()
+        sender.user_id = str(event.author.member_openid)
+        sender.nickname = str(event.author.id) if getattr(event, "author", None) else str(event.user_id)
+        sender.card = sender.nickname
+        sender.role = "member"
+        setattr(event, "sender", sender)
+
+    # 如果前面没补到 user_id，这里兜底
     if not hasattr(event, "user_id"):
         uid = get_user_id(event)
         if uid is not None:
             setattr(event, "user_id", uid)
+
+    # 如果没有 sender，再做一次通用兜底，避免外部直接访问 event.sender.nickname 报错
+    if not hasattr(event, "sender"):
+        sender = type("CompatSender", (), {})()
+        sender.user_id = getattr(event, "user_id", None)
+        sender.nickname = str(getattr(event, "user_id", ""))
+        sender.card = sender.nickname
+        sender.role = "member"
+        setattr(event, "sender", sender)
 
     setattr(event, "__compat_patched__", True)
     return event

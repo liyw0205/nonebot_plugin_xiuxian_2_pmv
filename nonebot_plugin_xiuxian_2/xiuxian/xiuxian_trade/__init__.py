@@ -1007,7 +1007,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
 
         md_text = "\r".join(lines)  # QQ md更建议 \r
-        msg = MessageSegment.markdown(md_text)
+        msg = MessageSegment.markdown(bot, md_text)
         await bot.send(event=event, message=msg)
         await xiuxian_shop_view.finish()
 
