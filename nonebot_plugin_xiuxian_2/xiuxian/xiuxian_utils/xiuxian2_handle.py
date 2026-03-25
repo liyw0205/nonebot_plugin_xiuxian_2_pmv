@@ -3851,26 +3851,26 @@ import sqlite3
 from pathlib import Path
 
 def _qid(name: str) -> str:
-    # 中文注释：安全引用SQLite标识符
+    # 安全引用SQLite标识符
     return '"' + str(name).replace('"', '""') + '"'
 
 
 def _get_tables(conn: sqlite3.Connection):
-    # 中文注释：获取所有业务表，排除sqlite内部表
+    # 获取所有业务表，排除sqlite内部表
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
     return [r[0] for r in cur.fetchall() if r and r[0] and not r[0].startswith("sqlite_")]
 
 
 def _get_table_info(conn: sqlite3.Connection, table: str):
-    # 中文注释：获取表结构信息
+    # 获取表结构信息
     cur = conn.cursor()
     cur.execute(f'PRAGMA table_info({_qid(table)})')
     return cur.fetchall()  # cid, name, type, notnull, dflt_value, pk
 
 
 def _has_autoincrement(conn: sqlite3.Connection, table: str) -> bool:
-    # 中文注释：检查原表是否包含AUTOINCREMENT
+    # 检查原表是否包含AUTOINCREMENT
     cur = conn.cursor()
     cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,))
     row = cur.fetchone()
@@ -3880,7 +3880,7 @@ def _has_autoincrement(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def _build_create_sql_by_table_info(conn: sqlite3.Connection, table: str, to_text_cols: set[str]) -> str:
-    # 中文注释：基于PRAGMA重建建表SQL，只改指定列为TEXT，保留主键结构
+    # 基于PRAGMA重建建表SQL，只改指定列为TEXT，保留主键结构
     cols = _get_table_info(conn, table)
     if not cols:
         raise RuntimeError(f"表 {table} 无字段信息")
@@ -3903,7 +3903,7 @@ def _build_create_sql_by_table_info(conn: sqlite3.Connection, table: str, to_tex
 
         if int(pk) > 0 and single_pk:
             part += " PRIMARY KEY"
-            # 中文注释：只有“非改动列”且原来是INTEGER主键且原表有自增，才保留AUTOINCREMENT
+            # 仅当该列未改为TEXT，且原列为INTEGER主键并带AUTOINCREMENT时保留自增
             if (name not in to_text_cols) and (raw_type in ("INTEGER", "INT")) and autoinc:
                 part += " AUTOINCREMENT"
         elif int(pk) > 0:
@@ -3920,7 +3920,7 @@ def _build_create_sql_by_table_info(conn: sqlite3.Connection, table: str, to_tex
 
 
 def _rebuild_table_convert_columns_to_text(conn: sqlite3.Connection, table: str, to_text_cols: set[str]):
-    # 中文注释：重建表并将指定列改为TEXT，数据原样拷贝（值转str仅针对目标列）
+    # 重建表并将指定列改为TEXT，数据原样拷贝（目标列统一转str）
     cols_info = _get_table_info(conn, table)
     cols = [c[1] for c in cols_info]
     hit_cols = [c for c in cols if c in to_text_cols]
@@ -3938,13 +3938,13 @@ def _rebuild_table_convert_columns_to_text(conn: sqlite3.Connection, table: str,
     cur.execute(f'SELECT {col_sql} FROM {_qid(table)}')
     rows = cur.fetchall()
 
-    ins_sql = f'INSERT INTO {_qid(tmp_table)} ({col_sql}) VALUES ({",".join(["?"]*len(cols))})'
+    ins_sql = f'INSERT INTO {_qid(tmp_table)} ({col_sql}) VALUES ({",".join(["?"] * len(cols))})'
     copied = 0
     for row in rows:
         row = list(row)
         for i, c in enumerate(cols):
             if c in to_text_cols and row[i] is not None:
-                row[i] = str(row[i])  # 中文注释：目标列统一存字符串
+                row[i] = str(row[i])
         cur.execute(ins_sql, tuple(row))
         copied += 1
 
@@ -3954,7 +3954,7 @@ def _rebuild_table_convert_columns_to_text(conn: sqlite3.Connection, table: str,
 
 
 def _update_ids_in_table(conn: sqlite3.Connection, table: str, target_cols: set[str], id_map: dict[str, str]) -> int:
-    # 中文注释：按严格相等匹配替换ID，str(db_value)==str(old_id)才替换
+    # 按严格相等匹配替换ID，CAST成TEXT后比对
     cols_info = _get_table_info(conn, table)
     cols = [c[1] for c in cols_info]
     hit_cols = [c for c in cols if c in target_cols]
@@ -3964,7 +3964,6 @@ def _update_ids_in_table(conn: sqlite3.Connection, table: str, target_cols: set[
     cur = conn.cursor()
     updated_cells = 0
     for col in hit_cols:
-        # 逐个old_id严格替换
         for old_id, new_id in id_map.items():
             if str(old_id) == str(new_id):
                 continue
@@ -3975,14 +3974,50 @@ def _update_ids_in_table(conn: sqlite3.Connection, table: str, target_cols: set[
     return updated_cells
 
 
+def _collect_all_candidate_ids(db_paths: dict, target_cols_by_db: dict) -> set[str]:
+    # 从所有数据库目标字段中收集候选ID（去重）
+    all_ids = set()
+
+    for db_name, db_path in db_paths.items():
+        if not db_path.exists():
+            continue
+
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            tables = _get_tables(conn)
+            for table in tables:
+                cols_info = _get_table_info(conn, table)
+                cols = {c[1] for c in cols_info}
+                hit_cols = cols.intersection(target_cols_by_db.get(db_name, set()))
+                if not hit_cols:
+                    continue
+
+                cur = conn.cursor()
+                for col in hit_cols:
+                    sql = f'SELECT DISTINCT CAST({_qid(col)} AS TEXT) FROM {_qid(table)} WHERE {_qid(col)} IS NOT NULL'
+                    cur.execute(sql)
+                    rows = cur.fetchall()
+                    for r in rows:
+                        if r and r[0] is not None:
+                            v = str(r[0]).strip()
+                            if v != "":
+                                all_ids.add(v)
+        finally:
+            conn.close()
+
+    return all_ids
+
+
 def migrate_user_id_to_openid():
     """
-    新逻辑迁移：
-    1) 先把目标字段改TEXT
-    2) 再做ID值替换（严格相等）
+    迁移逻辑：
+    1) 先备份数据库
+    2) 将目标字段类型统一改为TEXT
+    3) 一次性收集所有目标字段中的ID，统一生成映射
+    4) 一次性替换所有目标字段中的ID
     """
     try:
-        # 中文注释：先备份
+        # 先备份
         ok, backup_msg = backup_db_files()
         if not ok:
             return False, f"备份失败，终止迁移：{backup_msg}"
@@ -3994,12 +4029,16 @@ def migrate_user_id_to_openid():
             "player.db": DATABASE / "player.db",
         }
 
-        # 中文注释：字段类型转换规则
-        common_text_cols = {"user_id"}  # 所有库
-        player_extra_cols = {"partner_id", "group_id"}  # player.db额外
+        # 各库需要迁移的字段（player.db新增 main_id、active_id）
+        target_cols_by_db = {
+            "xiuxian.db": {"user_id"},
+            "xiuxian_impart.db": {"user_id"},
+            "trade.db": {"user_id"},
+            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
+        }
 
         # =========================
-        # A. 先全库改字段类型为TEXT
+        # A. 先全库目标字段改TEXT
         # =========================
         type_logs = []
         for db_name, db_path in db_paths.items():
@@ -4017,10 +4056,7 @@ def migrate_user_id_to_openid():
                 converted_rows = 0
 
                 for table in tables:
-                    to_text_cols = set(common_text_cols)
-                    if db_name == "player.db":
-                        to_text_cols |= player_extra_cols
-
+                    to_text_cols = target_cols_by_db.get(db_name, {"user_id"})
                     converted_rows += _rebuild_table_convert_columns_to_text(conn, table, to_text_cols)
 
                 conn.commit()
@@ -4032,27 +4068,17 @@ def migrate_user_id_to_openid():
                 conn.close()
 
         # =========================
-        # B. 获取用户ID并映射真实ID
+        # B. 一次性收集所有候选ID并映射
         # =========================
-        xdb = db_paths["xiuxian.db"]
-        if not xdb.exists():
-            return False, "xiuxian.db不存在，无法继续"
-
-        conn = sqlite3.connect(xdb, check_same_thread=False)
-        cur = conn.cursor()
-        cur.execute('SELECT user_id FROM "user_xiuxian"')
-        old_ids = [str(r[0]) for r in cur.fetchall() if r and r[0] is not None]
-        conn.close()
-
-        old_ids = list(set(old_ids))
-        if not old_ids:
-            return False, "未找到任何用户ID"
+        all_candidate_ids = _collect_all_candidate_ids(db_paths, target_cols_by_db)
+        if not all_candidate_ids:
+            return False, "未找到任何可迁移ID"
 
         from .utils import get_real_id
         id_map = {}
         fail_ids = []
 
-        for old_id in old_ids:
+        for old_id in all_candidate_ids:
             try:
                 real_id = get_real_id(old_id)
                 if real_id and str(real_id).strip():
@@ -4066,7 +4092,7 @@ def migrate_user_id_to_openid():
             return False, "真实ID转换全部失败，未执行替换"
 
         # =========================
-        # C. 全库替换ID值（严格相等）
+        # C. 全库替换（一次）
         # =========================
         data_logs = []
         total_updated = 0
@@ -4083,9 +4109,7 @@ def migrate_user_id_to_openid():
             try:
                 cur.execute("BEGIN")
                 tables = _get_tables(conn)
-                target_cols = {"user_id"}
-                if db_name == "player.db":
-                    target_cols |= {"partner_id", "group_id"}
+                target_cols = target_cols_by_db.get(db_name, {"user_id"})
 
                 db_updated = 0
                 for table in tables:
@@ -4100,7 +4124,7 @@ def migrate_user_id_to_openid():
             finally:
                 conn.close()
 
-        # 中文注释：可选迁移players目录名
+        # 可选迁移 players 目录名
         players_dir = DATABASE / "players"
         rename_count = 0
         if players_dir.exists():
@@ -4117,6 +4141,7 @@ def migrate_user_id_to_openid():
         msg = (
             f"QQID转换完成！\n"
             f"备份：{backup_msg}\n"
+            f"候选ID总数：{len(all_candidate_ids)}\n"
             f"成功映射：{len(id_map)}\n"
             f"转换失败：{len(fail_ids)}\n"
             f"更新总单元格：{total_updated}\n"
