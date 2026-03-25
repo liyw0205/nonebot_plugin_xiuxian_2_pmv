@@ -95,11 +95,11 @@ class XiuxianDateManage:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "user_cd" (
-  "user_id" TEXT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "user_id" TEXT NOT NULL PRIMARY KEY,
   "type" integer DEFAULT 0,
-  "create_time" integer DEFAULT NULL,
-  "scheduled_time" integer,
-  "last_check_info_time" integer DEFAULT NULL
+  "create_time" TEXT DEFAULT NULL,
+  "scheduled_time" TEXT,
+  "last_check_info_time" TEXT DEFAULT NULL
 );""")
             elif i == "sects":
                 try:
@@ -2248,13 +2248,6 @@ class TradeDataManager:
                 end_time REAL NOT NULL
             )
         """)
-        # 原有的 auction_settings 表不再由 TradeDataManager 管理，此处移除创建语句。
-        # c.execute("""
-        #     CREATE TABLE IF NOT EXISTS auction_settings (
-        #         key TEXT PRIMARY KEY,
-        #         value TEXT
-        #     )
-        # """)
         self.conn.commit()
 
     def total_goods_quantity(self):

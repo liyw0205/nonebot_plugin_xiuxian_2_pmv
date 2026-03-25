@@ -153,11 +153,17 @@ ws://127.0.0.1:8080/onebot/v11/ws
 
 安装命令
 ```
+# 默认目录
 curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash
+# 自定义目录 /root/xiuxian
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- install /root/xiuxian
 ```
 更新命令
 ```
+# 默认目录
 curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- update
+# 自定义目录 /root/xiuxian
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- update /root/xiuxian 
 ```
 xiu命令
 ```
