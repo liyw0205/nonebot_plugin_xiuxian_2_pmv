@@ -3,7 +3,7 @@ from nonebot.params import CommandArg
 from nonebot import on_command
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,

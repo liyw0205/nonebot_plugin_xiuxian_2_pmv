@@ -8,7 +8,7 @@ from typing import Any, Tuple
 from nonebot import on_regex
 from nonebot.log import logger
 from nonebot.params import RegexGroup
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GroupMessageEvent,
     PrivateMessageEvent,

@@ -1,13 +1,12 @@
-from nonebot import on_command, on_fullmatch
+from nonebot import on_command
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment,
-    ActionFailed
+    MessageSegment
 )
 import random
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -25,11 +24,11 @@ from nonebot.log import logger
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
-impart_pk_project = on_fullmatch("投影虚神界", priority=6, block=True)
+impart_pk_project = on_command("投影虚神界", priority=6, block=True)
 impart_pk_go = on_command("探索虚神界", aliases={"虚神界探索"}, priority=6, block=True)
-impart_pk_info = on_fullmatch("虚神界信息", priority=6, block=True)
+impart_pk_info = on_command("虚神界信息", priority=6, block=True)
 impart_pk_now = on_command("虚神界对决", priority=15, block=True)
-impart_pk_list = on_fullmatch("虚神界列表", priority=7, block=True)
+impart_pk_list = on_command("虚神界列表", priority=7, block=True)
 impart_pk_exp = on_command("虚神界修炼", priority=8, block=True)
 impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
@@ -138,12 +137,7 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             list_msg.append(
                 {"type": "node", "data": {"name": f"编号 {x}", "uin": bot.self_id,
                                           "content": msg}})
-    try:
-        await send_msg_handler(bot, event, list_msg)
-    except ActionFailed:
-        msg = f"未知原因，查看失败!"
-        await handle_send(bot, event, msg, md_type="虚神界", k1="列表", v1="虚神界列表", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_list.finish()
+    await send_msg_handler(bot, event, list_msg)
     await impart_pk_list.finish()
 
 @impart_pk_now.handle(parameterless=[Cooldown(stamina_cost=3)])
@@ -374,13 +368,8 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         }
     })
     
-    try:
-        await send_msg_handler(bot, event, list_msg)
-        await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
-    except ActionFailed:
-        msg = f"未知原因，对决显示失败!"
-        await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        
+    await send_msg_handler(bot, event, list_msg)
+    await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
     await impart_pk_now.finish()
 
 @impart_pk_exp.handle(parameterless=[Cooldown(cd_time=1.4)])

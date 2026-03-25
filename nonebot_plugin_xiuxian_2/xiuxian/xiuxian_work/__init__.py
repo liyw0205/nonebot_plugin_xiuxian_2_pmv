@@ -6,7 +6,7 @@ from typing import Tuple, Any, Dict
 from nonebot import on_regex, require, on_command
 from nonebot.params import RegexGroup
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     GroupMessageEvent,

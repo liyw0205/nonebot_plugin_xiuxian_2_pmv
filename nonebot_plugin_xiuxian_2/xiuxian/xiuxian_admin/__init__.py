@@ -10,17 +10,15 @@ import asyncio
 from datetime import datetime
 from nonebot.typing import T_State
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from nonebot import require, on_command, on_fullmatch, get_bot
-from nonebot.adapters.onebot.v11 import (
+from nonebot import require, on_command, get_bot
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
-    GROUP_ADMIN,
-    GROUP_OWNER,
+    MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment,
-    ActionFailed
+    MessageSegment
 )
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -30,14 +28,13 @@ from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, XiuxianJsonDate, OtherSet, 
-    UserBuffDate, XIUXIAN_IMPART_BUFF
+    UserBuffDate, XIUXIAN_IMPART_BUFF, migrate_user_id_to_openid
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, number_to, get_msg_pic, handle_send, send_msg_handler, generate_command, _impersonating_users
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.markdown_segment import MessageSegmentPlus, markdown_param
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -51,13 +48,13 @@ zaohua_xiuxian = on_command('造化力量', permission=SUPERUSER, priority=15, b
 cz = on_command('创造力量', permission=SUPERUSER, priority=15, block=True)
 hmll = on_command("毁灭力量", priority=5, permission=SUPERUSER, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
-set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=GROUP and (SUPERUSER | GROUP_ADMIN | GROUP_OWNER), priority=5, block=True)
+set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=SUPERUSER, priority=5, block=True)
 set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
 super_help = on_command("修仙手册", aliases={"修仙管理"}, permission=SUPERUSER, priority=15, block=True)
-xiuxian_updata_level = on_fullmatch('修仙适配', permission=SUPERUSER, priority=15, block=True)
+xiuxian_updata_level = on_command('修仙适配', permission=SUPERUSER, priority=15, block=True)
 clear_xiangyuan = on_command("清空仙缘", permission=SUPERUSER, priority=5, block=True)
 xiuxian_novice = on_command('重置新手礼包', permission=SUPERUSER, priority=15,block=True)
-create_new_rift = on_fullmatch("生成秘境", priority=5, permission=SUPERUSER, block=True)
+create_new_rift = on_command("生成秘境", priority=5, permission=SUPERUSER, block=True)
 do_work_cz = on_command("重置悬赏令", permission=SUPERUSER, priority=6, block=True)
 training_reset = on_command("重置历练", permission=SUPERUSER, priority=6, block=True)
 boss_reset = on_command("重置世界BOSS", permission=SUPERUSER, priority=6, block=True)
@@ -68,6 +65,7 @@ unblackhouse = on_command("解除小黑屋", aliases={"放出小黑屋", "解禁
 view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, permission=SUPERUSER, priority=10, block=True)
 impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
 dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
+migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1126,7 +1124,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 value = " "
             params.append({"key": key, "values": [value]})
 
-    msg = MessageSegmentPlus.markdown_template(template_id, params, button_id)
+    msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
     print(f"传入：\n{args_str}\n\n解析：\n{params}")
     await bot.send(event, msg)
 
@@ -1222,8 +1220,22 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     text = text.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://').replace("\\n", "\r").replace("\n", "\r")
 
     try:
-        msg = MessageSegmentPlus.markdown(text)
+        msg = MessageSegment.markdown(bot, text)
         await bot.send(event, msg)
     except Exception as e:
         logger.error(f"dm发送markdown失败: {e}")
         await handle_send(bot, event, "Markdown发送失败，请检查内容格式或平台是否支持。")
+
+@migrate_qqid_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """将数据库中的QQ user_id迁移为真实ID"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    if XiuConfig().gsk_link:
+        await handle_send(bot, event, "开始执行QQID迁移，正在自动备份并更新数据库，请稍候...")
+    else:
+        await handle_send(bot, event, "当前gsk地址为空，请先修改配置gsk_link")
+        await migrate_qqid_cmd.finish()
+
+    ok, msg = migrate_user_id_to_openid()
+    await handle_send(bot, event, msg)
+    await migrate_qqid_cmd.finish()

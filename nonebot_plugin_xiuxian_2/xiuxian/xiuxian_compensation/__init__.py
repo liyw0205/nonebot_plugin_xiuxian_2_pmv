@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union, Any, Literal
 
 from nonebot import on_command, require
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     Message,
     MessageEvent,
@@ -27,7 +27,6 @@ from ..xiuxian_utils.utils import (
     check_user,
     Txt2Img,
     get_msg_pic,
-    CommandObjectID,
     handle_send,
     send_msg_handler,
     number_to

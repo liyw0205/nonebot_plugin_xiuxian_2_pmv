@@ -1,7 +1,7 @@
 import random
 from datetime import datetime
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
@@ -13,7 +13,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md, get_impersonating_target
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_partner
 from .draw_changelog import get_commits, create_changelog_image
@@ -28,6 +28,7 @@ from ..xiuxian_natal_treasure.natal_data import NatalTreasure # 新增：导入 
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
+my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=5, block=True)
 changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
 
 sql_message = XiuxianDateManage()  # sql类
@@ -87,7 +88,7 @@ async def get_user_xiuxian_info(user_id):
             affection_level = "💗 初识情愫"
         else:
             affection_level = "💓 缘分伊始"
-        partner_info = f"{partner_info['user_name']} ({affection_level})"
+        partner_info = f"{partner_info['user_name']} ({affection_level})" if partner_info else "无"
     
     user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
@@ -159,7 +160,6 @@ async def get_user_xiuxian_info(user_id):
     
     # 格式化文本消息，本命法宝只显示名称和等级
     text_msg = f"""
-ID：{user_id}
 道号: {user_name}
 境界: {user_info['level']}
 修为: {number_to(user_info['exp'])}
@@ -275,6 +275,49 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
 
     await avatar_switch_cmd.finish()
+
+@my_id_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def my_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查询当前ID信息（含伪装/化身状态）"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    real_user_id = str(event.get_user_id())
+
+    # 群号
+    if isinstance(event, GroupMessageEvent):
+        group_id = str(event.group_id)
+    else:
+        group_id = "私聊无群号"
+
+    # 伪装目标（若有）
+    impersonated_id = get_impersonating_target(real_user_id)
+
+    # 化身激活ID（若有）
+    avatar_active_id = player_data_manager.get_field_data(real_user_id, "avatar", "active_id")
+    avatar_active_id = str(avatar_active_id) if avatar_active_id else real_user_id
+
+    # 生效ID优先级：伪装 > 化身 > 本体（与现有逻辑一致）
+    effective_user_id = impersonated_id if impersonated_id else avatar_active_id
+
+    # 身份状态描述
+    status_list = []
+    if impersonated_id:
+        status_list.append(f"伪装中 -> {impersonated_id}")
+    if avatar_active_id != real_user_id:
+        status_list.append(f"化身中 -> {avatar_active_id}")
+    if not status_list:
+        status_list.append("正常（本体）")
+
+    msg = (
+        f"你的ID信息如下：\n"
+        f"用户ID：{real_user_id}\n"
+        f"当前ID：{effective_user_id}\n"
+        f"群ID：{group_id}\n"
+        f"状态：{'；'.join(status_list)}"
+    )
+
+    await handle_send(bot, event, msg)
+    await my_id_cmd.finish()
 
 @changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

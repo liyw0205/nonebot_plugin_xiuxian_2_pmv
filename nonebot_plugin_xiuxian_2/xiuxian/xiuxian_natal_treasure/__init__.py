@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,

@@ -10,15 +10,12 @@ import os
 from nonebot.rule import Rule
 from nonebot import get_bots, get_bot, on_command, require
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
-    GROUP_ADMIN,
-    GROUP_OWNER,
-    ActionFailed,
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldown
@@ -37,7 +34,7 @@ from ..xiuxian_utils.item_json import Items
 items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
-    get_msg_pic, CommandObjectID,
+    get_msg_pic,
     send_msg_handler, log_message, handle_send, update_statistics_value
 )
 from .boss_limit import boss_limit, player_data_manager
@@ -174,14 +171,14 @@ async def set_boss_limits_reset():
     logger.opt(colors=True).info(f"<green>世界BOSS重置成功！</green>")
 
 @boss_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__ 
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="查询", v1="查询世界BOSS", k2="信息", v2="世界BOSS信息", k3="商店", v3="世界BOSS商店")
     await boss_help.finish()
 
 @boss_admin.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def boss_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def boss_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__2 
     await handle_send(bot, event, msg)
@@ -493,10 +490,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 更新讨伐次数
     boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
-    try:
-        await send_msg_handler(bot, event, result)
-    except ActionFailed:
-        msg += f"\nBoss战消息发送错误,可能被风控!"
+    await send_msg_handler(bot, event, result)
     if drops_id:
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1=f"讨伐世界BOSS{boss_num}", k2="查询", v2=f"查询世界BOSS{boss_num}", k3="物品", v3=f"查看效果 {drops_info['name']}")
     else:
@@ -561,10 +555,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     battle_flag[group_id] = False
 
-    try:
-        await send_msg_handler(bot, event, result)
-    except ActionFailed:
-            msg += f"\nBoss战消息发送错误,可能被风控!"
+    await send_msg_handler(bot, event, result)
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战稻草人", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
     await challenge_scarecrow.finish()
 
@@ -649,10 +640,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         msg = f"道友挑战训练傀儡，奋力攻击后共造成 {number_to(total_damage)} 伤害，训练傀儡岿然不动，继续等待挑战者！"
 
     battle_flag[group_id] = False
-    try:
-        await send_msg_handler(bot, event, result)
-    except ActionFailed:
-        msg += f"\nBoss战消息发送错误,可能被风控!"
+    await send_msg_handler(bot, event, result)
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战训练傀儡", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
     await challenge_training_puppet.finish()
     

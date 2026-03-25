@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from nonebot import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent, Message
+from ..adapter_compat import GroupMessageEvent, PrivateMessageEvent, Message
 
 # 导入你的现有函数（如果存在）
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager

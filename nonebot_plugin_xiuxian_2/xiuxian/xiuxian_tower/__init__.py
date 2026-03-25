@@ -5,7 +5,7 @@ from datetime import datetime
 from nonebot import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
 from nonebot.log import logger
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     Message,
     GroupMessageEvent,

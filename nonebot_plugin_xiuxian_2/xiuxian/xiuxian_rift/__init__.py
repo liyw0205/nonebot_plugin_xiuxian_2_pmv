@@ -1,15 +1,13 @@
 import random
 from datetime import datetime, timedelta
-from nonebot import get_bots, get_bot, on_command, on_fullmatch
+from nonebot import get_bots, get_bot, on_command
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
-    GROUP_ADMIN,
-    GROUP_OWNER,
     MessageSegment
 )
 from .old_rift_info import old_rift_info
@@ -19,7 +17,7 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    send_msg_handler, get_msg_pic, CommandObjectID, log_message, handle_send, update_statistics_value
+    send_msg_handler, get_msg_pic, log_message, handle_send, update_statistics_value
 )
 from .riftconfig import get_rift_config, savef_rift
 from .jsondata import save_rift_data, read_rift_data
@@ -36,8 +34,8 @@ config = get_rift_config() # 获取秘境配置
 groups = config['open']  # list
 
 my_rift_count = on_command("秘境次数", aliases={"秘境进度"}, priority=7, block=True)
-explore_rift = on_fullmatch("探索秘境", priority=5, block=True)
-rift_help = on_fullmatch("秘境帮助", priority=6, block=True)
+explore_rift = on_command("探索秘境", priority=5, block=True)
+rift_help = on_command("秘境帮助", priority=6, block=True)
 complete_rift = on_command("秘境结算", aliases={"结算秘境"}, priority=7, block=True)
 break_rift = on_command("秘境终止", aliases={"终止秘境"}, priority=7, block=True)
 
@@ -200,7 +198,7 @@ async def show_rift_progress(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await my_rift_count.finish()
 
 @rift_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_help:

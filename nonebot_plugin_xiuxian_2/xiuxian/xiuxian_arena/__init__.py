@@ -4,7 +4,7 @@ from datetime import datetime
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_msg_handler, update_statistics_value

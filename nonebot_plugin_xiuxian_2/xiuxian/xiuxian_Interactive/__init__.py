@@ -1,6 +1,6 @@
 from nonebot import on_command
 from .. import NICKNAME
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     GroupMessageEvent,

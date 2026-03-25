@@ -5,8 +5,8 @@ import json
 from nonebot.log import logger
 from datetime import datetime, timedelta
 from pathlib import Path
-from nonebot import on_command, on_fullmatch
-from nonebot.adapters.onebot.v11 import (
+from nonebot import on_command
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
@@ -26,7 +26,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.utils import (
     number_to, check_user, send_msg_handler,
-    check_user_type, get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
+    check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_work import count
@@ -55,28 +55,28 @@ BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 two_exp_limit = 3 # 默认双修次数上限，修仙之人一天3次也不奇怪（
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
-buffinfo = on_fullmatch("我的功法", priority=25, block=True)
+buffinfo = on_command("我的功法", priority=25, block=True)
 out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=True)
-in_closing = on_fullmatch("闭关", priority=5, block=True)
+in_closing = on_command("闭关", priority=5, block=True)
 up_exp = on_command("修炼", priority=5, block=True)
 reset_exp = on_command("重置修炼状态", priority=5, block=True)
 stone_exp = on_command("灵石修炼", aliases={"灵石修仙"}, priority=5, block=True)
 two_exp_invite = on_command("双修", priority=6, block=True)
-two_exp_accept = on_fullmatch("同意双修", priority=5, block=True)
-two_exp_reject = on_fullmatch("拒绝双修", priority=5, block=True)
+two_exp_accept = on_command("同意双修", priority=5, block=True)
+two_exp_reject = on_command("拒绝双修", priority=5, block=True)
 two_exp_protect = on_command("双修保护", priority=5, block=True)
-mind_state = on_fullmatch("我的状态", priority=7, block=True)
+mind_state = on_command("我的状态", priority=7, block=True)
 my_exp = on_command('我的修为', aliases={'修为'}, priority=10, block=True)
 qc = on_command("切磋", priority=6, block=True)
 buff_help = on_command("功法帮助", aliases={"灵田帮助", "洞天福地帮助"}, priority=5, block=True)
 double_cultivation_help = on_command("道侣帮助", aliases={"双修帮助"}, priority=5, block=True)
-blessed_spot_creat = on_fullmatch("洞天福地购买", priority=10, block=True)
-blessed_spot_info = on_fullmatch("洞天福地查看", priority=11, block=True)
+blessed_spot_creat = on_command("洞天福地购买", priority=10, block=True)
+blessed_spot_info = on_command("洞天福地查看", priority=11, block=True)
 blessed_spot_rename = on_command("洞天福地改名", priority=7, block=True)
-ling_tian_up = on_fullmatch("灵田开垦", priority=5, block=True)
-del_exp_decimal = on_fullmatch("抑制黑暗动乱", priority=9, block=True)
-my_exp_num = on_fullmatch("我的双修次数", priority=9, block=True)
-daily_info = on_fullmatch("日常", priority=9, block=True)
+ling_tian_up = on_command("灵田开垦", priority=5, block=True)
+del_exp_decimal = on_command("抑制黑暗动乱", priority=9, block=True)
+my_exp_num = on_command("我的双修次数", priority=9, block=True)
+daily_info = on_command("日常", priority=9, block=True)
 my_partner = on_command("我的道侣", priority=5, block=True)
 bind_partner = on_command("绑定道侣", aliases={"结为道侣"}, priority=5, block=True)
 agree_bind = on_command("同意道侣", aliases={"接受道侣"}, priority=5, block=True)
@@ -145,7 +145,7 @@ async def two_exp_cd_up():
 
 
 @buff_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """功法帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __buff_help__
@@ -153,7 +153,7 @@ async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
     await buff_help.finish()
 
 @double_cultivation_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def double_cultivation_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def double_cultivation_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """双修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __double_cultivation_help__
@@ -440,7 +440,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
-    if int(user_id) == int(two_qq):
+    if str(user_id) == str(two_qq):
         msg = "道友无法与自己双修！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
@@ -550,12 +550,12 @@ async def check_is_partner(user_id_1, user_id_2):
     """检查两个用户是否是道侣关系"""
     # 检查用户1的道侣信息中是否包含用户2
     partner_data_1 = load_partner(user_id_1)
-    if partner_data_1 and partner_data_1.get('partner_id') == int(user_id_2):
+    if partner_data_1 and partner_data_1.get('partner_id') == str(user_id_2):
         return True
     
     # 检查用户2的道侣信息中是否包含用户1
     partner_data_2 = load_partner(user_id_2)
-    if partner_data_2 and partner_data_2.get('partner_id') == int(user_id_1):
+    if partner_data_2 and partner_data_2.get('partner_id') == str(user_id_1):
         return True
     
     return False
@@ -2124,7 +2124,7 @@ def load_player_user3(user_id, file_name):
     except (json.JSONDecodeError, UnicodeDecodeError, FileNotFoundError):
         return {}
 
-migrate_data = on_fullmatch("player数据同步", priority=25, block=True)
+migrate_data = on_command("player数据同步", priority=25, block=True)
 @migrate_data.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2159,7 +2159,7 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data2 = on_fullmatch("player数据同步2", priority=25, block=True)
+migrate_data2 = on_command("player数据同步2", priority=25, block=True)
 @migrate_data2.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2179,7 +2179,7 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data3 = on_fullmatch("player数据同步3", priority=25, block=True)
+migrate_data3 = on_command("player数据同步3", priority=25, block=True)
 @migrate_data3.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2197,7 +2197,7 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         logger.info(f"更新通天塔: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data4 = on_fullmatch("player数据同步4", priority=25, block=True)
+migrate_data4 = on_command("player数据同步4", priority=25, block=True)
 @migrate_data4.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()

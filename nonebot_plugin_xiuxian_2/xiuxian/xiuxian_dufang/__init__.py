@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from nonebot import on_command
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,

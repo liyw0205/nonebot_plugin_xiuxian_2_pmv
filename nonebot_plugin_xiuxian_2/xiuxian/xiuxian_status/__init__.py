@@ -6,16 +6,13 @@ from datetime import datetime, timezone, timedelta
 from nonebot import on_command, __version__ as nb_version
 from nonebot.permission import SUPERUSER
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
-    GROUP_ADMIN,
-    GROUP_OWNER,
-    ActionFailed
 )
 from ..xiuxian_utils.utils import handle_send, number_to
 from ..xiuxian_utils.lay_out import Cooldown

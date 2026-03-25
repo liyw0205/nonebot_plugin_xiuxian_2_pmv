@@ -6,16 +6,15 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, BuffJsonDate,
     get_main_info_msg, UserBuffDate, get_sec_msg
 )
-from nonebot import on_command, on_fullmatch, require
+from nonebot import on_command, on_command, require
 from nonebot.log import logger
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
-    ActionFailed
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
 from nonebot.params import CommandArg
@@ -25,7 +24,7 @@ from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
 from ..xiuxian_utils.utils import (
     check_user, number_to,
-    get_msg_pic, send_msg_handler, CommandObjectID, handle_send,
+    get_msg_pic, send_msg_handler, handle_send,
     Txt2Img, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
@@ -66,12 +65,12 @@ sect_donate = on_command("宗门捐献", aliases={"宗门贡献"}, priority=5, b
 sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
 sect_owner_change = on_command("宗主传位", priority=5, block=True)
-sect_list = on_fullmatch("宗门列表", priority=5, block=True)
-sect_power_top = on_fullmatch("宗门战力排行榜", priority=5, block=True)
-sect_help = on_fullmatch("宗门帮助", priority=5, block=True)
+sect_list = on_command("宗门列表", priority=5, block=True)
+sect_power_top = on_command("宗门战力排行榜", priority=5, block=True)
+sect_help = on_command("宗门帮助", priority=5, block=True)
 sect_task = on_command("宗门任务接取", aliases={"我的宗门任务"}, priority=7, block=True)
-sect_task_complete = on_fullmatch("宗门任务完成", priority=7, block=True)
-sect_task_refresh = on_fullmatch("宗门任务刷新", priority=7, block=True)
+sect_task_complete = on_command("宗门任务完成", priority=7, block=True)
+sect_task_refresh = on_command("宗门任务刷新", priority=7, block=True)
 sect_mainbuff_get = on_command("宗门功法搜寻", aliases={"搜寻宗门功法"}, priority=6, block=True)
 sect_mainbuff_learn = on_command("学习宗门功法", priority=5, block=True)
 sect_secbuff_get = on_command("宗门神通搜寻", aliases={"搜寻宗门神通"}, priority=6, block=True)
@@ -309,19 +308,15 @@ async def auto_handle_inactive_sect_owners():
         logger.info("✅ 宗门状态检测处理完成")
 
 @sect_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        msg = cache_help[session_id]
-        await sect_help.finish()
-    else:
-        msg = __sect_help__
-        title = ""
-        font_size = 32
-        img = Txt2Img(font_size)
-        await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
-        await sect_help.finish()
+    msg = __sect_help__
+    title = ""
+    font_size = 32
+    img = Txt2Img(font_size)
+    await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
+    await sect_help.finish()
 
 @sect_position_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1235,20 +1230,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             msg_list.append(footer)
             page = ["翻页", f"查看宗门成员{current_page + 1}", "变更", "宗门职位变更", "踢出", "踢出宗门", f"{current_page}/{total_pages}"]
             # 发送消息
-            try:
-                await send_msg_handler(
-                    bot, 
-                    event, 
-                    '宗门成员', 
-                    bot.self_id, 
-                    msg_list,
-                    title=title,
-                    page=page
-                )
-            except ActionFailed:
-                # 如果转发消息失败，改为普通消息发送
-                combined_msg = "\n".join(msg_list)
-                await handle_send(bot, event, combined_msg)
+            await send_msg_handler(bot, event, '宗门成员', bot.self_id, msg_list, title=title, page=page)
         else:
             msg = "一介散修，莫要再问。"
             await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")

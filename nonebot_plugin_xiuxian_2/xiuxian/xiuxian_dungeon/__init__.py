@@ -5,17 +5,16 @@ from typing import Union, Any
 from nonebot import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GroupMessageEvent,
     PrivateMessageEvent,
     Message,
-    ActionFailed,
     MessageSegment
 )
 
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet
-from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, CommandObjectID, _impersonating_users
+from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users
 from ..xiuxian_utils.player_fight import pve_fight
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
@@ -84,21 +83,15 @@ __team_help__ = f"""
 
 
 @help_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_team_help:
-        msg = cache_team_help[session_id]
-        await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
-        await help_team_cmd.finish()
-    else:
-        msg = __team_help__
-        await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
+    msg = __team_help__
+    await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
     await help_team_cmd.finish()
 
 
 @create_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
-                              args: Message = CommandArg()):
+async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     """创建队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -135,8 +128,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @invite_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
-                              args: Message = CommandArg()):
+async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     """邀请成员组队"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -237,7 +229,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     try:
         if isinstance(event, GroupMessageEvent): # 如果是群聊邀请，则尝试私聊通知被邀请者
             await bot.send_private_msg(user_id=int(target_user_id), message=f"你在群{event.group_id}收到了来自{user_info['user_name']}的组队邀请，请在1分钟内回复【同意组队】或【拒绝组队】。")
-    except ActionFailed as e:
+    except Exception as e:
         print(f"私聊通知被邀请者失败: {e}")
 
     await invite_team_cmd.finish()
@@ -315,7 +307,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
             else: # 如果队长在私聊，或者其他情况
                 await bot.send_private_msg(user_id=int(inviter_id), message=f"你的队伍【{team_info['team_name']}】加入了新成员：{user_info['user_name']}！")
 
-        except ActionFailed as e:
+        except Exception as e:
             print(f"通知队长失败: {e}")
             
     else:
@@ -399,8 +391,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 
 @kick_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent],
-                            args: Message = CommandArg()):
+async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     """踢出队伍成员"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -576,16 +567,10 @@ async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
 
 @help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def help_dungeon_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
-                            session_id: int = CommandObjectID()):
+async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_dungeon_help:
-        msg = cache_dungeon_help[session_id]
-        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
-        await help_dungeon_cmd.finish()
-    else:
-        msg = __dungeon_help__
-        await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
+    msg = __dungeon_help__
+    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
     await help_dungeon_cmd.finish()
 
 
@@ -817,7 +802,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             msg = f"道友不敌【{boss_info[0]['name']}】，重伤逃遁。"
         try:
             await send_msg_handler(bot, event, result)
-        except ActionFailed:
+        except Exception:
             msg += f"\n对战消息发送错误,可能被风控!"
         await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
         await explore_dungeon.finish()
@@ -846,7 +831,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             msg += f"\n道友不敌，重伤逃遁。"
         try:
             await send_msg_handler(bot, event, result)
-        except ActionFailed:
+        except Exception:
             msg += f"\n对战消息发送错误,可能被风控!"
 
     elif event_result["type"] == "treasure":

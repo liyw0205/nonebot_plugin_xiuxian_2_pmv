@@ -4,7 +4,7 @@ from .xiuxian_utils.download_xiuxian_data import download_xiuxian_data
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
 from nonebot.message import event_preprocessor, IgnoredException
-from nonebot.adapters.onebot.v11 import (
+from .adapter_compat import (
     Bot,
     GroupMessageEvent,
     PrivateMessageEvent

@@ -9,8 +9,16 @@ from asyncio import get_running_loop
 from typing import DefaultDict, Dict, Any
 from nonebot.matcher import Matcher
 from nonebot.params import Depends
-from nonebot.adapters.onebot.v11.event import MessageEvent, GroupMessageEvent, PrivateMessageEvent
-from nonebot.adapters.onebot.v11 import Bot, MessageSegment
+from ..adapter_compat import (
+    Bot,
+    GROUP,
+    Message,
+    MessageEvent,
+    GroupMessageEvent,
+    PrivateMessageEvent,
+    MessageSegment
+)
+from ..adapter_compat import patch_bot_inplace, patch_event_inplace
 from ..xiuxian_config import XiuConfig, JsonConfig
 from .xiuxian2_handle import XiuxianDateManage
 from .utils import get_msg_pic, check_user, handle_send
@@ -139,6 +147,8 @@ def Cooldown(
         return
 
     async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent | PrivateMessageEvent):
+        bot = patch_bot_inplace(bot)
+        event = patch_event_inplace(event)
         if XiuConfig().at_response:
             if not event.to_me:
                 logger.opt(colors=True).success(f"<green>不为艾特命令,已忽略！</green>")

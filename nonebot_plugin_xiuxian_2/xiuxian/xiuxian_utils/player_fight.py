@@ -1202,7 +1202,7 @@ class BattleSystem:
             "type": "node",
             "data": {
                 "name": f"{unit.name} 当前血量：{number_to(int(unit.hp))} / {number_to(int(unit.max_hp))}",
-                "uin": int(unit.id),
+                "uin": str(unit.id),
                 "content": message
             }
         }

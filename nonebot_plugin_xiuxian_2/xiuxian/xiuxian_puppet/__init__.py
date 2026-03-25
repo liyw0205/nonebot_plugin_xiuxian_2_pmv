@@ -2,7 +2,7 @@ import random
 from datetime import datetime
 from nonebot import require
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.item_json import Items

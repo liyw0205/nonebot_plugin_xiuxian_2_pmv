@@ -2,7 +2,7 @@ import random
 from datetime import datetime
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     GroupMessageEvent,
@@ -19,7 +19,6 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,
-    CommandObjectID,
     handle_send
 )
 
@@ -63,7 +62,7 @@ beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
 novice = on_command("新手礼包", priority=7, block=True)
     
 @beg_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     if session_id in cache_beg_help:
         msg = cache_beg_help[session_id]

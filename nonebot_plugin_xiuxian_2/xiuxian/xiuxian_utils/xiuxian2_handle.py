@@ -69,7 +69,7 @@ class XiuxianDateManage:
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "user_xiuxian" (
       "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "user_id" INTEGER NOT NULL,
+         "user_id" TEXT NOT NULL,
       "sect_id" INTEGER DEFAULT NULL,
       "sect_position" INTEGER DEFAULT NULL,
       "stone" integer DEFAULT 0,
@@ -95,7 +95,7 @@ class XiuxianDateManage:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "user_cd" (
-  "user_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "user_id" TEXT NOT NULL PRIMARY KEY AUTOINCREMENT,
   "type" integer DEFAULT 0,
   "create_time" integer DEFAULT NULL,
   "scheduled_time" integer,
@@ -121,7 +121,7 @@ class XiuxianDateManage:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "back" (
-  "user_id" INTEGER NOT NULL,
+  "user_id" TEXT NOT NULL,
   "goods_id" INTEGER NOT NULL,
   "goods_name" TEXT,
   "goods_type" TEXT,
@@ -141,7 +141,7 @@ class XiuxianDateManage:
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "BuffInfo" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "user_id" integer DEFAULT 0,
+  "user_id" TEXT DEFAULT 0,
   "main_buff" integer DEFAULT 0,
   "sec_buff" integer DEFAULT 0,
   "effect1_buff" integer DEFAULT 0,
@@ -1786,30 +1786,34 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
 
     def get_item_by_good_id_and_user_id(self, user_id, goods_id):
         """根据物品id、用户id获取物品信息"""
-        sql = f"select * from back WHERE user_id=? and goods_id=?"
+        sql = "select * from back WHERE user_id=? and goods_id=?"
         cur = self.conn.cursor()
-        cur.execute(sql, (user_id, goods_id))
+        cur.execute(sql, (str(user_id), int(goods_id)))
         result = cur.fetchone()
         if not result:
             return None
-    
+
         columns = [column[0] for column in cur.description]
         item_dict = dict(zip(columns, result))
         return item_dict
 
 
-    def update_back_equipment(self, sql_str):
-        """更新背包,传入sql"""
-        logger.opt(colors=True).info(f"<green>执行的sql:{sql_str}</green>")
+    def update_back_equipment(self, sql_str, params=None):
+        """更新背包, 支持参数化SQL"""
+        logger.opt(colors=True).info(f"<green>执行的sql:{sql_str} | params:{params}</green>")
         cur = self.conn.cursor()
-        cur.execute(sql_str)
+        if params is not None:
+            cur.execute(sql_str, params)
+        else:
+            cur.execute(sql_str)
         self.conn.commit()
+
 
     def reset_user_drug_resistance(self, user_id):
         """重置用户耐药性"""
-        sql = f"UPDATE back SET all_num=0 where goods_type='丹药' and user_id={user_id}"
+        sql = "UPDATE back SET all_num=0 WHERE goods_type='丹药' AND user_id=?"
         cur = self.conn.cursor()
-        cur.execute(sql, )
+        cur.execute(sql, (str(user_id),))
         self.conn.commit()
 
     def update_back_j(self, user_id, goods_id, num=1, use_key=0):
@@ -1818,8 +1822,14 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         :num 减少数量  默认1
         :use_key 是否使用，丹药使用才传 默认0
         """
-        num = abs(num)
+        num = abs(int(num))
+        user_id = str(user_id)
+        goods_id = int(goods_id)
+
         back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
+        if not back:
+            return
+
         if back['goods_type'] == "丹药" and use_key == 1:  # 丹药要判断耐药性、日使用上限
             if back['bind_num'] >= 1:
                 bind_num = back['bind_num'] - num  # 优先使用绑定物品
@@ -1834,18 +1844,29 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
                 bind_num = back['bind_num']
             day_num = back['day_num']
             all_num = back['all_num']
+
         goods_num = back['goods_num'] - num
-        if int(goods_num) == 0:
+        if int(goods_num) <= 0:
+            goods_num = 0
             bind_num = 0
+
         bind_num = min(bind_num, goods_num)
         bind_num = max(bind_num, 0)
-        
-        now_time = datetime.now()
-        sql_str = f"UPDATE back set update_time='{now_time}',action_time='{now_time}',goods_num={goods_num},day_num={day_num},all_num={all_num},bind_num={bind_num} WHERE user_id={user_id} and goods_id={goods_id}"
-        cur = self.conn.cursor()
-        cur.execute(sql_str)
-        self.conn.commit()
 
+        now_time = datetime.now()
+        sql_str = """
+            UPDATE back
+            SET update_time=?,
+                action_time=?,
+                goods_num=?,
+                day_num=?,
+                all_num=?,
+                bind_num=?
+            WHERE user_id=? AND goods_id=?
+        """
+        cur = self.conn.cursor()
+        cur.execute(sql_str, (now_time, now_time, goods_num, day_num, all_num, bind_num, user_id, goods_id))
+        self.conn.commit()
 
     def _ensure_puppet_column(self):
         """确保 user_xiuxian 表中存在 puppet_status 字段，没有就创建"""
@@ -2928,7 +2949,7 @@ class XIUXIAN_IMPART_BUFF:
                 except sqlite3.OperationalError:
                     c.execute(f"""CREATE TABLE "xiuxian_impart" (
     "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "user_id" integer DEFAULT 0,
+    "user_id" TEXT DEFAULT 0,
     "impart_hp_per" integer DEFAULT 0,
     "impart_atk_per" integer DEFAULT 0,
     "impart_mp_per" integer DEFAULT 0,
@@ -3825,3 +3846,285 @@ async def close_db():
     XIUXIAN_IMPART_BUFF().close()
     # PlayerDataManager().close() # PlayerDataManager 的连接已改为按需打开和关闭
     TradeDataManager().close()
+
+import sqlite3
+from pathlib import Path
+
+def _qid(name: str) -> str:
+    # 中文注释：安全引用SQLite标识符
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _get_tables(conn: sqlite3.Connection):
+    # 中文注释：获取所有业务表，排除sqlite内部表
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    return [r[0] for r in cur.fetchall() if r and r[0] and not r[0].startswith("sqlite_")]
+
+
+def _get_table_info(conn: sqlite3.Connection, table: str):
+    # 中文注释：获取表结构信息
+    cur = conn.cursor()
+    cur.execute(f'PRAGMA table_info({_qid(table)})')
+    return cur.fetchall()  # cid, name, type, notnull, dflt_value, pk
+
+
+def _has_autoincrement(conn: sqlite3.Connection, table: str) -> bool:
+    # 中文注释：检查原表是否包含AUTOINCREMENT
+    cur = conn.cursor()
+    cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,))
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return False
+    return "AUTOINCREMENT" in row[0].upper()
+
+
+def _build_create_sql_by_table_info(conn: sqlite3.Connection, table: str, to_text_cols: set[str]) -> str:
+    # 中文注释：基于PRAGMA重建建表SQL，只改指定列为TEXT，保留主键结构
+    cols = _get_table_info(conn, table)
+    if not cols:
+        raise RuntimeError(f"表 {table} 无字段信息")
+
+    col_defs = []
+    pk_cols = []
+    pk_count = sum(1 for c in cols if int(c[5]) > 0)
+    single_pk = (pk_count == 1)
+    autoinc = _has_autoincrement(conn, table)
+
+    for cid, name, ctype, notnull, dflt, pk in cols:
+        raw_type = (ctype or "TEXT").upper().strip()
+        new_type = "TEXT" if name in to_text_cols else raw_type
+
+        part = f"{_qid(name)} {new_type}"
+        if int(notnull) == 1:
+            part += " NOT NULL"
+        if dflt is not None:
+            part += f" DEFAULT {dflt}"
+
+        if int(pk) > 0 and single_pk:
+            part += " PRIMARY KEY"
+            # 中文注释：只有“非改动列”且原来是INTEGER主键且原表有自增，才保留AUTOINCREMENT
+            if (name not in to_text_cols) and (raw_type in ("INTEGER", "INT")) and autoinc:
+                part += " AUTOINCREMENT"
+        elif int(pk) > 0:
+            pk_cols.append((name, int(pk)))
+
+        col_defs.append(part)
+
+    if pk_cols:
+        pk_cols = [x[0] for x in sorted(pk_cols, key=lambda x: x[1])]
+        col_defs.append("PRIMARY KEY (" + ", ".join(_qid(x) for x in pk_cols) + ")")
+
+    tmp_table = f"{table}__tmp_rebuild"
+    return f'CREATE TABLE {_qid(tmp_table)} (\n  ' + ",\n  ".join(col_defs) + "\n)"
+
+
+def _rebuild_table_convert_columns_to_text(conn: sqlite3.Connection, table: str, to_text_cols: set[str]):
+    # 中文注释：重建表并将指定列改为TEXT，数据原样拷贝（值转str仅针对目标列）
+    cols_info = _get_table_info(conn, table)
+    cols = [c[1] for c in cols_info]
+    hit_cols = [c for c in cols if c in to_text_cols]
+    if not hit_cols:
+        return 0
+
+    cur = conn.cursor()
+    tmp_table = f"{table}__tmp_rebuild"
+    cur.execute(f'DROP TABLE IF EXISTS {_qid(tmp_table)}')
+
+    create_sql = _build_create_sql_by_table_info(conn, table, to_text_cols)
+    cur.execute(create_sql)
+
+    col_sql = ", ".join(_qid(c) for c in cols)
+    cur.execute(f'SELECT {col_sql} FROM {_qid(table)}')
+    rows = cur.fetchall()
+
+    ins_sql = f'INSERT INTO {_qid(tmp_table)} ({col_sql}) VALUES ({",".join(["?"]*len(cols))})'
+    copied = 0
+    for row in rows:
+        row = list(row)
+        for i, c in enumerate(cols):
+            if c in to_text_cols and row[i] is not None:
+                row[i] = str(row[i])  # 中文注释：目标列统一存字符串
+        cur.execute(ins_sql, tuple(row))
+        copied += 1
+
+    cur.execute(f'DROP TABLE {_qid(table)}')
+    cur.execute(f'ALTER TABLE {_qid(tmp_table)} RENAME TO {_qid(table)}')
+    return copied
+
+
+def _update_ids_in_table(conn: sqlite3.Connection, table: str, target_cols: set[str], id_map: dict[str, str]) -> int:
+    # 中文注释：按严格相等匹配替换ID，str(db_value)==str(old_id)才替换
+    cols_info = _get_table_info(conn, table)
+    cols = [c[1] for c in cols_info]
+    hit_cols = [c for c in cols if c in target_cols]
+    if not hit_cols:
+        return 0
+
+    cur = conn.cursor()
+    updated_cells = 0
+    for col in hit_cols:
+        # 逐个old_id严格替换
+        for old_id, new_id in id_map.items():
+            if str(old_id) == str(new_id):
+                continue
+            sql = f'UPDATE {_qid(table)} SET {_qid(col)}=? WHERE CAST({_qid(col)} AS TEXT)=?'
+            cur.execute(sql, (str(new_id), str(old_id)))
+            if cur.rowcount and cur.rowcount > 0:
+                updated_cells += cur.rowcount
+    return updated_cells
+
+
+def migrate_user_id_to_openid():
+    """
+    新逻辑迁移：
+    1) 先把目标字段改TEXT
+    2) 再做ID值替换（严格相等）
+    """
+    try:
+        # 中文注释：先备份
+        ok, backup_msg = backup_db_files()
+        if not ok:
+            return False, f"备份失败，终止迁移：{backup_msg}"
+
+        db_paths = {
+            "xiuxian.db": DATABASE / "xiuxian.db",
+            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
+            "trade.db": DATABASE / "trade.db",
+            "player.db": DATABASE / "player.db",
+        }
+
+        # 中文注释：字段类型转换规则
+        common_text_cols = {"user_id"}  # 所有库
+        player_extra_cols = {"partner_id", "group_id"}  # player.db额外
+
+        # =========================
+        # A. 先全库改字段类型为TEXT
+        # =========================
+        type_logs = []
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                type_logs.append(f"{db_name}: 不存在，跳过")
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            cur = conn.cursor()
+
+            try:
+                cur.execute("BEGIN")
+                tables = _get_tables(conn)
+                converted_rows = 0
+
+                for table in tables:
+                    to_text_cols = set(common_text_cols)
+                    if db_name == "player.db":
+                        to_text_cols |= player_extra_cols
+
+                    converted_rows += _rebuild_table_convert_columns_to_text(conn, table, to_text_cols)
+
+                conn.commit()
+                type_logs.append(f"{db_name}: 字段类型处理完成，重建拷贝行数={converted_rows}")
+            except Exception as e:
+                conn.rollback()
+                type_logs.append(f"{db_name}: 字段类型处理失败 -> {e}")
+            finally:
+                conn.close()
+
+        # =========================
+        # B. 获取用户ID并映射真实ID
+        # =========================
+        xdb = db_paths["xiuxian.db"]
+        if not xdb.exists():
+            return False, "xiuxian.db不存在，无法继续"
+
+        conn = sqlite3.connect(xdb, check_same_thread=False)
+        cur = conn.cursor()
+        cur.execute('SELECT user_id FROM "user_xiuxian"')
+        old_ids = [str(r[0]) for r in cur.fetchall() if r and r[0] is not None]
+        conn.close()
+
+        old_ids = list(set(old_ids))
+        if not old_ids:
+            return False, "未找到任何用户ID"
+
+        from .utils import get_real_id
+        id_map = {}
+        fail_ids = []
+
+        for old_id in old_ids:
+            try:
+                real_id = get_real_id(old_id)
+                if real_id and str(real_id).strip():
+                    id_map[str(old_id)] = str(real_id).strip()
+                else:
+                    fail_ids.append(old_id)
+            except Exception:
+                fail_ids.append(old_id)
+
+        if not id_map:
+            return False, "真实ID转换全部失败，未执行替换"
+
+        # =========================
+        # C. 全库替换ID值（严格相等）
+        # =========================
+        data_logs = []
+        total_updated = 0
+
+        for db_name, db_path in db_paths.items():
+            if not db_path.exists():
+                data_logs.append(f"{db_name}: 不存在，跳过")
+                continue
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            cur = conn.cursor()
+
+            try:
+                cur.execute("BEGIN")
+                tables = _get_tables(conn)
+                target_cols = {"user_id"}
+                if db_name == "player.db":
+                    target_cols |= {"partner_id", "group_id"}
+
+                db_updated = 0
+                for table in tables:
+                    db_updated += _update_ids_in_table(conn, table, target_cols, id_map)
+
+                conn.commit()
+                total_updated += db_updated
+                data_logs.append(f"{db_name}: ID替换完成，更新单元格={db_updated}")
+            except Exception as e:
+                conn.rollback()
+                data_logs.append(f"{db_name}: ID替换失败 -> {e}")
+            finally:
+                conn.close()
+
+        # 中文注释：可选迁移players目录名
+        players_dir = DATABASE / "players"
+        rename_count = 0
+        if players_dir.exists():
+            for old_id, new_id in id_map.items():
+                old_p = players_dir / str(old_id)
+                new_p = players_dir / str(new_id)
+                if old_p.exists() and (not new_p.exists()):
+                    try:
+                        old_p.rename(new_p)
+                        rename_count += 1
+                    except Exception:
+                        pass
+
+        msg = (
+            f"QQID转换完成！\n"
+            f"备份：{backup_msg}\n"
+            f"成功映射：{len(id_map)}\n"
+            f"转换失败：{len(fail_ids)}\n"
+            f"更新总单元格：{total_updated}\n"
+            f"players目录改名：{rename_count}\n"
+            f"\n[字段类型阶段]\n" + "\n".join(type_logs) +
+            f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
+        )
+        return True, msg
+
+    except Exception as e:
+        return False, f"迁移异常中止：{e}"

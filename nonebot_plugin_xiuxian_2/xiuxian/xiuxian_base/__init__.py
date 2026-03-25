@@ -10,17 +10,15 @@ import asyncio
 from datetime import datetime
 from nonebot.typing import T_State
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from nonebot import on_command, on_fullmatch, get_bot
-from nonebot.adapters.onebot.v11 import (
+from nonebot import on_command, get_bot
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
-    GROUP_ADMIN,
-    GROUP_OWNER,
+    MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment,
-    ActionFailed
+    MessageSegment
 )
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -34,7 +32,6 @@ from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
-    CommandObjectID,
     Txt2Img, send_msg_handler, handle_send, handle_send_md, generate_command, get_logs, log_message, get_statistics_data, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
@@ -53,15 +50,15 @@ qqq = XiuConfig().qqq
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
-restart = on_fullmatch("重入仙途", priority=7, block=True)
+restart = on_command("重入仙途", priority=7, block=True)
 sign_in = on_command("修仙签到", priority=13, block=True)
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
-level_up = on_fullmatch("突破", priority=6, block=True)
-level_up_dr = on_fullmatch("渡厄突破", priority=7, block=True)
+level_up = on_command("突破", priority=6, block=True)
+level_up_dr = on_command("渡厄突破", priority=7, block=True)
 level_up_drjd = on_command("渡厄金丹突破", aliases={"金丹突破"}, priority=7, block=True)
 level_up_zj = on_command("直接突破", aliases={"破"}, priority=7, block=True)
 level_up_lx = on_command("连续突破", aliases={"快速突破"}, priority=7, block=True)
@@ -293,13 +290,10 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 3. 组合签到结果和抽奖结果
     msg = f"{result}\n\n{lottery_result}"
     
-    try:
-        log_message(user_id, msg)
-        update_statistics_value(user_id, "修仙签到")
-        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
-        await sign_in.finish()
-    except ActionFailed:
-        await sign_in.finish("修仙界网络堵塞，发送失败!", reply_message=True)
+    log_message(user_id, msg)
+    update_statistics_value(user_id, "修仙签到")
+    await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
+    await sign_in.finish()
 
 @hongyun.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -560,11 +554,7 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
    
     msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
 
-    try:
-        await handle_send(bot, event, msg)
-    except ActionFailed:
-        await bot.send_group_msg(group_id=event.group_id, message="修仙界网络堵塞，发送失败!")
-    await restart.finish()
+    await handle_send(bot, event, msg)
 
 
 @rank.handle(parameterless=[Cooldown(cd_time=1.4)])

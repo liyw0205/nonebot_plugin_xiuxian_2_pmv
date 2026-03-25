@@ -7,17 +7,14 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
-from nonebot import on_command, require, on_fullmatch
-from nonebot.adapters.onebot.v11 import (
+from nonebot import on_command, require
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
-    GROUP_ADMIN,
-    GROUP_OWNER,
-    ActionFailed
 )
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -27,7 +24,7 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, 
-    send_msg_handler, CommandObjectID,
+    send_msg_handler,
     Txt2Img, number_to, handle_send
 )
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -169,12 +166,12 @@ use_item = on_command("道具使用", priority=15, block=True)
 use = on_command("使用", priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("背包帮助", priority=8, block=True)
-xiuxian_sone = on_fullmatch("灵石", priority=4, block=True)
+xiuxian_sone = on_command("灵石", priority=4, block=True)
 compare_items = on_command("快速对比", priority=5, block=True)
 
 # 管理员命令
-check_user_equipment = on_fullmatch("装备检测", priority=4, permission=SUPERUSER, block=True)
-check_user_back = on_fullmatch("背包检测", priority=4, permission=SUPERUSER, block=True)
+check_user_equipment = on_command("装备检测", priority=4, permission=SUPERUSER, block=True)
+check_user_back = on_command("背包检测", priority=4, permission=SUPERUSER, block=True)
 
 
 def get_recover(goods_id, num):
@@ -910,10 +907,7 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         result_msg = f"道友使用灵签宝箓 {num} 个，未能获得任何物品，运气不佳啊！"
     
-    try:
-        await handle_send(bot, event, result_msg)
-    except ActionFailed:
-        await handle_send(bot, event, "使用灵签宝箓结果发送失败！")
+    await handle_send(bot, event, result_msg)
     return
 
 async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):

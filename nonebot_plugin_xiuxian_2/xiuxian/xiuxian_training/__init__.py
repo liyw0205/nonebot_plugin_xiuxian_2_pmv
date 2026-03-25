@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from nonebot import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
-from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value

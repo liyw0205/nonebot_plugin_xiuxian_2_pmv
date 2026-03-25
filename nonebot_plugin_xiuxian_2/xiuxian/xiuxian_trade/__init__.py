@@ -7,17 +7,14 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
-from nonebot import on_command, require, on_fullmatch
-from nonebot.adapters.onebot.v11 import (
+from nonebot import on_command, require
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
-    GROUP_ADMIN,
-    GROUP_OWNER,
-    ActionFailed
 )
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from nonebot.log import logger
@@ -26,7 +23,7 @@ from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
-    send_msg_handler, CommandObjectID,
+    send_msg_handler,
     Txt2Img, number_to, handle_send
 )
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -38,7 +35,6 @@ from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank 
 from ..xiuxian_config import XiuConfig, convert_rank
 from .auction_config import * # 显式导入模块，避免冲突和混乱
 from urllib.parse import quote
-from ..xiuxian_utils.markdown_segment import MessageSegmentPlus
 
 # 初始化全局组件
 items = Items()
@@ -67,7 +63,7 @@ xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
 xianshi_fast_add = on_command("仙肆快速上架", priority=5, block=True)
 my_xian_shop = on_command("我的仙肆", priority=5, block=True)
 xiuxian_shop_view = on_command("仙肆查看", priority=5, block=True)
-xian_shop_off_all = on_fullmatch("清空仙肆", priority=3, permission=SUPERUSER, block=True)
+xian_shop_off_all = on_command("清空仙肆", priority=3, permission=SUPERUSER, block=True)
 xianshi_fast_buy = on_command("仙肆快速购买", priority=5, block=True)
 xian_shop_remove = on_command("仙肆下架", priority=5, block=True)
 xian_buy = on_command("仙肆购买", priority=5, block=True)
@@ -83,7 +79,7 @@ guishi_qiugou = on_command("鬼市求购", priority=5, block=True)
 guishi_cancel_qiugou = on_command("鬼市取消求购", priority=5, block=True)
 guishi_baitan = on_command("鬼市摆摊", priority=5, block=True)
 guishi_shoutan = on_command("鬼市收摊", priority=5, block=True)
-clear_all_guishi = on_fullmatch("清空鬼市", priority=3, permission=SUPERUSER, block=True)
+clear_all_guishi = on_command("清空鬼市", priority=3, permission=SUPERUSER, block=True)
 
 # === 拍卖命令 ===
 auction_view = on_command("拍卖查看", aliases={"查看拍卖"}, priority=5, block=True)
@@ -92,10 +88,10 @@ auction_add = on_command("拍卖上架", priority=5, block=True)
 auction_remove = on_command("拍卖下架", priority=5, block=True)
 my_auction = on_command("我的拍卖", priority=5, block=True)
 auction_info = on_command("拍卖信息", priority=5, block=True)
-auction_start = on_fullmatch("开启拍卖", priority=4, permission=SUPERUSER, block=True)
-auction_end = on_fullmatch("结束拍卖", priority=4, permission=SUPERUSER, block=True)
-auction_lock = on_fullmatch("封闭拍卖", priority=4, permission=SUPERUSER, block=True)
-auction_unlock = on_fullmatch("解封拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_start = on_command("开启拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_end = on_command("结束拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_lock = on_command("封闭拍卖", priority=4, permission=SUPERUSER, block=True)
+auction_unlock = on_command("解封拍卖", priority=4, permission=SUPERUSER, block=True)
 
 # === 交易帮助命令 ===
 trade_help = on_command("交易帮助", aliases={"仙肆帮助", "鬼市帮助", "拍卖帮助"}, priority=8, block=True)
@@ -1011,7 +1007,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
 
         md_text = "\r".join(lines)  # QQ md更建议 \r
-        msg = MessageSegmentPlus.markdown(md_text)
+        msg = MessageSegment.markdown(md_text)
         await bot.send(event=event, message=msg)
         await xiuxian_shop_view.finish()
 

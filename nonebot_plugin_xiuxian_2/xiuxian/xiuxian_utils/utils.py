@@ -12,12 +12,14 @@ from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Union, Dict, Any
-from nonebot.adapters import MessageSegment
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
+    GROUP,
+    Message,
+    MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment,
+    MessageSegment
 )
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
@@ -28,7 +30,6 @@ from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
 from typing import Union
-from .markdown_segment import MessageSegmentPlus, markdown_param
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -197,6 +198,14 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     user_info['user_id'] = user_id_to_check
 
     return isUser, user_info, ""
+
+def get_impersonating_target(user_id: str) -> str | None:
+    """
+    获取管理员当前伪装目标ID
+    :param user_id: 管理员真实ID
+    :return: 被伪装ID，若未伪装则返回None
+    """
+    return _impersonating_users.get(str(user_id))
 
 class Txt2Img:
     """文字转图片"""
@@ -545,26 +554,6 @@ async def get_msg_pic(msg, boss_name="", scale=True):
         pic = img.sync_draw_to(msg, boss_name, scale)
     return pic
 
-def CommandObjectID() -> int:
-    """
-    根据消息事件的类型获取对象id
-    私聊->用户id
-    群聊->群id
-    频道->子频道id
-    :return: 对象id
-    """
-
-    def _event_id(event):
-        if event.message_type == "private":
-            return event.user_id
-        elif event.message_type == "group":
-            return event.group_id
-        elif event.message_type == "guild":
-            return event.channel_id
-
-    return Depends(_event_id)
-
-
 def format_number(num):
     """核心格式化逻辑：处理小数和单位"""
     if num < 10000:
@@ -883,12 +872,12 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             elif XiuConfig().img_send_type == "base64":
                 img_data = img.sync_draw_to(messages)
             if isinstance(event, GroupMessageEvent):
-                await bot.send_group_msg(
-                    group_id=event.group_id, message=MessageSegment.image(img_data)
+                await bot.send(
+                    event=event, message=MessageSegment.image(img_data)
                 )
             else:
-                await bot.send_private_msg(
-                    user_id=event.user_id, message=MessageSegment.image(img_data)
+                await bot.send(
+                    event=event, message=MessageSegment.image(img_data)
                 )
         elif len(args) == 1 and isinstance(args[0], list):
             messages = args[0]
@@ -899,12 +888,12 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             elif XiuConfig().img_send_type == "base64":
                 img_data = img.sync_draw_to(messages)
             if isinstance(event, GroupMessageEvent):
-                await bot.send_group_msg(
-                    group_id=event.group_id, message=MessageSegment.image(img_data)
+                await bot.send(
+                    event=event, message=MessageSegment.image(img_data)
                 )
             else:
-                await bot.send_private_msg(
-                    user_id=event.user_id, message=MessageSegment.image(img_data)
+                await bot.send(
+                    event=event, message=MessageSegment.image(img_data)
                 )
         else:
             raise ValueError("参数数量或类型不匹配")
@@ -973,26 +962,26 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
         pic_msg = f"@{sender_name}\n{msg}" if sender_name else msg
         pic = await get_msg_pic(pic_msg)
         if is_group:
-            await bot.send_group_msg(
-                group_id=event.group_id, message=MessageSegment.image(pic)
+            await bot.send(
+                event=event, message=MessageSegment.image(pic)
             )
         else:
-            await bot.send_private_msg(
-                user_id=event.user_id, message=MessageSegment.image(pic)
+            await bot.send(
+                event=event, message=MessageSegment.image(pic)
             )
     else:
         if is_group:
             if XiuConfig().at_sender:
-                await bot.send_group_msg(
-                    group_id=event.group_id, message=MessageSegment.at(event.get_user_id()) + msg
+                await bot.send(
+                    event=event, message=MessageSegment.at(event.get_user_id()) + msg
                 )
             else:
-                await bot.send_group_msg(
-                    group_id=event.group_id, message=msg
+                await bot.send(
+                    event=event, message=msg
                 )
         else:
-            await bot.send_private_msg(
-                user_id=event.user_id, message=msg
+            await bot.send(
+                event=event, message=msg
             )
 
 def generate_page_param(page_list: list) -> dict:
@@ -1046,7 +1035,9 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
 
     is_group = isinstance(event, GroupMessageEvent)
     open_id = get_real_id(event.user_id)
-    shell_param = markdown_param("s1", " ")
+    if not open_id:
+        open_id = event.user_id
+    shell_param = MessageSegment.markdown_param("s1", " ")
     if not title:
         title = " "
         if not shell:
@@ -1054,13 +1045,13 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
             msg = " "
     if not page:
         if page_param:
-            page = markdown_param("t2", page_param)
+            page = MessageSegment.markdown_param("t2", page_param)
         else:
-            page = markdown_param("t2", " ")
+            page = MessageSegment.markdown_param("t2", " ")
     else:
         page = generate_page_param(page)
     if shell:
-        shell_param = markdown_param("s1", "python\r" + msg)
+        shell_param = MessageSegment.markdown_param("s1", "python\r" + msg)
         msg_param = page
     else:
         original_user_id = event.get_user_id()
@@ -1075,15 +1066,15 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
                 title = f"<@{open_id}>\n{title}"
     if not title_param:
         title = optimize_md(title)
-        title_param = markdown_param("t1", title)
+        title_param = MessageSegment.markdown_param("t1", title)
     if not msg_param:
-        msg_param = markdown_param("t2", msg)
+        msg_param = MessageSegment.markdown_param("t2", msg)
     param = [        
         title_param,
         msg_param,
         shell_param,
     ]
-    msg = MessageSegmentPlus.markdown_template(markdown_id, param, button_id)
+    msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
     await bot.send(event=event, message=msg)
     
 def check_user_md_type(md_type, event):
@@ -1149,6 +1140,8 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     msg = optimize_md(msg)
     is_group = isinstance(event, GroupMessageEvent)
     open_id = get_real_id(event.user_id)
+    if not open_id:
+        open_id = event.user_id
     original_user_id = event.get_user_id()
     if open_id and is_group and XiuConfig().at_sender:
         if original_user_id in _impersonating_users:
@@ -1162,30 +1155,30 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     
     # 构造 param 列表
     param = [
-        markdown_param("t1", msg + '\r\r---\r\r'),
-        markdown_param("button_text_1", v1),
-        markdown_param("button_show_1", k1),
-        markdown_param("button_text_2", v2),
-        markdown_param("button_show_2", k2),
-        markdown_param("button_text_3", v3),
-        markdown_param("button_show_3", k3),
+        MessageSegment.markdown_param("t1", msg + '\r\r---\r\r'),
+        MessageSegment.markdown_param("button_text_1", v1),
+        MessageSegment.markdown_param("button_show_1", k1),
+        MessageSegment.markdown_param("button_text_2", v2),
+        MessageSegment.markdown_param("button_show_2", k2),
+        MessageSegment.markdown_param("button_text_3", v3),
+        MessageSegment.markdown_param("button_show_3", k3),
     ]
 
     # 如果 k4 存在，则修改第三个按钮的构造方式，以支持第四个按钮
     if k4 and v4:
         param = [
-            markdown_param("t1", msg + '\r\r---\r\r'),
-            markdown_param("button_text_1", v1),
-            markdown_param("button_show_1", k1),
-            markdown_param("button_text_2", v2),
-            markdown_param("button_show_2", k2),
-            markdown_param("button_text_3", v3),
+            MessageSegment.markdown_param("t1", msg + '\r\r---\r\r'),
+            MessageSegment.markdown_param("button_text_1", v1),
+            MessageSegment.markdown_param("button_show_1", k1),
+            MessageSegment.markdown_param("button_text_2", v2),
+            MessageSegment.markdown_param("button_show_2", k2),
+            MessageSegment.markdown_param("button_text_3", v3),
             {"key": "button_show_3",
             "values": [
             f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"
             ]}
         ]
-    msg = MessageSegmentPlus.markdown_template(XiuConfig().markdown_id2, param, button_id)
+    msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
     await bot.send(event=event, message=msg)
     
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None):
@@ -1229,13 +1222,13 @@ async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO] = None)
             
         # 发送图片消息
         if isinstance(event, GroupMessageEvent):
-            await bot.send_group_msg(
-                group_id=event.group_id, 
+            await bot.send(
+                event=event,
                 message=MessageSegment.image(pic)
             )
         else:
-            await bot.send_private_msg(
-                user_id=event.user_id, 
+            await bot.send(
+                event=event,
                 message=MessageSegment.image(pic)
             )
             
@@ -1310,13 +1303,13 @@ async def handle_pic_msg_send(bot, event, imgpath: Union[str, Path, BytesIO, Ima
         
         # 发送组合消息
         if isinstance(event, GroupMessageEvent):
-            await bot.send_group_msg(
-                group_id=event.group_id,
+            await bot.send(
+                event=event,
                 message=message
             )
         else:
-            await bot.send_private_msg(
-                user_id=event.user_id,
+            await bot.send(
+                event=event,
                 message=message
             )
             

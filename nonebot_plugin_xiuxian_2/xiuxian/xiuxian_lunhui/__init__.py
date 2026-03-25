@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timedelta
-from nonebot import on_command, on_fullmatch
+from nonebot import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -9,7 +9,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, PlayerDataManager, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
@@ -19,7 +19,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
-    CommandObjectID, handle_send
+    handle_send
 )
 from ..xiuxian_impart.impart_uitls import (
     impart_check,
@@ -84,7 +84,7 @@ resetting = on_command('自废修为', priority=15,  block=True)
 confirm_lunhui = on_command('确认轮回', priority=15,  block=True)
 
 @warring_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """轮回重修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __warring_help__
@@ -92,7 +92,7 @@ async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await warring_help.finish()
         
 @resetting.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -120,7 +120,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, s
         await resetting.finish()
         
 @lunhui.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -170,7 +170,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sess
     await lunhui.finish()
 
 @Infinite_reincarnation.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:

@@ -2,16 +2,15 @@ import random
 import asyncio
 import re
 import json
-from nonebot import on_command, on_fullmatch
+from nonebot import on_command
 from nonebot.params import EventPlainText, CommandArg
-from nonebot.adapters.onebot.v11 import (
+from ..adapter_compat import (
     Bot,
     GROUP,
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment,
-    ActionFailed
+    MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -20,7 +19,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler,
-    get_msg_pic, CommandObjectID, handle_send, log_message, update_statistics_value
+    get_msg_pic, handle_send, log_message, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict, get_elixir_recipe_msg
@@ -36,12 +35,12 @@ cache_help = {}
 
 mix_elixir = on_command("炼丹", priority=17, block=True)
 mix_make = on_command("配方", priority=5, block=True)
-elixir_help = on_fullmatch("炼丹帮助", priority=7, block=True)
-mix_elixir_help = on_fullmatch("炼丹配方帮助", priority=7, block=True)
+elixir_help = on_command("炼丹帮助", priority=7, block=True)
+mix_elixir_help = on_command("炼丹配方帮助", priority=7, block=True)
 yaocai_get = on_command("灵田收取", aliases={"灵田结算"}, priority=8, block=True)
 my_mix_elixir_info = on_command("我的炼丹信息", aliases={"炼丹信息"}, priority=6, block=True)
-mix_elixir_sqdj_up = on_fullmatch("升级收取等级", priority=6, block=True)
-mix_elixir_dykh_up = on_fullmatch("升级丹药控火", priority=6, block=True)
+mix_elixir_sqdj_up = on_command("升级收取等级", priority=6, block=True)
+mix_elixir_dykh_up = on_command("升级丹药控火", priority=6, block=True)
 
 __elixir_help__ = f"""
 炼丹帮助信息:
@@ -229,7 +228,7 @@ async def my_mix_elixir_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
 
 @elixir_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()):
+async def elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """炼丹帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __elixir_help__

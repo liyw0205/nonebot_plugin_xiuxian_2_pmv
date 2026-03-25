@@ -1,9 +1,8 @@
 import os
 import random
-from nonebot import on_command, on_fullmatch
-from nonebot.adapters.onebot.v11 import (
+from nonebot import on_command
+from ..adapter_compat import (
     GROUP,
-    ActionFailed,
     Bot,
     GroupMessageEvent,
     PrivateMessageEvent,
@@ -16,7 +15,6 @@ from .. import NICKNAME
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import (
-    CommandObjectID,
     number_to,
     append_draw_card_node,
     check_user,
@@ -68,9 +66,9 @@ impart_info = on_command(
     priority=10,    
     block=True,
 )
-impart_help = on_fullmatch("传承帮助", priority=8, block=True)
-impart_pk_help = on_fullmatch("虚神界帮助", priority=8, block=True)
-re_impart_load = on_fullmatch("加载传承数据", priority=45, block=True)
+impart_help = on_command("传承帮助", priority=8, block=True)
+impart_pk_help = on_command("虚神界帮助", priority=8, block=True)
+re_impart_load = on_command("加载传承数据", priority=45, block=True)
 impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
 )
@@ -110,7 +108,7 @@ __impart_pk_help__ = f"""
 
 @impart_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_help_(
-    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
+    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 ):
     """传承帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -120,7 +118,7 @@ async def impart_help_(
 
 @impart_pk_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def impart_pk_help_(
-    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, session_id: int = CommandObjectID()
+    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 ):
     """虚神界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -234,10 +232,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"剩余思恋结晶：{impart_data_draw['stone_num']}颗"
     )
 
-    try:
-        await handle_send(bot, event, summary_msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
-    except ActionFailed:
-        await handle_send(bot, event, "祈愿结果发送失败！")
+    await handle_send(bot, event, summary_msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     await impart_draw.finish()
 
 @impart_draw2.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -348,10 +343,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"消耗灵石：{number_to(required_crystals)}"
     )
 
-    try:
-        await handle_send(bot, event, summary_msg, md_type="传承", k1="抽卡", v1="传承抽卡", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
-    except ActionFailed:
-        await handle_send(bot, event, "抽卡结果发送失败！")
+    await handle_send(bot, event, summary_msg, md_type="传承", k1="抽卡", v1="传承抽卡", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     await impart_draw2.finish()
 
 async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -408,10 +400,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 {new_cards_msg}
 {duplicate_cards_msg}
 """
-    try:
-        await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
-    except ActionFailed:
-        await handle_send(bot, event, "获取祈愿石结果失败！")
+    await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     return
 
 async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -443,10 +432,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 构建结果消息
     final_msg = f"获得思恋结晶 {total_gained} 颗\n当前思恋结晶：{current_stones + total_gained}颗"
     
-    try:
-        await handle_send(bot, event, final_msg)
-    except ActionFailed:
-        await handle_send(bot, event, "使用思恋流沙结果发送失败！")
+    await handle_send(bot, event, final_msg)
     return
 
 @impart_back.handle(parameterless=[Cooldown(cd_time=1.4)])

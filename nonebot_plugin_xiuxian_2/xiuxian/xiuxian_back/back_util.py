@@ -57,67 +57,94 @@ def check_equipment_can_use(user_id, goods_id):
 def get_use_equipment_sql(user_id, goods_id):
     """
     使用装备
-    返回sql,和法器或防具
+    返回: [(sql, params), ...], item_type
     """
-    sql_str = []
+    sql_list = []
     item_info = items.get_data_by_item_id(goods_id)
     user_buff_info = UserBuffDate(user_id).BuffInfo
     now_time = datetime.now()
     item_type = ''
+
+    user_id = str(user_id)
+    goods_id = int(goods_id)
+
     if item_info['item_type'] == "法器":
         item_type = "法器"
-        in_use_id = user_buff_info['faqi_buff']
-        sql_str.append(
-            f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=1 WHERE user_id={user_id} and goods_id={goods_id}")  # 装备
+        in_use_id = int(user_buff_info['faqi_buff'])
+
+        # 装备当前法器
+        sql_list.append((
+            "UPDATE back SET update_time=?, action_time=?, state=1 WHERE user_id=? AND goods_id=?",
+            (now_time, now_time, user_id, goods_id)
+        ))
+
+        # 卸下原法器
         if in_use_id != 0:
-            sql_str.append(
-                f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=0 WHERE user_id={user_id} and goods_id={in_use_id}")  # 取下原有的
+            sql_list.append((
+                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                (now_time, now_time, user_id, in_use_id)
+            ))
 
     if item_info['item_type'] == "防具":
         item_type = "防具"
-        in_use_id = user_buff_info['armor_buff']
-        sql_str.append(
-            f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=1 WHERE user_id={user_id} and goods_id={goods_id}")  # 装备
-        if in_use_id != 0:
-            sql_str.append(
-                f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=0 WHERE user_id={user_id} and goods_id={in_use_id}")  # 取下原有的
+        in_use_id = int(user_buff_info['armor_buff'])
 
-    return sql_str, item_type
+        # 装备当前防具
+        sql_list.append((
+            "UPDATE back SET update_time=?, action_time=?, state=1 WHERE user_id=? AND goods_id=?",
+            (now_time, now_time, user_id, goods_id)
+        ))
+
+        # 卸下原防具
+        if in_use_id != 0:
+            sql_list.append((
+                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                (now_time, now_time, user_id, in_use_id)
+            ))
+
+    return sql_list, item_type
 
 
 def get_no_use_equipment_sql(user_id, goods_id):
     """
     卸载装备
-    返回sql,和法器或防具
+    返回: [(sql, params), ...], item_type
     """
     item_info = items.get_data_by_item_id(goods_id)
     user_buff_info = UserBuffDate(user_id).BuffInfo
     now_time = datetime.now()
-    sql_str = []
+    sql_list = []
     item_type = ""
+
+    user_id = str(user_id)
+    goods_id = int(goods_id)
 
     # 检查装备类型，并确定要卸载的是哪种buff
     if item_info['item_type'] == "法器":
         item_type = "法器"
-        in_use_id = user_buff_info['faqi_buff']
+        in_use_id = int(user_buff_info['faqi_buff'])
     elif item_info['item_type'] == "防具":
         item_type = "防具"
-        in_use_id = user_buff_info['armor_buff']
+        in_use_id = int(user_buff_info['armor_buff'])
     else:
-        return sql_str, item_type
+        return sql_list, item_type
 
     # 如果当前装备正被使用，或者存在需要卸载的其他装备
     if goods_id == in_use_id or in_use_id != 0:
         # 卸载当前装备
-        sql_str.append(
-            f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=0 WHERE user_id={user_id} and goods_id={goods_id}")
-        # 如果还有其他装备需要卸载（对于法器和防具的情况）
+        sql_list.append((
+            "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+            (now_time, now_time, user_id, goods_id)
+        ))
+
+        # 如果还有其他装备需要卸载
         if in_use_id != 0 and goods_id != in_use_id:
-            sql_str.append(
-                f"UPDATE back set update_time='{now_time}',action_time='{now_time}',state=0 WHERE user_id={user_id} and goods_id={in_use_id}")
+            sql_list.append((
+                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                (now_time, now_time, user_id, in_use_id)
+            ))
 
-    return sql_str, item_type
-
+    return sql_list, item_type
 
 
 def check_equipment_use_msg(user_id, goods_id):

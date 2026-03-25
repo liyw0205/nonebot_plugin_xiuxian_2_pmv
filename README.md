@@ -31,6 +31,46 @@ HOST = 127.0.0.1
 PORT = 8080 # 反代的8080端口，有需要自己改
 ```
 
+- 在.env.dev文件中添加QQ官方机器人来启动
+
+
+私域频道机器人示例
+
+```dotenv
+QQ_BOTS='
+[
+  {
+    "id": "xxx",
+    "token": "xxx",
+    "secret": "xxx",
+    "intent": {
+      "guild_messages": true,
+      "at_messages": false
+    },
+    "use_websocket": true
+  }
+]
+'
+```
+
+公域群机器人示例
+
+```dotenv
+QQ_BOTS='
+[
+  {
+    "id": "xxx",
+    "token": "xxx",
+    "secret": "xxx",
+    "intent": {
+      "c2c_group_at_messages": true
+    },
+    "use_websocket": true
+  }
+]
+'
+```
+
 - env文件配置
 
 ```
@@ -169,6 +209,7 @@ nb #打开nb命令行
 选择适配器
 ```
 OneBot V11 (OneBot V11 协议)
+QQ (QQ官方机器人)
 ```
 选择驱动器
 ```
@@ -255,6 +296,7 @@ nb #打开nb命令行
 选择适配器
 ```
 OneBot V11 (OneBot V11 协议)
+QQ (QQ官方机器人)
 ```
 选择驱动器
 ```
