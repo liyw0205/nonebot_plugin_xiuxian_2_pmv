@@ -7,7 +7,8 @@ from nonebot.message import event_preprocessor, IgnoredException
 from .adapter_compat import (
     Bot,
     GroupMessageEvent,
-    PrivateMessageEvent
+    PrivateMessageEvent,
+    get_group_id
 )
 from nonebot import get_driver
 from .xiuxian_config import XiuConfig
@@ -88,12 +89,12 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             
             # 群聊处理
             if response_group:
-                if str(event.group_id) in shield_group:
+                if str(get_group_id(event)) in shield_group:
                     pass
                 else:
                     raise IgnoredException("不为响应群消息,已忽略")
             else:
-                if str(event.group_id) in shield_group:
+                if str(get_group_id(event)) in shield_group:
                     raise IgnoredException("为屏蔽群消息,已忽略")
                 else:
                     pass

@@ -1797,11 +1797,11 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         item_dict = dict(zip(columns, result))
         return item_dict
 
-
+    
     def update_back_equipment(self, sql_str, params=None):
-        """更新背包, 支持参数化SQL"""
-        logger.opt(colors=True).info(f"<green>执行的sql:{sql_str} | params:{params}</green>")
         cur = self.conn.cursor()
+        if isinstance(sql_str, tuple) and params is None:
+            sql_str, params = sql_str
         if params is not None:
             cur.execute(sql_str, params)
         else:

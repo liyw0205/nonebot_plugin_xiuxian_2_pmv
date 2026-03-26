@@ -227,7 +227,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
     else:
         await handle_pic_send(bot, event, img_res)
-        await bot.send(event=event, message=MessageSegment.image(bot, img_res))
+    await xiuxian_message_img.finish()
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

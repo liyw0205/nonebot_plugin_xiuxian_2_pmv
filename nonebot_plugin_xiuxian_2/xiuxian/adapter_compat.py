@@ -10,6 +10,7 @@ from nonebot.permission import Permission
 from nonebot.adapters import Bot as BaseBot
 from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
+
 # =========================
 # 可选导入：onebot v11
 # =========================
@@ -45,6 +46,7 @@ try:
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
         GroupAtMessageCreateEvent as QQGroupMessageEvent,
+        AtMessageCreateEvent as QQAtChannelMessageEvent,  # 频道@消息
     )
     from nonebot.adapters.qq.models import MessageMarkdown, MessageKeyboard
 
@@ -56,6 +58,7 @@ except Exception:
     QQMessageSegment = None  # type: ignore
     QQPrivateMessageEvent = tuple()  # type: ignore
     QQGroupMessageEvent = tuple()  # type: ignore
+    QQAtChannelMessageEvent = tuple()  # type: ignore
     MessageMarkdown = None  # type: ignore
     MessageKeyboard = None  # type: ignore
 
@@ -275,7 +278,15 @@ Bot = BaseBot
 Message = Union[OB11Message, QQMessage, str]
 MessageSegment = CompatMessageSegment
 
-GroupMessageEvent = Union[OB11GroupMessageEvent, QQGroupMessageEvent]
+if HAS_QQ:
+    GroupMessageEvent = Union[
+        OB11GroupMessageEvent,
+        QQGroupMessageEvent,
+        QQAtChannelMessageEvent,  # 频道事件并入“群语义”
+    ]
+else:
+    GroupMessageEvent = Union[OB11GroupMessageEvent]
+
 PrivateMessageEvent = Union[OB11PrivateMessageEvent, QQPrivateMessageEvent]
 MessageEvent = Union[GroupMessageEvent, PrivateMessageEvent]
 
@@ -286,6 +297,7 @@ def is_group_event(event: BaseEvent) -> bool:
         types.append(OB11GroupMessageEvent)  # type: ignore[arg-type]
     if HAS_QQ:
         types.append(QQGroupMessageEvent)  # type: ignore[arg-type]
+        types.append(QQAtChannelMessageEvent)  # type: ignore[arg-type]
     return isinstance(event, tuple(types)) if types else False
 
 
@@ -343,6 +355,9 @@ def get_group_id(event: BaseEvent) -> Optional[str]:
     if hasattr(event, "group_openid"):
         gid = getattr(event, "group_openid")
         return str(gid) if gid is not None else None
+    if hasattr(event, "channel_id"):  # 频道兜底
+        gid = getattr(event, "channel_id")
+        return str(gid) if gid is not None else None
     return None
 
 
@@ -350,7 +365,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
     if getattr(event, "__compat_patched__", False):
         return event
 
-    # 中文注释：统一获取昵称，优先级 username > id > user_id
+    # 统一获取昵称，优先级 username > id > user_id
     def _resolve_sender_name(e: BaseEvent, fallback_user_id: Optional[str] = None) -> str:
         author = getattr(e, "author", None)
         username = getattr(author, "username", None)
@@ -377,7 +392,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 中文注释：补齐 sender，供业务统一访问 event.sender.nickname/card/role
+        # 补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.user_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
@@ -396,7 +411,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 中文注释：补齐 sender，供业务统一访问 event.sender.nickname/card/role
+        # 补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.member_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
@@ -405,13 +420,36 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         sender.role = "member"
         setattr(event, "sender", sender)
 
-    # 中文注释：兜底补齐 user_id
+    # 频道 AT 消息按“群语义”处理，关键是映射 channel_id -> group_id
+    elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+        raw = event.content or ""
+        setattr(event, "message_type", "group")
+        # 频道场景下统一 user_id
+        uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
+        setattr(event, "user_id", str(uid))
+        # 把频道ID映射到group_id，复用现有群逻辑
+        setattr(event, "group_id", str(event.channel_id))
+        setattr(event, "message_id", str(event.id))
+        setattr(event, "raw_message", raw)
+        setattr(event, "message", raw)
+        setattr(event, "plaintext", raw)
+
+        # 补齐 sender，避免 event.sender 访问报错
+        sender = type("CompatSender", (), {})()
+        sender.user_id = str(getattr(event, "user_id", ""))
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
+        sender.nickname = sender_name
+        sender.card = sender_name
+        sender.role = "member"
+        setattr(event, "sender", sender)
+
+    # 兜底补齐 user_id
     if not hasattr(event, "user_id"):
         uid = get_user_id(event)
         if uid is not None:
             setattr(event, "user_id", uid)
 
-    # 中文注释：兜底补齐 sender，避免外部直接访问 event.sender 报错
+    # 兜底补齐 sender，避免外部直接访问 event.sender 报错
     if not hasattr(event, "sender"):
         sender = type("CompatSender", (), {})()
         sender.user_id = getattr(event, "user_id", None)
@@ -449,13 +487,22 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
                 return await _origin_send(event=event, message=message, **kwargs)
 
+            # QQ 频道消息：走频道发送
+            if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+                return await bot.send_to_channel(
+                    channel_id=str(event.channel_id),
+                    message=message,
+                    msg_id=str(event.id),
+                    event_id=kwargs.pop("event_id", None),
+                )
+
             return await _origin_send(event=event, message=message, **kwargs)
 
         async def send_private_msg(*, user_id, message, **kwargs):
             return await bot.send_to_c2c(openid=str(user_id), message=message, **kwargs)
 
         async def send_group_msg(*, group_id, message, **kwargs):
-            # 兼容 OB11 的 send_group_msg 形态
+            # 兼容 OB11 的 send_group_msg 形态（QQ 中按 group_openid 发送）
             msg_seq = kwargs.pop("msg_seq", _next_group_seq(str(group_id)))
             return await bot.send_to_group(
                 group_openid=str(group_id),
