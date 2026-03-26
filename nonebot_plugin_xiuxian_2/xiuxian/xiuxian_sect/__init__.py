@@ -1504,6 +1504,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     sect_info = sql_message.get_sect_info(sect_id)
     level = user_info['level']
     list_level_all = list(jsondata.level_data().keys())
+
     # 检查境界
     if (list_level_all.index(level) < list_level_all.index(XiuConfig().sect_min_level)):
         msg = f"需达到{XiuConfig().sect_min_level}境才可创建宗门！"
@@ -1522,9 +1523,39 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="宗门", k1="帮助", v1="宗门帮助", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await create_sect.finish()
     
-    # 生成10个候选名称
+    # 自动宗名模式：直接创建，不进入候选选择流程
+    if JsonConfig().is_auto_sect_name_enabled():
+        sect_name = generate_random_sect_name(1)
+        sql_message.create_sect(user_id, sect_name)
+        new_sect = sql_message.get_sect_info_by_qq(user_id)
+
+        # 设置宗主职位
+        owner_position = next(
+            (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
+            0
+        )
+        sql_message.update_usr_sect(user_id, new_sect['sect_id'], owner_position)
+        sql_message.update_ls(user_id, XiuConfig().sect_create_cost, 2)  # 扣除创建费用
+
+        # 获取用户信息
+        user_info = sql_message.get_user_info_with_id(user_id)
+
+        msg = (
+            f"恭喜{user_info['user_name']}道友创建宗门——{sect_name}，"
+            f"宗门编号为{new_sect['sect_id']}。\n"
+            f"为道友贺！为仙道贺！"
+        )
+        await handle_send(
+            bot, event, msg, md_type="宗门",
+            k1="加入", v1=f"宗门加入 {sect_name}",
+            k2="宗门", v2="我的宗门",
+            k3="捐献", v3="宗门捐献"
+        )
+        await create_sect.finish()
+    
+    # 手动选名模式：生成10个候选名称
     name_options = generate_random_sect_name(10)
-    options_msg = "\n".join([f"{i}. {name}" for i, name in enumerate(name_options, 1)])    
+    options_msg = "\n".join([f"{i}. {name}" for i, name in enumerate(name_options, 1)])
 
     state["options"] = name_options
     state["user_id"] = user_id
@@ -1539,6 +1570,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         f"输入其他内容将随机选择"
     )
     await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+
 
 @create_sect.receive()
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
@@ -1563,7 +1595,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
             sect_name = random.choice(name_options)
             msg = f"灵石不足，已自动选择宗门名称：{sect_name}"
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-            # 继续创建流程
+            # 继续创建流程（不return，走后续统一创建）
         else:
             # 扣除灵石
             sql_message.update_ls(user_id, stone_cost, 2)
@@ -1590,7 +1622,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
     
     # 有效选择
     elif user_choice.isdigit() and 1 <= int(user_choice) <= 10:
-        sect_name = name_options[int(user_choice)-1]
+        sect_name = name_options[int(user_choice) - 1]
     else:
         # 非数字或超出范围，随机选择一个名字
         sect_name = random.choice(name_options)

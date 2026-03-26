@@ -350,6 +350,23 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
     if getattr(event, "__compat_patched__", False):
         return event
 
+    # 中文注释：统一获取昵称，优先级 username > id > user_id
+    def _resolve_sender_name(e: BaseEvent, fallback_user_id: Optional[str] = None) -> str:
+        author = getattr(e, "author", None)
+        username = getattr(author, "username", None)
+        if username:
+            return str(username)
+
+        author_id = getattr(author, "id", None)
+        if author_id:
+            return str(author_id)
+
+        if fallback_user_id:
+            return str(fallback_user_id)
+
+        uid = get_user_id(e)
+        return str(uid) if uid is not None else ""
+
     if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
         raw = event.content or ""
         setattr(event, "message_type", "private")
@@ -360,11 +377,12 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 补齐 sender，兼容 event.sender.nickname / event.sender.card / event.sender.role
+        # 中文注释：补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.user_openid)
-        sender.nickname = str(event.author.id) if getattr(event, "author", None) else str(event.user_id)
-        sender.card = sender.nickname
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
+        sender.nickname = sender_name
+        sender.card = sender_name
         sender.role = "member"
         setattr(event, "sender", sender)
 
@@ -378,26 +396,28 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 补齐 sender，供 OB11 风格代码复用
+        # 中文注释：补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.member_openid)
-        sender.nickname = str(event.author.id) if getattr(event, "author", None) else str(event.user_id)
-        sender.card = sender.nickname
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
+        sender.nickname = sender_name
+        sender.card = sender_name
         sender.role = "member"
         setattr(event, "sender", sender)
 
-    # 如果前面没补到 user_id，这里兜底
+    # 中文注释：兜底补齐 user_id
     if not hasattr(event, "user_id"):
         uid = get_user_id(event)
         if uid is not None:
             setattr(event, "user_id", uid)
 
-    # 如果没有 sender，再做一次通用兜底，避免外部直接访问 event.sender.nickname 报错
+    # 中文注释：兜底补齐 sender，避免外部直接访问 event.sender 报错
     if not hasattr(event, "sender"):
         sender = type("CompatSender", (), {})()
         sender.user_id = getattr(event, "user_id", None)
-        sender.nickname = str(getattr(event, "user_id", ""))
-        sender.card = sender.nickname
+        sender_name = _resolve_sender_name(event, fallback_user_id=str(sender.user_id or ""))
+        sender.nickname = sender_name
+        sender.card = sender_name
         sender.role = "member"
         setattr(event, "sender", sender)
 

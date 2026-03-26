@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from nonebot import get_driver
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, send_from_directory, abort
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 # 导入 xiuxian2_handle，以便获取 trade_manager
@@ -2019,12 +2019,6 @@ CONFIG_EDITABLE_FIELDS = {
         "description": "偷灵石上限（百分比）",
         "type": "float",
         "category": "资源设置"
-    },
-    "auto_select_root": {
-        "name": "自动选择灵根",
-        "description": "默认开启自动选择最佳灵根",
-        "type": "bool",
-        "category": "灵根设置"
     },
     "remake": {
         "name": "重入仙途消费",

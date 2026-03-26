@@ -64,13 +64,8 @@ novice = on_command("新手礼包", priority=7, block=True)
 @beg_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_beg_help:
-        msg = cache_beg_help[session_id]
-        await handle_send(bot, event, msg)
-        await beg_help.finish()
-    else:
-        msg = __beg_help__
-        await handle_send(bot, event, msg)
+    msg = __beg_help__
+    await handle_send(bot, event, msg)
     await beg_help.finish()
 
 @beg_stone.handle(parameterless=[Cooldown(cd_time=1.4)])

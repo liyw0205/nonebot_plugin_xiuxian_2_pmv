@@ -39,7 +39,7 @@ from ..xiuxian_trade import BANNED_ITEM_IDS
 from ..xiuxian_buff import trigger_partner_exp_share
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
-
+from urllib.parse import quote
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -434,8 +434,28 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 世界BOSS: 发送"世界boss帮助"
 - 通天塔: 发送"通天塔帮助"
 """
-    
+
+    md_msg = f"""【修仙帮助】
+>🌟 核心功能
+😇 启程修仙: [我要修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)
+📁 存档查询: [我的修仙信息](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)
+✅ 每日签到: [修仙签到](mqqapi://aio/inlinecmd?command=修仙签到&enter=false&reply=false)
+⚡ 突破境界: [突破](mqqapi://aio/inlinecmd?command=突破&enter=false&reply=false)
+  🔁 支持[连续突破](mqqapi://aio/inlinecmd?command=连续突破&enter=false&reply=false)五次
+💰 灵石交互: [送](mqqapi://aio/inlinecmd?command=送灵石&enter=false&reply=false)/[偷](mqqapi://aio/inlinecmd?command=偷灵石&enter=false&reply=false)/[抢](mqqapi://aio/inlinecmd?command=抢灵石&enter=false&reply=false)灵石+道号+数量
+✏️ 修改道号: [修仙改名](mqqapi://aio/inlinecmd?command=修仙改名&enter=false&reply=false)+道号
+👥 加入官群: [官群](mqqapi://aio/inlinecmd?command=官群&enter=false&reply=false)
+🎁 邀请奖励: [邀请帮助](mqqapi://aio/inlinecmd?command=邀请帮助&enter=false&reply=false)
+📢 更新日志: [更新日志](mqqapi://aio/inlinecmd?command=更新日志&enter=false&reply=false)，查看游戏最新内容
+🧘 修炼方式: [闭关](mqqapi://aio/inlinecmd?command=闭关&enter=false&reply=false)/[灵石出关](mqqapi://aio/inlinecmd?command=灵石出关&enter=false&reply=false)/[灵石修炼](mqqapi://aio/inlinecmd?command=灵石修炼&enter=false&reply=false)/[双修](mqqapi://aio/inlinecmd?command=双修&enter=false&reply=false)/[虚神界闭关](mqqapi://aio/inlinecmd?command=虚神界闭关&enter=false&reply=false)
+📖 功法体系: [境界](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false)/[品阶](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)/[灵根](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false)
+"""
+
     if XiuConfig().markdown_status:
+        if md_msg:
+            msg = MessageSegment.markdown(bot, md_msg, button_id=XiuConfig().button_id2)
+            await bot.send(event=event, message=msg)
+            await help_in.finish()
         title_param = {
         "key": "t1",
         "values": [
@@ -518,8 +538,6 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
                                              key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
-        msg = f"{linggen_list_msg}\n\n已自动为您选择最佳灵根：{selected_name} ({selected_root_type})"
-        await handle_send(bot, event, msg)
         msg = sql_message.ramaker(selected_name, selected_root_type, user_id)
         await handle_send(bot, event, msg)
         await restart.finish()

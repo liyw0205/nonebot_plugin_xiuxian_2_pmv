@@ -50,6 +50,8 @@ hmll = on_command("毁灭力量", priority=5, permission=SUPERUSER, block=True)
 restate = on_command("重置状态", permission=SUPERUSER, priority=12, block=True)
 set_xiuxian = on_command("启用修仙功能", aliases={'禁用修仙功能'}, permission=SUPERUSER, priority=5, block=True)
 set_private_chat = on_command("启用私聊功能", aliases={'禁用私聊功能'}, permission=SUPERUSER, priority=5, block=True)
+set_auto_root = on_command("开启自动灵根", aliases={'关闭自动灵根'}, permission=SUPERUSER, priority=5, block=True)
+set_auto_sect_name = on_command("启用自动宗名", aliases={'禁用自动宗名'}, permission=SUPERUSER, priority=5, block=True)
 super_help = on_command("修仙手册", aliases={"修仙管理"}, permission=SUPERUSER, priority=15, block=True)
 xiuxian_updata_level = on_command('修仙适配', permission=SUPERUSER, priority=15, block=True)
 clear_xiangyuan = on_command("清空仙缘", permission=SUPERUSER, priority=5, block=True)
@@ -626,7 +628,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await restate.finish()
 
-@set_xiuxian.handle()
+@set_xiuxian.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """群修仙开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -664,7 +666,7 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         await set_xiuxian.finish()
 
-@set_private_chat.handle()
+@set_private_chat.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """私聊功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -688,7 +690,57 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     await handle_send(bot, event, msg)
     await set_private_chat.finish()
-    
+
+@set_auto_root.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def set_auto_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """自动选择灵根功能开关配置"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg_text = str(event.message)
+    conf_data = JsonConfig().read_data()
+
+    if "开启" in msg_text:
+        if conf_data.get("auto_root_selection", False):
+            msg = "自动选择灵根功能已启用，请勿重复操作！"
+        else:
+            JsonConfig().write_data(5)
+            msg = "自动选择灵根功能已启用！新用户将自动选择最佳灵根。"
+    elif "关闭" in msg_text:
+        if not conf_data.get("auto_root_selection", False):
+            msg = "自动选择灵根功能已关闭，请勿重复操作！"
+        else:
+            JsonConfig().write_data(6)
+            msg = "自动选择灵根功能已关闭！"
+    else:
+        msg = "指令错误，请输入：开启自动灵根/关闭自动灵根"
+
+    await handle_send(bot, event, msg)
+    await set_auto_root.finish()    
+
+@set_auto_sect_name.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def set_auto_sect_name_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """自动宗名功能开关配置"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg_text = str(event.message)
+    conf_data = JsonConfig().read_data()
+
+    if "启用" in msg_text:
+        if conf_data.get("auto_sect_name", False):
+            msg = "自动宗名功能已启用，请勿重复操作！"
+        else:
+            JsonConfig().write_data(7)
+            msg = "自动宗名功能已启用！创建宗门时将自动随机命名。"
+    elif "禁用" in msg_text:
+        if not conf_data.get("auto_sect_name", False):
+            msg = "自动宗名功能已关闭，请勿重复操作！"
+        else:
+            JsonConfig().write_data(8)
+            msg = "自动宗名功能已关闭！创建宗门将恢复手动选择名称。"
+    else:
+        msg = "指令错误，请输入：启用自动宗名/禁用自动宗名"
+
+    await handle_send(bot, event, msg)
+    await set_auto_sect_name.finish()
+
 @xiuxian_updata_level.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将修仙2的境界适配到修仙2魔改"""
@@ -996,8 +1048,10 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 禁用修仙功能 - 关闭修仙功能
 → 启用私聊功能 - 开启私聊修仙
 → 禁用私聊功能 - 关闭私聊修仙
-→ 启用自动选择灵根 - 开启自动灵根
-→ 禁用自动选择灵根 - 关闭自动灵根
+→ 开启自动灵根 - 启用自动选择灵根
+→ 关闭自动灵根 - 禁用自动选择灵根
+→ 启用自动宗名 - 开启自动随机宗门名
+→ 禁用自动宗名 - 关闭自动随机宗门名
 
 ⚡ 交易管理：
 → 系统仙肆上架 物品名称 [价格] [数量] - 不带数量为无限

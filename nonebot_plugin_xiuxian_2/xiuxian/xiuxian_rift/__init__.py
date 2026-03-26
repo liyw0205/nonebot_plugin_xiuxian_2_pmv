@@ -201,13 +201,9 @@ async def show_rift_progress(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    if session_id in cache_help:
-        await bot.send_group_msg(group_id=int(send_group_id), message=MessageSegment.image(cache_help[session_id]))
-        await rift_help.finish()
-    else:
-        msg = __rift_help__
-        await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
-        await rift_help.finish()
+    msg = __rift_help__
+    await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
+    await rift_help.finish()
 
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境（手动触发，通常由管理员使用）"""

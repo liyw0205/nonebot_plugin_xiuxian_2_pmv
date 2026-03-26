@@ -25,8 +25,6 @@ class XiuConfig:
         # 反转屏蔽的群聊，仅响应这些群的消息
         self.shield_private = False  
         # 屏蔽私聊
-        self.private_chat_enabled = False 
-        # 私聊功能开关，默认关闭，屏蔽时开启也无效
         self.main_bo = []  
         # 负责发送消息的qq
         self.layout_bot_dict = {}
@@ -156,8 +154,6 @@ class XiuConfig:
         self.banned_unseal_ids = ["779151826"]  
         # 鉴石禁止群
 
-        self.auto_select_root = True  
-        # 默认开启自动选择最佳灵根
         self.remake = 100000  
         # 重入仙途的消费
         self.remaname = 10000000  
@@ -264,8 +260,9 @@ class JsonConfig:
         if not self.config_jsonpath.exists():
             default_data = {
                 "group": [],  # 群聊禁用列表
-                "private_enabled": False,  # 私聊功能开关
-                "auto_root_selection": False  # 自动选择灵根开关
+                "private": True,  # 私聊功能开关
+                "root_selection": True,  # 自动选择灵根开关
+                "sect_name": True  # 自动宗名开关
             }
             with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
                 json.dump(default_data, f)
@@ -276,10 +273,12 @@ class JsonConfig:
             data = json.load(f)
             if "group" not in data:
                 data["group"] = []
-            if "private_enabled" not in data:
-                data["private_enabled"] = False
-            if "auto_root_selection" not in data:
-                data["auto_root_selection"] = False
+            if "private" not in data:
+                data["private"] = True
+            if "root_selection" not in data:
+                data["root_selection"] = True
+            if "sect_name" not in data:
+                data["sect_name"] = True
             return data
 
     def write_data(self, key, id=None):
@@ -289,6 +288,7 @@ class JsonConfig:
             1 为开启群聊，2 为关闭群聊
             3 为开启私聊，4 为关闭私聊
             5 为开启自动选择灵根，6 为关闭自动选择灵根
+            7 为开启自动宗名，8 为关闭自动宗名
         id: 群聊ID（仅群聊使用）
         """
         json_data = self.read_data()
@@ -300,13 +300,17 @@ class JsonConfig:
                 group_list.remove(id)
             json_data['group'] = list(set(group_list))
         elif key == 3:  # 开启私聊
-            json_data["private_enabled"] = True
+            json_data["private"] = True
         elif key == 4:  # 关闭私聊
-            json_data["private_enabled"] = False
+            json_data["private"] = False
         elif key == 5:  # 开启自动选择灵根
-            json_data["auto_root_selection"] = True
+            json_data["root_selection"] = True
         elif key == 6:  # 关闭自动选择灵根
-            json_data["auto_root_selection"] = False
+            json_data["root_selection"] = False
+        elif key == 7:  # 开启自动宗名
+            json_data["sect_name"] = True
+        elif key == 8:  # 关闭自动宗名
+            json_data["sect_name"] = False
 
         with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=4)
@@ -315,7 +319,7 @@ class JsonConfig:
     def is_private_enabled(self):
         """检查私聊功能是否启用"""
         data = self.read_data()
-        return data.get("private_enabled", False)
+        return data.get("private", True)
             
     def get_enabled_groups(self):
         """获取开启修仙功能的群聊列表"""
@@ -325,4 +329,9 @@ class JsonConfig:
     def is_auto_root_selection_enabled(self):
         """检查自动选择灵根功能是否启用"""
         data = self.read_data()
-        return data.get("auto_root_selection", False)
+        return data.get("root_selection", True)
+
+    def is_auto_sect_name_enabled(self):
+        """检查自动宗名功能是否启用"""
+        data = self.read_data()
+        return data.get("sect_name", True)

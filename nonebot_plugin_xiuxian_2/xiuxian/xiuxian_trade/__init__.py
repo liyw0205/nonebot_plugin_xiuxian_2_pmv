@@ -218,7 +218,6 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     """
     current_auctions = trade_manager.get_current_auction() # 从数据库获取当前拍卖品
     if not current_auctions:
-        logger.warning("当前没有正在进行的拍卖！")
         return []
     
     auction_results: List[Dict[str, Any]] = []
@@ -2724,9 +2723,7 @@ async def check_auction_end_job():
         return
     
     if now_dt >= end_time_dt:
-        logger.info("拍卖结束时间已到，开始结束拍卖流程...")
         await end_auction_process(None)  # 传入None表示不需要Bot实例
-        logger.info("拍卖已结束。")
     else:
         # 计算剩余时间
         remaining_seconds = int((end_time_dt - now_dt).total_seconds())
