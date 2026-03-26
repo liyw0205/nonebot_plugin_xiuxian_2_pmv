@@ -34,7 +34,12 @@ PORT = 8080 # 反代的8080端口，有需要自己改
 - 在.env.dev文件中添加QQ官方机器人来启动
 
 
-私域频道机器人示例：nonebot qq未测试
+私域频道机器人：未测试
+
+公域群机器人示例：测试通过
+
+- 自动转发频道为群消息
+- 自动转发频道私聊消息为私聊
 
 ```dotenv
 QQ_BOTS='
@@ -44,26 +49,8 @@ QQ_BOTS='
     "token": "xxx",
     "secret": "xxx",
     "intent": {
-      "guild_messages": true,
-      "at_messages": false
-    },
-    "use_websocket": true
-  }
-]
-'
-```
-
-公域群机器人示例：测试通过，自动转发频道为群消息
-
-```dotenv
-QQ_BOTS='
-[
-  {
-    "id": "xxx",
-    "token": "xxx",
-    "secret": "xxx",
-    "intent": {
-      "c2c_group_at_messages": true
+      "c2c_group_at_messages": true,
+      "direct_message": true
     },
     "use_websocket": true
   }

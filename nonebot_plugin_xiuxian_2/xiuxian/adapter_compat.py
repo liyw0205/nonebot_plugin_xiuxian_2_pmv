@@ -14,7 +14,6 @@ from nonebot.log import logger
 # =========================
 # 可选导入：onebot v11
 # =========================
-HAS_OB11 = False
 try:
     from nonebot.adapters.onebot.v11 import (
         Bot as OB11Bot,
@@ -25,19 +24,19 @@ try:
         GroupMessageEvent as OB11GroupMessageEvent,
         PrivateMessageEvent as OB11PrivateMessageEvent,
     )
+
     HAS_OB11 = True
-except ImportError:
-    pass
-    OB11Bot = None
-    OB11Message = None
-    OB11MessageSegment = None
-    OB11GroupMessageEvent = None
-    OB11PrivateMessageEvent = None
+except Exception:
+    HAS_OB11 = False
+    OB11Bot = None  # type: ignore
+    OB11Message = str  # type: ignore
+    OB11MessageSegment = None  # type: ignore
+    OB11GroupMessageEvent = tuple()  # type: ignore
+    OB11PrivateMessageEvent = tuple()  # type: ignore
 
 # =========================
 # 可选导入：qq
 # =========================
-HAS_QQ = False
 try:
     from nonebot.adapters.qq import (
         Bot as QQBot,
@@ -47,20 +46,23 @@ try:
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
         GroupAtMessageCreateEvent as QQGroupMessageEvent,
-        AtChannelMessageCreateEvent as QQAtChannelMessageEvent,
+        AtMessageCreateEvent as QQAtChannelMessageEvent,      # 频道 @ 消息 -> 群语义
+        DirectMessageCreateEvent as QQChannelPrivateMessageEvent,  # 频道私信 -> 私聊语义
     )
     from nonebot.adapters.qq.models import MessageMarkdown, MessageKeyboard
+
     HAS_QQ = True
-except ImportError:
-    pass
-    QQBot = None
-    QQMessage = None
-    QQMessageSegment = None
-    QQPrivateMessageEvent = None
-    QQGroupMessageEvent = None
-    QQAtChannelMessageEvent = None
-    MessageMarkdown = None
-    MessageKeyboard = None
+except Exception:
+    HAS_QQ = False
+    QQBot = None  # type: ignore
+    QQMessage = str  # type: ignore
+    QQMessageSegment = None  # type: ignore
+    QQPrivateMessageEvent = tuple()  # type: ignore
+    QQGroupMessageEvent = tuple()  # type: ignore
+    QQAtChannelMessageEvent = tuple()  # type: ignore
+    QQChannelPrivateMessageEvent = tuple()  # type: ignore
+    MessageMarkdown = None  # type: ignore
+    MessageKeyboard = None  # type: ignore
 
 
 # =========================
@@ -71,7 +73,6 @@ class CompatMessageSegment:
 
     @staticmethod
     def _is_url(value: Any) -> bool:
-        # 只有字符串才可能是 URL
         if not isinstance(value, str):
             return False
         value = value.strip()
@@ -85,7 +86,6 @@ class CompatMessageSegment:
 
     @staticmethod
     def _to_bytes(data: Any) -> bytes:
-        # 统一转换为 bytes，供 QQ 的 file_* 使用
         if isinstance(data, bytes):
             return data
         if isinstance(data, BytesIO):
@@ -151,9 +151,6 @@ class CompatMessageSegment:
 
     @staticmethod
     def text(bot_or_text: Any, text: Optional[str] = None):
-        # 兼容两种调用
-        # 新: text(bot, "xxx")
-        # 旧: text("xxx")
         if text is None:
             pure_text = str(bot_or_text)
             if HAS_OB11 and OB11MessageSegment is not None:
@@ -171,17 +168,14 @@ class CompatMessageSegment:
 
     @staticmethod
     def image(bot: Any, file: Any):
-        # QQ：URL -> image；本地 -> file_image
         if CompatMessageSegment._is_qq_bot(bot):
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.image(file)  # type: ignore[union-attr]
             return QQMessageSegment.file_image(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
 
-        # OB11：原生 image
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.image(file)  # type: ignore[union-attr]
 
-        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.image(file)
         if HAS_QQ and QQMessageSegment is not None:
@@ -192,17 +186,14 @@ class CompatMessageSegment:
 
     @staticmethod
     def audio(bot: Any, file: Any):
-        # QQ：URL -> audio；本地 -> file_audio
         if CompatMessageSegment._is_qq_bot(bot):
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.audio(file)  # type: ignore[union-attr]
             return QQMessageSegment.file_audio(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
 
-        # OB11：record
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.record(file)  # type: ignore[union-attr]
 
-        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.record(file)
         if HAS_QQ and QQMessageSegment is not None:
@@ -213,17 +204,14 @@ class CompatMessageSegment:
 
     @staticmethod
     def video(bot: Any, file: Any):
-        # QQ：URL -> video；本地 -> file_video
         if CompatMessageSegment._is_qq_bot(bot):
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.video(file)  # type: ignore[union-attr]
             return QQMessageSegment.file_video(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
 
-        # OB11：video
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.video(file)  # type: ignore[union-attr]
 
-        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.video(file)
         if HAS_QQ and QQMessageSegment is not None:
@@ -234,17 +222,14 @@ class CompatMessageSegment:
 
     @staticmethod
     def file(bot: Any, file: Any):
-        # QQ：URL -> file；本地 -> file_file
         if CompatMessageSegment._is_qq_bot(bot):
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.file(file)  # type: ignore[union-attr]
             return QQMessageSegment.file_file(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
 
-        # OB11：无严格对等段，这里保底走 image
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.image(file)  # type: ignore[union-attr]
 
-        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.image(file)
         if HAS_QQ and QQMessageSegment is not None:
@@ -255,15 +240,12 @@ class CompatMessageSegment:
 
     @staticmethod
     def at(bot: Any, user_id: str):
-        # OB11 支持 at
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.at(str(user_id))  # type: ignore[union-attr]
 
-        # QQ 不支持 at，返回空文本
         if CompatMessageSegment._is_qq_bot(bot):
             return QQMessageSegment.text("")  # type: ignore[union-attr]
 
-        # 兜底
         if HAS_OB11 and OB11MessageSegment is not None:
             return OB11MessageSegment.at(str(user_id))
         if HAS_QQ and QQMessageSegment is not None:
@@ -277,31 +259,26 @@ class CompatMessageSegment:
 Bot = BaseBot
 Message = Union[OB11Message, QQMessage, str]
 MessageSegment = CompatMessageSegment
-# 现在，HAS_OB11 和 HAS_QQ 都已经正确设置了
-if HAS_OB11 and HAS_QQ:
-    # 如果两个适配器都存在，使用完整的联合类型
-    GroupMessageEvent = Union[OB11GroupMessageEvent, QQGroupMessageEvent]
-    PrivateMessageEvent = Union[OB11PrivateMessageEvent, QQPrivateMessageEvent]
-elif HAS_OB11:
-    # 只有 OneBot V11
-    GroupMessageEvent = OB11GroupMessageEvent
-    PrivateMessageEvent = OB11PrivateMessageEvent
-elif HAS_QQ:
-    # 只有 QQ
-    GroupMessageEvent = QQGroupMessageEvent
-    PrivateMessageEvent = QQPrivateMessageEvent
+
+if HAS_QQ:
+    GroupMessageEvent = Union[
+        OB11GroupMessageEvent,
+        QQGroupMessageEvent,
+        QQAtChannelMessageEvent,  # 频道消息并入“群语义”
+    ]
 else:
-    # 没有任何适配器，MessageEvent 为空
-    GroupMessageEvent = Union[()] # 使用 Union[()] 代替 Never
-    PrivateMessageEvent = Union[()] # 使用 Union[()] 代替 Never
-if HAS_OB11 and HAS_QQ:
-    MessageEvent = Union[OB11GroupMessageEvent, OB11PrivateMessageEvent, QQGroupMessageEvent, QQPrivateMessageEvent, QQAtChannelMessageEvent]
-elif HAS_OB11:
-    MessageEvent = Union[OB11GroupMessageEvent, OB11PrivateMessageEvent]
-elif HAS_QQ:
-    MessageEvent = Union[QQGroupMessageEvent, QQPrivateMessageEvent, QQAtChannelMessageEvent]
+    GroupMessageEvent = Union[OB11GroupMessageEvent]
+
+if HAS_QQ:
+    PrivateMessageEvent = Union[
+        OB11PrivateMessageEvent,
+        QQPrivateMessageEvent,
+        QQChannelPrivateMessageEvent,  # 频道私信并入“私聊语义”
+    ]
 else:
-    MessageEvent = Union[()] # 使用 Union[()] 代替 Never
+    PrivateMessageEvent = Union[OB11PrivateMessageEvent]
+
+MessageEvent = Union[GroupMessageEvent, PrivateMessageEvent]
 
 
 def is_group_event(event: BaseEvent) -> bool:
@@ -320,6 +297,7 @@ def is_private_event(event: BaseEvent) -> bool:
         types.append(OB11PrivateMessageEvent)  # type: ignore[arg-type]
     if HAS_QQ:
         types.append(QQPrivateMessageEvent)  # type: ignore[arg-type]
+        types.append(QQChannelPrivateMessageEvent)  # type: ignore[arg-type]
     return isinstance(event, tuple(types)) if types else False
 
 
@@ -329,12 +307,10 @@ _group_seq_cache: dict[str, int] = {}
 def _next_group_seq(group_openid: str) -> int:
     current = _group_seq_cache.get(group_openid)
     if current is None:
-        # 按需求：随机1-10000减随机1-1000
         current = random.randint(1, 10000) - random.randint(1, 1000)
 
     current += 1
 
-    # 兜底为正整数
     if current <= 0:
         current = 1
     if current > 1_000_000:
@@ -368,7 +344,7 @@ def get_group_id(event: BaseEvent) -> Optional[str]:
     if hasattr(event, "group_openid"):
         gid = getattr(event, "group_openid")
         return str(gid) if gid is not None else None
-    if hasattr(event, "channel_id"):  # 频道兜底
+    if hasattr(event, "channel_id"):  # 频道 ID 统一映射为 group_id
         gid = getattr(event, "channel_id")
         return str(gid) if gid is not None else None
     return None
@@ -378,8 +354,9 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
     if getattr(event, "__compat_patched__", False):
         return event
 
-    # 统一获取昵称，优先级 username > id > user_id
-    def _resolve_sender_name(e: BaseEvent, fallback_user_id: Optional[str] = None) -> str:
+    def _resolve_sender_name(
+        e: BaseEvent, fallback_user_id: Optional[str] = None
+    ) -> str:
         author = getattr(e, "author", None)
         username = getattr(author, "username", None)
         if username:
@@ -405,9 +382,28 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.user_openid)
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
+        sender.nickname = sender_name
+        sender.card = sender_name
+        sender.role = "member"
+        setattr(event, "sender", sender)
+
+    elif HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
+        # 频道私信 -> 私聊语义
+        raw = event.content or ""
+        uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
+        setattr(event, "message_type", "private")
+        setattr(event, "user_id", str(uid))
+        setattr(event, "group_id", None)
+        setattr(event, "message_id", str(event.id))
+        setattr(event, "raw_message", raw)
+        setattr(event, "message", raw)
+        setattr(event, "plaintext", raw)
+
+        sender = type("CompatSender", (), {})()
+        sender.user_id = str(uid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
         sender.nickname = sender_name
         sender.card = sender_name
@@ -424,7 +420,6 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 补齐 sender，供业务统一访问 event.sender.nickname/card/role
         sender = type("CompatSender", (), {})()
         sender.user_id = str(event.author.member_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
@@ -433,36 +428,36 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         sender.role = "member"
         setattr(event, "sender", sender)
 
-    # 频道 AT 消息按“群语义”处理，关键是映射 channel_id -> group_id
     elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+        # 频道消息 -> 群聊语义，channel_id -> group_id
         raw = event.content or ""
-        setattr(event, "message_type", "group")
-        # 频道场景下统一 user_id
         uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
+        setattr(event, "message_type", "group")
         setattr(event, "user_id", str(uid))
-        # 把频道ID映射到group_id，复用现有群逻辑
         setattr(event, "group_id", str(event.channel_id))
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
 
-        # 补齐 sender，避免 event.sender 访问报错
         sender = type("CompatSender", (), {})()
-        sender.user_id = str(getattr(event, "user_id", ""))
+        sender.user_id = str(uid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
         sender.nickname = sender_name
         sender.card = sender_name
         sender.role = "member"
         setattr(event, "sender", sender)
 
-    # 兜底补齐 user_id
     if not hasattr(event, "user_id"):
         uid = get_user_id(event)
         if uid is not None:
             setattr(event, "user_id", uid)
 
-    # 兜底补齐 sender，避免外部直接访问 event.sender 报错
+    if not hasattr(event, "group_id"):
+        gid = get_group_id(event)
+        if gid is not None and is_group_event(event):
+            setattr(event, "group_id", gid)
+
     if not hasattr(event, "sender"):
         sender = type("CompatSender", (), {})()
         sender.user_id = getattr(event, "user_id", None)
@@ -484,7 +479,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
         _origin_send = bot.send
 
         async def send(event, message, **kwargs):
-            # QQ 群聊：显式 msg_seq
             if HAS_QQ and isinstance(event, QQGroupMessageEvent):
                 group_openid = str(event.group_openid)
                 msg_seq = kwargs.pop("msg_seq", _next_group_seq(group_openid))
@@ -496,14 +490,22 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     event_id=kwargs.pop("event_id", None),
                 )
 
-            # QQ 私聊
             if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
                 return await _origin_send(event=event, message=message, **kwargs)
 
-            # QQ 频道消息：走频道发送
             if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+                # 频道消息归群语义，但发送仍走频道发送
                 return await bot.send_to_channel(
                     channel_id=str(event.channel_id),
+                    message=message,
+                    msg_id=str(event.id),
+                    event_id=kwargs.pop("event_id", None),
+                )
+
+            if HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
+                # 频道私信归私聊语义，但发送仍走频道私信接口
+                return await bot.send_to_dms(
+                    guild_id=str(event.guild_id),
                     message=message,
                     msg_id=str(event.id),
                     event_id=kwargs.pop("event_id", None),
@@ -515,7 +517,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             return await bot.send_to_c2c(openid=str(user_id), message=message, **kwargs)
 
         async def send_group_msg(*, group_id, message, **kwargs):
-            # 兼容 OB11 的 send_group_msg 形态（QQ 中按 group_openid 发送）
             msg_seq = kwargs.pop("msg_seq", _next_group_seq(str(group_id)))
             return await bot.send_to_group(
                 group_openid=str(group_id),
