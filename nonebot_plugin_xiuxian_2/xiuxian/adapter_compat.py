@@ -14,6 +14,7 @@ from nonebot.log import logger
 # =========================
 # 可选导入：onebot v11
 # =========================
+HAS_OB11 = False
 try:
     from nonebot.adapters.onebot.v11 import (
         Bot as OB11Bot,
@@ -24,19 +25,19 @@ try:
         GroupMessageEvent as OB11GroupMessageEvent,
         PrivateMessageEvent as OB11PrivateMessageEvent,
     )
-
     HAS_OB11 = True
-except Exception:
-    HAS_OB11 = False
-    OB11Bot = None  # type: ignore
-    OB11Message = str  # type: ignore
-    OB11MessageSegment = None  # type: ignore
-    OB11GroupMessageEvent = tuple()  # type: ignore
-    OB11PrivateMessageEvent = tuple()  # type: ignore
+except ImportError:
+    pass
+    OB11Bot = None
+    OB11Message = None
+    OB11MessageSegment = None
+    OB11GroupMessageEvent = None
+    OB11PrivateMessageEvent = None
 
 # =========================
 # 可选导入：qq
 # =========================
+HAS_QQ = False
 try:
     from nonebot.adapters.qq import (
         Bot as QQBot,
@@ -46,21 +47,20 @@ try:
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
         GroupAtMessageCreateEvent as QQGroupMessageEvent,
-        AtMessageCreateEvent as QQAtChannelMessageEvent,  # 频道@消息
+        AtChannelMessageCreateEvent as QQAtChannelMessageEvent,
     )
     from nonebot.adapters.qq.models import MessageMarkdown, MessageKeyboard
-
     HAS_QQ = True
-except Exception:
-    HAS_QQ = False
-    QQBot = None  # type: ignore
-    QQMessage = str  # type: ignore
-    QQMessageSegment = None  # type: ignore
-    QQPrivateMessageEvent = tuple()  # type: ignore
-    QQGroupMessageEvent = tuple()  # type: ignore
-    QQAtChannelMessageEvent = tuple()  # type: ignore
-    MessageMarkdown = None  # type: ignore
-    MessageKeyboard = None  # type: ignore
+except ImportError:
+    pass
+    QQBot = None
+    QQMessage = None
+    QQMessageSegment = None
+    QQPrivateMessageEvent = None
+    QQGroupMessageEvent = None
+    QQAtChannelMessageEvent = None
+    MessageMarkdown = None
+    MessageKeyboard = None
 
 
 # =========================
@@ -277,18 +277,31 @@ class CompatMessageSegment:
 Bot = BaseBot
 Message = Union[OB11Message, QQMessage, str]
 MessageSegment = CompatMessageSegment
-
-if HAS_QQ:
-    GroupMessageEvent = Union[
-        OB11GroupMessageEvent,
-        QQGroupMessageEvent,
-        QQAtChannelMessageEvent,  # 频道事件并入“群语义”
-    ]
+# 现在，HAS_OB11 和 HAS_QQ 都已经正确设置了
+if HAS_OB11 and HAS_QQ:
+    # 如果两个适配器都存在，使用完整的联合类型
+    GroupMessageEvent = Union[OB11GroupMessageEvent, QQGroupMessageEvent]
+    PrivateMessageEvent = Union[OB11PrivateMessageEvent, QQPrivateMessageEvent]
+elif HAS_OB11:
+    # 只有 OneBot V11
+    GroupMessageEvent = OB11GroupMessageEvent
+    PrivateMessageEvent = OB11PrivateMessageEvent
+elif HAS_QQ:
+    # 只有 QQ
+    GroupMessageEvent = QQGroupMessageEvent
+    PrivateMessageEvent = QQPrivateMessageEvent
 else:
-    GroupMessageEvent = Union[OB11GroupMessageEvent]
-
-PrivateMessageEvent = Union[OB11PrivateMessageEvent, QQPrivateMessageEvent]
-MessageEvent = Union[GroupMessageEvent, PrivateMessageEvent]
+    # 没有任何适配器，MessageEvent 为空
+    GroupMessageEvent = Union[()] # 使用 Union[()] 代替 Never
+    PrivateMessageEvent = Union[()] # 使用 Union[()] 代替 Never
+if HAS_OB11 and HAS_QQ:
+    MessageEvent = Union[OB11GroupMessageEvent, OB11PrivateMessageEvent, QQGroupMessageEvent, QQPrivateMessageEvent, QQAtChannelMessageEvent]
+elif HAS_OB11:
+    MessageEvent = Union[OB11GroupMessageEvent, OB11PrivateMessageEvent]
+elif HAS_QQ:
+    MessageEvent = Union[QQGroupMessageEvent, QQPrivateMessageEvent, QQAtChannelMessageEvent]
+else:
+    MessageEvent = Union[()] # 使用 Union[()] 代替 Never
 
 
 def is_group_event(event: BaseEvent) -> bool:
