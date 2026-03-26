@@ -13,11 +13,11 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from datetime import datetime
 import os
 from pathlib import Path
-from ..xiuxian_config import convert_rank, added_ranks
+from ..xiuxian_config import convert_rank, added_ranks as get_added_ranks
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
-added_ranks = added_ranks()
+ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -31,6 +31,29 @@ YAOCAIINFOMSG = {
     "6": "凝神",
 }
 
+
+
+
+def get_required_rank_name(item_info: dict, user_info: dict = None):
+    """
+    统一计算物品需求境界（可选考虑轮回减境界）
+    返回: (required_rank_name, goods_rank_calculated)
+    """
+    rank_name_list = convert_rank("江湖好手")[1]
+
+    rank_raw = int(item_info.get("rank", 1))
+    if rank_raw == -5:
+        goods_rank = 23
+    else:
+        goods_rank = rank_raw + ADDED_RANKS
+
+    # 轮回减境界
+    if user_info and user_info.get("root_type") in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
+        goods_rank = max(1, goods_rank - 3)
+
+    idx = len(rank_name_list) - goods_rank
+    idx = max(0, min(idx, len(rank_name_list) - 1))
+    return rank_name_list[idx], goods_rank
 
 def check_equipment_can_use(user_id, goods_id):
     """
@@ -822,12 +845,8 @@ def get_item_msg(goods_id, user_id=None):
     获取单个物品的消息
     """
     item_info = items.get_data_by_item_id(goods_id)
-    rank_name_list = convert_rank("江湖好手")[1]
-    if int(item_info['rank']) == -5:
-        goods_rank = 23
-    else:
-        goods_rank = int(item_info['rank']) + added_ranks
-    required_rank_name = rank_name_list[len(rank_name_list) - goods_rank]
+    user_info = sql_message.get_user_info_with_id(user_id) if user_id else None
+    required_rank_name, _ = get_required_rank_name(item_info, user_info)
     goods_max_num = sql_message.goods_max_num(goods_id)
     msg = ''
     if item_info['type'] == '丹药':
@@ -934,7 +953,7 @@ def check_use_elixir(user_id, goods_id, num):
     user_info = sql_message.get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
-    goods_rank = goods_info['rank'] + added_ranks - 2
+    goods_rank = goods_info['rank'] + ADDED_RANKS - 2
     goods_name = goods_info['name']
     back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
     goods_all_num = back['all_num'] # 数据库里的使用数量

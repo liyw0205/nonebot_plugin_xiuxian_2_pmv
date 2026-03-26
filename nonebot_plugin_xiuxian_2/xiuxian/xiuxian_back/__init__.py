@@ -42,7 +42,8 @@ from .back_util import (
     get_item_msg, get_item_msg_rank, check_use_elixir,
     get_use_jlq_msg, get_no_use_equipment_sql,
     get_user_equipment_msg,
-    check_equipment_use_msg
+    check_equipment_use_msg,
+    get_required_rank_name
 )
 
 
@@ -608,24 +609,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     
     # 根据物品类型处理逻辑
     user_rank = convert_rank(user_info['level'])[0]
-    rank_name_list = convert_rank("江湖好手")[1]
-    goods_rank_raw = goods_info.get('rank', 1)
-    
-    # 物品品阶的计算，-5表示特殊品阶
-    if int(goods_rank_raw) == -5:
-        goods_rank_calculated = 23 # 特殊品阶，例如神物
-    else:
-        goods_rank_calculated = int(goods_rank_raw) + added_ranks
-    
     goods_type = goods_info['type']
+
+    required_rank_name, goods_rank_calculated = get_required_rank_name(goods_info, user_info)
     lh_msg = ""
-    # 轮回道果等特殊灵根对境界限制的降低效果
     if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
-        goods_rank_calculated = max(1, goods_rank_calculated - 3) # 至少是1
         lh_msg = "\n轮回重修：境界限制下降！"
-    
-    # 避免索引越界
-    required_rank_name = rank_name_list[min(goods_rank_calculated, len(rank_name_list) - 1)]
         
     if goods_type == "礼包":
         package_name = goods_info['name']

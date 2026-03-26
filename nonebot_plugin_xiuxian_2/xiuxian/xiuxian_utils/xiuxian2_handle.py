@@ -3516,7 +3516,7 @@ def get_weapon_info_msg(weapon_id, weapon_info=None):
     mp_buff_msg = f"降低真元消耗{int(weapon_info['mp_buff'] * 100)}%！" if weapon_info['mp_buff'] != 0 else ''
     msg += f"名字：{weapon_info['name']}\n"
     msg += f"品阶：{weapon_info['level']}\n"
-    msg += f"效果：{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{mp_buff_msg}{zw_buff_msg}"
+    msg += f"效果：{weapon_info['desc']}，{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{mp_buff_msg}{zw_buff_msg}"
     return msg
 
 
@@ -3535,7 +3535,7 @@ def get_armor_info_msg(armor_id, armor_info=None):
     crit_buff_msg = f"提升{int(armor_info['crit_buff'] * 100)}%会心率！" if armor_info['crit_buff'] != 0 else ''
     msg += f"名字：{armor_info['name']}\n"
     msg += f"品阶：{armor_info['level']}\n"
-    msg += f"效果：{def_buff_msg}{atk_buff_msg}{crit_buff_msg}"
+    msg += f"效果：{armor_info['desc']}，{def_buff_msg}{atk_buff_msg}{crit_buff_msg}"
     return msg
 
 
