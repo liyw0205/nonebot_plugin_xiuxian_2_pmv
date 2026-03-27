@@ -147,15 +147,13 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     
 @novice.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    user_id = str(user_info['user_id'])
-    
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await novice.finish()
-    
+    user_id = str(user_info['user_id'])
     # 检查是否已领取
     if sql_message.get_novice(user_id) is None:
         msg = '您已经领取过新手礼包了！'
@@ -175,7 +173,7 @@ async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 发放新手礼包
     num = 1
-    goods_id = "15052"  # 新手礼包物品ID
+    goods_id = "18052"  # 新手礼包物品ID
     goods_info = items.get_data_by_item_id(goods_id)
     package_name = goods_info['name']
     msg_parts = []
