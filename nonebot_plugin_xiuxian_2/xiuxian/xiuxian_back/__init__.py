@@ -36,15 +36,8 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
-from .back_util import (
-    get_user_main_back_msg, get_user_yaocai_back_msg, get_user_yaocai_detail_back_msg, get_user_danyao_back_msg, check_equipment_can_use,
-    get_use_equipment_sql,
-    get_item_msg, get_item_msg_rank, check_use_elixir,
-    get_use_jlq_msg, get_no_use_equipment_sql,
-    get_user_equipment_msg,
-    check_equipment_use_msg,
-    get_required_rank_name
-)
+from .back_util import *
+from urllib.parse import quote
 
 
 # 初始化组件
@@ -1252,44 +1245,340 @@ async def chakan_wupin_(
     await send_msg_handler(bot, event, '修仙界物品', bot.self_id, final_msg, title=title, page=page) # 传入final_msg而非paged_items
     await chakan_wupin.finish()
 
+from urllib.parse import quote
+
+
+def _build_backpack_md_with_sections(
+    title: str,
+    sections: list[tuple[str, list[dict]]],
+    current_page: int,
+    total_pages: int,
+    show_use_btn: bool = True,
+    next_cmd: str = ""
+) -> str:
+    """
+    sections: [
+      ("分类标题", [{"name":"xxx","count":1,"bind":0}, ...]),
+      ...
+    ]
+    """
+    lines = [f"☆------{title}------☆", ""]
+
+    for sec_title, rows in sections:
+        if not rows:
+            continue
+        lines.append(f"{sec_title}")
+        lines.append("")
+        for row in rows:
+            name = row["name"]
+            count = row.get("count", 0)
+            bind = row.get("bind", 0)
+
+            view_cmd = quote(f"查看效果 {name}")
+            name_md = f"[{name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
+
+            equipped_flag = " ※已装备※" if row.get("is_equipped") else ""
+            line = f"> - {name_md} 数量:{count} 绑定:{bind}{equipped_flag}"
+
+            if show_use_btn:
+                use_cmd = quote(f"使用 {name}")
+                use_md = f"[使用](mqqapi://aio/inlinecmd?command={use_cmd}&enter=false&reply=false)"
+                line += f"  {use_md}"
+
+            lines.append(line)
+            lines.append("\r")
+
+    lines.append("")
+    lines.append(f"第 {current_page}/{total_pages} 页")
+
+    if current_page < total_pages and next_cmd:
+        next_cmd_q = quote(next_cmd)
+        lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_cmd_q}&enter=false&reply=false)")
+
+    return "\r".join(lines)
+
+
+def _paginate_sections(
+    sections: list[tuple[str, list[dict]]],
+    current_page: int,
+    per_page: int = 15
+):
+    """
+    按“物品条目数”分页，保留分类结构
+    """
+    flat = []
+    for sec_title, rows in sections:
+        for r in rows:
+            flat.append((sec_title, r))
+
+    if not flat:
+        return [], 1, 1
+
+    total_pages = (len(flat) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
+
+    start = (current_page - 1) * per_page
+    end = start + per_page
+    page_flat = flat[start:end]
+
+    grouped = {}
+    order = []
+    for sec_title, row in page_flat:
+        if sec_title not in grouped:
+            grouped[sec_title] = []
+            order.append(sec_title)
+        grouped[sec_title].append(row)
+
+    page_sections = [(k, grouped[k]) for k in order]
+    return page_sections, current_page, total_pages
+
+
+def _build_main_backpack_sections_for_md(user_id: str):
+    back_data = sql_message.get_back_msg(user_id)
+    if not back_data:
+        return []
+
+    # 只保留大类，不按品阶分段
+    equip_map = {
+        "法器": {"已装备": [], "未装备": []},
+        "防具": {"已装备": [], "未装备": []},
+    }
+    skill_map = {
+        "功法": [],
+        "神通": [],
+        "辅修功法": [],
+        "身法": [],
+        "瞳术": [],
+    }
+    other_map = {
+        "神物": [],
+        "聚灵旗": [],
+        "特殊道具": [],
+        "炼丹炉": [],
+        "礼包": [],
+    }
+
+    def _rank_idx(level: str, rank_list: list[str], default_idx=999):
+        for i, rk in enumerate(rank_list):
+            if rk in str(level):
+                return i
+        return default_idx
+
+    merged = {}
+    for b in back_data:
+        if int(b.get("goods_num", 0)) <= 0:
+            continue
+        gid = b["goods_id"]
+        gname = b["goods_name"]
+        key = (gid, gname, b.get("goods_type", ""))
+        if key not in merged:
+            merged[key] = {
+                "goods_id": gid,
+                "name": gname,
+                "goods_type": b.get("goods_type", ""),
+                "count": 0,
+                "bind": 0
+            }
+        merged[key]["count"] += int(b.get("goods_num", 0))
+        merged[key]["bind"] += int(b.get("bind_num", 0))
+
+    for _, row in merged.items():
+        goods_type = row["goods_type"]
+
+        if goods_type in ["丹药", "药材"]:
+            continue
+
+        item_info = items.get_data_by_item_id(row["goods_id"])
+        if not item_info:
+            continue
+
+        if goods_type == "装备":
+            it = item_info.get("item_type", "")
+            lv = item_info.get("level", "")
+            if it in ["法器", "防具"]:
+                row["_sort_idx"] = _rank_idx(lv, EQUIPMENT_RANK_ORDER)
+                row["_is_equipped"] = check_equipment_use_msg(user_id, row["goods_id"])
+                row["is_equipped"] = row["_is_equipped"]
+                if row["_is_equipped"]:
+                    equip_map[it]["已装备"].append(row)
+                else:
+                    equip_map[it]["未装备"].append(row)
+            continue
+
+        if goods_type == "技能":
+            st = item_info.get("item_type", "")
+            if st in skill_map:
+                lv = item_info.get("level", "")
+                row["_sort_idx"] = _rank_idx(lv, SKILL_RANK_ORDER)
+                skill_map[st].append(row)
+            continue
+
+        if goods_type in other_map:
+            other_map[goods_type].append(row)
+
+    sections = []
+
+    # 法器/防具：只按大类输出，内部按“已装备优先 + 品阶 + 名字”排序
+    for equip_type in ["法器", "防具"]:
+        rows = equip_map[equip_type]["已装备"] + equip_map[equip_type]["未装备"]
+        if rows:
+            rows = sorted(rows, key=lambda x: (0 if x.get("_is_equipped") else 1, x.get("_sort_idx", 999), x["name"]))
+            sections.append((equip_type, rows))
+
+    for st in ["功法", "神通", "辅修功法", "身法", "瞳术"]:
+        rows = skill_map[st]
+        if rows:
+            rows = sorted(rows, key=lambda x: (x.get("_sort_idx", 999), x["name"]))
+            sections.append((st, rows))
+
+    for k in ["神物", "聚灵旗", "特殊道具", "炼丹炉", "礼包"]:
+        rows = other_map[k]
+        if rows:
+            rows = sorted(rows, key=lambda x: x["name"])
+            sections.append((k, rows))
+
+    return sections
+
+def _build_danyao_sections_for_md(user_id: str):
+    """
+    丹药背包：
+    - 按 buff_type 分类
+    - 同分类按名字排序
+    """
+    back_data = sql_message.get_back_msg(user_id)
+    if not back_data:
+        return []
+
+    buff_type_order = {
+        'hp': 1, 'all': 2, 'level_up_rate': 3, 'level_up_big': 4,
+        'atk_buff': 5, 'exp_up': 6, 'level_up': 7, '未知': 999
+    }
+    buff_type_names = {
+        'hp': '气血回复丹药',
+        'all': '全状态回复丹药',
+        'level_up_rate': '突破丹药',
+        'level_up_big': '大境界突破丹药',
+        'atk_buff': '永久攻击丹药',
+        'exp_up': '经验增加丹药',
+        'level_up': '突破辅助丹药',
+        '未知': '未知类型丹药'
+    }
+
+    buckets = {}
+    for b in back_data:
+        if int(b.get("goods_num", 0)) <= 0 or b.get("goods_type") != "丹药":
+            continue
+        info = items.get_data_by_item_id(b["goods_id"])
+        if not info:
+            continue
+        bt = info.get("buff_type", "未知")
+        buckets.setdefault(bt, {})
+        name = b["goods_name"]
+        if name not in buckets[bt]:
+            buckets[bt][name] = {"name": name, "count": 0, "bind": 0}
+        buckets[bt][name]["count"] += int(b.get("goods_num", 0))
+        buckets[bt][name]["bind"] += int(b.get("bind_num", 0))
+
+    sections = []
+    for bt in sorted(buckets.keys(), key=lambda x: buff_type_order.get(x, 999)):
+        rows = sorted(list(buckets[bt].values()), key=lambda x: x["name"])
+        if rows:
+            sections.append((buff_type_names.get(bt, f"{bt}类丹药"), rows))
+    return sections
+
+def _build_yaocai_sections_for_md(user_id: str):
+    """
+    药材背包：
+    - 按 一~九品药材 分类
+    - 同分类按名字排序
+    """
+    back_data = sql_message.get_back_msg(user_id)
+    if not back_data:
+        return []
+
+    level_order = YAOCAI_RANK_ORDER
+    buckets = {lv: {} for lv in level_order}
+
+    for b in back_data:
+        if int(b.get("goods_num", 0)) <= 0 or b.get("goods_type") != "药材":
+            continue
+        info = items.get_data_by_item_id(b["goods_id"])
+        if not info:
+            continue
+        lv = info.get("level", "")
+        if lv not in buckets:
+            continue
+        name = b["goods_name"]
+        if name not in buckets[lv]:
+            buckets[lv][name] = {"name": name, "count": 0, "bind": 0}
+        buckets[lv][name]["count"] += int(b.get("goods_num", 0))
+        buckets[lv][name]["bind"] += int(b.get("bind_num", 0))
+
+    sections = []
+    for lv in level_order:
+        rows = sorted(list(buckets[lv].values()), key=lambda x: x["name"])
+        if rows:
+            sections.append((lv, rows))
+    return sections
+
 @main_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """我的背包 - 显示所有物品"""
+    """我的背包 - 显示所有物品（不含丹和材）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await main_back.finish()
-    
-    # 获取页码
+
     try:
         current_page = int(args.extract_plain_text().strip())
     except ValueError:
         current_page = 1
-    
+
     user_id = user_info['user_id']
+
+    if XiuConfig().markdown_status:
+        sections = _build_main_backpack_sections_for_md(user_id)
+        if not sections:
+            await handle_send(bot, event, "道友的背包空空如也！")
+            await main_back.finish()
+
+        page_sections, current_page, total_pages = _paginate_sections(
+            sections, current_page, per_page=15
+        )
+
+        md_text = _build_backpack_md_with_sections(
+            title=f"{user_info['user_name']}的背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=True,
+            next_cmd=f"我的背包 {current_page + 1}"
+        )
+        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        await main_back.finish()
+
+    # 非 markdown 逻辑保持原有
     msg_list = get_user_main_back_msg(user_id)
     title = f"{user_info['user_name']}的背包"
-    
+
     if not msg_list:
         await handle_send(bot, event, "道友的背包空空如也！")
         await main_back.finish()
-    
-    # 分页处理
+
     per_page = 15
     total_pages = (len(msg_list) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
-    
-    # 构建消息
+
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
-    
+
     title_display = f"\n☆------{title}------☆"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
-    
+
     if total_pages > 1:
         next_page_cmd = f"我的背包 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
@@ -1297,50 +1586,6 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await send_msg_handler(bot, event, '背包', bot.self_id, final_msg, title=title_display, page=page)
     await main_back.finish()
 
-@yaocai_back.handle(parameterless=[Cooldown(cd_time=5)])
-async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """药材背包 - 显示药材类物品"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await yaocai_back.finish()
-    
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
-    
-    user_id = user_info['user_id']
-    msg_list = get_user_yaocai_back_msg(user_id)
-    title = f"{user_info['user_name']}的药材背包"
-    
-    if not msg_list:
-        await handle_send(bot, event, "道友的药材背包空空如也！")
-        await yaocai_back.finish()
-    
-    # 分页处理
-    per_page = 15
-    total_pages = (len(msg_list) + per_page - 1) // per_page
-    current_page = max(1, min(current_page, total_pages))
-    
-    # 构建消息
-    start_idx = (current_page - 1) * per_page
-    end_idx = start_idx + per_page
-    paged_items = msg_list[start_idx:end_idx]
-    
-    title_display = f"\n☆------{title}------☆"
-    final_msg = []
-    final_msg.extend(paged_items)
-    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
-    
-    if total_pages > 1:
-        next_page_cmd = f"药材背包 {current_page + 1}"
-        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"药材背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
-    await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg, title=title_display, page=page)
-    await yaocai_back.finish()
 
 @danyao_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1350,42 +1595,128 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await danyao_back.finish()
-    
-    # 获取页码
+
     try:
         current_page = int(args.extract_plain_text().strip())
     except ValueError:
         current_page = 1
-    
+
     user_id = user_info['user_id']
+
+    if XiuConfig().markdown_status:
+        sections = _build_danyao_sections_for_md(user_id)
+        if not sections:
+            await handle_send(bot, event, "道友的丹药背包空空如也！")
+            await danyao_back.finish()
+
+        page_sections, current_page, total_pages = _paginate_sections(
+            sections, current_page, per_page=15
+        )
+
+        md_text = _build_backpack_md_with_sections(
+            title=f"{user_info['user_name']}的丹药背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=True,
+            next_cmd=f"丹药背包 {current_page + 1}"
+        )
+        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        await danyao_back.finish()
+
+    # 非 markdown 逻辑保持原有
     msg_list = get_user_danyao_back_msg(user_id)
     title = f"{user_info['user_name']}的丹药背包"
-    
+
     if not msg_list:
         await handle_send(bot, event, "道友的丹药背包空空如也！")
         await danyao_back.finish()
-    
-    # 分页处理
+
     per_page = 15
     total_pages = (len(msg_list) + per_page - 1) // per_page
     current_page = max(1, min(current_page, total_pages))
-    
-    # 构建消息
+
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
-    
+
     title_display = f"\n☆------{title}------☆"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
-    
+
     if total_pages > 1:
         next_page_cmd = f"丹药背包 {current_page + 1}"
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
     page = ["翻页", f"丹药背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg, title=title_display, page=page)
     await danyao_back.finish()
+
+
+@yaocai_back.handle(parameterless=[Cooldown(cd_time=5)])
+async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """药材背包 - 显示药材类物品"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await yaocai_back.finish()
+
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except ValueError:
+        current_page = 1
+
+    user_id = user_info['user_id']
+
+    if XiuConfig().markdown_status:
+        sections = _build_yaocai_sections_for_md(user_id)
+        if not sections:
+            await handle_send(bot, event, "道友的药材背包空空如也！")
+            await yaocai_back.finish()
+
+        page_sections, current_page, total_pages = _paginate_sections(
+            sections, current_page, per_page=15
+        )
+
+        md_text = _build_backpack_md_with_sections(
+            title=f"{user_info['user_name']}的药材背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=False,  # 药材不显示“使用”
+            next_cmd=f"药材背包 {current_page + 1}"
+        )
+        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        await yaocai_back.finish()
+
+    # 非 markdown 逻辑保持原有
+    msg_list = get_user_yaocai_back_msg(user_id)
+    title = f"{user_info['user_name']}的药材背包"
+
+    if not msg_list:
+        await handle_send(bot, event, "道友的药材背包空空如也！")
+        await yaocai_back.finish()
+
+    per_page = 15
+    total_pages = (len(msg_list) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
+
+    start_idx = (current_page - 1) * per_page
+    end_idx = start_idx + per_page
+    paged_items = msg_list[start_idx:end_idx]
+
+    title_display = f"\n☆------{title}------☆"
+    final_msg = []
+    final_msg.extend(paged_items)
+    final_msg.append(f"\n第 {current_page}/{total_pages} 页")
+
+    if total_pages > 1:
+        next_page_cmd = f"药材背包 {current_page + 1}"
+        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
+    page = ["翻页", f"药材背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg, title=title_display, page=page)
+    await yaocai_back.finish()
 
 @my_equipment.handle(parameterless=[Cooldown(cd_time=5)])
 async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

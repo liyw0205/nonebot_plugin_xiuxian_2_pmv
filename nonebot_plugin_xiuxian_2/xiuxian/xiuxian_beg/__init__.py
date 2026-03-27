@@ -71,8 +71,8 @@ async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @beg_stone.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_id = event.get_user_id()
     isUser, user_info, _ = check_user(event)
+    user_id = str(user_info['user_id'])
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
     sect = user_info['sect_id']
@@ -150,7 +150,7 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def novice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    user_id = event.get_user_id()
+    user_id = str(user_info['user_id'])
     
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")

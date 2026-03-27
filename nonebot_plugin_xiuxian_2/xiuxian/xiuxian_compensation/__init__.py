@@ -536,7 +536,11 @@ def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
 
     @claim_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
     async def handle_claim(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-        user_id = event.get_user_id()
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
+        user_id = str(user_info['user_id'])
         item_id = args.extract_plain_text().strip()
         if not item_id:
             await handle_send(bot, event, f"请指定要领取的{item_type}ID")
@@ -571,7 +575,11 @@ def register_common_commands(item_type: ItemType, config: Dict[str, Any]):
 claim_redeem_code_cmd = on_command("兑换", priority=10, block=True)
 @claim_redeem_code_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def claim_redeem_code_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    user_id = event.get_user_id()
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    user_id = str(user_info['user_id'])
     redeem_code = args.extract_plain_text().strip()
     if not redeem_code:
         await handle_send(bot, event, "请指定要兑换的兑换码")

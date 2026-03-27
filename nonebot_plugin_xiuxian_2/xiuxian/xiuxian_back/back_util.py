@@ -31,7 +31,31 @@ YAOCAIINFOMSG = {
     "6": "凝神",
 }
 
+EQUIPMENT_RANK_ORDER = [
+    "无上", "极品仙器", "上品仙器", "下品仙器",
+    "上品通天法器", "下品通天法器",
+    "上品纯阳法器", "下品纯阳法器",
+    "上品法器", "下品法器",
+    "上品玄器", "下品玄器",
+    "上品符器", "下品符器",
+    # 防具兼容
+    "上品通天", "下品通天",
+    "上品纯阳", "下品纯阳",
+]
 
+SKILL_RANK_ORDER = [
+    "无上", "仙阶极品", "仙阶上品", "仙阶下品",
+    "天阶上品", "天阶下品",
+    "地阶上品", "地阶下品",
+    "玄阶上品", "玄阶下品",
+    "黄阶上品", "黄阶下品",
+    "人阶上品", "人阶下品",
+]
+
+YAOCAI_RANK_ORDER = [
+    "一品药材", "二品药材", "三品药材", "四品药材", "五品药材",
+    "六品药材", "七品药材", "八品药材", "九品药材",
+]
 
 
 def get_required_rank_name(item_info: dict, user_info: dict = None):
@@ -192,67 +216,11 @@ def get_user_main_back_msg(user_id):
     if user_backs is None:
         return l_msg
     
-    # === 装备分类 ===
-    # 按装备类型和品阶分类
     equipment_types = {
-        "法器": {
-            "已装备": [],
-            "未装备": {
-                "无上": [],
-                "极品仙器": [],
-                "上品仙器": [],
-                "下品仙器": [],
-                "上品通天法器": [],
-                "下品通天法器": [],
-                "上品纯阳法器": [],
-                "下品纯阳法器": [],
-                "上品法器": [],
-                "下品法器": [],
-                "上品玄器": [],
-                "下品玄器": [],
-                "上品符器": [],
-                "下品符器": []
-            }
-        },
-        "防具": {
-            "已装备": [],
-            "未装备": {
-                "无上": [],
-                "极品仙器": [],
-                "上品仙器": [],
-                "下品仙器": [],
-                "上品通天": [],
-                "下品通天": [],
-                "上品纯阳": [],
-                "下品纯阳": [],
-                "上品玄器": [],
-                "下品玄器": [],
-                "上品符器": [],
-                "下品符器": []
-            }
-        }
+        "法器": {"已装备": [], "未装备": {rank: [] for rank in EQUIPMENT_RANK_ORDER}},
+        "防具": {"已装备": [], "未装备": {rank: [] for rank in EQUIPMENT_RANK_ORDER}},
     }
-    
-    # 装备品阶优先级（从高到低）
-    equipment_ranks = [
-        "无上",
-        "极品仙器",
-        "上品仙器",
-        "下品仙器",
-        "上品通天法器",
-        "下品通天法器",
-        "上品纯阳法器",
-        "下品纯阳法器",
-        "上品法器",
-        "下品法器",
-        "上品玄器",
-        "下品玄器",
-        "上品符器",
-        "下品符器"
-    ]
-    
-    # === 技能分类 ===
-    # 按技能类型分类
+
     skill_types = {
         "功法": [],
         "神通": [],
@@ -261,25 +229,6 @@ def get_user_main_back_msg(user_id):
         "瞳术": []
     }
     
-    # 技能品阶优先级（从高到低）
-    skill_ranks = [
-        "无上",
-        "仙阶极品",
-        "仙阶上品",
-        "仙阶下品",
-        "天阶上品",
-        "天阶下品",
-        "地阶上品",
-        "地阶下品",
-        "玄阶上品",
-        "玄阶下品",
-        "黄阶上品",
-        "黄阶下品",
-        "人阶上品",
-        "人阶下品"
-    ]
-    
-    # 其他分类保持不变
     l_shenwu_msg = []
     l_xiulianitem_msg = []
     l_special_msg = []
@@ -290,7 +239,6 @@ def get_user_main_back_msg(user_id):
         item_info = items.get_data_by_item_id(user_back['goods_id'])
         
         if user_back['goods_type'] == "装备":
-            # 检查是否已装备
             is_equipped = check_equipment_use_msg(user_id, user_back['goods_id'])
             equip_data = {
                 'id': user_back['goods_id'],
@@ -301,37 +249,23 @@ def get_user_main_back_msg(user_id):
                 'is_use': is_equipped
             }
             
-            # 按装备类型分类
-            if item_info['item_type'] == "法器":
+            if item_info['item_type'] in ["法器", "防具"]:
+                equip_type = item_info['item_type']
                 if is_equipped:
-                    equipment_types["法器"]["已装备"].append(equip_data)
+                    equipment_types[equip_type]["已装备"].append(equip_data)
                 else:
-                    # 未装备的按品阶分类
                     level = item_info['level']
-                    for rank in equipment_ranks:
+                    for rank in EQUIPMENT_RANK_ORDER:
                         if rank in level:
-                            equipment_types["法器"]["未装备"][rank].append(equip_data)
-                            break
-            
-            elif item_info['item_type'] == "防具":
-                if is_equipped:
-                    equipment_types["防具"]["已装备"].append(equip_data)
-                else:
-                    # 未装备的按品阶分类
-                    level = item_info['level']
-                    for rank in equipment_ranks:
-                        if rank in level:
-                            equipment_types["防具"]["未装备"][rank].append(equip_data)
+                            equipment_types[equip_type]["未装备"][rank].append(equip_data)
                             break
         
         elif user_back['goods_type'] == "技能":
-            # 按技能类型分类
             skill_type = item_info['item_type']
             if skill_type in skill_types:
-                # 按品阶排序
                 level = item_info['level']
-                skill_rank_index = len(skill_ranks)  # 默认最低优先级
-                for i, rank in enumerate(skill_ranks):
+                skill_rank_index = len(SKILL_RANK_ORDER)
+                for i, rank in enumerate(SKILL_RANK_ORDER):
                     if rank in level:
                         skill_rank_index = i
                         break
@@ -346,7 +280,6 @@ def get_user_main_back_msg(user_id):
                     'rank_index': skill_rank_index
                 })
         
-        # 其他物品类型保持不变
         elif user_back['goods_type'] == "神物":
             l_shenwu_msg = get_shenwu_msg(l_shenwu_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
         elif user_back['goods_type'] == "聚灵旗":
@@ -358,83 +291,57 @@ def get_user_main_back_msg(user_id):
         elif user_back['goods_type'] == "礼包":
             l_libao_msg = get_libao_msg(l_libao_msg, user_back['goods_id'], user_back['goods_num'], user_back['bind_num'])
     
-    # === 构建装备消息 ===
-    # 检查是否有装备
-    has_equipment = False
-    for equip_type in ["法器", "防具"]:
-        if (equipment_types[equip_type]["已装备"] or 
-            any(equipment_types[equip_type]["未装备"].values())):
-            has_equipment = True
-            break
+    has_equipment = any(
+        equipment_types[e]["已装备"] or any(equipment_types[e]["未装备"].values())
+        for e in ["法器", "防具"]
+    )
     
     if has_equipment:
-        
-        # 按装备类型显示：先法器，后防具
         for equip_type in ["法器", "防具"]:
-            has_this_type_equipment = (equipment_types[equip_type]["已装备"] or 
-                                     any(equipment_types[equip_type]["未装备"].values()))
+            has_this_type = equipment_types[equip_type]["已装备"] or any(equipment_types[equip_type]["未装备"].values())
+            if not has_this_type:
+                continue
+                
+            l_msg.append(f"☆------{equip_type}------☆")
             
-            if has_this_type_equipment:
-                l_msg.append(f"☆------{equip_type}------☆")
-                
-                # 1. 先显示已装备的装备
-                if equipment_types[equip_type]["已装备"]:
-                    for equip in equipment_types[equip_type]["已装备"]:
-                        msg = f"{equip['level']}-{equip['name']}\n"
-                        msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}"
-                        msg += "\n※已装备※"
-                        l_msg.append(msg)
-                
-                # 2. 显示未装备的装备（按品阶从高到低）
-                for rank in equipment_ranks:
-                    equipments = equipment_types[equip_type]["未装备"].get(rank, [])
-                    if equipments:
-                        for equip in equipments:
-                            msg = f"{equip['level']}-{equip['name']}\n"
-                            msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}"
-                            l_msg.append(msg)
+            for equip in equipment_types[equip_type]["已装备"]:
+                msg = f"{equip['level']}-{equip['name']}\n"
+                msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}\n※已装备※"
+                l_msg.append(msg)
+            
+            for rank in EQUIPMENT_RANK_ORDER:
+                for equip in equipment_types[equip_type]["未装备"].get(rank, []):
+                    msg = f"{equip['level']}-{equip['name']}\n"
+                    msg += f"拥有数量：{equip['num']}，绑定数量：{equip['bind_num']}"
+                    l_msg.append(msg)
     
-    # === 构建技能消息 ===
-    # 检查是否有技能
     has_skills = any(skill_types.values())
-    
     if has_skills:
-        
-        # 按技能类型显示
         for skill_type in ["功法", "神通", "辅修功法", "身法", "瞳术"]:
             skills = skill_types[skill_type]
             if skills:
-                # 按品阶从高到低排序
                 skills.sort(key=lambda x: x['rank_index'])
-                
                 l_msg.append(f"☆------{skill_type}------☆")
-                
                 for skill in skills:
                     msg = f"{skill['level']}-{skill['name']}\n"
                     msg += f"拥有数量：{skill['num']}，绑定数量：{skill['bind_num']}"
                     l_msg.append(msg)
     
-    # === 其他物品消息 ===
     if l_shenwu_msg:
         l_msg.append("☆------神物------☆")
-        for msg in l_shenwu_msg:
-            l_msg.append(msg)
+        l_msg.extend(l_shenwu_msg)
     if l_xiulianitem_msg:
         l_msg.append("☆------聚灵旗------☆")
-        for msg in l_xiulianitem_msg:
-            l_msg.append(msg)
+        l_msg.extend(l_xiulianitem_msg)
     if l_special_msg:
         l_msg.append("☆------特殊道具------☆")
-        for msg in l_special_msg:
-            l_msg.append(msg)
+        l_msg.extend(l_special_msg)
     if l_ldl_msg:
         l_msg.append("☆------炼丹炉------☆")
-        for msg in l_ldl_msg:
-            l_msg.append(msg)
+        l_msg.extend(l_ldl_msg)
     if l_libao_msg:
         l_msg.append("☆------礼包------☆")
-        for msg in l_libao_msg:
-            l_msg.append(msg)
+        l_msg.extend(l_libao_msg)
     
     return l_msg
 
@@ -443,33 +350,14 @@ def get_user_equipment_msg(user_id):
     获取背包内的所有装备及其详细信息
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id)
     if user_backs is None:
         return l_msg
     
-    # 装备品阶优先级（从高到低）
-    equipment_ranks = [
-        "无上",
-        "极品仙器",
-        "上品仙器",
-        "下品仙器",
-        "上品通天法器",
-        "下品通天法器",
-        "上品纯阳法器",
-        "下品纯阳法器",
-        "上品法器",
-        "下品法器",
-        "上品玄器",
-        "下品玄器",
-        "上品符器",
-        "下品符器"
-    ]
-    
-    # 分类存储装备（已装备和未装备分开）
     equipped_weapons = []
-    unequipped_weapons = {rank: [] for rank in equipment_ranks}
+    unequipped_weapons = {rank: [] for rank in EQUIPMENT_RANK_ORDER}
     equipped_armors = []
-    unequipped_armors = {rank: [] for rank in equipment_ranks}
+    unequipped_armors = {rank: [] for rank in EQUIPMENT_RANK_ORDER}
     
     for user_back in user_backs:
         if user_back['goods_type'] == "装备":
@@ -487,9 +375,8 @@ def get_user_equipment_msg(user_id):
                 if is_equipped:
                     equipped_weapons.append(equip_data)
                 else:
-                    # 按品阶分类
                     level = item_info['level']
-                    for rank in equipment_ranks:
+                    for rank in EQUIPMENT_RANK_ORDER:
                         if rank in level:
                             unequipped_weapons[rank].append(equip_data)
                             break
@@ -497,122 +384,34 @@ def get_user_equipment_msg(user_id):
                 if is_equipped:
                     equipped_armors.append(equip_data)
                 else:
-                    # 按品阶分类
                     level = item_info['level']
-                    for rank in equipment_ranks:
+                    for rank in EQUIPMENT_RANK_ORDER:
                         if rank in level:
                             unequipped_armors[rank].append(equip_data)
                             break
     
-    # === 构建法器消息 ===
     if equipped_weapons or any(unequipped_weapons.values()):
         l_msg.append("☆------法器------☆")
-        
-        # 1. 先显示已装备的法器
         for weapon in equipped_weapons:
             msg = get_weapon_info_msg(weapon['id'], weapon['info'])
-            msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
-            msg += "\n※已装备※"
+            msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})\n※已装备※"
             l_msg.append(msg)
-        
-        # 2. 显示未装备的法器（按品阶从高到低）
-        for rank in equipment_ranks:
-            weapons = unequipped_weapons[rank]
-            for weapon in weapons:
+        for rank in EQUIPMENT_RANK_ORDER:
+            for weapon in unequipped_weapons[rank]:
                 msg = get_weapon_info_msg(weapon['id'], weapon['info'])
                 msg += f"\n拥有数量: {weapon['num']} (绑定: {weapon['bind_num']})"
                 l_msg.append(msg)
     
-    # === 构建防具消息 ===
     if equipped_armors or any(unequipped_armors.values()):
         l_msg.append("☆------防具------☆")
-        
-        # 1. 先显示已装备的防具
         for armor in equipped_armors:
             msg = get_armor_info_msg(armor['id'], armor['info'])
-            msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
-            msg += "\n※已装备※"
+            msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})\n※已装备※"
             l_msg.append(msg)
-        
-        # 2. 显示未装备的防具（按品阶从高到低）
-        for rank in equipment_ranks:
-            armors = unequipped_armors[rank]
-            for armor in armors:
+        for rank in EQUIPMENT_RANK_ORDER:
+            for armor in unequipped_armors[rank]:
                 msg = get_armor_info_msg(armor['id'], armor['info'])
                 msg += f"\n拥有数量: {armor['num']} (绑定: {armor['bind_num']})"
-                l_msg.append(msg)
-    
-    return l_msg
-
-def get_user_danyao_back_msg(user_id):
-    """
-    获取丹药背包信息
-    """
-    l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
-    if user_backs is None:
-        return l_msg
-    
-    # 按buff_type分类存储丹药
-    danyao_by_type = {}
-    
-    for user_back in user_backs:
-        if user_back['goods_type'] == "丹药":
-            item_info = items.get_data_by_item_id(user_back['goods_id'])
-            buff_type = item_info.get('buff_type', '未知')
-            
-            if buff_type not in danyao_by_type:
-                danyao_by_type[buff_type] = []
-            
-            danyao_by_type[buff_type].append({
-                'id': user_back['goods_id'],
-                'name': item_info['name'],
-                'num': user_back['goods_num'],
-                'bind_num': user_back['bind_num'],
-                'info': item_info
-            })
-    
-    buff_type_order = {
-        'hp': 1,           # 回复状态
-        'all': 2,          # 回满状态
-        'level_up_rate': 3, # 突破概率
-        'level_up_big': 4,  # 大境界突破
-        'atk_buff': 5,     # 永久攻击
-        'exp_up': 6,       # 增加经验
-        'level_up': 7,      # 突破相关
-        '未知': 999        # 未知类型
-    }
-    
-    buff_type_names = {
-        'hp': '气血回复丹药',
-        'all': '全状态回复丹药',
-        'level_up_rate': '突破丹药',
-        'level_up_big': '大境界突破丹药',
-        'atk_buff': '永久攻击丹药',
-        'exp_up': '经验增加丹药',
-        'level_up': '突破辅助丹药',
-        '未知': '未知类型丹药'
-    }
-    
-    # 按定义的顺序排序
-    sorted_buff_types = sorted(danyao_by_type.keys(), 
-                              key=lambda x: buff_type_order.get(x, 999))
-    
-    # 构建排序后的消息
-    for buff_type in sorted_buff_types:
-        danyao_list = danyao_by_type[buff_type]
-        if danyao_list:
-            # 在每个类型内部按丹药名称排序
-            danyao_list.sort(key=lambda x: x['name'])
-            
-            type_name = buff_type_names.get(buff_type, f"{buff_type}类丹药")
-            l_msg.append(f"☆------{type_name}------☆")
-            
-            for danyao in danyao_list:
-                msg = f"名字：{danyao['name']}\n"
-                danyao_item_id, danyao_item = Items().get_data_by_item_name(danyao['name'])
-                msg += f"效果：{danyao_item['desc']}\n"
-                msg += f"拥有数量：{danyao['num']}，绑定数量：{danyao['bind_num']}"
                 l_msg.append(msg)
     
     return l_msg
@@ -622,23 +421,11 @@ def get_user_yaocai_back_msg(user_id):
     获取药材背包信息
     """
     l_msg = []
-    l_yaocai_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id)
     if user_backs is None:
         return l_msg
     
-    # 按品阶排序的药材字典
-    sorted_yaocai = {
-        "一品药材": [],
-        "二品药材": [],
-        "三品药材": [],
-        "四品药材": [],
-        "五品药材": [],
-        "六品药材": [],
-        "七品药材": [],
-        "八品药材": [],
-        "九品药材": []
-    }
+    sorted_yaocai = {k: [] for k in YAOCAI_RANK_ORDER}
     
     for user_back in user_backs:
         if user_back['goods_type'] == "药材":
@@ -652,8 +439,8 @@ def get_user_yaocai_back_msg(user_id):
                     'bind_num': user_back['bind_num']
                 })
     
-    # 构建排序后的消息
-    for level, yaocai_list in sorted_yaocai.items():
+    for level in YAOCAI_RANK_ORDER:
+        yaocai_list = sorted_yaocai[level]
         if yaocai_list:
             l_msg.append(f"☆------{level}------☆")
             for yaocai in yaocai_list:
@@ -669,44 +456,32 @@ def get_user_yaocai_detail_back_msg(user_id):
     获取药材背包详细信息
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id)
     if user_backs is None:
         return l_msg
     
-    # 按品阶排序的药材字典
-    sorted_yaocai = {
-        "一品药材": [],
-        "二品药材": [],
-        "三品药材": [],
-        "四品药材": [],
-        "五品药材": [],
-        "六品药材": [],
-        "七品药材": [],
-        "八品药材": [],
-        "九品药材": []
-    }
+    sorted_yaocai = {k: [] for k in YAOCAI_RANK_ORDER}
     
     for user_back in user_backs:
         if user_back['goods_type'] == "药材":
             item_info = items.get_data_by_item_id(user_back['goods_id'])
             level = item_info['level']
             if level in sorted_yaocai:
-                # 获取药材详细信息
                 yaocai_detail = {
                     'id': user_back['goods_id'],
                     'name': item_info['name'],
                     'num': user_back['goods_num'],
                     'bind_num': user_back['bind_num'],
-                    'info': get_yaocai_info_msg(user_back['goods_id'], item_info)  # 使用已有的详细信息函数
+                    'info': get_yaocai_info_msg(user_back['goods_id'], item_info)
                 }
                 sorted_yaocai[level].append(yaocai_detail)
     
-    # 构建排序后的消息
-    for level, yaocai_list in sorted_yaocai.items():
+    for level in YAOCAI_RANK_ORDER:
+        yaocai_list = sorted_yaocai[level]
         if yaocai_list:
             l_msg.append(f"☆------{level}------☆")
             for yaocai in yaocai_list:
-                msg = f"{yaocai['info']}\n"  # 包含完整药材信息
+                msg = f"{yaocai['info']}\n"
                 msg += f"拥有数量：{yaocai['num']}，绑定数量：{yaocai['bind_num']}"
                 l_msg.append(msg)
     
