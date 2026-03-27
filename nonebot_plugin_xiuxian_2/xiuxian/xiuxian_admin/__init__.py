@@ -4,13 +4,19 @@ except ImportError:
     import json
 import re
 import os
-from pathlib import Path
 import random
 import asyncio
+from pathlib import Path
 from datetime import datetime
 from nonebot.typing import T_State
-from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from nonebot import require, on_command, get_bot
+from nonebot.permission import SUPERUSER
+from nonebot.log import logger
+from nonebot.params import CommandArg, EventPlainText
+from nonebot import require, on_command, on_message, get_bot
+from nonebot.rule import Rule
+from nonebot.matcher import Matcher
+from nonebot.adapters import Event as BaseEvent
+
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -20,9 +26,8 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
-from nonebot.permission import SUPERUSER
-from nonebot.log import logger
-from nonebot.params import CommandArg
+
+from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
@@ -1206,17 +1211,30 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     用法：
     dm # 你好
     dm ## 标题\n- 列表1\n- 列表2
+    dm ![img](/root/xiu3/data/xiuxian/卡图/白玫瑰.webp)
     """
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    text = args.extract_plain_text().strip()
+    # 关键：不要用 extract_plain_text()，否则 markdown 结构可能丢失
+    text = str(args).strip()
     if not text:
         await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
         return
 
-    # 兼容用户输入的 \n，转换为QQ markdown常用的 \r
-    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
-    text = text.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://').replace("\\n", "\r").replace("\n", "\r")
+    # 兼容用户输入的转义字符，转换为QQ markdown常用格式
+    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', text)
+    text = (
+        text
+        .replace("\\r", "\r")
+        .replace('\\"', '"')
+        .replace(':/', '://')
+        .replace(':///', '://')
+        .replace("\\n", "\r")
+        .replace("\n", "\r")
+    )
+
+    # 可选：调试日志，确认本地图片语法是否还在
+    logger.info(f"[dm] markdown raw text => {text}")
 
     try:
         msg = MessageSegment.markdown(bot, text)
@@ -1366,4 +1384,18 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     ok, msg = swap_two_user_ids(id1, id2)
     await handle_send(bot, event, msg)
     await swap_id_cmd.finish()
- 
+
+def _fallback_rule() -> Rule:
+    async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
+        if XiuConfig().empty_fallback and XiuConfig().empty_msg:
+            return False
+        return isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
+    return Rule(_checker)
+
+empty_fallback = on_message(priority=999, block=False, rule=_fallback_rule())
+
+
+@empty_fallback.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: Matcher):
+    await handle_send(bot, event, XiuConfig().empty_msg)
+    await matcher.finish()

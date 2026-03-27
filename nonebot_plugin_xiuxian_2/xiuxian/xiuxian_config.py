@@ -36,6 +36,10 @@ class XiuConfig:
         # 艾特响应命令（官机可能需要关闭）
         self.at_sender = True
         # 消息是否艾特
+        self.empty_fallback = True
+        # 是否开启默认回复
+        self.empty_msg = "未识别到指令，可发送【修仙帮助】或【修仙手册】查看可用功能。"
+        # 默认回复内容
 
         #markdown模板
         self.markdown_status = False

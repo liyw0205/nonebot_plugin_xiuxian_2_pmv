@@ -1825,6 +1825,18 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "empty_fallback": {
+        "name": "空指令是否回复",
+        "description": "空指令回复",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "empty_msg": {
+        "name": "空指令回复",
+        "description": "回复内容",
+        "type": "str",
+        "category": "消息设置"
+    },
     "img": {
         "name": "图片发送",
         "description": "是否使用图片发送消息",

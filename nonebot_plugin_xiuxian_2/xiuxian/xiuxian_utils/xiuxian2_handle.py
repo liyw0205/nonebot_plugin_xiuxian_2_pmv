@@ -61,7 +61,7 @@ class XiuxianDateManage:
     def _check_data(self):
         """检查数据完整性"""
         c = self.conn.cursor()
-
+    
         for i in XiuConfig().sql_table:
             if i == "user_xiuxian":
                 try:
@@ -69,7 +69,7 @@ class XiuxianDateManage:
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "user_xiuxian" (
       "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-         "user_id" TEXT NOT NULL,
+      "user_id" TEXT NOT NULL,
       "sect_id" INTEGER DEFAULT NULL,
       "sect_position" INTEGER DEFAULT NULL,
       "stone" integer DEFAULT 0,
@@ -81,7 +81,7 @@ class XiuxianDateManage:
       "create_time" integer,
       "is_sign" integer DEFAULT 0,
       "is_beg" integer DEFAULT 0,
-      "is_novice" integer DEFAULT 0,      
+      "is_novice" integer DEFAULT 0,
       "is_ban" integer DEFAULT 0,
       "exp" integer DEFAULT 0,
       "work_num" integer DEFAULT 5,
@@ -95,113 +95,105 @@ class XiuxianDateManage:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "user_cd" (
-  "user_id" TEXT NOT NULL PRIMARY KEY,
-  "type" integer DEFAULT 0,
-  "create_time" TEXT DEFAULT NULL,
-  "scheduled_time" TEXT,
-  "last_check_info_time" TEXT DEFAULT NULL
-);""")
+      "user_id" TEXT NOT NULL PRIMARY KEY,
+      "type" integer DEFAULT 0,
+      "create_time" TEXT DEFAULT NULL,
+      "scheduled_time" TEXT,
+      "last_check_info_time" TEXT DEFAULT NULL
+    );""")
             elif i == "sects":
                 try:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "sects" (
-  "sect_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "sect_name" TEXT NOT NULL,
-  "sect_owner" integer,
-  "sect_scale" integer NOT NULL,
-  "sect_used_stone" integer,
-  "join_open" integer DEFAULT 1,
-  "closed" integer DEFAULT 0,
-  "combat_power" integer DEFAULT 0,
-  "sect_fairyland" integer
-);""")
+      "sect_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "sect_name" TEXT NOT NULL,
+      "sect_owner" integer,
+      "sect_scale" integer NOT NULL,
+      "sect_used_stone" integer,
+      "join_open" integer DEFAULT 1,
+      "closed" integer DEFAULT 0,
+      "combat_power" integer DEFAULT 0,
+      "sect_fairyland" integer
+    );""")
             elif i == "back":
                 try:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "back" (
-  "user_id" TEXT NOT NULL,
-  "goods_id" INTEGER NOT NULL,
-  "goods_name" TEXT,
-  "goods_type" TEXT,
-  "goods_num" INTEGER,
-  "create_time" TEXT,
-  "update_time" TEXT,
-  "remake" TEXT,
-  "day_num" INTEGER DEFAULT 0,
-  "all_num" INTEGER DEFAULT 0,
-  "action_time" TEXT,
-  "state" INTEGER DEFAULT 0
-);""")
-
+      "user_id" TEXT NOT NULL,
+      "goods_id" INTEGER NOT NULL,
+      "goods_name" TEXT,
+      "goods_type" TEXT,
+      "goods_num" INTEGER,
+      "create_time" TEXT,
+      "update_time" TEXT,
+      "remake" TEXT,
+      "day_num" INTEGER DEFAULT 0,
+      "all_num" INTEGER DEFAULT 0,
+      "action_time" TEXT,
+      "state" INTEGER DEFAULT 0
+    );""")
             elif i == "BuffInfo":
                 try:
                     c.execute(f"select count(1) from {i}")
                 except sqlite3.OperationalError:
                     c.execute("""CREATE TABLE "BuffInfo" (
-  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "user_id" TEXT DEFAULT 0,
-  "main_buff" integer DEFAULT 0,
-  "sec_buff" integer DEFAULT 0,
-  "effect1_buff" integer DEFAULT 0,
-  "effect2_buff" integer DEFAULT 0,
-  "faqi_buff" integer DEFAULT 0,
-  "fabao_weapon" integer DEFAULT 0,
-  "sub_buff" integer DEFAULT 0
-);""")
-
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "user_id" TEXT DEFAULT 0,
+      "main_buff" integer DEFAULT 0,
+      "sec_buff" integer DEFAULT 0,
+      "effect1_buff" integer DEFAULT 0,
+      "effect2_buff" integer DEFAULT 0,
+      "faqi_buff" integer DEFAULT 0,
+      "fabao_weapon" integer DEFAULT 0,
+      "sub_buff" integer DEFAULT 0
+    );""")
+    
         for i in XiuConfig().sql_user_xiuxian:
             try:
                 c.execute(f"select {i} from user_xiuxian")
             except sqlite3.OperationalError:
-                logger.opt(colors=True).info("<yellow>sql_user_xiuxian有字段不存在，开始创建\n</yellow>")
                 sql = f"ALTER TABLE user_xiuxian ADD COLUMN {i} INTEGER DEFAULT 0;"
-                logger.opt(colors=True).info(f"<green>{sql}</green>")
                 c.execute(sql)
-
+    
         for d in XiuConfig().sql_user_cd:
             try:
                 c.execute(f"select {d} from user_cd")
             except sqlite3.OperationalError:
-                logger.opt(colors=True).info("<yellow>sql_user_cd有字段不存在，开始创建</yellow>")
                 sql = f"ALTER TABLE user_cd ADD COLUMN {d} INTEGER DEFAULT 0;"
-                logger.opt(colors=True).info(f"<green>{sql}</green>")
                 c.execute(sql)
-
+    
         for s in XiuConfig().sql_sects:
             try:
                 c.execute(f"select {s} from sects")
             except sqlite3.OperationalError:
-                logger.opt(colors=True).info("<yellow>sql_sects有字段不存在，开始创建</yellow>")
                 sql = f"ALTER TABLE sects ADD COLUMN {s} INTEGER DEFAULT 0;"
-                logger.opt(colors=True).info(f"<green>{sql}</green>")
                 c.execute(sql)
-
+    
         for m in XiuConfig().sql_buff:
             try:
                 c.execute(f"select {m} from BuffInfo")
             except sqlite3.OperationalError:
-                logger.opt(colors=True).info("<yellow>sql_buff有字段不存在，开始创建</yellow>")
                 sql = f"ALTER TABLE BuffInfo ADD COLUMN {m} INTEGER DEFAULT 0;"
-                logger.opt(colors=True).info(f"<green>{sql}</green>")
                 c.execute(sql)
-
+    
         for b in XiuConfig().sql_back:
             try:
                 c.execute(f"select {b} from back")
             except sqlite3.OperationalError:
-                logger.opt(colors=True).info("<yellow>sql_back有字段不存在，开始创建</yellow>")
                 sql = f"ALTER TABLE back ADD COLUMN {b} INTEGER DEFAULT 0;"
-                logger.opt(colors=True).info(f"<green>{sql}</green>")
                 c.execute(sql)
-        
-        # 检查并更新 last_check_info_time 列的记录
-        c.execute(f"""UPDATE user_cd
-SET last_check_info_time = ?
-WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
-        """, (current_time,))
-
+    
+        now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        c.execute(
+            """UPDATE user_cd
+               SET last_check_info_time = ?
+               WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
+            """,
+            (now_time,)
+        )
+    
         self.conn.commit()
 
     @classmethod
@@ -501,11 +493,11 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def get_user_create_time(self, user_id):
         """获取用户创建时间"""
         cur = self.conn.cursor()
-        sql = f"SELECT create_time FROM user_xiuxian WHERE user_id=?"
+        sql = "SELECT create_time FROM user_xiuxian WHERE user_id=?"
         cur.execute(sql, (user_id,))
         result = cur.fetchone()
-        if result:
-            return datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S.%f")
+        if result and result[0]:
+            return _safe_parse_dt(result[0])
         return None
     
     def ramaker(self, lg, type, user_id):
@@ -552,17 +544,34 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         self.conn.commit()
 
     def update_ls(self, user_id, price, key):
-        """更新灵石  1为增加，2为减少"""
+        """更新灵石 1增加 2减少"""
         cur = self.conn.cursor()
-        price = abs(price)
+        price = abs(int(price))
         if key == 1:
-            sql = f"UPDATE user_xiuxian SET stone=stone+? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET stone=stone+? WHERE user_id=?"
             cur.execute(sql, (price, user_id))
-            self.conn.commit()
         elif key == 2:
-            sql = f"UPDATE user_xiuxian SET stone=stone-? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET stone=MAX(stone-?, 0) WHERE user_id=?"
             cur.execute(sql, (price, user_id))
-            self.conn.commit()
+        self.conn.commit()
+    
+    
+    def update_exp(self, user_id, exp):
+        """增加修为"""
+        exp = abs(int(number_count(exp)))
+        sql = "UPDATE user_xiuxian SET exp=exp+? WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (exp, user_id))
+        self.conn.commit()
+    
+    
+    def update_j_exp(self, user_id, exp):
+        """减少修为"""
+        exp = abs(int(number_count(exp)))
+        sql = "UPDATE user_xiuxian SET exp=MAX(exp-?, 0) WHERE user_id=?"
+        cur = self.conn.cursor()
+        cur.execute(sql, (exp, user_id))
+        self.conn.commit()
 
     def update_root(self, user_id, key):
         """更新灵根  1为混沌,2为融合,3为超,4为龙,5为天,6为千世,7为万世,8为永恒,9为命运"""
@@ -760,12 +769,10 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         sql = "SELECT last_check_info_time FROM user_cd WHERE user_id = ?"
         cur.execute(sql, (user_id,))
         result = cur.fetchone()
-        if result:
-           return datetime.strptime(result[0], '%Y-%m-%d %H:%M:%S.%f')
-        else:
-            return None
-        
-    
+        if result and result[0]:
+            return _safe_parse_dt(result[0])
+        return None
+            
     def updata_level(self, user_id, level_name):
         """更新境界"""
         sql = f"UPDATE user_xiuxian SET level=? WHERE user_id=?"
@@ -1076,23 +1083,6 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         sql = "UPDATE user_cd SET type=?,create_time=? WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (the_type, now_time, user_id))
-        self.conn.commit()
-
-
-    def update_exp(self, user_id, exp):
-        """增加修为"""
-        exp = number_count(exp)
-        sql = "UPDATE user_xiuxian SET exp=exp+? WHERE user_id=?"
-        cur = self.conn.cursor()
-        cur.execute(sql, (exp, user_id))
-        self.conn.commit()
-        
-    def update_j_exp(self, user_id, exp):
-        """减少修为"""
-        exp = number_count(exp)
-        sql = "UPDATE user_xiuxian SET exp=exp-? WHERE user_id=?"
-        cur = self.conn.cursor()
-        cur.execute(sql, (exp, user_id))
         self.conn.commit()
 
     def del_exp_decimal(self, user_id, exp):
@@ -1745,43 +1735,92 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
     def send_back(self, user_id, goods_id, goods_name, goods_type, goods_num, bind_flag=0):
         """
         插入物品至背包
-        :param user_id: 用户qq
-        :param goods_id: 物品id
-        :param goods_name: 物品名称
+        : 用户_id
+        ::物品名称
         :param goods_type: 物品类型
         :param goods_num: 物品数量
         :param bind_flag: 是否绑定物品,0-非绑定,1-绑定
-        :return: None
         """
         now_time = datetime.now()
         max_goods_num = int(XiuConfig().max_goods_num)
-        goods_num = min(abs(goods_num), max_goods_num)
-        # 检查物品是否存在，存在则update
+        goods_num = min(abs(int(goods_num)), max_goods_num)
+    
         cur = self.conn.cursor()
         back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
-
+    
         if back:
-            # 判断是否存在，存在则update
             if bind_flag == 1:
                 bind_num = back['bind_num'] + goods_num
             else:
                 bind_num = min(back['bind_num'], back['goods_num'])
+    
             goods_nums = min(back['goods_num'] + goods_num, max_goods_num)
-            bind_num = min(bind_num, max_goods_num)
-            sql = f"UPDATE back set goods_num=?,update_time=?,bind_num={bind_num} WHERE user_id=? and goods_id=?"
-            cur.execute(sql, (goods_nums, now_time, user_id, goods_id))
+            bind_num = min(bind_num, max_goods_num, goods_nums)
+    
+            sql = "UPDATE back SET goods_num=?, update_time=?, bind_num=? WHERE user_id=? and goods_id=?"
+            cur.execute(sql, (goods_nums, now_time, bind_num, user_id, goods_id))
             self.conn.commit()
         else:
-            # 判断是否存在，不存在则INSERT
-            if bind_flag == 1:
-                bind_num = goods_num
-            else:
-                bind_num = 0
-            sql = f"""
-                    INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num)
-            VALUES (?,?,?,?,?,?,?,?)"""
+            bind_num = goods_num if bind_flag == 1 else 0
+            sql = """
+                INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num)
+                VALUES (?,?,?,?,?,?,?,?)
+            """
             cur.execute(sql, (user_id, goods_id, goods_name, goods_type, goods_num, now_time, now_time, bind_num))
             self.conn.commit()
+    
+    
+    def update_back_j(self, user_id, goods_id, num=1, use_key=0):
+        """
+        使用物品
+        :num 减少数量  默认1
+        :use_key 是否使用，丹药使用才传 默认0
+        """
+        num = abs(int(num))
+        user_id = str(user_id)
+        goods_id = int(goods_id)
+    
+        back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
+        if not back:
+            return
+        if num <= 0:
+            return
+        if back['goods_num'] < num:
+            num = back['goods_num']
+        if num <= 0:
+            return
+    
+        if back['goods_type'] == "丹药" and use_key == 1:
+            bind_num = back['bind_num'] - num if back['bind_num'] >= num else back['bind_num']
+            day_num = back['day_num'] + num
+            all_num = back['all_num'] + num
+        else:
+            bind_num = back['bind_num'] - num if back['bind_num'] >= num else back['bind_num']
+            day_num = back['day_num']
+            all_num = back['all_num']
+    
+        goods_num = back['goods_num'] - num
+        if goods_num <= 0:
+            goods_num = 0
+            bind_num = 0
+    
+        bind_num = min(bind_num, goods_num)
+        bind_num = max(bind_num, 0)
+    
+        now_time = datetime.now()
+        sql_str = """
+            UPDATE back
+            SET update_time=?,
+                action_time=?,
+                goods_num=?,
+                day_num=?,
+                all_num=?,
+                bind_num=?
+            WHERE user_id=? AND goods_id=?
+        """
+        cur = self.conn.cursor()
+        cur.execute(sql_str, (now_time, now_time, goods_num, day_num, all_num, bind_num, user_id, goods_id))
+        self.conn.commit()
 
 
     def get_item_by_good_id_and_user_id(self, user_id, goods_id):
@@ -1814,58 +1853,6 @@ WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
         sql = "UPDATE back SET all_num=0 WHERE goods_type='丹药' AND user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (str(user_id),))
-        self.conn.commit()
-
-    def update_back_j(self, user_id, goods_id, num=1, use_key=0):
-        """
-        使用物品
-        :num 减少数量  默认1
-        :use_key 是否使用，丹药使用才传 默认0
-        """
-        num = abs(int(num))
-        user_id = str(user_id)
-        goods_id = int(goods_id)
-
-        back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
-        if not back:
-            return
-
-        if back['goods_type'] == "丹药" and use_key == 1:  # 丹药要判断耐药性、日使用上限
-            if back['bind_num'] >= 1:
-                bind_num = back['bind_num'] - num  # 优先使用绑定物品
-            else:
-                bind_num = back['bind_num']
-            day_num = back['day_num'] + num
-            all_num = back['all_num'] + num
-        else:
-            if back['bind_num'] >= 1:
-                bind_num = back['bind_num'] - num
-            else:
-                bind_num = back['bind_num']
-            day_num = back['day_num']
-            all_num = back['all_num']
-
-        goods_num = back['goods_num'] - num
-        if int(goods_num) <= 0:
-            goods_num = 0
-            bind_num = 0
-
-        bind_num = min(bind_num, goods_num)
-        bind_num = max(bind_num, 0)
-
-        now_time = datetime.now()
-        sql_str = """
-            UPDATE back
-            SET update_time=?,
-                action_time=?,
-                goods_num=?,
-                day_num=?,
-                all_num=?,
-                bind_num=?
-            WHERE user_id=? AND goods_id=?
-        """
-        cur = self.conn.cursor()
-        cur.execute(sql_str, (now_time, now_time, goods_num, day_num, all_num, bind_num, user_id, goods_id))
         self.conn.commit()
 
     def _ensure_puppet_column(self):
@@ -2160,18 +2147,19 @@ class TradeDataManager:
             self.trade_db_path = self.database_path / "trade.db"
             if not self.trade_db_path.exists():
                 self.trade_db_path.touch()
-                logger.opt(colors=True).info(f"<green>trade数据库已创建！</green>")
+                logger.opt(colors=True).info("<green>trade数据库已创建！</green>")
             self.conn = sqlite3.connect(self.trade_db_path, check_same_thread=False)
             self._check_data()
 
     def _check_data(self):
         """检查数据完整性"""
         c = self.conn.cursor()
+
         # 仙肆商品表
         c.execute("""
             CREATE TABLE IF NOT EXISTS xianshi_item (
                 id TEXT PRIMARY KEY,
-                user_id INTEGER,
+                user_id TEXT,
                 goods_id INTEGER,
                 name TEXT,
                 type TEXT,
@@ -2179,31 +2167,34 @@ class TradeDataManager:
                 quantity INTEGER
             )
         """)
-        # 鬼市求购/摆摊表
+
+        # 鬼市订单表（item_type: qiugou/baitan；兼容历史中文）
         c.execute("""
             CREATE TABLE IF NOT EXISTS guishi_item (
                 id TEXT PRIMARY KEY,
-                user_id INTEGER,
+                user_id TEXT,
                 item_id INTEGER,
                 item_name TEXT,
-                item_type TEXT, -- '求购' 或 '摆摊'
+                item_type TEXT,
                 price INTEGER,
                 quantity INTEGER,
                 filled_quantity INTEGER DEFAULT 0
             )
         """)
-        # 鬼市用户账户表 (灵石和暂存物品)
+
+        # 鬼市账户（灵石+暂存物品）
         c.execute("""
             CREATE TABLE IF NOT EXISTS guishi_info (
-                user_id INTEGER PRIMARY KEY,
+                user_id TEXT PRIMARY KEY,
                 stored_stone INTEGER DEFAULT 0,
                 items TEXT DEFAULT '{}'
             )
         """)
-        # 拍卖玩家上架物品等待区
+
+        # 玩家拍卖等待区
         c.execute("""
             CREATE TABLE IF NOT EXISTS auction_player_upload (
-                user_id INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
                 item_id INTEGER NOT NULL,
                 item_name TEXT NOT NULL,
                 start_price INTEGER NOT NULL,
@@ -2211,8 +2202,8 @@ class TradeDataManager:
                 PRIMARY KEY (user_id, item_id)
             )
         """)
-        # 当前拍卖品表
-        # 新增 bid_times 字段用于存储出价时间戳
+
+        # 当前拍卖表
         c.execute("""
             CREATE TABLE IF NOT EXISTS auction_current (
                 id TEXT PRIMARY KEY,
@@ -2220,15 +2211,16 @@ class TradeDataManager:
                 name TEXT NOT NULL,
                 start_price INTEGER NOT NULL,
                 current_price INTEGER NOT NULL,
-                seller_id INTEGER NOT NULL, -- 0 for system
+                seller_id TEXT NOT NULL,
                 seller_name TEXT NOT NULL,
-                bids TEXT DEFAULT '{}', -- JSON string of {user_id: bid_price}
-                bid_times TEXT DEFAULT '{}', -- JSON string of {user_id: timestamp}
-                is_system INTEGER DEFAULT 0, -- 0 for user, 1 for system
-                last_bid_time REAL DEFAULT NULL -- Unix timestamp
+                bids TEXT DEFAULT '{}',
+                bid_times TEXT DEFAULT '{}',
+                is_system INTEGER DEFAULT 0,
+                last_bid_time REAL DEFAULT NULL
             )
         """)
-        # 拍卖历史记录表
+
+        # 拍卖历史
         c.execute("""
             CREATE TABLE IF NOT EXISTS auction_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2237,11 +2229,11 @@ class TradeDataManager:
                 item_name TEXT NOT NULL,
                 start_price INTEGER NOT NULL,
                 final_price INTEGER,
-                seller_id INTEGER NOT NULL,
+                seller_id TEXT NOT NULL,
                 seller_name TEXT NOT NULL,
-                winner_id INTEGER,
+                winner_id TEXT,
                 winner_name TEXT,
-                status TEXT NOT NULL, -- '成交' or '流拍'
+                status TEXT NOT NULL,
                 fee INTEGER,
                 seller_earnings INTEGER,
                 start_time REAL NOT NULL,
@@ -2251,415 +2243,401 @@ class TradeDataManager:
         self.conn.commit()
 
     def total_goods_quantity(self):
-        """
-        获取全部仙肆物品数量总合，包括求购和摆摊类
-        """
+        """获取全部仙肆物品总数（不含系统无限）"""
         cur = self.conn.cursor()
         sql = """
             SELECT SUM(quantity) AS total_quantity
             FROM (
-                SELECT quantity FROM xianshi_item WHERE user_id != 0
+                SELECT quantity FROM xianshi_item WHERE user_id != '0' AND quantity > 0
                 UNION ALL
-                SELECT quantity FROM guishi_item WHERE user_id != 0 AND item_type = '摆摊'
+                SELECT quantity FROM guishi_item WHERE user_id != '0' AND (item_type='baitan' OR item_type='摆摊') AND quantity > 0
             )
         """
         cur.execute(sql)
         result = cur.fetchone()
-        if result and result[0] is not None:
-            return result[0]
-        else:
-            return 0
+        return int(result[0]) if result and result[0] is not None else 0
 
     def generate_unique_id(self, table_name):
-        """生成唯一的 unique_id，检查指定表中的ID"""
+        """生成唯一ID（字符串）"""
         cur = self.conn.cursor()
-        while True:
-            # 生成6-10位随机数字作为字符串
-            # 保证至少6位，最多10位，且首位不为0
-            first_digit = str(random.randint(1, 9))
-            remaining_digits = ''.join(random.choices(string.digits, k=random.randint(5, 9)))
-            new_id_str = first_digit + remaining_digits
-            unique_id = int(new_id_str) # 转换为整数，但存储时通常会保持文本，此处为兼容旧代码
-
-            # 确保ID在6到10位数字之间
-            if not (100000 <= unique_id <= 9999999999):
-                continue
-        
-            # 检查unique_id是否已存在于数据库中
-            cur.execute(f"SELECT id FROM {table_name} WHERE id = ?", (unique_id,))
+        for _ in range(200):
+            first = str(random.randint(1, 9))
+            rest = ''.join(random.choices(string.digits, k=random.randint(7, 11)))
+            uid = first + rest
+            cur.execute(f"SELECT 1 FROM {table_name} WHERE id = ?", (uid,))
             if not cur.fetchone():
-                return str(unique_id) # 返回字符串以匹配现有id TEXT类型
+                return uid
+        return f"{int(time.time() * 1000)}{random.randint(100, 999)}"
+
+    # ======== 仙肆 ========
 
     def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
-        """增加仙肆物品"""
         unique_id = self.generate_unique_id("xianshi_item")
-        
-        sql = f"""
+        sql = """
             INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """
-        self.conn.execute(sql, (unique_id, user_id, goods_id, name, type, price, quantity))
+        self.conn.execute(sql, (str(unique_id), str(user_id), int(goods_id), str(name), str(type), int(price), int(quantity)))
         self.conn.commit()
-
-    def add_guishi_order(self, user_id, item_id, item_name, item_type, price, quantity):
-        """新增鬼市求购订单/摊位"""
-        unique_id = self.generate_unique_id("guishi_item")
-        sql = f"""
-            INSERT INTO guishi_item (id, user_id, item_id, item_name, item_type, price, quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """
-        self.conn.execute(sql, (unique_id, user_id, item_id, item_name, item_type, price, quantity))
-        self.conn.commit()
-        return unique_id
 
     def remove_xianshi_item(self, item_id):
-        """删除仙肆物品（先数量-1，如果数量-1之后等于0才删除，不是0则是更新数量）"""
-        # 先查询当前物品的数量
+        """
+        删除仙肆物品：
+        - quantity == -1 视为系统无限库存，不删除
+        - quantity == 1 删除记录
+        - quantity > 1 数量减1
+        """
         cur = self.conn.cursor()
-        cur.execute("SELECT quantity FROM xianshi_item WHERE id = ?", (item_id,))
-        result = cur.fetchone()
-    
-        if not result:
-            logger.opt(colors=True).warning(f"<yellow>未找到ID为 {item_id} 的物品</yellow>")
+        cur.execute("SELECT quantity FROM xianshi_item WHERE id = ?", (str(item_id),))
+        row = cur.fetchone()
+        if not row:
             return False
-    
-        current_quantity = result[0]
 
-        if str(current_quantity) == "-1":
-            logger.opt(colors=True).warning(f"<yellow>系统无限物品不删除</yellow>")
-            return
-        elif current_quantity == 1:
-            # 如果当前数量为1减1后等于0，直接删除
-            sql = "DELETE FROM xianshi_item WHERE id = ?"
-            self.conn.execute(sql, (item_id,))
-            logger.opt(colors=True).info(f"<green>物品 {item_id} 数量减至0，已从数据库中删除</green>")
+        qty = int(row[0])
+        if qty == -1:
+            return True
+        if qty <= 1:
+            self.conn.execute("DELETE FROM xianshi_item WHERE id = ?", (str(item_id),))
         else:
-            # 如果当前数量大于1，减1后仍有剩余，更新数量
-            new_quantity = current_quantity - 1
-            sql = "UPDATE xianshi_item SET quantity = ? WHERE id = ?"
-            self.conn.execute(sql, (new_quantity, item_id))
-            logger.opt(colors=True).info(f"<green>物品 {item_id} 数量从 {current_quantity} 减少至 {new_quantity}</green>")
-    
+            self.conn.execute("UPDATE xianshi_item SET quantity=? WHERE id=?", (qty - 1, str(item_id)))
         self.conn.commit()
         return True
 
     def remove_xianshi_all_item(self, item_id):
-        """删除所有用户的仙肆物品"""
-        sql = "DELETE FROM xianshi_item WHERE id = ?"
-        self.conn.execute(sql, (item_id,))
-        self.conn.commit()
-
-    def remove_guishi_order(self, order_id):
-        """删除鬼市求购订单/摊位"""
-        sql = "DELETE FROM guishi_item WHERE id = ?"
-        self.conn.execute(sql, (order_id,))
-        self.conn.commit()
-
-    def increase_filled_quantity(self, order_id, amount):
-        """增加鬼市求购订单已购买数/摊位已售出数"""
-        sql = "UPDATE guishi_item SET filled_quantity = filled_quantity + ? WHERE id = ?"
-        self.conn.execute(sql, (amount, order_id))
+        self.conn.execute("DELETE FROM xianshi_item WHERE id = ?", (str(item_id),))
         self.conn.commit()
 
     def get_xianshi_items(self, user_id=None, type=None, id=None, name=None):
-        """查看仙肆物品"""
         conditions = []
         params = []
-        
+
         if user_id is not None:
             conditions.append("user_id = ?")
-            params.append(user_id)
-        
+            params.append(str(user_id))
         if type:
             conditions.append("type = ?")
-            params.append(type)
-        
+            params.append(str(type))
         if id:
             conditions.append("id = ?")
-            params.append(id)
-        
+            params.append(str(id))
         if name:
             conditions.append("name = ?")
-            params.append(name)
-        
-        query = "SELECT * FROM xianshi_item"
+            params.append(str(name))
+
+        q = "SELECT * FROM xianshi_item"
         if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        
+            q += " WHERE " + " AND ".join(conditions)
+
         cur = self.conn.cursor()
-        cur.execute(query, params)
-        result = cur.fetchall()
-        if not result:
+        cur.execute(q, params)
+        rows = cur.fetchall()
+        if not rows:
             return None
-        
-        columns = [column[0] for column in cur.description]
-        results = []
-        for row in result:
-            item_dict = dict(zip(columns, row))
-            results.append(item_dict)
-        return results
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r)) for r in rows]
+
+    # ======== 鬼市 ========
+
+    def add_guishi_order(self, user_id, item_id, item_name, item_type, price, quantity):
+        uid = self.generate_unique_id("guishi_item")
+        sql = """
+            INSERT INTO guishi_item (id, user_id, item_id, item_name, item_type, price, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        self.conn.execute(sql, (
+            str(uid), str(user_id), int(item_id), str(item_name), str(item_type), int(price), int(quantity)
+        ))
+        self.conn.commit()
+        return uid
+
+    def remove_guishi_order(self, order_id):
+        self.conn.execute("DELETE FROM guishi_item WHERE id = ?", (str(order_id),))
+        self.conn.commit()
+
+    def increase_filled_quantity(self, order_id, amount):
+        self.conn.execute(
+            "UPDATE guishi_item SET filled_quantity = filled_quantity + ? WHERE id = ?",
+            (int(amount), str(order_id))
+        )
+        self.conn.commit()
 
     def get_guishi_orders(self, user_id=None, name=None, type=None, id=None):
-        """获取鬼市订单"""
-        conditions = []
+        """
+        兼容：
+        - type='qiugou' -> 匹配 qiugou/求购
+        - type='baitan' -> 匹配 baitan/摆摊
+        """
+        cond = []
         params = []
-        if user_id is not None:
-            conditions.append("user_id = ?")
-            params.append(user_id)
-        if name:
-            conditions.append("item_name = ?")
-            params.append(name)
-        if type:
-            conditions.append("item_type = ?")
-            params.append(type)
-        if id:
-            conditions.append("id = ?")
-            params.append(id)
 
-        query = "SELECT * FROM guishi_item"
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        
+        if user_id is not None:
+            cond.append("user_id = ?")
+            params.append(str(user_id))
+        if name:
+            cond.append("item_name = ?")
+            params.append(str(name))
+        if type:
+            if type == "qiugou":
+                cond.append("(item_type = ? OR item_type = ?)")
+                params.extend(["qiugou", "求购"])
+            elif type == "baitan":
+                cond.append("(item_type = ? OR item_type = ?)")
+                params.extend(["baitan", "摆摊"])
+            else:
+                cond.append("item_type = ?")
+                params.append(str(type))
+        if id:
+            cond.append("id = ?")
+            params.append(str(id))
+
+        q = "SELECT * FROM guishi_item"
+        if cond:
+            q += " WHERE " + " AND ".join(cond)
+
         cur = self.conn.cursor()
-        cur.execute(query, params)
-        result = cur.fetchall()
-        if not result:
+        cur.execute(q, params)
+        rows = cur.fetchall()
+        if not rows:
             return None
-        
-        columns = [column[0] for column in cur.description]
-        results = []
-        for row in result:
-            item_dict = dict(zip(columns, row))
-            results.append(item_dict)
-        return results
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r)) for r in rows]
 
     def get_stored_stone(self, user_id):
-        """获取暂存灵石"""
         cur = self.conn.cursor()
-        cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        return result[0] if result else 0
+        cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id = ?", (str(user_id),))
+        row = cur.fetchone()
+        return int(row[0]) if row else 0
 
     def get_stored_items(self, user_id):
-        """获取暂存物品"""
         cur = self.conn.cursor()
-        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        if result:
-            return json.loads(result[0]) if result[0] else {}
-        return {}
+        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (str(user_id),))
+        row = cur.fetchone()
+        if not row:
+            return {}
+        raw = row[0] if row[0] else "{}"
+        try:
+            obj = json.loads(raw)
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
 
     def add_stored_item(self, user_id, item_id, quantity=1):
-        """
-        增加暂存物品，如果存在则更新数量，不存在则新增
-        :param user_id: 用户ID
-        :param item_id: 物品ID
-        :param quantity: 物品数量，默认为1
-        """
-        # 将数量转换为整数
+        user_id = str(user_id)
+        item_id = str(item_id)
         quantity = int(quantity)
-        
-        # 获取当前的暂存物品信息
-        current_items = self.get_stored_items(user_id)
-        current_sum = 0
-        for current_id, current in current_items.items():
-            if str(current_id) == str(item_id):
-               current_sum = current
-        
-        # 更新数量
-        current_items[str(item_id)] = current_sum + quantity # 确保key是字符串
-        
-        # 序列化物品信息
-        items_json = json.dumps(current_items)
-        
-        # 更新或插入记录
+
+        current = self.get_stored_items(user_id)
+        current[item_id] = int(current.get(item_id, 0)) + quantity
+        payload = json.dumps(current, ensure_ascii=False)
+
         cur = self.conn.cursor()
-        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        
-        if result:
-            # 更新现有记录
-            sql = "UPDATE guishi_info SET items = ? WHERE user_id = ?"
-            cur.execute(sql, (items_json, user_id))
+        cur.execute("SELECT 1 FROM guishi_info WHERE user_id = ?", (user_id,))
+        if cur.fetchone():
+            cur.execute("UPDATE guishi_info SET items=? WHERE user_id=?", (payload, user_id))
         else:
-            # 插入新记录
-            sql = "INSERT INTO guishi_info (user_id, items) VALUES (?, ?)"
-            cur.execute(sql, (user_id, items_json))
-        
+            cur.execute("INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (?, 0, ?)", (user_id, payload))
         self.conn.commit()
-       
+
     def remove_stored_item(self, user_id, item_id):
-        """删除暂存物品"""
-        cur = self.conn.cursor()
-        cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        if result:
-            items = json.loads(result[0]) if result[0] else {}
-            if str(item_id) in items: # 确保key是字符串
-                del items[str(item_id)]
-                sql = "UPDATE guishi_info SET items = ? WHERE user_id = ?"
-                cur.execute(sql, (json.dumps(items), user_id))
-                self.conn.commit()
+        user_id = str(user_id)
+        item_id = str(item_id)
+
+        cur_items = self.get_stored_items(user_id)
+        if item_id in cur_items:
+            del cur_items[item_id]
+            payload = json.dumps(cur_items, ensure_ascii=False)
+            self.conn.execute("UPDATE guishi_info SET items=? WHERE user_id=?", (payload, user_id))
+            self.conn.commit()
 
     def update_stored_stone(self, user_id, amount, operation):
-        """更新暂存灵石"""
+        """
+        operation: add / subtract
+        subtract 下限0
+        """
+        user_id = str(user_id)
+        amount = int(amount)
+
         cur = self.conn.cursor()
-        if operation == 'add':
-            sql = "UPDATE guishi_info SET stored_stone = stored_stone + ? WHERE user_id = ?"
-        elif operation == 'subtract':
-            sql = "UPDATE guishi_info SET stored_stone = stored_stone - ? WHERE user_id = ?"
-        cur.execute(sql, (amount, user_id))
-        if cur.rowcount == 0:
-            sql_insert = "INSERT INTO guishi_info (user_id, stored_stone) VALUES (?, ?)"
-            cur.execute(sql_insert, (user_id, amount))
+        cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id=?", (user_id,))
+        row = cur.fetchone()
+
+        if row is None:
+            init_val = amount if operation == "add" else 0
+            cur.execute("INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (?, ?, '{}')", (user_id, init_val))
+            self.conn.commit()
+            return
+
+        old = int(row[0])
+        if operation == "add":
+            newv = old + amount
+        else:
+            newv = max(old - amount, 0)
+
+        cur.execute("UPDATE guishi_info SET stored_stone=? WHERE user_id=?", (newv, user_id))
         self.conn.commit()
 
-    # ====== 拍卖相关方法 ======
-    # 这些方法将不再直接管理 auction_settings 表
-    # auction_settings 将由 __init__.py 直接通过 JSON 文件管理
+    # ======== 拍卖等待区 ========
 
     def add_player_auction_item(self, user_id, item_id, item_name, start_price, user_name):
-        """添加玩家上架物品到拍卖等待区"""
         sql = """
             INSERT INTO auction_player_upload (user_id, item_id, item_name, start_price, user_name)
             VALUES (?, ?, ?, ?, ?)
         """
-        self.conn.execute(sql, (user_id, item_id, item_name, start_price, user_name))
+        self.conn.execute(sql, (str(user_id), int(item_id), str(item_name), int(start_price), str(user_name)))
         self.conn.commit()
 
     def get_player_auction_items(self, user_id=None):
-        """获取玩家上架物品列表，可选按user_id筛选"""
         cur = self.conn.cursor()
         if user_id is None:
-            sql = "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload"
-            cur.execute(sql)
+            cur.execute("SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload")
         else:
-            sql = "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload WHERE user_id = ?"
-            cur.execute(sql, (user_id,))
-        
-        results = cur.fetchall()
-        columns = ["user_id", "item_id", "item_name", "start_price", "user_name"]
-        return [dict(zip(columns, row)) for row in results]
+            cur.execute(
+                "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload WHERE user_id = ?",
+                (str(user_id),)
+            )
+        rows = cur.fetchall()
+        cols = ["user_id", "item_id", "item_name", "start_price", "user_name"]
+        return [dict(zip(cols, r)) for r in rows]
 
     def remove_player_auction_item(self, user_id, item_id):
-        """从拍卖等待区移除玩家上架物品"""
-        sql = "DELETE FROM auction_player_upload WHERE user_id = ? AND item_id = ?"
-        self.conn.execute(sql, (user_id, item_id))
-        self.conn.commit()
-    
-    def clear_player_auctions(self):
-        """清空所有玩家上架物品"""
-        sql = "DELETE FROM auction_player_upload"
-        self.conn.execute(sql)
+        self.conn.execute(
+            "DELETE FROM auction_player_upload WHERE user_id = ? AND item_id = ?",
+            (str(user_id), int(item_id))
+        )
         self.conn.commit()
 
+    def clear_player_auctions(self):
+        self.conn.execute("DELETE FROM auction_player_upload")
+        self.conn.commit()
+
+    # ======== 当前拍卖 ========
+
     def set_current_auction(self, auction_items: list):
-        """
-        设置当前拍卖品列表
-        auction_items: list of dict, each dict represents an auction item.
-        """
-        self.clear_current_auction() # 清空旧的拍卖
+        self.clear_current_auction()
         cur = self.conn.cursor()
-        for item_data in auction_items:
-            # 确保 bids 和 bid_times 是 JSON 字符串
-            bids_json = json.dumps(item_data.get('bids', {}))
-            bid_times_json = json.dumps(item_data.get('bid_times', {}))
-            
-            sql = """
-                INSERT INTO auction_current (id, item_id, name, start_price, current_price, seller_id, seller_name, bids, bid_times, is_system, last_bid_time)
+        for x in auction_items:
+            bids_json = json.dumps(x.get("bids", {}), ensure_ascii=False)
+            bid_times_json = json.dumps(x.get("bid_times", {}), ensure_ascii=False)
+            cur.execute("""
+                INSERT INTO auction_current
+                (id, item_id, name, start_price, current_price, seller_id, seller_name, bids, bid_times, is_system, last_bid_time)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            cur.execute(sql, (
-                item_data['id'], item_data['item_id'], item_data['name'], item_data['start_price'], item_data['current_price'],
-                item_data['seller_id'], item_data['seller_name'], bids_json, bid_times_json,
-                1 if item_data['is_system'] else 0, item_data['last_bid_time']
+            """, (
+                str(x["id"]),
+                int(x["item_id"]),
+                str(x["name"]),
+                int(x["start_price"]),
+                int(x["current_price"]),
+                str(x["seller_id"]),
+                str(x["seller_name"]),
+                bids_json,
+                bid_times_json,
+                1 if bool(x.get("is_system", False)) else 0,
+                float(x.get("last_bid_time")) if x.get("last_bid_time") is not None else None
             ))
         self.conn.commit()
 
     def get_current_auction(self, auction_id=None):
-        """
-        获取当前拍卖品列表或单个拍卖品详情
-        Returns: list of dict if auction_id is None, dict if auction_id is specified, None if not found.
-        """
         cur = self.conn.cursor()
         if auction_id is None:
-            sql = "SELECT * FROM auction_current"
-            cur.execute(sql)
-            results = cur.fetchall()
-            columns = [col[0] for col in cur.description]
-            parsed_results = []
-            for row in results:
-                item = dict(zip(columns, row))
-                item['bids'] = json.loads(item['bids']) # Deserialize JSON strings
-                item['bid_times'] = json.loads(item['bid_times'])
-                item['is_system'] = bool(item['is_system'])
-                parsed_results.append(item)
-            return parsed_results
+            cur.execute("SELECT * FROM auction_current")
+            rows = cur.fetchall()
+            cols = [c[0] for c in cur.description]
+            out = []
+            for r in rows:
+                d = dict(zip(cols, r))
+                try:
+                    d["bids"] = json.loads(d["bids"]) if d["bids"] else {}
+                except Exception:
+                    d["bids"] = {}
+                try:
+                    d["bid_times"] = json.loads(d["bid_times"]) if d["bid_times"] else {}
+                except Exception:
+                    d["bid_times"] = {}
+                d["is_system"] = bool(d["is_system"])
+                out.append(d)
+            return out
         else:
-            sql = "SELECT * FROM auction_current WHERE id = ?"
-            cur.execute(sql, (auction_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [col[0] for col in cur.description]
-                item = dict(zip(columns, result))
-                item['bids'] = json.loads(item['bids'])
-                item['bid_times'] = json.loads(item['bid_times'])
-                item['is_system'] = bool(item['is_system'])
-                return item
-            return None
+            cur.execute("SELECT * FROM auction_current WHERE id=?", (str(auction_id),))
+            r = cur.fetchone()
+            if not r:
+                return None
+            cols = [c[0] for c in cur.description]
+            d = dict(zip(cols, r))
+            try:
+                d["bids"] = json.loads(d["bids"]) if d["bids"] else {}
+            except Exception:
+                d["bids"] = {}
+            try:
+                d["bid_times"] = json.loads(d["bid_times"]) if d["bid_times"] else {}
+            except Exception:
+                d["bid_times"] = {}
+            d["is_system"] = bool(d["is_system"])
+            return d
 
     def update_auction_bid(self, auction_id, new_current_price, new_bids, new_bid_times, new_last_bid_time):
-        """更新拍卖品的当前出价和出价记录"""
-        # 确保 bids 和 bid_times 是 JSON 字符串
-        bids_json = json.dumps(new_bids)
-        bid_times_json = json.dumps(new_bid_times)
-        
         sql = """
             UPDATE auction_current
-            SET current_price = ?, bids = ?, bid_times = ?, last_bid_time = ?
-            WHERE id = ?
+            SET current_price=?, bids=?, bid_times=?, last_bid_time=?
+            WHERE id=?
         """
-        self.conn.execute(sql, (new_current_price, bids_json, bid_times_json, new_last_bid_time, auction_id))
+        self.conn.execute(
+            sql,
+            (
+                int(new_current_price),
+                json.dumps(new_bids or {}, ensure_ascii=False),
+                json.dumps(new_bid_times or {}, ensure_ascii=False),
+                float(new_last_bid_time) if new_last_bid_time is not None else None,
+                str(auction_id)
+            )
+        )
         self.conn.commit()
 
     def clear_current_auction(self):
-        """清空当前拍卖品表"""
-        sql = "DELETE FROM auction_current"
-        self.conn.execute(sql)
+        self.conn.execute("DELETE FROM auction_current")
         self.conn.commit()
 
+    # ======== 拍卖历史 ========
+
     def add_auction_history_record(self, record: dict):
-        """添加拍卖历史记录"""
         sql = """
-            INSERT INTO auction_history (auction_id, item_id, item_name, start_price, final_price, seller_id, seller_name, winner_id, winner_name, status, fee, seller_earnings, start_time, end_time)
+            INSERT INTO auction_history
+            (auction_id, item_id, item_name, start_price, final_price, seller_id, seller_name,
+             winner_id, winner_name, status, fee, seller_earnings, start_time, end_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         self.conn.execute(sql, (
-            record['auction_id'], record['item_id'], record['item_name'], record['start_price'], record['final_price'],
-            record['seller_id'], record['seller_name'], record.get('winner_id'), record.get('winner_name'), record['status'],
-            record.get('fee'), record.get('seller_earnings'), record['start_time'], record['end_time']
+            str(record["auction_id"]),
+            int(record["item_id"]),
+            str(record["item_name"]),
+            int(record["start_price"]),
+            int(record["final_price"]) if record.get("final_price") is not None else None,
+            str(record["seller_id"]),
+            str(record["seller_name"]),
+            str(record["winner_id"]) if record.get("winner_id") is not None else None,
+            str(record["winner_name"]) if record.get("winner_name") is not None else None,
+            str(record["status"]),
+            int(record["fee"]) if record.get("fee") is not None else None,
+            int(record["seller_earnings"]) if record.get("seller_earnings") is not None else None,
+            float(record["start_time"]),
+            float(record["end_time"])
         ))
         self.conn.commit()
 
     def get_auction_history(self, auction_id=None):
-        """获取拍卖历史记录，可选按auction_id筛选"""
         cur = self.conn.cursor()
         if auction_id is None:
-            sql = "SELECT * FROM auction_history ORDER BY end_time DESC"
-            cur.execute(sql)
+            cur.execute("SELECT * FROM auction_history ORDER BY end_time DESC")
         else:
-            sql = "SELECT * FROM auction_history WHERE auction_id = ? ORDER BY end_time DESC"
-            cur.execute(sql, (auction_id,))
-        
-        results = cur.fetchall()
-        columns = [col[0] for col in cur.description]
-        return [dict(zip(columns, row)) for row in results]
-    
+            cur.execute("SELECT * FROM auction_history WHERE auction_id=? ORDER BY end_time DESC", (str(auction_id),))
+        rows = cur.fetchall()
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r)) for r in rows]
+
     def close(self):
-        """关闭数据库连接"""
-        if hasattr(self, 'conn') and self.conn:
+        if getattr(self, "conn", None):
             self.conn.close()
-            logger.opt(colors=True).info(f"<green>trade数据库关闭！</green>")
+            logger.opt(colors=True).info("<green>trade数据库关闭！</green>")
 
 # 这里是Player部分
 class PlayerDataManager:
@@ -3713,20 +3691,26 @@ def get_player_info(user_id, info_name):
         
     return player_info
 
+def _safe_parse_dt(dt_str):
+    if not dt_str:
+        return None
+    if isinstance(dt_str, datetime):
+        return dt_str
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(str(dt_str), fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def number_count(num):
-    """
-    根据数值大小返回原始值或科学计数法
-    规则：大于等于1e+21时返回科学计数法，否则直接返回原数值
-    """
+    """数据库安全：统一返回 int"""
     try:
-        num_val = float(num)
+        val = float(num)
     except (TypeError, ValueError):
-        raise ValueError("输入必须是数字或科学计数法字符串")
-    
-    if abs(num_val) >= 1e21:  # 阈值改为大于等于
-        return f"{num_val:.2e}"  # 保留2位小数的科学计数法
-    else:
-        return num_val  # 返回浮点数
+        raise ValueError("输入必须是数字")
+    return int(val)
 
 def backup_db_files():
     """
@@ -3826,22 +3810,6 @@ def clean_old_backups(backup_dir, keep_days=10):
                 
     except Exception as e:
         logger.warning(f"清理旧备份时出错: {str(e)}")
-
-driver = get_driver()
-sql_message = XiuxianDateManage()  # sql类
-items = Items()
-trade_manager = TradeDataManager()
-player_data_manager = PlayerDataManager()
-
-@driver.on_shutdown
-async def close_db():
-    XiuxianDateManage().close()
-    XIUXIAN_IMPART_BUFF().close()
-    # PlayerDataManager().close() # PlayerDataManager 的连接已改为按需打开和关闭
-    TradeDataManager().close()
-
-import sqlite3
-from pathlib import Path
 
 def _qid(name: str) -> str:
     # 安全引用SQLite标识符
@@ -4024,7 +3992,7 @@ def migrate_user_id_to_openid():
 
         # 各库需要迁移的字段（player.db新增 main_id、active_id）
         target_cols_by_db = {
-            "xiuxian.db": {"user_id"},
+            "xiuxian.db": {"user_id", "sect_owner"},
             "xiuxian_impart.db": {"user_id"},
             "trade.db": {"user_id"},
             "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
@@ -4174,7 +4142,7 @@ def migrate_single_user_id(old_id: str, new_id: str):
 
         # 各库需要迁移的字段（与批量迁移保持一致）
         target_cols_by_db = {
-            "xiuxian.db": {"user_id"},
+            "xiuxian.db": {"user_id", "sect_owner"},
             "xiuxian_impart.db": {"user_id"},
             "trade.db": {"user_id"},
             "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
@@ -4319,7 +4287,7 @@ def swap_two_user_ids(id1: str, id2: str):
         }
 
         target_cols_by_db = {
-            "xiuxian.db": {"user_id"},
+            "xiuxian.db": {"user_id", "sect_owner"},
             "xiuxian_impart.db": {"user_id"},
             "trade.db": {"user_id"},
             "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
@@ -4437,3 +4405,16 @@ def swap_two_user_ids(id1: str, id2: str):
 
     except Exception as e:
         return False, f"ID交换异常：{e}"
+
+driver = get_driver()
+sql_message = XiuxianDateManage()  # sql类
+items = Items()
+trade_manager = TradeDataManager()
+player_data_manager = PlayerDataManager()
+
+@driver.on_shutdown
+async def close_db():
+    XiuxianDateManage().close()
+    XIUXIAN_IMPART_BUFF().close()
+    # PlayerDataManager().close() # PlayerDataManager 的连接已改为按需打开和关闭
+    TradeDataManager().close()

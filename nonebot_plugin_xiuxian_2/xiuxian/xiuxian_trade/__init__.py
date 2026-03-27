@@ -238,7 +238,7 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
         if item["bids"]: # 如果有出价记录
             # 找到最高出价
             highest_bidder_id, final_price = max(item["bids"].items(), key=lambda x: x[1])
-            highest_bidder_id = int(highest_bidder_id) # 数据库存的是字符串，需要转回int
+            # highest_bidder_id 保持字符串，不再转 int
             
             # 给买家物品
             item_info = items.get_data_by_item_id(item["item_id"])
@@ -273,9 +273,8 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
             
             # 退还其他竞拍者的灵石
             for bidder_id_str, bid_price in item["bids"].items():
-                bidder_id = int(bidder_id_str)
-                if bidder_id != highest_bidder_id:
-                    sql_message.update_ls(bidder_id, bid_price, 1) # 退还灵石
+                if bidder_id_str != highest_bidder_id:
+                    sql_message.update_ls(bidder_id_str, bid_price, 1) # 退还灵石
                     # logger.info(f"退还竞拍者 {bidder_id} 灵石 {bid_price}")
         else:
             # 无出价，流拍
@@ -309,7 +308,7 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     logger.info("拍卖已结束，结算完成！")
     return auction_results
 
-async def place_auction_bid(bot: Bot, user_id: int, user_name: str, auction_id: str, bid_price: int):
+async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: str, bid_price: int):
     """
     用户参与拍卖竞拍。
     """
@@ -365,8 +364,7 @@ async def place_auction_bid(bot: Bot, user_id: int, user_name: str, auction_id: 
     # 处理上一个最高出价者 (退还灵石)
     if item["bids"]:
         # item["bids"] 存储的是 {user_id_str: bid_price}
-        prev_winner_id_str, prev_price = max(item["bids"].items(), key=lambda x: x[1])
-        prev_winner_id = int(prev_winner_id_str)
+        prev_winner_id, prev_price = max(item["bids"].items(), key=lambda x: x[1])
         
         if prev_winner_id != user_id: # 如果不是自己刷新出价
             sql_message.update_ls(prev_winner_id, prev_price, 1) # 1表示增加
@@ -573,7 +571,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
     
     # 检查用户背包中可交易的物品数量
-    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
@@ -822,7 +820,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
-    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         sql_message.update_user_stamina(user_id, 10, 1)
@@ -1787,7 +1785,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
     
     # 检查用户背包中可交易的物品数量
-    goods_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2045,7 +2043,7 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, "\n".join(msg_parts))
     await clear_all_guishi.finish()
 
-async def process_guishi_transactions(user_id: int = None) -> str:
+async def process_guishi_transactions(user_id: str = None) -> str:
     """
     处理鬼市的求购与摆摊交易匹配。
     :param user_id: 如果指定，则只处理该用户的求购订单，并返回详细交易信息；否则处理所有订单，只记录日志。
@@ -2233,9 +2231,8 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 # 获取所有出价记录并按时间降序排序
                 bid_records = []
                 for bidder_id_str, bid_price in item["bids"].items():
-                    bidder_id = int(bidder_id_str)
                     bid_time = item["bid_times"].get(bidder_id_str, 0)
-                    bid_records.append({"bidder_id": bidder_id, "price": bid_price, "time": bid_time})
+                    bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
                 
                 bid_records.sort(key=lambda x: x["time"], reverse=True)
                 recent_bids = bid_records[:5] # 只显示最近的5条出价
@@ -2353,7 +2350,7 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     success, result_msg = await place_auction_bid(
         bot,
-        user_info['user_id'],
+        str(user_info['user_id']),
         user_info['user_name'],
         auction_id,
         bid_price
@@ -2412,7 +2409,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
         return back and back.get('state', 0) == 1
     
-    trade_num = sql_message.goods_num(user_info['user_id'], goods_id, num_type='trade')
+    trade_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if get_equipment_is_used(user_id, goods_id): # 如果是已装备物品
         trade_num = max(0, trade_num - 1) # 已装备的物品不能上架，所以减1
     

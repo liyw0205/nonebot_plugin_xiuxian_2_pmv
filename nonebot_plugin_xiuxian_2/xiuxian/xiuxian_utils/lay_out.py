@@ -204,7 +204,7 @@ def Cooldown(
             pass
         
         if is_private:        
-            if is_private and not conf_data.get("private_enabled", False):
+            if is_private and not conf_data.get("private", True):
                 await bot.send(event=event, message="私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！")
                 await matcher.finish()
         
