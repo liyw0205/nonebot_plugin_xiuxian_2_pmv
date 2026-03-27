@@ -172,7 +172,7 @@ class Items:
         for k, v in dict_data.items():
             if k in ITEMS_CACHE:
                 logger.warning(f"items：{k}已存在！")
-                return
+                continue
             if item_type in ['功法', '神通', '辅修功法', '身法', '瞳术']:
                 v['type'] = '技能'
                 v['rank'], v['level'] = v['level'], v['rank']
