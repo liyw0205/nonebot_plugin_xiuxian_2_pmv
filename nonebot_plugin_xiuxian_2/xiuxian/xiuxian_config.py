@@ -61,6 +61,8 @@ class XiuConfig:
         # 修仙管理面板端口
         self.web_host = "0.0.0.0" 
         # 修仙管理面板IP
+        self.terminal_preload = ["echo '欢迎使用修仙交互终端'", "date"]
+        # 修仙管理面板终端启动命令
 
         self.merge_forward_send = 4
         # 使用消息合并转发

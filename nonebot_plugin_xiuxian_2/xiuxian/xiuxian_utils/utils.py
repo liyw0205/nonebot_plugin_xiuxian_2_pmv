@@ -19,6 +19,7 @@ from ..adapter_compat import (
     MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
+    is_channel_event,
     MessageSegment
 )
 from nonebot.adapters.onebot.v11 import Bot as OB11Bot
@@ -722,7 +723,8 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     
     if is_group:
         if not msg_text.startswith('\n'):
-            msg_text = '\n' + msg_text
+            if not is_channel_event:
+                msg_text = '\n' + msg_text
     else:
         if msg_text.startswith('\n'):
             msg_text = msg_text[1:]

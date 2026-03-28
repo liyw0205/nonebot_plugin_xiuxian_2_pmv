@@ -300,6 +300,34 @@ def is_private_event(event: BaseEvent) -> bool:
         types.append(QQChannelPrivateMessageEvent)  # type: ignore[arg-type]
     return isinstance(event, tuple(types)) if types else False
 
+def is_channel_event(event: BaseEvent) -> bool:
+    """是否为频道来源事件（包括频道公域消息、频道私信）"""
+    if HAS_QQ:
+        if isinstance(event, QQAtChannelMessageEvent):
+            return True
+        if isinstance(event, QQChannelPrivateMessageEvent):
+            return True
+    return False
+
+
+def get_chat_scene(event: BaseEvent) -> str:
+    """
+    获取会话场景：
+    - group: 普通群
+    - private: 普通私聊
+    - channel_group: 频道内消息（@机器人消息，按群语义处理）
+    - channel_private: 频道私信（按私聊语义处理）
+    - unknown: 未识别
+    """
+    if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+        return "channel_group"
+    if HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
+        return "channel_private"
+    if is_group_event(event):
+        return "group"
+    if is_private_event(event):
+        return "private"
+    return "unknown"
 
 _group_seq_cache: dict[str, int] = {}
 
@@ -560,6 +588,8 @@ __all__ = [
     "MessageEvent",
     "is_group_event",
     "is_private_event",
+    "is_channel_event",
+    "get_chat_scene",
     "get_user_id",
     "get_group_id",
     "patch_bot_inplace",

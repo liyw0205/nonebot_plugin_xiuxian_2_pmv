@@ -5,14 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>修仙管理面板</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"> {# 链接到新的外部 CSS 文件 #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- 1. 核心修复脚本：阻塞渲染，防止深色模式瞬间闪白 -->
+    <script>
+        (function() {
+            // 立即读取存储的主题和颜色
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const savedColor = localStorage.getItem('customAccentColor');
+            
+            // 在 body 渲染前应用到 html 标签上
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            
+            if (savedColor) {
+                document.documentElement.setAttribute('data-custom-accent-color', 'true');
+                document.documentElement.style.setProperty('--custom-accent-color', savedColor);
+            }
+        })();
+    </script>
 </head>
 
 <body>
+    <!-- 粒子背景容器 -->
     <div id="particles-js"></div>
     
     <header>
-        <a href="{{ url_for('home') }}" class="logo"> {# Make logo clickable to home #}
+        <a href="{{ url_for('home') }}" class="logo">
             <div class="logo-icon">
                 <i class="fas fa-mountain"></i>
             </div>
@@ -30,17 +48,18 @@
                 <li><a href="{{ url_for('commands') }}" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-terminal"></i> <span>管理员指令</span></a></li>
                 <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
                 <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
+                <li><a href="{{ url_for('terminal') }}" class="{% if is_active('terminal') %}active{% endif %}"><i class="fas fa-terminal"></i> 终端</a></li>
                 <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
             </ul>
             
-            {# Theme/Settings Dropdown #}
+            <!-- 主题/设置下拉菜单 -->
             <div class="settings-dropdown">
                 <button class="settings-button" id="settingsButton">
                     <i class="fas fa-palette"></i> 主题设置 <i class="fas fa-caret-down"></i>
                 </button>
                 <div class="dropdown-content" id="settingsDropdownContent">
                     <label>
-                        <input type="radio" name="theme" value="light" checked>
+                        <input type="radio" name="theme" value="light">
                         <i class="fas fa-sun"></i> 浅色模式
                     </label>
                     <label>
@@ -65,168 +84,139 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- 引入粒子库 -->
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    
     <script>
-        // --- Theme Switching & Custom Color Logic ---
-        const body = document.body;
+        // --- 逻辑变量定义 ---
+        const html = document.documentElement;
         const themeRadios = document.querySelectorAll('input[name="theme"]');
-        const customAccentColorInput = document.getElementById('customAccentColorInput');
+        const customColorInput = document.getElementById('customAccentColorInput');
         const settingsButton = document.getElementById('settingsButton');
         const settingsDropdownContent = document.getElementById('settingsDropdownContent');
+        const menuToggle = document.getElementById('menuToggle');
+        const mainNav = document.getElementById('mainNav');
 
+        // --- 主题控制函数 ---
+
+        // 1. 设置预设主题 (浅色/深色/活力)
         function applyTheme(themeName) {
-            body.dataset.theme = themeName;
+            html.setAttribute('data-theme', themeName);
             localStorage.setItem('theme', themeName);
-            // If a custom color is active, make sure it's applied
-            if (localStorage.getItem('customAccentColor')) {
-                applyCustomAccentColor(localStorage.getItem('customAccentColor'));
-            } else {
-                body.removeAttribute('data-custom-accent-color');
-                body.style.removeProperty('--custom-accent-color');
-            }
+            
+            // 切换预设主题时，自动移除自定义强调色，恢复主题原生配色
+            removeCustomAccent();
+            
+            // 更新粒子颜色
+            updateParticles(themeName);
         }
 
-        function applyCustomAccentColor(color) {
-            body.dataset.customAccentColor = 'true'; // Activate custom color override
-            body.style.setProperty('--custom-accent-color', color);
+        // 2. 设置自定义强调色
+        function applyCustomAccent(color) {
+            html.setAttribute('data-custom-accent-color', 'true');
+            html.style.setProperty('--custom-accent-color', color);
             localStorage.setItem('customAccentColor', color);
-            // Ensure a theme is active (e.g., light if none selected)
-            if (!localStorage.getItem('theme')) {
-                applyTheme('light');
-            }
+            
+            // 激活自定义颜色时，取消选中所有预设单选框
+            themeRadios.forEach(radio => radio.checked = false);
         }
 
-        // Initialize theme on page load
+        // 3. 移除自定义强调色
+        function removeCustomAccent() {
+            html.removeAttribute('data-custom-accent-color');
+            html.style.removeProperty('--custom-accent-color');
+            localStorage.removeItem('customAccentColor');
+        }
+
+        // --- 初始化 UI 状态 (页面加载时执行) ---
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('theme') || 'light';
-            const savedCustomColor = localStorage.getItem('customAccentColor');
+            const savedColor = localStorage.getItem('customAccentColor');
 
-            // Apply saved theme
-            applyTheme(savedTheme);
-            document.querySelector(`input[name="theme"][value="${savedTheme}"]`).checked = true;
-
-            // Apply saved custom color
-            if (savedCustomColor) {
-                customAccentColorInput.value = savedCustomColor;
-                applyCustomAccentColor(savedCustomColor);
+            // 同步 UI 单选框状态
+            if (savedColor) {
+                applyCustomAccent(savedColor);
+                customColorInput.value = savedColor;
+            } else {
+                const radio = document.querySelector(`input[name="theme"][value="${savedTheme}"]`);
+                if (radio) radio.checked = true;
             }
-        });
 
-        // Event listeners for theme radios
-        themeRadios.forEach(radio => {
-            radio.addEventListener('change', () => {
-                applyTheme(radio.value);
-                // When switching to a preset theme, disable custom color
-                body.removeAttribute('data-custom-accent-color');
-                body.style.removeProperty('--custom-accent-color');
-                localStorage.removeItem('customAccentColor'); // Clear custom color from storage
-            });
-        });
+            // 初始化粒子背景
+            initParticles(savedTheme);
 
-        // Event listener for custom accent color picker
-        customAccentColorInput.addEventListener('input', (event) => {
-            applyCustomAccentColor(event.target.value);
-            // Uncheck preset themes when custom color is picked
-            themeRadios.forEach(radio => radio.checked = false);
-        });
-
-        // Toggle settings dropdown
-        settingsButton.addEventListener('click', (event) => {
-            settingsDropdownContent.classList.toggle('show');
-            event.stopPropagation(); // Prevent document click from closing it immediately
-        });
-
-        // Close dropdown if clicked outside
-        document.addEventListener('click', (event) => {
-            if (!settingsDropdownContent.contains(event.target) && !settingsButton.contains(event.target)) {
-                settingsDropdownContent.classList.remove('show');
-            }
-        });
-
-        // --- Existing JavaScript Logic ---
-        // 移动端菜单切换
-        document.getElementById('menuToggle').addEventListener('click', function() {
-            document.getElementById('mainNav').classList.toggle('active');
-        });
-        
-        // 初始化粒子背景
-        particlesJS('particles-js', {
-            particles: {
-                number: { value: 80, density: { enable: true, value_area: 800 } },
-                color: { value: "#9370db" },
-                shape: { type: "circle" },
-                opacity: { value: 0.5, random: true },
-                size: { value: 3, random: true },
-                line_linked: {
-                    enable: true,
-                    distance: 150,
-                    color: "#6a5acd",
-                    opacity: 0.4,
-                    width: 1
-                },
-                move: {
-                    enable: true,
-                    speed: 2,
-                    direction: "none",
-                    random: true,
-                    straight: false,
-                    out_mode: "out",
-                    bounce: false
-                }
-            },
-            interactivity: {
-                detect_on: "canvas",
-                events: {
-                    onhover: { enable: true, mode: "grab" },
-                    onclick: { enable: true, mode: "push" },
-                    resize: true
-                }
-            },
-            retina_detect: true
-        });
-        
-        // 添加浮动动画到卡片
-        document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.card');
-            cards.forEach((card, index) => {
+            // 卡片入场动画延迟
+            document.querySelectorAll('.card').forEach((card, index) => {
                 card.style.animationDelay = `${index * 0.1}s`;
             });
         });
 
-        // 手机端点击导航栏外部自动关闭
-        document.addEventListener('click', function(event) {
-            const nav = document.getElementById('mainNav');
-            const menuToggle = document.getElementById('menuToggle');
-            
-            // 如果是移动端且导航栏已打开
-            if (window.innerWidth <= 768 && nav.classList.contains('active')) {
-                // 检查点击是否在导航栏内部或菜单按钮上
-                const isClickInsideNav = nav.contains(event.target);
-                const isClickOnToggle = menuToggle.contains(event.target);
-                
-                // 如果点击在导航栏外部且不是菜单按钮，则关闭导航栏
-                if (!isClickInsideNav && !isClickOnToggle) {
-                    nav.classList.remove('active');
+        // --- 事件监听器 ---
+
+        // 监听主题单选框点击
+        themeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (radio.checked) applyTheme(radio.value);
+            });
+        });
+
+        // 监听自定义取色器
+        customColorInput.addEventListener('input', (e) => {
+            applyCustomAccent(e.target.value);
+        });
+
+        // 下拉菜单切换
+        settingsButton.addEventListener('click', (e) => {
+            settingsDropdownContent.classList.toggle('show');
+            e.stopPropagation();
+        });
+
+        // 点击外部关闭下拉菜单
+        document.addEventListener('click', (e) => {
+            if (!settingsDropdownContent.contains(e.target) && !settingsButton.contains(e.target)) {
+                settingsDropdownContent.classList.remove('show');
+            }
+        });
+
+        // 移动端菜单切换
+        menuToggle.addEventListener('click', () => {
+            mainNav.classList.toggle('active');
+        });
+
+        // 移动端点击外部关闭导航
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && mainNav.classList.contains('active')) {
+                if (!mainNav.contains(e.target) && !menuToggle.contains(e.target)) {
+                    mainNav.classList.remove('active');
                 }
             }
         });
 
-        // 标签页切换时关闭导航栏（移动端）
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabLinks = document.querySelectorAll('.tab-link');
-            
-            tabLinks.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    // 如果是移动端，关闭导航栏
-                    if (window.innerWidth <= 768) {
-                        const nav = document.getElementById('mainNav');
-                        if (nav && nav.classList.contains('active')) {
-                            nav.classList.remove('active');
-                        }
-                    }
-                });
+        // --- 粒子系统初始化函数 ---
+        function initParticles(theme) {
+            const color = (theme === 'dark') ? "#3498db" : "#9370db";
+            particlesJS('particles-js', {
+                particles: {
+                    number: { value: 60, density: { enable: true, value_area: 800 } },
+                    color: { value: color },
+                    shape: { type: "circle" },
+                    opacity: { value: 0.5, random: true },
+                    size: { value: 3, random: true },
+                    line_linked: { enable: true, distance: 150, color: color, opacity: 0.4, width: 1 },
+                    move: { enable: true, speed: 2, direction: "none", random: true, out_mode: "out" }
+                },
+                interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "grab" } } },
+                retina_detect: true
             });
-        });
+        }
+
+        function updateParticles(theme) {
+            if (window.pJSDom && window.pJSDom.length > 0) {
+                window.pJSDom[0].pJS.fn.vendors.destroypJS();
+                window.pJSDom = [];
+            }
+            initParticles(theme);
+        }
     </script>
 </body>
 </html>

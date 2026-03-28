@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card terminal-container">
+    <div class="terminal-header">
+        <div class="terminal-dots">
+            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+        </div>
+        <div class="terminal-title">System Console - {{ admin_id }}</div>
+    </div>
+    
+    <div id="terminal-body" class="terminal-body">
+        <div class="output-line text-info"># 终端就绪。支持交互式指令（如 screen -r）。</div>
+    </div>
+
+    <!-- 虚拟功能键：解决手机操作痛点 -->
+    <div class="terminal-toolbar">
+        <button class="t-btn" onclick="sendControlKey('ArrowUp')">↑</button>
+        <button class="t-btn" onclick="sendControlKey('ArrowDown')">↓</button>
+        <button class="t-btn" onclick="sendRaw('\t')">Tab</button>
+        <button id="ctrl-toggle" class="t-btn" onclick="toggleCtrl()">Ctrl</button>
+        <button class="t-btn" onclick="sendRaw('\x1b')">Esc</button>
+        <button class="t-btn btn-danger" onclick="clearTerminal()">清屏</button>
+    </div>
+
+    <div class="terminal-input-group">
+        <span class="prompt">$</span>
+        <input type="text" id="terminal-input" autocomplete="off" placeholder="输入命令或按键...">
+        <button id="exec-btn" class="btn btn-primary">执行</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
+
+<style>
+    .terminal-container { background: #0d1117; border: 1px solid #30363d; display: flex; flex-direction: column; height: 80vh; padding: 0 !important; overflow: hidden; }
+    .terminal-header { background: #161b22; padding: 10px; display: flex; align-items: center; border-bottom: 1px solid #30363d; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+    .red { background: #ff5f56; } .yellow { background: #ffbd2e; } .green { background: #27c93f; }
+    .terminal-title { color: #8b949e; font-size: 12px; font-family: monospace; }
+    
+    .terminal-body { flex: 1; overflow-y: auto; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; color: #d1d5da; line-height: 1.5; }
+    
+    .terminal-toolbar { display: flex; background: #161b22; padding: 8px; gap: 6px; flex-wrap: wrap; border-top: 1px solid #30363d; }
+    .t-btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 5px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+    .t-btn:active { background: #30363d; }
+    .t-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+
+    .terminal-input-group { display: flex; padding: 12px; background: #0d1117; gap: 10px; align-items: center; border-top: 1px solid #21262d; }
+    .prompt { color: #7ee787; font-weight: bold; }
+    #terminal-input { background: #161b22; border: 1px solid #30363d; color: #fff; flex: 1; padding: 8px; border-radius: 4px; outline: none; }
+    
+    .cmd-echo { color: #58a6ff; font-weight: bold; margin-top: 10px; display: block; }
+    .text-info { color: #8b949e; font-style: italic; }
+</style>
+
+<script>
+const terminalBody = document.getElementById('terminal-body');
+const terminalInput = document.getElementById('terminal-input');
+const ctrlBtn = document.getElementById('ctrl-toggle');
+const ansiUp = new AnsiUp();
+
+let isCtrlActive = false;
+let cmdHistory = JSON.parse(localStorage.getItem('term_hist') || '[]');
+let histIdx = cmdHistory.length;
+
+// ASCII 控制符映射
+const CTRL_MAP = { 'a': '\x01', 'b': '\x02', 'c': '\x03', 'd': '\x04', 'e': '\x05', 'f': '\x06', 'l': '\x0c', 'u': '\x15', 'z': '\x1a' };
+
+function toggleCtrl() {
+    isCtrlActive = !isCtrlActive;
+    ctrlBtn.classList.toggle('active', isCtrlActive);
+    terminalInput.placeholder = isCtrlActive ? "Ctrl 模式已开启，按对应字母键触发..." : "输入命令...";
+    terminalInput.focus();
+}
+
+async function sendRaw(char) {
+    try {
+        const res = await fetch('/terminal/write', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ char: char })
+        });
+        const data = await res.json();
+        return data.success;
+    } catch (e) { return false; }
+}
+
+function clearTerminal() {
+    terminalBody.innerHTML = '<div class="text-info"># 屏幕已清除</div>';
+}
+
+async function runCommand(cmd) {
+    if (!cmd.trim()) return;
+
+    // 显示本条命令
+    const echo = document.createElement('div');
+    echo.className = 'cmd-echo';
+    echo.innerHTML = `<span style="color: #7ee787;">$</span> ${cmd}`;
+    terminalBody.appendChild(echo);
+
+    // 发起流式请求
+    const response = await fetch(`/terminal/run?command=${encodeURIComponent(cmd)}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    let container = document.createElement('span');
+    terminalBody.appendChild(container);
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        container.innerHTML += ansiUp.ansi_to_html(chunk);
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+}
+
+// 核心输入逻辑
+document.getElementById('exec-btn').onclick = async () => {
+    const val = terminalInput.value;
+    if (!val && !isCtrlActive) return;
+
+    if (isCtrlActive) {
+        // Ctrl 组合模式
+        const key = val.toLowerCase();
+        if (CTRL_MAP[key]) {
+            await sendRaw(CTRL_MAP[key]);
+            const note = document.createElement('span');
+            note.style.color = '#ff7b72';
+            note.textContent = `^${key.toUpperCase()}`;
+            terminalBody.appendChild(note);
+        }
+        toggleCtrl();
+    } else {
+        // 普通命令模式
+        // 先尝试写入（如果是交互式进程），写入失败则作为新命令运行
+        const success = await sendRaw(val + '\n');
+        if (!success) {
+            await runCommand(val);
+            // 存入历史
+            if (val !== cmdHistory[cmdHistory.length-1]) {
+                cmdHistory.push(val);
+                localStorage.setItem('term_hist', JSON.stringify(cmdHistory));
+            }
+        }
+    }
+    terminalInput.value = '';
+    histIdx = cmdHistory.length;
+    terminalBody.scrollTop = terminalBody.scrollHeight;
+};
+
+// 快捷按键处理
+async function sendControlKey(key) {
+    if (key === 'ArrowUp') {
+        if (histIdx > 0) { histIdx--; terminalInput.value = cmdHistory[histIdx]; }
+    } else if (key === 'ArrowDown') {
+        if (histIdx < cmdHistory.length - 1) { histIdx++; terminalInput.value = cmdHistory[histIdx]; }
+        else { histIdx = cmdHistory.length; terminalInput.value = ''; }
+    }
+    terminalInput.focus();
+}
+
+// 键盘监听
+terminalInput.onkeydown = (e) => {
+    if (e.key === 'Enter') document.getElementById('exec-btn').click();
+    if (e.key === 'ArrowUp') { e.preventDefault(); sendControlKey('ArrowUp'); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); sendControlKey('ArrowDown'); }
+};
+</script>
+{% endblock %}

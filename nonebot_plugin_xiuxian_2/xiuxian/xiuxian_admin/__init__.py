@@ -1387,7 +1387,7 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 def _fallback_rule() -> Rule:
     async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
-        if XiuConfig().empty_fallback and XiuConfig().empty_msg:
+        if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
             return False
         return isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
     return Rule(_checker)

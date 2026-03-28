@@ -2,6 +2,7 @@ import sqlite3
 import os
 import json
 import re
+import ast
 import platform
 # import psutil # 旧的导入方式
 import time
@@ -2665,7 +2666,112 @@ def download_file(filepath):
     
     # 发送文件
     return send_file(str(full_path))
+import pty
+import os
+import signal
+import subprocess
+import select
+import errno
+import fcntl
+from flask import Response, request, session, jsonify
 
+# 全局存储：admin_id -> master_fd (用于写入)
+terminal_fds = {}
+
+@app.route('/terminal')
+def terminal():
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    # 获取预设命令
+    return render_template('terminal.html')
+
+@app.route('/terminal/run')
+def terminal_run():
+    if 'admin_id' not in session:
+        return "Unauthorized", 401
+    
+    admin_id = session['admin_id']
+    command = request.args.get('command', '')
+    if not command:
+        return Response("", mimetype='text/plain')
+
+    def generate():
+        global terminal_fds
+        # 创建伪终端对
+        master_fd, slave_fd = pty.openpty()
+        terminal_fds[admin_id] = master_fd # 记录，供 /write 接口使用
+        
+        try:
+            # 开启子进程
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                stdin=slave_fd,
+                close_fds=True,
+                preexec_fn=os.setsid, # 创建进程组，方便整体控制
+                env={**os.environ, "TERM": "xterm", "LANG": "zh_CN.UTF-8"}
+            )
+            
+            os.close(slave_fd)
+            
+            # 设置 master_fd 为非阻塞模式
+            fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+            fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+            while True:
+                # 检查进程是否退出
+                if process.poll() is not None:
+                    # 最后读一次残留数据
+                    try:
+                        data = os.read(master_fd, 8192)
+                        if data: yield data.decode('utf-8', errors='replace')
+                    except: pass
+                    break
+
+                # 监听输出
+                r, _, _ = select.select([master_fd], [], [], 0.1)
+                if r:
+                    try:
+                        data = os.read(master_fd, 8192)
+                        if not data: break
+                        yield data.decode('utf-8', errors='replace')
+                    except OSError as e:
+                        if e.errno == errno.EIO: break # 进程结束，PTY关闭
+                        raise e
+                        
+        except Exception as e:
+            yield f"\n[Terminal Error]: {str(e)}"
+        finally:
+            if admin_id in terminal_fds:
+                del terminal_fds[admin_id]
+            try: os.close(master_fd)
+            except: pass
+            if process.poll() is None:
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+
+    return Response(generate(), mimetype='text/plain')
+
+@app.route('/terminal/write', methods=['POST'])
+def terminal_write():
+    """实时写入接口：透传按键、控制符到正在运行的 PTY"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    admin_id = session['admin_id']
+    data = request.get_json()
+    char = data.get('char', '')
+    
+    master_fd = terminal_fds.get(admin_id)
+    if master_fd:
+        try:
+            # 直接写入主设备，OS会自动将其转换为信号或输入给子进程
+            os.write(master_fd, char.encode('utf-8'))
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+    return jsonify({"success": False, "error": "当前没有正在运行的交互进程"})
 
 import threading
 
