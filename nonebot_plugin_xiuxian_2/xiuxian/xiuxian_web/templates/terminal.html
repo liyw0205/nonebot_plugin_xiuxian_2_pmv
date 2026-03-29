@@ -6,166 +6,179 @@
         <div class="terminal-dots">
             <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
         </div>
-        <div class="terminal-title">System Console - {{ admin_id }}</div>
+        <div class="terminal-title" id="terminal-title">Console - {{ admin_id }} (Connecting...)</div>
     </div>
     
-    <div id="terminal-body" class="terminal-body">
-        <div class="output-line text-info"># 终端就绪。支持交互式指令（如 screen -r）。</div>
-    </div>
+    <!-- 上面：终端内容显示区（会自动根据后端的PS1显示颜色） -->
+    <div id="terminal-body" class="terminal-body"></div>
 
-    <!-- 虚拟功能键：解决手机操作痛点 -->
+    <!-- 虚拟功能键 -->
     <div class="terminal-toolbar">
-        <button class="t-btn" onclick="sendControlKey('ArrowUp')">↑</button>
-        <button class="t-btn" onclick="sendControlKey('ArrowDown')">↓</button>
+        <button class="t-btn" onclick="sendRaw('\x1b[A')">↑</button>
+        <button class="t-btn" onclick="sendRaw('\x1b[B')">↓</button>
         <button class="t-btn" onclick="sendRaw('\t')">Tab</button>
-        <button id="ctrl-toggle" class="t-btn" onclick="toggleCtrl()">Ctrl</button>
+        <button id="ctrl-toggle" class="t-btn" onclick="toggleCtrl()">Ctrl: OFF</button>
         <button class="t-btn" onclick="sendRaw('\x1b')">Esc</button>
         <button class="t-btn btn-danger" onclick="clearTerminal()">清屏</button>
     </div>
 
+    <!-- 下面：输入区（保持简洁，只显示当前文件夹名） -->
     <div class="terminal-input-group">
-        <span class="prompt">$</span>
-        <input type="text" id="terminal-input" autocomplete="off" placeholder="输入命令或按键...">
-        <button id="exec-btn" class="btn btn-primary">执行</button>
+        <span class="prompt" id="current-pwd">~ $</span>
+        <input type="text" id="terminal-input" autocomplete="off" autofocus placeholder="输入命令...">
+        <button id="exec-btn" class="btn btn-primary">发送</button>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
 
 <style>
-    .terminal-container { background: #0d1117; border: 1px solid #30363d; display: flex; flex-direction: column; height: 80vh; padding: 0 !important; overflow: hidden; }
-    .terminal-header { background: #161b22; padding: 10px; display: flex; align-items: center; border-bottom: 1px solid #30363d; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+    .terminal-container { background: #000; border: 1px solid #333; height: 80vh; display: flex; flex-direction: column; padding: 0 !important; overflow: hidden; border-radius: 8px; }
+    .terminal-header { background: #1a1a1a; padding: 10px; display: flex; align-items: center; border-bottom: 1px solid #333; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
     .red { background: #ff5f56; } .yellow { background: #ffbd2e; } .green { background: #27c93f; }
-    .terminal-title { color: #8b949e; font-size: 12px; font-family: monospace; }
+    .terminal-title { color: #aaa; font-size: 13px; font-family: monospace; }
     
-    .terminal-body { flex: 1; overflow-y: auto; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; color: #d1d5da; line-height: 1.5; }
+    .terminal-body { flex: 1; overflow-y: auto; padding: 15px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; color: #fff; line-height: 1.4; white-space: pre-wrap; word-break: break-all; background: #000; }
     
-    .terminal-toolbar { display: flex; background: #161b22; padding: 8px; gap: 6px; flex-wrap: wrap; border-top: 1px solid #30363d; }
-    .t-btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 5px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; }
-    .t-btn:active { background: #30363d; }
-    .t-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+    .terminal-toolbar { display: flex; background: #1a1a1a; padding: 8px; gap: 8px; border-top: 1px solid #333; flex-wrap: wrap; }
+    .t-btn { background: #333; border: 1px solid #444; color: #eee; padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+    .t-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); font-weight: bold; }
 
-    .terminal-input-group { display: flex; padding: 12px; background: #0d1117; gap: 10px; align-items: center; border-top: 1px solid #21262d; }
-    .prompt { color: #7ee787; font-weight: bold; }
-    #terminal-input { background: #161b22; border: 1px solid #30363d; color: #fff; flex: 1; padding: 8px; border-radius: 4px; outline: none; }
+    .terminal-input-group { display: flex; padding: 12px; background: #000; gap: 12px; align-items: center; border-top: 1px solid #333; }
     
-    .cmd-echo { color: #58a6ff; font-weight: bold; margin-top: 10px; display: block; }
-    .text-info { color: #8b949e; font-style: italic; }
+    /* 下面输入框旁的路径提示符样式 */
+    .prompt { color: #27c93f; font-weight: bold; font-family: monospace; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+    
+    #terminal-input { background: #111; border: 1px solid #333; color: #fff; flex: 1; padding: 10px; border-radius: 4px; outline: none; font-family: monospace; }
+    #terminal-input:focus { border-color: var(--accent-color); }
 </style>
 
 <script>
 const terminalBody = document.getElementById('terminal-body');
 const terminalInput = document.getElementById('terminal-input');
 const ctrlBtn = document.getElementById('ctrl-toggle');
+const pwdSpan = document.getElementById('current-pwd');
 const ansiUp = new AnsiUp();
 
+let history = [];
+let historyIndex = -1;
 let isCtrlActive = false;
-let cmdHistory = JSON.parse(localStorage.getItem('term_hist') || '[]');
-let histIdx = cmdHistory.length;
 
-// ASCII 控制符映射
-const CTRL_MAP = { 'a': '\x01', 'b': '\x02', 'c': '\x03', 'd': '\x04', 'e': '\x05', 'f': '\x06', 'l': '\x0c', 'u': '\x15', 'z': '\x1a' };
-
+// 切换 Ctrl 状态
 function toggleCtrl() {
     isCtrlActive = !isCtrlActive;
     ctrlBtn.classList.toggle('active', isCtrlActive);
-    terminalInput.placeholder = isCtrlActive ? "Ctrl 模式已开启，按对应字母键触发..." : "输入命令...";
+    ctrlBtn.innerText = isCtrlActive ? "Ctrl: ON" : "Ctrl: OFF";
+    terminalInput.placeholder = isCtrlActive ? "输入字母组合(如 ad)..." : "输入命令...";
     terminalInput.focus();
 }
 
-async function sendRaw(char) {
+async function sendRaw(str) {
+    await fetch('/terminal/write', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ input: str })
+    });
+    updatePwd();
+}
+
+// 刷新下面输入框旁边的路径显示
+async function updatePwd() {
     try {
-        const res = await fetch('/terminal/write', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ char: char })
-        });
+        const res = await fetch('/terminal/pwd');
         const data = await res.json();
-        return data.success;
-    } catch (e) { return false; }
+        // 只取最后一级文件夹名，例如 /root/xiu3 只显示 xiu3
+        const folder = data.cwd === "/" ? "/" : data.cwd.split('/').pop();
+        pwdSpan.innerText = folder + " $";
+    } catch (e) {}
 }
 
-function clearTerminal() {
-    terminalBody.innerHTML = '<div class="text-info"># 屏幕已清除</div>';
-}
-
-async function runCommand(cmd) {
-    if (!cmd.trim()) return;
-
-    // 显示本条命令
-    const echo = document.createElement('div');
-    echo.className = 'cmd-echo';
-    echo.innerHTML = `<span style="color: #7ee787;">$</span> ${cmd}`;
-    terminalBody.appendChild(echo);
-
-    // 发起流式请求
-    const response = await fetch(`/terminal/run?command=${encodeURIComponent(cmd)}`);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    
-    let container = document.createElement('span');
-    terminalBody.appendChild(container);
-
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        container.innerHTML += ansiUp.ansi_to_html(chunk);
-        terminalBody.scrollTop = terminalBody.scrollHeight;
+function convertToCtrlCodes(str) {
+    let result = "";
+    for(let char of str.toLowerCase()) {
+        let code = char.charCodeAt(0) - 96;
+        if(code >= 1 && code <= 26) result += String.fromCharCode(code);
     }
+    return result;
 }
 
-// 核心输入逻辑
-document.getElementById('exec-btn').onclick = async () => {
+async function handleSend() {
     const val = terminalInput.value;
     if (!val && !isCtrlActive) return;
 
     if (isCtrlActive) {
-        // Ctrl 组合模式
-        const key = val.toLowerCase();
-        if (CTRL_MAP[key]) {
-            await sendRaw(CTRL_MAP[key]);
-            const note = document.createElement('span');
-            note.style.color = '#ff7b72';
-            note.textContent = `^${key.toUpperCase()}`;
-            terminalBody.appendChild(note);
-        }
+        const codes = convertToCtrlCodes(val);
+        if(codes) await sendRaw(codes);
         toggleCtrl();
     } else {
-        // 普通命令模式
-        // 先尝试写入（如果是交互式进程），写入失败则作为新命令运行
-        const success = await sendRaw(val + '\n');
-        if (!success) {
-            await runCommand(val);
-            // 存入历史
-            if (val !== cmdHistory[cmdHistory.length-1]) {
-                cmdHistory.push(val);
-                localStorage.setItem('term_hist', JSON.stringify(cmdHistory));
-            }
-        }
+        if (val.trim()) history.push(val);
+        historyIndex = -1;
+        await sendRaw(val + '\n');
     }
     terminalInput.value = '';
-    histIdx = cmdHistory.length;
     terminalBody.scrollTop = terminalBody.scrollHeight;
-};
-
-// 快捷按键处理
-async function sendControlKey(key) {
-    if (key === 'ArrowUp') {
-        if (histIdx > 0) { histIdx--; terminalInput.value = cmdHistory[histIdx]; }
-    } else if (key === 'ArrowDown') {
-        if (histIdx < cmdHistory.length - 1) { histIdx++; terminalInput.value = cmdHistory[histIdx]; }
-        else { histIdx = cmdHistory.length; terminalInput.value = ''; }
-    }
-    terminalInput.focus();
 }
 
-// 键盘监听
-terminalInput.onkeydown = (e) => {
-    if (e.key === 'Enter') document.getElementById('exec-btn').click();
-    if (e.key === 'ArrowUp') { e.preventDefault(); sendControlKey('ArrowUp'); }
-    if (e.key === 'ArrowDown') { e.preventDefault(); sendControlKey('ArrowDown'); }
+document.getElementById('exec-btn').onclick = handleSend;
+
+terminalInput.onkeydown = async (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleSend(); } 
+    else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (history.length > 0) {
+            if (historyIndex === -1) historyIndex = history.length - 1;
+            else if (historyIndex > 0) historyIndex--;
+            terminalInput.value = history[historyIndex];
+        }
+    } 
+    else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (historyIndex !== -1) {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                terminalInput.value = history[historyIndex];
+            } else {
+                historyIndex = -1;
+                terminalInput.value = '';
+            }
+        }
+    } 
+    else if (e.key === 'Tab') {
+        e.preventDefault();
+        await sendRaw('\t');
+    }
 };
+
+async function startOutputListener() {
+    try {
+        const response = await fetch('/terminal/output');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        document.getElementById('terminal-title').innerText = "Console - {{ admin_id }} (Connected)";
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            // 这里 ansi_up 会自动处理我们在后端 PS1 里设置的颜色代码
+            terminalBody.innerHTML += ansiUp.ansi_to_html(chunk);
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+            if (terminalBody.childNodes.length > 3000) {
+                for(let i=0; i<50; i++) terminalBody.removeChild(terminalBody.firstChild);
+            }
+        }
+    } catch (e) {
+        document.getElementById('terminal-title').innerText = "Console - Disconnected";
+        setTimeout(startOutputListener, 2000);
+    }
+}
+
+function clearTerminal() { terminalBody.innerHTML = ''; }
+
+startOutputListener();
+updatePwd();
+setInterval(updatePwd, 5000); // 没操作时每5秒同步一次路径
 </script>
 {% endblock %}

@@ -4,7 +4,6 @@
 <div class="card">
     <h2>欢迎, 管理员 {{ admin_id }}</h2>
     
-    {# 新增：仓库地址显示 #}
     <div style="margin-bottom: 20px; text-align: center;">
         <p><strong>GitHub 仓库:</strong> 
             <a href="https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv" target="_blank" class="btn btn-info btn-sm">
@@ -15,8 +14,22 @@
 
     <!-- 统计数据 -->
     <div class="stats-grid">
+        <!-- 机器人状态卡片 -->
         <div class="stat-card">
-            <div class="stat-icon" style="background: var(--success-color);"> {# Use CSS variable #}
+            <div class="stat-icon" style="background: #673ab7;">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="bot-count">0</h3>
+                <p>在线机器人</p>
+                <div id="bot-list-detail" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px; line-height: 1.2;">
+                    等待连接...
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: var(--success-color);">
                 <i class="fas fa-users"></i>
             </div>
             <div class="stat-content">
@@ -26,7 +39,7 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon" style="background: var(--info-color);"> {# Use CSS variable #}
+            <div class="stat-icon" style="background: var(--info-color);">
                 <i class="fas fa-landmark"></i>
             </div>
             <div class="stat-content">
@@ -36,7 +49,7 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon" style="background: var(--warning-color);"> {# Use CSS variable #}
+            <div class="stat-icon" style="background: var(--warning-color);">
                 <i class="fas fa-chart-line"></i>
             </div>
             <div class="stat-content">
@@ -49,7 +62,7 @@
                     </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span>7天:</span>
-                        <span id="seven-days-avg">0.0</span>
+                        <span id="seven-days-avg">0</span>
                     </div>
                 </div>
             </div>
@@ -60,20 +73,16 @@
     <div class="card" style="margin-top: 20px;">
         <h3><i class="fas fa-chart-pie"></i> 系统监控</h3>
         <div class="monitor-grid">
-            <!-- CPU监控 -->
             <div class="monitor-card">
                 <h4><i class="fas fa-microchip"></i> CPU使用率</h4>
                 <div class="monitor-content">
-                    <div class="circular-progress" data-percent="0"> {# data-color removed, controlled by JS #}
+                    <div class="circular-progress" id="cpu-progress">
                         <div class="progress-circle">
                             <svg viewBox="0 0 100 100">
                                 <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
-                                <circle class="progress-fill" cx="50" cy="50" r="45" 
-                                        style="stroke-dashoffset: 283;"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
                             </svg>
-                            <div class="progress-text">
-                                <span id="cpu-percent">0%</span>
-                            </div>
+                            <div class="progress-text"><span id="cpu-percent">0%</span></div>
                         </div>
                     </div>
                     <div class="cpu-history-chart" id="cpu-history">
@@ -83,46 +92,39 @@
                 </div>
             </div>
             
-            <!-- 内存监控 -->
             <div class="monitor-card">
                 <h4><i class="fas fa-memory"></i> 内存使用</h4>
                 <div class="monitor-content">
-                    <div class="circular-progress" data-percent="0"> {# data-color removed #}
+                    <div class="circular-progress" id="mem-progress">
                         <div class="progress-circle">
                             <svg viewBox="0 0 100 100">
                                 <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
-                                <circle class="progress-fill" cx="50" cy="50" r="45" 
-                                        style="stroke-dashoffset: 283;"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
                             </svg>
-                            <div class="progress-text">
-                                <span id="memory-percent">0%</span>
-                            </div>
+                            <div class="progress-text"><span id="memory-percent">0%</span></div>
                         </div>
                     </div>
                     <div class="process-list" id="memory-processes">
                         <div class="process-title">内存占用前5进程</div>
-                        <div class="process-items">
-                            <div class="loading">加载中...</div>
-                        </div>
+                        <div class="process-items"><div class="loading">加载中...</div></div>
                     </div>
                 </div>
             </div>
             
-            <!-- 磁盘监控 -->
             <div class="monitor-card">
                 <h4><i class="fas fa-hdd"></i> 磁盘使用</h4>
                 <div class="monitor-content">
-                    <div class="circular-progress" data-percent="0"> {# data-color removed #}
+                    <div class="circular-progress" id="disk-progress">
                         <div class="progress-circle">
                             <svg viewBox="0 0 100 100">
                                 <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
-                                <circle class="progress-fill" cx="50" cy="50" r="45" 
-                                        style="stroke-dashoffset: 283;"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
                             </svg>
-                            <div class="progress-text">
-                                <span id="disk-percent">0%</span>
-                            </div>
+                            <div class="progress-text"><span id="disk-percent">0%</span></div>
                         </div>
+                    </div>
+                    <div style="margin-top:10px; font-size: 0.8rem; color: var(--text-secondary); text-align: center;">
+                        Bot 运行时间: <span id="bot-uptime-val" style="color: var(--text-primary); font-weight: bold;">--</span>
                     </div>
                 </div>
             </div>
@@ -134,51 +136,27 @@
         <h3><i class="fas fa-bolt"></i> 快捷操作</h3>
         <div class="action-grid">
             <a href="{{ url_for('database') }}" class="action-card">
-                <div class="action-icon">
-                    <i class="fas fa-database"></i>
-                </div>
-                <div class="action-content">
-                    <h4>数据库管理</h4>
-                    <p>管理用户数据</p>
-                </div>
+                <div class="action-icon"><i class="fas fa-database"></i></div>
+                <div class="action-content"><h4>数据库管理</h4><p>管理用户数据</p></div>
             </a>
-            
             <a href="{{ url_for('commands') }}" class="action-card">
-                <div class="action-icon">
-                    <i class="fas fa-terminal"></i>
-                </div>
-                <div class="action-content">
-                    <h4>管理员指令</h4>
-                    <p>执行管理命令</p>
-                </div>
+                <div class="action-icon"><i class="fas fa-terminal"></i></div>
+                <div class="action-content"><h4>管理员指令</h4><p>执行管理命令</p></div>
             </a>
-            
             <a href="{{ url_for('config_management') }}" class="action-card">
-                <div class="action-icon">
-                    <i class="fas fa-cog"></i>
-                </div>
-                <div class="action-content">
-                    <h4>配置管理</h4>
-                    <p>修改配置</p>
-                </div>
+                <div class="action-icon"><i class="fas fa-cog"></i></div>
+                <div class="action-content"><h4>配置管理</h4><p>修改配置</p></div>
             </a>
-
             <a href="{{ url_for('update') }}" class="action-card">
-                <div class="action-icon">
-                    <i class="fas fa-sync-alt"></i>
-                </div>
-                <div class="action-content">
-                    <h4>检测更新</h4>
-                    <p>插件更新</p>
-                </div>
+                <div class="action-icon"><i class="fas fa-sync-alt"></i></div>
+                <div class="action-content"><h4>检测更新</h4><p>插件更新</p></div>
             </a>
         </div>
     </div>
 
-    
     <!-- 系统信息 -->
     <div class="card" style="margin-top: 20px;">
-        <h3><i class="fas fa-server"></i> 系统信息</h3>
+        <h3><i class="fas fa-server"></i> 系统信息 <small style="font-size: 0.7em; color: gray;">NoneBot2: <span id="nb-ver-val">--</span></small></h3>
         <div id="system-info" class="info-grid">
             <div class="loading">加载中...</div>
         </div>
@@ -186,7 +164,6 @@
 </div>
 
 <script>
-// 获取统计信息
 async function loadStats() {
     try {
         const response = await fetch('/get_stats');
@@ -198,216 +175,121 @@ async function loadStats() {
             document.getElementById('active-users').textContent = data.active_users.toLocaleString();
             document.getElementById('yesterday-users').textContent = data.yesterday_users.toLocaleString();
             document.getElementById('seven-days-avg').textContent = data.seven_days_avg.toLocaleString();
+            
+            // 更新机器人信息
+            document.getElementById('bot-count').textContent = data.bot_count;
+            document.getElementById('bot-uptime-val').textContent = data.bot_uptime;
+            document.getElementById('nb-ver-val').textContent = data.nb_version;
+            
+            const botDetail = document.getElementById('bot-list-detail');
+            if (data.bots && data.bots.length > 0) {
+                botDetail.innerHTML = data.bots.map(b => 
+                    `<div><i class="fas fa-check-circle" style="color:var(--success-color)"></i> ${b.bot_id} <small>(${b.adapter})</small></div>`
+                ).join('');
+            } else {
+                botDetail.innerHTML = '<span style="color:var(--danger-color)">无机器人在线</span>';
+            }
         }
     } catch (error) {
         console.error('获取统计信息失败:', error);
     }
 }
 
-// 更新圆形进度条
-function updateCircularProgress(elementId, percent) {
-    const progressElement = document.querySelector(`#${elementId}`).closest('.circular-progress');
-    const fillElement = progressElement.querySelector('.progress-fill');
-    const textElement = progressElement.querySelector('.progress-text span');
+function updateCircularProgress(containerId, percent) {
+    const fillElement = document.querySelector(`#${containerId} .progress-fill`);
+    const textElement = document.querySelector(`#${containerId} .progress-text span`);
     
-    // 根据百分比设置颜色（白>绿>红）
-    let strokeColor;
-    if (percent < 30) {
-        strokeColor = 'var(--success-color)'; // 绿色
-    } else if (percent < 70) {
-        strokeColor = 'var(--warning-color)'; // 橙色
-    } else {
-        strokeColor = 'var(--danger-color)'; // 红色
-    }
+    let strokeColor = 'var(--success-color)';
+    if (percent > 70) strokeColor = 'var(--danger-color)';
+    else if (percent > 40) strokeColor = 'var(--warning-color)';
     
-    // 计算进度
     const circumference = 2 * Math.PI * 45;
     const offset = circumference - (percent / 100 * circumference);
     
-    // 更新进度
     fillElement.style.strokeDashoffset = offset;
     fillElement.style.stroke = strokeColor;
-    textElement.textContent = `${percent}%`;
+    textElement.textContent = `${Math.round(percent)}%`;
 }
 
-// CPU历史数据
 let cpuHistoryData = [];
-
-// 更新CPU历史图表
 function updateCpuHistoryChart() {
     const chartBars = document.querySelector('#cpu-history .chart-bars');
     chartBars.innerHTML = '';
-    
-    // 确保有5个柱子
-    const displayData = [...cpuHistoryData];
-    
     for (let i = 0; i < 5; i++) {
-        const value = displayData[i] || 0; // 如果没有数据则为0
+        const value = cpuHistoryData[i] || 0;
         const bar = document.createElement('div');
-        bar.className = 'chart-bar';
-        
-        if (value === 0) {
-            bar.classList.add('empty'); // 添加空柱子样式
-            bar.style.height = '5px'; // 最小高度
-        } else {
-            bar.style.height = `${value}%`;
-            bar.setAttribute('data-percent', `${Math.round(value)}%`);
-            // Color based on usage
-            let barColor;
-            if (value < 30) { barColor = 'var(--success-color)'; }
-            else if (value < 70) { barColor = 'var(--warning-color)'; }
-            else { barColor = 'var(--danger-color)'; }
-            bar.style.background = `linear-gradient(to top, ${barColor}, color-mix(in srgb, ${barColor} 50%, white))`;
-        }
-        
-        bar.title = value === 0 ? '无数据' : `${Math.round(value)}%`;
+        bar.className = 'chart-bar' + (value === 0 ? ' empty' : '');
+        bar.style.height = value === 0 ? '5px' : `${value}%`;
+        if (value > 0) bar.setAttribute('data-percent', `${Math.round(value)}%`);
         chartBars.appendChild(bar);
     }
 }
 
-// 获取系统监控信息
 async function loadSystemMonitor() {
     try {
         const response = await fetch('/get_system_info_extended');
         const data = await response.json();
-        
         if (data.success) {
-            // 更新CPU
-            const cpuUsage = parseFloat(data.cpu_info['CPU使用率'].replace('%', ''));
-            updateCircularProgress('cpu-percent', cpuUsage);
-            
-            // 更新CPU历史数据（保留最近5次）
-            // 只有当有实际数据时才添加到历史记录
-            if (!isNaN(cpuUsage) && cpuUsage >= 0) { // Allow 0% but not NaN
-                cpuHistoryData.push(cpuUsage);
-            }
-            
-            if (cpuHistoryData.length > 5) {
-                cpuHistoryData.shift(); // 移除最旧的数据
-            }
+            const cpuUsage = parseFloat(data.cpu_info['CPU使用率']);
+            updateCircularProgress('cpu-progress', cpuUsage);
+            cpuHistoryData.push(cpuUsage);
+            if (cpuHistoryData.length > 5) cpuHistoryData.shift();
             updateCpuHistoryChart();
             
-            // 更新内存
-            const memoryUsage = parseFloat(data.mem_info['内存使用率'].replace('%', ''));
-            updateCircularProgress('memory-percent', memoryUsage);
-            
-            // 更新磁盘
-            const diskUsage = parseFloat(data.disk_info['磁盘使用率'].replace('%', ''));
-            updateCircularProgress('disk-percent', diskUsage);
+            updateCircularProgress('mem-progress', parseFloat(data.mem_info['内存使用率']));
+            updateCircularProgress('disk-progress', parseFloat(data.disk_info['磁盘使用率']));
         }
-    } catch (error) {
-        console.error('获取系统监控信息失败:', error);
-    }
+    } catch (e) {}
 }
 
-// 获取进程信息
 async function getProcessInfo() {
     try {
         const response = await fetch('/get_process_info');
         const data = await response.json();
-        
-        if (data.success) {
-            const processContainer = document.querySelector('.process-items');
-            processContainer.innerHTML = '';
-            
-            if (data.processes.length === 0) {
-                processContainer.innerHTML = '<div class="loading">暂无进程信息或psutil未安装</div>';
-            } else {
-                data.processes.forEach(process => {
-                    const item = document.createElement('div');
-                    item.className = 'process-item';
-                    item.innerHTML = `
-                        <div class="process-name" title="${process.name}">${process.name}</div>
-                        <div class="process-memory">${process.memory}</div>
-                        <div class="process-time">${process.time}</div>
-                    `;
-                    processContainer.appendChild(item);
-                });
-            }
-        } else {
-            document.querySelector('#memory-processes .process-items').innerHTML = `<div class="error-message">❌ ${data.error}</div>`;
+        const container = document.querySelector('.process-items');
+        if (data.success && data.processes.length > 0) {
+            container.innerHTML = data.processes.map(p => `
+                <div class="process-item">
+                    <div class="process-name">${p.name}</div>
+                    <div class="process-memory">${p.memory}</div>
+                    <div class="process-time">${p.time}</div>
+                </div>
+            `).join('');
         }
-    } catch (error) {
-        console.error('获取进程信息失败:', error);
-        document.querySelector('#memory-processes .process-items').innerHTML = `<div class="error-message">❌ 获取进程信息失败: ${error}</div>`;
-    }
+    } catch (e) {}
 }
 
-// 获取系统信息
 async function loadSystemInfo() {
     try {
         const response = await fetch('/get_system_info_extended');
         const data = await response.json();
-        
         if (data.success) {
             const systemInfoDiv = document.getElementById('system-info');
-            let html = '';
-            
-            // 系统基本信息
-            html += '<div class="info-item">';
-            html += '<h4>💻 系统信息</h4>';
-            for (const [key, value] of Object.entries(data.system_info)) {
-                html += `<p><strong>${key}:</strong> <span>${value}</span></p>`;
-            }
-            html += '</div>';
-            
-            // CPU信息
-            html += '<div class="info-item">';
-            html += '<h4>⚡ CPU信息</h4>';
-            for (const [key, value] of Object.entries(data.cpu_info)) {
-                html += `<p><strong>${key}:</strong> <span>${value}</span></p>`;
-            }
-            html += '</div>';
-            
-            // 内存信息
-            html += '<div class="info-item">';
-            html += '<h4>🧠 内存信息</h4>';
-            for (const [key, value] of Object.entries(data.mem_info)) {
-                html += `<p><strong>${key}:</strong> <span>${value}</span></p>`;
-            }
-            html += '</div>';
-            
-            // 磁盘信息
-            html += '<div class="info-item">';
-            html += '<h4>💾 磁盘信息</h4>';
-            for (const [key, value] of Object.entries(data.disk_info)) {
-                html += `<p><strong>${key}:</strong> <span>${value}</span></p>`;
-            }
-            html += '</div>';
-            
-            // 系统运行时间
-            html += '<div class="info-item">';
-            html += '<h4>⏱️ 系统运行时间</h4>';
-            for (const [key, value] of Object.entries(data.system_uptime)) {
-                html += `<p><strong>${key}:</strong> <span>${value}</span></p>`;
-            }
-            html += '</div>';
-            
-            systemInfoDiv.innerHTML = html;
-        } else {
-            document.getElementById('system-info').innerHTML = `<div class="error-message">❌ ${data.error}</div>`;
+            const sections = [
+                {title: '💻 系统信息', data: data.system_info},
+                {title: '⚡ CPU信息', data: data.cpu_info},
+                {title: '🧠 内存信息', data: data.mem_info},
+                {title: '💾 磁盘信息', data: data.disk_info}
+            ];
+            systemInfoDiv.innerHTML = sections.map(s => `
+                <div class="info-item">
+                    <h4>${s.title}</h4>
+                    ${Object.entries(s.data).map(([k,v]) => `<p><strong>${k}:</strong> <span>${v}</span></p>`).join('')}
+                </div>
+            `).join('');
         }
-    } catch (error) {
-        console.error('获取系统信息失败:', error);
-        document.getElementById('system-info').innerHTML = `<div class="error-message">❌ 获取系统信息失败: ${error}</div>`;
-    }
+    } catch (e) {}
 }
 
-// 页面加载时获取数据
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化空的历史数据
-    cpuHistoryData = [];
-    updateCpuHistoryChart(); // 先显示空图表
-    
     loadStats();
     loadSystemMonitor();
     loadSystemInfo();
     getProcessInfo();
     
-    // 定时刷新
-    setInterval(loadSystemMonitor, 3000); // 3秒刷新一次监控
-    setInterval(getProcessInfo, 7000); // 7秒刷新一次进程
-    setInterval(loadSystemInfo, 15000); // 15秒刷新一次系统信息
+    setInterval(loadStats, 10000);
+    setInterval(loadSystemMonitor, 3000);
+    setInterval(getProcessInfo, 10000);
 });
 </script>
 {% endblock %}

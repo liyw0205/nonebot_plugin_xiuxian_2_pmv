@@ -4,73 +4,67 @@ import json
 import re
 import ast
 import platform
-# import psutil # 旧的导入方式
 import time
+import pty
+import signal
+import subprocess
+import select
+import fcntl
+import termios
+import struct
+import threading
 from pathlib import Path
-from nonebot.log import logger
 from datetime import datetime, timedelta
-from nonebot import get_driver
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, send_from_directory, abort
+
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, abort, Response
+from nonebot.log import logger
+from nonebot import get_driver, get_bots, __version__ as nb_version
+
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
-# 导入 xiuxian2_handle，以便获取 trade_manager
 from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
-import os
 
+# --- 日志与 Psutil 处理 ---
 def log_to_file(message):
     log_file_path = Path(__file__).parent / "log.txt"
     with open(log_file_path, 'a', encoding='utf-8') as log_file:
         log_file.write(message + '\n')
 
-# 尝试导入 psutil，如果成功则设置一个标志
 psutil_available = False
 try:
     import psutil
     psutil_available = True
 except ImportError:
-    logger.warning("psutil模块未安装，部分系统监控功能（如CPU、内存、磁盘、进程信息）将受限，显示为未知。")
-    # 如果 psutil 不可用，定义一个虚拟对象以避免运行时错误
+    logger.warning("psutil模块未安装，部分系统监控功能将受限。")
     class DummyPsutilProcess:
-        def create_time(self):
-            return 0  # 占位符，表示启动时间为0
-        def name(self):
-            return "未知进程"
+        def create_time(self): return 0
+        def name(self): return "未知进程"
         def memory_info(self):
-            class MemInfo:
-                rss = 0
+            class MemInfo: rss = 0
             return MemInfo()
-    
     class DummyPsutil:
-        def cpu_percent(self, interval=None):
-            return 0.0 # 虚拟CPU使用率
+        def cpu_percent(self, interval=None): return 0.0
         def virtual_memory(self):
-            class VirtualMemory:
-                percent = 0.0 # 虚拟内存使用率
-                total = 0
-                used = 0
-            return VirtualMemory()
+            class VM: percent = 0.0; total = 0; used = 0
+            return VM()
         def disk_usage(self, path):
-            class DiskUsage:
-                percent = 0.0 # 虚拟磁盘使用率
-                total = 0
-                used = 0
-            return DiskUsage()
-        def cpu_count(self, logical=True):
-            return "未知"
+            class DU: percent = 0.0; total = 0; used = 0
+            return DU()
+        def cpu_count(self, logical=True): return "未知"
         def cpu_freq(self):
-            class Freq:
-                current = "未知"
+            class Freq: current = "未知"
             return Freq()
-        def boot_time(self):
-            return 0 # 占位符，表示系统启动时间为0
-        def process_iter(self, attrs=None):
-            return [] # 虚拟进程列表
-        def Process(self, pid):
-            return DummyPsutilProcess() # 返回虚拟进程对象
+        def boot_time(self): return 0
+        def process_iter(self, attrs=None): return []
+        def Process(self, pid): return DummyPsutilProcess()
+    psutil = DummyPsutil()
 
-    psutil = DummyPsutil() # 如果 psutil 不可用，则使用虚拟对象
+def log_to_file(message):
+    log_file_path = Path(__file__).parent / "log.txt"
+    with open(log_file_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(message + '\n')
 
 items = Items()
 update_manager = UpdateManager()
@@ -2419,49 +2413,79 @@ def get_config_category_icon(category):
     }
     return icon_map.get(category, "fas fa-cog")
 
+
 @app.route('/get_stats')
 def get_stats():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        # 获取总用户数
+        # 1. 数据库统计信息
         total_users_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM user_xiuxian")
         total_users = total_users_result[0]['COUNT(*)'] if total_users_result else 0
         
-        # 获取宗门数量
         total_sects_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM sects WHERE sect_owner IS NOT NULL")
         total_sects = total_sects_result[0]['COUNT(*)'] if total_sects_result else 0
         
-        # 获取今日活跃用户数（今天有操作记录的用户）
         today = datetime.now().strftime('%Y-%m-%d')
         active_users_result = execute_sql(DATABASE, 
             "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (today,))
         active_users = active_users_result[0]['COUNT(DISTINCT user_id)'] if active_users_result else 0
         
-        # 获取昨日活跃用户数
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         yesterday_users_result = execute_sql(DATABASE, 
             "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (yesterday,))
         yesterday_users = yesterday_users_result[0]['COUNT(DISTINCT user_id)'] if yesterday_users_result else 0
         
-        # 获取7天前的日期
         seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
-        # 注意：这里使用 >= 条件，统计从7天前到今天（共7天）的数据
         seven_days_avg_result = execute_sql(DATABASE, 
             "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) >= ?", (seven_days_ago,))
         seven_days_avg = seven_days_avg_result[0]['COUNT(DISTINCT user_id)'] if seven_days_avg_result else 0
+
+        # 2. 实时机器人 (Bot) 状态获取
+        # 通过 NoneBot2 的 get_bots() 跨线程获取实例
+        connected_bots = get_bots()
+        bot_info_list = []
         
+        for bot_id, bot in connected_bots.items():
+            adapter_name = "未知适配器"
+            try:
+                # 尝试获取适配器名称 (如 OneBot V11, QQ等)
+                adapter_name = bot.adapter.get_name()
+            except:
+                pass
+            
+            bot_info_list.append({
+                "bot_id": bot_id,
+                "adapter": adapter_name,
+                "status": "在线"
+            })
+
+        # 3. 获取运行时间 (基于当前进程)
+        bot_uptime = "未知"
+        if psutil_available:
+            try:
+                process_create_time = psutil.Process(os.getpid()).create_time()
+                bot_uptime = format_time(time.time() - process_create_time)
+            except:
+                pass
+
         return jsonify({
             "success": True,
             "total_users": total_users,
             "total_sects": total_sects,
             "active_users": active_users,
             "yesterday_users": yesterday_users,
-            "seven_days_avg": seven_days_avg
+            "seven_days_avg": seven_days_avg,
+            # 新增字段
+            "nb_version": nb_version,
+            "bots": bot_info_list,
+            "bot_count": len(bot_info_list),
+            "bot_uptime": bot_uptime
         })
         
     except Exception as e:
+        logger.error(f"统计信息获取失败: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/get_system_info')
@@ -2666,114 +2690,124 @@ def download_file(filepath):
     
     # 发送文件
     return send_file(str(full_path))
-import pty
-import os
-import signal
-import subprocess
-import select
-import errno
-import fcntl
-from flask import Response, request, session, jsonify
 
-# 全局存储：admin_id -> master_fd (用于写入)
-terminal_fds = {}
+# 全局存储终端会话：admin_id -> {'fd': master_fd, 'pid': child_pid}
+terminal_sessions = {}
+
+def get_terminal_session(admin_id):
+    """获取或创建一个持久的 bash 会话"""
+    if admin_id in terminal_sessions:
+        # 检查进程是否还在运行
+        pid = terminal_sessions[admin_id]['pid']
+        try:
+            os.kill(pid, 0)
+            return terminal_sessions[admin_id]
+        except OSError:
+            # 进程已死，清理
+            try: os.close(terminal_sessions[admin_id]['fd'])
+            except: pass
+            del terminal_sessions[admin_id]
+
+    # 创建新的伪终端对
+    master_fd, slave_fd = pty.openpty()
+    
+    # 启动 bash 子进程
+    pid = os.fork()
+
+    if pid == 0:  # 子进程
+        os.setsid()
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        os.close(master_fd)
+        
+        env = os.environ.copy()
+        env["TERM"] = "xterm-256color"
+        env["LANG"] = "zh_CN.UTF-8"
+        
+        # 这里的 PS1 控制【上面终端显示区】的样式
+        # \[\033[01;32m\] 为绿色 (用户)
+        # \[\033[01;34m\] 为蓝色 (路径)
+        # 这里的设置会通过 ansi_up 插件在网页上渲染出颜色
+        env["PS1"] = "\[\033[01;32m\]\\u\[\033[00m\]:\[\033[01;34m\]\\w\[\033[00m\]\\$ "
+        
+        os.execve("/bin/bash", ["/bin/bash", "--login", "-i"], env)
+    
+    # 父进程
+    os.close(slave_fd)
+    
+    # 将 master_fd 设置为非阻塞模式，防止读取时卡死整个 Flask
+    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    
+    session_data = {'fd': master_fd, 'pid': pid}
+    terminal_sessions[admin_id] = session_data
+    return session_data
 
 @app.route('/terminal')
 def terminal():
     if 'admin_id' not in session:
         return redirect(url_for('login'))
-    # 获取预设命令
-    return render_template('terminal.html')
+    return render_template('terminal.html', admin_id=session['admin_id'])
 
-@app.route('/terminal/run')
-def terminal_run():
+@app.route('/terminal/output')
+def terminal_output():
+    """流式读取终端输出的 Generator"""
     if 'admin_id' not in session:
         return "Unauthorized", 401
     
     admin_id = session['admin_id']
-    command = request.args.get('command', '')
-    if not command:
-        return Response("", mimetype='text/plain')
+    term = get_terminal_session(admin_id)
 
     def generate():
-        global terminal_fds
-        # 创建伪终端对
-        master_fd, slave_fd = pty.openpty()
-        terminal_fds[admin_id] = master_fd # 记录，供 /write 接口使用
-        
-        try:
-            # 开启子进程
-            process = subprocess.Popen(
-                command,
-                shell=True,
-                stdout=slave_fd,
-                stderr=slave_fd,
-                stdin=slave_fd,
-                close_fds=True,
-                preexec_fn=os.setsid, # 创建进程组，方便整体控制
-                env={**os.environ, "TERM": "xterm", "LANG": "zh_CN.UTF-8"}
-            )
-            
-            os.close(slave_fd)
-            
-            # 设置 master_fd 为非阻塞模式
-            fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-            fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-
-            while True:
-                # 检查进程是否退出
-                if process.poll() is not None:
-                    # 最后读一次残留数据
-                    try:
-                        data = os.read(master_fd, 8192)
-                        if data: yield data.decode('utf-8', errors='replace')
-                    except: pass
+        fd = term['fd']
+        while True:
+            # 使用 select 监听文件描述符是否有数据可读
+            r, _, _ = select.select([fd], [], [], 0.5)
+            if r:
+                try:
+                    data = os.read(fd, 1024 * 16)
+                    if not data: break
+                    yield data.decode('utf-8', errors='replace')
+                except (OSError, Exception):
                     break
-
-                # 监听输出
-                r, _, _ = select.select([master_fd], [], [], 0.1)
-                if r:
-                    try:
-                        data = os.read(master_fd, 8192)
-                        if not data: break
-                        yield data.decode('utf-8', errors='replace')
-                    except OSError as e:
-                        if e.errno == errno.EIO: break # 进程结束，PTY关闭
-                        raise e
-                        
-        except Exception as e:
-            yield f"\n[Terminal Error]: {str(e)}"
-        finally:
-            if admin_id in terminal_fds:
-                del terminal_fds[admin_id]
-            try: os.close(master_fd)
-            except: pass
-            if process.poll() is None:
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-
+            # 检查进程是否还存活
+            try:
+                os.kill(term['pid'], 0)
+            except OSError:
+                yield "\n[Session Terminated]\n"
+                break
+    
     return Response(generate(), mimetype='text/plain')
 
 @app.route('/terminal/write', methods=['POST'])
 def terminal_write():
-    """实时写入接口：透传按键、控制符到正在运行的 PTY"""
+    """向终端写入数据（支持多字符组合键）"""
     if 'admin_id' not in session:
-        return jsonify({"success": False, "error": "未登录"})
+        return jsonify({"success": False, "error": "Not logged in"})
     
     admin_id = session['admin_id']
     data = request.get_json()
-    char = data.get('char', '')
+    input_str = data.get('input', '')
     
-    master_fd = terminal_fds.get(admin_id)
-    if master_fd:
-        try:
-            # 直接写入主设备，OS会自动将其转换为信号或输入给子进程
-            os.write(master_fd, char.encode('utf-8'))
-            return jsonify({"success": True})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
-    return jsonify({"success": False, "error": "当前没有正在运行的交互进程"})
+    term = get_terminal_session(admin_id)
+    try:
+        os.write(term['fd'], input_str.encode('utf-8'))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
-import threading
+@app.route('/terminal/pwd')
+def terminal_pwd():
+    if 'admin_id' not in session: return jsonify({"cwd": "/"})
+    admin_id = session['admin_id']
+    if admin_id in terminal_sessions:
+        pid = terminal_sessions[admin_id]['pid']
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+            return jsonify({"cwd": cwd})
+        except: pass
+    return jsonify({"cwd": "~"})
 
 def run_flask():
     app.run(host=HOST, port=PORT, debug=False)

@@ -733,6 +733,10 @@ def optimize_message(msg: Union[Message, str, List[Union[Message, str]]], is_gro
         if is_group and not m_text.startswith('\n'):
             m_text = '\n' + m_text
         
+        # Markdown 状态处理
+        if XiuConfig().markdown_status:
+            m_text = m_text.replace('\n', '\r')
+
         m_text = m_text.rstrip()
         if m_text.endswith('\n') or m_text.endswith('\r'):
             m_text = m_text[:-1]
@@ -1021,18 +1025,16 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
             return
 
     # 未开启MD
+    is_group = is_group_event(event)
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, is_group)
     await handle_send2(bot, event, msg)
 
 async def handle_send2(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""
     if msg == " ":
         return
-
-    scene = get_chat_scene(event)
-    is_group = (scene == "group")
-
-    if XiuConfig().message_optimization:
-        msg = optimize_message(msg, is_group)
+    is_group = is_group_event(event)
     if XiuConfig().img:
         # 处理昵称为空的情况
         # 使用 event.sender.card 或 event.sender.nickname 来获取昵称
@@ -1147,7 +1149,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         msg_param = MessageSegment.markdown_param("t2", msg)
     
     param = [title_param, msg_param, shell_param]
-    logger.warning(f"{param}")
+    
     try:
         md_msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
         await bot.send(event=event, message=md_msg)
@@ -1218,7 +1220,6 @@ async def handle_send_markdown(
 
     if XiuConfig().message_optimization:
         md_text = optimize_message(md_text, False)
-    md_text = optimize_md(md_text)
     try:
         md_seg = MessageSegment.markdown(bot, md_text, button_id)
         await bot.send(event=event, message=md_seg)
