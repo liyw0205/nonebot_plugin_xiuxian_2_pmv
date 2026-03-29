@@ -164,8 +164,8 @@ xiuxian_sone = on_command("灵石", priority=4, block=True)
 compare_items = on_command("快速对比", priority=5, block=True)
 
 # 管理员命令
-check_user_equipment = on_command("装备检测", priority=4, permission=SUPERUSER, block=True)
-check_user_back = on_command("背包检测", priority=4, permission=SUPERUSER, block=True)
+check_user_equipment = on_command("装备检测", permission=SUPERUSER, priority=6, block=True)
+check_user_back = on_command("背包检测", permission=SUPERUSER, priority=6, block=True)
 
 
 def get_recover(goods_id, num):

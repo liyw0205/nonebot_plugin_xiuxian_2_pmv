@@ -38,7 +38,7 @@ class XiuConfig:
         # 消息是否艾特
         self.empty_fallback = True
         # 是否开启默认回复
-        self.empty_msg = "未识别到指令，可发送【修仙帮助】查看可用功能。"
+        self.empty_msg = "> 未识别到指令，可发送【修仙帮助】查看可用功能。"
         # 默认回复内容
 
         #markdown模板
