@@ -69,11 +69,13 @@ def get_required_rank_name(item_info: dict, user_info: dict = None):
     if rank_raw == -5:
         goods_rank = 23
     else:
-        goods_rank = rank_raw + ADDED_RANKS
+        goods_rank = rank_raw 
+        
+    goods_rank = goods_rank + ADDED_RANKS
 
     # 轮回减境界
     if user_info and user_info.get("root_type") in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
-        goods_rank = max(1, goods_rank - 3)
+        goods_rank = max(1, goods_rank + 3)
 
     idx = len(rank_name_list) - goods_rank
     idx = max(0, min(idx, len(rank_name_list) - 1))

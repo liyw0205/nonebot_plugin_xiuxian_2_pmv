@@ -558,7 +558,7 @@ class XiuxianDateManage:
     
     def update_exp(self, user_id, exp):
         """增加修为"""
-        exp = abs(int(number_count(exp)))
+        exp = number_count(exp)
         sql = "UPDATE user_xiuxian SET exp=exp+? WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (exp, user_id))
@@ -567,7 +567,7 @@ class XiuxianDateManage:
     
     def update_j_exp(self, user_id, exp):
         """减少修为"""
-        exp = abs(int(number_count(exp)))
+        exp = number_count(exp)
         sql = "UPDATE user_xiuxian SET exp=MAX(exp-?, 0) WHERE user_id=?"
         cur = self.conn.cursor()
         cur.execute(sql, (exp, user_id))
@@ -3705,11 +3705,20 @@ def _safe_parse_dt(dt_str):
 
 
 def number_count(num):
-    """数据库安全：统一返回 int"""
+    """
+    数据库安全处理：
+    如果数值超过 SQLite INTEGER 限制 (9,223,372,036,854,775,807)，返回科学计数法字符串。
+    否则返回 int。
+    """
+    MAX_SQLITE_INT = 9223372036854775807
     try:
         val = float(num)
     except (TypeError, ValueError):
         raise ValueError("输入必须是数字")
+    
+    if val > MAX_SQLITE_INT:
+        # 超过上限，返回科学计数法字符串，例如 "1.23e+20"
+        return "{:.2e}".format(val)
     return int(val)
 
 def backup_db_files():

@@ -650,8 +650,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = f"道友打开了 {num} 个 {package_name}:\n" + "".join(msg_parts)
 
     elif goods_type == "装备":
-        if goods_rank_calculated < user_rank: # 装备有境界限制
-             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
+        if goods_rank_calculated <= user_rank: # 装备有境界限制
+             msg = f"道友实力{user_rank}不足{goods_rank_calculated}使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         elif check_equipment_use_msg(user_id, goods_id): # 检查是否已经装备
             msg = "该装备已被装备，请勿重复装备！"
         else: # 执行装备操作
@@ -668,8 +668,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         user_buff_info = UserBuffDate(user_id).BuffInfo
         skill_info = goods_info
         skill_type = skill_info['item_type']
-        if goods_rank_calculated < user_rank: # 技能有境界限制
-             msg = f"道友实力不足学习{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
+        if goods_rank_calculated <= user_rank: # 技能有境界限制
+             msg = f"道友实力{user_rank}不足{goods_rank_calculated}学习{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         elif skill_type == "神通":
             if int(user_buff_info['sec_buff']) == int(goods_id):
                 msg = f"道友已学会该神通：{skill_info['name']}，请勿重复学习！"

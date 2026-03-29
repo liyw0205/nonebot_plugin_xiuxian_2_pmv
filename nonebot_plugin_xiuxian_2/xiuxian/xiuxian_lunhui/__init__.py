@@ -6,7 +6,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, PlayerDataManager, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from ..adapter_compat import (
@@ -29,6 +29,7 @@ from ..xiuxian_impart.impart_uitls import (
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 items = Items()
+added_ranks = added_ranks()
 confirm_lunhui_cache = {}
 
 __warring_help__ = f"""
@@ -64,7 +65,8 @@ __warring_help__ = f"""
        回忆前世 主功法
        回忆前世 神通
    • **每种类型只能取回一次**（取回后该印记作废）
-   • 取回有境界要求：需达到轮回前境界-9个小境界才能解锁
+   • 取回有境界要求：需达到轮回前境界3个大境界才能解锁
+   • 无限轮回可减免3个大境界（1次1个小境界）
 
 📌 注意事项：
 • 轮回后将更新灵根资质
@@ -428,6 +430,7 @@ def can_retrieve_skill(user_id, skill_type):
     返回 (can_retrieve: bool, reason: str, required_level_name: str or None)
     """
     memory = get_reincarnation_memory(user_id)
+    user_info = sql_message.get_user_info_with_id(user_id)
     if not memory:
         return False, "你没有任何轮回印记", None
     
@@ -451,28 +454,48 @@ def can_retrieve_skill(user_id, skill_type):
     if not old_level:
         return False, "轮回记忆数据异常", None
     
-    # 计算可取回的最低境界（前 9 阶）
-    rank_list = convert_rank("江湖好手")[1]  # 所有境界列表
-    try:
-        old_rank_idx = rank_list.index(old_level)
-        min_rank_idx = max(0, old_rank_idx - 9)
-        min_level_name = rank_list[min_rank_idx]
-    except ValueError:
+    # 获取境界数值（数字越大境界越低）
+    old_rank_score, rank_list = convert_rank(old_level)
+    if old_rank_score is None:
         return False, "轮回前境界数据异常", None
+
+    # 计算取回偏移量：基础9级 + 轮回等级加成（上限9级）
+    root_level = user_info.get('root_level', 0)
+    total_offset = 9 + min(root_level, 9)
     
-    # 当前境界
-    current_level = sql_message.get_user_info_with_id(user_id)['level']
-    current_rank_idx = rank_list.index(current_level) if current_level in rank_list else -1
+    # 计算要求境界数值（数值越大，要求境界越低）
+    required_rank_score = old_rank_score + total_offset
     
-    if current_rank_idx < min_rank_idx:
-        return False, f"境界不足，需要达到{min_level_name}才能取回该记忆", min_level_name
+    # 确保不超出境界表范围（最低只能到江湖好手）
+    max_score = convert_rank("江湖好手")[0]
+    required_rank_score = min(required_rank_score, max_score)
+    
+    # 获取对应的境界名称用于提示
+    target_idx = len(rank_list) - required_rank_score - 1
+    target_idx = max(0, min(target_idx, len(rank_list) - 1))
+    min_level_name = rank_list[target_idx]
+    
+    # 当前境界数值
+    current_rank_score, _ = convert_rank(user_info['level'])
+    
+    # 判断当前境界是否达到要求
+    if current_rank_score > required_rank_score:
+        return False, f"境界不足，需要达到【{min_level_name}】才能取回该记忆", min_level_name
     
     # 记忆中是否有该技能
     skill_id = memory.get(skill_type, 0)
     if skill_id == 0:
-        return False, f"轮回记忆中没有记录{skill_type}相关技能", None
+        return False, f"轮回记忆中没有记录{arg_to_name(skill_type)}相关技能", None
     
     return True, "可取回", None
+
+def arg_to_name(skill_type):
+    """辅助转换显示名称"""
+    names = {
+        "main_buff": "主功法", "sub_buff": "辅修", "sec_buff": "神通",
+        "effect1_buff": "身法", "effect2_buff": "瞳术"
+    }
+    return names.get(skill_type, skill_type)
 
 
 def retrieve_reincarnation_skill(user_id, skill_type):
