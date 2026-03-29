@@ -20,6 +20,7 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     is_channel_event,
+    get_chat_scene,
     MessageSegment
 )
 from nonebot.adapters.onebot.v11 import Bot as OB11Bot
@@ -716,23 +717,18 @@ def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
     :param is_group: 是否为群聊消息。
     :return: 优化后的纯文本消息 (str)。
     """
-    msg_text = str(msg)
 
-    if not msg_text:
+    if not msg:
         return ""
+
+    if msg.startswith('\n'):
+        msg = str(msg.lstrip())
+    msg_text = str(msg)
     
-    if is_group:
-        if not msg_text.startswith('\n'):
-            if not is_channel_event:
-                msg_text = '\n' + msg_text
-    else:
-        if msg_text.startswith('\n'):
-            msg_text = msg_text[1:]
+    if is_group and not msg_text.startswith('\n'):
+        msg_text = '\n' + msg_text
     
-    if msg_text.endswith('\n'):
-        msg_text = msg_text[:-1]
-    
-    return msg_text
+    return str(msg_text.rstrip())
 
 def optimize_md(msg: Union[Message, str]) -> str:
     """
@@ -741,23 +737,18 @@ def optimize_md(msg: Union[Message, str]) -> str:
     :param msg: 原始消息，可以是 Message 对象或 str。
     :return: 优化后的纯文本消息 (str)。
     """
-    msg_text = str(msg)
 
-    if not msg_text:
+    if not msg:
         return ""
 
-    if msg_text.startswith('\n'):
-        msg_text = msg_text.lstrip('\n')
-        if msg_text.startswith('\n'):
-            msg_text = msg_text[1:]
-
-    if msg_text.endswith('\n'):
-        msg_text = msg_text[:-1]
+    if msg.startswith('\n'):
+        msg = str(msg.lstrip())
+    msg_text = str(msg)
 
     msg_text = msg_text.replace('\n', '\r')
     msg_text = msg_text.replace('[', '')
     msg_text = msg_text.replace(']', '')
-    return msg_text
+    return str(msg_text.rstrip())
 
 def generate_command(msg, status=None, command=None, msg2=None):
     """
@@ -820,8 +811,11 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             name, uin, msgs = args
             msg = "\n".join(msgs)
             # 在合并后应用信息优化
-            if markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
+            if markdown_status:
+                if XiuConfig().markdown_id:
+                    await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
+                else:
+                    await handle_send_markdown(bot, event, msg, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -832,8 +826,11 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
             # 在合并后应用信息优化
-            if markdown_status and XiuConfig().markdown_id:
-                await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
+            if markdown_status:
+                if XiuConfig().markdown_id:
+                    await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
+                else:
+                    await handle_send_markdown(bot, event, merged_content, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
                 return
             if title:
                 msg = title + msg
@@ -945,20 +942,31 @@ async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v
         markdown_status = False
     else:
         markdown_status = XiuConfig().markdown_status
-
-    if markdown_status and XiuConfig().markdown_id and XiuConfig().markdown_id2:
+    
+    if markdown_status:
         if md_type:
-            await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
+            if XiuConfig().markdown_id2:
+                await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
+            else:
+                await handle_send_markdown_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
             return
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, button_id=button_id)
+        if XiuConfig().markdown_id:
+            await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, button_id=button_id)
+        else:
+            await handle_send_markdown(bot, event, msg, title=title, button_id=button_id)
         return
-    if msg == " ":
-        return
+    
     is_group = isinstance(event, GroupMessageEvent)
     
     if XiuConfig().message_optimization:
         msg = optimize_message(msg, is_group)
-    
+    await handle_send2(bot, event, msg)
+
+async def handle_send2(bot, event, msg: str):
+    """处理文本，根据配置发送文本或者图片消息"""
+    if msg == " ":
+        return
+    is_group = isinstance(event, GroupMessageEvent)
     if XiuConfig().img:
         # 处理昵称为空的情况
         # 使用 event.sender.card 或 event.sender.nickname 来获取昵称
@@ -1024,7 +1032,6 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     """发送md模板消息"""
     if not markdown_id:
         await handle_send(bot, event, msg)
-
     if msg:
         msg = optimize_md(msg)
     if title:
@@ -1068,6 +1075,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         title_param = MessageSegment.markdown_param("t1", title)
     if not msg_param:
         msg_param = MessageSegment.markdown_param("t2", msg)
+
     param = [        
         title_param,
         msg_param,
@@ -1075,7 +1083,59 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     ]
     msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
     await bot.send(event=event, message=msg)
-    
+
+async def handle_send_markdown(bot, event, msg: str, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
+    """发送md消息"""
+    if msg:
+        msg = optimize_md(msg)
+    if title:
+        title = optimize_md(title)
+    if page_param:
+        page_param = optimize_md(page_param)
+
+    is_group = get_chat_scene(event) == "group"
+    open_id = get_real_id(event.user_id)
+    if not open_id:
+        open_id = event.user_id
+    shell_param = " "
+    if not title:
+        title = " "
+        if not shell:
+            title = msg
+            msg = " "
+    if not page:
+            page = " "
+    else:
+        page = "\r".join(generate_page_param(page)['values'])
+    if shell:
+        shell_param = "```python\r" + msg + "\r```"
+        msg_param = page
+    else:
+        original_user_id = event.get_user_id()
+        if open_id and is_group and XiuConfig().at_sender and at_msg:
+            if original_user_id in _impersonating_users:
+                # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
+                target_user_id = _impersonating_users[original_user_id]
+                target_user_info = sql_message.get_user_info_with_id(target_user_id)
+                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+                title = f"<@{open_id}>\n(伪装[{target_user_name}])\n{title}"
+            else:
+                title = f"<@{open_id}>\n{title}"
+    if not title_param:
+        title = optimize_md(title)
+        title_param = title
+    if not msg_param:
+        msg_param = msg
+
+    param = title_param + shell_param + msg_param
+    if XiuConfig().message_optimization:
+        param = optimize_message(param, False)
+    if is_channel_event(event):
+        await handle_send2(bot, event, param)
+        return
+    msg = MessageSegment.markdown(bot, param, button_id)
+    await bot.send(event=event, message=msg)
+
 def check_user_md_type(md_type, event):
     original_user_id = event.user_id
     user_id_to_check = original_user_id
@@ -1179,7 +1239,59 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         ]
     msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
     await bot.send(event=event, message=msg)
-    
+
+async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=None):
+    """
+    发送md模板消息
+    为k2,v2,k3,v3,k4,v4提供默认值，避免在某些md_type下没有传入而导致报错
+    """
+    k2 = k2 if k2 is not None else "帮助"
+    v2 = v2 if v2 is not None else "修仙帮助"
+    k3 = k3 if k3 is not None else "存档"
+    v3 = v3 if v3 is not None else "我的修仙信息"
+
+    # 根据 md_type 调用 check_user_md_type 或设置特定按钮
+    if md_type in ["0", "1", "2", "3", "4", "5"]:
+        _k1, _v1 = check_user_md_type(md_type, event)
+        # 如果k1,v1未被外部传入，则使用check_user_md_type返回的值
+        k1 = k1 if k1 is not None and k1 != " " else _k1
+        v1 = v1 if v1 is not None and v1 != " " else _v1
+    elif md_type == "我要修仙":
+        k1 = "我要修仙"
+        v1 = "我要修仙"
+        k2 = "帮助"
+        v2 = "修仙帮助"
+        k3 = "官群"
+        v3 = f"{XiuConfig().qqq}"
+
+    msg = optimize_md(msg)
+    is_group = get_chat_scene(event) == "group"
+    open_id = get_real_id(event.user_id)
+    if not open_id:
+        open_id = event.user_id
+    original_user_id = event.get_user_id()
+    if open_id and is_group and XiuConfig().at_sender:
+        if original_user_id in _impersonating_users:
+            # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
+            target_user_id = _impersonating_users[original_user_id]
+            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
+            msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
+        else:
+            msg = f"<@{open_id}>\r{msg}"
+
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, False)
+    if is_channel_event(event):
+        await handle_send2(bot, event, msg)
+        return
+    md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false)"
+    if k4 and v4:
+        md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false) | [{k4}](mqqapi://aio/inlinecmd?command={v4}&enter=false&reply=false)"
+    msg = MessageSegment.markdown(bot, md_text, button_id)
+    await bot.send(event=event, message=msg)
+
+
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO, Image.Image] = None):
     """
     图片发送函数

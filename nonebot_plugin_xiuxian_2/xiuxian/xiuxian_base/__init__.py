@@ -18,6 +18,7 @@ from ..adapter_compat import (
     MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
+    is_channel_event,
     MessageSegment
 )
 from nonebot.log import logger
@@ -451,27 +452,32 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 📖 功法体系: [境界](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false)/[品阶](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)/[灵根](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false)
 """
 
-    if XiuConfig().markdown_status:
-        if md_msg:
+    if XiuConfig().markdown_status and not is_channel_event(event):
+        if XiuConfig().markdown_id:
+            title_param = {
+            "key": "t1",
+            "values": [
+                    generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r\r> "),
+                    generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r\r> "),
+                    generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r\r> "),
+                    generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r\r> "),
+                    generate_command("境界", command="境界帮助", status="start", msg2="/"),
+                    generate_command("灵根", command="灵根帮助", status="start", msg2="/"),
+                    generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r\r> "),
+                    generate_command("修炼", command="修炼", status="start", msg2="/"),
+                    generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
+                    generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
+            ]}
+            msg_param = MessageSegment.markdown_param("t2", " ")
+            shell_param = MessageSegment.markdown_param("s1", " ")
+            param = [title_param, msg_param, shell_param]
+            md_msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id, param, XiuConfig().button_id2)
+            await bot.send(event=event, message=md_msg)
+            await help_in.finish()
+        else:
             msg = MessageSegment.markdown(bot, md_msg, button_id=XiuConfig().button_id2)
             await bot.send(event=event, message=msg)
             await help_in.finish()
-        title_param = {
-        "key": "t1",
-        "values": [
-                generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r\r> "),
-                generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r\r> "),
-                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r\r> "),
-                generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r\r> "),
-                generate_command("境界", command="境界帮助", status="start", msg2="/"),
-                generate_command("灵根", command="灵根帮助", status="start", msg2="/"),
-                generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r\r> "),
-                generate_command("修炼", command="修炼", status="start", msg2="/"),
-                generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
-                generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
-            ]}
-        await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title_param=title_param, shell=True, button_id=XiuConfig().button_id2)
-        await help_in.finish()
     else:    
         await handle_send(bot, event, msg)
         await help_in.finish()

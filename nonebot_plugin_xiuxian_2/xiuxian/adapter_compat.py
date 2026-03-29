@@ -303,9 +303,7 @@ def is_private_event(event: BaseEvent) -> bool:
 def is_channel_event(event: BaseEvent) -> bool:
     """是否为频道来源事件（包括频道公域消息、频道私信）"""
     if HAS_QQ:
-        if isinstance(event, QQAtChannelMessageEvent):
-            return True
-        if isinstance(event, QQChannelPrivateMessageEvent):
+        if get_chat_scene(event) == "channel_group" or get_chat_scene(event) == "channel_private":
             return True
     return False
 
@@ -330,23 +328,98 @@ def get_chat_scene(event: BaseEvent) -> str:
     return "unknown"
 
 _group_seq_cache: dict[str, int] = {}
+_c2c_seq_cache: dict[str, int] = {}
 
 
 def _next_group_seq(group_openid: str) -> int:
+    """
+    群聊/频道群语义消息 seq:
+    - 首次随机起点
+    - 后续递增 + 小随机步长，降低并发同值概率
+    """
     current = _group_seq_cache.get(group_openid)
     if current is None:
-        current = random.randint(1, 10000) - random.randint(1, 1000)
+        current = random.randint(1000, 900000)
 
-    current += 1
+    current += random.randint(1, 3)
 
     if current <= 0:
         current = 1
     if current > 1_000_000:
-        current = 1
+        current = random.randint(1, 10000)
 
     _group_seq_cache[group_openid] = current
     return current
 
+
+def _next_c2c_seq(user_openid: str) -> int:
+    """
+    私聊(c2c)消息 seq:
+    - 首次随机起点
+    - 后续递增 + 小随机步长，降低并发同值概率
+    """
+    current = _c2c_seq_cache.get(user_openid)
+    if current is None:
+        current = random.randint(1000, 900000)
+
+    current += random.randint(1, 3)
+
+    if current <= 0:
+        current = 1
+    if current > 1_000_000:
+        current = random.randint(1, 10000)
+
+    _c2c_seq_cache[user_openid] = current
+    return current
+
+
+def _is_msgseq_conflict_error(exc: Exception) -> bool:
+    """
+    判断是否为 QQ 的 msg_seq 去重冲突错误（40054005）
+    """
+    try:
+        code = getattr(exc, "retcode", None)
+        if code == 40054005:
+            return True
+    except Exception:
+        pass
+
+    s = str(exc)
+    return ("40054005" in s) or ("消息被去重" in s) or ("msgseq" in s.lower())
+
+
+async def _send_with_retry(
+    send_coro_factory,
+    *,
+    get_new_seq=None,
+    max_retry: int = 3,
+    base_delay: float = 0.05,
+):
+    """
+    通用重试：
+    - 仅针对 40054005/msgseq 冲突重试
+    - 每次重试前随机等待，避免并发抖动
+    - 支持通过 get_new_seq() 每次重试注入新 msg_seq
+    """
+    last_exc = None
+    for i in range(max_retry + 1):
+        try:
+            kwargs = {}
+            if get_new_seq is not None:
+                kwargs["msg_seq"] = int(get_new_seq())
+            return await send_coro_factory(**kwargs)
+        except Exception as e:
+            last_exc = e
+            if (not _is_msgseq_conflict_error(e)) or i >= max_retry:
+                raise
+            delay = base_delay * (i + 1) + random.uniform(0.01, 0.08)
+            logger.warning(
+                f"[QQ发送重试] 检测到msg_seq冲突，准备重试 {i+1}/{max_retry}，"
+                f"等待 {delay:.3f}s，错误: {e}"
+            )
+            await asyncio.sleep(delay)
+
+    raise last_exc
 
 async def _group_checker(event: BaseEvent) -> bool:
     return is_group_event(event)
@@ -507,51 +580,163 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
         _origin_send = bot.send
 
         async def send(event, message, **kwargs):
+            # ===== 普通群 =====
             if HAS_QQ and isinstance(event, QQGroupMessageEvent):
                 group_openid = str(event.group_openid)
-                msg_seq = kwargs.pop("msg_seq", _next_group_seq(group_openid))
+
+                async def _do_send(msg_seq: int):
+                    return await bot.send_to_group(
+                        group_openid=group_openid,
+                        message=message,
+                        msg_id=str(event.id),
+                        msg_seq=int(msg_seq),
+                        event_id=kwargs.pop("event_id", None),
+                    )
+
+                # 优先使用外部传入的 msg_seq；否则走自动分配 + 重试
+                if "msg_seq" in kwargs:
+                    msg_seq = int(kwargs.pop("msg_seq"))
+                    return await _do_send(msg_seq)
+                return await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_group_seq(group_openid),
+                    max_retry=3,
+                )
+
+            # ===== 私聊 C2C =====
+            if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
+                user_openid = str(event.author.user_openid)
+
+                async def _do_send(msg_seq: int):
+                    return await bot.send_to_c2c(
+                        openid=user_openid,
+                        message=message,
+                        msg_id=str(event.id),
+                        msg_seq=int(msg_seq),
+                        event_id=kwargs.pop("event_id", None),
+                    )
+
+                if "msg_seq" in kwargs:
+                    msg_seq = int(kwargs.pop("msg_seq"))
+                    return await _do_send(msg_seq)
+                return await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_c2c_seq(user_openid),
+                    max_retry=3,
+                )
+
+            # ===== 频道公域消息（群语义）=====
+            if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+                channel_id = str(event.channel_id)
+
+                # QQ 频道接口是否支持 msg_seq 取决于适配器实现，这里优先尝试带 msg_seq
+                async def _do_send(msg_seq: int):
+                    try:
+                        return await bot.send_to_channel(
+                            channel_id=channel_id,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=kwargs.pop("event_id", None),
+                        )
+                    except TypeError:
+                        # 兼容某些版本不接受 msg_seq
+                        return await bot.send_to_channel(
+                            channel_id=channel_id,
+                            message=message,
+                            msg_id=str(event.id),
+                            event_id=kwargs.pop("event_id", None),
+                        )
+
+                if "msg_seq" in kwargs:
+                    msg_seq = int(kwargs.pop("msg_seq"))
+                    return await _do_send(msg_seq)
+                return await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_group_seq(channel_id),
+                    max_retry=3,
+                )
+
+            # ===== 频道私信 DMS（私聊语义）=====
+            if HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
+                guild_id = str(event.guild_id)
+                uid = str(getattr(getattr(event, "author", None), "id", "") or "")
+                seq_key = f"{guild_id}:{uid}" if uid else guild_id
+
+                async def _do_send(msg_seq: int):
+                    try:
+                        return await bot.send_to_dms(
+                            guild_id=guild_id,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=kwargs.pop("event_id", None),
+                        )
+                    except TypeError:
+                        return await bot.send_to_dms(
+                            guild_id=guild_id,
+                            message=message,
+                            msg_id=str(event.id),
+                            event_id=kwargs.pop("event_id", None),
+                        )
+
+                if "msg_seq" in kwargs:
+                    msg_seq = int(kwargs.pop("msg_seq"))
+                    return await _do_send(msg_seq)
+                return await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_c2c_seq(seq_key),
+                    max_retry=3,
+                )
+
+            # 其它事件类型走原始 send
+            return await _origin_send(event=event, message=message, **kwargs)
+
+        async def send_private_msg(*, user_id, message, **kwargs):
+            """
+            统一私聊发送入口（C2C）
+            """
+            openid = str(user_id)
+
+            async def _do_send(msg_seq: int):
+                return await bot.send_to_c2c(
+                    openid=openid,
+                    message=message,
+                    msg_seq=int(msg_seq),
+                    **kwargs
+                )
+
+            if "msg_seq" in kwargs:
+                msg_seq = int(kwargs.pop("msg_seq"))
+                return await _do_send(msg_seq)
+            return await _send_with_retry(
+                _do_send,
+                get_new_seq=lambda: _next_c2c_seq(openid),
+                max_retry=3,
+            )
+
+        async def send_group_msg(*, group_id, message, **kwargs):
+            """
+            统一群聊发送入口（普通群/频道群语义都可复用）
+            """
+            group_openid = str(group_id)
+
+            async def _do_send(msg_seq: int):
                 return await bot.send_to_group(
                     group_openid=group_openid,
                     message=message,
-                    msg_id=str(event.id),
+                    msg_id=kwargs.pop("msg_id", None),
                     msg_seq=int(msg_seq),
                     event_id=kwargs.pop("event_id", None),
                 )
 
-            if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
-                return await _origin_send(event=event, message=message, **kwargs)
-
-            if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
-                # 频道消息归群语义，但发送仍走频道发送
-                return await bot.send_to_channel(
-                    channel_id=str(event.channel_id),
-                    message=message,
-                    msg_id=str(event.id),
-                    event_id=kwargs.pop("event_id", None),
-                )
-
-            if HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
-                # 频道私信归私聊语义，但发送仍走频道私信接口
-                return await bot.send_to_dms(
-                    guild_id=str(event.guild_id),
-                    message=message,
-                    msg_id=str(event.id),
-                    event_id=kwargs.pop("event_id", None),
-                )
-
-            return await _origin_send(event=event, message=message, **kwargs)
-
-        async def send_private_msg(*, user_id, message, **kwargs):
-            return await bot.send_to_c2c(openid=str(user_id), message=message, **kwargs)
-
-        async def send_group_msg(*, group_id, message, **kwargs):
-            msg_seq = kwargs.pop("msg_seq", _next_group_seq(str(group_id)))
-            return await bot.send_to_group(
-                group_openid=str(group_id),
-                message=message,
-                msg_id=kwargs.pop("msg_id", None),
-                msg_seq=int(msg_seq),
-                event_id=kwargs.pop("event_id", None),
+            if "msg_seq" in kwargs:
+                msg_seq = int(kwargs.pop("msg_seq"))
+                return await _do_send(msg_seq)
+            return await _send_with_retry(
+                _do_send,
+                get_new_seq=lambda: _next_group_seq(group_openid),
+                max_retry=3,
             )
 
         async def delete_msg(*, message_id, group_id=None, user_id=None):
