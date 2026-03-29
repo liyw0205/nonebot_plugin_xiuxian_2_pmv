@@ -2139,6 +2139,18 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "MD设置"
     },
+    "update_image_web": {
+        "name": "频道图床上传接口",
+        "description": "用于上传图片",
+        "type": "str",
+        "category": "MD设置"
+    },
+    "channel_id": {
+        "name": "频道图床ID",
+        "description": "用于上传图片的频道",
+        "type": "str",
+        "category": "MD设置"
+    },
     "merge_forward_send": {
         "name": "消息发送方式",
         "description": "1=长文本,2=合并转发,3=合并转长图,4=长文本合并转发",

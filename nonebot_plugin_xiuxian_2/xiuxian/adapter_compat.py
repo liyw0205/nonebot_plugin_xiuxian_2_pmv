@@ -252,6 +252,111 @@ class CompatMessageSegment:
             return QQMessageSegment.text("")
         return ""
 
+    @staticmethod
+    async def upload_image_and_get_url(
+        bot: BaseBot,
+        channel_id: str,
+        image: Union[str, Path, bytes, BytesIO],
+        *,
+        fallback_url: Optional[str] = None,
+        audit_timeout: float = 30.0,
+    ) -> Optional[str]:
+        """
+        仅 MD5 返回模式 + 审核后台回查日志：
+        - 立即返回 md5 拼接链接
+        - 若触发审核，后台 asyncio 任务等待审核结果并打印真实附件链接
+        """
+        import hashlib
+        import asyncio
+
+        try:
+            from nonebot.adapters.qq.exception import AuditException
+        except Exception:
+            AuditException = Exception  # type: ignore
+
+        if not (HAS_QQ and QQBot is not None and isinstance(bot, QQBot)):
+            logger.warning("upload_image_and_get_url(md5): 当前 bot 不是 QQBot")
+            return fallback_url
+
+        if not channel_id:
+            logger.warning("upload_image_and_get_url(md5): channel_id为空，跳过上传")
+            return fallback_url
+
+        # 统一转 bytes
+        try:
+            if isinstance(image, str):
+                image_bytes = Path(image).read_bytes()
+            elif isinstance(image, Path):
+                image_bytes = image.read_bytes()
+            elif isinstance(image, BytesIO):
+                image_bytes = image.getvalue()
+            elif isinstance(image, bytes):
+                image_bytes = image
+            else:
+                raise TypeError(f"不支持的 image 类型: {type(image)}")
+        except Exception as e:
+            logger.error(f"upload_image_and_get_url(md5): 读取图片失败: {e}")
+            return fallback_url
+
+        # 先算 md5 链接（主返回）
+        md5_hex = hashlib.md5(image_bytes).hexdigest().upper()
+        md5_url = f"https://gchat.qpic.cn/qmeetpic/0/0-0-{md5_hex}/0"
+        logger.warning(f"md5链接{md5_url}")
+
+        async def _audit_followup(audit_exc: Exception):
+            """后台等待审核并回查真实链接，仅日志用途"""
+            try:
+                audit_id = getattr(audit_exc, "audit_id", None)
+                logger.warning(
+                    f"upload_image_and_get_url(md5): 触发审核 audit_id={audit_id}，已先返回md5链接"
+                )
+
+                audit_res = await audit_exc.get_audit_result(timeout=audit_timeout)  # type: ignore[attr-defined]
+                event_name = str(getattr(audit_res, "__type__", ""))
+                message_id = getattr(audit_res, "message_id", None)
+                logger.info(f"upload_image_and_get_url(md5): 审核结果={audit_res}")
+
+                if "MESSAGE_AUDIT_PASS" not in event_name or not message_id:
+                    logger.warning(
+                        f"upload_image_and_get_url(md5): 审核未通过或缺少message_id, "
+                        f"event={event_name}, message_id={message_id}"
+                    )
+                    return
+
+                msg_obj = await bot.get_message_of_id(
+                    channel_id=str(channel_id),
+                    message_id=str(message_id),
+                )
+                atts = getattr(msg_obj, "attachments", None) or []
+                real_url = None
+                for att in atts:
+                    url = getattr(att, "url", None)
+                    if url:
+                        real_url = str(url)
+                        break
+
+                if real_url:
+                    logger.info(f"upload_image_and_get_url(md5): 审核回查真实链接={real_url}")
+                else:
+                    logger.warning("upload_image_and_get_url(md5): 审核通过但未取到真实附件链接")
+            except Exception as ex:
+                logger.warning(f"upload_image_and_get_url(md5): 审核后台任务异常: {ex}")
+
+        try:
+            await bot.post_messages(
+                channel_id=str(channel_id),
+                content=" ",
+                file_image=image_bytes,
+            )
+            return md5_url
+
+        except AuditException as e:
+            asyncio.create_task(_audit_followup(e))
+            return md5_url
+
+        except Exception as e:
+            logger.error(f"upload_image_and_get_url(md5): 上传失败: {e}")
+            return fallback_url
 
 # =========================
 # 对外导出的兼容类型

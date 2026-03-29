@@ -3,6 +3,7 @@ import datetime
 import io
 import json
 import math
+import requests
 import os
 import random
 import unicodedata
@@ -1767,8 +1768,6 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
 
-import requests
-
 def get_real_id(id_str):
     """
     调用API接口获取真实ID
@@ -1785,3 +1784,54 @@ def get_real_id(id_str):
         return data.get('id')
     except Exception:
         return None
+
+def call_upload_api(image_data):
+    """
+    调用接口上传图片
+    :param image_data: 可以是文件路径(str/Path)、BytesIO对象或bytes数据
+    :return: 成功返回图片URL(str)，失败返回False
+    """
+    url = XiuConfig().update_image_web
+    files = None
+    file_obj = None
+
+    try:
+        # 1. 根据输入类型准备文件对象
+        if isinstance(image_data, (str, Path)):
+            # 如果是路径，打开文件
+            file_obj = open(image_data, 'rb')
+            files = {'image': (os.path.basename(str(image_data)), file_obj, 'image/png')}
+        elif isinstance(image_data, BytesIO):
+            # 如果是 BytesIO 对象
+            image_data.seek(0)
+            files = {'image': ('image.png', image_data, 'image/png')}
+        elif isinstance(image_data, bytes):
+            # 如果是纯 bytes 数据
+            files = {'image': ('image.png', BytesIO(image_data), 'image/png')}
+        else:
+            logger.error(f"call_upload_api: 不支持的数据类型 {type(image_data)}")
+            return False
+
+        # 2. 构造表单数据并发送请求
+        data = {'channel_id': XiuConfig().channel_id}
+        response = requests.post(url, files=files, data=data, timeout=10)
+        
+        # 3. 结果处理
+        if response.status_code == 200:
+            res_json = response.json()
+            if res_json.get("success"):
+                return res_json.get("url") # 成功直接返回 URL
+            else:
+                logger.error(f"图片上传接口返回失败: {res_json.get('error')}")
+                return False
+        else:
+            logger.error(f"图片上传请求失败，状态码: {response.status_code}")
+            return False
+
+    except Exception as e:
+        logger.error(f"调用图片上传接口异常: {e}")
+        return False
+    finally:
+        # 确保打开的文件被关闭
+        if file_obj:
+            file_obj.close()

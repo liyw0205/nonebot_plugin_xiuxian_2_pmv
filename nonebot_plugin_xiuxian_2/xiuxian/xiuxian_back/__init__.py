@@ -45,7 +45,8 @@ items = Items()
 sql_message = XiuxianDateManage()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
-
+# 技能学习确认缓存
+confirm_use_cache = {}
 # 通用物品类型和炼金最低价格
 MIN_PRICE = 600000
 
@@ -158,6 +159,7 @@ danyao_back = on_command('丹药背包', priority=10, block=True)
 my_equipment = on_command("我的装备", priority=10, block=True)
 use_item = on_command("道具使用", priority=15, block=True)
 use = on_command("使用", priority=15, block=True)
+confirm_use = on_command('确认使用', aliases={"确认学习"}, priority=15, block=True)
 no_use_zb = on_command("换装", aliases={'卸装'}, priority=5, block=True)
 back_help = on_command("背包帮助", priority=8, block=True)
 xiuxian_sone = on_command("灵石", priority=4, block=True)
@@ -575,8 +577,10 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use.finish()
     
-    item_name = args[0]  # 物品名称
-        # 检查背包物品
+    if str(user_id) in confirm_use_cache:
+        del confirm_use_cache[str(user_id)]
+
+    item_name = args[0]  
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
@@ -588,7 +592,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
     
-    # 处理使用数量的通用逻辑
     num = 1
     try:
         if len(args) > 1 and 1 <= int(args[1]) <= int(goods_num):
@@ -600,10 +603,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     except ValueError:
         num = 1
     
-    # 根据物品类型处理逻辑
     user_rank = convert_rank(user_info['level'])[0]
     goods_type = goods_info['type']
-
     required_rank_name, goods_rank_calculated = get_required_rank_name(goods_info, user_info)
     lh_msg = ""
     if user_info['root_type'] in ["轮回道果", "真·轮回道果", "永恒道果", "命运道果"]:
@@ -612,137 +613,116 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     if goods_type == "礼包":
         package_name = goods_info['name']
         msg_parts = []
-        # 遍历礼包内物品
         i = 1
         while True:
-            buff_key = f'buff_{i}'
-            name_key = f'name_{i}'
-            type_key = f'type_{i}'
-            amount_key = f'amount_{i}'
-
-            if name_key not in goods_info: # 礼包物品遍历结束
-                break
-
-            item_name = goods_info[name_key]
-            item_amount = goods_info.get(amount_key, 1) * num
-            item_type = goods_info.get(type_key)
-            buff_id = goods_info.get(buff_key)
-
-            if item_name == "灵石":
-                key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
-                sql_message.update_ls(user_id, abs(item_amount), key)
+            buff_key, name_key, type_key, amount_key = f'buff_{i}', f'name_{i}', f'type_{i}', f'amount_{i}'
+            if name_key not in goods_info: break
+            item_name_pkg, item_amount = goods_info[name_key], goods_info.get(amount_key, 1) * num
+            item_type_pkg, buff_id_pkg = goods_info.get(type_key), goods_info.get(buff_key)
+            if item_name_pkg == "灵石":
+                sql_message.update_ls(user_id, abs(item_amount), 1 if item_amount > 0 else 2)
                 msg_parts.append(f"获得灵石 {number_to(item_amount)} 枚\n")
             else:
-                # 调整 goods_type
-                if item_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
-                    goods_type_item = "技能"
-                elif item_type in ["法器", "防具"]:
-                    goods_type_item = "装备"
-                else:
-                    goods_type_item = item_type  # 包括 "礼包" 类型，直接放入背包
-
-                if buff_id is not None:
-                    sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-                    msg_parts.append(f"获得 {item_name} x{item_amount}\n")
-            
+                g_type = "技能" if item_type_pkg in ["辅修功法", "神通", "功法", "身法", "瞳术"] else "装备" if item_type_pkg in ["法器", "防具"] else item_type_pkg
+                if buff_id_pkg is not None:
+                    sql_message.send_back(user_id, buff_id_pkg, item_name_pkg, g_type, item_amount, 1)
+                    msg_parts.append(f"获得 {item_name_pkg} x{item_amount}\n")
             i += 1
         sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
         msg = f"道友打开了 {num} 个 {package_name}:\n" + "".join(msg_parts)
 
     elif goods_type == "装备":
-        if goods_rank_calculated <= user_rank: # 装备有境界限制
-             msg = f"道友实力{user_rank}不足{goods_rank_calculated}使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
-        elif check_equipment_use_msg(user_id, goods_id): # 检查是否已经装备
+        if goods_rank_calculated <= user_rank: 
+             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
+        elif check_equipment_use_msg(user_id, goods_id): 
             msg = "该装备已被装备，请勿重复装备！"
-        else: # 执行装备操作
+        else: 
             sql_str, item_type = get_use_equipment_sql(user_id, goods_id)
-            for sql in sql_str:
-                sql_message.update_back_equipment(sql)
-            if item_type == "法器":
-                sql_message.updata_user_faqi_buff(user_id, goods_id)
-            if item_type == "防具":
-                sql_message.updata_user_armor_buff(user_id, goods_id)
+            for sql in sql_str: sql_message.update_back_equipment(sql)
+            if item_type == "法器": sql_message.updata_user_faqi_buff(user_id, goods_id)
+            if item_type == "防具": sql_message.updata_user_armor_buff(user_id, goods_id)
             msg = f"成功装备 {item_name}！"
 
     elif goods_type == "技能":
         user_buff_info = UserBuffDate(user_id).BuffInfo
-        skill_info = goods_info
-        skill_type = skill_info['item_type']
-        if goods_rank_calculated <= user_rank: # 技能有境界限制
-             msg = f"道友实力{user_rank}不足{goods_rank_calculated}学习{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
-        elif skill_type == "神通":
-            if int(user_buff_info['sec_buff']) == int(goods_id):
-                msg = f"道友已学会该神通：{skill_info['name']}，请勿重复学习！"
-            else:
-                sql_message.update_back_j(user_id, goods_id)
-                sql_message.updata_user_sec_buff(user_id, goods_id)
-                msg = f"恭喜道友学会神通：{skill_info['name']}！"
-        elif skill_type == "身法":
-            if int(user_buff_info['effect1_buff']) == int(goods_id):
-                msg = f"道友已学会该身法：{skill_info['name']}，请勿重复学习！"
-            else:
-                sql_message.update_back_j(user_id, goods_id)
-                sql_message.updata_user_effect1_buff(user_id, goods_id)
-                msg = f"恭喜道友学会身法：{skill_info['name']}！"
-        elif skill_type == "瞳术":
-            if int(user_buff_info['effect2_buff']) == int(goods_id):
-                msg = f"道友已学会该瞳术：{skill_info['name']}，请勿重复学习！"
-            else:
-                sql_message.update_back_j(user_id, goods_id)
-                sql_message.updata_user_effect2_buff(user_id, goods_id)
-                msg = f"恭喜道友学会瞳术：{skill_info['name']}！"
-        elif skill_type == "功法":
-            if int(user_buff_info['main_buff']) == int(goods_id):
-                msg = f"道友已学会该功法：{skill_info['name']}，请勿重复学习！"
-            else:
-                sql_message.update_back_j(user_id, goods_id)
-                sql_message.updata_user_main_buff(user_id, goods_id)
-                msg = f"恭喜道友学会功法：{skill_info['name']}！"
-        elif skill_type == "辅修功法":
-            if int(user_buff_info['sub_buff']) == int(goods_id):
-                msg = f"道友已学会该辅修功法：{skill_info['name']}，请勿重复学习！"
-            else:
-                sql_message.update_back_j(user_id, goods_id)
-                sql_message.updata_user_sub_buff(user_id, goods_id)
-                msg = f"恭喜道友学会辅修功法：{skill_info['name']}！"
+        skill_type = goods_info['item_type']
+        if goods_rank_calculated <= user_rank: 
+             msg = f"道友实力不足学习{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         else:
-            msg = f"发生未知错误！"
+            check_map = {"神通": 'sec_buff', "身法": 'effect1_buff', "瞳术": 'effect2_buff', "功法": 'main_buff', "辅修功法": 'sub_buff'}
+            if int(user_buff_info.get(check_map.get(skill_type), 0)) == int(goods_id):
+                msg = f"道友已学会该{skill_type}：{item_name}，请勿重复学习！"
+            else:
+                await confirm_use_invite(bot, event, user_id, goods_id, item_name, skill_type)
+                return
 
     elif goods_type == "丹药":
         msg = check_use_elixir(user_id, goods_id, num)
-        
-    elif goods_type == "特殊道具": # 特殊道具需要通过 `道具使用` 命令触发
+    elif goods_type == "特殊道具": 
         msg = f"请使用【道具使用 {goods_info['name']}】命令来使用此道具。"
-        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1=f"道具使用 {goods_info['name']}", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
-        await use.finish()
-    elif goods_type == "神物": # 神物通常增加修为
+    elif goods_type == "神物": 
         user_info_full = sql_message.get_user_info_with_id(user_id)
-        user_rank_full = convert_rank(user_info_full['level'])[0]
-        goods_rank_full = goods_info['rank'] + added_ranks
-        goods_name_full = goods_info['name']
-        if goods_rank_full < user_rank_full: # 神物也有境界限制
-            msg = f"神物：{goods_name_full}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
+        if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
+            msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
         else:
             exp = goods_info['buff'] * num
-            # 计算增加修为后的基础属性
-            user_hp = int(user_info_full['hp'] + (exp / 2))
-            user_mp = int(user_info_full['mp'] + exp)
-            user_atk = int(user_info_full['atk'] + (exp / 10))
             sql_message.update_exp(user_id, exp)
-            sql_message.update_power2(user_id) # 更新战力
-            sql_message.update_user_attribute(user_id, user_hp, user_mp, user_atk) # 更新属性
+            sql_message.update_power2(user_id)
+            sql_message.update_user_attribute(user_id, int(user_info_full['hp'] + (exp / 2)), int(user_info_full['mp'] + exp), int(user_info_full['atk'] + (exp / 10)))
             sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-            msg = f"道友成功使用神物：{goods_name_full} {num} 个，修为增加 {number_to(exp)}！"
-
-    elif goods_type == "聚灵旗": # 聚灵旗用于洞天福地
+            msg = f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
+    elif goods_type == "聚灵旗": 
         msg = get_use_jlq_msg(user_id, goods_id)
-
     else:
         msg = "该类型物品调试中，未开启使用！"
 
-    # 发送结果消息
     await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
     await use.finish()
+
+async def confirm_use_invite(bot, event, user_id, goods_id, item_name, skill_type):
+    """发送确认使用"""
+    invite_id = f"{user_id}_use_{datetime.now().timestamp()}"
+    confirm_use_cache[str(user_id)] = {
+        'goods_id': goods_id,
+        'item_name': item_name,
+        'skill_type': skill_type,
+        'invite_id': invite_id
+    }
+    asyncio.create_task(expire_confirm_use_invite(user_id, invite_id, bot, event))
+    msg = f"道友确定要学习【{skill_type}：{item_name}】吗？\n此操作将消耗物品，请在30秒内发送【确认使用】！"
+    await handle_send(bot, event, msg, md_type="背包", k1="确认", v1="确认使用", k2="背包", v2="我的背包")
+
+async def expire_confirm_use_invite(user_id, invite_id, bot, event):
+    """确认使用过期"""
+    await asyncio.sleep(30)
+    if str(user_id) in confirm_use_cache and confirm_use_cache[str(user_id)]['invite_id'] == invite_id:
+        del confirm_use_cache[str(user_id)]
+
+@confirm_use.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """处理确认使用"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await confirm_use.finish()
+    user_id = user_info['user_id']
+    if str(user_id) not in confirm_use_cache:
+        msg = "没有待处理的请求！"
+        await handle_send(bot, event, msg)
+        await confirm_use.finish()
+    data = confirm_use_cache[str(user_id)]
+    gid, name, s_type = data['goods_id'], data['item_name'], data['skill_type']
+    if sql_message.goods_num(user_id, gid) <= 0:
+        msg = f"背包中已无 {name}！"
+    else:
+        update_map = {"神通": sql_message.updata_user_sec_buff, "身法": sql_message.updata_user_effect1_buff, "瞳术": sql_message.updata_user_effect2_buff, "功法": sql_message.updata_user_main_buff, "辅修功法": sql_message.updata_user_sub_buff}
+        sql_message.update_back_j(user_id, gid)
+        update_map[s_type](user_id, gid)
+        msg = f"恭喜道友成功学会{s_type}：{name}！"
+    await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
+    del confirm_use_cache[str(user_id)]
+    await confirm_use.finish()
 
 @use_item.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1257,8 +1237,9 @@ def _build_backpack_md_with_sections(
     next_cmd: str = ""
 ) -> str:
     """
+    构建带分类和交互按钮的背包 Markdown 消息
     sections: [
-      ("分类标题", [{"name":"xxx","count":1,"bind":0}, ...]),
+      ("分类标题", [{"name":"xxx","count":1,"bind":0, "goods_type": "装备/技能/特殊道具..."}, ...]),
       ...
     ]
     """
@@ -1267,23 +1248,31 @@ def _build_backpack_md_with_sections(
     for sec_title, rows in sections:
         if not rows:
             continue
-        lines.append(f"{sec_title}")
+        lines.append(f"【{sec_title}】")
         lines.append("")
         for row in rows:
             name = row["name"]
             count = row.get("count", 0)
             bind = row.get("bind", 0)
+            g_type = row.get("goods_type", "") # 获取物品大类
 
+            # 查看效果按钮
             view_cmd = quote(f"查看效果 {name}")
             name_md = f"[{name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
 
             equipped_flag = " ※已装备※" if row.get("is_equipped") else ""
             line = f"> - {name_md} 数量:{count} 绑定:{bind}{equipped_flag}"
 
+            # 动态生成使用指令
             if show_use_btn:
-                use_cmd = quote(f"使用 {name}")
-                use_md = f"[使用](mqqapi://aio/inlinecmd?command={use_cmd}&enter=false&reply=false)"
-                line += f"  {use_md}"
+                if g_type == "特殊道具":
+                    use_cmd_str = f"道具使用 {name}"
+                else:
+                    use_cmd_str = f"使用 {name}"
+                
+                use_cmd_encoded = quote(use_cmd_str)
+                use_md = f" [使用](mqqapi://aio/inlinecmd?command={use_cmd_encoded}&enter=false&reply=false)"
+                line += use_md
 
             lines.append(line)
             lines.append("\r")
@@ -1291,12 +1280,12 @@ def _build_backpack_md_with_sections(
     lines.append("")
     lines.append(f"第 {current_page}/{total_pages} 页")
 
+    # 下一页按钮
     if current_page < total_pages and next_cmd:
         next_cmd_q = quote(next_cmd)
         lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_cmd_q}&enter=false&reply=false)")
 
     return "\r".join(lines)
-
 
 def _paginate_sections(
     sections: list[tuple[str, list[dict]]],

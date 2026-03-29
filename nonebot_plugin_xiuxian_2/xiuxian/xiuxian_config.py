@@ -54,6 +54,10 @@ class XiuConfig:
         # gsk地址获取真实ID用于md模板艾特
         self.web_link = ""
         # 修仙管理面板地址用于获取修仙信息图片
+        self.update_image_web = "http://127.0.0.1:5888/upload_image"
+        # 修仙管理面板地址用于频道图床上传接口
+        self.channel_id = ""
+        # 频道图床ID 
 
         self.web_status = True
         # 修仙管理面板是否开启
