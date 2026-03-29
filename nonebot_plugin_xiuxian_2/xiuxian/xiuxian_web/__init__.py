@@ -19,52 +19,70 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, abort, Response
 from nonebot.log import logger
 from nonebot import get_driver, get_bots, __version__ as nb_version
-
+# --- 消息统计核心导入 ---
+from nonebot.message import event_preprocessor
+from nonebot.adapters import Bot as BaseBot, Event
+from typing import Any
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
 
-# --- 日志与 Psutil 处理 ---
-def log_to_file(message):
-    log_file_path = Path(__file__).parent / "log.txt"
-    with open(log_file_path, 'a', encoding='utf-8') as log_file:
-        log_file.write(message + '\n')
+# --- 消息统计变量 ---
+msg_stats = {
+    "received": 0,
+    "sent": 0
+}
 
+# 钩子：统计收到的消息
+@event_preprocessor
+async def _count_received(bot: BaseBot, event: Event): # 这里改为 Event
+    try:
+        # 仅统计消息类型的事件
+        if event.get_type() == "message":
+            msg_stats["received"] += 1
+    except: 
+        pass
+
+# 钩子：统计发出的消息
+@BaseBot.on_calling_api
+async def _count_sent(bot: BaseBot, api: str, data: dict[str, Any]):
+    # 只要 API 名字里包含 "send" 或 "post" 且包含 "message" 或 "msg"，基本就是发送消息
+    api_lower = api.lower()
+    if ("send" in api_lower or "post" in api_lower) and ("msg" in api_lower or "message" in api_lower):
+        msg_stats["sent"] += 1
+
+# --- 辅助函数 ---
+def format_time(seconds: float) -> str:
+    if seconds <= 0: return "未知"
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+
+def execute_sql(db_path, sql, params=None):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        if params: cursor.execute(sql, params)
+        else: cursor.execute(sql)
+        if sql.strip().lower().startswith('select'):
+            return [dict(row) for row in cursor.fetchall()]
+        conn.commit()
+        return {"affected_rows": cursor.rowcount}
+    except Exception as e: return {"error": str(e)}
+    finally: conn.close()
+
+# --- Psutil 处理 ---
 psutil_available = False
 try:
     import psutil
     psutil_available = True
 except ImportError:
-    logger.warning("psutil模块未安装，部分系统监控功能将受限。")
-    class DummyPsutilProcess:
-        def create_time(self): return 0
-        def name(self): return "未知进程"
-        def memory_info(self):
-            class MemInfo: rss = 0
-            return MemInfo()
-    class DummyPsutil:
-        def cpu_percent(self, interval=None): return 0.0
-        def virtual_memory(self):
-            class VM: percent = 0.0; total = 0; used = 0
-            return VM()
-        def disk_usage(self, path):
-            class DU: percent = 0.0; total = 0; used = 0
-            return DU()
-        def cpu_count(self, logical=True): return "未知"
-        def cpu_freq(self):
-            class Freq: current = "未知"
-            return Freq()
-        def boot_time(self): return 0
-        def process_iter(self, attrs=None): return []
-        def Process(self, pid): return DummyPsutilProcess()
-    psutil = DummyPsutil()
-
-def log_to_file(message):
-    log_file_path = Path(__file__).parent / "log.txt"
-    with open(log_file_path, 'a', encoding='utf-8') as log_file:
-        log_file.write(message + '\n')
+    class Dummy: pass
+    psutil = Dummy()
 
 items = Items()
 update_manager = UpdateManager()
@@ -2447,19 +2465,14 @@ def get_stats():
         connected_bots = get_bots()
         bot_info_list = []
         
-        for bot_id, bot in connected_bots.items():
-            adapter_name = "未知适配器"
-            try:
-                # 尝试获取适配器名称 (如 OneBot V11, QQ等)
-                adapter_name = bot.adapter.get_name()
-            except:
-                pass
-            
-            bot_info_list.append({
-                "bot_id": bot_id,
-                "adapter": adapter_name,
-                "status": "在线"
-            })
+        # 2. 机器人实时状态
+        bots = get_bots()
+        bot_info_list = []
+        for bid, b in bots.items():
+            adapter = "未知"
+            try: adapter = b.adapter.get_name()
+            except: pass
+            bot_info_list.append({"bot_id": bid, "adapter": adapter})
 
         # 3. 获取运行时间 (基于当前进程)
         bot_uptime = "未知"
@@ -2477,11 +2490,14 @@ def get_stats():
             "active_users": active_users,
             "yesterday_users": yesterday_users,
             "seven_days_avg": seven_days_avg,
-            # 新增字段
-            "nb_version": nb_version,
-            "bots": bot_info_list,
+            # 消息统计
+            "msg_received": msg_stats["received"],
+            "msg_sent": msg_stats["sent"],
+            # Bot 信息
             "bot_count": len(bot_info_list),
-            "bot_uptime": bot_uptime
+            "bots": bot_info_list,
+            "bot_uptime": bot_uptime,
+            "nb_version": nb_version
         })
         
     except Exception as e:
