@@ -35,22 +35,22 @@ from .team_manager import (
 )
 
 # 组队
-create_team_cmd = on_command("创建队伍", aliases={"新建队伍"}, priority=5)
-invite_team_cmd = on_command("邀请组队", aliases={"邀请入队", "组队邀请"}, priority=5)
-agree_team_cmd = on_command("同意组队", aliases={"加入队伍", "接受组队", "组队同意"}, priority=5)
-reject_team_cmd = on_command("拒绝组队", aliases={"拒绝入队"}, priority=5)
-leave_team_cmd = on_command("离开队伍", aliases={"退出队伍"}, priority=5)
-kick_team_cmd = on_command("踢出队伍", aliases={"移除队员"}, priority=5)
-disband_team_cmd = on_command("解散队伍", aliases={"解散组队"}, priority=5)
-view_team_cmd = on_command("查看队伍", aliases={"队伍信息", "我的队伍"}, priority=5)
-help_team_cmd = on_command("队伍帮助", aliases={"组队帮助", "组队指令"}, priority=5)
+create_team_cmd = on_command("创建队伍", aliases={"新建队伍"}, priority=5, block=True)
+invite_team_cmd = on_command("邀请组队", aliases={"邀请入队", "组队邀请"}, priority=5, block=True)
+agree_team_cmd = on_command("同意组队", aliases={"加入队伍", "接受组队", "组队同意"}, priority=5, block=True)
+reject_team_cmd = on_command("拒绝组队", aliases={"拒绝入队"}, priority=5, block=True)
+leave_team_cmd = on_command("离开队伍", aliases={"退出队伍"}, priority=5, block=True)
+kick_team_cmd = on_command("踢出队伍", aliases={"移除队员"}, priority=5, block=True)
+disband_team_cmd = on_command("解散队伍", aliases={"解散组队"}, priority=5, block=True)
+view_team_cmd = on_command("查看队伍", aliases={"队伍信息", "我的队伍"}, priority=5, block=True)
+help_team_cmd = on_command("队伍帮助", aliases={"组队帮助", "组队指令"}, priority=5, block=True)
 # ----------副本----------
 # 副本
 dungeon_info = on_command("副本信息", aliases={"今日副本"}, priority=5, block=True)
 explore_dungeon = on_command("探索副本", aliases={"副本探索", "挑战副本"}, priority=5, block=True)
 dungeon_status = on_command("我的副本状态", aliases={"副本状态", "我的副本信息"}, priority=5, block=True)
 reset_command = on_command("重置副本", aliases={"手动重置"}, priority=5, block=True, permission=SUPERUSER)
-help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5)
+help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5, block=True)
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 # 初始化副本管理器

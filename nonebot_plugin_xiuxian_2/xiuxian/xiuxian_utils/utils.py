@@ -11,7 +11,7 @@ from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Union, Dict, Any
+from typing import List, Union, Dict, Any, TypeVar
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -20,6 +20,7 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     is_channel_event,
+    is_group_event,
     get_chat_scene,
     MessageSegment
 )
@@ -32,7 +33,6 @@ from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
-from typing import Union
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -709,46 +709,73 @@ async def handle_pagination(
     
     return final_msg
 
-def optimize_message(msg: Union[Message, str], is_group: bool) -> str:
+# 定义一个泛型，用于处理输入和输出类型对应
+T = TypeVar('T', str, List[str])
+
+def optimize_message(msg: Union[Message, str, List[Union[Message, str]]], is_group: bool) -> Union[str, List[str]]:
     """
-    优化消息格式，确保将传入的 Message 或 str 处理为干净的字符串。
-    
-    :param msg: 原始消息，可以是 Message 对象或 str。
-    :param is_group: 是否为群聊消息。
-    :return: 优化后的纯文本消息 (str)。
+    优化消息格式，支持单个消息或消息列表。
     """
+    if msg is None:
+        return " "
 
-    if not msg:
-        return ""
+    def _process(m: Union[Message, str]) -> str:
+        if not m:
+            return " "
+        
+        # 转换为字符串并处理开头的换行
+        m_text = str(m)
+        m_text = m_text.lstrip()
+        if m_text.startswith('\n') or m_text.startswith('\r'):
+            m_text = m_text[1:]            
+            
+        # 群聊逻辑：确保以换行开头
+        if is_group and not m_text.startswith('\n'):
+            m_text = '\n' + m_text
+        
+        m_text = m_text.rstrip()
+        if m_text.endswith('\n') or m_text.endswith('\r'):
+            m_text = m_text[:-1]
 
-    if msg.startswith('\n'):
-        msg = str(msg.lstrip())
-    msg_text = str(msg)
-    
-    if is_group and not msg_text.startswith('\n'):
-        msg_text = '\n' + msg_text
-    
-    return str(msg_text.rstrip())
+        return m_text
 
-def optimize_md(msg: Union[Message, str]) -> str:
+    if isinstance(msg, list):
+        return [_process(item) for item in msg]
+    else:
+        return _process(msg)
+
+
+def optimize_md(msg: Union[Message, str, List[Union[Message, str]]]) -> Union[str, List[str]]:
     """
-    优化消息格式，确保将传入的 Message 或 str 处理为干净的字符串。
-    
-    :param msg: 原始消息，可以是 Message 对象或 str。
-    :return: 优化后的纯文本消息 (str)。
+    优化 Markdown 消息格式，支持单个消息或消息列表。
     """
+    if msg is None:
+        return " "
 
-    if not msg:
-        return ""
+    def _process(m: Union[Message, str]) -> str:
+        if not m:
+            return " "
+            
+        m_text = str(m)
+        m_text = m_text.lstrip()
+        if m_text.startswith('\n') or m_text.startswith('\r'):
+            m_text = m_text[1:]
 
-    if msg.startswith('\n'):
-        msg = str(msg.lstrip())
-    msg_text = str(msg)
+        m_text = m_text.rstrip()
+        if m_text.endswith('\n') or m_text.endswith('\r'):
+            m_text = m_text[:-1]
 
-    msg_text = msg_text.replace('\n', '\r')
-    msg_text = msg_text.replace('[', '')
-    msg_text = msg_text.replace(']', '')
-    return str(msg_text.rstrip())
+        # MD 特殊字符替换
+        m_text = m_text.replace('\n', '\r')
+        m_text = m_text.replace('[', '')
+        m_text = m_text.replace(']', '')
+        
+        return m_text
+
+    if isinstance(msg, list):
+        return [_process(item) for item in msg]
+    else:
+        return _process(msg)
 
 def generate_command(msg, status=None, command=None, msg2=None):
     """
@@ -772,15 +799,17 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     统一消息发送处理器
     :param bot: 机器人实例
     :param event: 事件对象
-    :param name: 用户名称
-    :param uin: 用户ID
-    :param msgs: 消息内容列表
-    :param messages: 合并转发的消息列表（字典格式）
-    :param msg_type: 关键字参数，可用于传递特定命名参数
+    :param args:
+        - (name, uin, msgs) 或
+        - ([forward_nodes],)
+    :param title: 标题
+    :param page/page_param: 分页参数
     """
-    is_group = isinstance(event, GroupMessageEvent)
+    is_group = is_group_event(event)
+    scene = get_chat_scene(event)  # group/private/channel_group/channel_private
     MAX_LEN = 3800
-    
+
+    # OneBot 不走 markdown
     if isinstance(bot, OB11Bot):
         markdown_status = False
     else:
@@ -802,44 +831,70 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         if current:
             groups.append(current)
         return groups
-    merge_forward_send = XiuConfig().merge_forward_send
-    if markdown_status:
-        merge_forward_send = 1
-        
-    if merge_forward_send == 1:
-        if len(args) == 3:
-            name, uin, msgs = args
-            msg = "\n".join(msgs)
-            # 在合并后应用信息优化
-            if markdown_status:
-                if XiuConfig().markdown_id:
-                    await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
-                else:
-                    await handle_send_markdown(bot, event, msg, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
-                return
-            if title:
-                msg = title + msg
-            if XiuConfig().message_optimization:
-                msg = optimize_message(msg, is_group) 
-            await handle_send(bot, event, msg)
-        elif len(args) == 1 and isinstance(args[0], list):
-            merged_contents = [msg["data"]["content"] for msg in args[0]]
-            merged_content = "\n\n".join(merged_contents)
-            # 在合并后应用信息优化
-            if markdown_status:
-                if XiuConfig().markdown_id:
-                    await handle_send_md(bot, event, merged_content, markdown_id=XiuConfig().markdown_id, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
-                else:
-                    await handle_send_markdown(bot, event, merged_content, title=title, page=page, page_param=page_param, shell=True, button_id=button_id)
-                return
-            if title:
-                msg = title + msg
-            if XiuConfig().message_optimization:
-                merged_content = optimize_message(merged_content, is_group)
-            await handle_send(bot, event, merged_content)
+
+    def merge_args_to_text(_args):
+        """把两种入参统一成纯文本"""
+        if len(_args) == 3:
+            _name, _uin, _msgs = _args
+            return "\n".join(_msgs)
+        elif len(_args) == 1 and isinstance(_args[0], list):
+            merged_contents = [str(m.get("data", {}).get("content", "")) for m in _args[0]]
+            return "\n\n".join(merged_contents)
         else:
             raise ValueError("参数数量或类型不匹配")
-            
+
+    # 渠道能力判定：
+    # - 频道(channel_group/channel_private): 仅模板MD
+    # - 普通群/私聊(group/private): 模板MD优先，其次原生MD
+    allow_native_md = scene in ("group", "private")
+    allow_md_template = True  # 频道和频道私信支持模板MD
+
+    merge_forward_send = XiuConfig().merge_forward_send
+
+    # markdown 开启时，优先文本聚合发送（避免 forward 与 markdown 逻辑冲突）
+    if markdown_status:
+        merge_forward_send = 1
+
+    # ========== 1) 长文本直发模式 ==========
+    if merge_forward_send == 1:
+        msg = merge_args_to_text(args)
+
+        # Markdown 路径
+        if markdown_status:
+            # 先模板MD（频道也可）
+            if allow_md_template and XiuConfig().markdown_id:
+                try:
+                    await handle_send_md(
+                        bot, event, msg,
+                        markdown_id=XiuConfig().markdown_id,
+                        title=title, page=page, page_param=page_param,
+                        shell=True, button_id=button_id
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(f"send_msg_handler: 模板MD发送失败，降级: {e}")
+
+            # 模板不可用时，普通群/私聊才用原生MD
+            if allow_native_md:
+                try:
+                    await handle_send_markdown(
+                        bot, event, msg,
+                        title=title, page=page, page_param=page_param,
+                        shell=True, button_id=button_id
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(f"send_msg_handler: 原生MD发送失败，降级: {e}")
+
+        # 普通文本兜底
+        if XiuConfig().message_optimization:
+            msg = optimize_message(msg, is_group)        
+        if title:
+            msg = title + msg
+        await handle_send2(bot, event, msg)
+        return
+
+    # ========== 2) 合并转发 ==========
     elif merge_forward_send == 2:
         if len(args) == 3:
             name, uin, msgs = args
@@ -848,125 +903,136 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 for msg in msgs
             ]
             if isinstance(event, GroupMessageEvent):
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
+                await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
             else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
+                await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+            return
+
         elif len(args) == 1 and isinstance(args[0], list):
             for messages in split_to_groups(args[0]):
                 if isinstance(event, GroupMessageEvent):
-                    await bot.call_api(
-                        "send_group_forward_msg", group_id=event.group_id, messages=messages
-                    )
+                    await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
                 else:
-                    await bot.call_api(
-                        "send_private_forward_msg", user_id=event.user_id, messages=messages
-                    )
+                    await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+            return
+
         else:
             raise ValueError("参数数量或类型不匹配")
+
+    # ========== 3) 转图片发送 ==========
     elif merge_forward_send == 3:
         if len(args) == 3:
-            name, uin, msgs = args
-            img = Txt2Img()
-            messages = "\n".join(msgs)
-            if XiuConfig().img_send_type == "io":
-                img_data = await img.io_draw_to(messages)
-            elif XiuConfig().img_send_type == "base64":
-                img_data = img.sync_draw_to(messages)
-            await bot.send(
-                event=event, message=MessageSegment.image(bot, img_data)
-            )
+            _name, _uin, msgs = args
+            merged = "\n".join(msgs)
         elif len(args) == 1 and isinstance(args[0], list):
-            messages = args[0]
-            img = Txt2Img()
-            messages = "\n".join([str(msg["data"]["content"]) for msg in messages])
-            if XiuConfig().img_send_type == "io":
-                img_data = await img.io_draw_to(messages)
-            elif XiuConfig().img_send_type == "base64":
-                img_data = img.sync_draw_to(messages)
-            await bot.send(
-                event=event, message=MessageSegment.image(bot, img_data)
-            )
+            merged = "\n".join([str(msg["data"]["content"]) for msg in args[0]])
         else:
             raise ValueError("参数数量或类型不匹配")
+
+        img = Txt2Img()
+        if XiuConfig().img_send_type == "io":
+            img_data = await img.io_draw_to(merged)
+        else:
+            img_data = img.sync_draw_to(merged)
+
+        await bot.send(event=event, message=MessageSegment.image(bot, img_data))
+        return
+
+    # ========== 4) 长文本转单节点合并 ==========
     elif merge_forward_send == 4:
         if len(args) == 3:
             name, uin, msgs = args
-            msg = "\n".join(msgs)
-            if XiuConfig().message_optimization:
-                msg = optimize_message(msg, is_group)
-            if msg.startswith('\n'):
-                msg = msg[1:]
-            messages = [
-                {"type": "node", "data": {"name": name, "uin": uin, "content": msg}}
-            ]
-            if is_group:
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
-            else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
+            merged_content = "\n".join(msgs)
         elif len(args) == 1 and isinstance(args[0], list):
             merged_contents = [msg["data"]["content"] for msg in args[0]]
             merged_content = "\n\n".join(merged_contents)
-            if XiuConfig().message_optimization:
-                merged_content = optimize_message(merged_content, is_group)
-            if merged_content.startswith('\n'):
-                merged_content = merged_content[1:]
             first_msg = args[0][0] if args[0] else None
             name = first_msg["data"]["name"] if first_msg else "系统"
             uin = first_msg["data"]["uin"] if first_msg else int(bot.self_id)
-            messages = [
-                {"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}
-            ]
-            if is_group:
-                await bot.call_api(
-                    "send_group_forward_msg", group_id=event.group_id, messages=messages
-                )
-            else:
-                await bot.call_api(
-                    "send_private_forward_msg", user_id=event.user_id, messages=messages
-                )
         else:
             raise ValueError("参数数量或类型不匹配")
 
-async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None, button_id=None):
-    """处理文本，根据配置发送文本或者图片消息"""
+        if XiuConfig().message_optimization:
+            merged_content = optimize_message(merged_content, is_group)
+        if merged_content.startswith('\n'):
+            merged_content = merged_content[1:]
 
+        messages = [{"type": "node", "data": {"name": name, "uin": uin, "content": merged_content}}]
+        if is_group:
+            await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
+        else:
+            await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+        return
+
+def _allow_native_markdown(event) -> bool:
+    """
+    原生MD仅允许普通群聊/普通私聊
+    频道公域(channel_group)/频道私信(channel_private)不允许
+    """
+    scene = get_chat_scene(event)
+    return scene in ("group", "private")
+
+async def handle_send(bot, event, msg: str, title=None, md_type=None, k1=None, v1=None, k2=None, v2=None, k3=None, v3=None, k4=None, v4=None, button_id=None):
+    """统一消息入口：
+    1) 优先MD体系
+    2) MD失败自动降级普通消息
+    3) 频道只走MD模板，不走原生MD
+    """
     if isinstance(bot, OB11Bot):
         markdown_status = False
     else:
         markdown_status = XiuConfig().markdown_status
-    
+
+    # 开启MD体系
     if markdown_status:
-        if md_type:
-            if XiuConfig().markdown_id2:
-                await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
-            else:
-                await handle_send_markdown_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
+        try:
+            # 有 md_type 走 type 风格
+            if md_type:
+                # 优先模板（频道也支持）
+                if XiuConfig().markdown_id2:
+                    await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
+                    return
+                # 无模板时，只有普通群/私聊允许原生MD
+                if _allow_native_markdown(event):
+                    await handle_send_markdown_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
+                    return
+                # 频道无模板 -> 降级普通
+                await handle_send2(bot, event, msg)
+                return
+
+            # 无 md_type 的普通消息
+            if XiuConfig().markdown_id:
+                # 模板MD（频道可用）
+                await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, button_id=button_id)
+                return
+
+            # 无模板时，仅普通群/私聊用原生MD
+            if _allow_native_markdown(event):
+                await handle_send_markdown(bot, event, msg, title=title, button_id=button_id)
+                return
+
+            # 频道无模板 -> 普通消息
+            await handle_send2(bot, event, msg)
             return
-        if XiuConfig().markdown_id:
-            await handle_send_md(bot, event, msg, markdown_id=XiuConfig().markdown_id, title=title, button_id=button_id)
-        else:
-            await handle_send_markdown(bot, event, msg, title=title, button_id=button_id)
-        return
-    
-    is_group = isinstance(event, GroupMessageEvent)
-    
-    if XiuConfig().message_optimization:
-        msg = optimize_message(msg, is_group)
+
+        except Exception as e:
+            logger.warning(f"MD发送失败，降级普通消息: {e}")
+            await handle_send2(bot, event, msg)
+            return
+
+    # 未开启MD
     await handle_send2(bot, event, msg)
 
 async def handle_send2(bot, event, msg: str):
     """处理文本，根据配置发送文本或者图片消息"""
     if msg == " ":
         return
-    is_group = isinstance(event, GroupMessageEvent)
+
+    scene = get_chat_scene(event)
+    is_group = (scene == "group")
+
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, is_group)
     if XiuConfig().img:
         # 处理昵称为空的情况
         # 使用 event.sender.card 或 event.sender.nickname 来获取昵称
@@ -1029,112 +1095,136 @@ def generate_page_param(page_list: list) -> dict:
     return result
 
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
-    """发送md模板消息"""
+    """发送md模板消息（频道可用），失败降级普通消息"""
     if not markdown_id:
-        await handle_send(bot, event, msg)
-    if msg:
-        msg = optimize_md(msg)
-    if title:
-        title = optimize_md(title)
-    if page_param:
-        page_param = optimize_md(page_param)
+        if msg:
+            await handle_send2(bot, event, msg)
+        return
 
-    is_group = isinstance(event, GroupMessageEvent)
+    raw_plain = msg or " "
+    if not title:
+        title = " "
+    if not msg:
+        msg = " "
+    msg = optimize_md(msg)
+    title = optimize_md(title)
+    scene = get_chat_scene(event)
+    is_normal_group = (scene == "group")  # 仅普通群可@
+
     open_id = get_real_id(event.user_id)
     if not open_id:
         open_id = event.user_id
-    shell_param = MessageSegment.markdown_param("s1", " ")
-    if not title:
-        title = " "
-        if not shell:
-            title = msg
-            msg = " "
+
     if not page:
         if page_param:
+            page_param = optimize_md(page_param)
             page = MessageSegment.markdown_param("t2", page_param)
         else:
             page = MessageSegment.markdown_param("t2", " ")
     else:
         page = generate_page_param(page)
+
     if shell:
         shell_param = MessageSegment.markdown_param("s1", "python\r" + msg)
         msg_param = page
     else:
+        shell_param = MessageSegment.markdown_param("s1", " ")
         original_user_id = event.get_user_id()
-        if open_id and is_group and XiuConfig().at_sender and at_msg:
+        if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
             if original_user_id in _impersonating_users:
-                # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
                 target_user_id = _impersonating_users[original_user_id]
                 target_user_info = sql_message.get_user_info_with_id(target_user_id)
                 target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
-                title = f"<@{open_id}>\n(伪装[{target_user_name}])\n{title}"
+                title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
             else:
-                title = f"<@{open_id}>\n{title}"
+                title = f"<@{open_id}>\r{title}"
+
     if not title_param:
         title = optimize_md(title)
         title_param = MessageSegment.markdown_param("t1", title)
     if not msg_param:
-        msg_param = MessageSegment.markdown_param("t2", msg)
-
-    param = [        
-        title_param,
-        msg_param,
-        shell_param,
-    ]
-    msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
-    await bot.send(event=event, message=msg)
-
-async def handle_send_markdown(bot, event, msg: str, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
-    """发送md消息"""
-    if msg:
         msg = optimize_md(msg)
-    if title:
-        title = optimize_md(title)
-    if page_param:
-        page_param = optimize_md(page_param)
+        msg_param = MessageSegment.markdown_param("t2", msg)
+    
+    param = [title_param, msg_param, shell_param]
+    logger.warning(f"{param}")
+    try:
+        md_msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
+        await bot.send(event=event, message=md_msg)
+    except Exception as e:
+        logger.warning(f"md模板发送失败，降级普通消息: {e}\n\n内容：{param}")
+        await handle_send2(bot, event, raw_plain)
 
-    is_group = get_chat_scene(event) == "group"
-    open_id = get_real_id(event.user_id)
-    if not open_id:
-        open_id = event.user_id
-    shell_param = " "
+async def handle_send_markdown(
+    bot, event, msg: str,
+    shell=None, title=None, page=None, page_param=None,
+    title_param=None, msg_param=None, button_id=None, at_msg=True
+):
+    """发送原生md消息（仅普通群/私聊），失败降级普通消息"""
+    if not _allow_native_markdown(event):
+        await handle_send2(bot, event, msg or " ")
+        return
+
+    raw_plain = msg or " "
+    msg = optimize_md(msg) if msg else " "
+    title = optimize_md(title) if title else " "
+    page_param = optimize_md(page_param) if page_param else " "
+
+    scene = get_chat_scene(event)
+    is_normal_group = (scene == "group")
+
+    open_id = get_real_id(event.user_id) or event.user_id
+    original_user_id = event.get_user_id()
+
     if not title:
         title = " "
-        if not shell:
-            title = msg
-            msg = " "
-    if not page:
-            page = " "
-    else:
-        page = "\r".join(generate_page_param(page)['values'])
-    if shell:
-        shell_param = "```python\r" + msg + "\r```"
-        msg_param = page
-    else:
-        original_user_id = event.get_user_id()
-        if open_id and is_group and XiuConfig().at_sender and at_msg:
-            if original_user_id in _impersonating_users:
-                # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
-                target_user_id = _impersonating_users[original_user_id]
-                target_user_info = sql_message.get_user_info_with_id(target_user_id)
-                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
-                title = f"<@{open_id}>\n(伪装[{target_user_name}])\n{title}"
-            else:
-                title = f"<@{open_id}>\n{title}"
-    if not title_param:
-        title = optimize_md(title)
-        title_param = title
-    if not msg_param:
-        msg_param = msg
 
-    param = title_param + shell_param + msg_param
+    if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
+        if original_user_id in _impersonating_users:
+            target_user_id = _impersonating_users[original_user_id]
+            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
+            title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
+        else:
+            title = f"<@{open_id}>\r{title}"
+
+    if page:
+        page_text = "\r".join(generate_page_param(page).get("values", []))
+        page_text = f"[{page_text}]"
+    elif page_param:
+        page_text = page_param
+    else:
+        page_text = " "
+
+    blocks = []
+    if title_param is not None:
+        blocks.append(str(title_param))
+    elif title and title.strip():
+        blocks.append(str(title))
+
+    if shell:
+        body = msg_param if msg_param is not None else msg
+        body = body if body else " "
+        blocks.append(f"\r```python\r{body}\r```\r")
+    else:
+        body = msg_param if msg_param is not None else msg
+        body = body if body else " "
+        blocks.append(str(body))
+
+    if page_text.strip():
+        blocks.append(str(page_text))
+
+    md_text = "\r\r".join(blocks).rstrip()
+
     if XiuConfig().message_optimization:
-        param = optimize_message(param, False)
-    if is_channel_event(event):
-        await handle_send2(bot, event, param)
-        return
-    msg = MessageSegment.markdown(bot, param, button_id)
-    await bot.send(event=event, message=msg)
+        md_text = optimize_message(md_text, False)
+    md_text = optimize_md(md_text)
+    try:
+        md_seg = MessageSegment.markdown(bot, md_text, button_id)
+        await bot.send(event=event, message=md_seg)
+    except Exception as e:
+        logger.warning(f"原生md发送失败，降级普通消息: {e}")
+        await handle_send2(bot, event, raw_plain)
 
 def check_user_md_type(md_type, event):
     original_user_id = event.user_id
@@ -1174,18 +1264,17 @@ def check_user_md_type(md_type, event):
 
 async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=None):
     """
-    发送md模板消息
-    为k2,v2,k3,v3,k4,v4提供默认值，避免在某些md_type下没有传入而导致报错
+    发送md模板消息（type）（频道可用），失败降级普通消息
     """
+    raw_plain = msg or " "
+
     k2 = k2 if k2 is not None else "帮助"
     v2 = v2 if v2 is not None else "修仙帮助"
     k3 = k3 if k3 is not None else "存档"
     v3 = v3 if v3 is not None else "我的修仙信息"
 
-    # 根据 md_type 调用 check_user_md_type 或设置特定按钮
     if md_type in ["0", "1", "2", "3", "4", "5"]:
         _k1, _v1 = check_user_md_type(md_type, event)
-        # 如果k1,v1未被外部传入，则使用check_user_md_type返回的值
         k1 = k1 if k1 is not None and k1 != " " else _k1
         v1 = v1 if v1 is not None and v1 != " " else _v1
     elif md_type == "我要修仙":
@@ -1196,23 +1285,26 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         k3 = "官群"
         v3 = f"{XiuConfig().qqq}"
 
-    msg = optimize_md(msg)
-    is_group = isinstance(event, GroupMessageEvent)
-    open_id = get_real_id(event.user_id)
-    if not open_id:
-        open_id = event.user_id
+    scene = get_chat_scene(event)
+    is_normal_group = (scene == "group")
+    open_id = get_real_id(event.user_id) or event.user_id
+
     original_user_id = event.get_user_id()
-    if open_id and is_group and XiuConfig().at_sender:
+    if open_id and is_normal_group and XiuConfig().at_sender:
         if original_user_id in _impersonating_users:
-            # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
             target_user_id = _impersonating_users[original_user_id]
             target_user_info = sql_message.get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
             msg = f"<@{open_id}>\r{msg}"
-    
-    # 构造 param 列表
+
+    if XiuConfig().message_optimization:
+        msg = optimize_message(msg, False)
+
+    if not msg:
+        msg = " "
+    msg = optimize_md(msg)
     param = [
         MessageSegment.markdown_param("t1", msg + '\r\r---\r\r'),
         MessageSegment.markdown_param("button_text_1", v1),
@@ -1223,7 +1315,6 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         MessageSegment.markdown_param("button_show_3", k3),
     ]
 
-    # 如果 k4 存在，则修改第三个按钮的构造方式，以支持第四个按钮
     if k4 and v4:
         param = [
             MessageSegment.markdown_param("t1", msg + '\r\r---\r\r'),
@@ -1233,27 +1324,33 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
             MessageSegment.markdown_param("button_show_2", k2),
             MessageSegment.markdown_param("button_text_3", v3),
             {"key": "button_show_3",
-            "values": [
-            f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"
-            ]}
+             "values": [f"{k3}\" reference=\"false\" />\r<qqbot-cmd-input text=\"{v4}\" show=\"{k4}"]}
         ]
-    msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
-    await bot.send(event=event, message=msg)
+
+    try:
+        md_msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
+        await bot.send(event=event, message=md_msg)
+    except Exception as e:
+        logger.warning(f"md模板(type)发送失败，降级普通消息: {e}")
+        await handle_send2(bot, event, raw_plain)
 
 async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=None):
     """
-    发送md模板消息
-    为k2,v2,k3,v3,k4,v4提供默认值，避免在某些md_type下没有传入而导致报错
+    发送原生md(type)（仅普通群/私聊），失败降级普通消息
     """
+    if not _allow_native_markdown(event):
+        await handle_send2(bot, event, msg or " ")
+        return
+
+    raw_plain = msg or " "
+
     k2 = k2 if k2 is not None else "帮助"
     v2 = v2 if v2 is not None else "修仙帮助"
     k3 = k3 if k3 is not None else "存档"
     v3 = v3 if v3 is not None else "我的修仙信息"
 
-    # 根据 md_type 调用 check_user_md_type 或设置特定按钮
     if md_type in ["0", "1", "2", "3", "4", "5"]:
         _k1, _v1 = check_user_md_type(md_type, event)
-        # 如果k1,v1未被外部传入，则使用check_user_md_type返回的值
         k1 = k1 if k1 is not None and k1 != " " else _k1
         v1 = v1 if v1 is not None and v1 != " " else _v1
     elif md_type == "我要修仙":
@@ -1264,15 +1361,13 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
         k3 = "官群"
         v3 = f"{XiuConfig().qqq}"
 
-    msg = optimize_md(msg)
-    is_group = get_chat_scene(event) == "group"
-    open_id = get_real_id(event.user_id)
-    if not open_id:
-        open_id = event.user_id
+    scene = get_chat_scene(event)
+    is_normal_group = (scene == "group")
+    open_id = get_real_id(event.user_id) or event.user_id
     original_user_id = event.get_user_id()
-    if open_id and is_group and XiuConfig().at_sender:
+
+    if open_id and is_normal_group and XiuConfig().at_sender:
         if original_user_id in _impersonating_users:
-            # 如果当前用户正在伪装，则@真实用户，但标题显示伪装者的信息
             target_user_id = _impersonating_users[original_user_id]
             target_user_info = sql_message.get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
@@ -1282,14 +1377,19 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
 
     if XiuConfig().message_optimization:
         msg = optimize_message(msg, False)
-    if is_channel_event(event):
-        await handle_send2(bot, event, msg)
-        return
+
+    msg = optimize_md(msg)
+
     md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false)"
     if k4 and v4:
         md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false) | [{k4}](mqqapi://aio/inlinecmd?command={v4}&enter=false&reply=false)"
-    msg = MessageSegment.markdown(bot, md_text, button_id)
-    await bot.send(event=event, message=msg)
+
+    try:
+        md_seg = MessageSegment.markdown(bot, md_text, button_id)
+        await bot.send(event=event, message=md_seg)
+    except Exception as e:
+        logger.warning(f"原生md(type)发送失败，降级普通消息: {e}")
+        await handle_send2(bot, event, raw_plain)
 
 
 async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO, Image.Image] = None):
