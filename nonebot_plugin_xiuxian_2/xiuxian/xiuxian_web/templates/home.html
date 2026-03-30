@@ -12,9 +12,8 @@
         </p>
     </div>
 
-    <!-- 统计数据 -->
+    <!-- 1. 基础统计数据 -->
     <div class="stats-grid">
-        <!-- 机器人与消息统计卡片 -->
         <div class="stat-card">
             <div class="stat-icon" style="background: #673ab7;">
                 <i class="fas fa-robot"></i>
@@ -22,24 +21,14 @@
             <div class="stat-content">
                 <h3 id="bot-count">0</h3>
                 <p>在线机器人</p>
-                <!-- 消息收发统计 -->
-                <div style="font-size: 0.85rem; margin-top: 5px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 5px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color:var(--text-secondary)"><i class="fas fa-download" style="color:#4caf50;width:15px"></i> 接收:</span>
-                        <strong id="msg-received">0</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color:var(--text-secondary)"><i class="fas fa-upload" style="color:#2196f3;width:15px"></i> 发送:</span>
-                        <strong id="msg-sent">0</strong>
-                    </div>
+                <div class="msg-mini-stats">
+                    <div><i class="fas fa-download"></i> 接收: <strong id="msg-received">0</strong></div>
+                    <div><i class="fas fa-upload"></i> 发送: <strong id="msg-sent">0</strong></div>
                 </div>
-                <div id="bot-list-detail" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; font-style: italic;">
-                    等待连接...
-                </div>
+                <div id="bot-list-detail" class="bot-detail-text">等待连接...</div>
             </div>
         </div>
 
-        <!-- 存量统计 -->
         <div class="stat-card">
             <div class="stat-icon" style="background: var(--success-color);">
                 <i class="fas fa-users"></i>
@@ -66,74 +55,133 @@
             </div>
             <div class="stat-content">
                 <h3 id="active-users">0</h3>
-                <p>今日活跃用户</p>
-                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px;">
-                    昨日活跃: <span id="yesterday-users">0</span>
-                </div>
+                <p>今日活跃</p>
+                <div class="yesterday-text">昨日: <span id="yesterday-users">0</span></div>
             </div>
         </div>
     </div>
     
-    <!-- 系统监控区 (保持您原有的布局) -->
+    <!-- 2. 实时系统监控区 -->
     <div class="card" style="margin-top: 20px;">
-        <h3><i class="fas fa-chart-pie"></i> 系统监控</h3>
+        <h3><i class="fas fa-microchip"></i> 实时监控</h3>
         <div class="monitor-grid">
+            <!-- CPU 监控 -->
             <div class="monitor-card">
-                <h4><i class="fas fa-microchip"></i> CPU使用率</h4>
+                <h4>CPU 使用率</h4>
                 <div class="monitor-content">
                     <div class="circular-progress" id="cpu-progress">
                         <div class="progress-circle">
-                            <svg viewBox="0 0 100 100"><circle class="progress-bg" cx="50" cy="50" r="45"></circle><circle class="progress-fill" cx="50" cy="50" r="45"></circle></svg>
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
+                            </svg>
                             <div class="progress-text"><span id="cpu-percent">0%</span></div>
                         </div>
                     </div>
+                    <div class="monitor-details">
+                        <p><i class="fas fa-microchip"></i> <span id="cpu-cores">核心: --</span></p>
+                        <p><i class="fas fa-tachometer-alt"></i> <span id="cpu-freq">频率: --</span></p>
+                    </div>
                 </div>
             </div>
             
+            <!-- 内存监控 -->
             <div class="monitor-card">
-                <h4><i class="fas fa-memory"></i> 内存使用</h4>
+                <h4>内存占用</h4>
                 <div class="monitor-content">
                     <div class="circular-progress" id="mem-progress">
                         <div class="progress-circle">
-                            <svg viewBox="0 0 100 100"><circle class="progress-bg" cx="50" cy="50" r="45"></circle><circle class="progress-fill" cx="50" cy="50" r="45"></circle></svg>
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
+                            </svg>
                             <div class="progress-text"><span id="memory-percent">0%</span></div>
+                        </div>
+                    </div>
+                    <div class="monitor-details">
+                        <p><i class="fas fa-memory"></i> <span id="mem-usage-text">-- / --</span></p>
+                        <div class="process-box" style="width: 100%; margin-top: 10px;">
+                            <div class="process-header">Top 进程</div>
+                            <div id="process-list-container">
+                                <div class="loading-sm">正在加载...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
             
+            <!-- 磁盘监控 -->
             <div class="monitor-card">
-                <h4><i class="fas fa-clock"></i> 运行时间</h4>
-                <div class="monitor-content" style="text-align: center;">
-                    <p style="font-size: 0.9rem; margin-bottom: 5px;">Bot 已运行:</p>
-                    <h4 id="bot-uptime-val" style="color:var(--accent-color)">--</h4>
-                    <p style="font-size: 0.8rem; color: gray; margin-top: 10px;">NoneBot2: <span id="nb-ver-val">--</span></p>
+                <h4>磁盘空间 (根目录)</h4>
+                <div class="monitor-content">
+                    <div class="circular-progress" id="disk-progress">
+                        <div class="progress-circle">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
+                            </svg>
+                            <div class="progress-text"><span id="disk-percent">0%</span></div>
+                        </div>
+                    </div>
+                    <div class="monitor-details">
+                        <p><i class="fas fa-hdd"></i> <span id="disk-usage-text">-- / --</span></p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 快捷操作区... (保留您原来的内容) -->
+    <!-- 3. 系统详细信息 -->
+    <div class="card" style="margin-top: 20px;">
+        <h3><i class="fas fa-info-circle"></i> 系统详情</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <h4><i class="fab fa-python"></i> 软件环境</h4>
+                <p><strong>Python 版本:</strong> <span id="sys-python">--</span></p>
+                <p><strong>NoneBot 版本:</strong> <span id="nb-ver-val">--</span></p>
+                <p><strong>Bot 运行时间:</strong> <span id="bot-uptime-val">--</span></p>
+            </div>
+            <div class="info-item">
+                <h4><i class="fas fa-desktop"></i> 操作系统</h4>
+                <p><strong>系统类型:</strong> <span id="sys-os">--</span></p>
+                <p><strong>系统架构:</strong> <span id="sys-machine">--</span></p>
+                <p><strong>处理器:</strong> <span id="sys-processor" style="font-size: 0.85em; text-align: right;">--</span></p>
+            </div>
+            <div class="info-item">
+                <h4><i class="fas fa-server"></i> 服务器状态</h4>
+                <p><strong>系统启动时间:</strong> <span id="sys-boot-time">--</span></p>
+                <p><strong>系统运行时间:</strong> <span id="sys-uptime">--</span></p>
+                <p><strong>平台详情:</strong> <span id="sys-platform" style="font-size: 0.85em; text-align: right;">--</span></p>
+            </div>
+        </div>
+    </div>
 </div>
 
+<style>
+/* 局部样式补充 */
+.monitor-details p { margin: 5px 0; font-size: 0.9rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.process-box { background: var(--bg-primary); border-radius: 6px; padding: 8px; border: 1px solid var(--border-color); }
+.process-header { font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); margin-bottom: 5px; padding-bottom: 2px; }
+.process-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 2px 0; }
+.p-name { color: var(--text-primary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-mem { font-weight: bold; color: var(--accent-color); }
+.loading-sm { font-size: 0.7rem; color: #888; text-align: center; }
+.yesterday-text { font-size: 0.8rem; opacity: 0.7; }
+</style>
+
 <script>
+// 更新基础统计和消息
 async function loadStats() {
     try {
         const response = await fetch('/get_stats');
         const data = await response.json();
-        
         if (data.success) {
-            // 更新基础统计
             document.getElementById('total-users').textContent = data.total_users.toLocaleString();
             document.getElementById('total-sects').textContent = data.total_sects.toLocaleString();
             document.getElementById('active-users').textContent = data.active_users.toLocaleString();
             document.getElementById('yesterday-users').textContent = data.yesterday_users.toLocaleString();
-            
-            // 更新消息收发
             document.getElementById('msg-received').textContent = data.msg_received.toLocaleString();
             document.getElementById('msg-sent').textContent = data.msg_sent.toLocaleString();
-            
-            // 更新 Bot 信息
             document.getElementById('bot-count').textContent = data.bot_count;
             document.getElementById('bot-uptime-val').textContent = data.bot_uptime;
             document.getElementById('nb-ver-val').textContent = data.nb_version;
@@ -148,30 +196,97 @@ async function loadStats() {
     } catch (e) { console.error('加载统计失败', e); }
 }
 
-function updateCircularProgress(containerId, percent) {
-    const fill = document.querySelector(`#${containerId} .progress-fill`);
-    const text = document.querySelector(`#${containerId} .progress-text span`);
-    const circumference = 2 * Math.PI * 45;
-    fill.style.strokeDashoffset = circumference - (percent / 100 * circumference);
-    text.textContent = `${Math.round(percent)}%`;
-}
-
+// 利用 get_system_info_extended 更新硬件监控及详情
 async function loadMonitor() {
     try {
         const response = await fetch('/get_system_info_extended');
         const data = await response.json();
         if (data.success) {
-            updateCircularProgress('cpu-progress', parseFloat(data.cpu_info['CPU使用率']));
-            updateCircularProgress('mem-progress', parseFloat(data.mem_info['内存使用率']));
+            // 1. CPU 监控
+            const cpuPercent = parseFloat(data.cpu_info['CPU使用率']);
+            updateCircularProgress('cpu-progress', cpuPercent);
+            document.getElementById('cpu-cores').textContent = `物理: ${data.cpu_info['物理核心数']} / 逻辑: ${data.cpu_info['逻辑核心数']}`;
+            document.getElementById('cpu-freq').textContent = `当前频率: ${data.cpu_info['CPU频率']}`;
+
+            // 2. 内存监控
+            const memPercent = parseFloat(data.mem_info['内存使用率']);
+            updateCircularProgress('mem-progress', memPercent);
+            document.getElementById('mem-usage-text').textContent = `${data.mem_info['已用内存']} / ${data.mem_info['总内存']}`;
+            
+            // 3. 磁盘监控
+            const diskPercent = parseFloat(data.disk_info['磁盘使用率']);
+            updateCircularProgress('disk-progress', diskPercent);
+            document.getElementById('disk-usage-text').textContent = `${data.disk_info['已用空间']} / ${data.disk_info['总磁盘空间']}`;
+
+            // 4. 系统详情文字填充
+            document.getElementById('sys-os').textContent = data.system_info['系统'];
+            document.getElementById('sys-python').textContent = data.system_info['Python版本'];
+            document.getElementById('sys-machine').textContent = data.system_info['机器'];
+            document.getElementById('sys-processor').textContent = data.system_info['处理器'];
+            document.getElementById('sys-platform').textContent = data.system_info['平台'];
+            
+            document.getElementById('sys-boot-time').textContent = data.system_uptime['系统启动时间'];
+            document.getElementById('sys-uptime').textContent = data.system_uptime['系统运行时间'];
         }
-    } catch (e) {}
+    } catch (e) { console.error('加载监控失败', e); }
 }
 
+// 加载 Top 进程列表
+async function loadProcesses() {
+    try {
+        const response = await fetch('/get_process_info');
+        const data = await response.json();
+        const container = document.getElementById('process-list-container');
+        if (data.success && data.processes && data.processes.length > 0) {
+            container.innerHTML = data.processes.map(p => `
+                <div class="process-row">
+                    <span class="p-name" title="${p.name}">${p.name}</span>
+                    <span class="p-mem">${p.memory}</span>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="loading-sm">暂无进程数据</div>';
+        }
+    } catch (e) { console.error('加载进程失败', e); }
+}
+
+// 圆环进度条动画及变色逻辑
+function updateCircularProgress(containerId, percent) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const fill = container.querySelector(`.progress-fill`);
+    const text = container.querySelector(`.progress-text span`);
+    const circumference = 2 * Math.PI * 45; // 282.7
+    
+    if (fill) {
+        const offset = circumference - (percent / 100 * circumference);
+        fill.style.strokeDashoffset = offset;
+        
+        // 动态变色逻辑
+        if (percent > 90) fill.style.stroke = "#f44336"; // 极高：红色
+        else if (percent > 70) fill.style.stroke = "#ff9800"; // 较高：橙色
+        else {
+            // 正常：根据类型使用主题色
+            if (containerId === 'cpu-progress') fill.style.stroke = "var(--accent-color)";
+            else if (containerId === 'mem-progress') fill.style.stroke = "var(--success-color)";
+            else fill.style.stroke = "var(--info-color)";
+        }
+    }
+    if (text) text.textContent = `${Math.round(percent)}%`;
+}
+
+// 初始化及定时器
 document.addEventListener('DOMContentLoaded', () => {
+    // 立即加载一次
     loadStats();
     loadMonitor();
-    setInterval(loadStats, 5000); // 5秒刷新一次基础统计（含消息数）
-    setInterval(loadMonitor, 3000); // 3秒刷新一次硬件监控
+    loadProcesses();
+    
+    // 设置不同的轮询频率
+    setInterval(loadStats, 5000);      // 基础统计 5秒
+    setInterval(loadMonitor, 3000);    // 硬件监控 3秒
+    setInterval(loadProcesses, 15000); // 进程列表 15秒
 });
 </script>
 {% endblock %}

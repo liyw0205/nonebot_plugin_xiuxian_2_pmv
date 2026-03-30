@@ -7,13 +7,14 @@ from ..adapter_compat import (
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
+    is_channel_event,
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md, get_impersonating_target
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md, get_impersonating_target, call_upload_api
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_partner
 from .draw_changelog import get_commits, create_changelog_image
@@ -29,7 +30,7 @@ xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
 my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=5, block=True)
-changelog = on_command("更新日志", aliases={"更新记录"}, priority=5, block=True)
+changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
 
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
@@ -219,14 +220,23 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         img_res = await draw_user_info_img(user_info['user_id'], detail_map)
     else:
         img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
-    if XiuConfig().markdown_status and XiuConfig().markdown_id and XiuConfig().web_link:
-        msg_param = {
-        "key": "t1",
-        "values": ["](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",f"img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",f"道号：[{user_info['user_name']}"]
-        }
-        await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
-    else:
-        await handle_pic_send(bot, event, img_res)
+    if XiuConfig().markdown_status:
+        if XiuConfig().markdown_id and XiuConfig().web_link:
+            msg_param = {
+            "key": "t1",
+            "values": ["](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",f"img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",f"道号：[{user_info['user_name']}"]
+            }
+            await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
+            await xiuxian_message_img.finish()
+        else:
+            if not is_channel_event(event):
+                link = call_upload_api(img_res)
+                logger.error(f"web图片返回: {link}")
+                if link:
+                    img_data = f"[img #1100px #2450px]({link})"
+                    await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
+                    await xiuxian_message_img.finish()
+    await handle_pic_send(bot, event, img_res)
     await xiuxian_message_img.finish()
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])

@@ -1234,6 +1234,170 @@ tr:hover {
     justify-content: space-between; /* 垂直方向分散对齐 */
 }
 
+/* --- 监控圆环核心样式 --- */
+.circular-progress {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 10px;
+}
+
+.progress-circle svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.progress-bg {
+    fill: none;
+    stroke: var(--border-color);
+    stroke-width: 8;
+}
+
+.progress-fill {
+    fill: none;
+    stroke-width: 9;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease, stroke 0.3s ease;
+    stroke-dasharray: 283; /* 2 * PI * 45 */
+    stroke-dashoffset: 283;
+}
+
+/* 初始颜色 */
+.cpu-color { stroke: var(--accent-color); }
+.mem-color { stroke: var(--success-color); }
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.progress-text span {
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+/* 监控卡片详情文字 */
+.monitor-details {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.monitor-details span {
+    background: var(--bg-primary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    width: 100%;
+    text-align: center;
+}
+
+/* 进程列表盒子 */
+.process-box {
+    width: 100%;
+    margin-top: 15px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: 'Consolas', monospace;
+}
+
+.process-header {
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: var(--accent-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+}
+
+.process-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    padding: 2px 0;
+    border-bottom: 1px dashed rgba(0,0,0,0.05);
+}
+
+.p-name {
+    color: var(--text-primary);
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.p-mem {
+    color: var(--success-color);
+    font-weight: bold;
+}
+
+/* 运行时间卡片 */
+.uptime-box {
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.uptime-box h4 {
+    font-size: 1.1rem;
+    color: var(--accent-color);
+    margin: 5px 0;
+}
+
+.uptime-box p { font-size: 0.8rem; margin: 0; }
+
+.sys-info-box {
+    border-top: 1px solid var(--border-color);
+    padding-top: 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.sys-info-box p { margin: 3px 0; display: flex; justify-content: space-between; }
+.sys-info-box span { color: var(--text-primary); font-weight: 500; }
+
+/* 消息微型统计 */
+.msg-mini-stats {
+    font-size: 0.8rem;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.msg-mini-stats i { width: 15px; text-align: center; opacity: 0.7; }
+
+.bot-detail-text {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 5px;
+}
+
+.yesterday-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 5px;
+}
+
+.loading-sm {
+    text-align: center;
+    padding: 10px;
+    font-size: 0.7rem;
+    color: #999;
+}
+
 /* CPU History Chart */
 .cpu-history-chart {
     width: 100%;

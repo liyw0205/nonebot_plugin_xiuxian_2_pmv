@@ -2516,44 +2516,6 @@ def get_stats():
         logger.error(f"统计信息获取失败: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/get_system_info')
-def get_system_info():
-    """此路由在 home.html 中未被直接调用，但保留以防万一。
-    更详细的系统信息由 /get_system_info_extended 提供。"""
-    if 'admin_id' not in session:
-        return jsonify({"success": False, "error": "未登录"})
-    
-    if not psutil_available:
-        return jsonify({
-            "success": False, 
-            "error": "psutil未安装，无法获取系统信息",
-            "cpu_usage": 0.0,
-            "memory_usage": 0.0,
-            "disk_usage": 0.0
-        })
-
-    try:
-        # 获取CPU使用率
-        cpu_usage = psutil.cpu_percent(interval=1)
-        
-        # 获取内存使用率
-        memory = psutil.virtual_memory()
-        memory_usage = memory.percent
-        
-        # 获取磁盘使用率
-        disk = psutil.disk_usage('/')
-        disk_usage = disk.percent
-        
-        return jsonify({
-            "success": True,
-            "cpu_usage": round(cpu_usage, 1),
-            "memory_usage": round(memory_usage, 1),
-            "disk_usage": round(disk_usage, 1)
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
 @app.route('/get_system_info_extended')
 def get_system_info_extended():
     """获取详细系统信息，对psutil是否可用进行适配"""
@@ -2836,6 +2798,52 @@ def terminal_pwd():
             return jsonify({"cwd": cwd})
         except: pass
     return jsonify({"cwd": "~"})
+
+@app.route('/upload_image', methods=['POST'])
+def upload_api_image():
+    """
+    供外部/其他插件调用的图片上传接口
+    """
+    # 安全检查：仅允许本地调用或已登录管理员
+    if 'admin_id' not in session and request.remote_addr != '127.0.0.1':
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+    channel_id = request.form.get('channel_id')
+    file = request.files.get('image')
+    
+    if not file or not channel_id:
+        return jsonify({"success": False, "error": "缺少参数 image 或 channel_id"}), 400
+
+    image_bytes = file.read()
+
+    # 获取在线的 QQBot 实例
+    bots = get_bots()
+    target_bot = None
+    for b in bots.values():
+        if b.adapter.get_name() == "QQ":
+            target_bot = b
+            break
+    
+    if not target_bot:
+        return jsonify({"success": False, "error": "未找到在线的 QQBot 实例"}), 500
+
+    try:
+        url = run_async(
+            CompatMessageSegment.upload_image_and_get_url(
+                bot=target_bot,
+                channel_id=str(channel_id),
+                image=image_bytes
+            )
+        )
+        
+        if url:
+            return jsonify({"success": True, "url": url})
+        else:
+            return jsonify({"success": False, "error": "上传失败，无法生成URL"})
+            
+    except Exception as e:
+        logger.error(f"接口上传图片异常: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 def run_flask():
     app.run(host=HOST, port=PORT, debug=False)
