@@ -42,7 +42,7 @@ from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon.dungeon_manager import DungeonManager
 from .two_exp_cd import two_exp_cd
-
+from nonebot.permission import SUPERUSER
 
 cache_help = {}
 invite_cache = {}
@@ -2124,7 +2124,7 @@ def load_player_user3(user_id, file_name):
     except (json.JSONDecodeError, UnicodeDecodeError, FileNotFoundError):
         return {}
 
-migrate_data = on_command("player数据同步", priority=25, block=True)
+migrate_data = on_command("player数据同步", permission=SUPERUSER, priority=25, block=True)
 @migrate_data.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2159,7 +2159,7 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data2 = on_command("player数据同步2", priority=25, block=True)
+migrate_data2 = on_command("player数据同步2", permission=SUPERUSER, priority=25, block=True)
 @migrate_data2.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2179,7 +2179,7 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data3 = on_command("player数据同步3", priority=25, block=True)
+migrate_data3 = on_command("player数据同步3", permission=SUPERUSER, priority=25, block=True)
 @migrate_data3.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2197,7 +2197,7 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         logger.info(f"更新通天塔: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
-migrate_data4 = on_command("player数据同步4", priority=25, block=True)
+migrate_data4 = on_command("player数据同步4", permission=SUPERUSER, priority=25, block=True)
 @migrate_data4.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
@@ -2211,3 +2211,51 @@ async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             player_data_manager.update_or_write_data(user_id, "statistics", key, value)
         logger.info(f"更新统计数据: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
+
+migrate_bank_data = on_command("同步灵庄", permission=SUPERUSER, priority=25, block=True)
+@migrate_bank_data.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def migrate_bank_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    players_dir = Path() / "data" / "xiuxian" / "players"
+    if not players_dir.exists():
+        await handle_send(bot, event, "未找到 players 数据目录，无需同步。")
+        return
+
+    user_num = 0
+    sync_num = 0
+    fail_num = 0
+
+    for user_dir in players_dir.iterdir():
+        if not user_dir.is_dir():
+            continue
+        user_id = user_dir.name
+        user_num += 1
+
+        bank_file = user_dir / "bankinfo.json"
+        if not bank_file.exists():
+            continue
+
+        try:
+            with open(bank_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    continue
+                data = json.loads(content)
+
+            # 兼容默认值
+            savestone = int(data.get("savestone", 0))
+            savetime = str(data.get("savetime", datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            banklevel = str(data.get("banklevel", "1"))
+
+            player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", savestone, data_type="INTEGER")
+            player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", savetime, data_type="TEXT")
+            player_data_manager.update_or_write_data(user_id, "bankinfo", "banklevel", banklevel, data_type="TEXT")
+
+            sync_num += 1
+            logger.info(f"更新灵庄数据: {user_id}")
+        except Exception as e:
+            fail_num += 1
+            logger.error(f"灵庄同步失败 {user_id}: {e}")
+
+    await handle_send(bot, event, f"灵庄同步完成！扫描用户:{user_num}，成功:{sync_num}，失败:{fail_num}")

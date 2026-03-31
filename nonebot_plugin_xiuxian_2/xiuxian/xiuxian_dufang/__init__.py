@@ -14,31 +14,31 @@ from ..adapter_compat import (
     MessageSegment
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message
 from ..xiuxian_config import XiuConfig
+from nonebot.permission import SUPERUSER
 
 sql_message = XiuxianDateManage()
+player_data_manager = PlayerDataManager()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
-
-# 共享用户数据文件路径
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
 
-# 初始化共享数据文件
-if not SHARING_DATA_PATH.exists():
-    with open(SHARING_DATA_PATH, "w", encoding="utf-8") as f:
-        json.dump({"users": []}, f, ensure_ascii=False, indent=4)
-
 # 加载共享用户数据
 def load_sharing_users():
-    with open(SHARING_DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["users"]
+    users = player_data_manager.get_field_data("global", "unseal_sharing", "users")
+    if not users:
+        return []
+    if isinstance(users, list):
+        return users
+    try:
+        return json.loads(users)
+    except:
+        return []
 
-# 保存共享用户数据
 def save_sharing_users(users):
-    with open(SHARING_DATA_PATH, "w", encoding="utf-8") as f:
-        json.dump({"users": users}, f, ensure_ascii=False, indent=4)
+    player_data_manager.update_or_write_data("global", "unseal_sharing", "users", users, data_type="TEXT")
 
 # 添加共享用户
 def add_sharing_user(user_id):
@@ -72,11 +72,9 @@ def get_random_sharing_users(user_id, count=3):
     return random.sample(users, count)
 
 # 鉴石数据管理
-# 修改默认数据格式
 def get_unseal_data(user_id):
     user_id = str(user_id)
-    file_path = PLAYERSDATA / user_id / "unseal_data.json"
-    
+
     default_data = {
         "unseal_info": {
             "count": 0,
@@ -92,30 +90,54 @@ def get_unseal_data(user_id):
         },
         "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-    
-    if not file_path.exists():
-        os.makedirs(file_path.parent, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(default_data, f, ensure_ascii=False, indent=4)
+
+    row = player_data_manager.get_fields(user_id, "unseal_data")
+    if not row:
+        save_unseal_data(user_id, default_data)
         return default_data
-    
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    
-    # 确保所有字段都存在
-    for key in default_data:
-        if key not in data:
-            data[key] = default_data[key]
-    
+
+    def to_int(v, d=0):
+        try:
+            return int(v)
+        except:
+            return d
+
+    data = {
+        "unseal_info": {
+            "count": to_int(row.get("count", 0)),
+            "total_cost": to_int(row.get("total_cost", 0)),
+            "profit": to_int(row.get("profit", 0)),
+            "loss": to_int(row.get("loss", 0)),
+        },
+        "sharing_info": {
+            "shared_profit": to_int(row.get("shared_profit", 0)),
+            "shared_loss": to_int(row.get("shared_loss", 0)),
+            "received_profit": to_int(row.get("received_profit", 0)),
+            "received_loss": to_int(row.get("received_loss", 0)),
+        },
+        "last_update": row.get("last_update") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
     return data
+
 
 def save_unseal_data(user_id, data):
     user_id = str(user_id)
-    file_path = PLAYERSDATA / user_id / "unseal_data.json"
-    
     data["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+
+    u = data["unseal_info"]
+    s = data["sharing_info"]
+
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "count", int(u.get("count", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "total_cost", int(u.get("total_cost", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "profit", int(u.get("profit", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "loss", int(u.get("loss", 0)), data_type="INTEGER")
+
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "shared_profit", int(s.get("shared_profit", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "shared_loss", int(s.get("shared_loss", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "received_profit", int(s.get("received_profit", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "received_loss", int(s.get("received_loss", 0)), data_type="INTEGER")
+
+    player_data_manager.update_or_write_data(user_id, "unseal_data", "last_update", data["last_update"], data_type="TEXT")
 
 # 鉴石命令
 unseal = on_command("鉴石", priority=9, block=True)
@@ -671,3 +693,71 @@ SHARING_EVENTS = [
         "message": "祥瑞之气惠及了附近的其他道友！"
     }
 ]
+
+unseal_migrate = on_command("同步鉴石", permission=SUPERUSER, priority=25, block=True)
+
+@unseal_migrate.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    players_dir = Path() / "data" / "xiuxian" / "players"
+    if not players_dir.exists():
+        await handle_send(bot, event, "未找到players目录，无需同步。")
+        return
+
+    total = 0
+    ok = 0
+    fail = 0
+
+    for user_dir in players_dir.iterdir():
+        if not user_dir.is_dir():
+            continue
+        total += 1
+        user_id = user_dir.name
+
+        file_path = user_dir / "unseal_data.json"
+        if not file_path.exists():
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    continue
+                raw = json.loads(content)
+
+            # 兜底
+            data = {
+                "unseal_info": {
+                    "count": int(raw.get("unseal_info", {}).get("count", 0)),
+                    "total_cost": int(raw.get("unseal_info", {}).get("total_cost", 0)),
+                    "profit": int(raw.get("unseal_info", {}).get("profit", 0)),
+                    "loss": int(raw.get("unseal_info", {}).get("loss", 0)),
+                },
+                "sharing_info": {
+                    "shared_profit": int(raw.get("sharing_info", {}).get("shared_profit", 0)),
+                    "shared_loss": int(raw.get("sharing_info", {}).get("shared_loss", 0)),
+                    "received_profit": int(raw.get("sharing_info", {}).get("received_profit", 0)),
+                    "received_loss": int(raw.get("sharing_info", {}).get("received_loss", 0)),
+                },
+                "last_update": raw.get("last_update", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            }
+
+            save_unseal_data(user_id, data)
+            ok += 1
+        except Exception:
+            fail += 1
+
+    # 同步旧共享名单文件（可选）
+    try:
+        if SHARING_DATA_PATH.exists():
+            with open(SHARING_DATA_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    users = json.loads(content).get("users", [])
+                    if isinstance(users, list):
+                        save_sharing_users(users)
+    except Exception:
+        pass
+
+    await handle_send(bot, event, f"鉴石同步完成！扫描:{total}，成功:{ok}，失败:{fail}")

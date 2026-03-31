@@ -16,7 +16,7 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from datetime import datetime
 from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send
@@ -25,6 +25,7 @@ from ..xiuxian_config import XiuConfig
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
 sql_message = XiuxianDateManage()  # sql类
+player_data_manager = PlayerDataManager()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 
 bank = on_regex(
@@ -186,22 +187,37 @@ def get_give_stone(bankinfo):
 
 
 def readf(user_id):
+    """从动态数据库读取灵庄信息（兼容默认值）"""
     user_id = str(user_id)
-    FILEPATH = PLAYERSDATA / user_id / "bankinfo.json"
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
+    bank_data = player_data_manager.get_fields(user_id, "bankinfo")
+    if not bank_data:
+        return {
+            "savestone": 0,
+            "savetime": str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            "banklevel": "1",
+        }
+
+    # 兼容缺失字段
+    savestone = bank_data.get("savestone", 0)
+    savetime = bank_data.get("savetime", str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    banklevel = str(bank_data.get("banklevel", "1"))
+
+    try:
+        savestone = int(savestone)
+    except:
+        savestone = 0
+
+    return {
+        "savestone": savestone,
+        "savetime": str(savetime),
+        "banklevel": banklevel,
+    }
 
 
 def savef(user_id, data):
+    """保存灵庄信息到动态数据库"""
     user_id = str(user_id)
-    if not os.path.exists(PLAYERSDATA / user_id):
-        logger.opt(colors=True).info(f"<green>用户目录不存在，创建目录</green>")
-        os.makedirs(PLAYERSDATA / user_id)
-    FILEPATH = PLAYERSDATA / user_id / "bankinfo.json"
-    data = json.dumps(data, ensure_ascii=False, indent=3)
-    savemode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=savemode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
+    player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", int(data.get("savestone", 0)), data_type="INTEGER")
+    player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
+    player_data_manager.update_or_write_data(user_id, "bankinfo", "banklevel", str(data.get("banklevel", "1")), data_type="TEXT")
     return True

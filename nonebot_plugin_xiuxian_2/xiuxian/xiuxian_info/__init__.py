@@ -30,7 +30,7 @@ xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
 my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=5, block=True)
-changelog = on_command("更新日志", priority=5, aliases={"更新记录"})
+changelog = on_command("更新日志", priority=5, aliases={"更新记录"}, block=True)
 
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
