@@ -88,6 +88,9 @@
         <button type="button" onclick="showRestoreModal()" class="btn btn-primary">
             <i class="fas fa-history"></i> 恢复配置
         </button>
+        <button type="button" onclick="cloudBackupConfig()" class="btn btn-info">
+            <i class="fas fa-cloud-upload-alt"></i> 云端备份配置
+        </button>
     </div>
 </div>
 
@@ -192,7 +195,7 @@
     </div>
 </div>
 
-<!-- 恢复配置模态框 -->
+<!-- 恢复配置模态框（已支持本地/云端） -->
 <div id="restoreModal" class="modal" style="display: none;">
     <div class="modal-content">
         <div class="modal-header">
@@ -200,38 +203,69 @@
             <span class="close" onclick="closeModal('restoreModal')">×</span>
         </div>
         <div class="modal-body">
-            <div id="backupList">
-                <div class="loading">加载备份列表...</div>
+            <div class="tab-nav" style="margin-bottom: 10px;">
+                <button type="button" class="tab-link mini-tab active" id="cfg-tab-local" onclick="switchConfigRestoreTab('local')">本地备份</button>
+                <button type="button" class="tab-link mini-tab" id="cfg-tab-cloud" onclick="switchConfigRestoreTab('cloud')">云端备份</button>
+            </div>
+
+            <div id="config-local-pane">
+                <div id="backupList">
+                    <div class="loading">加载本地备份列表...</div>
+                </div>
+            </div>
+
+            <div id="config-cloud-pane" style="display:none;">
+                <div id="cloudConfigBackupList">
+                    <div class="loading">加载云端配置备份列表...</div>
+                </div>
             </div>
             
             <div id="restoreResult" style="margin: 15px 0;"></div>
             
             <div class="modal-actions">
-                <button onclick="restoreConfig()" class="btn btn-success">恢复配置</button>
-                <button onclick="deleteConfigBackup()" class="btn btn-danger">删除配置</button>
+                <button onclick="restoreConfig()" class="btn btn-success">恢复本地配置</button>
+                <button onclick="restoreCloudConfig()" class="btn btn-warning">恢复云端配置</button>
+                <button onclick="deleteConfigBackup()" class="btn btn-danger">删除本地配置</button>
                 <button onclick="closeModal('restoreModal')" class="btn btn-secondary">取消</button>
             </div>
         </div>
     </div>
 </div>
 
+<style>
+/* 恢复弹窗里的小型tab，和主tab区分 */
+#restoreModal .tab-nav {
+    margin-bottom: 10px;
+}
+#restoreModal .mini-tab {
+    border-radius: 6px;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.88rem;
+}
+</style>
+
 <script>
+let currentConfigRestoreTab = 'local';
+
 // 标签切换功能
 document.querySelectorAll('.tab-link').forEach(tab => {
     tab.addEventListener('click', function() {
+        if (this.id === 'cfg-tab-local' || this.id === 'cfg-tab-cloud') return; // 恢复模态框tab单独处理
         // 移除所有活动状态
-        document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-link').forEach(t => {
+            if (t.id !== 'cfg-tab-local' && t.id !== 'cfg-tab-cloud') t.classList.remove('active');
+        });
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         
         // 添加当前活动状态
         this.classList.add('active');
         const tabId = this.dataset.tab;
-        document.getElementById(tabId).classList.add('active');
+        const pane = document.getElementById(tabId);
+        if (pane) pane.classList.add('active');
     });
 });
 
 function saveConfig() {
-    // 收集所有表单数据
     const configData = {};
     document.querySelectorAll('.config-form').forEach(form => {
         const formData = new FormData(form);
@@ -239,67 +273,62 @@ function saveConfig() {
             configData[key] = value;
         });
     });
-    
+
     const resultDiv = document.getElementById('saveResult');
     resultDiv.innerHTML = '<span style="color: blue;"><i class="fas fa-spinner fa-spin"></i> 保存中...</span>';
-    
+
     fetch("{{ url_for('save_config') }}", {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configData)
     })
-    .then(response => response.json())
-    .then(result => {
+    .then(async response => {
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error('后端返回不是 JSON，可能服务报错或被拦截');
+        }
+
         if (result.success) {
-            resultDiv.innerHTML = `<span style="color: green;"><i class="fas fa-check-circle"></i> ${result.message}</span>`;
+            resultDiv.innerHTML = `<span style="color: green;"><i class="fas fa-check-circle"></i> ${result.message || '配置保存成功'}</span>`;
         } else {
-            resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 错误: ${result.error}</span>`;
+            // 关键：失败优先读 error，没有就给默认文案
+            const errMsg = result.error || result.message || '保存失败（未知错误）';
+            resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 错误: ${errMsg}</span>`;
         }
     })
     .catch(error => {
-        resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 请求失败: ${error}</span>`;
+        resultDiv.innerHTML = `<span style="color: red;"><i class="fas fa-exclamation-circle"></i> 请求失败: ${error.message || error}</span>`;
     });
 }
 
 // 模态框控制函数
-function showExportModal() {
-    document.getElementById('exportModal').style.display = 'flex';
-}
-
+function showExportModal() { document.getElementById('exportModal').style.display = 'flex'; }
 function showImportModal() {
     document.getElementById('importModal').style.display = 'flex';
     document.getElementById('importResult').innerHTML = '';
 }
-
 function showBackupModal() {
     document.getElementById('backupModal').style.display = 'flex';
     document.getElementById('backupResult').innerHTML = '';
 }
-
 function showRestoreModal() {
     document.getElementById('restoreModal').style.display = 'flex';
-    loadBackupList();
+    switchConfigRestoreTab('local');
+    document.getElementById('restoreResult').innerHTML = '';
 }
-
-function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
-}
+function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
 
 function toggleExportSelection() {
     const exportAll = document.getElementById('exportAll').checked;
-    const exportSelection = document.getElementById('exportSelection');
-    exportSelection.style.display = exportAll ? 'none' : 'block';
+    document.getElementById('exportSelection').style.display = exportAll ? 'none' : 'block';
 }
-
 function toggleBackupSelection() {
     const backupAll = document.getElementById('backupAll').checked;
-    const backupSelection = document.getElementById('backupSelection');
-    backupSelection.style.display = backupAll ? 'none' : 'block';
+    document.getElementById('backupSelection').style.display = backupAll ? 'none' : 'block';
 }
 
-// 文件读取辅助函数
 function readFileAsText(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -309,37 +338,28 @@ function readFileAsText(file) {
     });
 }
 
-// 导出配置函数
+// 导出配置
 async function exportConfig() {
     const exportAll = document.getElementById('exportAll').checked;
     let selectedFields = [];
-    
     if (!exportAll) {
         const checkboxes = document.querySelectorAll('input[name="export_fields"]:checked');
         selectedFields = Array.from(checkboxes).map(cb => cb.value);
-        
         if (selectedFields.length === 0) {
             alert('请至少选择一个配置项');
             return;
         }
     }
-    
+
     try {
         const response = await fetch('/export_config', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                selected_fields: selectedFields,
-                export_all: exportAll
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected_fields: selectedFields, export_all: exportAll })
         });
-        
         const data = await response.json();
-        
+
         if (data.success) {
-            // 创建下载链接
             const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -349,7 +369,6 @@ async function exportConfig() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            
             closeModal('exportModal');
         } else {
             alert('导出失败: ' + data.error);
@@ -359,24 +378,21 @@ async function exportConfig() {
     }
 }
 
-// 导入配置函数
+// 导入配置
 async function importConfig() {
     const fileInput = document.getElementById('importFile');
     const file = fileInput.files[0];
-    
     if (!file) {
         alert('请选择要导入的配置文件');
         return;
     }
-    
+
     try {
         const fileContent = await readFileAsText(file);
         const configData = JSON.parse(fileContent);
-        
-        // 显示文件信息供用户确认
         const metadata = configData._metadata || {};
         const importResult = document.getElementById('importResult');
-        
+
         importResult.innerHTML = `
             <div class="import-confirm">
                 <h4>📋 配置文件信息</h4>
@@ -386,8 +402,7 @@ async function importConfig() {
                     <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
                 </div>
                 <div class="import-actions">
-                    <button onclick="confirmImport(${JSON.stringify(configData).replace(/"/g, '&quot;')})" 
-                            class="btn btn-success">
+                    <button onclick="confirmImportFromWindow()" class="btn btn-success">
                         <i class="fas fa-check"></i> 确认导入
                     </button>
                     <button onclick="cancelImport()" class="btn btn-secondary">
@@ -396,113 +411,87 @@ async function importConfig() {
                 </div>
             </div>
         `;
-        
+        window.__pendingImportData = configData;
     } catch (error) {
-        document.getElementById('importResult').innerHTML = 
-            `<div style="color: red;">❌ 文件读取失败: ${error}</div>`;
+        document.getElementById('importResult').innerHTML = `<div style="color: red;">❌ 文件读取失败: ${error}</div>`;
     }
 }
 
-// 确认导入
-function confirmImport(configData) {
-    // 移除元数据字段
-    if (configData._metadata) {
-        delete configData._metadata;
-    }
-    
-    // 将导入的数据填充到表单中
+function confirmImportFromWindow() {
+    const configData = window.__pendingImportData;
+    if (!configData) return;
+    if (configData._metadata) delete configData._metadata;
     fillFormWithImportedData(configData);
-    
-    document.getElementById('importResult').innerHTML = 
-        '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
+    document.getElementById('importResult').innerHTML = '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
     closeModal('importModal');
 }
 
-// 取消导入
 function cancelImport() {
     document.getElementById('importResult').innerHTML = '';
     document.getElementById('importFile').value = '';
+    window.__pendingImportData = null;
 }
 
-// 备份配置函数
+// 备份配置
 async function backupConfig() {
     const backupAll = document.getElementById('backupAll').checked;
     let selectedFields = [];
-    
     if (!backupAll) {
         const checkboxes = document.querySelectorAll('input[name="backup_fields"]:checked');
         selectedFields = Array.from(checkboxes).map(cb => cb.value);
-        
         if (selectedFields.length === 0) {
             alert('请至少选择一个配置项');
             return;
         }
     }
-    
+
     try {
         const response = await fetch('/backup_config', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                selected_fields: selectedFields,
-                backup_all: backupAll
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected_fields: selectedFields, backup_all: backupAll })
         });
-        
         const data = await response.json();
-        
         if (data.success) {
-            document.getElementById('backupResult').innerHTML = 
-                '<div style="color: green;">✅ ' + data.message + '</div>';
+            document.getElementById('backupResult').innerHTML = '<div style="color: green;">✅ ' + data.message + '</div>';
         } else {
-            document.getElementById('backupResult').innerHTML = 
-                '<div style="color: red;">❌ ' + data.error + '</div>';
+            document.getElementById('backupResult').innerHTML = '<div style="color: red;">❌ ' + data.error + '</div>';
         }
     } catch (error) {
-        document.getElementById('backupResult').innerHTML = 
-            '<div style="color: red;">❌ 备份失败: ' + error + '</div>';
+        document.getElementById('backupResult').innerHTML = '<div style="color: red;">❌ 备份失败: ' + error + '</div>';
     }
 }
 
-// 加载备份列表函数
+// 本地备份列表
 async function loadBackupList() {
     const backupListDiv = document.getElementById('backupList');
-    backupListDiv.innerHTML = '<div class="loading">加载备份列表中...</div>';
-    
+    backupListDiv.innerHTML = '<div class="loading">加载本地备份列表中...</div>';
     try {
         const response = await fetch('/get_config_backups');
         const data = await response.json();
-        
         if (data.success) {
             if (data.backups.length > 0) {
                 let html = '<div style="max-height: 300px; overflow-y: auto;">';
                 html += '<h4>选择要恢复的备份：</h4>';
-                
                 data.backups.forEach(backup => {
                     const date = new Date(backup.created_at);
                     const sizeMB = (backup.size / (1024 * 1024)).toFixed(2);
-                    
                     html += `
                         <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
                             <label style="display: block;">
                                 <input type="radio" name="restore_backup" value="${backup.filename}">
                                 <strong>${backup.filename}</strong><br>
                                 <span style="font-size: 0.9em; color: #666;">
-                                    版本: ${backup.version} | 
-                                    大小: ${sizeMB} MB | 
-                                    ${date.toLocaleString()}
+                                    版本: ${backup.version} | 大小: ${sizeMB} MB | ${date.toLocaleString()}
                                 </span>
                             </label>
                         </div>
                     `;
                 });
-                
                 html += '</div>';
                 backupListDiv.innerHTML = html;
             } else {
-                backupListDiv.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">暂无备份文件</div>';
+                backupListDiv.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">暂无本地备份文件</div>';
             }
         } else {
             backupListDiv.innerHTML = '<div style="color: red;">加载失败: ' + data.error + '</div>';
@@ -512,172 +501,279 @@ async function loadBackupList() {
     }
 }
 
-// 恢复配置函数
+// 恢复本地配置
 async function restoreConfig() {
     const selectedBackup = document.querySelector('input[name="restore_backup"]:checked');
-    
     if (!selectedBackup) {
-        alert('请选择一个备份文件');
+        alert('请选择一个本地备份文件');
         return;
     }
-    
+
     try {
         const response = await fetch('/restore_config_backup', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                backup_filename: selectedBackup.value
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backup_filename: selectedBackup.value })
         });
-        
-    const data = await response.json();
-    
-    if (data.success) {
-        const restoreResult = document.getElementById('restoreResult');
-        const metadata = data.metadata || {};
-        restoreResult.innerHTML = `
-            <div class="restore-confirm">
-                <h4>📋📋 备份文件信息</h4>
-                <div class="file-info">
-                    <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
-                    <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
-                    <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
+        const data = await response.json();
+        if (data.success) {
+            const metadata = data.metadata || {};
+            document.getElementById('restoreResult').innerHTML = `
+                <div class="restore-confirm">
+                    <h4>📋 本地备份信息</h4>
+                    <div class="file-info">
+                        <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
+                        <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
+                        <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
+                    </div>
+                    <div class="restore-actions">
+                        <button onclick="confirmRestoreFromWindow('local')" class="btn btn-success">
+                            <i class="fas fa-check"></i> 确认恢复
+                        </button>
+                        <button onclick="cancelRestore()" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                    </div>
                 </div>
-                <div class="restore-actions">
-                    <button onclick="confirmRestore(${JSON.stringify(data.data).replace(/"/g, '&quot;')})" 
-                            class="btn btn-success">
-                        <i class="fas fa-check"></i> 确认恢复
-                    </button>
-                    <button onclick="cancelRestore()" class="btn btn-secondary">
-                        <i class="fas fa-times"></i> 取消
-                    </button>
-                </div>
-            </div>
-        `;
-    } else {
-            document.getElementById('restoreResult').innerHTML = 
-                `<div style="color: red;">❌ ${data.error}</div>`;
+            `;
+            window.__pendingRestoreData = data.data;
+        } else {
+            document.getElementById('restoreResult').innerHTML = `<div style="color: red;">❌ ${data.error}</div>`;
         }
     } catch (error) {
-        document.getElementById('restoreResult').innerHTML = 
-            `<div style="color: red;">❌ 恢复失败: ${error}</div>`;
+        document.getElementById('restoreResult').innerHTML = `<div style="color: red;">❌ 恢复失败: ${error}</div>`;
     }
 }
 
-// 确认恢复
-function confirmRestore(backupData) {
-    // 移除元数据字段
-    if (backupData._metadata) {
-        delete backupData._metadata;
-    }
-    
-    // 将恢复的数据填充到表单中
-    fillFormWithImportedData(backupData);
-    
-    document.getElementById('restoreResult').innerHTML = 
-        '<div style="color: green;">✅ 配置已加载，请点击"保存所有配置"按钮应用更改</div>';
-    closeModal('restoreModal');
-}
-
-// 删除配置备份函数
+// 删除本地配置备份
 async function deleteConfigBackup() {
     const selectedBackup = document.querySelector('input[name="restore_backup"]:checked');
-    
     if (!selectedBackup) {
-        alert('请选择一个备份文件');
+        alert('请选择一个本地备份文件');
         return;
     }
 
     const backupFilename = selectedBackup.value;
-    
-    if (!confirm(`确定要删除配置备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) {
-        return;
-    }
-    
+    if (!confirm(`确定要删除配置备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) return;
+
     const response = await fetch('/delete_config_backup', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-       },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backup_filename: backupFilename })
     });
-             const data = await response.json();
-        
+    const data = await response.json();
     if (data.success) {
         alert(`✅ ${data.message}`);
-        closeModal('restoreModal');
-        // 重新加载备份列表
-        loadBackups();
+        loadBackupList();
     } else {
         alert(`❌ ${data.error}`);
     }
 }
 
-// 取消恢复
 function cancelRestore() {
     document.getElementById('restoreResult').innerHTML = '';
+    window.__pendingRestoreData = null;
 }
 
-// 用导入的数据填充表单
 function fillFormWithImportedData(importedData) {
     for (const [fieldName, value] of Object.entries(importedData)) {
         const input = document.getElementById(fieldName);
         if (input) {
-            if (input.type === 'checkbox') {
-                input.checked = Boolean(value);
-            } else {
-                input.value = value;
-            }
+            if (input.type === 'checkbox') input.checked = Boolean(value);
+            else input.value = value;
         }
     }
 }
 
-// 添加全局点击事件关闭模态框
+function confirmRestoreFromWindow(type) {
+    const data = window.__pendingRestoreData;
+    if (!data) return;
+    if (data._metadata) delete data._metadata;
+    fillFormWithImportedData(data);
+    document.getElementById('restoreResult').innerHTML = `<div style="color: green;">✅ ${type === 'cloud' ? '云端' : '本地'}配置已加载，请点击“保存所有配置”按钮应用更改</div>`;
+}
+
+// 云端备份配置
+async function cloudBackupConfig() {
+    if (!confirm('确定要将当前配置备份并上传到云端吗？')) return;
+    try {
+        const res = await fetch('/cloud_backup_config', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) alert('✅ ' + data.message);
+        else alert('❌ ' + data.error);
+    } catch (e) {
+        alert('❌ 云端备份请求失败: ' + e);
+    }
+}
+
+// 恢复模态框 tab 切换
+function switchConfigRestoreTab(type) {
+    currentConfigRestoreTab = type;
+    const localBtn = document.getElementById('cfg-tab-local');
+    const cloudBtn = document.getElementById('cfg-tab-cloud');
+    const localPane = document.getElementById('config-local-pane');
+    const cloudPane = document.getElementById('config-cloud-pane');
+
+    if (type === 'local') {
+        localBtn.classList.add('active');
+        cloudBtn.classList.remove('active');
+        localPane.style.display = 'block';
+        cloudPane.style.display = 'none';
+        loadBackupList();
+    } else {
+        localBtn.classList.remove('active');
+        cloudBtn.classList.add('active');
+        localPane.style.display = 'none';
+        cloudPane.style.display = 'block';
+        loadCloudConfigBackupList();
+    }
+}
+
+// 加载云端配置备份列表
+async function loadCloudConfigBackupList() {
+    const container = document.getElementById('cloudConfigBackupList');
+    container.innerHTML = '<div class="loading">加载云端备份中...</div>';
+    try {
+        const res = await fetch('/get_cloud_config_backups');
+        const data = await res.json();
+        if (data.success) {
+            if (!data.backups || data.backups.length === 0) {
+                container.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">云端暂无配置备份</div>';
+                return;
+            }
+
+            let html = '<div style="max-height:300px;overflow-y:auto;">';
+            html += '<h4>选择云端配置备份：</h4>';
+            data.backups.forEach(b => {
+                const sizeMB = (b.size / (1024 * 1024)).toFixed(2);
+                html += `
+                    <div style="margin:10px 0;padding:10px;border:1px solid #ddd;border-radius:5px;">
+                        <label style="display:block;">
+                            <input type="radio" name="cloud_restore_backup" value="${b.filename}">
+                            <strong>${b.filename}</strong><br>
+                            <span style="font-size:0.9em;color:#666;">
+                                修改时间: ${b.modified} | 大小: ${sizeMB} MB
+                            </span>
+                        </label>
+                        <div style="margin-top:8px;">
+                            <button type="button" class="btn btn-info btn-sm" onclick="syncCloudConfigBackup('${b.filename}', false)">同步到本地</button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `<div style="color:red;">加载失败: ${data.error}</div>`;
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="color:red;">请求失败: ${e}</div>`;
+    }
+}
+
+// 同步云端配置到本地
+async function syncCloudConfigBackup(filename, overwrite=false) {
+    try {
+        const res = await fetch('/sync_cloud_config_backup', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filename, overwrite })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ ' + data.message);
+            loadBackupList();
+        } else if (data.error === 'FILE_EXISTS') {
+            if (confirm(data.message)) await syncCloudConfigBackup(filename, true);
+        } else {
+            alert('❌ ' + data.error);
+        }
+    } catch (e) {
+        alert('❌ 同步失败: ' + e);
+    }
+}
+
+// 恢复云端配置
+async function restoreCloudConfig() {
+    const selected = document.querySelector('input[name="cloud_restore_backup"]:checked');
+    if (!selected) {
+        alert('请选择一个云端配置备份');
+        return;
+    }
+
+    try {
+        const res = await fetch('/cloud_restore_config_backup', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filename: selected.value })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const metadata = data.metadata || {};
+            document.getElementById('restoreResult').innerHTML = `
+                <div class="restore-confirm">
+                    <h4>📋 云端备份信息</h4>
+                    <div class="file-info">
+                        <p><strong>版本:</strong> ${metadata.version || '未知'}</p>
+                        <p><strong>备份时间:</strong> ${metadata.backup_time ? new Date(metadata.backup_time).toLocaleString() : '未知'}</p>
+                        <p><strong>包含字段:</strong> ${metadata.backup_fields ? metadata.backup_fields.length + ' 个配置项' : '未知'}</p>
+                    </div>
+                    <div class="restore-actions">
+                        <button onclick="confirmRestoreFromWindow('cloud')" class="btn btn-success">
+                            <i class="fas fa-check"></i> 确认恢复
+                        </button>
+                        <button onclick="cancelRestore()" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                    </div>
+                </div>
+            `;
+            window.__pendingRestoreData = data.data;
+        } else {
+            document.getElementById('restoreResult').innerHTML = `<div style="color:red;">❌ ${data.error}</div>`;
+        }
+    } catch (e) {
+        document.getElementById('restoreResult').innerHTML = `<div style="color:red;">❌ 云恢复失败: ${e}</div>`;
+    }
+}
+
+// 点击遮罩关闭模态框
 document.addEventListener('click', function(event) {
     const modals = document.querySelectorAll('.modal');
     modals.forEach(modal => {
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
+        if (event.target === modal) modal.style.display = 'none';
     });
 });
 
-// 页面加载时初始化
+// 页面初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 触发初始标签状态
-    const firstTab = document.querySelector('.tab-link.active');
+    const firstTab = document.querySelector('.tab-link.active[data-tab]');
     if (firstTab) {
         const tabId = firstTab.dataset.tab;
-        document.getElementById(tabId).classList.add('active');
+        const pane = document.getElementById(tabId);
+        if (pane) pane.classList.add('active');
     }
-    
-    // 为所有下拉菜单添加事件监听
+
     document.querySelectorAll('select').forEach(select => {
         select.addEventListener('change', function() {
             const showIf = this.dataset.showIf;
             if (showIf) {
                 const conditions = JSON.parse(showIf);
                 const parentForm = this.closest('form');
-                
                 Object.keys(conditions).forEach(key => {
                     const value = conditions[key];
                     const shouldShow = this.value === value;
-                    
                     parentForm.querySelectorAll(`[data-show-if*="${key}"]`).forEach(el => {
                         if (el !== this) {
                             el.style.display = shouldShow ? 'block' : 'none';
-                            if (!shouldShow) {
-                                el.querySelector('input, select').value = '';
-                            }
+                            const input = el.querySelector('input, select');
+                            if (!shouldShow && input) input.value = '';
                         }
                     });
                 });
             }
         });
-        
-        // 触发初始状态
         select.dispatchEvent(new Event('change'));
     });
 });

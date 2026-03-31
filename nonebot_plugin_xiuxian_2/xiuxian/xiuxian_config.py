@@ -66,6 +66,19 @@ class XiuConfig:
         self.web_host = "0.0.0.0" 
         # 修仙管理面板IP
 
+        self.cloud_backup_enabled = False
+        # 是否开启云备份（True 才会上传）
+        self.webdav_url = ""
+        # 例如: http://127.0.0.1:5244/dav
+        self.webdav_user = ""
+        self.webdav_pass = ""
+        self.webdav_target_subdir = "/"
+        # WebDAV根下的目标目录
+        self.webdav_backup_folder = "backups"
+        # 在 target_subdir 下再套一层子目录
+        self.webdav_delete_days = 0
+        # 删除云端多少天前备份；0或空表示不删
+
         self.merge_forward_send = 4
         # 使用消息合并转发
         # 1是合并转发的内容转换成长文本发送

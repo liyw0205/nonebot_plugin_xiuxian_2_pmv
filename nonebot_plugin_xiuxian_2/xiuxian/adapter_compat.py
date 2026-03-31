@@ -3,7 +3,9 @@ from __future__ import annotations
 import random
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Union, Any
+import hashlib
+import asyncio
+from typing import Optional, Union, Any, Literal
 from urllib.parse import urlparse
 
 from nonebot.permission import Permission
@@ -258,30 +260,29 @@ class CompatMessageSegment:
         channel_id: str,
         image: Union[str, Path, bytes, BytesIO],
         *,
+        mode: Literal["md5", "link"] = "md5",
         fallback_url: Optional[str] = None,
         audit_timeout: float = 30.0,
     ) -> Optional[str]:
         """
-        仅 MD5 返回模式 + 审核后台回查日志：
-        - 立即返回 md5 拼接链接
-        - 若触发审核，后台 asyncio 任务等待审核结果并打印真实附件链接
+        mode:
+        - "md5": 立即返回 md5 链接（默认）
+        - "link": 等待审核并回查真实附件链接后返回
         """
-        import hashlib
-        import asyncio
-
+    
         try:
             from nonebot.adapters.qq.exception import AuditException
         except Exception:
             AuditException = Exception  # type: ignore
-
+    
         if not (HAS_QQ and QQBot is not None and isinstance(bot, QQBot)):
-            logger.warning("upload_image_and_get_url(md5): 当前 bot 不是 QQBot")
+            logger.warning("upload_image_and_get_url: 当前 bot 不是 QQBot")
             return fallback_url
-
+    
         if not channel_id:
-            logger.warning("upload_image_and_get_url(md5): channel_id为空，跳过上传")
+            logger.warning("upload_image_and_get_url: channel_id为空，跳过上传")
             return fallback_url
-
+    
         # 统一转 bytes
         try:
             if isinstance(image, str):
@@ -295,67 +296,87 @@ class CompatMessageSegment:
             else:
                 raise TypeError(f"不支持的 image 类型: {type(image)}")
         except Exception as e:
-            logger.error(f"upload_image_and_get_url(md5): 读取图片失败: {e}")
+            logger.error(f"upload_image_and_get_url: 读取图片失败: {e}")
             return fallback_url
-
-        # 先算 md5 链接（主返回）
+    
+        # 计算 md5 链接
         md5_hex = hashlib.md5(image_bytes).hexdigest().upper()
         md5_url = f"https://gchat.qpic.cn/qmeetpic/0/0-0-{md5_hex}/0"
-        logger.warning(f"md5链接{md5_url}")
-
+    
+        async def _resolve_real_url_from_message(message_id: str) -> Optional[str]:
+            msg_obj = await bot.get_message_of_id(
+                channel_id=str(channel_id),
+                message_id=str(message_id),
+            )
+            atts = getattr(msg_obj, "attachments", None) or []
+            for att in atts:
+                url = getattr(att, "url", None)
+                if url:
+                    return str(url)
+            return None
+    
         async def _audit_followup(audit_exc: Exception):
-            """后台等待审核并回查真实链接，仅日志用途"""
+            """md5 模式下后台日志用途"""
             try:
                 audit_id = getattr(audit_exc, "audit_id", None)
-                logger.warning(
-                    f"upload_image_and_get_url(md5): 触发审核 audit_id={audit_id}，已先返回md5链接"
-                )
-
+                logger.warning(f"upload_image_and_get_url: 触发审核 audit_id={audit_id}，先返回md5链接")
                 audit_res = await audit_exc.get_audit_result(timeout=audit_timeout)  # type: ignore[attr-defined]
                 event_name = str(getattr(audit_res, "__type__", ""))
                 message_id = getattr(audit_res, "message_id", None)
-                logger.info(f"upload_image_and_get_url(md5): 审核结果={audit_res}")
-
                 if "MESSAGE_AUDIT_PASS" not in event_name or not message_id:
-                    logger.warning(
-                        f"upload_image_and_get_url(md5): 审核未通过或缺少message_id, "
-                        f"event={event_name}, message_id={message_id}"
-                    )
+                    logger.warning(f"upload_image_and_get_url: 审核未通过或缺少message_id, event={event_name}, message_id={message_id}")
                     return
-
-                msg_obj = await bot.get_message_of_id(
-                    channel_id=str(channel_id),
-                    message_id=str(message_id),
-                )
-                atts = getattr(msg_obj, "attachments", None) or []
-                real_url = None
-                for att in atts:
-                    url = getattr(att, "url", None)
-                    if url:
-                        real_url = str(url)
-                        break
-
+                real_url = await _resolve_real_url_from_message(str(message_id))
                 if real_url:
-                    logger.info(f"upload_image_and_get_url(md5): 审核回查真实链接={real_url}")
-                else:
-                    logger.warning("upload_image_and_get_url(md5): 审核通过但未取到真实附件链接")
+                    logger.info(f"upload_image_and_get_url: 审核回查真实链接={real_url}")
             except Exception as ex:
-                logger.warning(f"upload_image_and_get_url(md5): 审核后台任务异常: {ex}")
-
+                logger.warning(f"upload_image_and_get_url: 审核后台任务异常: {ex}")
+    
         try:
-            await bot.post_messages(
+            result = await bot.post_messages(
                 channel_id=str(channel_id),
                 content=" ",
                 file_image=image_bytes,
             )
+            # 未触发审核，直接尝试拿返回消息 id 回查真实链接
+            if mode == "link":
+                message_id = getattr(result, "id", None)
+                if message_id:
+                    real_url = await _resolve_real_url_from_message(str(message_id))
+                    if real_url:
+                        return real_url
+                # 拿不到就降级
+                return fallback_url or md5_url
+    
+            # 默认 md5
             return md5_url
-
+    
         except AuditException as e:
-            asyncio.create_task(_audit_followup(e))
-            return md5_url
-
+            if mode == "md5":
+                asyncio.create_task(_audit_followup(e))
+                return md5_url
+    
+            # mode == "link": 同步等待审核结果并返回真实链接
+            try:
+                audit_res = await e.get_audit_result(timeout=audit_timeout)  # type: ignore[attr-defined]
+                event_name = str(getattr(audit_res, "__type__", ""))
+                message_id = getattr(audit_res, "message_id", None)
+    
+                if "MESSAGE_AUDIT_PASS" not in event_name or not message_id:
+                    logger.warning(
+                        f"upload_image_and_get_url(link): 审核未通过或缺少message_id, "
+                        f"event={event_name}, message_id={message_id}"
+                    )
+                    return fallback_url
+    
+                real_url = await _resolve_real_url_from_message(str(message_id))
+                return real_url or fallback_url
+            except Exception as ex:
+                logger.warning(f"upload_image_and_get_url(link): 等待审核失败: {ex}")
+                return fallback_url
+    
         except Exception as e:
-            logger.error(f"upload_image_and_get_url(md5): 上传失败: {e}")
+            logger.error(f"upload_image_and_get_url: 上传失败: {e}")
             return fallback_url
 
 # =========================

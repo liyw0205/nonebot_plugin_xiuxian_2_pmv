@@ -1,505 +1,373 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card">
-    <h2><i class="fas fa-sync-alt"></i> 检测更新</h2>
+<!-- 1. 检测更新模块 -->
+<div class="card animate-in">
+    <h2><i class="fas fa-sync-alt"></i> 检测系统更新</h2>
     
     <div id="update-status">
-        <div class="loading">检查更新中...</div>
+        <div class="loading">正在检查当前版本状态...</div>
     </div>
     
-    <div id="releases-list" style="display: none; margin-top: 20px;">
-        <h3>最近更新 
-            <button onclick="toggleReleasesList()" class="btn btn-sm btn-secondary" style="margin-left: 10px;">
-                <i class="fas fa-chevron-up"></i> 收起
-            </button>
-        </h3>
+    <!-- 历史发布版本列表 (折叠) -->
+    <div id="releases-list" class="collapsible-section" style="display: none;">
+        <div class="section-header">
+            <h3><i class="fab fa-github"></i> 远程版本记录</h3>
+        </div>
         <div class="releases-container"></div>
     </div>
     
     <div class="form-actions">
         <button onclick="checkForUpdates()" class="btn btn-primary">
-            <i class="fas fa-sync"></i> 检查更新
+            <i class="fas fa-search"></i> 检查新版本
         </button>
-        <button onclick="viewAllReleases()" class="btn btn-info">
-            <i class="fas fa-list"></i> 查看所有版本
+        <button onclick="toggleReleasesList()" class="btn btn-info">
+            <i class="fas fa-history"></i> <span id="btn-text-list">查看历史版本</span>
         </button>
-        <button onclick="manualBackup()" class="btn btn-info">
-            <i class="fas fa-copy"></i> 手动备份
+        <button onclick="manualBackup()" class="btn btn-success">
+            <i class="fas fa-folder-plus"></i> 立即创建备份
         </button>
     </div>
 </div>
 
-<div class="card" style="margin-top: 20px;">
-    <h2><i class="fas fa-history"></i> 版本回退</h2>
+<!-- 2. 备份管理模块 (Tab 切换) -->
+<div class="card animate-in delay-1" style="margin-top: 20px;">
+    <h2><i class="fas fa-archive"></i> 备份与回退管理</h2>
+    <p>管理本地备份或通过 WebDAV 同步云端数据。恢复备份需要重启机器人。</p>
     
-    <div id="backups-list">
-        <div class="loading">加载备份列表...</div>
+    <div class="tab-nav">
+        <button id="tab-btn-local" class="tab-link active" onclick="switchBackupTab('local')">
+            <i class="fas fa-hdd"></i> 本地备份
+        </button>
+        <button id="tab-btn-cloud" class="tab-link" onclick="switchBackupTab('cloud')">
+            <i class="fas fa-cloud"></i> 云端仓库 (WebDAV)
+        </button>
+    </div>
+
+    <!-- 本地备份列表容器 -->
+    <div id="local-backups-section">
+        <div id="backups-list">
+            <div class="loading">正在读取本地备份目录...</div>
+        </div>
+    </div>
+
+    <!-- 云端备份列表容器 -->
+    <div id="cloud-backups-section" class="hidden">
+        <div id="cloud-backups-list">
+            <div class="loading">正在尝试连接 WebDAV 服务器...</div>
+        </div>
+        <div id="cloud-config-tip" class="info-item hidden" style="margin-top: 15px; border-left: 4px solid var(--warning-color);">
+            <p><i class="fas fa-exclamation-triangle"></i> 无法连接？请确保已在 <strong><a href="{{ url_for('config_management') }}">配置管理</a></strong> 中正确设置了 WebDAV 地址、账号和密码。</p>
+        </div>
     </div>
     
     <div class="form-actions">
-        <button onclick="loadBackups()" class="btn btn-info">
-            <i class="fas fa-refresh"></i> 刷新备份列表
+        <button onclick="refreshCurrentBackupList()" class="btn btn-info">
+            <i class="fas fa-sync"></i> 刷新列表
         </button>
     </div>
 </div>
 
-<!-- 版本详情模态框 -->
-<div id="versionDetailModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 700px;">
+<!-- 模态框：版本详情 -->
+<div id="versionDetailModal" class="modal">
+    <div class="modal-content">
         <div class="modal-header">
-            <h3 id="versionDetailTitle">版本详情</h3>
+            <h3 id="versionDetailTitle">版本说明</h3>
             <span class="close" onclick="closeModal('versionDetailModal')">×</span>
         </div>
         <div class="modal-body">
-            <div id="version-detail-content" class="loading">加载版本详情中...</div>
-            <div class="modal-actions" style="margin-top: 20px; text-align: center;">
-                <button onclick="performUpdate()" class="btn btn-success">
-                    <i class="fas fa-download"></i> 更新到此版本
-                </button>
-                <button onclick="closeModal('versionDetailModal')" class="btn btn-secondary">
-                    <i class="fas fa-times"></i> 关闭
-                </button>
+            <div id="version-detail-content"></div>
+            <div class="modal-actions">
+                <button id="modal-update-btn" class="btn btn-success">执行操作</button>
+                <button onclick="closeModal('versionDetailModal')" class="btn btn-secondary">关闭</button>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-// 全局变量
-let releasesListExpanded = false;
-let selectedVersion = null;
+<style>
+    /* 备份卡片增强 */
+    .backup-card.cloud-item { border-left: 4px solid var(--info-color); background: linear-gradient(to right, rgba(23, 162, 184, 0.05), transparent); }
+    .backup-detail-row { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 6px; }
+    .backup-detail-row strong { color: var(--text-primary); }
+    
+    /* 更新内容显示 */
+    .changelog-box { background: var(--bg-primary); padding: 12px; border-radius: 6px; max-height: 250px; overflow-y: auto; font-family: monospace; font-size: 13px; border: 1px solid var(--border-color); }
+    
+    .hidden { display: none; }
+    .success-text { color: var(--success-color); font-weight: bold; }
+</style>
 
+<script>
+let currentBackupType = 'local';
+let releasesListExpanded = false;
+
+/**
+ * 1. 更新检测逻辑
+ */
 async function checkForUpdates() {
     const statusDiv = document.getElementById('update-status');
-    statusDiv.innerHTML = '<div class="loading">检查更新中...</div>';
-    
+    statusDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 正在请求 GitHub API...</div>';
     try {
-        const response = await fetch('/check_update');
-        const data = await response.json();
-        
+        const res = await fetch('/check_update');
+        const data = await res.json();
         if (data.success) {
             if (data.update_available) {
                 statusDiv.innerHTML = `
                     <div class="update-available">
-                        <h3 style="color: #4CAF50;">🎉 发现新版本！</h3>
-                        <p>当前版本: ${data.current_version}</p>
-                        <p>最新版本: <strong>${data.latest_version}</strong></p>
-                        <p>发布时间: ${new Date(data.published_at).toLocaleString()}</p>
-                        
-                        <div class="toggle-section">
-                            <button class="toggle-btn" onclick="toggleSection(this, 'changelog')">
-                                <i class="fas fa-chevron-down"></i> 显示更新内容
-                            </button>
-                            <div id="changelog" class="collapsible-content">
-                                <div class="release-notes">
-                                    <h4>更新内容:</h4>
-                                    <pre>${data.changelog}</pre>
-                                </div>
-                            </div>
+                        <h3 class="success-text"><i class="fas fa-gift"></i> 发现新版本: ${data.latest_version}</h3>
+                        <p>当前: ${data.current_version} ➔ 最新: ${data.latest_version}</p>
+                        <div style="margin: 10px 0;">
+                            <button class="btn btn-sm btn-info" onclick="showChangelog('${data.latest_version}', \`${data.changelog.replace(/`/g, '\\`')}\`)">查看更新内容</button>
                         </div>
-                        
-                        <button onclick="performUpdate('${data.latest_version}')" class="btn btn-success">
-                            <i class="fas fa-download"></i> 立即更新
-                        </button>
-                    </div>
-                `;
+                        <button onclick="performUpdate('${data.latest_version}')" class="btn btn-success">立即升级并备份</button>
+                    </div>`;
             } else {
-                statusDiv.innerHTML = `
-                    <div class="no-update">
-                        <h3 style="color: #666;">✅ 当前已是最新版本</h3>
-                        <p>当前版本: ${data.current_version}</p>
-                    </div>
-                `;
+                statusDiv.innerHTML = `<div class="no-update"><h3><i class="fas fa-check-circle"></i> 当前已是最新版本 (${data.current_version})</h3></div>`;
             }
-        } else {
-            statusDiv.innerHTML = `<div class="error-message">❌ 检查更新失败: ${data.error}</div>`;
         }
-    } catch (error) {
-        statusDiv.innerHTML = `<div class="error-message">❌ 请求失败: ${error}</div>`;
+    } catch (e) { statusDiv.innerHTML = '<div class="error">检查更新失败，请检查网络连接或稍后重试。</div>'; }
+}
+
+function showChangelog(ver, text) {
+    const modal = document.getElementById('versionDetailModal');
+    document.getElementById('versionDetailTitle').innerText = `版本 ${ver} 更新日志`;
+    document.getElementById('version-detail-content').innerHTML = `<pre class="changelog-box">${text}</pre>`;
+    const btn = document.getElementById('modal-update-btn');
+    btn.innerText = "执行更新";
+    btn.onclick = () => performUpdate(ver);
+    modal.style.display = 'flex';
+}
+
+/**
+ * 2. 备份管理 (Tab & 同步恢复)
+ */
+function switchBackupTab(type) {
+    currentBackupType = type;
+    document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-btn-${type}`).classList.add('active');
+    
+    const localSec = document.getElementById('local-backups-section');
+    const cloudSec = document.getElementById('cloud-backups-section');
+    
+    if (type === 'local') {
+        localSec.classList.remove('hidden'); cloudSec.classList.add('hidden');
+        loadBackups();
+    } else {
+        localSec.classList.add('hidden'); cloudSec.classList.remove('hidden');
+        loadCloudBackups();
     }
 }
 
-async function viewAllReleases() {
-    const releasesDiv = document.getElementById('releases-list');
-    const container = releasesDiv.querySelector('.releases-container');
-    container.innerHTML = '<div class="loading">加载中...</div>';
-    releasesDiv.style.display = 'block';
-    releasesListExpanded = true;
-    
+async function loadBackups() {
+    const container = document.getElementById('backups-list');
+    container.innerHTML = '<div class="loading">正在加载本地文件...</div>';
     try {
-        const response = await fetch('/get_releases');
-        const data = await response.json();
-        
-        if (data.success) {
-            let html = '';
-            data.releases.forEach(release => {
-                const isCurrent = release.tag_name === data.current_version;
-                html += `
-                    <div class="release-card ${isCurrent ? 'current-release' : ''}">
-                        <div class="release-header">
-                            <div class="release-title">
-                                <h4>${release.name}</h4>
-                                <span class="tag">${release.tag_name}</span>
-                                <p class="release-date">${new Date(release.published_at).toLocaleString()}</p>
-                            </div>
-                            <div class="release-actions">
-                                ${isCurrent ? 
-                                    '<span class="current-badge">当前版本</span>' : 
-                                    `<button onclick="performUpdate('${release.tag_name}')" class="btn btn-success btn-sm">
-                                        <i class="fas fa-download"></i> 更新
-                                    </button>`
-                                }
-                            </div>
-                        </div>
-                        
-                        <div class="toggle-section">
-                            <button class="toggle-btn" onclick="toggleSection(this, 'notes-${release.tag_name}')">
-                                <i class="fas fa-chevron-down"></i> 显示更新内容
-                            </button>
-                            <div id="notes-${release.tag_name}" class="collapsible-content">
-                                <div class="release-notes">
-                                    <pre>${release.body}</pre>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        ${release.assets && release.assets.length > 0 ? `
-                        <div class="toggle-section">
-                            <button class="toggle-btn" onclick="toggleSection(this, 'assets-${release.tag_name}')">
-                                <i class="fas fa-chevron-down"></i> 显示资源文件 (${release.assets.length})
-                            </button>
-                            <div id="assets-${release.tag_name}" class="collapsible-content">
-                                <div class="assets-list">
-                                    ${release.assets.map(asset => `
-                                        <div class="asset-item">
-                                            <span class="asset-name">${asset.name}</span>
-                                            <span class="asset-size">${formatFileSize(asset.size)}</span>
-                                            <a href="${asset.browser_download_url}" target="_blank" class="asset-download">
-                                                <i class="fas fa-download"></i> 下载
-                                            </a>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
+        const res = await fetch('/get_backups');
+        const data = await res.json();
+        if (data.success && data.backups.length > 0) {
+            container.innerHTML = '<div class="backups-container">' + data.backups.map(b => `
+                <div class="backup-card">
+                    <div class="backup-header"><div class="backup-filename"><i class="fas fa-file-archive"></i> ${b.filename}</div></div>
+                    <div class="backup-details">
+                        <div class="backup-detail-row"><strong>版本:</strong> <span>${b.version}</span></div>
+                        <div class="backup-detail-row"><strong>创建时间:</strong> <span>${new Date(b.created_at).toLocaleString()}</span></div>
+                        <div class="backup-detail-row"><strong>文件大小:</strong> <span>${(b.size / 1048576).toFixed(2)} MB</span></div>
                     </div>
-                `;
-            });
-            container.innerHTML = html;
+                    <div class="backup-actions">
+                        <button onclick="confirmRestore('${b.filename}')" class="btn btn-warning"><i class="fas fa-undo"></i> 恢复</button>
+                        <button onclick="downloadBackup('${b.filename}')" class="btn btn-info"><i class="fas fa-download"></i> 下载</button>
+                        <button onclick="confirmDeleteBackup('${b.filename}')" class="btn btn-danger"><i class="fas fa-trash-alt"></i> 删除</button>
+                    </div>
+                </div>`).join('') + '</div>';
+        } else container.innerHTML = '<div class="no-backups">未发现任何本地备份文件</div>';
+    } catch (e) { container.innerHTML = '<div class="error">读取本地目录失败</div>'; }
+}
+
+async function loadCloudBackups() {
+    const container = document.getElementById('cloud-backups-list');
+    const tip = document.getElementById('cloud-config-tip');
+    container.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 正在连接 WebDAV...</div>';
+    tip.classList.add('hidden');
+
+    try {
+        const res = await fetch('/get_cloud_backups');
+        const data = await res.json();
+        if (data.success && data.backups.length > 0) {
+            container.innerHTML = '<div class="backups-container">' + data.backups.map(b => `
+                <div class="backup-card cloud-item">
+                    <div class="backup-header"><div class="backup-filename"><i class="fas fa-cloud"></i> ${b.filename}</div></div>
+                    <div class="backup-details">
+                        <div class="backup-detail-row"><strong>最后修改:</strong> <span>${b.modified}</span></div>
+                        <div class="backup-detail-row"><strong>云端大小:</strong> <span>${(b.size / 1048576).toFixed(2)} MB</span></div>
+                    </div>
+                    <div class="backup-actions">
+                        <button onclick="syncCloudFile('${b.filename}')" class="btn btn-info"><i class="fas fa-sync"></i> 同步到本地</button>
+                        <button onclick="cloudRestore('${b.filename}')" class="btn btn-warning"><i class="fas fa-cloud-download-alt"></i> 云恢复</button>
+                    </div>
+                </div>`).join('') + '</div>';
         } else {
-            container.innerHTML = `<div class="error-message">加载失败: ${data.error}</div>`;
+            container.innerHTML = `<div class="no-backups">${data.error || '云端尚未存放任何备份'}</div>`;
+            tip.classList.remove('hidden');
         }
-    } catch (error) {
-        container.innerHTML = `<div class="error-message">请求失败: ${error}</div>`;
+    } catch (e) { 
+        container.innerHTML = '<div class="error">连接云端仓库失败</div>'; 
+        tip.classList.remove('hidden');
     }
+}
+
+// 同步逻辑
+async function syncCloudFile(filename, overwrite = false) {
+    if (!overwrite && !confirm(`确定将云端备份 ${filename} 同步到本地吗？`)) return;
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = `<div class="loading"><i class="fas fa-cloud-download-alt"></i> 正在下载 ${filename}...</div>`;
+    try {
+        const res = await fetch('/sync_cloud_backup', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filename, overwrite })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('同步成功！现在可以在本地备份中看到它。'); 
+            switchBackupTab('local');
+            statusDiv.innerHTML = "";
+        } else if (data.error === "FILE_EXISTS") {
+            if (confirm(data.message)) syncCloudFile(filename, true);
+            else statusDiv.innerHTML = "";
+        }
+    } catch (e) { alert('同步过程中发生异常'); }
+}
+
+// 云恢复逻辑
+async function cloudRestore(filename) {
+    if (!confirm(`【警告】你确定要直接从云端版本 ${filename} 恢复吗？\n系统将自动完成下载、解压并回退，完成后需要重启机器人。`)) return;
+    const statusDiv = document.getElementById('update-status');
+    statusDiv.innerHTML = '<div class="loading">正在执行云端恢复流程，请勿关闭页面或断开电源...</div>';
+    try {
+        const res = await fetch('/cloud_restore_backup', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filename })
+        });
+        const data = await res.json();
+        if (data.success) {
+            statusDiv.innerHTML = `<div class="success"><h3>恢复成功！</h3><p>${data.message}</p></div>`;
+            alert('云端恢复成功，请手动重启机器人以应用更改。');
+        } else {
+            statusDiv.innerHTML = `<div class="error">恢复失败: ${data.error}</div>`;
+        }
+    } catch (e) { statusDiv.innerHTML = '<div class="error">连接已断开（可能是机器人正在重启），请稍后刷新。</div>'; }
+}
+
+/**
+ * 3. 辅助功能
+ */
+function refreshCurrentBackupList() {
+    if (currentBackupType === 'local') loadBackups(); else loadCloudBackups();
 }
 
 function toggleReleasesList() {
-    const releasesDiv = document.getElementById('releases-list');
-    const toggleBtn = releasesDiv.querySelector('button');
-    const icon = toggleBtn.querySelector('i');
-    
-    if (releasesListExpanded) {
-        releasesDiv.style.display = 'none';
-        icon.className = 'fas fa-chevron-down';
-        toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i> 展开';
-        releasesListExpanded = false;
-    } else {
-        releasesDiv.style.display = 'block';
-        icon.className = 'fas fa-chevron-up';
-        toggleBtn.innerHTML = '<i class="fas fa-chevron-up"></i> 收起';
-        releasesListExpanded = true;
-    }
+    const list = document.getElementById('releases-list');
+    const btnText = document.getElementById('btn-text-list');
+    releasesListExpanded = !releasesListExpanded;
+    list.style.display = releasesListExpanded ? 'block' : 'none';
+    btnText.innerText = releasesListExpanded ? '收起版本记录' : '查看历史版本';
+    if (releasesListExpanded) viewAllReleases();
 }
 
-function toggleSection(button, contentId) {
-    const content = document.getElementById(contentId);
-    const icon = button.querySelector('i');
-    
-    if (content.classList.contains('expanded')) {
-        content.classList.remove('expanded');
-        icon.className = 'fas fa-chevron-down';
-    } else {
-        content.classList.add('expanded');
-        icon.className = 'fas fa-chevron-up';
-    }
-}
-
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-async function performUpdate(releaseTag) {
-    if (!confirm(`确定要更新到版本 ${releaseTag} 吗？\n\n建议先备份数据。`)) {
-        return;
-    }
-    
-    const statusDiv = document.getElementById('update-status');
-    statusDiv.innerHTML = '<div class="loading">更新中，请查看终端日志...</div>';
-    
+async function viewAllReleases() {
+    const container = document.querySelector('.releases-container');
+    container.innerHTML = '<div class="loading">正在获取 GitHub Releases...</div>';
     try {
-        const response = await fetch('/perform_update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ release_tag: releaseTag })
-        });
-        
-        const data = await response.json();
-        
+        const res = await fetch('/get_releases');
+        const data = await res.json();
         if (data.success) {
-            statusDiv.innerHTML = `
-                <div class="success">
-                    <h3 style="color: #4CAF50;">✅ 更新成功！</h3>
-                    <p>${data.message}</p>
-                    <p>请重启机器人使更新生效</p>
-                </div>
-            `;
-        } else {
-            statusDiv.innerHTML = `
-                <div class="error-message">
-                    <h3 style="color: #F44336;">❌ 更新失败</h3>
-                    <p>${data.message}</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        statusDiv.innerHTML = `
-            <div class="error-message">
-                <h3 style="color: #4CAF50;">⏳ 更新进行中，连接已断开，重启后刷新页面即可</h3>
-                <p>${error}</p>
-            </div>
-        `;
-    }
-}
-
-// 加载备份列表函数
-async function loadBackups() {
-    const backupsDiv = document.getElementById('backups-list');
-    backupsDiv.innerHTML = '<div class="loading">加载备份列表中...</div>';
-    
-    try {
-        const response = await fetch('/get_backups');
-        const data = await response.json();
-        
-        if (data.success) {
-            if (data.backups.length > 0) {
-                let html = '<div class="backups-container">';
-                data.backups.forEach(backup => {
-                    const sizeMB = (backup.size / (1024 * 1024)).toFixed(2);
-                    const createdDate = new Date(backup.created_at);
-                    
-                    html += `
-                        <div class="backup-card">
-                            <div class="backup-header">
-                                <div class="backup-filename" style="font-size: clamp(0.7em, 3.5vw, 0.9em); word-break: break-all; max-width: 100%;">${backup.filename}</div>
-                            </div>
-                            <div class="backup-details">
-                                <div class="backup-detail">
-                                    <strong>版本:</strong>
-                                    <span class="backup-version">${backup.version}</span>
-                                </div>
-                                <div class="backup-detail">
-                                    <strong>创建时间:</strong>
-                                    ${createdDate.toLocaleString()}
-                                </div>
-                                <div class="backup-detail">
-                                    <strong>文件大小:</strong>
-                                    ${sizeMB} MB
-                                </div>
-                            </div>
-                            <div class="backup-actions">
-                                <button onclick="confirmRestore('${backup.filename}')" class="btn btn-warning">
-                                    <i class="fas fa-undo"></i> 恢复到此版本
-                                </button>
-                                <button onclick="downloadBackup('${backup.filename}')" class="btn btn-info">
-                                    <i class="fas fa-download"></i> 下载
-                                </button>
-                                <button onclick="confirmDeleteBackup('${backup.filename}')" class="btn btn-danger">
-                                    <i class="fas fa-trash"></i> 删除
-                                </button>
-                            </div>
+            container.innerHTML = data.releases.map(release => {
+                const isCurrent = release.tag_name === data.current_version;
+                return `
+                <div class="release-card ${isCurrent ? 'current-release' : ''}">
+                    <div class="release-header">
+                        <div class="release-title">
+                            <h4>${release.name} <span class="tag">${release.tag_name}</span></h4>
+                            <p class="release-date">${new Date(release.published_at).toLocaleString()}</p>
                         </div>
-                    `;
-                });
-                html += '</div>';
-                backupsDiv.innerHTML = html;
-            } else {
-                backupsDiv.innerHTML = '<div class="no-backups">暂无备份文件</div>';
-            }
-        } else {
-            backupsDiv.innerHTML = `<div class="error-message">加载备份失败: ${data.error}</div>`;
-        }
-    } catch (error) {
-        backupsDiv.innerHTML = `<div class="error-message">请求失败: ${error}</div>`;
-    }
-}
-
-// 确认恢复备份函数
-async function confirmRestore(backupFilename) {
-    if (!confirm(`确定要从备份 ${backupFilename} 恢复吗？\n\n这将覆盖当前文件，操作不可逆！`)) {
-        return;
-    }
-    
-    const statusDiv = document.getElementById('update-status');
-    statusDiv.innerHTML = '<div class="loading">恢复中，请查看终端日志...</div>';
-    
-    try {
-        const response = await fetch('/restore_backup', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ backup_filename: backupFilename })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            statusDiv.innerHTML = `
-                <div class="success">
-                    <h3 style="color: #4CAF50;">✅ 恢复成功！</h3>
-                    <p>${data.message}</p>
-                    <p>请重启机器人使恢复生效</p>
-                </div>
-            `;
-        } else {
-            statusDiv.innerHTML = `
-                <div class="error-message">
-                    <h3 style="color: #F44336;">❌ 恢复失败</h3>
-                    <p>${data.error}</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        statusDiv.innerHTML = `
-            <div class="error-message">
-                <h3 style="color: #4CAF50;">⏳ 恢复进行中，连接已断开，重启后刷新页面即可</h3>
-                <p>${error}</p>
-            </div>
-        `;
-    }
-}
-
-// 手动备份函数
-async function manualBackup() {
-    const statusDiv = document.getElementById('update-status');
-    statusDiv.innerHTML = '<div class="loading">正在创建手动备份，请稍候...</div>';
-    
-    try {
-        const response = await fetch('/manual_backup', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            statusDiv.innerHTML = `
-                <div class="success">
-                    <h3 style="color: #4CAF50;">✅ 手动备份成功！</h3>
-                    <p>${data.message}</p>
-                    <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; 
-                         word-break: break-all; overflow-wrap: break-word;">
-                        <p style="margin: 5px 0; word-break: break-word;"><strong>插件备份:</strong> ${data.plugin_backup}</p>
-                        <p style="margin: 5px 0; word-break: break-word;"><strong>配置备份:</strong> ${data.config_backup}</p>
+                        <div class="release-actions">
+                            ${isCurrent ? '<span class="current-badge">当前运行中</span>' : `<button onclick="performUpdate('${release.tag_name}')" class="btn btn-success btn-sm">强制更新</button>`}
+                        </div>
                     </div>
-                    <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
-                        备份文件保存在 data/backups/ 和 data/config_backups/ 目录中
-                    </p>
-                </div>
-            `;
-            
-            // 刷新备份列表
-            loadBackups();
-        } else {
-            statusDiv.innerHTML = `
-                <div class="error-message">
-                    <h3 style="color: #F44336;">❌ 手动备份失败</h3>
-                    <p>${data.error}</p>
-                </div>
-            `;
+                </div>`;
+            }).join('');
         }
-    } catch (error) {
-        statusDiv.innerHTML = `
-            <div class="error-message">
-                <h3 style="color: #F44336;">❌ 请求失败</h3>
-                <p>${error}</p>
-            </div>
-        `;
-    }
+    } catch (e) { container.innerHTML = '<div class="error">获取版本列表失败</div>'; }
 }
 
-// 下载备份文件函数
-async function downloadBackup(backupFilename) {
-    // 直接在新窗口打开下载链接
-    window.open(`/download_backup/${encodeURIComponent(backupFilename)}`, '_blank');
-    
-    // 显示成功消息
+async function performUpdate(tag) {
+    if (!confirm(`确定要将插件更新到 ${tag} 吗？\n更新前系统会自动为您创建一份当前版本的本地备份。`)) return;
     const statusDiv = document.getElementById('update-status');
-    statusDiv.innerHTML = `
-        <div class="success">
-            <h3 style="color: #4CAF50;">✅ 下载开始</h3>
-            <p>备份文件 ${backupFilename} 正在下载中...</p>
-        </div>
-    `;
-}
-
-// 确认删除备份函数
-async function confirmDeleteBackup(backupFilename) {
-    if (!confirm(`确定要删除备份文件 ${backupFilename} 吗？\n\n此操作不可撤销！`)) {
-        return;
-    }
-    
+    statusDiv.innerHTML = '<div class="loading">正在下载并解压更新包，这可能需要一分钟...</div>';
     try {
-        const response = await fetch('/delete_backup', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ backup_filename: backupFilename })
+        const res = await fetch('/perform_update', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ release_tag: tag })
         });
-        
-        const data = await response.json();
-        
+        const data = await res.json();
         if (data.success) {
-            alert('✅ 备份文件删除成功');
-            loadBackups(); // 重新加载备份列表
+            statusDiv.innerHTML = '<div class="success"><h3>更新成功！</h3><p>系统已完成自动备份并应用新版本。请重启机器人。</p></div>';
+            alert('更新成功，系统即将重启或请手动重启。');
         } else {
-            alert(`❌ 删除失败: ${data.error}`);
+            statusDiv.innerHTML = `<div class="error">更新失败: ${data.error}</div>`;
         }
-    } catch (error) {
-        alert(`❌ 请求失败: ${error}`);
-    }
+    } catch (e) { statusDiv.innerHTML = '<div class="error">机器人正在重启，请稍后刷新页面...</div>'; }
 }
 
-function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+async function manualBackup() {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 备份中...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/manual_backup', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) { 
+            alert('备份成功！已同时尝试同步至云端（如果已开启）。'); 
+            loadBackups(); 
+        } else {
+            alert('备份失败: ' + data.error);
+        }
+    } catch (e) { alert('备份请求异常'); }
+    btn.innerHTML = originalText;
+    btn.disabled = false;
 }
 
-// 页面加载时自动检查更新和加载备份列表
-document.addEventListener('DOMContentLoaded', function() {
+async function confirmRestore(filename) {
+    if (!confirm(`警告：确定要恢复本地备份 ${filename} 吗？\n这会覆盖当前的所有插件文件！`)) return;
+    try {
+        const res = await fetch('/restore_backup', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ backup_filename: filename })
+        });
+        const data = await res.json();
+        if (data.success) alert('恢复成功，请重启机器人以生效。');
+    } catch (e) { alert('系统正在处理恢复，请稍后重连。'); }
+}
+
+async function confirmDeleteBackup(filename) {
+    if (!confirm(`确定要永久删除备份 ${filename} 吗？`)) return;
+    try {
+        const res = await fetch('/delete_backup', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ backup_filename: filename })
+        });
+        const data = await res.json();
+        if (data.success) loadBackups();
+    } catch (e) { alert('删除失败'); }
+}
+
+function downloadBackup(f) { window.open(`/download_backup/${encodeURIComponent(f)}`, '_blank'); }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+document.addEventListener('DOMContentLoaded', () => {
     checkForUpdates();
-    loadBackups();
-});
-
-// 添加全局点击事件关闭模态框
-document.addEventListener('click', function(event) {
-    const modals = document.querySelectorAll('.modal');
-    modals.forEach(modal => {
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
+    switchBackupTab('local');
 });
 </script>
 {% endblock %}

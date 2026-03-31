@@ -1,0 +1,812 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card animate-in">
+    <h2><i class="fas fa-archive"></i> 备份管理</h2>
+    <p>统一管理数据库与插件备份，支持本地恢复、批量删除、云端同步、云端恢复与云端批量删除。</p>
+
+    <!-- 全局进度条 -->
+    <div id="batch-progress-wrap" class="hidden" style="margin-bottom: 15px;">
+        <div class="progress-head">
+            <span id="batch-progress-title">处理中...</span>
+            <span id="batch-progress-text">0 / 0</span>
+        </div>
+        <div class="progress-bar-outer">
+            <div id="batch-progress-bar" class="progress-bar-inner" style="width: 0%;"></div>
+        </div>
+    </div>
+
+    <div class="tab-nav">
+        <button class="tab-link active" id="tab-btn-db" onclick="switchTab('db', this)">
+            <i class="fas fa-database"></i> 数据库备份
+        </button>
+        <button class="tab-link" id="tab-btn-plugin" onclick="switchTab('plugin', this)">
+            <i class="fas fa-cubes"></i> 插件备份
+        </button>
+    </div>
+
+    <!-- ================= 数据库备份 ================= -->
+    <div id="tab-db" class="tab-pane active">
+        <div class="card" style="margin-top: 10px;">
+            <h3><i class="fas fa-server"></i> 数据库备份 / 恢复</h3>
+            <div class="form-actions">
+                <button class="btn btn-success" onclick="manualDbBackup()">
+                    <i class="fas fa-plus-circle"></i> 立即数据库备份
+                </button>
+                <button class="btn btn-info" onclick="loadDbBackups()">
+                    <i class="fas fa-sync"></i> 刷新本地
+                </button>
+                <button class="btn btn-info" onclick="loadCloudDbBackups()">
+                    <i class="fas fa-cloud"></i> 刷新云端
+                </button>
+            </div>
+
+            <div class="info-item" style="margin-top: 15px;">
+                <h4><i class="fas fa-check-square"></i> 恢复数据库选择（至少1个）</h4>
+                <div class="db-select-grid">
+                    <label><input type="checkbox" class="db-check" value="xiuxian.db" checked> xiuxian.db</label>
+                    <label><input type="checkbox" class="db-check" value="xiuxian_impart.db" checked> xiuxian_impart.db</label>
+                    <label><input type="checkbox" class="db-check" value="player.db" checked> player.db</label>
+                    <label><input type="checkbox" class="db-check" value="trade.db" checked> trade.db</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 本地数据库备份（可折叠） -->
+        <div class="collapse-card" style="margin-top:12px;">
+            <div class="collapse-header" onclick="toggleSection('db-local')">
+                <h3><i class="fas fa-hdd"></i> 本地数据库备份</h3>
+                <button class="btn btn-sm btn-info" id="btn-db-local" type="button">收起</button>
+            </div>
+            <div id="section-db-local" class="collapse-body">
+                <div id="db-backups-list"><div class="loading">加载中...</div></div>
+            </div>
+        </div>
+
+        <!-- 云端数据库备份（可折叠） -->
+        <div class="collapse-card" style="margin-top:12px;">
+            <div class="collapse-header" onclick="toggleSection('db-cloud')">
+                <h3><i class="fas fa-cloud"></i> 云端数据库备份</h3>
+                <button class="btn btn-sm btn-info" id="btn-db-cloud" type="button">收起</button>
+            </div>
+            <div id="section-db-cloud" class="collapse-body">
+                <div id="cloud-db-backups-list"><div class="loading">加载中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 插件备份 ================= -->
+    <div id="tab-plugin" class="tab-pane">
+        <div class="card" style="margin-top: 10px;">
+            <h3><i class="fas fa-box-open"></i> 插件备份 / 恢复</h3>
+            <div class="form-actions">
+                <button class="btn btn-success" onclick="manualPluginBackup()">
+                    <i class="fas fa-plus-circle"></i> 立即插件备份
+                </button>
+                <button class="btn btn-info" onclick="loadPluginBackups()">
+                    <i class="fas fa-sync"></i> 刷新本地
+                </button>
+                <button class="btn btn-info" onclick="loadCloudPluginBackups()">
+                    <i class="fas fa-cloud"></i> 刷新云端
+                </button>
+            </div>
+        </div>
+
+        <!-- 本地插件备份（可折叠） -->
+        <div class="collapse-card" style="margin-top:12px;">
+            <div class="collapse-header" onclick="toggleSection('plugin-local')">
+                <h3><i class="fas fa-folder-open"></i> 本地插件备份</h3>
+                <button class="btn btn-sm btn-info" id="btn-plugin-local" type="button">收起</button>
+            </div>
+            <div id="section-plugin-local" class="collapse-body">
+                <div id="plugin-backups-list"><div class="loading">加载中...</div></div>
+            </div>
+        </div>
+
+        <!-- 云端插件备份（可折叠） -->
+        <div class="collapse-card" style="margin-top:12px;">
+            <div class="collapse-header" onclick="toggleSection('plugin-cloud')">
+                <h3><i class="fas fa-cloud-download-alt"></i> 云端插件备份</h3>
+                <button class="btn btn-sm btn-info" id="btn-plugin-cloud" type="button">收起</button>
+            </div>
+            <div id="section-plugin-cloud" class="collapse-body">
+                <div id="cloud-plugin-backups-list"><div class="loading">加载中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="backup-status" style="margin-top: 12px;"></div>
+</div>
+
+<style>
+.hidden { display: none; }
+
+.db-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.db-select-grid label {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.backups-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+.backup-card.cloud-item {
+    border-left: 4px solid var(--info-color);
+    background: linear-gradient(to right, rgba(23, 162, 184, 0.05), transparent);
+}
+.backup-row-head {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+.backup-row-head strong {
+    word-break: break-all;
+}
+.backup-detail-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+    margin-bottom: 6px;
+}
+.backup-detail-row strong { color: var(--text-primary); }
+
+/* 进度条 */
+.progress-head {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+}
+.progress-bar-outer {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+.progress-bar-inner {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-color), var(--info-color));
+    transition: width 0.25s ease;
+}
+
+/* 折叠区 */
+.collapse-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+.collapse-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+}
+.collapse-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+.collapse-body {
+    max-height: 3000px;
+    overflow: hidden;
+    transition: max-height .25s ease, opacity .2s ease, padding .2s ease;
+    opacity: 1;
+    padding: 10px;
+}
+.collapse-body.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .backups-container { grid-template-columns: 1fr; }
+}
+</style>
+
+<script>
+/* ====================== 勾选缓存 ====================== */
+const selectedLocalPluginBackups = new Set();
+const selectedCloudPluginBackups = new Set();
+const selectedLocalDbBackups = new Set();
+const selectedCloudDbBackups = new Set();
+
+/* ====================== 折叠状态 ====================== */
+const sectionState = {
+    'db-local': true,
+    'db-cloud': true,
+    'plugin-local': true,
+    'plugin-cloud': true
+};
+
+/* ====================== UI 工具 ====================== */
+function setStatus(msg, type='info') {
+    const box = document.getElementById('backup-status');
+    if (!msg) { box.innerHTML = ''; return; }
+    if (type === 'error') box.innerHTML = `<div class="error">${msg}</div>`;
+    else if (type === 'success') box.innerHTML = `<div class="success">${msg}</div>`;
+    else box.innerHTML = `<div class="loading">${msg}</div>`;
+}
+
+function switchTab(type, el){
+    document.querySelectorAll('.tab-link').forEach(x=>x.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.getElementById('tab-db').classList.remove('active');
+    document.getElementById('tab-plugin').classList.remove('active');
+    document.getElementById('tab-'+type).classList.add('active');
+}
+
+function getSelectedDbs(){
+    return Array.from(document.querySelectorAll('.db-check:checked')).map(x=>x.value);
+}
+
+/* ====================== 折叠 ====================== */
+function toggleSection(key) {
+    sectionState[key] = !sectionState[key];
+    applySectionState(key);
+}
+function applySectionState(key) {
+    const body = document.getElementById(`section-${key}`);
+    const btn = document.getElementById(`btn-${key}`);
+    if (!body || !btn) return;
+    if (sectionState[key]) {
+        body.classList.remove('collapsed');
+        btn.innerText = '收起';
+    } else {
+        body.classList.add('collapsed');
+        btn.innerText = '展开';
+    }
+}
+function initSectionStates() {
+    Object.keys(sectionState).forEach(applySectionState);
+}
+
+/* ====================== 进度条 ====================== */
+function showBatchProgress(title='处理中...') {
+    const wrap = document.getElementById('batch-progress-wrap');
+    document.getElementById('batch-progress-title').innerText = title;
+    document.getElementById('batch-progress-text').innerText = '0 / 0';
+    document.getElementById('batch-progress-bar').style.width = '0%';
+    wrap.classList.remove('hidden');
+}
+function updateBatchProgress(current, total, title=null) {
+    if (title) document.getElementById('batch-progress-title').innerText = title;
+    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+    document.getElementById('batch-progress-text').innerText = `${current} / ${total}`;
+    document.getElementById('batch-progress-bar').style.width = `${percent}%`;
+}
+function hideBatchProgress(delay=600) {
+    setTimeout(() => {
+        document.getElementById('batch-progress-wrap').classList.add('hidden');
+    }, delay);
+}
+
+/* ====================== 勾选工具（4组） ====================== */
+function getGroupConfig(group) {
+    switch(group) {
+        case 'local-plugin': return { cls: '.plugin-local-check', setRef: selectedLocalPluginBackups };
+        case 'cloud-plugin': return { cls: '.plugin-cloud-check', setRef: selectedCloudPluginBackups };
+        case 'local-db': return { cls: '.db-local-check', setRef: selectedLocalDbBackups };
+        case 'cloud-db': return { cls: '.db-cloud-check', setRef: selectedCloudDbBackups };
+        default: return null;
+    }
+}
+
+function updateSelectionCache(checkbox, group) {
+    const cfg = getGroupConfig(group);
+    if (!cfg) return;
+    if (checkbox.checked) cfg.setRef.add(checkbox.value);
+    else cfg.setRef.delete(checkbox.value);
+}
+
+function reapplySelections(group) {
+    const cfg = getGroupConfig(group);
+    if (!cfg) return;
+    document.querySelectorAll(cfg.cls).forEach(cb => {
+        cb.checked = cfg.setRef.has(cb.value);
+    });
+}
+
+function toggleSelectAll(group, checked) {
+    const cfg = getGroupConfig(group);
+    if (!cfg) return;
+    document.querySelectorAll(cfg.cls).forEach(cb => {
+        cb.checked = checked;
+        updateSelectionCache(cb, group);
+    });
+}
+
+function invertSelection(group) {
+    const cfg = getGroupConfig(group);
+    if (!cfg) return;
+    document.querySelectorAll(cfg.cls).forEach(cb => {
+        cb.checked = !cb.checked;
+        updateSelectionCache(cb, group);
+    });
+}
+
+/* ====================== 数据库 ====================== */
+async function manualDbBackup(){
+    setStatus('正在执行数据库备份...');
+    const res = await fetch('/manual_db_backup',{method:'POST'});
+    const data = await res.json();
+    if (data.success) {
+        setStatus(data.message, 'success');
+        loadDbBackups();
+    } else setStatus(data.error || '备份失败', 'error');
+}
+
+async function loadDbBackups(){
+    const el = document.getElementById('db-backups-list');
+    el.innerHTML = '<div class="loading">加载中...</div>';
+    const res = await fetch('/get_db_backups');
+    const data = await res.json();
+    if(!data.success){ el.innerHTML = `<div class="error">加载失败: ${data.error}</div>`; return; }
+    if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无本地数据库备份</div>'; return; }
+
+    el.innerHTML = `
+        <div class="form-actions" style="margin-bottom:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-db', true)">全选</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-db', false)">全不选</button>
+            <button class="btn btn-info btn-sm" onclick="invertSelection('local-db')">反选</button>
+            <button class="btn btn-danger btn-sm" onclick="batchDeleteLocalDbBackups()">
+                <i class="fas fa-trash-alt"></i> 批量删除
+            </button>
+        </div>
+        <div class="backups-container">
+            ${data.backups.map(b=>`
+                <div class="backup-card">
+                    <div class="backup-row-head">
+                        <input type="checkbox" class="db-local-check" value="${b.filename}"
+                               onchange="updateSelectionCache(this, 'local-db')">
+                        <strong><i class="fas fa-file-archive"></i> ${b.filename}</strong>
+                    </div>
+                    <div class="backup-details" style="margin-top:10px;">
+                        <div class="backup-detail-row"><strong>大小:</strong><span>${(b.size/1048576).toFixed(2)} MB</span></div>
+                        <div class="backup-detail-row"><strong>创建时间:</strong><span>${new Date(b.created_at).toLocaleString()}</span></div>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-warning btn-sm" onclick="restoreDbBackup('${b.filename}')">
+                            <i class="fas fa-undo"></i> 恢复
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    reapplySelections('local-db');
+}
+
+async function restoreDbBackup(filename){
+    const selected = getSelectedDbs();
+    if(selected.length < 1){ alert('最少选择1个数据库'); return; }
+    if(!confirm(`确认恢复 ${filename} ?\n将恢复: ${selected.join(', ')}`)) return;
+
+    setStatus('正在恢复数据库，请稍候...');
+    const res = await fetch('/restore_db_backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({backup_filename:filename, selected_dbs:selected})
+    });
+    const data = await res.json();
+    if (data.success) setStatus(data.message, 'success');
+    else setStatus(data.error || '恢复失败', 'error');
+}
+
+async function loadCloudDbBackups(){
+    const el = document.getElementById('cloud-db-backups-list');
+    el.innerHTML = '<div class="loading">加载中...</div>';
+    const res = await fetch('/get_cloud_db_backups');
+    const data = await res.json();
+    if(!data.success){ el.innerHTML = `<div class="error">加载失败: ${data.error}</div>`; return; }
+    if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无云端数据库备份</div>'; return; }
+
+    el.innerHTML = `
+        <div class="form-actions" style="margin-bottom:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-db', true)">全选</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-db', false)">全不选</button>
+            <button class="btn btn-info btn-sm" onclick="invertSelection('cloud-db')">反选</button>
+            <button class="btn btn-info btn-sm" onclick="batchSyncCloudDbBackups(false)">
+                <i class="fas fa-cloud-download-alt"></i> 批量同步到本地
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="batchDeleteCloudDbBackups()">
+                <i class="fas fa-trash-alt"></i> 批量删除云端
+            </button>
+        </div>
+        <div class="backups-container">
+            ${data.backups.map(b=>`
+                <div class="backup-card cloud-item">
+                    <div class="backup-row-head">
+                        <input type="checkbox" class="db-cloud-check" value="${b.filename}"
+                               onchange="updateSelectionCache(this, 'cloud-db')">
+                        <strong><i class="fas fa-cloud"></i> ${b.filename}</strong>
+                    </div>
+                    <div class="backup-details" style="margin-top:10px;">
+                        <div class="backup-detail-row"><strong>大小:</strong><span>${(b.size/1048576).toFixed(2)} MB</span></div>
+                        <div class="backup-detail-row"><strong>最后修改:</strong><span>${b.modified}</span></div>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-info btn-sm" onclick="syncCloudDb('${b.filename}')">
+                            <i class="fas fa-sync"></i> 同步到本地
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="cloudRestoreDb('${b.filename}')">
+                            <i class="fas fa-cloud-download-alt"></i> 云端恢复
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    reapplySelections('cloud-db');
+}
+
+async function syncCloudDb(filename, overwrite=false){
+    const res = await fetch('/sync_cloud_db_backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({filename, overwrite})
+    });
+    const data = await res.json();
+    if(data.success){ setStatus(data.message, 'success'); loadDbBackups(); return; }
+    if(data.error === 'FILE_EXISTS'){
+        if(confirm(data.message)) return syncCloudDb(filename, true);
+    } else setStatus(data.error || '同步失败', 'error');
+}
+
+async function cloudRestoreDb(filename){
+    const selected = getSelectedDbs();
+    if(selected.length < 1){ alert('最少选择1个数据库'); return; }
+    if(!confirm(`确认云端恢复 ${filename} ?\n将恢复: ${selected.join(', ')}`)) return;
+
+    setStatus('正在执行云端恢复...');
+    const res = await fetch('/cloud_restore_db_backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({filename, selected_dbs:selected})
+    });
+    const data = await res.json();
+    if (data.success) setStatus(data.message, 'success');
+    else setStatus(data.error || '云恢复失败', 'error');
+}
+
+/* ===== 数据库批量 ===== */
+async function batchDeleteLocalDbBackups() {
+    const filenames = Array.from(selectedLocalDbBackups);
+    if (!filenames.length) return alert('请先勾选要删除的本地数据库备份');
+    if (!confirm(`确认删除选中的 ${filenames.length} 个数据库备份吗？`)) return;
+
+    showBatchProgress('正在批量删除数据库备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_delete_db_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '批量删除失败', 'error');
+
+        (data.deleted || []).forEach(name => selectedLocalDbBackups.delete(name));
+        setStatus(data.message || '批量删除完成', 'success');
+        await loadDbBackups();
+    } catch (e) {
+        setStatus('批量删除请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+async function batchSyncCloudDbBackups(overwrite=false) {
+    const filenames = Array.from(selectedCloudDbBackups);
+    if (!filenames.length) return alert('请先勾选要同步的云端数据库备份');
+
+    showBatchProgress('正在批量同步云端数据库备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_sync_cloud_db_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames, overwrite })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '批量同步失败', 'error');
+
+        if ((data.exists || []).length > 0 && !overwrite) {
+            const ok = confirm(`有 ${data.exists.length} 个文件本地已存在，是否覆盖同步？`);
+            if (ok) {
+                hideBatchProgress(100);
+                return batchSyncCloudDbBackups(true);
+            }
+        }
+
+        setStatus(data.message || '批量同步完成', 'success');
+        await loadDbBackups();
+        await loadCloudDbBackups();
+    } catch (e) {
+        setStatus('批量同步请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+async function batchDeleteCloudDbBackups() {
+    const filenames = Array.from(selectedCloudDbBackups);
+    if (!filenames.length) return alert('请先勾选要删除的云端数据库备份');
+    if (!confirm(`确认删除云端选中的 ${filenames.length} 个数据库备份吗？\n此操作不可撤销！`)) return;
+
+    showBatchProgress('正在批量删除云端数据库备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_delete_cloud_db_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '云端批量删除失败', 'error');
+
+        (data.deleted || []).forEach(name => selectedCloudDbBackups.delete(name));
+        setStatus(data.message || '云端批量删除完成', 'success');
+        await loadCloudDbBackups();
+    } catch (e) {
+        setStatus('云端批量删除请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+/* ====================== 插件 ====================== */
+async function manualPluginBackup(){
+    setStatus('正在执行插件备份...');
+    const res = await fetch('/manual_backup',{method:'POST'});
+    const data = await res.json();
+    if(data.success){ setStatus('插件备份完成', 'success'); loadPluginBackups(); }
+    else setStatus('失败: ' + (data.error || '未知错误'), 'error');
+}
+
+async function loadPluginBackups(){
+    const el = document.getElementById('plugin-backups-list');
+    el.innerHTML = '<div class="loading">加载中...</div>';
+    const res = await fetch('/get_backups');
+    const data = await res.json();
+    if(!data.success){ el.innerHTML = `<div class="error">加载失败: ${data.error}</div>`; return; }
+    if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无本地插件备份</div>'; return; }
+
+    el.innerHTML = `
+        <div class="form-actions" style="margin-bottom:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-plugin', true)">全选</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-plugin', false)">全不选</button>
+            <button class="btn btn-info btn-sm" onclick="invertSelection('local-plugin')">反选</button>
+            <button class="btn btn-danger btn-sm" onclick="batchDeleteLocalPluginBackups()">
+                <i class="fas fa-trash-alt"></i> 批量删除
+            </button>
+        </div>
+        <div class="backups-container">
+            ${data.backups.map(b=>`
+                <div class="backup-card">
+                    <div class="backup-row-head">
+                        <input type="checkbox" class="plugin-local-check" value="${b.filename}"
+                               onchange="updateSelectionCache(this, 'local-plugin')">
+                        <strong><i class="fas fa-file-archive"></i> ${b.filename}</strong>
+                    </div>
+                    <div class="backup-details" style="margin-top:10px;">
+                        <div class="backup-detail-row"><strong>版本:</strong><span>${b.version || '-'}</span></div>
+                        <div class="backup-detail-row"><strong>大小:</strong><span>${(b.size/1048576).toFixed(2)} MB</span></div>
+                        <div class="backup-detail-row"><strong>时间:</strong><span>${new Date(b.created_at).toLocaleString()}</span></div>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-warning btn-sm" onclick="restorePlugin('${b.filename}')">
+                            <i class="fas fa-undo"></i> 恢复
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    reapplySelections('local-plugin');
+}
+
+async function restorePlugin(filename){
+    if(!confirm(`确认恢复插件备份 ${filename} ?`)) return;
+    setStatus('正在恢复插件...');
+    const res = await fetch('/restore_backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({backup_filename:filename})
+    });
+    const data = await res.json();
+    if (data.success) setStatus(data.message || '恢复成功', 'success');
+    else setStatus(data.error || '恢复失败', 'error');
+}
+
+async function loadCloudPluginBackups(){
+    const el = document.getElementById('cloud-plugin-backups-list');
+    el.innerHTML = '<div class="loading">加载中...</div>';
+    const res = await fetch('/get_cloud_backups');
+    const data = await res.json();
+    if(!data.success){ el.innerHTML = `<div class="error">加载失败: ${data.error}</div>`; return; }
+    if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无云端插件备份</div>'; return; }
+
+    el.innerHTML = `
+        <div class="form-actions" style="margin-bottom:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-plugin', true)">全选</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-plugin', false)">全不选</button>
+            <button class="btn btn-info btn-sm" onclick="invertSelection('cloud-plugin')">反选</button>
+            <button class="btn btn-info btn-sm" onclick="batchSyncCloudPluginBackups(false)">
+                <i class="fas fa-cloud-download-alt"></i> 批量同步到本地
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="batchDeleteCloudPluginBackups()">
+                <i class="fas fa-trash-alt"></i> 批量删除云端
+            </button>
+        </div>
+        <div class="backups-container">
+            ${data.backups.map(b=>`
+                <div class="backup-card cloud-item">
+                    <div class="backup-row-head">
+                        <input type="checkbox" class="plugin-cloud-check" value="${b.filename}"
+                               onchange="updateSelectionCache(this, 'cloud-plugin')">
+                        <strong><i class="fas fa-cloud"></i> ${b.filename}</strong>
+                    </div>
+                    <div class="backup-details" style="margin-top:10px;">
+                        <div class="backup-detail-row"><strong>大小:</strong><span>${(b.size/1048576).toFixed(2)} MB</span></div>
+                        <div class="backup-detail-row"><strong>修改:</strong><span>${b.modified}</span></div>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-warning btn-sm" onclick="cloudRestorePlugin('${b.filename}')">
+                            <i class="fas fa-cloud-download-alt"></i> 云端恢复
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    reapplySelections('cloud-plugin');
+}
+
+async function cloudRestorePlugin(filename){
+    if(!confirm(`确认云端恢复插件备份 ${filename} ?`)) return;
+    setStatus('正在执行云端插件恢复...');
+    const res = await fetch('/cloud_restore_backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({filename})
+    });
+    const data = await res.json();
+    if (data.success) setStatus(data.message || '恢复成功', 'success');
+    else setStatus(data.error || '恢复失败', 'error');
+}
+
+/* ===== 插件批量 ===== */
+async function batchDeleteLocalPluginBackups() {
+    const filenames = Array.from(selectedLocalPluginBackups);
+    if (!filenames.length) return alert('请先勾选要删除的本地备份');
+    if (!confirm(`确认删除选中的 ${filenames.length} 个本地备份吗？`)) return;
+
+    showBatchProgress('正在批量删除本地插件备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_delete_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '批量删除失败', 'error');
+
+        (data.deleted || []).forEach(name => selectedLocalPluginBackups.delete(name));
+        setStatus(data.message || '批量删除完成', 'success');
+        await loadPluginBackups();
+    } catch (e) {
+        setStatus('批量删除请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+async function batchSyncCloudPluginBackups(overwrite = false) {
+    const filenames = Array.from(selectedCloudPluginBackups);
+    if (!filenames.length) return alert('请先勾选要同步的云端备份');
+
+    showBatchProgress('正在批量同步云端插件备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_sync_cloud_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames, overwrite })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '批量同步失败', 'error');
+
+        if ((data.exists || []).length > 0 && !overwrite) {
+            const ok = confirm(`有 ${data.exists.length} 个文件本地已存在，是否覆盖同步？`);
+            if (ok) {
+                hideBatchProgress(100);
+                return batchSyncCloudPluginBackups(true);
+            }
+        }
+
+        setStatus(data.message || '批量同步完成', 'success');
+        await loadPluginBackups();
+        await loadCloudPluginBackups();
+    } catch (e) {
+        setStatus('批量同步请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+async function batchDeleteCloudPluginBackups() {
+    const filenames = Array.from(selectedCloudPluginBackups);
+    if (!filenames.length) return alert('请先勾选要删除的云端插件备份');
+    if (!confirm(`确认删除云端选中的 ${filenames.length} 个插件备份吗？\n此操作不可撤销！`)) return;
+
+    showBatchProgress('正在批量删除云端插件备份...');
+    updateBatchProgress(0, filenames.length);
+
+    try {
+        const res = await fetch('/batch_delete_cloud_backups', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filenames })
+        });
+        const data = await res.json();
+        updateBatchProgress(filenames.length, filenames.length);
+
+        if (!data.success) return setStatus(data.error || '云端批量删除失败', 'error');
+
+        (data.deleted || []).forEach(name => selectedCloudPluginBackups.delete(name));
+        setStatus(data.message || '云端批量删除完成', 'success');
+        await loadCloudPluginBackups();
+    } catch (e) {
+        setStatus('云端批量删除请求失败: ' + e, 'error');
+    } finally {
+        hideBatchProgress();
+    }
+}
+
+/* ====================== 初始化 ====================== */
+document.addEventListener('DOMContentLoaded', ()=>{
+    initSectionStates();
+    loadDbBackups();
+    loadCloudDbBackups();
+    loadPluginBackups();
+    loadCloudPluginBackups();
+});
+</script>
+{% endblock %}

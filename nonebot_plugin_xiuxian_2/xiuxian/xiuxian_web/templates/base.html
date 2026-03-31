@@ -49,6 +49,7 @@
                 <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
                 <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
                 <li><a href="{{ url_for('terminal') }}" class="{% if is_active('terminal') %}active{% endif %}"><i class="fas fa-terminal"></i> 终端</a></li>
+                <li><a href="{{ url_for('backups') }}" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-archive"></i> <span>备份管理</span></a></li>
                 <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
             </ul>
             

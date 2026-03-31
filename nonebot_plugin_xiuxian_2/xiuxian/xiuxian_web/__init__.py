@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import asyncio
 import json
 import re
 import ast
@@ -22,6 +23,7 @@ from nonebot import get_driver, get_bots, __version__ as nb_version
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
+from ..adapter_compat import MessageSegment
 from typing import Any
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
@@ -686,6 +688,181 @@ def get_backups():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route('/get_cloud_backups')
+def get_cloud_backups():
+    """获取云端备份列表"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    success, result = update_manager.list_webdav_backups()
+    if success:
+        return jsonify({"success": True, "backups": result})
+    else:
+        return jsonify({"success": False, "error": result})
+
+@app.route('/sync_cloud_backup', methods=['POST'])
+def sync_cloud_backup():
+    """将云端备份同步到本地，包含覆盖检测"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    data = request.get_json()
+    filename = data.get('filename')
+    overwrite = data.get('overwrite', False) # 是否允许覆盖
+    
+    if not filename:
+        return jsonify({"success": False, "error": "文件名不能为空"})
+    
+    local_path = Path() / "data" / "xiuxian" / "backups" / filename
+    
+    # 检测本地是否存在
+    if local_path.exists() and not overwrite:
+        return jsonify({
+            "success": False, 
+            "error": "FILE_EXISTS", 
+            "message": f"本地已存在同名备份文件 {filename}，是否覆盖下载？"
+        })
+
+    success, result = update_manager.download_from_webdav(filename)
+    if success:
+        return jsonify({"success": True, "message": f"已成功从云端同步: {filename}"})
+    else:
+        return jsonify({"success": False, "error": str(result)})
+
+@app.route('/cloud_restore_backup', methods=['POST'])
+def cloud_restore_backup():
+    """云端智能恢复：本地有则直接恢复，本地无则下载后恢复"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    
+    data = request.get_json()
+    filename = data.get('filename')
+    if not filename:
+        return jsonify({"success": False, "error": "无效文件名"})
+    
+    local_path = Path() / "data" / "xiuxian" / "backups" / filename
+    
+    # 步骤1：检查本地，没有就同步
+    if not local_path.exists():
+        logger.info(f"本地无备份 {filename}，正在从云端拉取并准备恢复...")
+        success, err = update_manager.download_from_webdav(filename)
+        if not success:
+            return jsonify({"success": False, "error": f"下载失败: {err}"})
+    else:
+        logger.info(f"本地已存在备份 {filename}，直接进行本地恢复流程")
+
+    # 步骤2：执行恢复
+    success, message = update_manager.restore_backup(filename)
+    if success:
+        return jsonify({"success": True, "message": message})
+    else:
+        return jsonify({"success": False, "error": message})
+
+@app.route('/cloud_backup_config', methods=['POST'])
+def cloud_backup_config():
+    """本地配置备份 + 上传云端"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        # 1) 先本地备份
+        backup_success, backup_result = update_manager.backup_all_configs()
+        if not backup_success:
+            return jsonify({"success": False, "error": f"本地备份失败: {backup_result}"})
+
+        backup_path = backup_result
+
+        # 2) 上传云端
+        upload_success, upload_msg = update_manager.upload_config_backup_to_webdav(backup_path)
+        if not upload_success:
+            return jsonify({"success": False, "error": upload_msg})
+
+        return jsonify({
+            "success": True,
+            "message": f"配置云备份成功：{Path(backup_path).name}"
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"云备份失败: {e}"})
+
+
+@app.route('/get_cloud_config_backups')
+def get_cloud_config_backups():
+    """获取云端配置备份列表"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        success, result = update_manager.list_webdav_config_backups()
+        if success:
+            return jsonify({"success": True, "backups": result})
+        return jsonify({"success": False, "error": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取云端配置备份失败: {e}"})
+
+
+@app.route('/sync_cloud_config_backup', methods=['POST'])
+def sync_cloud_config_backup():
+    """同步云端配置备份到本地（支持覆盖检测）"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        overwrite = data.get('overwrite', False)
+
+        if not filename:
+            return jsonify({"success": False, "error": "文件名不能为空"})
+
+        local_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / filename
+        if local_path.exists() and not overwrite:
+            return jsonify({
+                "success": False,
+                "error": "FILE_EXISTS",
+                "message": f"本地已存在同名配置备份 {filename}，是否覆盖下载？"
+            })
+
+        success, result = update_manager.download_config_backup_from_webdav(filename, overwrite=overwrite)
+        if success:
+            return jsonify({"success": True, "message": f"同步成功: {filename}"})
+        else:
+            if result == "FILE_EXISTS":
+                return jsonify({
+                    "success": False,
+                    "error": "FILE_EXISTS",
+                    "message": f"本地已存在同名配置备份 {filename}，是否覆盖下载？"
+                })
+            return jsonify({"success": False, "error": str(result)})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"同步失败: {e}"})
+
+
+@app.route('/cloud_restore_config_backup', methods=['POST'])
+def cloud_restore_config_backup():
+    """云端配置恢复（返回配置数据给前端，前端点击保存再落地）"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        if not filename:
+            return jsonify({"success": False, "error": "未指定备份文件"})
+
+        success, result = update_manager.cloud_restore_config_backup(filename)
+        if not success:
+            return jsonify({"success": False, "error": result})
+
+        return jsonify({
+            "success": True,
+            "data": result["data"],
+            "metadata": result.get("metadata", {}),
+            "message": "云端配置已加载，请点击保存所有配置应用。"
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"云恢复失败: {e}"})
+
 @app.route('/restore_backup', methods=['POST'])
 def restore_backup():
     if 'admin_id' not in session:
@@ -708,6 +885,306 @@ def restore_backup():
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@app.route('/backups')
+def backups():
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('backups.html')
+
+@app.route('/manual_db_backup', methods=['POST'])
+def manual_db_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    ok, msg = update_manager.backup_db_files()
+    return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
+
+
+@app.route('/get_db_backups')
+def get_db_backups():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        backups = update_manager.get_db_backups()
+        return jsonify({"success": True, "backups": backups})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/restore_db_backup', methods=['POST'])
+def restore_db_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    data = request.get_json() or {}
+    backup_filename = data.get("backup_filename")
+    selected_dbs = data.get("selected_dbs", [])
+    if not backup_filename:
+        return jsonify({"success": False, "error": "未指定备份文件"})
+    if not selected_dbs:
+        return jsonify({"success": False, "error": "至少选择一个数据库"})
+    ok, msg = update_manager.restore_db_files(backup_filename, selected_dbs)
+    return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
+
+
+@app.route('/get_cloud_db_backups')
+def get_cloud_db_backups():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    ok, result = update_manager.list_webdav_db_backups()
+    if ok:
+        return jsonify({"success": True, "backups": result})
+    return jsonify({"success": False, "error": result})
+
+
+@app.route('/sync_cloud_db_backup', methods=['POST'])
+def sync_cloud_db_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    data = request.get_json() or {}
+    filename = data.get("filename")
+    overwrite = data.get("overwrite", False)
+    if not filename:
+        return jsonify({"success": False, "error": "文件名不能为空"})
+
+    ok, result = update_manager.download_db_backup_from_webdav(filename, overwrite=overwrite)
+    if ok:
+        return jsonify({"success": True, "message": f"同步成功: {filename}"})
+    if result == "FILE_EXISTS":
+        return jsonify({"success": False, "error": "FILE_EXISTS", "message": f"本地已存在 {filename}，是否覆盖？"})
+    return jsonify({"success": False, "error": str(result)})
+
+
+@app.route('/cloud_restore_db_backup', methods=['POST'])
+def cloud_restore_db_backup():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    data = request.get_json() or {}
+    filename = data.get("filename")
+    selected_dbs = data.get("selected_dbs", [])
+    if not filename:
+        return jsonify({"success": False, "error": "未指定云端备份文件"})
+    if not selected_dbs:
+        return jsonify({"success": False, "error": "至少选择一个数据库"})
+
+    ok, msg = update_manager.cloud_restore_db_files(filename, selected_dbs)
+    return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
+
+@app.route('/batch_delete_backups', methods=['POST'])
+def batch_delete_backups():
+    """批量删除本地插件备份（data/xiuxian/backups/*.zip）"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待删除文件列表"})
+
+        backup_dir = Path() / "data" / "xiuxian" / "backups"
+        deleted, failed = [], []
+
+        for name in filenames:
+            try:
+                # 防止路径穿越
+                safe_name = Path(name).name
+                f = backup_dir / safe_name
+                if f.exists() and f.is_file():
+                    f.unlink()
+                    deleted.append(safe_name)
+                else:
+                    failed.append({"filename": safe_name, "reason": "文件不存在"})
+            except Exception as e:
+                failed.append({"filename": str(name), "reason": str(e)})
+
+        return jsonify({
+            "success": True,
+            "message": f"批量删除完成，成功 {len(deleted)} 个，失败 {len(failed)} 个",
+            "deleted": deleted,
+            "failed": failed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量删除失败: {str(e)}"})
+
+
+@app.route('/batch_sync_cloud_backups', methods=['POST'])
+def batch_sync_cloud_backups():
+    """批量同步云端插件备份到本地"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        overwrite = data.get('overwrite', False)
+
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待同步文件列表"})
+
+        success_list, failed_list, exists_list = [], [], []
+        for filename in filenames:
+            safe_name = Path(filename).name
+            local_path = Path() / "data" / "xiuxian" / "backups" / safe_name
+
+            # 覆盖检测
+            if local_path.exists() and not overwrite:
+                exists_list.append(safe_name)
+                continue
+
+            ok, result = update_manager.download_from_webdav(safe_name)
+            if ok:
+                success_list.append(safe_name)
+            else:
+                failed_list.append({
+                    "filename": safe_name,
+                    "reason": str(result)
+                })
+
+        return jsonify({
+            "success": True,
+            "message": f"批量同步完成：成功 {len(success_list)}，已存在 {len(exists_list)}，失败 {len(failed_list)}",
+            "synced": success_list,
+            "exists": exists_list,
+            "failed": failed_list
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量同步失败: {str(e)}"})
+
+@app.route('/batch_delete_db_backups', methods=['POST'])
+def batch_delete_db_backups():
+    """批量删除本地数据库备份"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待删除文件列表"})
+
+        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
+        deleted, failed = [], []
+
+        for name in filenames:
+            safe_name = Path(name).name
+            f = backup_dir / safe_name
+            try:
+                if f.exists() and f.is_file():
+                    f.unlink()
+                    deleted.append(safe_name)
+                else:
+                    failed.append({"filename": safe_name, "reason": "文件不存在"})
+            except Exception as e:
+                failed.append({"filename": safe_name, "reason": str(e)})
+
+        return jsonify({
+            "success": True,
+            "message": f"数据库备份删除完成：成功 {len(deleted)}，失败 {len(failed)}",
+            "deleted": deleted,
+            "failed": failed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量删除失败: {e}"})
+
+
+@app.route('/batch_sync_cloud_db_backups', methods=['POST'])
+def batch_sync_cloud_db_backups():
+    """批量同步云端数据库备份到本地"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        overwrite = data.get('overwrite', False)
+
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待同步文件列表"})
+
+        synced, exists, failed = [], [], []
+
+        for filename in filenames:
+            safe_name = Path(filename).name
+            local_path = Path() / "data" / "xiuxian" / "backups" / "db_backup" / safe_name
+
+            if local_path.exists() and not overwrite:
+                exists.append(safe_name)
+                continue
+
+            ok, result = update_manager.download_db_backup_from_webdav(safe_name, overwrite=overwrite)
+            if ok:
+                synced.append(safe_name)
+            else:
+                if str(result) == "FILE_EXISTS":
+                    exists.append(safe_name)
+                else:
+                    failed.append({"filename": safe_name, "reason": str(result)})
+
+        return jsonify({
+            "success": True,
+            "message": f"数据库云同步完成：成功 {len(synced)}，已存在 {len(exists)}，失败 {len(failed)}",
+            "synced": synced,
+            "exists": exists,
+            "failed": failed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量同步失败: {e}"})
+
+@app.route('/batch_delete_cloud_backups', methods=['POST'])
+def batch_delete_cloud_backups():
+    """批量删除云端插件备份"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待删除文件列表"})
+
+        deleted, failed = [], []
+        for name in filenames:
+            safe_name = Path(name).name
+            ok, msg = update_manager.delete_webdav_backup(safe_name)
+            if ok:
+                deleted.append(safe_name)
+            else:
+                failed.append({"filename": safe_name, "reason": msg})
+
+        return jsonify({
+            "success": True,
+            "message": f"云端批量删除完成：成功 {len(deleted)}，失败 {len(failed)}",
+            "deleted": deleted,
+            "failed": failed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量删除失败: {e}"})
+
+
+@app.route('/batch_delete_cloud_db_backups', methods=['POST'])
+def batch_delete_cloud_db_backups():
+    """批量删除云端数据库备份"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json() or {}
+        filenames = data.get('filenames', [])
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({"success": False, "error": "请提供待删除文件列表"})
+
+        deleted, failed = [], []
+        for name in filenames:
+            safe_name = Path(name).name
+            ok, msg = update_manager.delete_webdav_db_backup(safe_name)
+            if ok:
+                deleted.append(safe_name)
+            else:
+                failed.append({"filename": safe_name, "reason": msg})
+
+        return jsonify({
+            "success": True,
+            "message": f"云端数据库批量删除完成：成功 {len(deleted)}，失败 {len(failed)}",
+            "deleted": deleted,
+            "failed": failed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"批量删除失败: {e}"})
 
 # 配置导入导出路由
 @app.route('/export_config', methods=['POST'])
@@ -2180,6 +2657,48 @@ CONFIG_EDITABLE_FIELDS = {
         "description": "io或base64",
         "type": "str",
         "category": "消息设置"
+    },
+    "cloud_backup_enabled": {
+        "name": "开启自动云备份",
+        "description": "手动备份或更新插件时，是否自动上传到云端",
+        "type": "bool",
+        "category": "云备份设置"
+    },
+    "webdav_url": {
+        "name": "WebDAV 服务器地址",
+        "description": "例如：http://192.168.1.10:5244/dav",
+        "type": "str",
+        "category": "云备份设置"
+    },
+    "webdav_user": {
+        "name": "WebDAV 账号",
+        "description": "云存储的登录用户名",
+        "type": "str",
+        "category": "云备份设置"
+    },
+    "webdav_pass": {
+        "name": "WebDAV 密码",
+        "description": "云存储的登录密码或授权码",
+        "type": "str",
+        "category": "云备份设置"
+    },
+    "webdav_target_subdir": {
+        "name": "云端存储根目录",
+        "description": "WebDAV 路径下的存放目录，如：backup/xiuxian",
+        "type": "str",
+        "category": "云备份设置"
+    },
+    "webdav_backup_folder": {
+        "name": "备份二级目录",
+        "description": "根目录下再套一层的目录名，默认：backups",
+        "type": "str",
+        "category": "云备份设置"
+    },
+    "webdav_delete_days": {
+        "name": "云端自动清理天数",
+        "description": "删除云端多少天之前的旧备份。0 表示永不删除",
+        "type": "int",
+        "category": "云备份设置"
     }
 }
 
@@ -2202,7 +2721,10 @@ def get_config_values():
     return values
 
 def save_config_values(new_values):
-    """保存配置到文件"""
+    """
+    保存配置到文件。
+    支持自动格式化布尔值、数字、列表以及包含特殊字符的 WebDAV 字符串。
+    """
     config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
     
     if not config_file_path.exists():
@@ -2213,52 +2735,41 @@ def save_config_values(new_values):
         with open(config_file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 更新配置值
         for field_name, new_value in new_values.items():
+            # 只有在可编辑字段列表中的项才允许处理
             if field_name in CONFIG_EDITABLE_FIELDS:
                 field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
                 
-                # 根据类型格式化值
-                if field_type == "list[int]":
-                    # 清理输入：移除所有非数字字符（除了逗号和空格）
+                # --- 1. 布尔类型转换 ---
+                if field_type == "bool":
+                    # 处理来自 Web 的 'true'/'false' 字符串或 checkbox 的 'on'
+                    if str(new_value).lower() in ('true', '1', 'yes', 'on'):
+                        formatted_value = "True"
+                    else:
+                        formatted_value = "False"
+                
+                # --- 2. 整数列表转换 [1, 2, 3] ---
+                elif field_type == "list[int]":
                     if isinstance(new_value, str):
-                        # 移除方括号、引号等字符
-                        cleaned_value = re.sub(r'[\[\]\'"\s]', '', new_value)
-                        if cleaned_value:
-                            # 分割并转换为整数列表
-                            try:
-                                int_list = [int(x.strip()) for x in cleaned_value.split(',') if x.strip()]
-                                formatted_value = f"[{', '.join(map(str, int_list))}]"
-                            except ValueError:
-                                formatted_value = "[]"
-                        else:
-                            formatted_value = "[]"
+                        # 移除所有非数字和非逗号字符
+                        cleaned = re.sub(r'[^0-9,]', '', new_value)
+                        items = [i.strip() for i in cleaned.split(',') if i.strip()]
+                        formatted_value = f"[{', '.join(items)}]"
                     else:
                         formatted_value = str(new_value)
                 
+                # --- 3. 字符串列表转换 ["a", "b"] ---
                 elif field_type == "list[str]":
-                    # 清理输入：移除方括号和多余的引号
                     if isinstance(new_value, str):
-                        # 移除方括号
-                        cleaned_value = re.sub(r'[\[\]]', '', new_value)
-                        # 分割并清理每个元素
-                        str_list = []
-                        for item in cleaned_value.split(','):
-                            item = item.strip()
-                            # 移除两端的引号（单引号或双引号）
-                            item = re.sub(r'^[\'"]|[\'"]$', '', item)
-                            if item:
-                                str_list.append(f'"{item}"')
-                        formatted_value = f"[{', '.join(str_list)}]"
+                        # 移除外层方括号，按逗号分割，并去除每个元素两端的引号和空格
+                        cleaned = new_value.strip().replace('[', '').replace(']', '')
+                        items = [i.strip().strip("'").strip('"') for i in cleaned.split(',') if i.strip()]
+                        # 统一使用双引号包裹每个元素
+                        formatted_value = "[" + ", ".join([f'"{i}"' for i in items]) + "]"
                     else:
                         formatted_value = str(new_value)
                 
-                elif field_type == "bool":
-                    formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
-                
-                elif field_type == "select":
-                    formatted_value = f'"{new_value}"'
-                
+                # --- 4. 数字类型转换 ---
                 elif field_type == "int":
                     try:
                         formatted_value = str(int(new_value))
@@ -2271,24 +2782,40 @@ def save_config_values(new_values):
                     except (ValueError, TypeError):
                         formatted_value = "0.0"
                 
+                # --- 5. 字符串/选择类型 (最关键：处理 URL、路径和密码) ---
                 else:
-                    # 字符串类型：确保有引号包围
-                    if not (new_value.startswith('"') and new_value.endswith('"')) and \
-                       not (new_value.startswith("'") and new_value.endswith("'")):
-                        formatted_value = f'"{new_value}"'
-                    else:
-                        formatted_value = new_value
+                    # 确保是字符串并去除首尾空格
+                    val_str = str(new_value).strip()
+                    # 避免重复包裹：如果用户输入的字符串本身带了引号，先去掉
+                    if (val_str.startswith('"') and val_str.endswith('"')) or \
+                       (val_str.startswith("'") and val_str.endswith("'")):
+                        val_str = val_str[1:-1]
+                    
+                    # 统一使用双引号包裹，这样即使字符串里有单引号（如密码）也不会崩
+                    formatted_value = f'"{val_str}"'
                 
-                # 在文件中查找并替换配置项
-                pattern = rf"self\.{field_name}\s*=\s*.+"
-                replacement = f"self.{field_name} = {formatted_value}"
-                content = re.sub(pattern, replacement, content)
+                # --- 6. 执行正则替换 ---
+                # 匹配模式：捕获 self.变量名 = 这一部分，然后替换掉后面直到行尾的内容
+                # 能够处理 self.xxx=yyy, self.xxx = yyy, self.xxx   =   yyy 等各种写法
+                pattern = rf"(self\.{re.escape(field_name)}\s*=\s*).+"
+                # 检查文件中是否存在该配置项
+                if re.search(pattern, content):
+                    # \1 代表保留第一个捕获组 (即 self.变量名 = )
+                        content = re.sub(
+                            pattern,
+                            lambda m: f"{m.group(1)}{formatted_value}",
+                            content
+                        )
+                else:
+                    # 如果配置项在文件中不存在，可能是手动删除了，这里记录日志但不中断
+                    from nonebot.log import logger
+                    logger.warning(f"[Web管理] 配置项 {field_name} 在 xiuxian_config.py 中未找到匹配行，跳过修改。")
         
-        # 写入新内容
+        # 写入更新后的内容
         with open(config_file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        return True, "配置保存成功"
+        return True, "配置保存成功，重启机器人后生效。"
     
     except Exception as e:
         return False, f"保存配置时出错: {str(e)}"
@@ -2439,7 +2966,8 @@ def get_config_category_icon(category):
         "资源设置": "fas fa-coins",
         "灵根设置": "fas fa-seedling",
         "体力设置": "fas fa-heart",
-        "轮回设置": "fas fa-infinity"
+        "轮回设置": "fas fa-infinity",
+        "云备份设置": "fas fa-cloud-upload-alt"
     }
     return icon_map.get(category, "fas fa-cog")
 
@@ -2799,6 +3327,30 @@ def terminal_pwd():
         except: pass
     return jsonify({"cwd": "~"})
 
+def run_async(coro):
+    """在同步环境执行协程，兼容已有事件循环/无事件循环两种情况"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # 当前线程无事件循环
+        return asyncio.run(coro)
+    else:
+        # 当前线程已有事件循环：新建线程跑，避免 'This event loop is already running'
+        result = {}
+
+        def _runner():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                result["value"] = new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+
+        t = threading.Thread(target=_runner)
+        t.start()
+        t.join()
+        return result.get("value")
+
 @app.route('/upload_image', methods=['POST'])
 def upload_api_image():
     """
@@ -2829,10 +3381,11 @@ def upload_api_image():
 
     try:
         url = run_async(
-            CompatMessageSegment.upload_image_and_get_url(
+            MessageSegment.upload_image_and_get_url(
                 bot=target_bot,
                 channel_id=str(channel_id),
-                image=image_bytes
+                image=image_bytes,
+                mode="link"
             )
         )
         

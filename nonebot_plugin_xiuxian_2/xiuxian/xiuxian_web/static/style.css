@@ -703,35 +703,63 @@ tr:hover {
 /* --- 9. Command & Config Management Styles --- */
 .tab-nav {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    gap: 0.6rem;
+    margin-bottom: 1.2rem;
     border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+}
+
+.tab-nav::-webkit-scrollbar {
+    height: 6px;
+}
+.tab-nav::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--border-color) 80%, #999);
+    border-radius: 999px;
 }
 
 .tab-link {
-    background: transparent;
-    border: none;
-    padding: 0.8rem 1.2rem;
-    cursor: pointer;
-    border-radius: 5px 5px 0 0;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all var(--transition-speed) ease;
+    border: 1px solid transparent;
+    background: var(--bg-primary);
     color: var(--text-secondary);
-    font-weight: 500;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all var(--transition-speed) ease;
+    position: relative;
 }
 
 .tab-link:hover {
-    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-color) 25%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
 }
 
 .tab-link.active {
-    background-color: var(--accent-color);
-    color: white;
-    font-weight: bold;
-    border-bottom: 2px solid var(--accent-color); /* Active tab highlight */
+    color: #fff;
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-color) 35%, transparent);
+}
+
+.tab-link.active::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -2px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--accent-color);
 }
 
 .tab-content {
@@ -1642,7 +1670,17 @@ tr:hover {
         overflow-y: auto; /* Allow scrolling for many menu items */
         border-right: 1px solid var(--border-color);
     }
-    
+
+    .tab-nav {
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+    }
+
+    .tab-link {
+        padding: 0.62rem 0.9rem;
+        font-size: 0.9rem;
+    }
+
     nav.active {
         left: 0;
     }
