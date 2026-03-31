@@ -910,7 +910,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
             if isinstance(event, GroupMessageEvent):
                 await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
             else:
-                await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+                await bot.call_api("send_private_forward_msg", user_id=event.get_user_id(), messages=messages)
             return
 
         elif len(args) == 1 and isinstance(args[0], list):
@@ -918,7 +918,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
                 if isinstance(event, GroupMessageEvent):
                     await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
                 else:
-                    await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+                    await bot.call_api("send_private_forward_msg", user_id=event.get_user_id(), messages=messages)
             return
 
         else:
@@ -966,7 +966,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         if is_group:
             await bot.call_api("send_group_forward_msg", group_id=event.group_id, messages=messages)
         else:
-            await bot.call_api("send_private_forward_msg", user_id=event.user_id, messages=messages)
+            await bot.call_api("send_private_forward_msg", user_id=event.get_user_id(), messages=messages)
         return
 
 def _allow_native_markdown(event) -> bool:
@@ -1114,9 +1114,9 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")  # 仅普通群可@
 
-    open_id = get_real_id(event.user_id)
+    open_id = get_real_id(event.get_user_id())
     if not open_id:
-        open_id = event.user_id
+        open_id = event.get_user_id()
 
     if not page:
         if page_param:
@@ -1176,7 +1176,7 @@ async def handle_send_markdown(
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
 
-    open_id = get_real_id(event.user_id) or event.user_id
+    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
     original_user_id = event.get_user_id()
 
     if not title:
@@ -1229,7 +1229,7 @@ async def handle_send_markdown(
         await handle_send2(bot, event, raw_plain)
 
 def check_user_md_type(md_type, event):
-    original_user_id = event.user_id
+    original_user_id = event.get_user_id()
     user_id_to_check = original_user_id
     if original_user_id in _impersonating_users:
         user_id_to_check = _impersonating_users[original_user_id]
@@ -1289,7 +1289,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
 
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
-    open_id = get_real_id(event.user_id) or event.user_id
+    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
 
     original_user_id = event.get_user_id()
     if open_id and is_normal_group and XiuConfig().at_sender:
@@ -1365,7 +1365,7 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
 
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
-    open_id = get_real_id(event.user_id) or event.user_id
+    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
     original_user_id = event.get_user_id()
 
     if open_id and is_normal_group and XiuConfig().at_sender:
