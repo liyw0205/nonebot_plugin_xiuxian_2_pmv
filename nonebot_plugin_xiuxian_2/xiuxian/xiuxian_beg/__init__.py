@@ -90,32 +90,20 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
     if sect != None and user_root == "伪灵根":
-        if XiuConfig().img:
-            msg = f"道友已有宗门庇佑，又何必来此寻求机缘呢？"
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
+        msg = f"道友已有宗门庇佑，又何必来此寻求机缘呢？"
+        await handle_send(bot, event, msg)
 
     elif user_root in {"轮回道果", "真·轮回道果"}:
-        if XiuConfig().img:
-            msg = f"道友已是轮回大能，又何必来此寻求机缘呢？"
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
+        msg = f"道友已是轮回大能，又何必来此寻求机缘呢？"
+        await handle_send(bot, event, msg)
     
     elif list_level_all.index(level) >= list_level_all.index(XiuConfig().beg_max_level):
         msg = f"道友已跻身于{user_info['level']}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
-        if XiuConfig().img:
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
+        await handle_send(bot, event, msg)
 
     elif diff_days > XiuConfig().beg_max_days:
-        if XiuConfig().img:
-            msg = f"道友已经过了新手期,不能再来此寻求机缘了。"
-            await handle_send(bot, event, msg)
-        else:
-            await handle_send(bot, event, msg)
+        msg = f"道友已经过了新手期,不能再来此寻求机缘了。"
+        await handle_send(bot, event, msg)
 
     else:
         stone = sql_message.get_beg(user_id)
