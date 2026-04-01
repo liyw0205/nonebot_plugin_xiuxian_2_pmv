@@ -34,6 +34,7 @@ from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
+from urllib.parse import quote
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -1097,6 +1098,26 @@ def generate_page_param(page_list: list) -> dict:
     
     return result
 
+def build_native_page_text(page_list: list[str]) -> str:
+    # page_list: [k1,v1,k2,v2,...,page_text]
+    pairs = []
+    page_tail = ""
+    n = len(page_list)
+
+    if n % 2 == 1:
+        page_tail = page_list[-1]
+        n -= 1
+
+    for i in range(0, min(n, 18), 2):  # 最多9个按钮=18项
+        k = page_list[i]
+        v = quote(page_list[i + 1], safe="")
+        pairs.append(f"[{k}](mqqapi://aio/inlinecmd?command={v}&enter=false&reply=false)")
+
+    text = " | ".join(pairs)
+    if page_tail:
+        text += f"\r{page_tail}"
+    return text
+
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息（频道可用），失败降级普通消息"""
     if not markdown_id:
@@ -1192,8 +1213,7 @@ async def handle_send_markdown(
             title = f"<@{open_id}>\r{title}"
 
     if page:
-        page_text = "\r".join(generate_page_param(page).get("values", []))
-        page_text = f"[{page_text}]"
+        page_text = build_native_page_text(page)
     elif page_param:
         page_text = page_param
     else:
