@@ -2,7 +2,7 @@ from ..command import *
 
 daily_60s_image_cmd = on_command(
     "每日60S图片",
-    aliases={"60S", "60s"},
+    aliases={"60S图片", "60s图片"},
     priority=5,
     block=True
 )

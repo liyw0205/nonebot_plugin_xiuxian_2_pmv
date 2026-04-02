@@ -67,17 +67,18 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
             except Exception as e:
                 logger.warning(f"热榜图片 原生MD发送失败：{e}")
-            await hot_rank_image_cmd.finish()
-    try:
-        await handle_pic_msg_send(bot, event, image_url, title)
-    except Exception as e:
-        await handle_send(
-            bot, event,
-            f"热榜图片发送失败：{e}",
-            md_type="娱乐",
-            k1="百度图", v1="百度热榜图片",
-            k2="微博图", v2="微博热榜图片",
-            k3="帮助", v3="娱乐帮助"
-        )
+                await hot_rank_image_cmd.finish()
+    else:
+        try:
+            await handle_pic_msg_send(bot, event, image_url, title)
+        except Exception as e:
+            await handle_send(
+                bot, event,
+                f"热榜图片发送失败：{e}",
+                md_type="娱乐",
+                k1="百度图", v1="百度热榜图片",
+                k2="微博图", v2="微博热榜图片",
+                k3="帮助", v3="娱乐帮助"
+            )
 
-    await hot_rank_image_cmd.finish()
+        await hot_rank_image_cmd.finish()
