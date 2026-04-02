@@ -5,7 +5,8 @@ from io import BytesIO
 from pathlib import Path
 import hashlib
 import asyncio
-from typing import Optional, Union, Any, Literal
+from dataclasses import dataclass, asdict
+from typing import Optional, Union, Any, Literal, Iterator
 from urllib.parse import urlparse
 
 from nonebot.permission import Permission
@@ -65,6 +66,25 @@ except Exception:
     QQChannelPrivateMessageEvent = tuple()  # type: ignore
     MessageMarkdown = None  # type: ignore
     MessageKeyboard = None  # type: ignore
+
+
+@dataclass
+class CompatSender:
+    """兼容 sender 对象，支持属性访问与序列化"""
+
+    user_id: Optional[str] = None
+    nickname: Optional[str] = None
+    card: Optional[str] = None
+    role: Optional[str] = "member"
+
+    def dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def model_dump(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def __iter__(self) -> Iterator[tuple[str, Any]]:
+        yield from asdict(self).items()
 
 
 # =========================
@@ -269,21 +289,20 @@ class CompatMessageSegment:
         - "md5": 立即返回 md5 链接（默认）
         - "link": 等待审核并回查真实附件链接后返回
         """
-    
+
         try:
             from nonebot.adapters.qq.exception import AuditException
         except Exception:
             AuditException = Exception  # type: ignore
-    
+
         if not (HAS_QQ and QQBot is not None and isinstance(bot, QQBot)):
             logger.warning("upload_image_and_get_url: 当前 bot 不是 QQBot")
             return fallback_url
-    
+
         if not channel_id:
             logger.warning("upload_image_and_get_url: channel_id为空，跳过上传")
             return fallback_url
-    
-        # 统一转 bytes
+
         try:
             if isinstance(image, str):
                 image_bytes = Path(image).read_bytes()
@@ -298,11 +317,10 @@ class CompatMessageSegment:
         except Exception as e:
             logger.error(f"upload_image_and_get_url: 读取图片失败: {e}")
             return fallback_url
-    
-        # 计算 md5 链接
+
         md5_hex = hashlib.md5(image_bytes).hexdigest().upper()
         md5_url = f"https://gchat.qpic.cn/qmeetpic/0/0-0-{md5_hex}/0"
-    
+
         async def _resolve_real_url_from_message(message_id: str) -> Optional[str]:
             msg_obj = await bot.get_message_of_id(
                 channel_id=str(channel_id),
@@ -314,9 +332,8 @@ class CompatMessageSegment:
                 if url:
                     return str(url)
             return None
-    
+
         async def _audit_followup(audit_exc: Exception):
-            """md5 模式下后台日志用途"""
             try:
                 audit_id = getattr(audit_exc, "audit_id", None)
                 logger.warning(f"upload_image_and_get_url: 触发审核 audit_id={audit_id}，先返回md5链接")
@@ -331,53 +348,50 @@ class CompatMessageSegment:
                     logger.info(f"upload_image_and_get_url: 审核回查真实链接={real_url}")
             except Exception as ex:
                 logger.warning(f"upload_image_and_get_url: 审核后台任务异常: {ex}")
-    
+
         try:
             result = await bot.post_messages(
                 channel_id=str(channel_id),
                 content=" ",
                 file_image=image_bytes,
             )
-            # 未触发审核，直接尝试拿返回消息 id 回查真实链接
             if mode == "link":
                 message_id = getattr(result, "id", None)
                 if message_id:
                     real_url = await _resolve_real_url_from_message(str(message_id))
                     if real_url:
                         return real_url
-                # 拿不到就降级
                 return fallback_url or md5_url
-    
-            # 默认 md5
+
             return md5_url
-    
+
         except AuditException as e:
             if mode == "md5":
                 asyncio.create_task(_audit_followup(e))
                 return md5_url
-    
-            # mode == "link": 同步等待审核结果并返回真实链接
+
             try:
                 audit_res = await e.get_audit_result(timeout=audit_timeout)  # type: ignore[attr-defined]
                 event_name = str(getattr(audit_res, "__type__", ""))
                 message_id = getattr(audit_res, "message_id", None)
-    
+
                 if "MESSAGE_AUDIT_PASS" not in event_name or not message_id:
                     logger.warning(
                         f"upload_image_and_get_url(link): 审核未通过或缺少message_id, "
                         f"event={event_name}, message_id={message_id}"
                     )
                     return fallback_url
-    
+
                 real_url = await _resolve_real_url_from_message(str(message_id))
                 return real_url or fallback_url
             except Exception as ex:
                 logger.warning(f"upload_image_and_get_url(link): 等待审核失败: {ex}")
                 return fallback_url
-    
+
         except Exception as e:
             logger.error(f"upload_image_and_get_url: 上传失败: {e}")
             return fallback_url
+
 
 # =========================
 # 对外导出的兼容类型
@@ -390,7 +404,7 @@ if HAS_QQ:
     GroupMessageEvent = Union[
         OB11GroupMessageEvent,
         QQGroupMessageEvent,
-        QQAtChannelMessageEvent,  # 频道消息并入“群语义”
+        QQAtChannelMessageEvent,
     ]
 else:
     GroupMessageEvent = Union[OB11GroupMessageEvent]
@@ -399,7 +413,7 @@ if HAS_QQ:
     PrivateMessageEvent = Union[
         OB11PrivateMessageEvent,
         QQPrivateMessageEvent,
-        QQChannelPrivateMessageEvent,  # 频道私信并入“私聊语义”
+        QQChannelPrivateMessageEvent,
     ]
 else:
     PrivateMessageEvent = Union[OB11PrivateMessageEvent]
@@ -425,6 +439,7 @@ def is_private_event(event: BaseEvent) -> bool:
         types.append(QQPrivateMessageEvent)  # type: ignore[arg-type]
         types.append(QQChannelPrivateMessageEvent)  # type: ignore[arg-type]
     return isinstance(event, tuple(types)) if types else False
+
 
 def is_channel_event(event: BaseEvent) -> bool:
     """是否为频道来源事件（包括频道公域消息、频道私信）"""
@@ -453,16 +468,12 @@ def get_chat_scene(event: BaseEvent) -> str:
         return "private"
     return "unknown"
 
+
 _group_seq_cache: dict[str, int] = {}
 _c2c_seq_cache: dict[str, int] = {}
 
 
 def _next_group_seq(group_openid: str) -> int:
-    """
-    群聊/频道群语义消息 seq:
-    - 首次随机起点
-    - 后续递增 + 小随机步长，降低并发同值概率
-    """
     current = _group_seq_cache.get(group_openid)
     if current is None:
         current = random.randint(1000, 900000)
@@ -479,11 +490,6 @@ def _next_group_seq(group_openid: str) -> int:
 
 
 def _next_c2c_seq(user_openid: str) -> int:
-    """
-    私聊(c2c)消息 seq:
-    - 首次随机起点
-    - 后续递增 + 小随机步长，降低并发同值概率
-    """
     current = _c2c_seq_cache.get(user_openid)
     if current is None:
         current = random.randint(1000, 900000)
@@ -500,9 +506,6 @@ def _next_c2c_seq(user_openid: str) -> int:
 
 
 def _is_msgseq_conflict_error(exc: Exception) -> bool:
-    """
-    判断是否为 QQ 的 msg_seq 去重冲突错误（40054005）
-    """
     try:
         code = getattr(exc, "retcode", None)
         if code == 40054005:
@@ -521,12 +524,6 @@ async def _send_with_retry(
     max_retry: int = 3,
     base_delay: float = 0.05,
 ):
-    """
-    通用重试：
-    - 仅针对 40054005/msgseq 冲突重试
-    - 每次重试前随机等待，避免并发抖动
-    - 支持通过 get_new_seq() 每次重试注入新 msg_seq
-    """
     last_exc = None
     for i in range(max_retry + 1):
         try:
@@ -546,6 +543,7 @@ async def _send_with_retry(
             await asyncio.sleep(delay)
 
     raise last_exc
+
 
 async def _group_checker(event: BaseEvent) -> bool:
     return is_group_event(event)
@@ -571,109 +569,143 @@ def get_group_id(event: BaseEvent) -> Optional[str]:
     if hasattr(event, "group_openid"):
         gid = getattr(event, "group_openid")
         return str(gid) if gid is not None else None
-    if hasattr(event, "channel_id"):  # 频道 ID 统一映射为 group_id
+    if hasattr(event, "channel_id"):
         gid = getattr(event, "channel_id")
         return str(gid) if gid is not None else None
     return None
+
+
+def _resolve_sender_name(
+    e: BaseEvent, fallback_user_id: Optional[str] = None
+) -> str:
+    author = getattr(e, "author", None)
+    username = getattr(author, "username", None)
+    if username:
+        return str(username)
+
+    author_id = getattr(author, "id", None)
+    if author_id:
+        return str(author_id)
+
+    if fallback_user_id:
+        return str(fallback_user_id)
+
+    uid = get_user_id(e)
+    return str(uid) if uid is not None else ""
+
+
+def _build_compat_sender(
+    *,
+    user_id: Optional[str],
+    nickname: Optional[str],
+    card: Optional[str],
+    role: Optional[str] = "member",
+) -> CompatSender:
+    return CompatSender(
+        user_id=str(user_id) if user_id is not None else None,
+        nickname=nickname,
+        card=card,
+        role=role,
+    )
 
 
 def patch_event_inplace(event: BaseEvent) -> BaseEvent:
     if getattr(event, "__compat_patched__", False):
         return event
 
-    def _resolve_sender_name(
-        e: BaseEvent, fallback_user_id: Optional[str] = None
-    ) -> str:
-        author = getattr(e, "author", None)
-        username = getattr(author, "username", None)
-        if username:
-            return str(username)
-
-        author_id = getattr(author, "id", None)
-        if author_id:
-            return str(author_id)
-
-        if fallback_user_id:
-            return str(fallback_user_id)
-
-        uid = get_user_id(e)
-        return str(uid) if uid is not None else ""
-
     if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
         raw = event.content or ""
+        sender_id = str(event.author.user_openid)
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
+
         setattr(event, "message_type", "private")
-        setattr(event, "user_id", str(event.author.user_openid))
+        setattr(event, "user_id", sender_id)
         setattr(event, "group_id", None)
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
-
-        sender = type("CompatSender", (), {})()
-        sender.user_id = str(event.author.user_openid)
-        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
-        sender.nickname = sender_name
-        sender.card = sender_name
-        sender.role = "member"
-        setattr(event, "sender", sender)
+        setattr(
+            event,
+            "sender",
+            _build_compat_sender(
+                user_id=sender_id,
+                nickname=sender_name,
+                card=sender_name,
+                role="member",
+            ),
+        )
 
     elif HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
-        # 频道私信 -> 私聊语义
         raw = event.content or ""
         uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
+        uid = str(uid)
+        sender_name = _resolve_sender_name(event, fallback_user_id=uid)
+
         setattr(event, "message_type", "private")
-        setattr(event, "user_id", str(uid))
+        setattr(event, "user_id", uid)
         setattr(event, "group_id", None)
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
-
-        sender = type("CompatSender", (), {})()
-        sender.user_id = str(uid)
-        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
-        sender.nickname = sender_name
-        sender.card = sender_name
-        sender.role = "member"
-        setattr(event, "sender", sender)
+        setattr(
+            event,
+            "sender",
+            _build_compat_sender(
+                user_id=uid,
+                nickname=sender_name,
+                card=sender_name,
+                role="member",
+            ),
+        )
 
     elif HAS_QQ and isinstance(event, QQGroupMessageEvent):
         raw = event.content or ""
+        sender_id = str(event.author.member_openid)
+        sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
+
         setattr(event, "message_type", "group")
-        setattr(event, "user_id", str(event.author.member_openid))
+        setattr(event, "user_id", sender_id)
         setattr(event, "group_id", str(event.group_openid))
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
-
-        sender = type("CompatSender", (), {})()
-        sender.user_id = str(event.author.member_openid)
-        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
-        sender.nickname = sender_name
-        sender.card = sender_name
-        sender.role = "member"
-        setattr(event, "sender", sender)
+        setattr(
+            event,
+            "sender",
+            _build_compat_sender(
+                user_id=sender_id,
+                nickname=sender_name,
+                card=sender_name,
+                role="member",
+            ),
+        )
 
     elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
-        # 频道消息 -> 群聊语义，channel_id -> group_id
         raw = event.content or ""
         uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
+        uid = str(uid)
+        sender_name = _resolve_sender_name(event, fallback_user_id=uid)
+
         setattr(event, "message_type", "group")
-        setattr(event, "user_id", str(uid))
+        setattr(event, "user_id", uid)
         setattr(event, "group_id", str(event.channel_id))
         setattr(event, "message_id", str(event.id))
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
-
-        sender = type("CompatSender", (), {})()
-        sender.user_id = str(uid)
-        sender_name = _resolve_sender_name(event, fallback_user_id=sender.user_id)
-        sender.nickname = sender_name
-        sender.card = sender_name
-        sender.role = "member"
-        setattr(event, "sender", sender)
+        setattr(
+            event,
+            "sender",
+            _build_compat_sender(
+                user_id=uid,
+                nickname=sender_name,
+                card=sender_name,
+                role="member",
+            ),
+        )
 
     if not hasattr(event, "user_id"):
         uid = get_user_id(event)
@@ -686,13 +718,20 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
             setattr(event, "group_id", gid)
 
     if not hasattr(event, "sender"):
-        sender = type("CompatSender", (), {})()
-        sender.user_id = getattr(event, "user_id", None)
-        sender_name = _resolve_sender_name(event, fallback_user_id=str(sender.user_id or ""))
-        sender.nickname = sender_name
-        sender.card = sender_name
-        sender.role = "member"
-        setattr(event, "sender", sender)
+        sender_id = getattr(event, "user_id", None)
+        sender_name = _resolve_sender_name(
+            event, fallback_user_id=str(sender_id or "")
+        )
+        setattr(
+            event,
+            "sender",
+            _build_compat_sender(
+                user_id=sender_id,
+                nickname=sender_name,
+                card=sender_name,
+                role="member",
+            ),
+        )
 
     setattr(event, "__compat_patched__", True)
     return event
@@ -719,7 +758,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                         event_id=kwargs.pop("event_id", None),
                     )
 
-                # 优先使用外部传入的 msg_seq；否则走自动分配 + 重试
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
                     return await _do_send(msg_seq)
@@ -755,7 +793,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
                 channel_id = str(event.channel_id)
 
-                # QQ 频道接口是否支持 msg_seq 取决于适配器实现，这里优先尝试带 msg_seq
                 async def _do_send(msg_seq: int):
                     try:
                         return await bot.send_to_channel(
@@ -766,7 +803,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                             event_id=kwargs.pop("event_id", None),
                         )
                     except TypeError:
-                        # 兼容某些版本不接受 msg_seq
                         return await bot.send_to_channel(
                             channel_id=channel_id,
                             message=message,
@@ -815,13 +851,9 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     max_retry=3,
                 )
 
-            # 其它事件类型走原始 send
             return await _origin_send(event=event, message=message, **kwargs)
 
         async def send_private_msg(*, user_id, message, **kwargs):
-            """
-            统一私聊发送入口（C2C）
-            """
             openid = str(user_id)
 
             async def _do_send(msg_seq: int):
@@ -842,9 +874,6 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             )
 
         async def send_group_msg(*, group_id, message, **kwargs):
-            """
-            统一群聊发送入口（普通群/频道群语义都可复用）
-            """
             group_openid = str(group_id)
 
             async def _do_send(msg_seq: int):
@@ -894,6 +923,7 @@ __all__ = [
     "GROUP",
     "Message",
     "MessageSegment",
+    "CompatSender",
     "GroupMessageEvent",
     "PrivateMessageEvent",
     "MessageEvent",

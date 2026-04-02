@@ -231,9 +231,9 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         else:
             if not is_channel_event(event):
                 link = call_upload_api(img_res)
-                logger.error(f"web图片返回: {link}")
                 if link:
-                    img_data = f"[img #1100px #2450px]({link})"
+                    logger.info(f"web图片返回: {link}")
+                    img_data = f"![img #1100px #2450px]({link})"
                     await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
                     await xiuxian_message_img.finish()
     await handle_pic_send(bot, event, img_res)

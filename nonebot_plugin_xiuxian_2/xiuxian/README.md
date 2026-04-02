@@ -17,6 +17,7 @@
 - xiuxian_buff ：双修/修炼/闭关/切磋/洞天福地
 - xiuxian_dufang ：鉴石
 - xiuxian_dungeon ：组队/副本
+- xiuxian_entertainment ：娱乐
 - xiuxian_fusion ：合成
 - xiuxian_Illusion ：幻境寻心
 - xiuxian_impart ：传承

@@ -5,8 +5,12 @@ except ImportError:
 import re
 import os
 import random
+import requests
 import asyncio
+from nonebot.compat import model_dump
 from pathlib import Path
+from typing import Any
+from nonebot.compat import model_dump
 from datetime import datetime
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
@@ -24,7 +28,8 @@ from ..adapter_compat import (
     MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment
+    MessageSegment,
+    is_channel_event,
 )
 
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -37,7 +42,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user, number_to, get_msg_pic, handle_send, send_msg_handler, generate_command, _impersonating_users
+    check_user, number_to, get_msg_pic, handle_send, send_msg_handler,
+    generate_command, _impersonating_users, handle_pic_msg_send, handle_send_md
 )
 from ..xiuxian_utils.item_json import Items
 
@@ -75,6 +81,7 @@ dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
 migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
 update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
 swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
+parse_event_cmd = on_command("取", permission=SUPERUSER, priority=100, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1238,7 +1245,7 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     try:
         msg = MessageSegment.markdown(bot, text)
-        await bot.send(event, msg)
+        await bot.send_reply(event, msg)
     except Exception as e:
         err = str(e)
         logger.error(f"dm发送markdown失败: {err}")
@@ -1385,6 +1392,43 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await handle_send(bot, event, msg)
     await swap_id_cmd.finish()
 
+def get_random_acg_pic_url(timeout: int = 5) -> str | None:
+    """
+    获取随机二次元图片地址
+    成功返回图片URL，失败返回 None
+    """
+    api_url = "https://v2.xxapi.cn/api/randomAcgPic"
+    params = {
+        "type": "pc",
+        "return": "json",
+    }
+
+    try:
+        resp = requests.get(api_url, params=params, timeout=timeout)
+        resp.raise_for_status()
+
+        data = resp.json()
+        if not isinstance(data, dict):
+            logger.warning("默认回复图片接口返回格式异常：不是 JSON 对象")
+            return None
+
+        if str(data.get("code")) != "200":
+            logger.warning(
+                f"默认回复图片接口请求失败: code={data.get('code')} msg={data.get('msg')}"
+            )
+            return None
+
+        image_url = data.get("data")
+        if image_url and isinstance(image_url, str):
+            return image_url.strip()
+
+        logger.warning("默认回复图片接口未返回有效图片地址")
+        return None
+
+    except Exception as e:
+        logger.warning(f"获取默认回复随机图片失败: {e}")
+        return None
+
 def _fallback_rule() -> Rule:
     async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
         if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
@@ -1397,5 +1441,490 @@ empty_fallback = on_message(priority=999, block=False, rule=_fallback_rule())
 
 @empty_fallback.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: Matcher):
-    await handle_send(bot, event, XiuConfig().empty_msg)
+    config = XiuConfig()
+    text_msg = config.empty_msg
+
+    # 先尝试获取随机图片
+    image_url = get_random_acg_pic_url(timeout=5)
+
+    # 1. 开启 Markdown
+    if config.markdown_status and image_url:
+        # 1.1 有模板ID -> 走模板MD
+        if config.markdown_id:
+            try:
+                msg_param = {
+                    "key": "t1",
+                    "values": [
+                        "](mqqapi://aio/inlinecmd?command=修仙帮助&enter=false&reply=false)\r![",
+                        f"img #1280px #720px]({image_url})\r",
+                        f"{text_msg}\r\r时间：[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    ]
+                }
+                await handle_send_md(
+                    bot,
+                    event,
+                    " ",
+                    markdown_id=config.markdown_id,
+                    msg_param=msg_param,
+                    at_msg=None,
+                )
+            except Exception as e:
+                logger.warning(f"默认回复模板Markdown发送失败，准备降级: {e}")
+            await matcher.finish()
+        # 1.2 无模板ID -> 走原生MD
+        elif not is_channel_event(event):
+            try:
+                md_msg = (
+                    f"## 提示\r"
+                    f"![img #1280px #720px]({image_url})\r"
+                    f"{text_msg}"
+                )
+                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+                return
+            except Exception as e:
+                logger.warning(f"默认回复原生Markdown发送失败，准备降级: {e}")
+            await matcher.finish()
+    # 2. 未开启 Markdown -> 走图文
+    if not config.markdown_status and image_url:
+        try:
+            await handle_pic_msg_send(bot, event, image_url, text_msg)
+        except Exception as e:
+            logger.warning(f"默认回复图文发送失败，准备降级纯文字: {e}")
+        await matcher.finish()
+    # 3. 最终兜底：纯文字
+    try:
+        await handle_send(bot, event, text_msg)
+    except Exception as e:
+        logger.warning(f"默认回复纯文字发送失败: {e}")
+
     await matcher.finish()
+
+parse_event_cmd = on_command("取", permission=SUPERUSER, priority=100, block=True)
+
+@parse_event_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def parse_event_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent
+):
+    """
+    超管：解析当前 event，并转图片发送
+    """
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    try:
+        text = _build_event_info_text(event)
+        pic = await get_msg_pic(text, scale=False)
+        await bot.send(event=event, message=MessageSegment.image(bot, pic))
+    except Exception as e:
+        logger.error(f"解析event并转图发送失败: {e}")
+        await handle_send(bot, event, f"解析event失败：{e}")
+
+
+def _safe_str(obj) -> str:
+    try:
+        return str(obj)
+    except Exception:
+        try:
+            return repr(obj)
+        except Exception:
+            return "<无法转为字符串>"
+
+
+def _unescape_slashes(text: str) -> str:
+    """
+    避免 JSON 中显示 \\/
+    """
+    if not isinstance(text, str):
+        text = _safe_str(text)
+    return text.replace("\\/", "/")
+
+
+def _segment_to_simple(seg):
+    """
+    将消息段转成更易读的结构
+    """
+    try:
+        seg_type = getattr(seg, "type", None)
+        seg_data = getattr(seg, "data", None)
+        return {
+            "type": seg_type,
+            "data": seg_data if seg_data is not None else _safe_str(seg),
+        }
+    except Exception:
+        return _safe_str(seg)
+
+
+def _message_to_simple(msg):
+    """
+    尽量把 Message/消息数组转成可读结构
+    """
+    if msg is None:
+        return None
+
+    # 如果本身就是字符串
+    if isinstance(msg, str):
+        return msg
+
+    try:
+        # 可迭代消息段
+        return [_segment_to_simple(seg) for seg in msg]
+    except Exception:
+        pass
+
+    return _safe_str(msg)
+
+
+def _extract_plain_from_message(msg) -> str:
+    if msg is None:
+        return ""
+    try:
+        if hasattr(msg, "extract_plain_text"):
+            return msg.extract_plain_text()
+    except Exception:
+        pass
+    try:
+        return str(msg)
+    except Exception:
+        return ""
+
+
+def _extract_reply_info(event) -> dict | None:
+    """
+    统一提取引用/回复信息
+    兼容：
+    - OneBot v11: event.reply / original_message中的reply段
+    - QQ: event.message_reference / event.reply / message_scene.ext / msg_elements
+    """
+    reply_info = {}
+
+    # 1. OneBot v11 标准 reply 对象
+    reply_obj = getattr(event, "reply", None)
+    if reply_obj is not None:
+        try:
+            reply_info["source"] = "event.reply"
+            reply_info["message_id"] = getattr(reply_obj, "message_id", None)
+            reply_info["real_id"] = getattr(reply_obj, "real_id", None)
+            reply_info["time"] = getattr(reply_obj, "time", None)
+
+            sender = getattr(reply_obj, "sender", None)
+            if sender is not None:
+                reply_info["sender"] = {
+                    "user_id": getattr(sender, "user_id", None),
+                    "nickname": getattr(sender, "nickname", None),
+                    "card": getattr(sender, "card", None),
+                    "role": getattr(sender, "role", None),
+                }
+
+            message = getattr(reply_obj, "message", None)
+            if message is not None:
+                reply_info["message"] = _message_to_simple(message)
+                reply_info["plain_text"] = _extract_plain_from_message(message)
+
+            return reply_info
+        except Exception:
+            pass
+
+    # 2. OneBot 原始消息里的 [reply] 段
+    try:
+        original_message = getattr(event, "original_message", None)
+        if original_message:
+            for seg in original_message:
+                if getattr(seg, "type", None) == "reply":
+                    reply_info["source"] = "original_message.reply_segment"
+                    reply_info["message_id"] = getattr(seg, "data", {}).get("id")
+                    return reply_info
+    except Exception:
+        pass
+
+    # 3. QQ 新增 message_reference
+    try:
+        message_reference = getattr(event, "message_reference", None)
+        if message_reference is not None:
+            reply_info["source"] = "message_reference"
+            reply_info["message_id"] = getattr(message_reference, "message_id", None)
+            reply_info["ignore_get_message_error"] = getattr(
+                message_reference, "ignore_get_message_error", None
+            )
+            # 不立即 return，继续尝试看看有没有更丰富内容
+            if reply_info:
+                return reply_info
+    except Exception:
+        pass
+
+    # 4. QQ message_scene.ext 里的 ref_msg_idx
+    try:
+        message_scene = getattr(event, "message_scene", None)
+        if message_scene:
+            ext_list = getattr(message_scene, "ext", None)
+            if ext_list is None and isinstance(message_scene, dict):
+                ext_list = message_scene.get("ext")
+
+            ref_msg_idx = None
+            if isinstance(ext_list, list):
+                for item in ext_list:
+                    if isinstance(item, dict) and item.get("key") == "ref_msg_idx":
+                        ref_msg_idx = item.get("value")
+                        break
+
+            if ref_msg_idx:
+                reply_info["source"] = "message_scene.ext.ref_msg_idx"
+                reply_info["ref_msg_idx"] = ref_msg_idx
+                return reply_info
+    except Exception:
+        pass
+
+    # 5. QQ msg_elements 里可能存在引用字段
+    try:
+        msg_elements = getattr(event, "msg_elements", None)
+        if isinstance(msg_elements, list):
+            for elem in msg_elements:
+                if not isinstance(elem, dict):
+                    continue
+
+                # 常见可能字段尝试
+                for key in (
+                    "ref_msg_id",
+                    "ref_message_id",
+                    "message_id",
+                    "msg_id",
+                    "reply_id",
+                ):
+                    if key in elem and elem.get(key):
+                        reply_info["source"] = "msg_elements"
+                        reply_info["message_id"] = elem.get(key)
+                        reply_info["raw_element"] = elem
+                        return reply_info
+    except Exception:
+        pass
+
+    return reply_info or None
+
+
+def _event_to_dict(event):
+    """
+    尽量把 event 转成 dict，并把消息对象转成易读结构
+    """
+    # 先基础 dump
+    data = None
+
+    try:
+        data = model_dump(event)
+    except Exception:
+        pass
+
+    if data is None:
+        try:
+            if hasattr(event, "dict"):
+                data = event.dict()
+        except Exception:
+            pass
+
+    if data is None:
+        try:
+            if hasattr(event, "__dict__"):
+                data = {}
+                for k, v in event.__dict__.items():
+                    if k.startswith("_"):
+                        continue
+                    data[k] = v
+        except Exception:
+            pass
+
+    if data is None:
+        return {"raw": _safe_str(event)}
+
+    # 深度修正几个关键字段，避免 message 显示不友好
+    try:
+        if hasattr(event, "message"):
+            data["message"] = _message_to_simple(getattr(event, "message", None))
+    except Exception:
+        pass
+
+    try:
+        if hasattr(event, "original_message"):
+            data["original_message"] = _message_to_simple(
+                getattr(event, "original_message", None)
+            )
+    except Exception:
+        pass
+
+    try:
+        if hasattr(event, "reply") and getattr(event, "reply", None) is not None:
+            data["reply"] = _extract_reply_info(event)
+    except Exception:
+        pass
+
+    # 兼容 QQ 引用消息字段
+    try:
+        reply_info = _extract_reply_info(event)
+        if reply_info:
+            data["__parsed_reply__"] = reply_info
+    except Exception:
+        pass
+
+    return data
+
+
+def _pretty_event_json(data) -> str:
+    """
+    美化 JSON，并避免显示 \\/
+    """
+    try:
+        text = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        return _unescape_slashes(text)
+    except Exception:
+        return _unescape_slashes(_safe_str(data))
+
+
+def _truncate_for_image(text: str, limit: int = 12000) -> str:
+    """
+    防止内容太长导致图片过大
+    """
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n\n......\n（内容过长，已截断，原长度：{len(text)}）"
+
+
+def _build_event_info_text(event) -> str:
+    lines = []
+    lines.append("【Event 解析】")
+    lines.append("")
+
+    # 基础信息
+    try:
+        lines.append(f"事件类型：{event.get_type()}")
+    except Exception:
+        lines.append(
+            f"事件类型：{getattr(event, 'post_type', getattr(event, '__type__', '未知'))}"
+        )
+
+    try:
+        lines.append(f"事件名称：{event.get_event_name()}")
+    except Exception:
+        pass
+
+    try:
+        lines.append(f"用户ID：{event.get_user_id()}")
+    except Exception:
+        uid = getattr(event, "user_id", None)
+        if uid is not None:
+            lines.append(f"用户ID：{uid}")
+
+    try:
+        lines.append(f"会话ID：{event.get_session_id()}")
+    except Exception:
+        pass
+
+    for attr, label in [
+        ("group_id", "群ID"),
+        ("group_openid", "群OpenID"),
+        ("channel_id", "频道ID"),
+        ("guild_id", "Guild ID"),
+        ("message_id", "消息ID"),
+        ("id", "平台消息ID"),
+        ("event_id", "事件ID"),
+        ("self_id", "Bot ID"),
+    ]:
+        value = getattr(event, attr, None)
+        if value is not None:
+            lines.append(f"{label}：{value}")
+
+    # to_me
+    try:
+        lines.append(f"to_me：{event.is_tome()}")
+    except Exception:
+        to_me = getattr(event, "to_me", None)
+        if to_me is not None:
+            lines.append(f"to_me：{to_me}")
+
+    lines.append("")
+
+    # 发送者
+    sender = getattr(event, "sender", None)
+    author = getattr(event, "author", None)
+
+    if sender is not None:
+        lines.append("【发送者信息】")
+        user_id = getattr(sender, "user_id", None)
+        nickname = getattr(sender, "nickname", None)
+        card = getattr(sender, "card", None)
+        role = getattr(sender, "role", None)
+        if user_id is not None:
+            lines.append(f"发送者ID：{user_id}")
+        if nickname:
+            lines.append(f"昵称：{nickname}")
+        if card:
+            lines.append(f"群名片：{card}")
+        if role:
+            lines.append(f"角色：{role}")
+        lines.append("")
+
+    elif author is not None:
+        lines.append("【发送者信息】")
+        author_id = (
+            getattr(author, "id", None)
+            or getattr(author, "user_openid", None)
+            or getattr(author, "member_openid", None)
+        )
+        username = getattr(author, "username", None)
+        if author_id is not None:
+            lines.append(f"发送者ID：{author_id}")
+        if username:
+            lines.append(f"昵称：{username}")
+        lines.append("")
+
+    # 消息
+    lines.append("【消息信息】")
+    try:
+        msg_obj = event.get_message()
+        plain_text = _extract_plain_from_message(msg_obj)
+        lines.append(f"纯文本：{plain_text if plain_text else '[空]'}")
+        lines.append(f"消息对象：{_safe_str(msg_obj)}")
+    except Exception:
+        raw_message = getattr(event, "raw_message", None)
+        content = getattr(event, "content", None)
+        message = getattr(event, "message", None)
+
+        if raw_message is not None:
+            lines.append(f"raw_message：{raw_message}")
+        elif content is not None:
+            lines.append(f"content：{content}")
+        elif message is not None:
+            lines.append(f"message：{_safe_str(message)}")
+        else:
+            lines.append("无可提取消息内容")
+
+    # original_message
+    try:
+        original_message = getattr(event, "original_message", None)
+        if original_message is not None:
+            lines.append("")
+            lines.append("【原始消息对象】")
+            lines.append(_safe_str(original_message))
+    except Exception:
+        pass
+
+    # reply / 引用消息
+    reply_info = _extract_reply_info(event)
+    if reply_info:
+        lines.append("")
+        lines.append("【引用/回复消息】")
+        for k, v in reply_info.items():
+            if isinstance(v, (dict, list)):
+                lines.append(f"{k}：{_unescape_slashes(json.dumps(v, ensure_ascii=False, default=str))}")
+            else:
+                lines.append(f"{k}：{v}")
+
+    lines.append("")
+    lines.append("【原始 Event 数据】")
+
+    event_dict = _event_to_dict(event)
+    raw_json = _pretty_event_json(event_dict)
+    raw_json = _truncate_for_image(raw_json)
+    lines.append("────────────────")
+    lines.append(raw_json)
+    lines.append("────────────────")
+
+    return "\n".join(lines)

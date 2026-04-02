@@ -3385,7 +3385,7 @@ def upload_api_image():
                 bot=target_bot,
                 channel_id=str(channel_id),
                 image=image_bytes,
-                mode="link"
+                mode="md5"
             )
         )
         
