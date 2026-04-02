@@ -3,7 +3,7 @@ import random
 
 random_voice_cmd = on_command(
     "随机语音",
-    aliases={"语音", "随机绿茶语音", "随机御姐撒娇语音", "绿茶语音", "御姐语音"},
+    aliases={"语音", "随机绿茶语音", "随机御姐撒娇语音", "绿茶语音", "御姐语音", "怼人语音"},
     priority=5,
     block=True
 )
@@ -11,14 +11,15 @@ random_voice_cmd = on_command(
 
 @random_voice_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """随机语音"""
+    """随机语音（绿茶/御姐/怼人）"""
 
-    voice_type = random.choice(["绿茶", "御姐"])
-    api_url = (
-        "https://api.pearktrue.cn/api/greentea/"
-        if voice_type == "绿茶"
-        else "https://api.pearktrue.cn/api/yujie/"
-    )
+    voice_type = random.choice(["绿茶", "御姐", "怼人"])
+    if voice_type == "绿茶":
+        api_url = "https://api.pearktrue.cn/api/greentea/"
+    elif voice_type == "御姐":
+        api_url = "https://api.pearktrue.cn/api/yujie/"
+    else:
+        api_url = "https://api.pearktrue.cn/api/duiren/"
 
     try:
         result = get_json_api(api_url, params={"type": "mp3"}, timeout=15)
@@ -48,14 +49,6 @@ async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await random_voice_cmd.finish()
 
     try:
-        await handle_send(
-            bot, event,
-            " ",
-            md_type="娱乐",
-            k1="再来一条", v1="随机语音",
-            k2="随机点歌", v2="随机点歌",
-            k3="帮助", v3="娱乐帮助"
-        )
         await handle_audio_send(bot, event, audiopath)
     except Exception as e:
         logger.warning(f"随机语音 发送失败：{e}")

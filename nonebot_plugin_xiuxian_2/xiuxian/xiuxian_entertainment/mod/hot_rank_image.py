@@ -67,7 +67,7 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
             except Exception as e:
                 logger.warning(f"热榜图片 原生MD发送失败：{e}")
-                await hot_rank_image_cmd.finish()
+            await hot_rank_image_cmd.finish()
     try:
         await handle_pic_msg_send(bot, event, image_url, title)
     except Exception as e:

@@ -1484,10 +1484,24 @@ async def handle_pic_msg_send(
 
         # 图文一起发（MessageSegment 支持相加）
         msg = message_parts[0]
+        is_group = is_group_event(event)
+        if XiuConfig().message_optimization:
+            msg = optimize_message(msg, is_group)
         for part in message_parts[1:]:
             msg = msg + part
-
-        await bot.send(event=event, message=msg)
+        if is_group:
+            if XiuConfig().at_sender:
+                await bot.send(
+                    event=event, message=MessageSegment.at(bot, event.get_user_id()) + msg
+                )
+            else:
+                await bot.send(
+                    event=event, message=msg
+                )
+        else:
+            await bot.send(
+                event=event, message=msg
+            )
 
     except Exception as e:
         logger.error(f"发送图文消息失败: {e}")

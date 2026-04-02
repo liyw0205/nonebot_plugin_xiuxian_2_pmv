@@ -16,11 +16,12 @@ from .mod.hot_rank_image import *
 from .mod.daily_60s_image import *
 from .mod.world_60s import *
 
-fun_menu_cmd = on_command("娱乐菜单", aliases={"娱乐帮助", "娱乐功能"}, priority=5, block=True)
-fun_menu_cmd2 = on_command("娱乐帮助2", aliases={"娱乐菜单2", "娱乐功能2"}, priority=5, block=True)
+
+fun_menu_cmd = on_command("娱乐帮助", aliases={"娱乐菜单", "娱乐功能"}, priority=5, block=True)
 
 
 def _build_fun_help_page(page: int):
+    # ===================== 第1页 =====================
     if page == 1:
         title = "🎮 娱乐帮助 第1页"
         text_msg = (
@@ -28,24 +29,24 @@ def _build_fun_help_page(page: int):
             "1、今日老婆\n"
             "2、今日超能力\n"
             "3、随机点歌\n"
-            "4、随机语音\n"
+            "4、随机语音（含怼人）\n"
             "5、每日Bing图\n"
             "6、舔狗日记\n"
             "7、随机一言\n"
             "8、历史上的今天\n\n"
-            "发送【娱乐帮助2】查看第2页。"
+            "发送【娱乐帮助 2】查看第2页。"
         )
         shell_text = (
             "娱乐功能 第1页\r"
             "1. 今日老婆\r"
             "2. 今日超能力\r"
             "3. 随机点歌\r"
-            "4. 随机语音\r"
+            "4. 随机语音（含怼人）\r"
             "5. 每日Bing图\r"
             "6. 舔狗日记\r"
             "7. 随机一言\r"
             "8. 历史上的今天\r\r"
-            "发送 娱乐帮助2 查看下一页"
+            "发送 娱乐帮助 2 查看下一页"
         )
         t1 = {
             "key": "t1",
@@ -63,7 +64,7 @@ def _build_fun_help_page(page: int):
                 generate_command("舔狗日记", command="舔狗日记", status="start", msg2="\r"),
                 generate_command("随机一言", command="随机一言", status="start", msg2=" | "),
                 generate_command("历史上的今天", command="历史上的今天", status="start", msg2="\r"),
-                generate_command("下一页", command="娱乐帮助2", status="end", msg2="\r[直接发送对应指令即可使用"),
+                generate_command("下一页", command="娱乐帮助 2", status="end", msg2="\r[直接发送对应指令即可使用"),
             ]
         }
         md_msg = (
@@ -76,16 +77,17 @@ def _build_fun_help_page(page: int):
             "[舔狗日记](mqqapi://aio/inlinecmd?command=舔狗日记&enter=false&reply=false)\r"
             "[随机一言](mqqapi://aio/inlinecmd?command=随机一言&enter=false&reply=false) | "
             "[历史上的今天](mqqapi://aio/inlinecmd?command=历史上的今天&enter=false&reply=false)\r\r"
-            "[下一页](mqqapi://aio/inlinecmd?command=娱乐帮助2&enter=false&reply=false)"
+            "[下一页](mqqapi://aio/inlinecmd?command=娱乐帮助%202&enter=false&reply=false)"
         )
         fallback_buttons = {
             "k1": "今日老婆", "v1": "今日老婆",
             "k2": "随机语音", "v2": "随机语音",
-            "k3": "下一页", "v3": "娱乐帮助2",
+            "k3": "下一页", "v3": "娱乐帮助 2",
         }
         return title, text_msg, shell_text, t1, t2, md_msg, fallback_buttons
 
-    else:
+    # ===================== 第2页 =====================
+    elif page == 2:
         title = "🎮 娱乐帮助 第2页"
         text_msg = (
             "=== 娱乐帮助 第2页 ===\n"
@@ -94,11 +96,10 @@ def _build_fun_help_page(page: int):
             "3、Steam喜加一\n"
             "4、脑筋急转弯\n"
             "5、弱智吧问答\n"
-            "6、热榜60S\n"
-            "7、热榜图片\n"
-            "8、60S读世界\n\n"
-            "补充功能：每日60S图片\n"
-            "发送【娱乐帮助】查看第1页。"
+            "6、热榜图片\n"
+            "7、60S读世界\n"
+            "8、每日60S图片\n\n"
+            "发送【娱乐帮助 3】查看第3页。"
         )
         shell_text = (
             "娱乐功能 第2页\r"
@@ -107,11 +108,10 @@ def _build_fun_help_page(page: int):
             "3. Steam喜加一\r"
             "4. 脑筋急转弯\r"
             "5. 弱智吧问答\r"
-            "6. 热榜60S\r"
-            "7. 热榜图片\r"
-            "8. 60S读世界\r\r"
-            "补充功能：每日60S图片\r"
-            "发送 娱乐帮助 查看上一页"
+            "6. 热榜图片\r"
+            "7. 60S读世界\r"
+            "8. 每日60S图片\r\r"
+            "发送 娱乐帮助 3 查看下一页"
         )
         t1 = {
             "key": "t1",
@@ -126,10 +126,11 @@ def _build_fun_help_page(page: int):
             "key": "t2",
             "values": [
                 generate_command("弱智吧问答", command="弱智吧问答", status="start", msg2=" | "),
-                generate_command("热榜60S", command="热榜60S", status="start", msg2="\r"),
-                generate_command("热榜图片", command="热榜图片", status="start", msg2=" | "),
-                generate_command("60S读世界", command="60S读世界", status="start", msg2="\r"),
-                generate_command("上一页", command="娱乐帮助", status="end", msg2="\r[直接发送对应指令即可使用"),
+                generate_command("热榜图片", command="热榜图片", status="start", msg2="\r"),
+                generate_command("60S读世界", command="60S读世界", status="start", msg2=" | "),
+                generate_command("每日60S图片", command="每日60S图片", status="start", msg2="\r"),
+                generate_command("上一页", command="娱乐帮助 1", status="start", msg2=" | "),
+                generate_command("下一页", command="娱乐帮助 3", status="end", msg2="\r[直接发送对应指令即可使用"),
             ]
         }
         md_msg = (
@@ -139,19 +140,18 @@ def _build_fun_help_page(page: int):
             "[Steam喜加一](mqqapi://aio/inlinecmd?command=Steam喜加一&enter=false&reply=false) | "
             "[脑筋急转弯](mqqapi://aio/inlinecmd?command=脑筋急转弯&enter=false&reply=false)\r"
             "[弱智吧问答](mqqapi://aio/inlinecmd?command=弱智吧问答&enter=false&reply=false) | "
-            "[热榜60S](mqqapi://aio/inlinecmd?command=热榜60S&enter=false&reply=false)\r"
-            "[热榜图片](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false) | "
-            "[60S读世界](mqqapi://aio/inlinecmd?command=60S读世界&enter=false&reply=false)\r\r"
-            "[上一页](mqqapi://aio/inlinecmd?command=娱乐帮助&enter=false&reply=false) | "
-            "[每日60S图片](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)"
+            "[热榜图片](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false)\r"
+            "[60S读世界](mqqapi://aio/inlinecmd?command=60S读世界&enter=false&reply=false) | "
+            "[每日60S图片](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)\r\r"
+            "[上一页](mqqapi://aio/inlinecmd?command=娱乐帮助%201&enter=false&reply=false) | "
+            "[下一页](mqqapi://aio/inlinecmd?command=娱乐帮助%203&enter=false&reply=false)"
         )
         fallback_buttons = {
-            "k1": "上一页", "v1": "娱乐帮助",
-            "k2": "热榜60S", "v2": "热榜60S",
+            "k1": "上一页", "v1": "娱乐帮助 1",
+            "k2": "下一页", "v2": "娱乐帮助 3",
             "k3": "60S读世界", "v3": "60S读世界",
         }
         return title, text_msg, shell_text, t1, t2, md_msg, fallback_buttons
-
 
 async def send_fun_help_page(bot: Bot, event, config: XiuConfig, page: int):
     title, text_msg, shell_text, t1, t2, native_md_msg, fallback_buttons = _build_fun_help_page(page)
@@ -160,11 +160,7 @@ async def send_fun_help_page(bot: Bot, event, config: XiuConfig, page: int):
         # ===== 模板MD =====
         if config.markdown_id:
             try:
-                s1 = {
-                    "key": "s1",
-                    "values": [f"python\r{shell_text}"]
-                }
-
+                s1 = {"key": "s1", "values": [f"python\r{shell_text}"]}
                 md_msg = MessageSegment.markdown_template(
                     bot,
                     config.markdown_id,
@@ -183,7 +179,7 @@ async def send_fun_help_page(bot: Bot, event, config: XiuConfig, page: int):
             except Exception as e:
                 logger.warning(f"娱乐帮助 第{page}页 原生MD发送失败：{e}")
 
-    # ===== 普通文本 =====
+    # ===== 普通文本回退 =====
     await handle_send(
         bot, event, text_msg,
         md_type="娱乐",
@@ -196,10 +192,29 @@ async def send_fun_help_page(bot: Bot, event, config: XiuConfig, page: int):
 @fun_menu_cmd.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     config = XiuConfig()
-    await send_fun_help_page(bot, event, config, page=1)
 
+    raw_msg = str(event.get_message()).strip()
+    # 支持：娱乐帮助 / 娱乐帮助 2 / 娱乐菜单 3 / 娱乐功能 1
+    parts = raw_msg.split()
+    page = 1
 
-@fun_menu_cmd2.handle(parameterless=[Cooldown(cd_time=3)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    config = XiuConfig()
-    await send_fun_help_page(bot, event, config, page=2)
+    if len(parts) >= 2:
+        try:
+            page = int(parts[1])
+        except Exception:
+            await handle_send(
+                bot, event,
+                "页码格式错误，示例：娱乐帮助 2",
+                md_type="娱乐",
+                k1="第1页", v1="娱乐帮助 1",
+                k2="第2页", v2="娱乐帮助 2",
+                k3="第3页", v3="娱乐帮助 3",
+            )
+            return
+
+    if page < 1:
+        page = 1
+    if page > 3:
+        page = 3
+
+    await send_fun_help_page(bot, event, config, page=page)
