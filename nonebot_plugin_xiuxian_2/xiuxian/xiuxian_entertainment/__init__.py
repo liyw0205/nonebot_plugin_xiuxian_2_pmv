@@ -16,6 +16,7 @@ from .mod.hot_rank_image import *
 from .mod.daily_60s_image import *
 from .mod.world_60s import *
 from .mod.music import *
+from .mod.random_hakimi import *
 
 
 fun_menu_cmd = on_command("娱乐帮助", aliases={"娱乐菜单", "娱乐功能"}, priority=5, block=True)

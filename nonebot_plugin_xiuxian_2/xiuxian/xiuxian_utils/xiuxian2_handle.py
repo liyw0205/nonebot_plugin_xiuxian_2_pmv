@@ -1848,7 +1848,9 @@ class XiuxianDateManage:
             sql = "UPDATE user_xiuxian SET puppet_status=? WHERE user_id=?"
             cur = self.conn.cursor()
             cur.execute(sql, (status, user_id))
-            self.conn_all_enabled_puppets(self)
+            self.conn.commit()
+    
+    def get_all_enabled_puppets(self):
         """获取所有开启灵田傀儡的玩家 user_id 列表"""
         with self.lock:
             self._ensure_puppet_column()
@@ -1857,7 +1859,6 @@ class XiuxianDateManage:
             cur.execute(sql)
             rows = cur.fetchall()
             return [r[0] for r in rows]
-
 
 class XiuxianJsonDate:
     def __init__(self):

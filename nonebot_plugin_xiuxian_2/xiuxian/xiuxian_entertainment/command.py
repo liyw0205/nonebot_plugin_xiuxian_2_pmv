@@ -1,5 +1,6 @@
 import json
 import requests
+import random
 from urllib.parse import quote
 from nonebot.log import logger
 from nonebot import on_command
