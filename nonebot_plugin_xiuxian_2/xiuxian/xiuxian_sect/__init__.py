@@ -28,6 +28,8 @@ from ..xiuxian_utils.utils import (
     Txt2Img, update_statistics_value
 )
 from ..xiuxian_utils.item_json import Items
+from urllib.parse import quote
+from ..adapter_compat import is_channel_event
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -1147,89 +1149,166 @@ async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_msg_handler(bot, event, '宗门列表', bot.self_id, msg_list)
     await sect_list.finish()
 
+def _md_cmd_link(text: str, cmd: str) -> str:
+    """生成 QQ 原生 Markdown 快捷指令链接"""
+    return f"[{text}](mqqapi://aio/inlinecmd?command={quote(cmd)}&enter=false&reply=false)"
+    
 @sect_users.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):  
-    """查看所在宗门成员信息（第一页显示职位人数统计）"""
+async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看所在宗门成员信息（第一页显示职位人数统计，支持原生MD快捷键）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_users.finish()
-    
+
     # 获取页码，默认为1
     try:
         current_page = int(args.extract_plain_text().strip())
     except:
         current_page = 1
-    
+
     if user_info:
         sect_id = user_info['sect_id']
         if sect_id:
             sect_info = sql_message.get_sect_info(sect_id)
             userlist = sql_message.get_all_users_by_sect_id(sect_id)
-            
+
             if not userlist:
                 msg = "宗门目前没有成员！"
                 await handle_send(bot, event, msg)
                 await sect_users.finish()
-            
-            # 按职位排序：宗主(0) > 副宗主(1) > 长老(2) > 护法(3) > 执事(4) > 亲传弟子(5) > 大师兄(6) > 大师姐(7) > 二师兄(8) > 小师弟(9) > 小师妹(10) > 内门弟子(11) > 外门弟子(12) > 守山弟子(13) > 记名弟子(14) > 杂役(15)
+
+            # 按职位排序（数字越小，权限越高）
             sorted_users = sorted(userlist, key=lambda x: x['sect_position'])
 
-            # 构建成员详细信息
-            title = [f"☆【{sect_info['sect_name']}】的成员信息☆"]          
-            # 构建成员信息列表
-            msg_list = []
-            
-            # 第一页显示职位人数统计
+            # 获取长老职位编号
+            position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
+            elder_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
+
+            # 当前操作者职位
+            actor_pos = int(user_info['sect_position'])
+
+            # 操作者是否达到长老及以上
+            actor_is_elder_or_above = actor_pos <= elder_position
+
+            # 判断是否可对目标显示“职位/踢出”快捷键
+            # 规则：操作者需为长老及以上，且目标职位必须低于自己（编号更大）
+            def can_manage_target(target_pos: int) -> bool:
+                if not actor_is_elder_or_above:
+                    return False
+                return int(target_pos) > actor_pos
+
+            # 构建标题（文本模式）
+            title = [f"☆【{sect_info['sect_name']}】的成员信息☆"]
+
+            # 第一页显示职位统计
             if current_page == 1:
-                # 统计各个职位的人数
                 position_count = {}
-                for user in sorted_users:
-                    position = user['sect_position']
-                    if position not in position_count:
-                        position_count[position] = 0
-                    position_count[position] += 1
-                
-                # 显示职位人数统计
+                for u in sorted_users:
+                    p = u['sect_position']
+                    position_count[p] = position_count.get(p, 0) + 1
+
                 title.append("☆------宗门职位统计------☆")
-                
-                # 按职位编号顺序显示
                 for pos_id in sorted(position_count.keys()):
                     pos_data = jsondata.sect_config_data().get(str(pos_id), {})
                     pos_title = pos_data.get("title", f"未知职位{pos_id}")
                     max_count = pos_data.get("max_count", 0)
-                    
                     count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
                     title.append(f"{pos_title}：{count_info}")
-                
+
             title = "\n".join(title)
-            
-            
-            # 每10条消息为一页（第一页已经显示了统计信息，所以成员信息从第16条开始）
+
+            # 分页
             page_size = 10
-            start_idx = (current_page - 1) * page_size
-            end_idx = start_idx + page_size
-            
-            # 其他页正常显示10个成员
-            current_msgs = sorted_users[start_idx:end_idx]
-            
-            # 添加成员详细信息
-            for idx, user in enumerate(current_msgs, start_idx + 1):
-                msg = f"编号:{idx}\n道号:{user['user_name']}\n境界:{user['level']}\n"
-                msg += f"宗门职位:{jsondata.sect_config_data()[str(user['sect_position'])]['title']}\n"
-                msg += f"宗门贡献度:{number_to(user['sect_contribution'])}\n"
-                msg_list.append(msg)
-            
-            # 计算总页数（考虑第一页的特殊情况）
             total_members = len(sorted_users)
             total_pages = (total_members + page_size - 1) // page_size
-            
-            # 添加页脚
+            if total_pages <= 0:
+                total_pages = 1
+
+            # 页码修正
+            if current_page < 1:
+                current_page = 1
+            if current_page > total_pages:
+                current_page = total_pages
+
+            start_idx = (current_page - 1) * page_size
+            end_idx = start_idx + page_size
+            current_msgs = sorted_users[start_idx:end_idx]
+
+            # ===== 原生MD模式 =====
+            if XiuConfig().markdown_status and not is_channel_event(event):
+                md_lines = []
+                md_lines.append(f"# 【{sect_info['sect_name']}】成员信息")
+                md_lines.append(f"> 第 {current_page}/{total_pages} 页")
+
+                if current_page == 1:
+                    md_lines.append("## 宗门职位统计")
+                    position_count = {}
+                    for u in sorted_users:
+                        p = u['sect_position']
+                        position_count[p] = position_count.get(p, 0) + 1
+
+                    for pos_id in sorted(position_count.keys()):
+                        pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                        pos_title = pos_data.get("title", f"未知职位{pos_id}")
+                        max_count = pos_data.get("max_count", 0)
+                        count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
+                        md_lines.append(f"- {pos_title}：{count_info}")
+
+                md_lines.append("## 成员列表")
+                for idx, u in enumerate(current_msgs, start_idx + 1):
+                    uname = u['user_name']
+                    upos_num = int(u['sect_position'])
+                    upos = jsondata.sect_config_data()[str(upos_num)]['title']
+                    ulevel = u['level']
+                    ucon = number_to(u['sect_contribution'])
+
+                    if can_manage_target(upos_num):
+                        pos_link = _md_cmd_link("职位", f"宗门职位变更 {uname} ")
+                        kick_link = _md_cmd_link("踢出", f"踢出宗门 {uname}")
+                        quick_ops = f"{pos_link} | {kick_link}"
+                    else:
+                        quick_ops = ""
+
+                    md_lines.append(
+                        f"{idx}. **{uname}**  {quick_ops}\n"
+                        f"> 职位：{upos}｜境界：{ulevel}｜贡献：{ucon}"
+                    )
+
+                if current_page < total_pages:
+                    next_link = _md_cmd_link("下一页", f"宗门成员查看 {current_page + 1}")
+                    md_lines.append(f"\n{next_link}")
+                else:
+                    md_lines.append("\n已是最后一页")
+
+                md_msg = MessageSegment.markdown(bot, "\n".join(md_lines), button_id="")
+                await bot.send(event=event, message=md_msg)
+                await sect_users.finish()
+
+            # ===== 文本模式（回退）=====
+            msg_list = []
+            for idx, u in enumerate(current_msgs, start_idx + 1):
+                upos_num = int(u['sect_position'])
+                upos = jsondata.sect_config_data()[str(upos_num)]['title']
+                one = f"编号:{idx}\n道号:{u['user_name']}\n境界:{u['level']}\n"
+                one += f"宗门职位:{upos}\n"
+                one += f"宗门贡献度:{number_to(u['sect_contribution'])}\n"
+                if can_manage_target(upos_num):
+                    one += f"快捷操作: 宗门职位变更 {u['user_name']} [职位编号] / 踢出宗门 {u['user_name']}\n"
+                else:
+                    one += f"快捷操作: 不可操作\n"
+                msg_list.append(one)
+
             footer = f"发送'宗门成员查看 页码'查看其他页（共{total_pages}页）"
             msg_list.append(footer)
-            page = ["翻页", f"查看宗门成员{current_page + 1}", "变更", "宗门职位变更", "踢出", "踢出宗门", f"{current_page}/{total_pages}"]
-            # 发送消息
+
+            # 底部按钮：只有长老及以上才给管理入口
+            if actor_is_elder_or_above:
+                page = ["翻页", f"宗门成员查看 {current_page + 1}", "变更", "宗门职位变更", "踢出", "踢出宗门", f"{current_page}/{total_pages}"]
+            else:
+                page = ["翻页", f"宗门成员查看 {current_page + 1}", "宗门", "我的宗门", "帮助", "宗门帮助", f"{current_page}/{total_pages}"]
+
             await send_msg_handler(bot, event, '宗门成员', bot.self_id, msg_list, title=title, page=page)
         else:
             msg = "一介散修，莫要再问。"
@@ -1237,7 +1316,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     else:
         msg = "未曾踏入修仙世界，输入【我要修仙】加入我们，看破这世间虚妄!"
         await handle_send(bot, event, msg, md_type="我要修仙")
-    
+
     await sect_users.finish()
 
 @sect_task.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1753,25 +1832,45 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_donate.finish()
+
     user_id = user_info['user_id']
     if not user_info['sect_id']:
         msg = f"道友还未加入一方宗门。"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_donate.finish()
+
     msg = args.extract_plain_text().strip()
     donate_num = re.findall(r"\d+", msg)  # 捐献灵石数
+
     if len(donate_num) > 0:
-        if int(donate_num[0]) > user_info['stone']:
-            msg = f"道友的灵石数量小于欲捐献数量{int(donate_num[0])}，请检查"
+        donate_stone = int(donate_num[0])
+
+        if donate_stone > user_info['stone']:
+            msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_donate.finish()
-        else:
-            sql_message.update_ls(user_id, int(donate_num[0]), 2)
-            sql_message.donate_update(user_info['sect_id'], int(donate_num[0]))
-            sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(donate_num[0]))
-            msg = f"道友捐献灵石{int(donate_num[0])}枚，宗门建设度增加：{int(donate_num[0])}，宗门贡献度增加：{int(donate_num[0])}点，蒸蒸日上！"
-            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-            await sect_donate.finish()
+
+        # 捐献资材倍率
+        materials_rate = config.get("宗门捐献资材倍率", 1)
+        add_materials = int(donate_stone * materials_rate)
+
+        # 扣用户灵石
+        sql_message.update_ls(user_id, donate_stone, 2)
+        # 加宗门建设度
+        sql_message.donate_update(user_info['sect_id'], donate_stone)
+        # 加个人宗门贡献
+        sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + donate_stone)
+        # 加宗门资材
+        sql_message.update_sect_materials(user_info['sect_id'], add_materials, 1)
+
+        msg = (
+            f"道友捐献灵石{donate_stone}枚，"
+            f"宗门建设度增加：{donate_stone}，"
+            f"宗门资材增加：{add_materials}，"
+            f"宗门贡献度增加：{donate_stone}点，蒸蒸日上！"
+        )
+        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await sect_donate.finish()
     else:
         msg = f"捐献的灵石数量解析异常"
         await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
