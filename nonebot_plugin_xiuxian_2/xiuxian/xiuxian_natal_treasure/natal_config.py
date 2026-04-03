@@ -149,7 +149,7 @@ EFFECT_NAME_TO_TYPE = {v: k for k, v in EFFECT_NAME_MAP.items()}
 # min_value/max_value: 觉醒/铭刻时，该效果基础值的随机范围
 # growth: 效果每提升1级，增加的数值 (Effect Level Growth)
 EFFECT_BASE_AND_GROWTH = {
-    NatalEffectType.BLEED:        {"min_value": 0.05, "max_value": 0.10, "growth": 0.015},
+    NatalEffectType.BLEED:        {"min_value": 0.025, "max_value": 0.05, "growth": 0.005},
     NatalEffectType.ARMOR_BREAK:  {"min_value": 0.08, "max_value": 0.15, "growth": 0.02},
     NatalEffectType.EVASION:      {"min_value": 0.07, "max_value": 0.12, "growth": 0.015},
     NatalEffectType.SHIELD:       {"min_value": 0.15, "max_value": 0.35, "growth": 0.025},
