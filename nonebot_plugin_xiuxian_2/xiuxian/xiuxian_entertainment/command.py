@@ -18,6 +18,7 @@ from ..adapter_compat import (
 from ..xiuxian_utils.utils import (
     handle_send,
     handle_send_md,
+    handle_pic_send,
     handle_pic_msg_send,
     generate_command,
 )
