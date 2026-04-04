@@ -18,7 +18,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
     save_player_info,UserBuffDate, get_main_info_msg, 
     get_user_buff, get_sec_msg, get_sub_info_msg, get_effect_info_msg,
-    XIUXIAN_IMPART_BUFF, leave_harm_time, PlayerDataManager
+    XIUXIAN_IMPART_BUFF, leave_harm_time, PlayerDataManager,
+    get_base_attributes, get_final_attributes
 )
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -1188,23 +1189,32 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mind_state.finish()
+
     user_id = user_msg['user_id']
-    sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
-    
+    sql_message.update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+
     player_data = sql_message.get_player_data(user_id)
     if not player_data:
         msg = "获取用户状态信息失败！"
         await handle_send(bot, event, msg)
         await mind_state.finish()
-    
+
     user_info = sql_message.get_user_info_with_id(user_id)
-    
     current_status = load_player_user(user_id)
-    
+
+    # 统一属性口径
+    base_attr = get_base_attributes(user_id)
+    final_attr = get_final_attributes(user_id)
+
+    if not base_attr or not final_attr:
+        msg = "属性读取失败，请稍后再试。"
+        await handle_send(bot, event, msg)
+        await mind_state.finish()
+
     # 状态映射
     status_map = {
         "on": "开启",
-        "off": "关闭", 
+        "off": "关闭",
         "refusal": "拒绝"
     }
     current_status_display = status_map.get(current_status, "关闭")
@@ -1214,60 +1224,24 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
     main_buff_data = user_buff_data.get_user_main_buff_data()
-    
-    # 获取传承数据
+
+    # 传承数据（用于展示）
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
-    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
-    impart_mp_per = impart_data['impart_mp_per'] if impart_data is not None else 0
-    impart_know_per = impart_data['impart_know_per'] if impart_data is not None else 0
     impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
     boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
-    
-    base_attack = player_data['攻击']
-    user_attack = int(base_attack)
-    
-    # 获取其他buff数据
-    user_armor_crit_data = user_buff_data.get_user_armor_buff_data()
-    user_weapon_data = UserBuffDate(user_id).get_user_weapon_data()
-    user_main_crit_data = UserBuffDate(user_id).get_user_main_buff_data()
-    user_main_data = UserBuffDate(user_id).get_user_main_buff_data()
-    
-    if user_main_data is not None:
-        main_def = user_main_data['def_buff'] * 100
-    else:
-        main_def = 0
-    
-    if user_armor_crit_data is not None:
-        armor_crit_buff = ((user_armor_crit_data['crit_buff']) * 100)
-    else:
-        armor_crit_buff = 0
-        
-    if user_weapon_data is not None:
-        crit_buff = ((user_weapon_data['crit_buff']) * 100)
-    else:
-        crit_buff = 0
 
-    user_armor_data = user_buff_data.get_user_armor_buff_data()
-    if user_armor_data is not None:
-        def_buff = int(user_armor_data['def_buff'] * 100)
-    else:
-        def_buff = 0
-    
-    if user_weapon_data is not None:
-        weapon_def = user_weapon_data['def_buff'] * 100
-    else:
-        weapon_def = 0
+    # 武器/功法会心伤害加成（展示）
+    weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()
+    weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0
+    user_main_critatk = UserBuffDate(user_id).get_user_main_buff_data()
+    main_critatk = user_main_critatk['critatk'] if user_main_critatk is not None else 0
 
-    if user_main_crit_data is not None:
-        main_crit_buff = ((user_main_crit_data['crit_buff']) * 100)
-    else:
-        main_crit_buff = 0
-    
-    # 计算会心率（包含传承加成）
-    base_crit_rate = player_data['会心']
-    total_crit_rate = base_crit_rate + (impart_know_per * 100)
-    
+    user_attack = int(final_attr["final_atk"])
+    total_crit_rate = float(final_attr["crit_rate"] * 100)
+    user_js = int(final_attr["damage_reduction"] * 100)
+    max_hp = int(final_attr["max_hp"])
+    max_mp = int(final_attr["max_mp"])
+
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     if list_all == now_index:
@@ -1280,26 +1254,11 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
         else:
             exp_meg = f"可突破！"
-    
+
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
-    main_hp_buff = main_buff_data['hpbuff'] if main_buff_data is not None else 0
-    main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
-    
-    hppractice = user_info['hppractice'] * 0.05 if user_info['hppractice'] is not None else 0
-    mppractice = user_info['mppractice'] * 0.05 if user_info['mppractice'] is not None else 0  
-    
-    weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()
-    weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0
-    user_main_critatk = UserBuffDate(user_id).get_user_main_buff_data()
-    main_critatk = user_main_critatk['critatk'] if user_main_critatk is not None else 0
-    
-    user_js = def_buff + weapon_def + main_def
     leveluprate = int(user_info['level_up_rate'])
     number = user_main_critatk["number"] if user_main_critatk is not None else 0
-    
-    max_hp = int((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice))
-    max_mp = int(user_info['exp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
-    
+
     msg = f"""
 道号：{player_data['道号']}
 气血:{number_to(player_data['气血'])}/{number_to(max_hp)}({((player_data['气血'] / max_hp) * 100):.2f}%)
@@ -1309,7 +1268,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 攻击修炼:{user_info['atkpractice']}级(提升攻击力{user_info['atkpractice'] * 4}%)
 元血修炼:{user_info['hppractice']}级(提升气血{user_info['hppractice'] * 5}%)
 灵海修炼:{user_info['mppractice']}级(提升真元{user_info['mppractice'] * 5}%)
-修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1+ user_blessed_spot_data)) * 100)}%
+修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%
 会心:{total_crit_rate:.1f}%
 减伤率:{user_js}%
 boss战增益:{int(boss_atk * 100)}%

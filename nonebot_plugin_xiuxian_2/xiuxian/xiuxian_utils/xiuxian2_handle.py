@@ -1849,7 +1849,7 @@ class XiuxianDateManage:
             cur = self.conn.cursor()
             cur.execute(sql, (status, user_id))
             self.conn.commit()
-    
+
     def get_all_enabled_puppets(self):
         """获取所有开启灵田傀儡的玩家 user_id 列表"""
         with self.lock:
@@ -1859,6 +1859,7 @@ class XiuxianDateManage:
             cur.execute(sql)
             rows = cur.fetchall()
             return [r[0] for r in rows]
+
 
 class XiuxianJsonDate:
     def __init__(self):
@@ -3469,46 +3470,132 @@ class UserBuffDate:
         return armor_buff_data
 
 def final_user_data(user_data, columns):
-    """传入用户当前信息、buff信息,返回最终信息"""
+    """传入数据库行与列描述，返回叠加buff后的用户信息（统一口径）"""
     user_dict = dict(zip((col[0] for col in columns), user_data))
-    
-    # 通过字段名称获取相应的值
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
-    if impart_data is None:
-        xiuxian_impart._create_user(user_dict['user_id'])
-  
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_dict['user_id'])
-    impart_hp_per = impart_data['impart_hp_per'] if impart_data is not None else 0
-    impart_mp_per = impart = impart_data['impart_mp_per'] if impart_data is not None else 0
-    impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
-    
-    user_buff_data = UserBuffDate(user_dict['user_id']).BuffInfo
-    
-    armor_atk_buff = 0
-    if int(user_buff_data['armor_buff']) != 0:
-        armor_info = items.get_data_by_item_id(user_buff_data['armor_buff'])
-        armor_atk_buff = armor_info['atk_buff']
-        
-    weapon_atk_buff = 0
-    if int(user_buff_data['faqi_buff']) != 0:
-        weapon_info = items.get_data_by_item_id(user_buff_data['faqi_buff'])
-        weapon_atk_buff = weapon_info['atk_buff']
-    
-    main_buff_data = UserBuffDate(user_dict['user_id']).get_user_main_buff_data()
-    main_hp_buff = main_buff_data['hpbuff'] if main_buff_data is not None else 0
-    main_mp_buff = main_buff_data['mpbuff'] if main_buff_data is not None else 0
-    main_atk_buff = main_buff_data['atkbuff'] if main_buff_data is not None else 0
-    
-    hppractice = user_dict['hppractice'] * 0.05 if user_dict['hppractice'] is not None else 0
-    mppractice = user_dict['mppractice'] * 0.05 if user_dict['mppractice'] is not None else 0
-    
-    # 改成字段名称来获取相应的值
-    user_dict['hp'] = int(user_dict['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
-    user_dict['mp'] = int(user_dict['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
-    user_dict['atk'] = int((user_dict['atk'] * (user_dict['atkpractice'] * 0.04 + 1) * (1 + main_atk_buff) * (
-            1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(user_buff_data['atk_buff'])
-    
+    user_id = user_dict.get("user_id")
+    if not user_id:
+        return user_dict
+
+    final_attr = get_final_attributes(user_id, ratio=1.0, include_current=True)
+    if not final_attr:
+        return user_dict
+
+    # 仅覆盖需要动态计算的字段，其他字段保持原样
+    user_dict["hp"] = int(final_attr["current_hp"])
+    user_dict["mp"] = int(final_attr["current_mp"])
+    user_dict["atk"] = int(final_attr["final_atk"])
     return user_dict
+
+def get_base_attributes(user_id: str | int) -> dict | None:
+    """获取基础属性（不吃任何buff）"""
+    user = sql_message.get_user_info_with_id(user_id)
+    if not user:
+        return None
+
+    return {
+        "user_id": user["user_id"],
+        "nickname": user["user_name"],
+        "level": user["level"],
+        "exp": int(user["exp"]),
+        "stone": int(user["stone"]),
+
+        "base_hp": int(user["hp"]),
+        "base_mp": int(user["mp"]),
+        "base_atk": int(user["atk"]),
+
+        "atkpractice": int(user.get("atkpractice", 0)),
+        "hppractice": int(user.get("hppractice", 0)),
+        "mppractice": int(user.get("mppractice", 0)),
+    }
+
+
+def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current: bool = True) -> dict | None:
+    """获取buff加成后的最终属性（统一口径）"""
+    base = get_base_attributes(user_id)
+    if not base:
+        return None
+
+    # buff数据
+    user_buff = UserBuffDate(user_id)
+    buff_info = user_buff.BuffInfo or {}
+
+    main = user_buff.get_user_main_buff_data() or {}
+    weapon = user_buff.get_user_weapon_data() or {}
+    armor = user_buff.get_user_armor_buff_data() or {}
+
+    impart = xiuxian_impart.get_user_impart_info_with_id(user_id) or {}
+
+    # 主功法
+    main_hp = float(main.get("hpbuff", 0))
+    main_mp = float(main.get("mpbuff", 0))
+    main_atk = float(main.get("atkbuff", 0))
+    main_crit = float(main.get("crit_buff", 0))
+    main_critatk = float(main.get("critatk", 0))
+    main_def = float(main.get("def_buff", 0))
+
+    # 装备
+    weapon_atk = float(weapon.get("atk_buff", 0))
+    weapon_crit = float(weapon.get("crit_buff", 0))
+    weapon_critatk = float(weapon.get("critatk", 0))
+    weapon_def = float(weapon.get("def_buff", 0))
+
+    armor_atk = float(armor.get("atk_buff", 0))
+    armor_crit = float(armor.get("crit_buff", 0))
+    armor_def = float(armor.get("def_buff", 0))
+
+    # 传承
+    impart_hp = float(impart.get("impart_hp_per", 0))
+    impart_mp = float(impart.get("impart_mp_per", 0))
+    impart_atk = float(impart.get("impart_atk_per", 0))
+    impart_know = float(impart.get("impart_know_per", 0))
+    impart_burst = float(impart.get("impart_burst_per", 0))
+    boss_atk = float(impart.get("boss_atk", 0))
+
+    # 修炼等级
+    hppractice = base["hppractice"] * 0.05
+    mppractice = base["mppractice"] * 0.05
+    atkpractice = base["atkpractice"] * 0.04
+
+    # 永久攻击buff
+    perm_atk = int(buff_info.get("atk_buff", 0) or 0)
+
+    # 最终值
+    max_hp = int((base["exp"] / 2) * (1 + main_hp + impart_hp + hppractice))
+    max_mp = int(base["exp"] * (1 + main_mp + impart_mp + mppractice))
+
+    current_hp = int(base["base_hp"] * (1 + main_hp + impart_hp + hppractice))
+    current_mp = int(base["base_mp"] * (1 + main_mp + impart_mp + mppractice))
+
+    final_atk = int(
+        (base["base_atk"] * (1 + atkpractice) * (1 + main_atk) * (1 + weapon_atk) * (1 + armor_atk)) * (1 + impart_atk)
+    ) + perm_atk
+
+    crit_rate = max(0, min(1, weapon_crit + armor_crit + main_crit + impart_know))
+    crit_damage = 1.5 + impart_burst + weapon_critatk + main_critatk
+    damage_reduction = main_def + weapon_def + armor_def
+    armor_penetration = 0.0  # 需要的话可从副功法等再叠
+    
+    # 比例缩放（例如PVE多队平衡）
+    max_hp = int(max_hp * ratio)
+    max_mp = int(max_mp * ratio)
+    current_hp = int(current_hp * ratio) if include_current else max_hp
+    current_mp = int(current_mp * ratio) if include_current else max_mp
+    final_atk = int(final_atk * ratio)
+
+    return {
+        **base,
+        "max_hp": max_hp,
+        "max_mp": max_mp,
+        "current_hp": current_hp,
+        "current_mp": current_mp,
+        "final_atk": final_atk,
+
+        "crit_rate": crit_rate,
+        "crit_damage": crit_damage,
+        "damage_reduction": damage_reduction,
+        "armor_penetration": armor_penetration,
+        "boss_damage_bonus": boss_atk,
+    }
 
 def get_weapon_info_msg(weapon_id, weapon_info=None):
     """

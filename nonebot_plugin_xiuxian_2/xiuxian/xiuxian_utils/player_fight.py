@@ -4,7 +4,10 @@ from enum import IntEnum
 from pathlib import Path
 from nonebot.log import logger
 
-from .xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
+from .xiuxian2_handle import (
+    XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,
+    get_final_attributes
+)
 from ..xiuxian_config import convert_rank
 from .utils import number_to
 from .item_json import Items
@@ -159,71 +162,31 @@ def get_players_attributes(user_id, level_ratios=None):
             item_data = items.get_data_by_item_id(item_id)
             buffs[display_name] = item_data
 
-    user_info = sql_message.get_user_info_with_id(user_id)
-    user_impart_info = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    # 修复 faqi_data 未定义
+    weapon_data = buffs.get('法器', {})
 
-    faqi_data = buffs.get('法器', {})
-    armor_data = buffs.get('防具', {})
-    main_gongfa_data = buffs.get('主功法', {})
-
-    weapon_mp_cost_modifier = faqi_data.get('mp_buff', 0)
-    weapon_atk_buff = faqi_data.get('atk_buff', 0)
-    armor_atk_buff = armor_data.get('atk_buff', 0)
-    weapon_crit_buff = faqi_data.get('crit_buff', 0)
-    armor_crit_buff = armor_data.get('crit_buff', 0)
-    weapon_critatk = faqi_data.get('critatk', 0)
-    weapon_def = faqi_data.get('def_buff', 0)
-    armor_def = armor_data.get('def_buff', 0)
-
-    main_hp_buff = main_gongfa_data.get('hpbuff', 0)
-    main_mp_buff = main_gongfa_data.get('mpbuff', 0)
-    main_atk_buff = main_gongfa_data.get('atkbuff', 0)
-    main_crit_buff = main_gongfa_data.get('crit_buff', 0)
-    main_critatk = main_gongfa_data.get('critatk', 0)
-    main_def = main_gongfa_data.get('def_buff', 0)
-
-    hppractice = user_info['hppractice'] * 0.05
-    mppractice = user_info['mppractice'] * 0.05
-    atkpractice = user_info['atkpractice'] * 0.04
-
-    impart_hp_per = user_impart_info['impart_hp_per']
-    impart_mp_per = user_impart_info['impart_mp_per']
-    impart_atk_per = user_impart_info['impart_atk_per']
-    impart_know_per = user_impart_info['impart_know_per']
-    impart_burst_per = user_impart_info['impart_burst_per']
-    boss_atk = user_impart_info['boss_atk']
-
-    max_hp = int((user_info['exp'] / 2) * (1 + main_hp_buff + impart_hp_per + hppractice))
-    hp = int(user_info['hp'] * (1 + main_hp_buff + impart_hp_per + hppractice))
-    max_mp = int(user_info['exp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
-    mp = int(user_info['mp'] * (1 + main_mp_buff + impart_mp_per + mppractice))
-    atk = int((user_info['atk'] * (atkpractice + 1) * (1 + main_atk_buff) * (1 + weapon_atk_buff) * (1 + armor_atk_buff)) * (1 + impart_atk_per)) + int(buff_data_info.get('atk_buff', 0))
-    crit = max(0, min(1, weapon_crit_buff + armor_crit_buff + main_crit_buff + impart_know_per))
-    critatk = 1.5 + impart_burst_per + weapon_critatk + main_critatk
-    dr = armor_def + weapon_def + main_def
-    hit = 100
-    dodge = 0
-    ap = 0
-    speed = 10
+    final_attr = get_final_attributes(user_id, ratio=ratio, include_current=True)
+    if not final_attr:
+        return {"属性": {}, "其他": buff_data_info, "本命法宝": None}
 
     attributes = {
-        "user_id": user_id,
-        "nickname": user_info['user_name'],
-        "max_hp": int(max_hp * ratio),
-        "current_hp": int(hp * ratio),
-        "max_mp": int(max_mp * ratio),
-        "current_mp": int(mp * ratio),
-        "mp_cost_modifier": weapon_mp_cost_modifier,
-        "attack": int(atk * ratio),
-        "exp": int(user_info['exp'] * ratio),
-        "critical_rate": crit,
-        "critical_damage": critatk,
-        "boss_damage_bonus": boss_atk,
-        "damage_reduction": dr,
-        "armor_penetration": ap,
-        "accuracy": hit,
-        "dodge": dodge,
-        "speed": speed,
+        "user_id": final_attr["user_id"],
+        "nickname": final_attr["nickname"],
+        "max_hp": final_attr["max_hp"],
+        "current_hp": final_attr["current_hp"],
+        "max_mp": final_attr["max_mp"],
+        "current_mp": final_attr["current_mp"],
+        "mp_cost_modifier": weapon_data.get('mp_buff', 0),
+        "attack": final_attr["final_atk"],
+        "exp": final_attr["exp"],
+        "critical_rate": final_attr["crit_rate"],
+        "critical_damage": final_attr["crit_damage"],
+        "boss_damage_bonus": final_attr["boss_damage_bonus"],
+        "damage_reduction": final_attr["damage_reduction"],
+        "armor_penetration": final_attr["armor_penetration"],
+        "accuracy": 100,
+        "dodge": 0,
+        "speed": 10,
         "start_skills": []
     }
 

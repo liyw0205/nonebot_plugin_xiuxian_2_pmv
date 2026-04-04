@@ -18,7 +18,7 @@ from ..xiuxian_utils.utils import (
     optimize_md
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate, get_base_attributes, get_final_attributes
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
@@ -50,7 +50,7 @@ async def get_user_xiuxian_info(user_id):
     """获取用户修仙信息的公共函数"""
     user_info = sql_message.get_user_real_info(user_id)
     user_name = user_info['user_name']
-    
+
     user_num = user_info['id']
     rank = sql_message.get_exp_rank(user_id)
     user_rank = int(rank[0])
@@ -59,6 +59,10 @@ async def get_user_xiuxian_info(user_id):
 
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
+
+    # 统一属性口径
+    final_attr = get_final_attributes(user_id)
+    final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
@@ -83,14 +87,14 @@ async def get_user_xiuxian_info(user_id):
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
         else:
             exp_meg = f"可突破！"
-    
+
     partner_data = load_partner(user_id)
     if not partner_data or partner_data.get('partner_id') is None:
         partner_info = "无"
     else:
         partner_user_id = partner_data["partner_id"]
         affection = partner_data["affection"]
-        partner_info = sql_message.get_user_real_info(partner_user_id)
+        partner_info_data = sql_message.get_user_real_info(partner_user_id)
         if affection >= 10000:
             affection_level = "💖 深情厚谊"
         elif affection >= 5000:
@@ -99,8 +103,8 @@ async def get_user_xiuxian_info(user_id):
             affection_level = "💗 初识情愫"
         else:
             affection_level = "💓 缘分伊始"
-        partner_info = f"{partner_info['user_name']} ({affection_level})" if partner_info else "无"
-    
+        partner_info = f"{partner_info_data['user_name']} ({affection_level})" if partner_info_data else "无"
+
     user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
@@ -109,7 +113,7 @@ async def get_user_xiuxian_info(user_id):
     user_effect2_buff_date = user_buff_data.get_user_effect2_buff_data()
     user_weapon_data = user_buff_data.get_user_weapon_data()
     user_armor_data = user_buff_data.get_user_armor_buff_data()
-    
+
     main_buff_name = f"无"
     sub_buff_name = f"无"
     sec_buff_name = f"无"
@@ -117,11 +121,11 @@ async def get_user_xiuxian_info(user_id):
     effect2_buff_buff_name = f"无"
     weapon_name = f"无"
     armor_name = f"无"
-    
+
     if user_main_buff_date is not None:
         main_buff_name = f"{user_main_buff_date['name']}({user_main_buff_date['level']})"
-    if user_sub_buff_date != None:
-        sub_buff_name = f"{user_sub_buff_date['name']}({user_sub_buff_date['level']})"   
+    if user_sub_buff_date is not None:
+        sub_buff_name = f"{user_sub_buff_date['name']}({user_sub_buff_date['level']})"
     if user_sec_buff_date is not None:
         sec_buff_name = f"{user_sec_buff_date['name']}({user_sec_buff_date['level']})"
     if user_effect1_buff_date is not None:
@@ -132,12 +136,12 @@ async def get_user_xiuxian_info(user_id):
         weapon_name = f"{user_weapon_data['name']}({user_weapon_data['level']})"
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
-        
+
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
     sql_message.update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
-    
+
     nt = NatalTreasure(user_id)
     natal_name_level = "无"
     if nt.exists():
@@ -158,7 +162,7 @@ async def get_user_xiuxian_info(user_id):
         "灵根": f"{user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)",
         "突破状态": f"{exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%",
         "修炼等级": f"攻修{user_info['atkpractice']}级，元血{user_info['hppractice']}级，灵海{user_info['mppractice']}级",
-        "攻击力": f"{number_to(user_info['atk'])}",
+        "攻击力": f"{number_to(final_atk)}",
         "所在宗门": sectmsg,
         "宗门职位": sectzw,
         "主修功法": main_buff_name,
@@ -172,10 +176,9 @@ async def get_user_xiuxian_info(user_id):
         "修为排行": f"第{int(user_rank)}位",
         "灵石排行": f"第{int(user_stone)}位",
     }
-    
-    # ===== 称号行：有名称才写入，有图片URL时不写入文本行（由发送函数单独展示） =====
+
     title_line = f"\n称号: {title_name}" if title_name else ""
-    
+
     text_msg = f"""
 道号: {user_name}{title_line}
 境界: {user_info['level']}
@@ -184,7 +187,7 @@ async def get_user_xiuxian_info(user_id):
 战力: {number_to(int(user_info['exp'] * level_rate * realm_rate))}
 灵根: {user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)
 突破状态: {exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%
-攻击力: {number_to(user_info['atk'])}
+攻击力: {number_to(final_atk)}
 攻修等级: {user_info['atkpractice']}级
 元血等级: {user_info['hppractice']}级
 灵海等级: {user_info['mppractice']}级
@@ -202,7 +205,7 @@ async def get_user_xiuxian_info(user_id):
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
 灵石排行: 第{int(user_stone)}位"""
-    
+
     return DETAIL_MAP, text_msg
 
 @xiuxian_message.handle(parameterless=[Cooldown(cd_time=1.4)])
