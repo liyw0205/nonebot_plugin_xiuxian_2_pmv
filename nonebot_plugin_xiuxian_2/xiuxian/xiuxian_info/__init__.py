@@ -8,13 +8,19 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     is_channel_event,
+    is_group_event,
     MessageSegment
+)
+from ..xiuxian_utils.utils import (
+    check_user, get_msg_pic, handle_send, number_to,
+    handle_pic_send, handle_pic_msg_send, handle_send_md,
+    get_impersonating_target, call_upload_api,
+    optimize_md
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, handle_pic_send, handle_send_md, get_impersonating_target, call_upload_api
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_partner
 from .draw_changelog import get_commits, create_changelog_image
@@ -25,6 +31,11 @@ from pathlib import Path
 
 # 导入本命法宝数据管理类
 from ..xiuxian_natal_treasure.natal_data import NatalTreasure # 新增：导入 NatalTreasure
+# 称号
+from ..xiuxian_title.title_data import (
+    get_equipped_title_display, check_and_unlock_titles,
+    get_user_equipped_title, get_title_by_id
+)
 
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
@@ -49,8 +60,8 @@ async def get_user_xiuxian_info(user_id):
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
-    realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
+    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     sect_id = user_info['sect_id']
     if sect_id:
         sect_info = sql_message.get_sect_info(sect_id)
@@ -60,7 +71,6 @@ async def get_user_xiuxian_info(user_id):
         sectmsg = f"无宗门"
         sectzw = f"无"
 
-    # 判断突破的修为
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     if list_all == now_index:
@@ -123,20 +133,24 @@ async def get_user_xiuxian_info(user_id):
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
         
-    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data() # 功法突破概率提升
-    sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
-    leveluprate = int(user_info['level_up_rate'])  # 用户失败次数加成
-    number =  main_rate_buff["number"] if main_rate_buff is not None else 0
+    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    sql_message.update_last_check_info_time(user_id)
+    leveluprate = int(user_info['level_up_rate'])
+    number = main_rate_buff["number"] if main_rate_buff is not None else 0
     
     nt = NatalTreasure(user_id)
-    natal_name_level = "无" # 默认显示无
+    natal_name_level = "无"
     if nt.exists():
         natal_data = nt.get_data()
         natal_name_level = f"{natal_data.get('name', '未知法宝')} (Lv.{natal_data.get('level', 0)})"
 
+    # ===== 获取称号信息 =====
+    title_name = get_equipped_title_display(user_id)
+
     DETAIL_MAP = {
         "ID": f"{user_id}",
         "道号": f"{user_name}",
+        "称号": f"{title_name}" if title_name else "无",
         "境界": f"{user_info['level']}",
         "修为": f"{number_to(user_info['exp'])}",
         "灵石": f"{number_to(user_info['stone'])}",
@@ -153,15 +167,17 @@ async def get_user_xiuxian_info(user_id):
         "法器": weapon_name,
         "防具": armor_name,
         "道侣": partner_info,
-        "本命法宝": natal_name_level, # 添加本命法宝名称和等级
+        "本命法宝": natal_name_level,
         "注册位数": f"第{int(user_num)}人",
         "修为排行": f"第{int(user_rank)}位",
         "灵石排行": f"第{int(user_stone)}位",
     }
     
-    # 格式化文本消息，本命法宝只显示名称和等级
+    # ===== 称号行：有名称才写入，有图片URL时不写入文本行（由发送函数单独展示） =====
+    title_line = f"\n称号: {title_name}" if title_name else ""
+    
     text_msg = f"""
-道号: {user_name}
+道号: {user_name}{title_line}
 境界: {user_info['level']}
 修为: {number_to(user_info['exp'])}
 灵石: {number_to(user_info['stone'])}
@@ -197,13 +213,88 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
-    
+
     _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
+
     if XiuConfig().user_info_image:
         await xiuxian_message_img_(bot, event)
-    else:
-        await handle_send(bot, event, text_msg, md_type="修仙信息", k1="图片版", v1="我的修仙信息图片版", k2="修为", v2="我的修为", k3="状态", v3="我的状态")
+        await xiuxian_message.finish()
+
+    # 获取称号信息
+    title_id = get_user_equipped_title(user_info['user_id'])
+    title_url = ""
+    title_name = ""
+    if title_id:
+        title_data = get_title_by_id(title_id)
+        if title_data:
+            title_url = title_data.get("url", "")
+            title_name = title_data['name']
+
+    config = XiuConfig()
+    is_channel = is_channel_event(event)
+
+    # ===== 有称号图片时 =====
+    if title_url:
+        # ---- 模板MD ----
+        if config.markdown_status and config.markdown_id and not is_channel:
+            try:
+                optimized_msg = optimize_md(text_msg)
+                msg_param = {
+                    "key": "t1",
+                    "values": [
+                        f"](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",
+                        f"img #256px #64px]({title_url})\r",
+                        f"{optimized_msg}\r\r---\r\r[",
+                        f"图片版](mqqapi://aio/inlinecmd?command=我的修仙信息图片版&enter=false&reply=false) | [",
+                        f"我的修为](mqqapi://aio/inlinecmd?command=我的修为&enter=false&reply=false) | [",
+                        f"我的状态](mqqapi://aio/inlinecmd?command=我的状态&enter=false&reply=false)\r",
+                    ]
+                }
+                await handle_send_md(
+                    bot, event, " ",
+                    markdown_id=config.markdown_id,
+                    msg_param=msg_param,
+                    at_msg=None
+                )
+            except Exception as e:
+                logger.warning(f"存档称号模板MD发送失败")
+            await xiuxian_message.finish()
+        # ---- 原生MD ----
+        if config.markdown_status and not is_channel:
+            try:
+                optimized_msg = optimize_md(text_msg)
+                md_msg = (
+                    f"![img #256px #64px]({title_url})\r"
+                    f"{optimized_msg}\r\r"
+                    f"---\r\r"
+                    f"[图片版](mqqapi://aio/inlinecmd?command=我的修仙信息图片版&enter=false&reply=false) | "
+                    f"[我的修为](mqqapi://aio/inlinecmd?command=我的修为&enter=false&reply=false) | "
+                    f"[我的状态](mqqapi://aio/inlinecmd?command=我的状态&enter=false&reply=false)"
+                )
+                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+            except Exception as e:
+                logger.warning(f"存档称号原生MD发送失败")
+            await xiuxian_message.finish()
+
+        # ---- 普通图文模式 ----
+        if not config.markdown_status:
+            try:
+                pic_text = f"🏅 称号：{title_name}\n{text_msg}"
+                await handle_pic_msg_send(bot, event, title_url, pic_text)
+            except Exception as e:
+                logger.warning(f"存档称号图文发送失败")
+            await xiuxian_message.finish()
+
+    # ===== 无称号图片 =====
+    await handle_send(
+        bot, event, text_msg,
+        md_type="修仙信息",
+        k1="图片版", v1="我的修仙信息图片版",
+        k2="修为", v2="我的修为",
+        k3="状态", v3="我的状态"
+    )
     await xiuxian_message.finish()
+
 
 @xiuxian_message_img.handle(parameterless=[Cooldown(cd_time=30)])
 async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -214,17 +305,24 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
     
-    detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])
+    detail_map, _, equipped_title_name, equipped_title_id = await get_user_xiuxian_info(user_info['user_id'])
     
     if XiuConfig().xiuxian_info_img:
-        img_res = await draw_user_info_img(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img(user_info['user_id'], detail_map, equipped_title_name)
     else:
-        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map, equipped_title_name)
+    
     if XiuConfig().markdown_status:
         if XiuConfig().markdown_id and XiuConfig().web_link:
+            # 模板MD - 称号显示在标题中
+            title_display = f"🏅{equipped_title_name}\r" if equipped_title_name else ""
             msg_param = {
-            "key": "t1",
-            "values": ["](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",f"img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",f"道号：[{user_info['user_name']}"]
+                "key": "t1",
+                "values": [
+                    f"](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r",
+                    f"![img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",
+                    f"{title_display}道号：[{user_info['user_name']}"
+                ]
             }
             await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
             await xiuxian_message_img.finish()
@@ -232,10 +330,12 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             if not is_channel_event(event):
                 link = call_upload_api(img_res)
                 if link:
-                    logger.info(f"web图片返回: {link}")
-                    img_data = f"![img #1100px #2450px]({link})"
+                    # 原生MD - 称号显示在标题中
+                    title_display = f"#### {equipped_title_name}\r" if equipped_title_name else ""
+                    img_data = f"{title_display}![img #1100px #2450px]({link})"
                     await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
                     await xiuxian_message_img.finish()
+    
     await handle_pic_send(bot, event, img_res)
     await xiuxian_message_img.finish()
 

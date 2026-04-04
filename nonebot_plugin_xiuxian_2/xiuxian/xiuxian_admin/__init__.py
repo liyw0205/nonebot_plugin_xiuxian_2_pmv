@@ -81,7 +81,7 @@ dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
 migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
 update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
 swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
-parse_event_cmd = on_command("取", permission=SUPERUSER, priority=100, block=True)
+parse_event_cmd = on_command("消息信息", permission=SUPERUSER, priority=100, block=True)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1011,6 +1011,8 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 毁灭力量 [物品ID/名称] [数量] - 给自己扣物品
 → 毁灭力量 [物品ID/名称] [数量] all - 全服扣物品
 → 毁灭力量 [物品ID/名称] [数量] [道号] - 给指定用户扣物品
+→ 赠送称号 [物品ID/名称] all - 全服赠送
+→ 赠送称号 [物品ID/名称] [道号] - 给指定用户赠送
 
 ⚡ 境界管理：
 → 造化力量 [境界] [道号] - 修改用户境界
@@ -1499,7 +1501,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
 
     await matcher.finish()
 
-parse_event_cmd = on_command("取", permission=SUPERUSER, priority=100, block=True)
+from typing import Any, Dict, Tuple
+
 
 @parse_event_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def parse_event_cmd_(
@@ -1507,16 +1510,19 @@ async def parse_event_cmd_(
     event: GroupMessageEvent | PrivateMessageEvent
 ):
     """
-    超管：解析当前 event，并转图片发送
+    超管：解析当前 event 并按配置发送
+    规则：
+    1) markdown_status=True 且 markdown_id有值 -> send_msg_handler
+    2) markdown_status=True 且 markdown_id为空 -> 原生 Markdown（原始信息代码框）
+    3) markdown_status=False -> handle_send
     """
     bot, _ = await assign_bot(bot=bot, event=event)
 
     try:
-        text = _build_event_info_text(event)
-        pic = await get_msg_pic(text, scale=False)
-        await bot.send(event=event, message=MessageSegment.image(bot, pic))
+        basic_text, raw_json = _build_event_info_blocks(event)
+        await _send_event_info_by_config(bot, event, basic_text, raw_json)
     except Exception as e:
-        logger.error(f"解析event并转图发送失败: {e}")
+        logger.error(f"解析event并发送失败: {e}")
         await handle_send(bot, event, f"解析event失败：{e}")
 
 
@@ -1531,18 +1537,12 @@ def _safe_str(obj) -> str:
 
 
 def _unescape_slashes(text: str) -> str:
-    """
-    避免 JSON 中显示 \\/
-    """
     if not isinstance(text, str):
         text = _safe_str(text)
     return text.replace("\\/", "/")
 
 
 def _segment_to_simple(seg):
-    """
-    将消息段转成更易读的结构
-    """
     try:
         seg_type = getattr(seg, "type", None)
         seg_data = getattr(seg, "data", None)
@@ -1555,23 +1555,14 @@ def _segment_to_simple(seg):
 
 
 def _message_to_simple(msg):
-    """
-    尽量把 Message/消息数组转成可读结构
-    """
     if msg is None:
         return None
-
-    # 如果本身就是字符串
     if isinstance(msg, str):
         return msg
-
     try:
-        # 可迭代消息段
         return [_segment_to_simple(seg) for seg in msg]
     except Exception:
-        pass
-
-    return _safe_str(msg)
+        return _safe_str(msg)
 
 
 def _extract_plain_from_message(msg) -> str:
@@ -1589,15 +1580,8 @@ def _extract_plain_from_message(msg) -> str:
 
 
 def _extract_reply_info(event) -> dict | None:
-    """
-    统一提取引用/回复信息
-    兼容：
-    - OneBot v11: event.reply / original_message中的reply段
-    - QQ: event.message_reference / event.reply / message_scene.ext / msg_elements
-    """
     reply_info = {}
 
-    # 1. OneBot v11 标准 reply 对象
     reply_obj = getattr(event, "reply", None)
     if reply_obj is not None:
         try:
@@ -1624,7 +1608,6 @@ def _extract_reply_info(event) -> dict | None:
         except Exception:
             pass
 
-    # 2. OneBot 原始消息里的 [reply] 段
     try:
         original_message = getattr(event, "original_message", None)
         if original_message:
@@ -1636,7 +1619,6 @@ def _extract_reply_info(event) -> dict | None:
     except Exception:
         pass
 
-    # 3. QQ 新增 message_reference
     try:
         message_reference = getattr(event, "message_reference", None)
         if message_reference is not None:
@@ -1645,13 +1627,10 @@ def _extract_reply_info(event) -> dict | None:
             reply_info["ignore_get_message_error"] = getattr(
                 message_reference, "ignore_get_message_error", None
             )
-            # 不立即 return，继续尝试看看有没有更丰富内容
-            if reply_info:
-                return reply_info
+            return reply_info
     except Exception:
         pass
 
-    # 4. QQ message_scene.ext 里的 ref_msg_idx
     try:
         message_scene = getattr(event, "message_scene", None)
         if message_scene:
@@ -1673,22 +1652,13 @@ def _extract_reply_info(event) -> dict | None:
     except Exception:
         pass
 
-    # 5. QQ msg_elements 里可能存在引用字段
     try:
         msg_elements = getattr(event, "msg_elements", None)
         if isinstance(msg_elements, list):
             for elem in msg_elements:
                 if not isinstance(elem, dict):
                     continue
-
-                # 常见可能字段尝试
-                for key in (
-                    "ref_msg_id",
-                    "ref_message_id",
-                    "message_id",
-                    "msg_id",
-                    "reply_id",
-                ):
+                for key in ("ref_msg_id", "ref_message_id", "message_id", "msg_id", "reply_id"):
                     if key in elem and elem.get(key):
                         reply_info["source"] = "msg_elements"
                         reply_info["message_id"] = elem.get(key)
@@ -1701,12 +1671,7 @@ def _extract_reply_info(event) -> dict | None:
 
 
 def _event_to_dict(event):
-    """
-    尽量把 event 转成 dict，并把消息对象转成易读结构
-    """
-    # 先基础 dump
     data = None
-
     try:
         data = model_dump(event)
     except Exception:
@@ -1733,7 +1698,6 @@ def _event_to_dict(event):
     if data is None:
         return {"raw": _safe_str(event)}
 
-    # 深度修正几个关键字段，避免 message 显示不友好
     try:
         if hasattr(event, "message"):
             data["message"] = _message_to_simple(getattr(event, "message", None))
@@ -1742,19 +1706,10 @@ def _event_to_dict(event):
 
     try:
         if hasattr(event, "original_message"):
-            data["original_message"] = _message_to_simple(
-                getattr(event, "original_message", None)
-            )
+            data["original_message"] = _message_to_simple(getattr(event, "original_message", None))
     except Exception:
         pass
 
-    try:
-        if hasattr(event, "reply") and getattr(event, "reply", None) is not None:
-            data["reply"] = _extract_reply_info(event)
-    except Exception:
-        pass
-
-    # 兼容 QQ 引用消息字段
     try:
         reply_info = _extract_reply_info(event)
         if reply_info:
@@ -1766,9 +1721,6 @@ def _event_to_dict(event):
 
 
 def _pretty_event_json(data) -> str:
-    """
-    美化 JSON，并避免显示 \\/
-    """
     try:
         text = json.dumps(data, ensure_ascii=False, indent=2, default=str)
         return _unescape_slashes(text)
@@ -1776,10 +1728,7 @@ def _pretty_event_json(data) -> str:
         return _unescape_slashes(_safe_str(data))
 
 
-def _truncate_for_image(text: str, limit: int = 12000) -> str:
-    """
-    防止内容太长导致图片过大
-    """
+def _truncate_for_send(text: str, limit: int = 2000) -> str:
     if not text:
         return ""
     if len(text) <= limit:
@@ -1787,18 +1736,19 @@ def _truncate_for_image(text: str, limit: int = 12000) -> str:
     return text[:limit] + f"\n\n......\n（内容过长，已截断，原长度：{len(text)}）"
 
 
-def _build_event_info_text(event) -> str:
+def _build_event_info_blocks(event) -> Tuple[str, str]:
+    """
+    返回：
+    - basic_text: 基本信息文本（纯文本）
+    - raw_json:   原始event json文本（已美化）
+    """
     lines = []
-    lines.append("【Event 解析】")
-    lines.append("")
+    lines.append("【消息基本信息】")
 
-    # 基础信息
     try:
         lines.append(f"事件类型：{event.get_type()}")
     except Exception:
-        lines.append(
-            f"事件类型：{getattr(event, 'post_type', getattr(event, '__type__', '未知'))}"
-        )
+        lines.append(f"事件类型：{getattr(event, 'post_type', getattr(event, '__type__', '未知'))}")
 
     try:
         lines.append(f"事件名称：{event.get_event_name()}")
@@ -1831,7 +1781,6 @@ def _build_event_info_text(event) -> str:
         if value is not None:
             lines.append(f"{label}：{value}")
 
-    # to_me
     try:
         lines.append(f"to_me：{event.is_tome()}")
     except Exception:
@@ -1839,44 +1788,23 @@ def _build_event_info_text(event) -> str:
         if to_me is not None:
             lines.append(f"to_me：{to_me}")
 
-    lines.append("")
-
-    # 发送者
     sender = getattr(event, "sender", None)
     author = getattr(event, "author", None)
 
     if sender is not None:
-        lines.append("【发送者信息】")
-        user_id = getattr(sender, "user_id", None)
-        nickname = getattr(sender, "nickname", None)
-        card = getattr(sender, "card", None)
-        role = getattr(sender, "role", None)
-        if user_id is not None:
-            lines.append(f"发送者ID：{user_id}")
-        if nickname:
-            lines.append(f"昵称：{nickname}")
-        if card:
-            lines.append(f"群名片：{card}")
-        if role:
-            lines.append(f"角色：{role}")
-        lines.append("")
-
+        lines.append(f"发送者ID：{getattr(sender, 'user_id', None)}")
+        lines.append(f"发送者昵称：{getattr(sender, 'nickname', None)}")
+        lines.append(f"发送者群名片：{getattr(sender, 'card', None)}")
+        lines.append(f"发送者角色：{getattr(sender, 'role', None)}")
     elif author is not None:
-        lines.append("【发送者信息】")
         author_id = (
             getattr(author, "id", None)
             or getattr(author, "user_openid", None)
             or getattr(author, "member_openid", None)
         )
-        username = getattr(author, "username", None)
-        if author_id is not None:
-            lines.append(f"发送者ID：{author_id}")
-        if username:
-            lines.append(f"昵称：{username}")
-        lines.append("")
+        lines.append(f"发送者ID：{author_id}")
+        lines.append(f"发送者昵称：{getattr(author, 'username', None)}")
 
-    # 消息
-    lines.append("【消息信息】")
     try:
         msg_obj = event.get_message()
         plain_text = _extract_plain_from_message(msg_obj)
@@ -1886,7 +1814,6 @@ def _build_event_info_text(event) -> str:
         raw_message = getattr(event, "raw_message", None)
         content = getattr(event, "content", None)
         message = getattr(event, "message", None)
-
         if raw_message is not None:
             lines.append(f"raw_message：{raw_message}")
         elif content is not None:
@@ -1894,37 +1821,68 @@ def _build_event_info_text(event) -> str:
         elif message is not None:
             lines.append(f"message：{_safe_str(message)}")
         else:
-            lines.append("无可提取消息内容")
+            lines.append("消息内容：<无>")
 
-    # original_message
-    try:
-        original_message = getattr(event, "original_message", None)
-        if original_message is not None:
-            lines.append("")
-            lines.append("【原始消息对象】")
-            lines.append(_safe_str(original_message))
-    except Exception:
-        pass
-
-    # reply / 引用消息
     reply_info = _extract_reply_info(event)
     if reply_info:
-        lines.append("")
-        lines.append("【引用/回复消息】")
-        for k, v in reply_info.items():
-            if isinstance(v, (dict, list)):
-                lines.append(f"{k}：{_unescape_slashes(json.dumps(v, ensure_ascii=False, default=str))}")
-            else:
-                lines.append(f"{k}：{v}")
+        lines.append(f"引用信息：{_unescape_slashes(json.dumps(reply_info, ensure_ascii=False, default=str))}")
 
-    lines.append("")
-    lines.append("【原始 Event 数据】")
+    basic_text = "\n".join(lines)
 
     event_dict = _event_to_dict(event)
     raw_json = _pretty_event_json(event_dict)
-    raw_json = _truncate_for_image(raw_json)
-    lines.append("────────────────")
-    lines.append(raw_json)
-    lines.append("────────────────")
+    raw_json = _truncate_for_send(raw_json)
 
-    return "\n".join(lines)
+    return basic_text, raw_json
+
+
+async def _send_event_info_by_config(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    basic_text: str,
+    raw_json: str
+):
+    cfg = XiuConfig()
+
+    if cfg.markdown_status and cfg.markdown_id:
+        try:
+            raw_json = _sanitize_urls_for_markdown_template(raw_json)
+            content = [raw_json]
+            await send_msg_handler(bot, event, 'event', bot.self_id, content, title=basic_text)
+            return
+        except Exception as e:
+            logger.warning(f"send_msg_handler发送失败，降级原生MD: {e}")
+
+    if cfg.markdown_status and not cfg.markdown_id:
+        try:
+            md = (
+                f"## 消息信息\n"
+                f"{basic_text}\n\n"
+                f"### 原始信息\n"
+                f"```json\n{raw_json}\n```"
+            )
+            await bot.send(event=event, message=MessageSegment.markdown(bot, md))
+            return
+        except Exception as e:
+            logger.warning(f"原生Markdown发送失败，降级handle_send: {e}")
+
+    await handle_send(bot, event, f"{basic_text}\n\n【原始信息】\n{raw_json}")
+
+
+def _sanitize_urls_for_markdown_template(text: str) -> str:
+    """
+    仅净化 URL：
+    - http://xxx -> xxx
+    - https://xxx -> xxx
+    - mqqapi://xxx -> xxx
+    只替换 URL 片段，不改其他普通文本。
+    """
+    if not isinstance(text, str):
+        text = _safe_str(text)
+
+    def _repl(m: re.Match) -> str:
+        rest = m.group("rest") or ""
+        return rest
+
+    _URL_SCHEME_RE = re.compile(r'(?P<scheme>https?|mqqapi)://(?P<rest>[^\s<>"\'`]+)', re.IGNORECASE)
+    return _URL_SCHEME_RE.sub(_repl, text)

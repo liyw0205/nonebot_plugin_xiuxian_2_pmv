@@ -44,6 +44,7 @@ class Items:
         self.mix_elixir_type_jsonpath = ELIXIRPATH / "炼丹丹药.json"
         self.ldl_jsonpath = ELIXIRPATH / "炼丹炉.json"
         self.jlq_jsonpath = XIULIANITEMPATH / "聚灵旗.json"
+        self.title_jsonpath = XIULIANITEMPATH / "称号.json"
         self.sw_jsonpath = ELIXIRPATH / "神物.json"
         self.special_jsonpath = XIULIANITEMPATH / "特殊物品.json"
         self.type_to_path = {
@@ -60,6 +61,7 @@ class Items:
             "合成丹药": self.mix_elixir_type_jsonpath,
             "炼丹炉": self.ldl_jsonpath,
             "聚灵旗": self.jlq_jsonpath,
+            "称号": self.title_jsonpath,
             "神物": self.sw_jsonpath,
             "特殊物品": self.special_jsonpath
         }
@@ -114,7 +116,7 @@ class Items:
         item_types = [
             "功法", "辅修功法", "神通", "身法", "瞳术",
             "法器", "防具", "丹药", "礼包", "药材",
-            "合成丹药", "炼丹炉", "聚灵旗", "神物", "特殊物品"
+            "合成丹药", "炼丹炉", "聚灵旗", "称号", "神物", "特殊物品"
         ]
         for item_type in item_types:
             self.set_item_data(self.get_items_data(item_type), item_type)

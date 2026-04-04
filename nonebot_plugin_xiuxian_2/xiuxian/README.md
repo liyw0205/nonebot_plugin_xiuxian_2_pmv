@@ -26,9 +26,11 @@
 - xiuxian_lunhui ：轮回重修
 - xiuxian_mixelixir ：炼丹
 - xiuxian_natal_treasure ：本命法宝
+- xiuxian_past_life ：前尘往事
 - xiuxian_puppet ：灵田傀儡
 - xiuxian_rift ：秘境
 - xiuxian_sect ：宗门
+- xiuxian_title ：称号
 - xiuxian_tower ：通天塔
 - xiuxian_trade ：交易
 - xiuxian_training ：历练
