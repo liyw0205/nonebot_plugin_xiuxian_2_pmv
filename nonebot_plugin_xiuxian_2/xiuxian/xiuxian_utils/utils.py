@@ -609,7 +609,7 @@ def number_to(num):
     try:
         num = float(num)
     except (TypeError, ValueError):
-        raise ValueError("输入必须是数字")
+        num = 0
 
     # 处理负数
     is_negative = False
@@ -1158,7 +1158,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
             if original_user_id in _impersonating_users:
                 target_user_id = _impersonating_users[original_user_id]
                 target_user_info = sql_message.get_user_info_with_id(target_user_id)
-                target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
+                target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
                 title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
             else:
                 title = f"<@{open_id}>\r{title}"
@@ -1316,7 +1316,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
             target_user_info = sql_message.get_user_info_with_id(target_user_id)
-            target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
+            target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
             msg = f"<@{open_id}>\r{msg}"
@@ -1392,7 +1392,7 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
             target_user_info = sql_message.get_user_info_with_id(target_user_id)
-            target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
+            target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
             msg = f"<@{open_id}>\r{msg}"
@@ -1459,7 +1459,7 @@ async def handle_pic_msg_send(
                 target_user_name = (
                     target_user_info["user_name"]
                     if target_user_info
-                    else f"ID:{target_user_id}"
+                    else f"QQ:{target_user_id}"
                 )
                 text = f"(伪装[{target_user_name}])\n{text}"
 
