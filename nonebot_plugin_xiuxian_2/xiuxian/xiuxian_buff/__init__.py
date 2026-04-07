@@ -329,7 +329,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     else:
         arg = args.extract_plain_text().strip()
         give_info = sql_message.get_user_info_with_name(str(arg))
-        give_qq = give_info.get('user_id')
+        give_qq = give_info['user_id'] if give_info else None
     
     user2 = sql_message.get_user_real_info(give_qq)
     

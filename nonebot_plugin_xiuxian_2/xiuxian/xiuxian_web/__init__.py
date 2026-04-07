@@ -3610,6 +3610,122 @@ def api_logs_read():
     except Exception as e:
         return jsonify({"success": False, "error": f"读取失败：{str(e)}"})
 
+@app.route('/api/logs/tail')
+def api_logs_tail():
+    """
+    增量读取日志（按字节 offset）：
+    参数：
+      file               日志文件名
+      offset             上次读取位置（字节）
+      keyword            包含关键字（可空）
+      level              日志级别过滤，ALL 表示不过滤
+      start/end          时间过滤（可空）
+      ignore_unknown     1/0，是否忽略 UNKNOWN
+      ignore_keywords    使用 | 分隔的忽略关键字（可空）
+    返回：
+      {
+        success, file, offset, next_offset,
+        lines: [{time, level, text}, ...]
+      }
+    """
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    file_name = request.args.get("file", "").strip()
+
+    try:
+        offset = int(request.args.get("offset", 0))
+    except Exception:
+        offset = 0
+
+    keyword = request.args.get("keyword", "").strip()
+    level = request.args.get("level", "ALL").strip().upper()
+    start_dt = request.args.get("start", "").strip()
+    end_dt = request.args.get("end", "").strip()
+
+    # 新增：忽略项
+    ignore_unknown = request.args.get("ignore_unknown", "0") == "1"
+    ignore_keywords_raw = request.args.get("ignore_keywords", "").strip()
+    ignore_keywords = [x.strip() for x in ignore_keywords_raw.split("|") if x.strip()]
+
+    try:
+        candidates = _get_log_candidates()
+        file_map = {p.name: p for p in candidates}
+        if file_name not in file_map:
+            return jsonify({"success": False, "error": "日志文件不存在或不允许访问"})
+
+        target = file_map[file_name]
+        file_size = target.stat().st_size
+
+        # 日志轮转/截断处理：offset 越界则回到 0
+        if offset < 0 or offset > file_size:
+            offset = 0
+
+        # 时间解析
+        start_obj = _parse_dt_flexible(start_dt) if start_dt else None
+        end_obj = _parse_dt_flexible(end_dt) if end_dt else None
+        if end_dt and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_dt):
+            end_obj = end_obj.replace(hour=23, minute=59, second=59)
+
+        lines = []
+        next_offset = offset
+
+        import codecs
+        decoder = codecs.getincrementaldecoder('utf-8')('replace')
+
+        with open(target, "rb") as f:
+            f.seek(offset)
+            chunk = f.read()
+            next_offset = f.tell()
+
+        text = decoder.decode(chunk, final=True)
+        raw_lines = text.splitlines()
+
+        for raw in raw_lines:
+            clean_for_match = _strip_ansi_for_parse(raw)
+
+            # 正向关键字（包含）
+            if keyword and keyword not in clean_for_match:
+                continue
+
+            lv = _parse_level(clean_for_match)
+
+            # 级别过滤
+            if level and level != "ALL" and lv != level:
+                continue
+
+            # 忽略 UNKNOWN
+            if ignore_unknown and lv == "UNKNOWN":
+                continue
+
+            # 忽略关键字（命中任意一个就忽略）
+            if ignore_keywords and any(k in raw for k in ignore_keywords):
+                continue
+
+            # 时间过滤
+            t = _parse_line_time(raw)
+            if start_obj and t and t < start_obj:
+                continue
+            if end_obj and t and t > end_obj:
+                continue
+
+            lines.append({
+                "time": t.strftime("%Y-%m-%d %H:%M:%S") if t else "",
+                "level": lv,
+                "text": raw
+            })
+
+        return jsonify({
+            "success": True,
+            "file": file_name,
+            "offset": offset,
+            "next_offset": next_offset,
+            "lines": lines
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"tail失败：{str(e)}"})
+
 def run_flask():
     app.run(host=HOST, port=PORT, debug=False)
 

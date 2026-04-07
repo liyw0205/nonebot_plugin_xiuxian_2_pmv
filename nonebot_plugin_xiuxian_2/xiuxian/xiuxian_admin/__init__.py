@@ -1247,7 +1247,7 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     try:
         msg = MessageSegment.markdown(bot, text)
-        await bot.send_reply(event, msg)
+        await bot.send(event, msg)
     except Exception as e:
         err = str(e)
         logger.error(f"dm发送markdown失败: {err}")
@@ -1273,10 +1273,11 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     用户伪装 off     - 取消当前伪装
     """
     bot, _ = await assign_bot(bot=bot, event=event)
-    admin_user_id = event.get_user_id()
+    admin_user_id = str(event.get_user_id())
     arg_text = args.extract_plain_text().strip()
 
-    if arg_text.lower() == "取消" or arg_text.lower() == "off":
+    # 取消伪装
+    if arg_text.lower() in {"取消", "off"}:
         if admin_user_id in _impersonating_users:
             del _impersonating_users[admin_user_id]
             await handle_send(bot, event, "已取消用户伪装。您现在是您自己了。")
@@ -1284,44 +1285,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             await handle_send(bot, event, "您当前没有伪装任何用户。")
         return
 
-    # 初始化目标用户ID和信息
-    target_user_id = None
-    target_user_info = None
-
-    # 1. 优先处理 @ 提及
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
-
-    if at_qq:
-        target_user_id = at_qq
-        target_user_info = sql_message.get_user_info_with_id(target_user_id)
-
-    # 2. 如果没有 @ 提及，尝试通过道号查找
-    if not target_user_info and arg_text: # 确保 arg_text 存在且之前未找到用户
-        # 尝试通过道号查找用户
-        temp_user_info_by_name = sql_message.get_user_info_with_name(arg_text)
-        if temp_user_info_by_name:
-            target_user_info = temp_user_info_by_name
-            target_user_id = target_user_info['user_id']
-
-    # 3. 如果 @ 和道号都未找到，最后尝试将文本作为用户ID
-    if not target_user_info and arg_text: # 确保 arg_text 存在且之前未找到用户
-        try:
-            potential_user_id = str(int(arg_text)) # 尝试转换为整数ID
-            target_user_info = sql_message.get_user_info_with_id(potential_user_id)
-            if target_user_info: # 只有当通过ID成功找到用户时才赋值
-                target_user_id = potential_user_id
-            else:
-                # 如果是有效的数字，但不是修仙用户，则 target_user_info 依然为 None
-                pass 
-        except ValueError:
-            # 如果 arg_text 既不是数字也不是道号，则会走到这里
-            pass
-            
-    if not target_user_id or not target_user_info:
+    if not arg_text and not any(seg.type == "at" for seg in args):
         current_target_id = _impersonating_users.get(admin_user_id)
         if current_target_id:
             target_user_info = sql_message.get_user_info_with_id(current_target_id)
@@ -1331,9 +1295,53 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             await handle_send(bot, event, "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消")
         return
 
-    # 到这里，target_user_id 和 target_user_info 应该都已正确获取
+    target_user_id = None
+    target_user_info = None
+
+    # 1) 优先 @
+    at_qq = None
+    for seg in args:
+        if seg.type == "at":
+            at_qq = seg.data.get("qq", "")
+            break
+
+    if at_qq:
+        target_user_id = str(at_qq)
+        target_user_info = sql_message.get_user_info_with_id(target_user_id)
+
+    # 2) 再按道号查
+    if not target_user_id and arg_text:
+        info_by_name = sql_message.get_user_info_with_name(arg_text)
+        if info_by_name:
+            target_user_info = info_by_name
+            target_user_id = str(info_by_name["user_id"])
+
+    # 3) 最后把输入当ID（重点：即使数据库没有，也允许伪装）
+    if not target_user_id and arg_text:
+        target_user_id = str(arg_text)
+        target_user_info = sql_message.get_user_info_with_id(target_user_id)
+
+    # 兜底
+    if not target_user_id:
+        await handle_send(bot, event, "未找到可伪装目标，请输入目标ID/@用户/道号")
+        return
+
+    # 直接写入伪装映射（不因为数据库不存在而中断）
     _impersonating_users[admin_user_id] = target_user_id
-    await handle_send(bot, event, f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n后续所有修仙命令都将以此用户身份执行，直至您取消伪装。")
+
+    if target_user_info:
+        await handle_send(
+            bot, event,
+            f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n"
+            f"后续所有修仙命令都将以此用户身份执行，直至您取消伪装。"
+        )
+    else:
+        await handle_send(
+            bot, event,
+            f"您已成功伪装为 ID：{target_user_id}。\n"
+            f"⚠ 该ID当前不在数据库，仅提醒，不影响伪装执行。\n"
+            f"后续所有修仙命令都将以此身份执行，直至您取消伪装。"
+        )
 
 @migrate_qqid_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1504,6 +1512,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
 from typing import Any, Dict, Tuple
 
 
+from typing import Any, Dict, Tuple
+
+
 @parse_event_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def parse_event_cmd_(
     bot: Bot,
@@ -1512,9 +1523,8 @@ async def parse_event_cmd_(
     """
     超管：解析当前 event 并按配置发送
     规则：
-    1) markdown_status=True 且 markdown_id有值 -> send_msg_handler
-    2) markdown_status=True 且 markdown_id为空 -> 原生 Markdown（原始信息代码框）
-    3) markdown_status=False -> handle_send
+    1) markdown_status=True 且 markdown_id有值 -> 模板Markdown（清洗后）
+    2) 其他情况 -> 强制纯文本发送（避免原生Markdown URL风控/代码块截断）
     """
     bot, _ = await assign_bot(bot=bot, event=event)
 
@@ -1728,13 +1738,46 @@ def _pretty_event_json(data) -> str:
         return _unescape_slashes(_safe_str(data))
 
 
-def _truncate_for_send(text: str, limit: int = 2000) -> str:
+def _truncate_for_send(text: str, limit: int = 3000) -> str:
     if not text:
         return ""
     if len(text) <= limit:
         return text
     return text[:limit] + f"\n\n......\n（内容过长，已截断，原长度：{len(text)}）"
 
+
+def _sanitize_markdown_unsafe_text(text: str) -> str:
+    """
+    清理可能触发QQ原生Markdown风控或渲染异常的内容：
+    保留换行符结构，防止代码块坍塌
+    """
+    if not isinstance(text, str):
+        text = _safe_str(text)
+
+    # 1. 先把标准的 \n 换行符统一转为 \r (QQ Markdown 识别 \r 换行更稳定)
+    text = text.replace("\n", "\r")
+
+    # 2. 清理 Markdown 链接防止被解析
+    text = strip_md_links(text)
+
+    # 3. 避免 ``` 干扰代码块闭合
+    text = text.replace("```", "'''")
+    
+    return text
+
+def strip_md_links(text: str) -> str:
+    if not isinstance(text, str):
+        text = str(text)
+
+    # [文本](任意链接) -> 文本
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1', text)
+    text = re.sub(
+        r'(?i)\b(https?|mqqapi)://',
+        lambda m: f"{m.group(1)}:\\/\\/",
+        text
+    )
+
+    return text
 
 def _build_event_info_blocks(event) -> Tuple[str, str]:
     """
@@ -1844,45 +1887,41 @@ async def _send_event_info_by_config(
 ):
     cfg = XiuConfig()
 
-    if cfg.markdown_status and cfg.markdown_id:
-        try:
-            raw_json = _sanitize_urls_for_markdown_template(raw_json)
-            content = [raw_json]
-            await send_msg_handler(bot, event, 'event', bot.self_id, content, title=basic_text)
-            return
-        except Exception as e:
-            logger.warning(f"send_msg_handler发送失败，降级原生MD: {e}")
+    # 预处理：这里的 safe_raw 已经通过 _sanitize_markdown_unsafe_text 转换了 \n 为 \r
+    safe_basic = _sanitize_markdown_unsafe_text(basic_text)
+    safe_raw = _sanitize_markdown_unsafe_text(raw_json)
 
-    if cfg.markdown_status and not cfg.markdown_id:
+    if cfg.markdown_status:
+        if cfg.markdown_id:
+            # 模板 MD 逻辑保持不变
+            try:
+                content = [safe_raw]
+                await send_msg_handler(bot, event, "event", bot.self_id, content, title=safe_basic)
+                return
+            except Exception as e:
+                logger.warning(f"消息信息模板Markdown发送失败，降级原生: {e}")
+        
+        # 优化原生 Markdown 发送结构
         try:
-            md = (
-                f"## 消息信息\n"
-                f"{basic_text}\n\n"
-                f"### 原始信息\n"
-                f"```json\n{raw_json}\n```"
+            # 使用 \r 确保在手机端渲染时，代码块能够正常换行且保持缩进
+            plain = (
+                f"### 消息基本信息\r"
+                f"```text\r"
+                f"{safe_basic}\r"
+                f"```\r"
+                f"### 原始数据 (Event JSON)\r"
+                f"```json\r"
+                f"{safe_raw}\r"
+                f"```"
             )
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md))
+            await bot.send(event=event, message=MessageSegment.markdown(bot, plain))
             return
         except Exception as e:
-            logger.warning(f"原生Markdown发送失败，降级handle_send: {e}")
-
-    await handle_send(bot, event, f"{basic_text}\n\n【原始信息】\n{raw_json}")
-
-
-def _sanitize_urls_for_markdown_template(text: str) -> str:
-    """
-    仅净化 URL：
-    - http://xxx -> xxx
-    - https://xxx -> xxx
-    - mqqapi://xxx -> xxx
-    只替换 URL 片段，不改其他普通文本。
-    """
-    if not isinstance(text, str):
-        text = _safe_str(text)
-
-    def _repl(m: re.Match) -> str:
-        rest = m.group("rest") or ""
-        return rest
-
-    _URL_SCHEME_RE = re.compile(r'(?P<scheme>https?|mqqapi)://(?P<rest>[^\s<>"\'`]+)', re.IGNORECASE)
-    return _URL_SCHEME_RE.sub(_repl, text)
+            logger.warning(f"消息信息原生Markdown发送失败，降级纯文本: {e}")
+                
+    # 纯文本兜底
+    plain = f"{basic_text}\n\n【原始信息】\n{raw_json}"
+    try:
+        await bot.send(event=event, message=plain)
+    except Exception:
+        await handle_send(bot, event, plain)

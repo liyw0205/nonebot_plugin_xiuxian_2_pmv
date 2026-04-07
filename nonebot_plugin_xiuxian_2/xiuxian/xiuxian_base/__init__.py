@@ -227,18 +227,42 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """我要修仙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    # 先查当前激活身份是否已注册
+    # 先查当前激活身份是否已注册（内部已兼容：伪装ID > active_id > 本号）
     isUser, user_info, msg = check_user(event)
 
     # 已注册直接返回
     if isUser:
-        await handle_send(bot, event, "您已踏入修仙世界，输入【我的修仙信息】查看数据吧！", md_type="修仙", k1="存档", v1="我的修仙信息", k2="帮助", v2="修仙帮助", k3="签到", v3="修仙签到")
+        await handle_send(
+            bot,
+            event,
+            "您已踏入修仙世界，输入【我的修仙信息】查看数据吧！",
+            md_type="修仙",
+            k1="存档",
+            v1="我的修仙信息",
+            k2="帮助",
+            v2="修仙帮助",
+            k3="签到",
+            v3="修仙签到"
+        )
         await run_xiuxian.finish()
 
-    # 未注册时，不能从user_info取id，应从event获取当前执行ID
-    # 注意：这里要兼容身外化身active_id
-    active_id = player_data_manager.get_field_data(str(event.get_user_id()), "avatar", "active_id")
-    user_id = str(active_id) if active_id else str(event.get_user_id())
+    # 未注册时，按统一生效ID规则计算：伪装ID > active_id > 本号
+    real_user_id = str(event.get_user_id())
+
+    # 先本号/化身
+    active_id = player_data_manager.get_field_data(real_user_id, "avatar", "active_id")
+    user_id = str(active_id) if active_id else real_user_id
+
+    # 再伪装（优先级最高）
+    try:
+        from ..xiuxian_utils.utils import get_impersonating_target
+        imp_id = get_impersonating_target(real_user_id)
+        if imp_id:
+            user_id = str(imp_id)
+            logger.warning(f"管理员 {real_user_id} 正在伪装 {user_id} 执行【我要修仙】")
+    except Exception:
+        # 防御式处理，避免导入异常影响注册
+        pass
 
     # 生成不重复道号
     while True:
@@ -267,7 +291,18 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         f"耳边响起一个神秘人的声音：不要忘记仙途奇缘！\n"
         f"不知道怎么玩可以发送【修仙帮助】"
     )
-    await handle_send(bot, event, final_msg, md_type="修仙", k1="帮助", v1="修仙帮助", k2="存档", v2="我的修仙信息", k3="仙途奇缘", v3="仙途奇缘帮助")
+    await handle_send(
+        bot,
+        event,
+        final_msg,
+        md_type="修仙",
+        k1="帮助",
+        v1="修仙帮助",
+        k2="存档",
+        v2="我的修仙信息",
+        k3="仙途奇缘",
+        v3="仙途奇缘帮助"
+    )
     await run_xiuxian.finish()
 
 @sign_in.handle(parameterless=[Cooldown(cd_time=1.4)])

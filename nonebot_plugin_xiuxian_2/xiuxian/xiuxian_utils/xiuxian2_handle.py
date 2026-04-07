@@ -2699,8 +2699,20 @@ class PlayerDataManager:
             self.conn.commit()
 
     def update_or_write_data(self, user_id, table_name, field, value, data_type='TEXT'):
+        dt = str(data_type).upper().strip() if data_type is not None else "TEXT"
+        alias = {
+            "INT": "INTEGER",
+            "STR": "TEXT",
+            "STRING": "TEXT",
+            "FLOAT": "REAL",
+            "DOUBLE": "REAL",
+            "BOOL": "NUMERIC",
+            "BOOLEAN": "NUMERIC",
+        }
+        data_type = alias.get(dt, dt)
+
         if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
-            logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to TEXT.</yellow>")
+            logger.warning(f"不支持的数据类型: {data_type} 已设置为默认类型：TEXT")
             data_type = 'TEXT'
 
         self._ensure_table_exists(table_name)
