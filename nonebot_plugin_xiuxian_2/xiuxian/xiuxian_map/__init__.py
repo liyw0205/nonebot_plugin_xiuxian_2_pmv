@@ -13,9 +13,11 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, number_to
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ..xiuxian_utils.item_json import Items
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+items = Items()
 
 MAP_FILE = Path() / "data" / "xiuxian" / "地图.json"
 MAP_TABLE = "map_status"
@@ -25,25 +27,28 @@ DONGFU_TABLE = "dongfu_status"
 DONGFU_COST = 100000000
 FORBIDDEN_DONGFU_TYPES = {"坊市", "渡口", "驿站", "交通", "关隘", "情报", "宫殿", "试炼"}
 
+# ===== 移动节点类型 =====
+TRAVEL_NODE_TYPES = {"交通", "渡口", "驿站"}
+
 # ===== 节点功能 =====
 SEED_SHOP_TYPES = {"坊市", "城池", "驿站"}
 
-# ===== 命令 =====
-map_help = on_command("地图帮助", priority=8, block=True)
-map_info = on_command("地图", priority=8, block=True)
-my_pos = on_command("我的位置", priority=8, block=True)
-map_go = on_command("前往", priority=8, block=True)
+# ===== 节点生产配置 =====
+NODE_ACTION_CONFIG = {
+    "水域": {"cmd": "钓鱼", "cost": 5,  "pool_key": "fish", "desc": "垂钓灵鱼"},
+    "矿脉": {"cmd": "挖矿", "cost": 5,  "pool_key": "ore",  "desc": "开采灵矿"},
+    "灵林": {"cmd": "采集", "cost": 3,  "pool_key": "herb", "desc": "采集灵草"},
+    "仙山": {"cmd": "采集", "cost": 4,  "pool_key": "herb", "desc": "探寻天材"},
+}
 
-build_dongfu = on_command("建设洞府", priority=8, block=True)
-go_home = on_command("回府", priority=8, block=True)
+# 📦 奖励物品池配置
+ACTION_ITEM_POOLS = {
+    "fish": [40001, 40002, 40003, 40004, 40005],
+    "ore":  [40006, 40007, 40008, 40009, 40010],
+    "herb": [3001, 3002, 3003, 3004, 3005],
+}
 
-nearby_users_cmd = on_command("附近道友", priority=8, block=True)
-dao_qc = on_command("论道切磋", priority=8, block=True)
-dao_view = on_command("论道查看", priority=8, block=True)
-
-seed_shop = on_command("种子商店", priority=8, block=True)
-buy_seed = on_command("购买种子", priority=8, block=True)
-
+# ===== 种子配置 =====
 SEED_CONFIG = {
     21001: {"name": "青灵草种", "price": 500000, "pool": "herb_mid", "minutes": 180},
     21003: {"name": "星砂神种", "price": 15000000, "pool": "god_low", "minutes": 360},
@@ -124,59 +129,17 @@ def _init_player_map_status(user_id: str, map_data: dict):
 
 
 def _parse_map_query(map_data, text: str):
-    """
-    解析地图查询参数：
-    - 返回 ("realm", realm_name) 或 ("heaven", (realm_name, heaven_name)) 或 (None, None)
-    """
     q = (text or "").strip()
     if not q:
         return None, None
-
-    # 先判定是否是界名
     for realm in _all_realms(map_data):
         if q == realm:
             return "realm", realm
-
-    # 再判定是否是天名
     for realm in _all_realms(map_data):
         heavens = _heaven_names(map_data, realm)
         if q in heavens:
             return "heaven", (realm, q)
-
     return None, None
-
-
-def _calc_move_cost(meta, map_data, cur_realm, cur_heaven, cur_node_id, tar_realm, tar_heaven, tar_node_id):
-    cost_cfg = meta.get("move_cost", {})
-    cross_realm = int(cost_cfg.get("cross_realm", 300))
-    cross_heaven = int(cost_cfg.get("cross_heaven", 50))
-    cross_node = int(cost_cfg.get("cross_node", 5))
-
-    if cur_realm == tar_realm and cur_heaven == tar_heaven and cur_node_id == tar_node_id:
-        return 0, "你已经在该节点。"
-
-    # 跨界：仅交通节点可发起
-    if cur_realm != tar_realm:
-        cur_node = _find_node_by_id(map_data, cur_realm, cur_heaven, cur_node_id)
-        if not cur_node or cur_node.get("type") != "交通":
-            return -1, "只有在交通类节点才可前往其他界。"
-        return cross_realm, ""
-
-    # 同界跨天：允许去任意天，但若不允许跳层，则一次只能相邻天
-    if cur_heaven != tar_heaven:
-        allow_jump = bool(meta.get("rules", {}).get("allow_cross_level_jump", False))
-        if not allow_jump:
-            order = _get_realm_heaven_order(map_data, cur_realm)
-            if cur_heaven in order and tar_heaven in order:
-                if abs(order.index(cur_heaven) - order.index(tar_heaven)) > 1:
-                    return -1, "不可跨越多个天层，请逐层前往。"
-        return cross_heaven, ""
-
-    # 同天跨节点：随意前往
-    if cur_node_id != tar_node_id:
-        return cross_node, ""
-
-    return -1, "无效移动。"
 
 
 def _get_all_in_same_node(realm, heaven, node_id):
@@ -197,16 +160,119 @@ def _is_seed_shop_node(node_type: str):
     return node_type in SEED_SHOP_TYPES
 
 
+def _save_map_status(uid: str, realm: str, heaven: str, node_id: str):
+    """统一保存玩家地图状态及访问记录"""
+    player_data_manager.update_or_write_data(uid, MAP_TABLE, "realm", realm)
+    player_data_manager.update_or_write_data(uid, MAP_TABLE, "heaven", heaven)
+    player_data_manager.update_or_write_data(uid, MAP_TABLE, "node_id", node_id)
+    
+    visited = player_data_manager.get_field_data(uid, MAP_TABLE, "visited_nodes") or []
+    if node_id not in visited:
+        visited.append(node_id)
+        player_data_manager.update_or_write_data(uid, MAP_TABLE, "visited_nodes", visited)
+
+
+# ============================================================
+# 🆕 便捷函数
+# ============================================================
+def get_player_current_node(user_id: str) -> dict | None:
+    map_data = _load_map_data()
+    status = _get_player_map_status(str(user_id), map_data)
+    return _find_node_by_id(map_data, status["realm"], status["heaven"], status["node_id"])
+
+
+def get_current_node_name(user_id: str) -> str | None:
+    node = get_player_current_node(user_id)
+    return node["name"] if node else None
+
+
+# ============================================================
+# 🆕 节点生产逻辑核心处理器
+# ============================================================
+async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, action_type: str):
+    ok, user_info, m = check_user(event)
+    if not ok:
+        await handle_send(bot, event, m, md_type="我要修仙")
+        return
+
+    uid = str(user_info["user_id"])
+    node = get_player_current_node(uid)
+    if not node:
+        await handle_send(bot, event, "当前位置节点数据异常，请尝试重新【前往】其他节点。")
+        return
+
+    config = NODE_ACTION_CONFIG.get(node["type"])
+    if not config or config["cmd"] != action_type:
+        await handle_send(bot, event, f"当前节点【{node['name']}】(类型:{node['type']}) 无法进行【{action_type}】。")
+        return
+
+    stamina = int(user_info.get("user_stamina", 0))
+    if stamina < config["cost"]:
+        await handle_send(bot, event, f"体力不足！{config['desc']}需消耗 {config['cost']} 体力，当前仅剩 {stamina}。")
+        return
+
+    sql_message.update_user_stamina(uid, config["cost"], 2)
+
+    pool_ids = ACTION_ITEM_POOLS.get(config["pool_key"], [])
+    if not pool_ids:
+        await handle_send(bot, event, f"⚠️ 系统配置缺失 {config['pool_key']} 物品池，请联系管理员补全。")
+        return
+
+    reward_count = random.randint(1, 2)
+    rewards = []
+    for _ in range(reward_count):
+        item_id = random.choice(pool_ids)
+        item_data = items.get_data_by_item_id(str(item_id))
+        if item_data:
+            sql_message.send_back(uid, item_id, item_data["name"], item_data.get("type", "材料"), 1, 0)
+            rewards.append(item_data["name"])
+
+    if rewards:
+        msg = f"✅ 在【{node['name']}】成功{config['cmd']}！\n"
+        msg += f"🔋 消耗体力：{config['cost']}\n"
+        msg += f"🎁 获得物品：{'、'.join(rewards)}"
+    else:
+        msg = f"💨 在【{node['name']}】{config['cmd']}一番，似乎什么也没得到...\n"
+        msg += f"🔋 消耗体力：{config['cost']}"
+    await handle_send(bot, event, msg)
+
+
+# ============================================================
+# 🟢 命令注册
+# ============================================================
+map_help = on_command("地图帮助", priority=8, block=True)
+map_info = on_command("地图", priority=8, block=True)
+my_pos = on_command("我的位置", priority=8, block=True)
+map_go = on_command("前往", priority=8, block=True)
+
+build_dongfu = on_command("建设洞府", priority=8, block=True)
+go_home = on_command("回府", priority=8, block=True)
+
+nearby_users_cmd = on_command("附近道友", priority=8, block=True)
+dao_qc = on_command("论道切磋", priority=8, block=True)
+dao_view = on_command("论道查看", priority=8, block=True)
+
+seed_shop = on_command("种子商店", priority=8, block=True)
+buy_seed = on_command("购买种子", priority=8, block=True)
+
+fishing_cmd = on_command("钓鱼", priority=8, block=True)
+mining_cmd = on_command("挖矿", priority=8, block=True)
+gathering_cmd = on_command("采集", priority=8, block=True)
+
+
+# ============================================================
+# 🟡 命令处理器
+# ============================================================
 @map_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     msg = (
-        "【地图帮助】\n"
-        "1. 地图 / 我的位置\n"
-        "2. 前往 节点名（例：前往 九幽殿）\n"
-        "3. 建设洞府 / 回府\n"
-        "4. 附近道友 / 论道切磋 / 论道查看\n"
-        "5. 种子商店 / 购买种子 种子名 数量"
+        "🗺️【地图系统帮助】\n"
+        "1️⃣ 导航查询：地图 / 我的位置 / 前往 节点名\n"
+        "2️⃣ 洞府系统：建设洞府 / 回府\n"
+        "3️⃣ 社交互动：附近道友 / 论道切磋 / 论道查看\n"
+        "4️⃣ 节点生产：🎣钓鱼 / ⛏️挖矿 / 🌿采集\n"
+        "💡 提示：移动消耗体力。跨界/跨天需至【交通/渡口/驿站】节点。"
     )
     await handle_send(bot, event, msg)
 
@@ -224,21 +290,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     st = _get_player_map_status(uid, map_data)
 
     query = args.extract_plain_text().strip()
-
-    # 无参数：显示当前天节点列表
     if not query:
-        realm = st["realm"]
-        heaven = st["heaven"]
-        cur_node_id = st["node_id"]
-        cur_node = _find_node_by_id(map_data, realm, heaven, cur_node_id)
-
+        cur_node = _find_node_by_id(map_data, st["realm"], st["heaven"], st["node_id"])
         lines = [
             "【地图信息】",
-            f"当前位置：{realm}·{heaven}·{cur_node['name']}（{cur_node['type']}）" if cur_node else f"当前位置：{realm}·{heaven}",
+            f"当前位置：{st['realm']}·{st['heaven']}·{cur_node['name']}（{cur_node['type']}）" if cur_node else f"当前位置：{st['realm']}·{st['heaven']}",
             "—— 当前天可前往节点 ——"
         ]
-        for n in _nodes(map_data, realm, heaven):
-            mark = "📍" if n["id"] == cur_node_id else "▫"
+        for n in _nodes(map_data, st["realm"], st["heaven"]):
+            mark = "📍" if n["id"] == st["node_id"] else "▫"
             lines.append(f"{mark} {n['name']}（{n['type']}）")
         await handle_send(bot, event, "\n".join(lines))
         return
@@ -248,25 +308,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"未识别参数【{query}】，可输入界名或天名。")
         return
 
-    # 查询“界” -> 显示天列表
     if kind == "realm":
-        realm = parsed
-        heavens = _get_realm_heaven_order(map_data, realm)
-        lines = [f"【地图 - {realm}】", "—— 天层列表 ——"]
+        heavens = _get_realm_heaven_order(map_data, parsed)
+        lines = [f"【地图 - {parsed}】", "—— 天层列表 ——"]
         for h in heavens:
-            if st["realm"] == realm and st["heaven"] == h:
-                lines.append(f"📍 {h}")
-            else:
-                lines.append(f"▫ {h}")
+            mark = "📍" if st["heaven"] == h else "▫"
+            lines.append(f"{mark} {h}")
         await handle_send(bot, event, "\n".join(lines))
         return
 
-    # 查询“天” -> 显示该天节点
     if kind == "heaven":
-        realm, heaven = parsed
-        lines = [f"【地图 - {realm}·{heaven}】", "—— 节点列表 ——"]
-        for n in _nodes(map_data, realm, heaven):
-            mark = "📍" if (st["realm"] == realm and st["heaven"] == heaven and st["node_id"] == n["id"]) else "▫"
+        r, h = parsed
+        lines = [f"【地图 - {r}·{h}】", "—— 节点列表 ——"]
+        for n in _nodes(map_data, r, h):
+            mark = "📍" if st["realm"] == r and st["heaven"] == h and st["node_id"] == n["id"] else "▫"
             lines.append(f"{mark} {n['name']}（{n['type']}）")
         await handle_send(bot, event, "\n".join(lines))
         return
@@ -288,6 +343,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, m)
 
 
+# 🚶 核心路由：前往命令
 @map_go.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -297,51 +353,122 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
-    stamina = int(user_info.get("user_stamina", 0))
-    target_name = args.extract_plain_text().strip()
-    if not target_name:
-        await handle_send(bot, event, "请使用：前往 节点名")
+    target_text = args.extract_plain_text().strip()
+    if not target_text:
+        await handle_send(bot, event, "请使用：前往 [节点名/天名/界名]")
         return
 
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
-    found = _find_node_by_name(map_data, target_name)
-    if not found:
-        await handle_send(bot, event, f"未找到节点【{target_name}】")
+    meta = map_data.get("meta", {})
+    cost_cfg = meta.get("move_cost", {})
+
+    stamina = int(user_info.get("user_stamina", 0))
+    cur_node = _find_node_by_id(map_data, st["realm"], st["heaven"], st["node_id"])
+    if not cur_node:
+        await handle_send(bot, event, "当前位置节点数据异常。")
         return
 
-    tar_realm, tar_heaven, tar_node = found
-    cost, err = _calc_move_cost(
-        map_data["meta"],
-        map_data,
-        st["realm"], st["heaven"], st["node_id"],
-        tar_realm, tar_heaven, tar_node["id"]
-    )
-    if cost < 0:
-        await handle_send(bot, event, err)
-        return
-    if cost == 0:
-        await handle_send(bot, event, err or "你已在该节点。")
-        return
-    if stamina < cost:
-        await handle_send(bot, event, f"体力不足，需{cost}，当前{stamina}")
+    # 1. 智能识别目标类型 (界 > 天 > 节点)
+    t_type, t_data = None, None
+    if target_text in _all_realms(map_data):
+        t_type, t_data = "realm", target_text
+    else:
+        found_heaven = False
+        for r in _all_realms(map_data):
+            if target_text in _heaven_names(map_data, r):
+                t_type, t_data = "heaven", (r, target_text)
+                found_heaven = True
+                break
+        if not found_heaven:
+            found_node = _find_node_by_name(map_data, target_text)
+            if found_node:
+                t_type, t_data = "node", found_node
+            else:
+                await handle_send(bot, event, f"未找到地点【{target_text}】，请检查名称是否正确。")
+                return
+
+    # ================= 跨界逻辑 =================
+    if t_type == "realm":
+        tar_realm = t_data
+        if st["realm"] == tar_realm:
+            await handle_send(bot, event, "你已在此界。")
+            return
+        if cur_node["type"] not in TRAVEL_NODE_TYPES:
+            travel_nodes = [n["name"] for n in _nodes(map_data, st["realm"], st["heaven"]) if n["type"] in TRAVEL_NODE_TYPES]
+            tip = f"跨界需通过【交通/渡口/驿站】节点。\n请先前往本天内的：{'、'.join(travel_nodes)}" if travel_nodes else "本天暂无交通节点，无法跨界。"
+            await handle_send(bot, event, tip)
+            return
+
+        first_heaven = _get_realm_heaven_order(map_data, tar_realm)[0]
+        tar_node = _nodes(map_data, tar_realm, first_heaven)[0]
+        cost = int(cost_cfg.get("cross_realm", 300))
+        if stamina < cost:
+            await handle_send(bot, event, f"跨界体力不足！需{cost}，当前{stamina}。")
+            return
+            
+        _save_map_status(uid, tar_realm, first_heaven, tar_node["id"])
+        sql_message.update_user_stamina(uid, cost, 2)
+        await handle_send(bot, event, f"🚀 跨界成功！\n已抵达 {tar_realm}·{first_heaven}·{tar_node['name']}\n消耗体力：{cost}，剩余：{number_to(stamina - cost)}")
         return
 
-    sql_message.update_user_stamina(uid, cost, 2)
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "realm", tar_realm)
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "heaven", tar_heaven)
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "node_id", tar_node["id"])
+    # ================= 跨天逻辑 ✅ 支持任意层跳跃，体力固定 =================
+    if t_type == "heaven":
+        tar_realm, tar_heaven = t_data
+        if st["realm"] != tar_realm:
+            await handle_send(bot, event, f"跨天需在界内进行，请先前往【{tar_realm}】。")
+            return
+        if st["heaven"] == tar_heaven:
+            await handle_send(bot, event, "你已在此天。")
+            return
+        if cur_node["type"] not in TRAVEL_NODE_TYPES:
+            travel_nodes = [n["name"] for n in _nodes(map_data, st["realm"], st["heaven"]) if n["type"] in TRAVEL_NODE_TYPES]
+            tip = f"跨天需通过【交通/渡口/驿站】节点。\n请先前往本天内的：{'、'.join(travel_nodes)}" if travel_nodes else "本天暂无交通节点，无法跨天。"
+            await handle_send(bot, event, tip)
+            return
 
-    visited = player_data_manager.get_field_data(uid, MAP_TABLE, "visited_nodes") or []
-    if tar_node["id"] not in visited:
-        visited.append(tar_node["id"])
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "visited_nodes", visited)
+        # ✅ 允许直接跳跃至任意天，落点为目标的第一个节点
+        tar_node = _nodes(map_data, tar_realm, tar_heaven)[0]
+        cost = int(cost_cfg.get("cross_heaven", 50))  # ✅ 固定消耗，不按层数累加
+        if stamina < cost:
+            await handle_send(bot, event, f"跨天体力不足！需{cost}，当前{stamina}。")
+            return
+            
+        _save_map_status(uid, tar_realm, tar_heaven, tar_node["id"])
+        sql_message.update_user_stamina(uid, cost, 2)
+        await handle_send(bot, event, f"☁️ 跨天成功！\n已抵达 {tar_realm}·{tar_heaven}·{tar_node['name']}\n消耗体力：{cost}，剩余：{number_to(stamina - cost)}")
+        return
 
-    await handle_send(
-        bot, event,
-        f"你已前往：{tar_realm}·{tar_heaven}·{tar_node['name']}（{tar_node['type']}）\n"
-        f"消耗体力：{cost}，剩余体力：{number_to(stamina - cost)}"
-    )
+    # ================= 节点移动逻辑 (同天) ✅ 支持多站直达，体力按步数累加 =================
+    if t_type == "node":
+        tar_realm, tar_heaven, tar_node = t_data
+        if tar_realm != st["realm"]:
+            await handle_send(bot, event, f"该节点位于【{tar_realm}】，请先前往该界。")
+            return
+        if tar_heaven != st["heaven"]:
+            await handle_send(bot, event, f"该节点位于【{tar_heaven}】，请先前往该天。")
+            return
+
+        nodes_list = _nodes(map_data, tar_realm, tar_heaven)
+        all_ids = [n["id"] for n in nodes_list]
+        idx_cur = all_ids.index(cur_node["id"])
+        idx_tar = all_ids.index(tar_node["id"])
+        steps = abs(idx_tar - idx_cur)
+
+        if steps == 0:
+            await handle_send(bot, event, "你已在该节点。")
+            return
+
+        # ✅ 同天直达，体力 = 步数 × 单步消耗
+        cost = steps * int(cost_cfg.get("cross_node", 5))
+        if stamina < cost:
+            await handle_send(bot, event, f"移动体力不足！需{cost}，当前{stamina}。")
+            return
+
+        _save_map_status(uid, tar_realm, tar_heaven, tar_node["id"])
+        sql_message.update_user_stamina(uid, cost, 2)
+        await handle_send(bot, event, f"👣 移动成功！\n已前往【{tar_node['name']}】\n跨越 {steps} 个节点，消耗体力：{cost}，剩余：{number_to(stamina - cost)}")
+        return
 
 
 @build_dongfu.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -378,17 +505,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 buildable_names.append(n["name"])
 
         if buildable_names:
-            await handle_send(
-                bot, event,
-                f"当前节点【{node['name']}】（{node_type}）不可建设洞府。\n"
-                f"当前天可建设节点：{'、'.join(buildable_names)}"
-            )
+            await handle_send(bot, event, f"当前节点【{node['name']}】（{node_type}）不可建设洞府。\n当前天可建设节点：{'、'.join(buildable_names)}")
         else:
-            await handle_send(
-                bot, event,
-                f"当前节点【{node['name']}】（{node_type}）不可建设洞府。\n"
-                f"当前天暂无可建设节点，请前往其他天或其他界。"
-            )
+            await handle_send(bot, event, f"当前节点【{node['name']}】（{node_type}）不可建设洞府。\n当前天暂无可建设节点，请前往其他天或其他界。")
         return
 
     if int(user_info.get("stone", 0)) < DONGFU_COST:
@@ -396,23 +515,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     sql_message.update_ls(user_id, DONGFU_COST, 2)
-
-    save_data = {
-        "built": 1,
-        "realm": realm,
-        "heaven": heaven,
-        "node_id": node["id"],
-        "node_name": node["name"]
-    }
+    save_data = {"built": 1, "realm": realm, "heaven": heaven, "node_id": node["id"], "node_name": node["name"]}
     for k, v in save_data.items():
         player_data_manager.update_or_write_data(user_id, DONGFU_TABLE, k, v)
 
-    await handle_send(
-        bot, event,
-        f"洞府建设成功！\n"
-        f"位置：{realm}·{heaven}·{node['name']}\n"
-        f"消耗灵石：{number_to(DONGFU_COST)}"
-    )
+    await handle_send(bot, event, f"洞府建设成功！\n位置：{realm}·{heaven}·{node['name']}\n消耗灵石：{number_to(DONGFU_COST)}")
 
 
 @go_home.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -430,25 +537,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "你尚未建设洞府，请先使用【建设洞府】。")
         return
 
-    home_realm = dongfu_data.get("realm", "")
-    home_heaven = dongfu_data.get("heaven", "")
-    home_node_id = dongfu_data.get("node_id", "")
-    home_node_name = dongfu_data.get("node_name", "未知节点")
-
-    if not home_realm or not home_heaven or not home_node_id:
+    if not all(dongfu_data.get(k) for k in ("realm", "heaven", "node_id")):
         await handle_send(bot, event, "洞府数据异常，请联系管理员处理。")
         return
 
-    player_data_manager.update_or_write_data(user_id, MAP_TABLE, "realm", home_realm)
-    player_data_manager.update_or_write_data(user_id, MAP_TABLE, "heaven", home_heaven)
-    player_data_manager.update_or_write_data(user_id, MAP_TABLE, "node_id", home_node_id)
-
-    visited = player_data_manager.get_field_data(user_id, MAP_TABLE, "visited_nodes") or []
-    if home_node_id not in visited:
-        visited.append(home_node_id)
-    player_data_manager.update_or_write_data(user_id, MAP_TABLE, "visited_nodes", visited)
-
-    await handle_send(bot, event, f"你已回到洞府：{home_realm}·{home_heaven}·{home_node_name}")
+    _save_map_status(user_id, dongfu_data["realm"], dongfu_data["heaven"], dongfu_data["node_id"])
+    await handle_send(bot, event, f"你已回到洞府：{dongfu_data['realm']}·{dongfu_data['heaven']}·{dongfu_data['node_name']}")
 
 
 @nearby_users_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -463,19 +557,30 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
 
+    # 获取同节点所有用户
     users = _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"])
-    users = [u for u in users if str(u["user_id"]) != uid]
+    
+    # ✅ 仅排除当前生效的自身ID。化身/伪装视为独立实体，若在同一节点则正常显示
+    filtered_users = [u for u in users if str(u.get("user_id")) != uid]
+    
+    # 去重（防数据异常导致重复显示）
+    seen_ids = set()
+    unique_filtered = []
+    for u in filtered_users:
+        u_id = str(u.get("user_id"))
+        if u_id not in seen_ids:
+            seen_ids.add(u_id)
+            unique_filtered.append(u)
 
-    if not users:
+    if not unique_filtered:
         await handle_send(bot, event, "附近暂无其他道友。")
         return
 
-    if len(users) > 10:
-        users = random.sample(users, 10)
+    # 最多随机展示10人，避免刷屏
+    if len(unique_filtered) > 10:
+        unique_filtered = random.sample(unique_filtered, 10)
 
-    lines = ["【附近道友】"]
-    for u in users:
-        lines.append(f"- {u['user_name']}（{u['level']}）")
+    lines = ["【附近道友】"] + [f"- {u['user_name']}（{u['level']}）" for u in unique_filtered]
     await handle_send(bot, event, "\n".join(lines))
 
 
@@ -506,19 +611,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
-    nearby = _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"])
-    nearby = [u for u in nearby if str(u["user_id"]) != uid]
+    nearby = [u for u in _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"]) if str(u["user_id"]) != uid]
     if not nearby:
         await handle_send(bot, event, "附近无可切磋道友。")
         return
 
-    if target_name:
-        target = next((u for u in nearby if u["user_name"] == target_name), None)
-        if not target:
-            await handle_send(bot, event, f"附近未找到道友【{target_name}】")
-            return
-    else:
-        target = random.choice(nearby)
+    target = next((u for u in nearby if u["user_name"] == target_name), None) if target_name else random.choice(nearby)
+    if not target:
+        await handle_send(bot, event, f"附近未找到道友【{target_name}】")
+        return
 
     my_power = int(user_info.get("power", 0))
     ta_power = int(target.get("power", 0))
@@ -644,3 +745,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     sql_message.send_back(uid, seed_id, SEED_CONFIG[seed_id]["name"], "特殊物品", num, 1)
 
     await handle_send(bot, event, f"购买成功：{SEED_CONFIG[seed_id]['name']} x{num}，花费{number_to(cost)}灵石。")
+
+
+@fishing_cmd.handle(parameterless=[Cooldown(cd_time=2.0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await _process_node_action(bot, event, "钓鱼")
+
+@mining_cmd.handle(parameterless=[Cooldown(cd_time=2.0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await _process_node_action(bot, event, "挖矿")
+
+@gathering_cmd.handle(parameterless=[Cooldown(cd_time=2.0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await _process_node_action(bot, event, "采集")

@@ -96,11 +96,12 @@ function toggleDatabase(dbId) {
     const toggleIcon = document.getElementById('icon_' + dbId);
     
     if (tableContainer.style.display === 'none') {
-        tableContainer.style.display = 'block';
+        tableContainer.style.display = 'grid'; // 改用 grid 触发布局重排
         toggleIcon.className = 'fas fa-chevron-down';
-        // 添加展开动画
-        tableContainer.style.animation = 'slideIn 0.3s ease';
+        // 添加淡入缩放动画
+        tableContainer.style.animation = 'fadeInUp 0.3s ease-out forwards';
     } else {
+        tableContainer.style.animation = 'none'; // 重置动画
         tableContainer.style.display = 'none';
         toggleIcon.className = 'fas fa-chevron-right';
     }
