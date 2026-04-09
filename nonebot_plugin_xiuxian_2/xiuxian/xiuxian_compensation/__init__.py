@@ -189,6 +189,13 @@ def get_item_list(items_str: str, items: Any) -> List[Dict[str, Any]]:
                 raise ValueError(f"物品 {item_id_or_name} 不存在")
 
         item_info = items.get_data_by_item_id(goods_id)
+
+        if item_info.get("item_type") == "饰品":
+            raise ValueError(
+                f"物品 {item_info.get('name', item_id_or_name)} 为饰品，"
+                f"请不要直接发放物品，请改为发饰品礼包！"
+            )
+
         items_list.append({
             "type": item_info['type'],
             "id": goods_id,

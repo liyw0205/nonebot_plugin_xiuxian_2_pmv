@@ -1,0 +1,283 @@
+{
+  "meta": {
+    "version": "3.1.0",
+    "realms": ["仙域", "幽冥", "妖界"],
+    "move_cost": {
+      "cross_realm": 150,
+      "cross_heaven": 30,
+      "cross_node": 5
+    },
+    "rules": {
+      "step_limit": true,
+      "allow_cross_level_jump": false
+    },
+    "heaven_order": {
+      "仙域": ["接引天", "流光天", "紫宸天", "太虚天", "天衍天", "太初天", "九天天", "太上天", "凌霄天"],
+      "幽冥": ["黄泉天", "阴都天", "冥罗天", "幽狱天", "九幽天", "无间天", "轮回天"],
+      "妖界": ["青石天", "苍梧天", "天衡天"]
+    },
+    "type_pool": {
+      "城池": {"tags": ["社交", "补给"]},
+      "坊市": {"tags": ["交易", "任务"]},
+      "渡口": {"tags": ["移动"]},
+      "驿站": {"tags": ["休整"]},
+      "洞天": {"tags": ["修炼", "采集"]},
+      "仙山": {"tags": ["探索", "战斗"]},
+      "灵林": {"tags": ["采集"]},
+      "水域": {"tags": ["钓鱼"]},
+      "矿脉": {"tags": ["采矿"]},
+      "遗迹": {"tags": ["奇遇", "解谜"]},
+      "试炼": {"tags": ["战斗", "挑战"]},
+      "险地": {"tags": ["高风险"]},
+      "交通": {"tags": ["移动中转"]},
+      "情报": {"tags": ["线索", "悬赏"]},
+      "宫殿": {"tags": ["高阶事件"]},
+      "关隘": {"tags": ["跨层门槛"]}
+    }
+  },
+
+  "妖界": {
+    "heavens": {
+      "青石天": [
+        {"id":"yao_qingshi_01","name":"青石妖城","type":"城池","desc":"妖修聚居，市井喧闹。"},
+        {"id":"yao_qingshi_02","name":"长风妖镇","type":"城池","desc":"游妖往来，消息繁杂。"},
+        {"id":"yao_qingshi_03","name":"白鹿灵院","type":"洞天","desc":"灵气温和，适合初修。"},
+        {"id":"yao_qingshi_04","name":"栖霞妖山","type":"仙山","desc":"山间灵草颇多。"},
+        {"id":"yao_qingshi_05","name":"黑水妖渡","type":"渡口","desc":"水路纵横，往来复杂。"},
+        {"id":"yao_qingshi_06","name":"古槐妖驿","type":"驿站","desc":"古道歇脚之所。"},
+        {"id":"yao_qingshi_07","name":"听雨妖楼","type":"情报","desc":"异闻流转最快之地。"},
+        {"id":"yao_qingshi_08","name":"赤岩妖矿","type":"矿脉","desc":"低阶矿材充足。"},
+        {"id":"yao_qingshi_09","name":"寒溪妖渔场","type":"水域","desc":"可钓常见灵鱼。"},
+        {"id":"yao_qingshi_10","name":"云桥妖道","type":"交通","desc":"连接多处节点。"}
+      ],
+      "苍梧天": [
+        {"id":"yao_cangwu_01","name":"苍梧妖城","type":"城池","desc":"中阶妖修常驻之地。"},
+        {"id":"yao_cangwu_02","name":"灵泉妖谷","type":"洞天","desc":"泉眼含灵，可养经脉。"},
+        {"id":"yao_cangwu_03","name":"百草妖圃","type":"灵林","desc":"灵材种类丰富。"},
+        {"id":"yao_cangwu_04","name":"千灯妖坊","type":"坊市","desc":"夜市交易繁盛。"},
+        {"id":"yao_cangwu_05","name":"飞鹤妖台","type":"试炼","desc":"适合磨砺身法。"},
+        {"id":"yao_cangwu_06","name":"霜竹妖岭","type":"灵林","desc":"寒灵气浓郁。"},
+        {"id":"yao_cangwu_07","name":"鸣沙妖原","type":"试炼","desc":"开阔地带，便于斗法。"},
+        {"id":"yao_cangwu_08","name":"墨池妖洞","type":"遗迹","desc":"洞壁有古纹残刻。"},
+        {"id":"yao_cangwu_09","name":"归云妖渡","type":"渡口","desc":"雾重路险，慎行。"},
+        {"id":"yao_cangwu_10","name":"藏锋妖山","type":"仙山","desc":"剑意残存，适合参悟。"},
+        {"id":"yao_cangwu_11","name":"星芒妖湖","type":"水域","desc":"夜有灵鱼浮现。"},
+        {"id":"yao_cangwu_12","name":"流岚妖驿","type":"驿站","desc":"行旅与商队停驻。"}
+      ],
+      "天衡天": [
+        {"id":"yao_tianheng_01","name":"天衡妖城","type":"城池","desc":"妖界高阶势力汇聚。"},
+        {"id":"yao_tianheng_02","name":"镜湖妖宫","type":"洞天","desc":"可照见心念执着。"},
+        {"id":"yao_tianheng_03","name":"太初妖台","type":"试炼","desc":"突破前常来此地。"},
+        {"id":"yao_tianheng_04","name":"玄木妖林海","type":"灵林","desc":"古木参天，木灵资源丰富。"},
+        {"id":"yao_tianheng_05","name":"赤霄妖山","type":"仙山","desc":"山巅常见赤霞。"},
+        {"id":"yao_tianheng_06","name":"云梦妖泽","type":"水域","desc":"水深流急，鱼获丰。"},
+        {"id":"yao_tianheng_07","name":"沉星妖窟","type":"遗迹","desc":"深处疑藏古阵。"},
+        {"id":"yao_tianheng_08","name":"断空妖崖","type":"险地","desc":"风压极强，不宜久留。"},
+        {"id":"yao_tianheng_09","name":"归藏妖阁","type":"情报","desc":"换取线索的重要据点。"},
+        {"id":"yao_tianheng_10","name":"悬月妖桥","type":"交通","desc":"夜月时灵压更稳。"}
+      ]
+    }
+  },
+
+  "仙域": {
+    "heavens": {
+      "接引天": [
+        {"id":"xian_jieyin_01","name":"接引仙门","type":"关隘","desc":"踏入仙域的起始门户。"},
+        {"id":"xian_jieyin_02","name":"云华洞天","type":"洞天","desc":"仙雾轻拢，灵压平稳。"},
+        {"id":"xian_jieyin_03","name":"青霄仙坊","type":"坊市","desc":"低阶仙材交易频繁。"},
+        {"id":"xian_jieyin_04","name":"灵羽仙湖","type":"水域","desc":"可见羽纹灵鱼掠水。"},
+        {"id":"xian_jieyin_05","name":"长生仙渡","type":"渡口","desc":"灵舟往来，客流不断。"},
+        {"id":"xian_jieyin_06","name":"玉阶仙林","type":"灵林","desc":"静修与采集兼宜。"},
+        {"id":"xian_jieyin_07","name":"曜石仙台","type":"矿脉","desc":"盛产低阶曜石。"},
+        {"id":"xian_jieyin_08","name":"观霞仙亭","type":"试炼","desc":"晨霞映道，有助悟性。"},
+        {"id":"xian_jieyin_09","name":"鸣钟仙殿","type":"宫殿","desc":"钟声可震荡神识。"},
+        {"id":"xian_jieyin_10","name":"回风仙崖","type":"险地","desc":"罡风盘旋，行进困难。"}
+      ],
+      "流光天": [
+        {"id":"xian_liuguang_01","name":"赤曜仙宫","type":"宫殿","desc":"火修聚集的仙宫。"},
+        {"id":"xian_liuguang_02","name":"流光仙河","type":"水域","desc":"河中灵辉碎影不断。"},
+        {"id":"xian_liuguang_03","name":"天工仙坊","type":"坊市","desc":"炼器与材料流通核心。"},
+        {"id":"xian_liuguang_04","name":"玉京仙驿","type":"驿站","desc":"连接各层仙域。"},
+        {"id":"xian_liuguang_05","name":"灵魄仙潭","type":"水域","desc":"偶有魄鳞鱼现身。"},
+        {"id":"xian_liuguang_06","name":"碧霄仙林","type":"灵林","desc":"木灵气旺盛。"},
+        {"id":"xian_liuguang_07","name":"星纹仙碑苑","type":"遗迹","desc":"碑文可参悟阵道。"},
+        {"id":"xian_liuguang_08","name":"飞仙古桥","type":"交通","desc":"横跨云海。"},
+        {"id":"xian_liuguang_09","name":"断尘仙台","type":"试炼","desc":"可磨炼心神法力。"},
+        {"id":"xian_liuguang_10","name":"玄霄仙峰","type":"仙山","desc":"峰顶常伴玄雷。"}
+      ],
+      "紫宸天": [
+        {"id":"xian_zichen_01","name":"紫宸仙门","type":"关隘","desc":"守备严密。"},
+        {"id":"xian_zichen_02","name":"天琴仙台","type":"试炼","desc":"琴音可稳道心。"},
+        {"id":"xian_zichen_03","name":"琉璃仙海","type":"水域","desc":"海面如镜，鱼影难寻。"},
+        {"id":"xian_zichen_04","name":"落星仙庭","type":"遗迹","desc":"残阵仍存余威。"},
+        {"id":"xian_zichen_05","name":"青冥仙原","type":"试炼","desc":"适合长线历练。"},
+        {"id":"xian_zichen_06","name":"寒魄仙涧","type":"险地","desc":"寒气逼人。"},
+        {"id":"xian_zichen_07","name":"灵璧仙宫","type":"宫殿","desc":"宫壁可映灵识。"},
+        {"id":"xian_zichen_08","name":"万羽仙林","type":"灵林","desc":"灵羽漫空。"},
+        {"id":"xian_zichen_09","name":"赤焰仙池","type":"矿脉","desc":"火精矿藏丰富。"},
+        {"id":"xian_zichen_10","name":"问道仙桥","type":"交通","desc":"论道者常经之路。"}
+      ],
+      "太虚天": [
+        {"id":"xian_taixu_01","name":"太虚仙门","type":"关隘","desc":"通往高层的重要门户。"},
+        {"id":"xian_taixu_02","name":"九曜仙殿","type":"宫殿","desc":"九曜之力汇聚。"},
+        {"id":"xian_taixu_03","name":"玄冰仙湖","type":"水域","desc":"寒鳞灵鱼稀有。"},
+        {"id":"xian_taixu_04","name":"青冥仙塔","type":"遗迹","desc":"可观天象变化。"},
+        {"id":"xian_taixu_05","name":"星河仙渡","type":"渡口","desc":"灵舟繁忙。"},
+        {"id":"xian_taixu_06","name":"羽化仙林","type":"灵林","desc":"羽化灵草生长旺。"},
+        {"id":"xian_taixu_07","name":"断云仙崖","type":"险地","desc":"风压极强。"},
+        {"id":"xian_taixu_08","name":"赤玄仙矿域","type":"矿脉","desc":"稀有玄矿产地。"},
+        {"id":"xian_taixu_09","name":"明心仙台","type":"试炼","desc":"可压制杂念。"},
+        {"id":"xian_taixu_10","name":"飞虹仙桥","type":"交通","desc":"霞光常驻。"}
+      ],
+      "天衍天": [
+        {"id":"xian_tianyan_01","name":"天衍仙宫","type":"宫殿","desc":"推演大道之地。"},
+        {"id":"xian_tianyan_02","name":"坠星仙海","type":"水域","desc":"异种灵鱼偶现。"},
+        {"id":"xian_tianyan_03","name":"归墟仙台","type":"遗迹","desc":"残阵藏古法痕。"},
+        {"id":"xian_tianyan_04","name":"凌霄仙原","type":"试炼","desc":"适合斗法演练。"},
+        {"id":"xian_tianyan_05","name":"金阙仙门","type":"关隘","desc":"门后仙压提升。"},
+        {"id":"xian_tianyan_06","name":"问剑仙峰","type":"仙山","desc":"剑意冲霄。"},
+        {"id":"xian_tianyan_07","name":"灵机仙坊","type":"坊市","desc":"珍稀材料集中。"},
+        {"id":"xian_tianyan_08","name":"碧涛仙潭","type":"水域","desc":"鱼获稳定。"},
+        {"id":"xian_tianyan_09","name":"千机仙阁","type":"情报","desc":"阵图机关并存。"},
+        {"id":"xian_tianyan_10","name":"流霞仙渡","type":"交通","desc":"通往更高层。"}
+      ],
+      "太初天": [
+        {"id":"xian_taichu_01","name":"太初仙关","type":"关隘","desc":"高层防线之一。"},
+        {"id":"xian_taichu_02","name":"无垢仙池","type":"水域","desc":"池水可净杂质。"},
+        {"id":"xian_taichu_03","name":"曜天仙宫","type":"宫殿","desc":"日曜真火不熄。"},
+        {"id":"xian_taichu_04","name":"苍穹仙台","type":"试炼","desc":"观云海悟天道。"},
+        {"id":"xian_taichu_05","name":"琼华仙林","type":"灵林","desc":"灵木可作器材。"},
+        {"id":"xian_taichu_06","name":"断岳仙谷","type":"险地","desc":"地势复杂。"},
+        {"id":"xian_taichu_07","name":"灵铸仙坊","type":"坊市","desc":"高阶器胚常现。"},
+        {"id":"xian_taichu_08","name":"星辉仙桥","type":"交通","desc":"桥面映星辉。"},
+        {"id":"xian_taichu_09","name":"幽霭仙涧","type":"险地","desc":"灵识易受干扰。"},
+        {"id":"xian_taichu_10","name":"青焰仙原","type":"矿脉","desc":"青焰晶矿储量可观。"}
+      ],
+      "九天天": [
+        {"id":"xian_jiutian_01","name":"九天仙阙","type":"宫殿","desc":"接近高层核心。"},
+        {"id":"xian_jiutian_02","name":"凌虚仙门","type":"关隘","desc":"守关威压极强。"},
+        {"id":"xian_jiutian_03","name":"琉光仙海","type":"水域","desc":"鱼少但品高。"},
+        {"id":"xian_jiutian_04","name":"太玄仙碑林","type":"遗迹","desc":"古纹深藏。"},
+        {"id":"xian_jiutian_05","name":"赤霄仙台","type":"试炼","desc":"强者切磋地。"},
+        {"id":"xian_jiutian_06","name":"云墟仙谷","type":"险地","desc":"灵压起伏剧烈。"},
+        {"id":"xian_jiutian_07","name":"霜华仙林","type":"灵林","desc":"寒霜灵材较多。"},
+        {"id":"xian_jiutian_08","name":"问心仙殿","type":"宫殿","desc":"可照见执念。"},
+        {"id":"xian_jiutian_09","name":"玄曜仙矿庭","type":"矿脉","desc":"高纯曜矿产地。"},
+        {"id":"xian_jiutian_10","name":"飞天仙渡","type":"交通","desc":"连通八层通道。"}
+      ],
+      "太上天": [
+        {"id":"xian_taishang_01","name":"太上仙门","type":"关隘","desc":"八层主门户。"},
+        {"id":"xian_taishang_02","name":"玄天仙宫","type":"宫殿","desc":"仙纹大阵常开。"},
+        {"id":"xian_taishang_03","name":"寂海仙湾","type":"水域","desc":"平静中藏杀机。"},
+        {"id":"xian_taishang_04","name":"天演仙台","type":"试炼","desc":"适合推演大道。"},
+        {"id":"xian_taishang_05","name":"星坠仙原","type":"试炼","desc":"陨星碎片遍布。"},
+        {"id":"xian_taishang_06","name":"云渊仙林","type":"灵林","desc":"异兽偶现。"},
+        {"id":"xian_taishang_07","name":"赤月仙崖","type":"险地","desc":"夜有赤月异象。"},
+        {"id":"xian_taishang_08","name":"琼玉仙坊","type":"坊市","desc":"高阶材料中心。"},
+        {"id":"xian_taishang_09","name":"归真仙阁","type":"情报","desc":"收录残缺仙经。"},
+        {"id":"xian_taishang_10","name":"天衡仙桥","type":"交通","desc":"通往凌霄天要道。"}
+      ],
+      "凌霄天": [
+        {"id":"xian_lingxiao_01","name":"九霄仙阙","type":"宫殿","desc":"仙域九层之巅。"},
+        {"id":"xian_lingxiao_02","name":"无极仙宫","type":"宫殿","desc":"大道气机浓郁。"},
+        {"id":"xian_lingxiao_03","name":"太一仙台","type":"试炼","desc":"高层感悟之地。"},
+        {"id":"xian_lingxiao_04","name":"天外仙海眼","type":"水域","desc":"稀有灵鱼概率最高。"},
+        {"id":"xian_lingxiao_05","name":"寂灭仙崖","type":"险地","desc":"灵压近乎实质。"},
+        {"id":"xian_lingxiao_06","name":"混元仙林","type":"灵林","desc":"混元灵木珍稀。"},
+        {"id":"xian_lingxiao_07","name":"道源仙碑海","type":"遗迹","desc":"大道残痕密布。"},
+        {"id":"xian_lingxiao_08","name":"玄黄仙矿庭","type":"矿脉","desc":"顶级矿材来源。"},
+        {"id":"xian_lingxiao_09","name":"万象仙殿","type":"宫殿","desc":"幻境轮转不息。"},
+        {"id":"xian_lingxiao_10","name":"天命仙桥","type":"交通","desc":"九层内部枢纽。"}
+      ]
+    }
+  },
+
+  "幽冥": {
+    "heavens": {
+      "黄泉天": [
+        {"id":"you_huangquan_01","name":"黄泉渡","type":"渡口","desc":"阴雾弥漫，往来谨慎。"},
+        {"id":"you_huangquan_02","name":"枉魂城","type":"城池","desc":"城中灯火长年不熄。"},
+        {"id":"you_huangquan_03","name":"阴风林","type":"险地","desc":"阴风如刃，需护体。"},
+        {"id":"you_huangquan_04","name":"忘川湾","type":"水域","desc":"可钓幽鳞与冥骨鱼。"},
+        {"id":"you_huangquan_05","name":"白骨坡","type":"矿脉","desc":"常见骨材与阴矿。"},
+        {"id":"you_huangquan_06","name":"幽灯驿","type":"驿站","desc":"灯火引路，谨防迷失。"},
+        {"id":"you_huangquan_07","name":"鬼面岩","type":"险地","desc":"岩壁似有鬼面浮现。"},
+        {"id":"you_huangquan_08","name":"沉魂井","type":"遗迹","desc":"井底回声惑人心神。"},
+        {"id":"you_huangquan_09","name":"冥雾桥","type":"交通","desc":"桥上常年冥雾不散。"},
+        {"id":"you_huangquan_10","name":"寒烬台","type":"试炼","desc":"可磨砺阴属性抗性。"}
+      ],
+      "阴都天": [
+        {"id":"you_yindu_01","name":"阴都城","type":"城池","desc":"地界要塞古城。"},
+        {"id":"you_yindu_02","name":"葬月泽","type":"水域","desc":"鱼种诡异难测。"},
+        {"id":"you_yindu_03","name":"噬灵谷","type":"险地","desc":"灵力流失加快。"},
+        {"id":"you_yindu_04","name":"黑炎矿庭","type":"矿脉","desc":"黑炎矿可作特材。"},
+        {"id":"you_yindu_05","name":"幽冥坊","type":"坊市","desc":"偏门材料流通地。"},
+        {"id":"you_yindu_06","name":"断魂崖","type":"险地","desc":"神识易受创。"},
+        {"id":"you_yindu_07","name":"引魄台","type":"遗迹","desc":"祭台残阵尚存。"},
+        {"id":"you_yindu_08","name":"冥木林","type":"灵林","desc":"阴木与鬼藤富集。"},
+        {"id":"you_yindu_09","name":"幽桥渡","type":"交通","desc":"连接更深层。"},
+        {"id":"you_yindu_10","name":"黄烬寺","type":"遗迹","desc":"钟鸣令人心悸。"}
+      ],
+      "冥罗天": [
+        {"id":"you_mingluo_01","name":"冥罗宫","type":"宫殿","desc":"势力聚集之地。"},
+        {"id":"you_mingluo_02","name":"葬星海","type":"水域","desc":"稀有深海幽鱼出没。"},
+        {"id":"you_mingluo_03","name":"魇梦原","type":"险地","desc":"幻象频生，谨守本心。"},
+        {"id":"you_mingluo_04","name":"白冥碑林","type":"遗迹","desc":"记载古史。"},
+        {"id":"you_mingluo_05","name":"幽髓矿场","type":"矿脉","desc":"幽髓与阴晶产地。"},
+        {"id":"you_mingluo_06","name":"鬼啸岭","type":"险地","desc":"鬼啸干扰心神。"},
+        {"id":"you_mingluo_07","name":"忘魂台","type":"试炼","desc":"磨炼神识稳定。"},
+        {"id":"you_mingluo_08","name":"冥灯阁","type":"情报","desc":"异动情报汇集地。"},
+        {"id":"you_mingluo_09","name":"断川桥","type":"交通","desc":"冥川关键通道。"},
+        {"id":"you_mingluo_10","name":"寒烬宫门","type":"关隘","desc":"通往更深层。"}
+      ],
+      "幽狱天": [
+        {"id":"you_youyu_01","name":"黄泉宫","type":"宫殿","desc":"阴气森森，威压明显。"},
+        {"id":"you_youyu_02","name":"业火湾","type":"水域","desc":"水火并存。"},
+        {"id":"you_youyu_03","name":"噬心崖","type":"险地","desc":"易引杂念心魔。"},
+        {"id":"you_youyu_04","name":"幽魄林","type":"灵林","desc":"林中常闻低语。"},
+        {"id":"you_youyu_05","name":"玄骨矿庭","type":"矿脉","desc":"骨矿坚韧且阴性。"},
+        {"id":"you_youyu_06","name":"无常渡","type":"渡口","desc":"渡船行踪不定。"},
+        {"id":"you_youyu_07","name":"归墟台","type":"遗迹","desc":"远古冥祭遗存。"},
+        {"id":"you_youyu_08","name":"冥府坊","type":"坊市","desc":"珍奇诡异之物流通。"},
+        {"id":"you_youyu_09","name":"寒鸦岭","type":"险地","desc":"阴风刺骨。"},
+        {"id":"you_youyu_10","name":"枯魂桥","type":"交通","desc":"桥下暗流汹涌。"}
+      ],
+      "九幽天": [
+        {"id":"you_jiuyou_01","name":"九幽门","type":"关隘","desc":"五层主门户。"},
+        {"id":"you_jiuyou_02","name":"幽狱城","type":"城池","desc":"戒备森严。"},
+        {"id":"you_jiuyou_03","name":"赤冥海","type":"水域","desc":"可钓高阶冥鱼。"},
+        {"id":"you_jiuyou_04","name":"万鬼原","type":"险地","desc":"鬼影幢幢。"},
+        {"id":"you_jiuyou_05","name":"噬骨矿场","type":"矿脉","desc":"高阶阴矿富集。"},
+        {"id":"you_jiuyou_06","name":"阴阳碑庭","type":"遗迹","desc":"疑藏逆转之理。"},
+        {"id":"you_jiuyou_07","name":"断魄谷","type":"险地","desc":"声波冲击神识。"},
+        {"id":"you_jiuyou_08","name":"冥照台","type":"试炼","desc":"磨炼道心。"},
+        {"id":"you_jiuyou_09","name":"幽纹阁","type":"情报","desc":"偏门冥术残卷。"},
+        {"id":"you_jiuyou_10","name":"沉夜桥","type":"交通","desc":"桥面终年无光。"}
+      ],
+      "无间天": [
+        {"id":"you_wujian_01","name":"无间宫","type":"宫殿","desc":"六层权势核心。"},
+        {"id":"you_wujian_02","name":"寂灭海眼","type":"水域","desc":"深渊鱼种稀有。"},
+        {"id":"you_wujian_03","name":"业障崖","type":"险地","desc":"负面气机极重。"},
+        {"id":"you_wujian_04","name":"冥渊林","type":"灵林","desc":"凶物常出没。"},
+        {"id":"you_wujian_05","name":"玄冥矿庭","type":"矿脉","desc":"高纯玄冥矿产地。"},
+        {"id":"you_wujian_06","name":"亡者渡","type":"渡口","desc":"禁制密布。"},
+        {"id":"you_wujian_07","name":"葬天台","type":"遗迹","desc":"古战场祭台遗留。"},
+        {"id":"you_wujian_08","name":"幽狱坊","type":"坊市","desc":"高阶阴材流通地。"},
+        {"id":"you_wujian_09","name":"魇影谷","type":"险地","desc":"极易触发幻觉。"},
+        {"id":"you_wujian_10","name":"断冥桥","type":"交通","desc":"通往七层关键桥。"}
+      ],
+      "轮回天": [
+        {"id":"you_lunhui_01","name":"九幽殿","type":"宫殿","desc":"幽冥最深处之一。"},
+        {"id":"you_lunhui_02","name":"黄泉终渡","type":"渡口","desc":"之后迷雾无尽。"},
+        {"id":"you_lunhui_03","name":"冥皇城","type":"城池","desc":"高阶冥修聚集。"},
+        {"id":"you_lunhui_04","name":"忘川海渊","type":"水域","desc":"可钓传闻级幽鱼。"},
+        {"id":"you_lunhui_05","name":"万魂碑海","type":"遗迹","desc":"古老怨念盘踞。"},
+        {"id":"you_lunhui_06","name":"寂魂崖","type":"险地","desc":"神识压制极强。"},
+        {"id":"you_lunhui_07","name":"冥源林","type":"灵林","desc":"稀有冥木生长区。"},
+        {"id":"you_lunhui_08","name":"玄狱矿庭","type":"矿脉","desc":"顶级阴矿集中地。"},
+        {"id":"you_lunhui_09","name":"轮回台","type":"试炼","desc":"磨炼意志道心。"},
+        {"id":"you_lunhui_10","name":"宿命桥","type":"交通","desc":"内部中枢通道。"}
+      ]
+    }
+  }
+}

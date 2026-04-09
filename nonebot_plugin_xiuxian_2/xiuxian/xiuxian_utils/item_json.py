@@ -38,6 +38,7 @@ class Items:
         self.effect2buff_jsonpath = SKILLPATH / "瞳术.json"
         self.weapon_jsonpath = WEAPONPATH / "法器.json"
         self.armor_jsonpath = WEAPONPATH / "防具.json"
+        self.accessory_jsonpath = WEAPONPATH / "饰品.json"
         self.elixir_jsonpath = ELIXIRPATH / "丹药.json"
         self.lb_jsonpath = PACKAGESPATH / "礼包.json"
         self.yaocai_jsonpath = ELIXIRPATH / "药材.json"
@@ -50,6 +51,7 @@ class Items:
         self.type_to_path = {
             "防具": self.armor_jsonpath,
             "法器": self.weapon_jsonpath,
+            "饰品": self.accessory_jsonpath,
             "功法": self.mainbuff_jsonpath,
             "辅修功法": self.subbuff_jsonpath,
             "神通": self.secbuff_jsonpath,
@@ -115,7 +117,7 @@ class Items:
         global ITEMS_CACHE
         item_types = [
             "功法", "辅修功法", "神通", "身法", "瞳术",
-            "法器", "防具", "丹药", "礼包", "药材",
+            "法器", "防具", "饰品", "丹药", "礼包", "药材",
             "合成丹药", "炼丹炉", "聚灵旗", "称号", "神物", "特殊物品"
         ]
         for item_type in item_types:

@@ -46,6 +46,7 @@ from ..xiuxian_utils.utils import (
     generate_command, _impersonating_users, handle_pic_msg_send, handle_send_md
 )
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_back import add_accessory_to_bag
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -422,190 +423,317 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """创造力量 - 给玩家或全服发放物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    args = args.extract_plain_text().split()
-    
-    if len(args) < 2:
-        msg = f"请输入正确指令！例如：创造力量 物品名 数量 [玩家名]\n创造力量 物品名 数量 all (全服发放)"
+    arg_list = args.extract_plain_text().split()
+
+    if len(arg_list) < 2:
+        msg = (
+            "请输入正确指令！例如：\n"
+            "创造力量 物品名 数量\n"
+            "创造力量 物品名 数量 玩家名\n"
+            "创造力量 物品名 数量 all\n"
+            "（饰品可选品阶）创造力量 物品名 数量 [玩家名/all] [1-5]"
+        )
         await handle_send(bot, event, msg)
         await cz.finish()
-    
-    goods_name = args[0]
+
+    goods_name = arg_list[0]
+
     try:
-        quantity = int(args[1])
-        if len(args) > 2:
-            target = args[2]
-        else:
-            target = None
+        quantity = int(arg_list[1])
+        if quantity <= 0:
+            await handle_send(bot, event, "数量必须大于0！")
+            await cz.finish()
     except ValueError:
-        msg = "数量必须是整数！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, "数量必须是整数！")
         await cz.finish()
-    
-    # 查找物品ID
-    goods_id = None
-    for item_id, item_info in items.items.items():
-        if goods_name == item_info['name']:
-            goods_id = item_id
-            break
-    
-    if not goods_id:
-        msg = f"物品 {goods_name} 不存在！"
-        await handle_send(bot, event, msg)
+
+    # 查找物品
+    goods_id, item_info = items.get_data_by_item_name(goods_name)
+    if not goods_id or not item_info:
+        await handle_send(bot, event, f"物品 {goods_name} 不存在！")
         await cz.finish()
-    
-    # 获取物品类型
-    item_info = items.get_data_by_item_id(goods_id)
-    goods_type = item_info['type']
-    
-    # 处理发放目标
-    if target and target.lower() == 'all':
-        # 全服发放
+
+    goods_id = int(goods_id)
+    is_accessory = item_info.get("item_type") == "饰品"
+
+    # 解析目标与饰品品阶
+    # 规则：
+    # - 第3参数：target（玩家名/all，可省略）
+    # - 第4参数：quality（仅饰品有效，可省略）
+    target = None
+    quality = 1
+
+    if len(arg_list) >= 3:
+        target = arg_list[2]
+
+    if is_accessory and len(arg_list) >= 4:
+        try:
+            quality = int(arg_list[3])
+            quality = max(1, min(5, quality))
+        except ValueError:
+            await handle_send(bot, event, "饰品品阶必须是1~5的整数！")
+            await cz.finish()
+
+    # 非饰品保持老逻辑需要的 goods_type
+    goods_type = item_info.get("type", "")
+
+    # ===== 全服发放 =====
+    if target and str(target).lower() == "all":
         all_users = sql_message.get_all_user_id()
+        if not all_users:
+            await handle_send(bot, event, "当前没有可发放的用户。")
+            await cz.finish()
+
         success_count = 0
-        
-        for user_id in all_users:
+
+        for uid in all_users:
             try:
-                sql_message.send_back(user_id, goods_id, goods_name, goods_type, quantity)
+                uid_str = str(uid)
+
+                if is_accessory:
+                    for _ in range(quantity):
+                        add_accessory_to_bag(uid_str, goods_id, quality)
+                else:
+                    sql_message.send_back(uid_str, goods_id, item_info["name"], goods_type, quantity)
+
                 success_count += 1
             except Exception as e:
-                logger.error(f"给用户 {user_id} 发放物品失败: {e}")
-        
-        msg = f"全服发放成功！共向 {success_count} 名玩家发放了 {goods_name} x{quantity}"
-        
-    elif target:
-        # 指定玩家发放
+                logger.error(f"创造力量全服发放失败 user_id={uid}: {e}")
+
+        if is_accessory:
+            msg = f"全服发放成功！共向 {success_count} 名玩家发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
+        else:
+            msg = f"全服发放成功！共向 {success_count} 名玩家发放 {item_info['name']} x{quantity}"
+
+        await handle_send(bot, event, msg)
+        await cz.finish()
+
+    # ===== 指定玩家发放 =====
+    if target:
         user_info = sql_message.get_user_info_with_name(target)
         if not user_info:
-            msg = f"玩家 {target} 不存在！"
-            await handle_send(bot, event, msg)
+            await handle_send(bot, event, f"玩家 {target} 不存在！")
             await cz.finish()
-        
-        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity)
-        msg = f"成功向 {target} 发放 {goods_name} x{quantity}"
-    
+
+        user_id = str(user_info["user_id"])
+
+        if is_accessory:
+            for _ in range(quantity):
+                add_accessory_to_bag(user_id, goods_id, quality)
+            msg = f"成功向 {target} 发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
+        else:
+            sql_message.send_back(user_id, goods_id, item_info["name"], goods_type, quantity)
+            msg = f"成功向 {target} 发放 {item_info['name']} x{quantity}"
+
+        await handle_send(bot, event, msg)
+        await cz.finish()
+
+    # ===== 默认给自己 =====
+    is_user, self_user_info, _ = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, "您尚未加入修仙界！")
+        await cz.finish()
+
+    self_user_id = str(self_user_info["user_id"])
+
+    if is_accessory:
+        for _ in range(quantity):
+            add_accessory_to_bag(self_user_id, goods_id, quality)
+        msg = f"成功向您发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
     else:
-        # 默认给发送者
-        is_user, user_info, _ = check_user(event)
-        if not is_user:
-            msg = "您尚未加入修仙界！"
-            await handle_send(bot, event, msg)
-            await cz.finish()
-        
-        sql_message.send_back(user_info['user_id'], goods_id, goods_name, goods_type, quantity)
-        msg = f"成功向您发放 {goods_name} x{quantity}"
-    
+        sql_message.send_back(self_user_id, goods_id, item_info["name"], goods_type, quantity)
+        msg = f"成功向您发放 {item_info['name']} x{quantity}"
+
     await handle_send(bot, event, msg)
     await cz.finish()
 
+
 @hmll.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """毁灭力量 - 扣除玩家或全服的物品"""
+    """毁灭力量 - 扣除玩家或全服物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    args = args.extract_plain_text().split()
-    
-    if len(args) < 2:
-        msg = f"请输入正确指令！例如：毁灭力量 物品名 数量 [玩家名]\n毁灭力量 物品名 数量 all (全服扣除)"
+    arg_list = args.extract_plain_text().split()
+
+    if len(arg_list) < 2:
+        msg = (
+            "请输入正确指令！例如：\n"
+            "毁灭力量 物品名 数量\n"
+            "毁灭力量 物品名 数量 玩家名\n"
+            "毁灭力量 物品名 数量 all"
+        )
         await handle_send(bot, event, msg)
         await hmll.finish()
-    
-    goods_name = args[0]
+
+    goods_name = arg_list[0]
+
     try:
-        quantity = int(args[1])
-        if len(args) > 2:
-            target = args[2]
-        else:
-            target = None
+        quantity = int(arg_list[1])
+        if quantity <= 0:
+            await handle_send(bot, event, "数量必须大于0！")
+            await hmll.finish()
     except ValueError:
-        msg = "数量必须是整数！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, "数量必须是整数！")
         await hmll.finish()
-    
-    # 查找物品ID
-    goods_id = None
-    for item_id, item_info in items.items.items():
-        if goods_name == item_info['name']:
-            goods_id = item_id
-            break
-    
-    if not goods_id:
-        msg = f"物品 {goods_name} 不存在！"
-        await handle_send(bot, event, msg)
+
+    target = arg_list[2] if len(arg_list) > 2 else None
+
+    # 查找物品
+    goods_id, item_info = items.get_data_by_item_name(goods_name)
+    if not goods_id or not item_info:
+        await handle_send(bot, event, f"物品 {goods_name} 不存在！")
         await hmll.finish()
-    
-    # 处理扣除目标
-    if target and target.lower() == 'all':
-        # 全服扣除
+
+    goods_id = int(goods_id)
+    is_accessory = item_info.get("item_type") == "饰品"
+
+    # ===== 饰品专门处理函数 =====
+    def remove_accessory_from_bag(user_id: str, target_item_id: int, amount: int):
+        """
+        只从饰品bag扣除，不动equipped。
+        返回：(ok: bool, removed: int, reason: str)
+        """
+        try:
+            data = player_data_manager.get_fields(str(user_id), "player_accessory")
+            if not data:
+                return False, 0, "未找到饰品数据"
+
+            bag = data.get("bag", [])
+            if not isinstance(bag, list):
+                return False, 0, "饰品数据异常"
+
+            kept = []
+            removed = 0
+            need = amount
+
+            for acc in bag:
+                if need > 0 and int(acc.get("item_id", 0)) == int(target_item_id):
+                    removed += 1
+                    need -= 1
+                else:
+                    kept.append(acc)
+
+            if removed <= 0:
+                return False, 0, "背包中无可扣除饰品"
+
+            if removed < amount:
+                # 数量不足也执行部分扣除，给出提示
+                pass
+
+            # 保存回去
+            player_data_manager.update_or_write_data(str(user_id), "player_accessory", "bag", kept, data_type="TEXT")
+            # 确保equipped字段存在（不改内容）
+            if "equipped" in data:
+                player_data_manager.update_or_write_data(str(user_id), "player_accessory", "equipped", data.get("equipped"), data_type="TEXT")
+
+            return True, removed, ""
+        except Exception as e:
+            return False, 0, str(e)
+
+    # ===== 全服扣除 =====
+    if target and str(target).lower() == "all":
         all_users = sql_message.get_all_user_id()
-        success_count = 0
-        
-        for user_id in all_users:
+        if not all_users:
+            await handle_send(bot, event, "当前没有可扣除的用户。")
+            await hmll.finish()
+
+        success_user_count = 0
+        total_removed = 0
+
+        for uid in all_users:
+            uid_str = str(uid)
             try:
-                # 检查玩家是否有该物品
-                back_msg = sql_message.get_back_msg(user_id)
-                has_item = False
-                for item in back_msg:
-                    if item['goods_name'] == goods_name:
-                        has_item = True
-                        break
-                
-                if has_item:
-                    sql_message.update_back_j(user_id, goods_id, num=quantity)
-                    success_count += 1
+                if is_accessory:
+                    ok, removed, _ = remove_accessory_from_bag(uid_str, goods_id, quantity)
+                    if ok and removed > 0:
+                        success_user_count += 1
+                        total_removed += removed
+                else:
+                    # 普通物品：先检查数量再扣
+                    have = sql_message.goods_num(uid_str, goods_id)
+                    if have > 0:
+                        deduct = min(quantity, have)
+                        sql_message.update_back_j(uid_str, goods_id, num=deduct)
+                        success_user_count += 1
+                        total_removed += deduct
             except Exception as e:
-                logger.error(f"扣除用户 {user_id} 物品失败: {e}")
-        
-        msg = f"全服扣除成功！共从 {success_count} 名玩家扣除了 {goods_name} x{quantity}"
-    
-    elif target:
-        # 指定玩家扣除
+                logger.error(f"毁灭力量全服扣除失败 user_id={uid}: {e}")
+
+        if is_accessory:
+            msg = f"全服扣除完成！共影响 {success_user_count} 名玩家，累计扣除【{item_info['name']}】饰品 {total_removed} 件（仅背包，已装备未扣除）"
+        else:
+            msg = f"全服扣除完成！共影响 {success_user_count} 名玩家，累计扣除 {item_info['name']} x{total_removed}"
+
+        await handle_send(bot, event, msg)
+        await hmll.finish()
+
+    # ===== 指定玩家扣除 =====
+    if target:
         user_info = sql_message.get_user_info_with_name(target)
         if not user_info:
-            msg = f"玩家 {target} 不存在！"
+            await handle_send(bot, event, f"玩家 {target} 不存在！")
+            await hmll.finish()
+
+        user_id = str(user_info["user_id"])
+
+        if is_accessory:
+            ok, removed, reason = remove_accessory_from_bag(user_id, goods_id, quantity)
+            if not ok:
+                await handle_send(bot, event, f"扣除失败：{reason}（已装备饰品不会被直接扣除）")
+                await hmll.finish()
+
+            if removed < quantity:
+                msg = f"成功从 {target} 扣除【{item_info['name']}】饰品 {removed} 件（数量不足，已按背包可扣最大值执行）"
+            else:
+                msg = f"成功从 {target} 扣除【{item_info['name']}】饰品 x{removed}"
             await handle_send(bot, event, msg)
             await hmll.finish()
-        
-        # 检查玩家是否有该物品
-        back_msg = sql_message.get_back_msg(user_info['user_id'])
-        has_item = False
-        for item in back_msg:
-            if item['goods_name'] == goods_name:
-                has_item = True
-                break
-        
-        if not has_item:
-            msg = f"玩家 {target} 没有 {goods_name}！"
+        else:
+            have = sql_message.goods_num(user_id, goods_id)
+            if have <= 0:
+                await handle_send(bot, event, f"玩家 {target} 没有 {item_info['name']}！")
+                await hmll.finish()
+
+            deduct = min(quantity, have)
+            sql_message.update_back_j(user_id, goods_id, num=deduct)
+            msg = f"成功从 {target} 扣除 {item_info['name']} x{deduct}"
+            if deduct < quantity:
+                msg += "（数量不足，已按实际可扣执行）"
             await handle_send(bot, event, msg)
             await hmll.finish()
-        
-        sql_message.update_back_j(user_info['user_id'], goods_id, num=quantity)
-        msg = f"成功从 {target} 扣除 {goods_name} x{quantity}"
-    
+
+    # ===== 默认扣自己 =====
+    is_user, self_user_info, _ = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, "您尚未加入修仙界！")
+        await hmll.finish()
+
+    self_user_id = str(self_user_info["user_id"])
+
+    if is_accessory:
+        ok, removed, reason = remove_accessory_from_bag(self_user_id, goods_id, quantity)
+        if not ok:
+            await handle_send(bot, event, f"扣除失败：{reason}（已装备饰品不会被直接扣除）")
+            await hmll.finish()
+
+        msg = f"成功从您背包扣除【{item_info['name']}】饰品 x{removed}"
+        if removed < quantity:
+            msg += "（数量不足，已按实际可扣执行）"
+        await handle_send(bot, event, msg)
+        await hmll.finish()
     else:
-        # 默认扣除发送者
-        is_user, user_info, _ = check_user(event)
-        if not is_user: # Corrected variable name from isUser to is_user
-            msg = "您尚未加入修仙界！"
-            await handle_send(bot, event, msg)
+        have = sql_message.goods_num(self_user_id, goods_id)
+        if have <= 0:
+            await handle_send(bot, event, f"您没有 {item_info['name']}！")
             await hmll.finish()
-        
-        # 检查是否有该物品
-        back_msg = sql_message.get_back_msg(user_info['user_id'])
-        has_item = False
-        for item in back_msg:
-            if item['goods_name'] == goods_name:
-                has_item = True
-                break
-        
-        if not has_item:
-            msg = f"您没有 {goods_name}！"
-            await handle_send(bot, event, msg)
-            await hmll.finish()
-        
-        sql_message.update_back_j(user_info['user_id'], goods_id, num=quantity)
-        msg = f"成功从您这里扣除 {goods_name} x{quantity}"
-    
-    await handle_send(bot, event, msg)
-    await hmll.finish()
+
+        deduct = min(quantity, have)
+        sql_message.update_back_j(self_user_id, goods_id, num=deduct)
+        msg = f"成功从您这里扣除 {item_info['name']} x{deduct}"
+        if deduct < quantity:
+            msg += "（数量不足，已按实际可扣执行）"
+        await handle_send(bot, event, msg)
+        await hmll.finish()
+
 
 @restate.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

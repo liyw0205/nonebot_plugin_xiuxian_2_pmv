@@ -3481,6 +3481,115 @@ class UserBuffDate:
             armor_buff_data = items.get_data_by_item_id(armor_buff_id)
         return armor_buff_data
 
+def calc_accessory_effects(user_id: str | int) -> dict:
+    """
+    计算饰品效果：
+    - 基础词条总和（气血/攻击/会心/会伤/减伤/抗暴）
+    - 套装件数
+    - 套装激活列表（2件/4件）
+
+    返回:
+    {
+      "hp_pct": float,
+      "atk_pct": float,
+      "crit_rate": float,
+      "crit_damage": float,
+      "dmg_reduction": float,
+      "crit_resist": float,
+      "set_count": {"烈阳":2,...},
+      "set_bonus": [{"set":"烈阳","pieces":2,"type":"attack","value":0.08}, ...]
+    }
+    """
+    result = {
+        "hp_pct": 0.0,
+        "atk_pct": 0.0,
+        "crit_rate": 0.0,
+        "crit_damage": 0.0,
+        "dmg_reduction": 0.0,
+        "crit_resist": 0.0,
+        "set_count": {},
+        "set_bonus": []
+    }
+
+    from ..xiuxian_back import AFFIX_KEY_MAP, SET_BONUS
+    acc_data = get_user_accessory_data(user_id)
+    equipped = acc_data.get("equipped", {})
+
+    for _, acc in equipped.items():
+        if not acc:
+            continue
+
+        set_type = acc.get("set_type", "")
+        if set_type:
+            result["set_count"][set_type] = result["set_count"].get(set_type, 0) + 1
+
+        affixes = acc.get("affixes", [])
+        if not isinstance(affixes, list):
+            continue
+
+        for af in affixes:
+            a_type = af.get("type")
+            a_val = float(af.get("value", 0))
+            mapped = AFFIX_KEY_MAP.get(a_type)
+
+            if mapped == "hp_pct":
+                result["hp_pct"] += a_val
+            elif mapped == "atk_pct":
+                result["atk_pct"] += a_val
+            elif mapped == "crit_rate":
+                result["crit_rate"] += a_val
+            elif mapped == "crit_damage":
+                result["crit_damage"] += a_val
+            elif mapped == "dmg_reduction":
+                result["dmg_reduction"] += a_val
+            elif mapped == "crit_resist":
+                result["crit_resist"] += a_val
+
+    # 套装激活（2件/4件）
+    for set_name, cnt in result["set_count"].items():
+        conf = SET_BONUS.get(set_name, {})
+
+        if cnt >= 2 and 2 in conf:
+            v = conf[2]
+            result["set_bonus"].append({
+                "set": set_name,
+                "pieces": 2,
+                "type": v.get("type"),
+                "value": float(v.get("value", 0))
+            })
+
+        if cnt >= 4 and 4 in conf:
+            v = conf[4]
+            result["set_bonus"].append({
+                "set": set_name,
+                "pieces": 4,
+                "type": v.get("type"),
+                "value": float(v.get("value", 0))
+            })
+
+    return result
+
+
+def get_user_accessory_data(user_id: str | int) -> dict:
+    """
+    读取玩家饰品数据（player.db -> player_accessory）
+    返回结构:
+    {
+        "equipped": {"手镯": {...}|None, "戒指": ..., "手环": ..., "项链": ...},
+        "bag": [...]
+    }
+    """
+    data = player_data_manager.get_fields(str(user_id), "player_accessory")
+    if not data:
+        return {
+            "equipped": {"手镯": None, "戒指": None, "手环": None, "项链": None},
+            "bag": []
+        }
+
+    equipped = data.get("equipped") or {"手镯": None, "戒指": None, "手环": None, "项链": None}
+    bag = data.get("bag") or []
+    return {"equipped": equipped, "bag": bag}
+
 def final_user_data(user_data, columns):
     """传入数据库行与列描述，返回叠加buff后的用户信息（统一口径）"""
     user_dict = dict(zip((col[0] for col in columns), user_data))
@@ -3571,7 +3680,7 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     # 永久攻击buff
     perm_atk = int(buff_info.get("atk_buff", 0) or 0)
 
-    # 最终值
+    # ===== 常规最终值（不含饰品）=====
     max_hp = int((base["exp"] / 2) * (1 + main_hp + impart_hp + hppractice))
     max_mp = int(base["exp"] * (1 + main_mp + impart_mp + mppractice))
 
@@ -3585,8 +3694,24 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     crit_rate = max(0, min(1, weapon_crit + armor_crit + main_crit + impart_know))
     crit_damage = 1.5 + impart_burst + weapon_critatk + main_critatk
     damage_reduction = main_def + weapon_def + armor_def
-    armor_penetration = 0.0  # 需要的话可从副功法等再叠
-    
+    armor_penetration = 0.0  # 可在其他系统叠加
+
+    # ===== 饰品加成 =====
+    acc_effect = calc_accessory_effects(user_id)
+
+    # 百分比型基础属性加成
+    max_hp = int(max_hp * (1 + acc_effect["hp_pct"]))
+    current_hp = int(current_hp * (1 + acc_effect["hp_pct"]))
+    final_atk = int(final_atk * (1 + acc_effect["atk_pct"]))
+
+    # 战斗率属性加成
+    crit_rate += acc_effect["crit_rate"]
+    crit_damage += acc_effect["crit_damage"]
+    damage_reduction += acc_effect["dmg_reduction"]
+
+    # 上限裁剪（防止溢出）
+    damage_reduction = min(0.95, damage_reduction)
+
     # 比例缩放（例如PVE多队平衡）
     max_hp = int(max_hp * ratio)
     max_mp = int(max_mp * ratio)
@@ -3607,6 +3732,7 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         "damage_reduction": damage_reduction,
         "armor_penetration": armor_penetration,
         "boss_damage_bonus": boss_atk,
+        "accessory_effect": acc_effect,
     }
 
 def get_weapon_info_msg(weapon_id, weapon_info=None):

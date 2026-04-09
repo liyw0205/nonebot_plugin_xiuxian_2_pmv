@@ -80,14 +80,15 @@ def _default_dongfu():
 
 def _get_dongfu(uid: str):
     d = player_data_manager.get_fields(str(uid), DONGFU_TABLE)
+    default = _default_dongfu()
+
     if not d:
-        d = _default_dongfu()
+        d = default.copy()
         for k, v in d.items():
             player_data_manager.update_or_write_data(str(uid), DONGFU_TABLE, k, v)
     else:
-        default = _default_dongfu()
         for k, v in default.items():
-            if k not in d:
+            if k not in d or d.get(k) is None:
                 d[k] = v
                 player_data_manager.update_or_write_data(str(uid), DONGFU_TABLE, k, v)
     return d
