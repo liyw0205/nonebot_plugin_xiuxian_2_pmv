@@ -167,5 +167,56 @@
         "rank": -5,
         "desc": "一颗蕴含浓郁玄妙药力的丹药，服用后可瞬间获得相当于333次修炼的修为增益！",
         "item_type": "特殊物品"
+    },
+    "20023": {
+        "name": "洗练石",
+        "type": "特殊道具",
+        "rank": -5,
+        "desc": "用于饰品洗练的基础材料。",
+        "item_type": "特殊物品"
+    },
+    "21001": {
+        "name": "青灵草种",
+        "level": "凡品种子",
+        "type": "特殊物品",
+        "rank": 60,
+        "desc": "适合洞府灵田栽种的基础种子，可产出常见低阶药材。",
+        "seed_type": "herb_low",
+        "grow_time": 60,
+        "yield_min": 1,
+        "yield_max": 2
+    },
+    "21002": {
+        "name": "玄木灵种",
+        "level": "灵品种子",
+        "type": "特殊物品",
+        "rank": 45,
+        "desc": "蕴含木灵之气的中阶种子，可产出较高阶药材。",
+        "seed_type": "herb_mid",
+        "grow_time": 180,
+        "yield_min": 1,
+        "yield_max": 3
+    },
+    "21003": {
+        "name": "星砂神种",
+        "level": "神品种子",
+        "type": "特殊物品",
+        "rank": 25,
+        "desc": "吸纳星辉凝结而成的珍稀种子，成熟后有机会产出低阶神物。",
+        "seed_type": "god_low",
+        "grow_time": 360,
+        "yield_min": 1,
+        "yield_max": 2
+    },
+    "21004": {
+        "name": "混元神种",
+        "level": "绝品种子",
+        "type": "特殊物品",
+        "rank": 8,
+        "desc": "洞府顶级灵种，蕴含混元道韵，成熟后可产出高阶神物。",
+        "seed_type": "god_high",
+        "grow_time": 720,
+        "yield_min": 1,
+        "yield_max": 2
     }
 }
