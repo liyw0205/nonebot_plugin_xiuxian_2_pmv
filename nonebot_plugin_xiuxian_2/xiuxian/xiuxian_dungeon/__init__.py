@@ -711,19 +711,19 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
     - 队长20%
     - 每个队友10%
     - 剩余按贡献度分
-    - 单人：固定50%
+    - 单人固定50%
+    - 多人每人上限50%，超出部分直接作废（不再分配）
     """
     member_ids = [str(x) for x in team_member_ids]
     n = len(member_ids)
     if n <= 0:
         return {}
 
-    # 单人特例：固定50%
+    # 单人特例
     if n == 1:
-        only_id = member_ids[0]
-        return {only_id: 0.5}
+        return {member_ids[0]: 0.5}
 
-    # 固定占比
+    # 固定份额
     fixed = {}
     fixed_pool = 0.0
     for uid in member_ids:
@@ -733,27 +733,35 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
             fixed[uid] = 0.10
         fixed_pool += fixed[uid]
 
-    # 剩余池
     remain_pool = max(0.0, 1.0 - fixed_pool)
 
-    # 贡献度（用伤害）
-    contrib_sum = 0
+    # 贡献
     contrib = {}
+    contrib_sum = 0
     for uid in member_ids:
         d = max(0, int(dmg_map.get(uid, 0)))
         contrib[uid] = d
         contrib_sum += d
 
-    dist = {}
-    if contrib_sum <= 0:
-        # 无伤害则剩余池均分
-        avg = remain_pool / n
-        for uid in member_ids:
-            dist[uid] = fixed[uid] + avg
-        return dist
+    dist = dict(fixed)
 
+    # 分贡献池
+    if remain_pool > 0:
+        if contrib_sum <= 0:
+            # 没有贡献时，剩余池均分（之后仍会受50%上限）
+            avg = remain_pool / n
+            for uid in member_ids:
+                dist[uid] += avg
+        else:
+            for uid in member_ids:
+                dist[uid] += remain_pool * (contrib[uid] / contrib_sum)
+
+    # 上限：50%，超出作废
+    cap = 0.5
     for uid in member_ids:
-        dist[uid] = fixed[uid] + remain_pool * (contrib[uid] / contrib_sum)
+        if dist[uid] > cap:
+            dist[uid] = cap
+
     return dist
 
 
