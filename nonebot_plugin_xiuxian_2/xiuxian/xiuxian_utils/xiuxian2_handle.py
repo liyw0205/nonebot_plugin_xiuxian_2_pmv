@@ -2870,6 +2870,131 @@ class PlayerDataManager:
             cursor.execute(f"DELETE FROM {table_name} WHERE user_id=?", (str(user_id),))
             self.conn.commit()
 
+    # ===== 通用文档接口（JSON字段友好） =====
+    def _json_load_if_possible(self, val):
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except Exception:
+                return val
+        return val
+
+    def get_doc(self, user_id, table_name, fields=None, default_factory=None):
+        """
+        读取某个 user_id 在 table_name 的文档（仅指定字段）。
+        fields=None 时读取整行。
+        default_factory: callable -> dict，记录不存在时提供默认结构
+        """
+        self._ensure_table_exists(table_name)
+        user_id = str(user_id)
+
+        with self.lock:
+            cursor = self._get_cursor()
+
+            if fields:
+                for f in fields:
+                    self._ensure_field_exists(table_name, f, "TEXT")
+                col_sql = ", ".join(["user_id"] + [f for f in fields])
+                cursor.execute(f"SELECT {col_sql} FROM {table_name} WHERE user_id=?", (user_id,))
+            else:
+                cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
+
+            row = cursor.fetchone()
+            if not row:
+                if default_factory:
+                    data = default_factory()
+                    data["user_id"] = user_id
+                    return data
+                return None
+
+            columns = [c[0] for c in cursor.description]
+            out = {}
+            for k, v in zip(columns, row):
+                out[k] = self._json_load_if_possible(v)
+            return out
+
+    def save_doc(self, user_id, table_name, data: dict, fields=None, dirty_check=True):
+        """
+        保存文档到 table，支持一次写多个字段。
+        - data: dict
+        - fields: 仅写入这些字段（None=除user_id外全部）
+        - dirty_check: 开启后，仅值变化时更新
+        """
+        self._ensure_table_exists(table_name)
+        user_id = str(user_id)
+
+        if fields is None:
+            fields = [k for k in data.keys() if k != "user_id"]
+
+        for f in fields:
+            self._ensure_field_exists(table_name, f, "TEXT")
+
+        with self.lock:
+            cursor = self._get_cursor()
+            cursor.execute(f"SELECT 1 FROM {table_name} WHERE user_id=?", (user_id,))
+            exists = cursor.fetchone() is not None
+
+            old_map = {}
+            if dirty_check and exists and fields:
+                col_sql = ", ".join(fields)
+                cursor.execute(f"SELECT {col_sql} FROM {table_name} WHERE user_id=?", (user_id,))
+                old_row = cursor.fetchone()
+                if old_row:
+                    for k, v in zip(fields, old_row):
+                        old_map[k] = v
+
+            new_map = {}
+            for f in fields:
+                v = data.get(f)
+                if isinstance(v, (dict, list)):
+                    v = json.dumps(v, ensure_ascii=False)
+                elif v is None:
+                    v = None
+                else:
+                    v = str(v)
+                new_map[f] = v
+
+            if dirty_check and exists:
+                changed = any(old_map.get(f) != new_map.get(f) for f in fields)
+                if not changed:
+                    return
+
+            if not exists:
+                cols = ["user_id"] + fields
+                vals = [user_id] + [new_map[f] for f in fields]
+                ph = ",".join(["?"] * len(cols))
+                col_sql = ",".join(cols)
+                cursor.execute(f"INSERT INTO {table_name} ({col_sql}) VALUES ({ph})", vals)
+            else:
+                if fields:
+                    set_sql = ", ".join([f"{f}=?" for f in fields])
+                    vals = [new_map[f] for f in fields] + [user_id]
+                    cursor.execute(f"UPDATE {table_name} SET {set_sql} WHERE user_id=?", vals)
+
+            self.conn.commit()
+
+    def patch_doc(self, user_id, table_name, fields, mutator, default_factory=None):
+        """
+        原子化读改写：
+        mutator(doc) -> bool(是否有变化) 或 None(默认视为有变化)
+        """
+        self._ensure_table_exists(table_name)
+        user_id = str(user_id)
+
+        with self.lock:
+            doc = self.get_doc(user_id, table_name, fields=fields, default_factory=default_factory)
+            if doc is None and default_factory:
+                doc = default_factory()
+                doc["user_id"] = user_id
+            elif doc is None:
+                doc = {"user_id": user_id}
+
+            ret = mutator(doc)
+            need_save = True if ret is None else bool(ret)
+            if need_save:
+                self.save_doc(user_id, table_name, doc, fields=fields, dirty_check=True)
+            return doc
+
     def close(self):
         with self.lock:
             if getattr(self, "conn", None):
@@ -3654,15 +3779,21 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     main_critatk = float(main.get("critatk", 0))
     main_def = float(main.get("def_buff", 0))
 
+    # ===== 独立减会心伤害（减法区）=====
+    # 目前主功法/装备若未来配置该字段，可自动接入
+    main_crit_dmg_reduce = float(main.get("crit_damage_reduction", 0))
+
     # 装备
     weapon_atk = float(weapon.get("atk_buff", 0))
     weapon_crit = float(weapon.get("crit_buff", 0))
     weapon_critatk = float(weapon.get("critatk", 0))
     weapon_def = float(weapon.get("def_buff", 0))
+    weapon_crit_dmg_reduce = float(weapon.get("crit_damage_reduction", 0))
 
     armor_atk = float(armor.get("atk_buff", 0))
     armor_crit = float(armor.get("crit_buff", 0))
     armor_def = float(armor.get("def_buff", 0))
+    armor_crit_dmg_reduce = float(armor.get("crit_damage_reduction", 0))
 
     # 传承
     impart_hp = float(impart.get("impart_hp_per", 0))
@@ -3671,6 +3802,9 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     impart_know = float(impart.get("impart_know_per", 0))
     impart_burst = float(impart.get("impart_burst_per", 0))
     boss_atk = float(impart.get("boss_atk", 0))
+
+    # 如果未来传承也有减会伤配置，可接这里
+    impart_crit_dmg_reduce = float(impart.get("crit_damage_reduction", 0))
 
     # 修炼等级
     hppractice = base["hppractice"] * 0.05
@@ -3691,26 +3825,72 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         (base["base_atk"] * (1 + atkpractice) * (1 + main_atk) * (1 + weapon_atk) * (1 + armor_atk)) * (1 + impart_atk)
     ) + perm_atk
 
+    # 会心率
     crit_rate = max(0, min(1, weapon_crit + armor_crit + main_crit + impart_know))
+
+    # 会心伤害倍率（比如1.5表示150%）
     crit_damage = 1.5 + impart_burst + weapon_critatk + main_critatk
+
+    # 减伤
     damage_reduction = main_def + weapon_def + armor_def
-    armor_penetration = 0.0  # 可在其他系统叠加
+
+    # 护甲穿透
+    armor_penetration = 0.0
+
+    # ===== 独立防暴体系 =====
+    # 抗暴（乘法区）
+    crit_resist = 0.0
+
+    # 减会心伤害（减法区）
+    crit_damage_reduction = (
+        main_crit_dmg_reduce
+        + weapon_crit_dmg_reduce
+        + armor_crit_dmg_reduce
+        + impart_crit_dmg_reduce
+    )
 
     # ===== 饰品加成 =====
     acc_effect = calc_accessory_effects(user_id)
 
     # 百分比型基础属性加成
-    max_hp = int(max_hp * (1 + acc_effect["hp_pct"]))
-    current_hp = int(current_hp * (1 + acc_effect["hp_pct"]))
-    final_atk = int(final_atk * (1 + acc_effect["atk_pct"]))
+    max_hp = int(max_hp * (1 + float(acc_effect.get("hp_pct", 0))))
+    current_hp = int(current_hp * (1 + float(acc_effect.get("hp_pct", 0))))
+    final_atk = int(final_atk * (1 + float(acc_effect.get("atk_pct", 0))))
 
     # 战斗率属性加成
-    crit_rate += acc_effect["crit_rate"]
-    crit_damage += acc_effect["crit_damage"]
-    damage_reduction += acc_effect["dmg_reduction"]
+    crit_rate += float(acc_effect.get("crit_rate", 0))
+    crit_damage += float(acc_effect.get("crit_damage", 0))
+    damage_reduction += float(acc_effect.get("dmg_reduction", 0))
 
-    # 上限裁剪（防止溢出）
+    # 饰品抗暴 -> 独立进入抗暴乘法区
+    crit_resist += float(acc_effect.get("crit_resist", 0))
+
+    # ===== 套装效果直接落地的部分 =====
+    set_bonus_effects = acc_effect.get("set_bonus", []) or []
+    for sb in set_bonus_effects:
+        sb_type = sb.get("type")
+        sb_val = float(sb.get("value", 0))
+
+        if sb_type == "attack":
+            final_atk = int(final_atk * (1 + sb_val))
+        elif sb_type == "dmg_reduction":
+            damage_reduction += sb_val
+        elif sb_type == "crit_rate":
+            crit_rate += sb_val
+        elif sb_type == "armor_pen":
+            armor_penetration += sb_val
+        elif sb_type == "dodge":
+            # dodge 为固定点数，战斗层读取
+            pass
+        elif sb_type in ["shield", "reflect", "true_damage", "shield_break"]:
+            # 这些交给战斗层处理
+            pass
+
+    # 上限裁剪
+    crit_rate = max(0.0, min(1.0, crit_rate))
     damage_reduction = min(0.95, damage_reduction)
+    crit_resist = max(0.0, min(0.95, crit_resist))
+    crit_damage_reduction = max(0.0, crit_damage_reduction)
 
     # 比例缩放（例如PVE多队平衡）
     max_hp = int(max_hp * ratio)
@@ -3727,12 +3907,20 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         "current_mp": current_mp,
         "final_atk": final_atk,
 
+        # 暴击体系
         "crit_rate": crit_rate,
         "crit_damage": crit_damage,
+
+        "crit_resist": crit_resist,  # 抗暴：乘法
+        "crit_damage_reduction": crit_damage_reduction,  # 减会伤：减法
+
         "damage_reduction": damage_reduction,
         "armor_penetration": armor_penetration,
         "boss_damage_bonus": boss_atk,
+
+        # 饰品/套装扩展
         "accessory_effect": acc_effect,
+        "set_bonus_effects": set_bonus_effects,
     }
 
 def get_weapon_info_msg(weapon_id, weapon_info=None):

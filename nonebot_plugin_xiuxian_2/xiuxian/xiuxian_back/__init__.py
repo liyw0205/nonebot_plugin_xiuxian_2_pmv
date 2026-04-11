@@ -2600,12 +2600,362 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
     return "\n".join(comparison)
 
 
+TABLE = "player_accessory"
+
+AFFIX_TYPES = ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击"]
+
+# 品阶1-5洗练区间
+WASH_RANGE = {
+    1: {"气血": (0.02, 0.05), "抗暴": (0.01, 0.03), "防御": (0.01, 0.03), "会心": (0.01, 0.03), "会心伤害": (0.02, 0.05), "攻击": (0.02, 0.05)},
+    2: {"气血": (0.04, 0.08), "抗暴": (0.02, 0.05), "防御": (0.02, 0.05), "会心": (0.02, 0.05), "会心伤害": (0.04, 0.08), "攻击": (0.04, 0.08)},
+    3: {"气血": (0.06, 0.12), "抗暴": (0.03, 0.07), "防御": (0.03, 0.07), "会心": (0.03, 0.07), "会心伤害": (0.06, 0.12), "攻击": (0.06, 0.12)},
+    4: {"气血": (0.08, 0.16), "抗暴": (0.04, 0.10), "防御": (0.04, 0.10), "会心": (0.04, 0.10), "会心伤害": (0.08, 0.16), "攻击": (0.08, 0.16)},
+    5: {"气血": (0.10, 0.20), "抗暴": (0.05, 0.12), "防御": (0.05, 0.12), "会心": (0.05, 0.12), "会心伤害": (0.10, 0.20), "攻击": (0.10, 0.20)},
+}
+
+SLOTS = ["手镯", "戒指", "手环", "项链"]
+
+# 你的饰品词条中文 -> 统一属性键
+AFFIX_KEY_MAP = {
+    "气血": "hp_pct",              # 最大生命百分比
+    "抗暴": "crit_resist",         # 抗暴
+    "防御": "dmg_reduction",       # 伤害减免
+    "会心": "crit_rate",           # 会心率
+    "会心伤害": "crit_damage",     # 会心伤害
+    "攻击": "atk_pct",             # 攻击百分比
+}
+
+# 套装效果（2件 / 4件）
+SET_BONUS = {
+    "烈阳": {
+        2: {"type": "attack", "value": 0.08},
+        4: {"type": "true_damage", "value": 0.06},
+    },
+    "玄渊": {
+        2: {"type": "shield", "value": 0.12},
+        4: {"type": "reflect", "value": 0.12},
+    },
+    "天衡": {
+        2: {"type": "armor_pen", "value": 0.08},
+        4: {"type": "dmg_reduction", "value": 0.10},
+    },
+    "星痕": {
+        2: {"type": "crit_rate", "value": 0.06},
+        4: {"type": "dodge", "value": 12},
+    },
+    "龙魄": {
+        2: {"type": "attack", "value": 0.06},
+        4: {"type": "shield_break", "value": 0.10},
+    },
+}
+
+def quality_to_cn(q: int) -> str:
+    return {
+        1: "一阶",
+        2: "二阶",
+        3: "三阶",
+        4: "四阶",
+        5: "五阶",
+    }.get(int(q), f"{q}阶")
+
+SET_TYPE_CN = {
+    "attack": "攻击提升",
+    "true_damage": "附加真伤",
+    "shield": "开场护盾",
+    "reflect": "反伤",
+    "armor_pen": "护甲穿透",
+    "dmg_reduction": "伤害减免",
+    "crit_rate": "会心率",
+    "dodge": "闪避",
+    "shield_break": "护盾穿透",
+}
+
+SET_VALUE_POINT_TYPES = {"dodge"}
+
+ACCESSORY_SETS = ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]
+ACCESSORY_PARTS = ["手镯", "戒指", "手环", "项链"]
+QUALITY_RANGE = [1, 2, 3, 4, 5]
+
+WASH_STONE_ID = 20023
+WASH_STONE_NAME = "洗练石"
+
+WASH_STONE_COST = {
+    1: 1,
+    2: 2,
+    3: 4,
+    4: 8,
+    5: 12
+}
+
+ACCESSORY_DECOMPOSE_GAIN = {
+    1: 1,
+    2: 3,
+    3: 8,
+    4: 20,
+    5: 50
+}
+
+
+def _default_accessory_doc():
+    return {
+        "equipped": {"手镯": None, "戒指": None, "手环": None, "项链": None},
+        "bag": []
+    }
+
+def _normalize_accessory_doc(doc: dict):
+    if not isinstance(doc, dict):
+        doc = _default_accessory_doc()
+
+    eq = doc.get("equipped")
+    if not isinstance(eq, dict):
+        eq = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+    for s in SLOTS:
+        if s not in eq:
+            eq[s] = None
+
+    bag = doc.get("bag")
+    if not isinstance(bag, list):
+        bag = []
+
+    doc["equipped"] = eq
+    doc["bag"] = bag
+    return doc
+
+def _get_data(user_id: str):
+    doc = player_data_manager.get_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        default_factory=_default_accessory_doc
+    )
+    return _normalize_accessory_doc(doc)
+
+def _save_data(user_id: str, data: dict):
+    data = _normalize_accessory_doc(data)
+    player_data_manager.save_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        data=data,
+        fields=["equipped", "bag"],
+        dirty_check=True
+    )
+
+def roll_affixes(quality: int, count: int = 2):
+    count = max(1, min(4, count))
+    pool = random.sample(AFFIX_TYPES, count)
+    out = []
+    for t in pool:
+        lo, hi = WASH_RANGE[quality][t]
+        out.append({"type": t, "value": round(random.uniform(lo, hi), 4)})
+    return out
+
+def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = False):
+    count = max(1, min(4, count))
+    pool = random.sample(AFFIX_TYPES, count)
+    out = []
+    for t in pool:
+        lo, hi = WASH_RANGE[quality][t]
+        v = hi if pity_reached else round(random.uniform(lo, hi), 4)
+        out.append({"type": t, "value": v})
+    return out
+
+def create_accessory_instance(item_id: int, quality: int = 1):
+    item = items.get_data_by_item_id(item_id)
+    uid = f"acc_{int(time.time())}_{random.randint(1,9999)}"
+    return {
+        "uid": uid,
+        "item_id": item_id,
+        "name": item["name"],
+        "part": item["part"],
+        "set_type": item["set_type"],
+        "quality": quality,
+        "affixes": roll_affixes(quality, 2),
+        "wash_count": 0
+    }
+
+def add_accessory_to_bag(user_id: str, item_id: int, quality: int = 1):
+    data = _get_data(user_id)
+    ins = create_accessory_instance(item_id, quality)
+    data["bag"].append(ins)
+    _save_data(user_id, data)
+    return ins
+
+def _find_accessory_in_bag(data: dict, uid: str):
+    bag = data.get("bag", [])
+    for i, x in enumerate(bag):
+        if str(x.get("uid", "")) == str(uid):
+            return i, x
+    return -1, None
+
+def _parse_quality_arg(q_text: str):
+    q_text = str(q_text).strip()
+    mapping = {
+        "1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
+        "一阶": 1, "二阶": 2, "三阶": 3, "四阶": 4, "五阶": 5,
+        "q1": 1, "q2": 2, "q3": 3, "q4": 4, "q5": 5,
+        "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4, "Q5": 5,
+    }
+    return mapping.get(q_text, None)
+
+def _match_accessory_type(acc: dict, t: str):
+    t = str(t).strip()
+    if t == "全部":
+        return True
+    if t in ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]:
+        return acc.get("set_type") == t
+    if t in ["手镯", "戒指", "手环", "项链"]:
+        return acc.get("part") == t
+    return False
+
+def _find_accessory_anywhere(data: dict, uid: str):
+    for i, x in enumerate(data.get("bag", [])):
+        if str(x.get("uid", "")) == str(uid):
+            return "bag", i, x
+    for s in SLOTS:
+        it = data.get("equipped", {}).get(s)
+        if it and str(it.get("uid", "")) == str(uid):
+            return "equipped", s, it
+    return None, None, None
+
+def _get_upgrade_cost(cur_quality: int) -> int:
+    if cur_quality <= 1:
+        return 1
+    return cur_quality - 1
+
+def _is_same_accessory_for_upgrade(main_acc: dict, material_acc: dict) -> bool:
+    if not main_acc or not material_acc:
+        return False
+    return (
+        int(main_acc.get("item_id", 0)) == int(material_acc.get("item_id", -1))
+        and str(main_acc.get("part", "")) == str(material_acc.get("part", ""))
+        and str(main_acc.get("set_type", "")) == str(material_acc.get("set_type", ""))
+        and int(main_acc.get("quality", 1)) == int(material_acc.get("quality", 0))
+    )
+
+def _build_accessory_sections_for_md(user_id: str):
+    data = _get_data(str(user_id))
+    if not data:
+        return []
+
+    bag = data.get("bag", [])
+    equipped = data.get("equipped", {})
+
+    set_order = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "其他"]
+    buckets = {k: [] for k in set_order}
+
+    equipped_rows = []
+    for s in SLOTS:
+        it = equipped.get(s)
+        if not it:
+            continue
+        row = {
+            "name": it.get("name", "未知饰品"),
+            "count": 1,
+            "bind": 0,
+            "goods_type": "饰品",
+            "uid": it.get("uid", ""),
+            "quality": int(it.get("quality", 1)),
+            "part": it.get("part", s),
+            "set_type": it.get("set_type", "其他"),
+            "is_equipped": True
+        }
+        equipped_rows.append(row)
+
+    bag_rows = []
+    for x in bag:
+        row = {
+            "name": x.get("name", "未知饰品"),
+            "count": 1,
+            "bind": 0,
+            "goods_type": "饰品",
+            "uid": x.get("uid", ""),
+            "quality": int(x.get("quality", 1)),
+            "part": x.get("part", ""),
+            "set_type": x.get("set_type", "其他"),
+            "is_equipped": False
+        }
+        bag_rows.append(row)
+
+    all_rows = equipped_rows + bag_rows
+
+    for row in all_rows:
+        st = row.get("set_type", "其他")
+        if st not in buckets:
+            st = "其他"
+        buckets[st].append(row)
+
+    sections = []
+    for st in set_order:
+        rows = buckets.get(st, [])
+        if not rows:
+            continue
+
+        rows = sorted(
+            rows,
+            key=lambda r: (
+                0 if r.get("is_equipped") else 1,
+                -r.get("quality", 1),
+                r.get("part", ""),
+                r.get("name", "")
+            )
+        )
+        sections.append((f"{st}套装", rows))
+
+    return sections
+
+def _build_accessory_md_text(
+    title: str,
+    sections: list[tuple[str, list[dict]]],
+    current_page: int,
+    total_pages: int,
+    next_cmd: str = ""
+) -> str:
+    lines = [f"☆------{title}------☆", ""]
+
+    for sec_title, rows in sections:
+        if not rows:
+            continue
+
+        lines.append(f"【{sec_title}】")
+        lines.append("")
+
+        for row in rows:
+            name = row.get("name", "未知饰品")
+            uid = row.get("uid", "")
+            q = int(row.get("quality", 1))
+            part = row.get("part", "")
+            set_type = row.get("set_type", "未知")
+
+            view_cmd = quote(f"查看饰品 {uid}", safe="")
+            view_md = f"[{name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
+
+            equip_cmd = quote(f"装备饰品 {uid}", safe="")
+            wash_cmd = quote(f"饰品洗练 {uid}", safe="")
+            decompose_cmd = quote(f"饰品分解 {uid}", safe="")
+            op_md = (
+                f"[装备](mqqapi://aio/inlinecmd?command={equip_cmd}&enter=false&reply=false) "
+                f"[洗练](mqqapi://aio/inlinecmd?command={wash_cmd}&enter=false&reply=false) "
+                f"[分解](mqqapi://aio/inlinecmd?command={decompose_cmd}&enter=false&reply=false)"
+            )
+
+            eq_flag = "【已装备】" if row.get("is_equipped") else ""
+            lines.append(
+                f"> - {eq_flag}{view_md} | {part} | {set_type} | {quality_to_cn(q)} | UID:{uid} | {op_md}"
+            )
+            lines.append("\r")
+
+    lines.append("")
+    lines.append(f"第 {current_page}/{total_pages} 页")
+    if current_page < total_pages and next_cmd:
+        next_q = quote(next_cmd, safe="")
+        lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_q}&enter=false&reply=false)")
+
+    return "\r".join(lines)
+
+# ========== 命令 ==========
 @accessory_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """
-    饰品系统帮助
-    """
-    msg = f"""
+    msg = """
 【饰品系统帮助】
 
 一、基础功能
@@ -2627,53 +2977,33 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 5）卸下饰品：
    发送：卸下饰品 部位
    可用部位：手镯 / 戒指 / 手环 / 项链
-   例如：卸下饰品 戒指
 
 二、成长功能
 6）洗练饰品：
    发送：饰品洗练 饰品UID
-   说明：
-   - 消耗【洗练石】，消耗数量随品阶(Q1~Q5)提升
-   - 每件饰品独立计算洗练次数
-   - 洗练保底固定150次：
-     达到后词条数值固定为该品阶上限，再次洗练仅变化词条类型
+   - 消耗【洗练石】随品阶增加
+   - 每件饰品独立洗练次数
+   - 150次保底：词条值固定上限，仅词条类型变化
 
 7）饰品升阶：
    发送：饰品升阶 部位 主饰品UID 材料UID
-   例如：饰品升阶 项链 UID1 UID2
    规则：
-   - 主饰品必须先装备在对应部位
-   - 材料必须是同阶同款（同 item_id / 同部位 / 同套装）
-   - 升3→4需2个材料，升4→5需3个材料
+   - 主饰品必须已装备在对应部位
+   - 材料必须同阶同款（同 item_id / 部位 / 套装）
+   - 3->4需2个材料，4->5需3个材料
    - 最高五阶
 
 三、分解功能
 8）单件分解：
    发送：饰品分解 饰品UID
-   说明：分解后获得【洗练石】，产出随品阶提升。
-   注意：已装备饰品不能直接分解，请先卸下。
+   说明：已装备饰品不能直接分解，请先卸下
 
 9）快速分解：
    发送：快速分解饰品 类型 品阶
-   类型支持：
-   - 全部
-   - 套装：烈阳 / 玄渊 / 天衡 / 星痕 / 龙魄
-   - 部位：手镯 / 戒指 / 手环 / 项链
-   品阶支持：
-   - 全部
-   - 1~5
-   - 一阶~五阶
-   示例：
-   - 快速分解饰品 全部 全部
-   - 快速分解饰品 烈阳 三阶
-   - 快速分解饰品 戒指 2
+   类型：全部 / 烈阳 / 玄渊 / 天衡 / 星痕 / 龙魄 / 手镯 / 戒指 / 手环 / 项链
+   品阶：全部 / 1~5 / 一阶~五阶
    安全规则：
-   - 当“类型=全部”或“品阶=全部”时，系统自动忽略4/5阶，避免高品质饰品被误分解
-
-四、补充说明
-- 饰品为实例物品，每件都有唯一UID。
-- 套装效果与战斗加成可通过“我的饰品 / 查看饰品”查看与搭配。
-
+   - 当“类型=全部”或“品阶=全部”时，自动忽略4/5阶
 """.strip()
 
     await handle_send(
@@ -2684,127 +3014,103 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         k3="升阶示例", v3="饰品升阶 项链 UID1 UID2"
     )
 
-@upgrade_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    饰品升阶
-    用法：饰品升阶 部位 主饰品UID 材料UID
-    例如：饰品升阶 项链 acc_xxx acc_yyy
+@my_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    user_id = str(user_info["user_id"])
+    data = _get_data(user_id)
+    eq = data["equipped"]
+    lines = ["☆------我的饰品------☆"]
+    for s in SLOTS:
+        it = eq.get(s)
+        if not it:
+            lines.append(f"{s}：未装备")
+        else:
+            lines.append(f"{s}：{it['name']}[{quality_to_cn(it.get('quality', 1))}]")
+    await handle_send(bot, event, "\n".join(lines))
 
-    规则：
-    - 主饰品必须已装备在对应部位
-    - 升阶需要消耗同阶同款材料（同 item_id / part / set_type / quality）
-    - 3->4 需要2个材料，4->5需要3个材料
-    """
+@accessory_bag.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    parts = args.extract_plain_text().split()
-    if len(parts) != 3:
-        await handle_send(
-            bot, event,
-            "用法：饰品升阶 部位 主饰品UID 材料UID\n例如：饰品升阶 项链 UID1 UID2",
-            md_type="背包", k1="饰品", v1="饰品背包", k2="帮助", v2="饰品帮助"
-        )
-        return
-
-    part, main_uid, material_uid = parts
-    if part not in SLOTS:
-        await handle_send(bot, event, f"部位错误，可用：{'/'.join(SLOTS)}")
-        return
-
     user_id = str(user_info["user_id"])
+
+    try:
+        current_page = int(args.extract_plain_text().strip())
+    except ValueError:
+        current_page = 1
+
     data = _get_data(user_id)
-
-    # 1) 主饰品必须已装备在指定部位
-    main_acc = data.get("equipped", {}).get(part)
-    if not main_acc:
-        await handle_send(bot, event, f"{part}当前未装备饰品，无法升阶")
-        return
-
-    if str(main_acc.get("uid", "")) != str(main_uid):
-        await handle_send(bot, event, f"主饰品UID不匹配：{part}当前装备并非该UID")
-        return
-
-    main_q = int(main_acc.get("quality", 1))
-    if main_q >= 5:
-        await handle_send(bot, event, "该饰品已达最高五阶，无法继续升阶")
-        return
-
-    need_cnt = _get_upgrade_cost(main_q)
-
-    # 2) 在背包中收集可用材料（不能从已装备里扣）
     bag = data.get("bag", [])
-    candidate_idx = []
-    specified_idx = None
-
-    for i, x in enumerate(bag):
-        if str(x.get("uid", "")) == str(main_uid):
-            continue
-
-        if _is_same_accessory_for_upgrade(main_acc, x):
-            candidate_idx.append(i)
-            if str(x.get("uid", "")) == str(material_uid):
-                specified_idx = i
-
-    if specified_idx is None:
-        await handle_send(bot, event, "材料UID无效：需为背包内同阶同款饰品")
+    if not bag:
+        await handle_send(bot, event, "饰品背包为空")
         return
 
-    if len(candidate_idx) < need_cnt:
-        await handle_send(
-            bot, event,
-            f"材料不足：当前升阶需 {need_cnt} 个同阶同款饰品，你只有 {len(candidate_idx)} 个",
-            md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2=f"查看饰品 {main_uid}"
+    if XiuConfig().markdown_status:
+        sections = _build_accessory_sections_for_md(user_id)
+        if not sections:
+            await handle_send(bot, event, "饰品背包为空")
+            return
+
+        page_sections, current_page, total_pages = _paginate_sections(
+            sections, current_page, per_page=15
         )
+
+        md_text = _build_accessory_md_text(
+            title=f"{user_info.get('user_name', '道友')}的饰品背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            next_cmd=f"饰品背包 {current_page + 1}"
+        )
+
+        try:
+            await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        except Exception:
+            await handle_send(bot, event, md_text)
         return
 
-    # 3) 组装消耗列表：优先消耗你指定的材料UID，再补齐
-    consume_idx = [specified_idx]
-    for i in candidate_idx:
-        if i == specified_idx:
-            continue
-        if len(consume_idx) >= need_cnt:
-            break
-        consume_idx.append(i)
+    sections = _build_accessory_sections_for_md(user_id)
+    flat_rows = []
+    for sec_title, rows in sections:
+        for r in rows:
+            flat_rows.append((sec_title, r))
 
-    # 4) 扣除材料（倒序删防止下标错位）
-    for i in sorted(consume_idx, reverse=True):
-        del bag[i]
+    per_page = 15
+    total_pages = (len(flat_rows) + per_page - 1) // per_page
+    current_page = max(1, min(current_page, total_pages))
 
-    # 5) 主饰品升阶：quality+1，词条按新阶重roll（词条条数保留）
-    new_q = main_q + 1
-    old_cnt = len(main_acc.get("affixes", [])) if isinstance(main_acc.get("affixes", []), list) else 2
-    old_cnt = max(1, min(4, old_cnt))
+    start = (current_page - 1) * per_page
+    end = start + per_page
+    page_flat = flat_rows[start:end]
 
-    main_acc["quality"] = new_q
-    main_acc["affixes"] = roll_affixes(new_q, old_cnt)
-    # wash_count 保留（不重置）
-    main_acc["wash_count"] = int(main_acc.get("wash_count", 0))
+    title = [f"☆------{user_info.get('user_name', '道友')}的饰品背包------☆"]
+    lines = []
+    last_sec = None
+    for sec_title, r in page_flat:
+        if sec_title != last_sec:
+            lines.append(f"\n【{sec_title}】")
+            last_sec = sec_title
 
-    # 回写
-    data["equipped"][part] = main_acc
-    data["bag"] = bag
-    _save_data(user_id, data)
+        lines.append(
+            f"{r.get('name')} | {r.get('part')} | {r.get('set_type')} | {quality_to_cn(r.get('quality', 1))} | UID:{r.get('uid')}"
+        )
 
-    await handle_send(
-        bot, event,
-        f"升阶成功：{main_acc.get('name', '未知饰品')} "
-        f"{quality_to_cn(main_q)} → {quality_to_cn(new_q)}\n"
-        f"消耗材料：{need_cnt}件同阶同款饰品",
-        md_type="背包",
-        k1="我的饰品", v1="我的饰品",
-        k2="饰品背包", v2="饰品背包",
-        k3="查看饰品", v3=f"查看饰品 {main_uid}"
-    )
+    lines.append(f"\n第 {current_page}/{total_pages} 页")
+    if current_page < total_pages:
+        lines.append(f"输入 饰品背包 {current_page + 1} 查看下一页")
+    lines.append("可用命令：装备饰品 UID / 饰品洗练 UID / 饰品分解 UID")
+    page = ["翻页", f"饰品背包 {current_page + 1}", "装备", "装备饰品", "洗练", "饰品洗练", f"{current_page}/{total_pages}"]
+    await send_msg_handler(bot, event, '饰品背包', bot.self_id, lines, title=title, page=page)
 
 @check_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    查看饰品 饰品UID
-    """
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -2821,14 +3127,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     target = None
     where = "背包"
 
-    # 先查背包
     for x in data.get("bag", []):
         if str(x.get("uid", "")) == uid:
             target = x
             where = "背包"
             break
 
-    # 再查已装备
     if not target:
         for s in SLOTS:
             it = data.get("equipped", {}).get(s)
@@ -2841,7 +3145,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到该饰品UID，请检查是否输入正确。")
         return
 
-    # 基础静态信息（从饰品.json）
     item_id = int(target.get("item_id", 0))
     item_info = items.get_data_by_item_id(item_id) or {}
 
@@ -2851,7 +3154,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     quality = int(target.get("quality", 1))
     desc = item_info.get("desc", "暂无介绍")
 
-    # 词条展示
     affixes = target.get("affixes", [])
     if not affixes:
         affix_lines = ["- 无词条"]
@@ -2862,7 +3164,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             v = float(af.get("value", 0))
             affix_lines.append(f"- {t}：+{round(v * 100, 2)}%")
 
-    # 套装效果展示（中文）
     set_lines = []
     sb = SET_BONUS.get(set_type, {})
     if 2 in sb:
@@ -2905,282 +3206,61 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         k3="饰品帮助", v3="饰品帮助"
     )
 
-@my_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
-    user_id = str(user_info["user_id"])
-    data = _get_data(user_id)
-    eq = data["equipped"]
-    lines = ["☆------我的饰品------☆"]
-    for s in SLOTS:
-        it = eq.get(s)
-        if not it:
-            lines.append(f"{s}：未装备")
-        else:
-            lines.append(f"{s}：{it['name']}[{quality_to_cn(it.get('quality', 1))}]")
-    await handle_send(bot, event, "\n".join(lines))
-
-
-def _build_accessory_sections_for_md(user_id: str):
-    """
-    饰品背包：
-    - 已装备优先显示
-    - 再显示背包
-    - 按套装分组（烈阳/玄渊/天衡/星痕/龙魄/其他）
-    """
-    data = _get_data(str(user_id))
-    if not data:
-        return []
-
-    bag = data.get("bag", [])
-    equipped = data.get("equipped", {})
-
-    set_order = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "其他"]
-    buckets = {k: [] for k in set_order}
-
-    # 1) 先放已装备（优先）
-    equipped_rows = []
-    for s in SLOTS:
-        it = equipped.get(s)
-        if not it:
-            continue
-        row = {
-            "name": it.get("name", "未知饰品"),
-            "count": 1,
-            "bind": 0,
-            "goods_type": "饰品",
-            "uid": it.get("uid", ""),
-            "quality": int(it.get("quality", 1)),
-            "part": it.get("part", s),
-            "set_type": it.get("set_type", "其他"),
-            "is_equipped": True
-        }
-        equipped_rows.append(row)
-
-    # 2) 再放背包
-    bag_rows = []
-    for x in bag:
-        row = {
-            "name": x.get("name", "未知饰品"),
-            "count": 1,
-            "bind": 0,
-            "goods_type": "饰品",
-            "uid": x.get("uid", ""),
-            "quality": int(x.get("quality", 1)),
-            "part": x.get("part", ""),
-            "set_type": x.get("set_type", "其他"),
-            "is_equipped": False
-        }
-        bag_rows.append(row)
-
-    # 合并（已装备在前）
-    all_rows = equipped_rows + bag_rows
-
-    # 分桶
-    for row in all_rows:
-        st = row.get("set_type", "其他")
-        if st not in buckets:
-            st = "其他"
-        buckets[st].append(row)
-
-    sections = []
-    for st in set_order:
-        rows = buckets.get(st, [])
-        if not rows:
-            continue
-
-        # 排序规则：
-        # 1. 已装备优先
-        # 2. 品阶高优先
-        # 3. 部位
-        # 4. 名字
-        rows = sorted(
-            rows,
-            key=lambda r: (
-                0 if r.get("is_equipped") else 1,
-                -r.get("quality", 1),
-                r.get("part", ""),
-                r.get("name", "")
-            )
-        )
-        sections.append((f"{st}套装", rows))
-
-    return sections
-
-
-def _build_accessory_md_text(
-    title: str,
-    sections: list[tuple[str, list[dict]]],
-    current_page: int,
-    total_pages: int,
-    next_cmd: str = ""
-) -> str:
-    """
-    饰品专用Markdown构建（每条包含 UID 和操作按钮）
-    """
-    lines = [f"☆------{title}------☆", ""]
-
-    for sec_title, rows in sections:
-        if not rows:
-            continue
-
-        lines.append(f"【{sec_title}】")
-        lines.append("")
-
-        for row in rows:
-            name = row.get("name", "未知饰品")
-            uid = row.get("uid", "")
-            q = int(row.get("quality", 1))
-            part = row.get("part", "")
-            set_type = row.get("set_type", "未知")
-
-            # 查看详情（按UID）
-            view_cmd = quote(f"查看饰品 {uid}", safe="")
-            view_md = f"[{name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
-
-            # 操作按钮（按UID）
-            equip_cmd = quote(f"装备饰品 {uid}", safe="")
-            wash_cmd = quote(f"饰品洗练 {uid}", safe="")
-            decompose_cmd = quote(f"饰品分解 {uid}", safe="")
-
-            op_md = (
-                f"[装备](mqqapi://aio/inlinecmd?command={equip_cmd}&enter=false&reply=false) "
-                f"[洗练](mqqapi://aio/inlinecmd?command={wash_cmd}&enter=false&reply=false) "
-                f"[分解](mqqapi://aio/inlinecmd?command={decompose_cmd}&enter=false&reply=false)"
-            )
-
-            eq_flag = "【已装备】" if row.get("is_equipped") else ""
-            lines.append(
-                f"> - {eq_flag}{view_md} | {part} | {set_type} | {quality_to_cn(q)} | UID:{uid} | {op_md}"
-            )
-            lines.append("\r")
-
-    lines.append("")
-    lines.append(f"第 {current_page}/{total_pages} 页")
-    if current_page < total_pages and next_cmd:
-        next_q = quote(next_cmd, safe="")
-        lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_q}&enter=false&reply=false)")
-
-    return "\r".join(lines)
-
-
-@accessory_bag.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    饰品背包 [页码]
-    """
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
-
-    user_id = str(user_info["user_id"])
-
-    # 页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
-
-    data = _get_data(user_id)
-    bag = data.get("bag", []) if data else []
-    if not bag:
-        await handle_send(bot, event, "饰品背包为空")
-        return
-
-    # ===== Markdown 模式 =====
-    if XiuConfig().markdown_status:
-        sections = _build_accessory_sections_for_md(user_id)
-        if not sections:
-            await handle_send(bot, event, "饰品背包为空")
-            return
-
-        page_sections, current_page, total_pages = _paginate_sections(
-            sections, current_page, per_page=15
-        )
-
-        md_text = _build_accessory_md_text(
-            title=f"{user_info.get('user_name', '道友')}的饰品背包",
-            sections=page_sections,
-            current_page=current_page,
-            total_pages=total_pages,
-            next_cmd=f"饰品背包 {current_page + 1}"
-        )
-
-        try:
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
-        except Exception:
-            await handle_send(bot, event, md_text)
-        return
-
-    # ===== 普通消息模式 =====
-    sections = _build_accessory_sections_for_md(user_id)
-    flat_rows = []
-    for sec_title, rows in sections:
-        for r in rows:
-            flat_rows.append((sec_title, r))
-
-    per_page = 15
-    total_pages = (len(flat_rows) + per_page - 1) // per_page
-    current_page = max(1, min(current_page, total_pages))
-
-    start = (current_page - 1) * per_page
-    end = start + per_page
-    page_flat = flat_rows[start:end]
-
-    title = [f"☆------{user_info.get('user_name', '道友')}的饰品背包------☆"]
-    lines = []
-    last_sec = None
-    for sec_title, r in page_flat:
-        if sec_title != last_sec:
-            lines.append(f"\n【{sec_title}】")
-            last_sec = sec_title
-
-        lines.append(
-            f"{r.get('name')} | {r.get('part')} | {r.get('set_type')} | {quality_to_cn(r.get('quality', 1))} | UID:{r.get('uid')}"
-        )
-
-    lines.append(f"\n第 {current_page}/{total_pages} 页")
-    if current_page < total_pages:
-        lines.append(f"输入 饰品背包 {current_page + 1} 查看下一页")
-    lines.append("可用命令：装备饰品 UID / 饰品洗练 UID / 饰品分解 UID")
-    page = ["翻页", f"饰品背包 {current_page + 1}", "装备", "装备饰品", "洗练", "饰品洗练", f"{current_page}/{total_pages}"]
-    await send_msg_handler(bot, event, '饰品背包', bot.self_id, lines, title=title, page=page)
-
-
 @equip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
+
     uid = args.extract_plain_text().strip()
     if not uid:
         await handle_send(bot, event, "用法：装备饰品 饰品UID")
         return
-    user_id = str(user_info["user_id"])
-    data = _get_data(user_id)
-    bag = data["bag"]
-    hit = None
-    for x in bag:
-        if x["uid"] == uid:
-            hit = x
-            break
-    if not hit:
-        await handle_send(bot, event, "未找到该饰品UID")
-        return
-    part = hit["part"]
-    old = data["equipped"].get(part)
-    if old:
-        bag.append(old)
-    data["equipped"][part] = hit
-    bag.remove(hit)
-    _save_data(user_id, data)
-    await handle_send(bot, event, f"已装备：{hit['name']} 到 {part}")
 
+    user_id = str(user_info["user_id"])
+    result = {"ok": False, "msg": "未找到该饰品UID"}
+
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+        bag = doc["bag"]
+
+        hit_idx = -1
+        hit = None
+        for i, x in enumerate(bag):
+            if str(x.get("uid", "")) == uid:
+                hit_idx = i
+                hit = x
+                break
+        if hit_idx < 0:
+            return False
+
+        part = hit.get("part")
+        if part not in SLOTS:
+            result["msg"] = "饰品部位异常，无法装备"
+            return False
+
+        old = doc["equipped"].get(part)
+        if old:
+            bag.append(old)
+
+        doc["equipped"][part] = hit
+        del bag[hit_idx]
+
+        result["ok"] = True
+        result["msg"] = f"已装备：{hit.get('name', '未知饰品')} 到 {part}"
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    await handle_send(bot, event, result["msg"])
 
 @unequip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -3188,21 +3268,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
+
     part = args.extract_plain_text().strip()
     if part not in SLOTS:
         await handle_send(bot, event, "用法：卸下饰品 手镯/戒指/手环/项链")
         return
-    user_id = str(user_info["user_id"])
-    data = _get_data(user_id)
-    cur = data["equipped"].get(part)
-    if not cur:
-        await handle_send(bot, event, f"{part}未装备饰品")
-        return
-    data["bag"].append(cur)
-    data["equipped"][part] = None
-    _save_data(user_id, data)
-    await handle_send(bot, event, f"已卸下：{cur['name']}")
 
+    user_id = str(user_info["user_id"])
+    result = {"ok": False, "msg": f"{part}未装备饰品"}
+
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+        cur = doc["equipped"].get(part)
+        if not cur:
+            return False
+        doc["bag"].append(cur)
+        doc["equipped"][part] = None
+        result["ok"] = True
+        result["msg"] = f"已卸下：{cur.get('name', '未知饰品')}"
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    await handle_send(bot, event, result["msg"])
 
 @wash_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -3217,34 +3312,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
+
     data = _get_data(user_id)
-
-    # 先在背包找
-    target = None
-    in_equipped = False
-    target_slot = None
-
-    for x in data.get("bag", []):
-        if str(x.get("uid", "")) == uid:
-            target = x
-            break
-
-    # 背包没找到，再看已装备
-    if not target:
-        for s in SLOTS:
-            it = data.get("equipped", {}).get(s)
-            if it and str(it.get("uid", "")) == uid:
-                target = it
-                in_equipped = True
-                target_slot = s
-                break
-
+    where, key, target = _find_accessory_anywhere(data, uid)
     if not target:
         await handle_send(bot, event, "未找到该饰品UID")
         return
 
-    q = int(target.get("quality", 1))
-    q = max(1, min(5, q))
+    q = max(1, min(5, int(target.get("quality", 1))))
     need = WASH_STONE_COST.get(q, 1)
     have = sql_message.goods_num(user_id, WASH_STONE_ID)
 
@@ -3256,22 +3331,53 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         return
 
-    # 扣除洗练石
     sql_message.update_back_j(user_id, WASH_STONE_ID, num=need)
 
-    # 重roll词条，默认沿用原有词条数量
-    old_cnt = len(target.get("affixes", [])) if isinstance(target.get("affixes", []), list) else 2
-    old_cnt = max(1, min(4, old_cnt))
-    target["affixes"] = roll_affixes(q, old_cnt)
+    result = {"ok": False, "msg": "洗练失败：未找到饰品"}
 
-    # 保存
-    if in_equipped and target_slot:
-        data["equipped"][target_slot] = target
-    _save_data(user_id, data)
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+
+        w, k, t = _find_accessory_anywhere(doc, uid)
+        if not t:
+            result["msg"] = "洗练失败：饰品不存在（可能刚被操作）"
+            return False
+
+        q2 = max(1, min(5, int(t.get("quality", 1))))
+        old_cnt = len(t.get("affixes", [])) if isinstance(t.get("affixes", []), list) else 2
+        old_cnt = max(1, min(4, old_cnt))
+
+        wash_count = int(t.get("wash_count", 0)) + 1
+        t["wash_count"] = wash_count
+
+        pity_reached = wash_count >= 150
+        t["affixes"] = roll_affixes_with_pity(q2, old_cnt, pity_reached=pity_reached)
+
+        if w == "bag":
+            doc["bag"][k] = t
+        else:
+            doc["equipped"][k] = t
+
+        tip = "（已触发150次保底：词条数值固定上限）" if pity_reached else ""
+        result["ok"] = True
+        result["msg"] = (
+            f"洗练完成：{t.get('name','未知饰品')}（{quality_to_cn(q2)}）\n"
+            f"消耗{WASH_STONE_NAME}：{need}个\n"
+            f"当前洗练次数：{wash_count}/150 {tip}"
+        )
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
 
     await handle_send(
-        bot, event,
-        f"洗练完成：{target.get('name','未知饰品')}（{quality_to_cn(q)}）\n消耗{WASH_STONE_NAME}：{need}个",
+        bot, event, result["msg"],
         md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2="我的饰品"
     )
 
@@ -3288,40 +3394,48 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    data = _get_data(user_id)
+    result = {"ok": False, "gain": 0, "name": "未知饰品", "q": 1, "msg": ""}
 
-    idx, target = _find_accessory_in_bag(data, uid)
-    if idx < 0 or not target:
-        await handle_send(bot, event, "分解失败：未在饰品背包中找到该UID（已装备饰品请先卸下）")
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+        idx, target = _find_accessory_in_bag(doc, uid)
+        if idx < 0 or not target:
+            result["msg"] = "分解失败：未在饰品背包中找到该UID（已装备饰品请先卸下）"
+            return False
+
+        q = max(1, min(5, int(target.get("quality", 1))))
+        gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
+
+        result["ok"] = True
+        result["gain"] = gain
+        result["name"] = target.get("name", "未知饰品")
+        result["q"] = q
+
+        del doc["bag"][idx]
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    if not result["ok"]:
+        await handle_send(bot, event, result["msg"] or "分解失败")
         return
 
-    q = int(target.get("quality", 1))
-    q = max(1, min(5, q))
-    gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
-
-    # 从背包移除
-    del data["bag"][idx]
-    _save_data(user_id, data)
-
-    # 发放洗练石
-    sql_message.send_back(user_id, WASH_STONE_ID, WASH_STONE_NAME, "特殊道具", gain, 1)
-
+    sql_message.send_back(user_id, WASH_STONE_ID, WASH_STONE_NAME, "特殊道具", result["gain"], 1)
     await handle_send(
         bot, event,
-        f"已分解：{target.get('name','未知饰品')}（{quality_to_cn(q)}）\n获得{WASH_STONE_NAME}：{gain}个",
+        f"已分解：{result['name']}（{quality_to_cn(result['q'])}）\n获得{WASH_STONE_NAME}：{result['gain']}个",
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
-
 @quick_decompose_accessory.handle(parameterless=[Cooldown(cd_time=2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    快速分解饰品 类型 品阶
-    示例：
-    - 快速分解饰品 全部 全部
-    - 快速分解饰品 烈阳 三阶
-    - 快速分解饰品 戒指 5
-    """
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -3338,7 +3452,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     t = parts[0].strip()
     q_text = parts[1].strip()
 
-    # 品阶解析
     if q_text == "全部":
         q_filter = None
     else:
@@ -3347,7 +3460,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, "品阶参数错误，请使用：全部/1~5/一阶~五阶")
             return
 
-    # 类型合法性
     valid_types = ["全部", "烈阳", "玄渊", "天衡", "星痕", "龙魄", "手镯", "戒指", "手环", "项链"]
     if t not in valid_types:
         await handle_send(bot, event, f"类型参数错误：{t}\n可用类型：{'/'.join(valid_types)}")
@@ -3365,11 +3477,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     hit = []
     total_gain = 0
 
+    safe_mode = (t == "全部" or q_text == "全部")
+
     for acc in bag:
         ok_type = _match_accessory_type(acc, t)
-        q = int(acc.get("quality", 1))
-        q = max(1, min(5, q))
+        q = max(1, min(5, int(acc.get("quality", 1))))
         ok_quality = (q_filter is None or q == q_filter)
+
+        if safe_mode and q >= 4:
+            keep.append(acc)
+            continue
 
         if ok_type and ok_quality:
             hit.append(acc)
@@ -3381,7 +3498,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到符合条件的饰品")
         return
 
-    # 批量更新
     data["bag"] = keep
     _save_data(user_id, data)
 
@@ -3393,249 +3509,100 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
-TABLE = "player_accessory"
+@upgrade_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
 
-AFFIX_TYPES = ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击"]
+    parts = args.extract_plain_text().split()
+    if len(parts) != 3:
+        await handle_send(
+            bot, event,
+            "用法：饰品升阶 部位 主饰品UID 材料UID\n例如：饰品升阶 项链 UID1 UID2",
+            md_type="背包", k1="饰品", v1="饰品背包", k2="帮助", v2="饰品帮助"
+        )
+        return
 
-# 品阶1-5洗练区间
-WASH_RANGE = {
-    1: {"气血": (0.02, 0.05), "抗暴": (0.01, 0.03), "防御": (0.01, 0.03), "会心": (0.01, 0.03), "会心伤害": (0.02, 0.05), "攻击": (0.02, 0.05)},
-    2: {"气血": (0.04, 0.08), "抗暴": (0.02, 0.05), "防御": (0.02, 0.05), "会心": (0.02, 0.05), "会心伤害": (0.04, 0.08), "攻击": (0.04, 0.08)},
-    3: {"气血": (0.06, 0.12), "抗暴": (0.03, 0.07), "防御": (0.03, 0.07), "会心": (0.03, 0.07), "会心伤害": (0.06, 0.12), "攻击": (0.06, 0.12)},
-    4: {"气血": (0.08, 0.16), "抗暴": (0.04, 0.10), "防御": (0.04, 0.10), "会心": (0.04, 0.10), "会心伤害": (0.08, 0.16), "攻击": (0.08, 0.16)},
-    5: {"气血": (0.10, 0.20), "抗暴": (0.05, 0.12), "防御": (0.05, 0.12), "会心": (0.05, 0.12), "会心伤害": (0.10, 0.20), "攻击": (0.10, 0.20)},
-}
+    part, main_uid, material_uid = parts
+    if part not in SLOTS:
+        await handle_send(bot, event, f"部位错误，可用：{'/'.join(SLOTS)}")
+        return
 
-SLOTS = ["手镯", "戒指", "手环", "项链"]
-
-# 你的饰品词条中文 -> 统一属性键
-AFFIX_KEY_MAP = {
-    "气血": "hp_pct",              # 最大生命百分比
-    "抗暴": "crit_resist",         # 抗暴（预留，当前战斗可先不生效）
-    "防御": "dmg_reduction",       # 伤害减免
-    "会心": "crit_rate",           # 会心率
-    "会心伤害": "crit_damage",     # 会心伤害
-    "攻击": "atk_pct",             # 攻击百分比
-}
-
-# =========================
-# 套装效果（2件 / 4件）
-# type 可用值：
-# shield / true_damage / armor_pen / reflect / attack / dodge / dmg_reduction / crit_rate / shield_break
-# =========================
-SET_BONUS = {
-    # 烈阳：攻击 + 真伤
-    "烈阳": {
-        2: {"type": "attack", "value": 0.08},        # 攻击 +8%
-        4: {"type": "true_damage", "value": 0.06},   # 附加真伤 = 攻击 * 6%
-    },
-
-    # 玄渊：护盾 + 反伤
-    "玄渊": {
-        2: {"type": "shield", "value": 0.12},        # 开局护盾 = 最大生命 * 12%
-        4: {"type": "reflect", "value": 0.12},       # 反伤 12%
-    },
-
-    # 天衡：穿甲 + 减伤
-    "天衡": {
-        2: {"type": "armor_pen", "value": 0.08},     # 穿甲 +8%
-        4: {"type": "dmg_reduction", "value": 0.10}, # 减伤 +10%
-    },
-
-    # 星痕：会心 + 闪避
-    "星痕": {
-        2: {"type": "crit_rate", "value": 0.06},     # 会心 +6%
-        4: {"type": "dodge", "value": 12}, # 闪避 +12（你的系统闪避是数值制）
-    },
-
-    # 龙魄：攻击 + 护盾穿透
-    "龙魄": {
-        2: {"type": "attack", "value": 0.06},        # 攻击 +6%
-        4: {"type": "shield_break", "value": 0.10},  # 额外护盾穿透 +10%
-    },
-}
-
-def quality_to_cn(q: int) -> str:
-    return {
-        1: "一阶",
-        2: "二阶",
-        3: "三阶",
-        4: "四阶",
-        5: "五阶",
-    }.get(int(q), f"{q}阶")
-
-SET_TYPE_CN = {
-    "attack": "攻击提升",
-    "true_damage": "附加真伤",
-    "shield": "开场护盾",
-    "reflect": "反伤",
-    "armor_pen": "护甲穿透",
-    "dmg_reduction": "伤害减免",
-    "crit_rate": "会心率",
-    "dodge": "闪避",
-    "shield_break": "护盾穿透",
-}
-
-# 这些套装类型按“点数”显示，不加百分号
-SET_VALUE_POINT_TYPES = {"dodge"}
-
-# =========================
-# 套装/部位基础定义（可选）
-# =========================
-ACCESSORY_SETS = ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]
-ACCESSORY_PARTS = ["手镯", "戒指", "手环", "项链"]
-QUALITY_RANGE = [1, 2, 3, 4, 5]
-# ===== 饰品洗练石配置 =====
-WASH_STONE_ID = 20023
-WASH_STONE_NAME = "洗练石"
-
-# 洗练消耗（按品质Q1~Q5）
-WASH_STONE_COST = {
-    1: 1,
-    2: 2,
-    3: 4,
-    4: 8,
-    5: 12
-}
-
-# 分解产出（按品质Q1~Q5）
-ACCESSORY_DECOMPOSE_GAIN = {
-    1: 1,
-    2: 3,
-    3: 8,
-    4: 20,
-    5: 50
-}
-
-
-def _init_user(user_id: str):
-    data = player_data_manager.get_fields(user_id, TABLE)
-    if not data:
-        data = {
-            "equipped": {"手镯": None, "戒指": None, "手环": None, "项链": None},
-            "bag": []
-        }
-        player_data_manager.update_or_write_data(user_id, TABLE, "equipped", data["equipped"], data_type="TEXT")
-        player_data_manager.update_or_write_data(user_id, TABLE, "bag", data["bag"], data_type="TEXT")
-    else:
-        if "equipped" not in data or data["equipped"] is None:
-            player_data_manager.update_or_write_data(user_id, TABLE, "equipped", {"手镯": None, "戒指": None, "手环": None, "项链": None}, data_type="TEXT")
-        if "bag" not in data or data["bag"] is None:
-            player_data_manager.update_or_write_data(user_id, TABLE, "bag", [], data_type="TEXT")
-
-def _get_data(user_id: str):
-    _init_user(user_id)
-    data = player_data_manager.get_fields(user_id, TABLE)
-    return data
-
-def _save_data(user_id: str, data: dict):
-    player_data_manager.update_or_write_data(user_id, TABLE, "equipped", data["equipped"], data_type="TEXT")
-    player_data_manager.update_or_write_data(user_id, TABLE, "bag", data["bag"], data_type="TEXT")
-
-def roll_affixes(quality: int, count: int = 2):
-    count = max(1, min(4, count))
-    pool = random.sample(AFFIX_TYPES, count)
-    out = []
-    for t in pool:
-        lo, hi = WASH_RANGE[quality][t]
-        out.append({"type": t, "value": round(random.uniform(lo, hi), 4)})
-    return out
-
-def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = False):
-    """
-    pity_reached=True 时，词条值固定上限，只随机词条类型
-    """
-    count = max(1, min(4, count))
-    pool = random.sample(AFFIX_TYPES, count)
-    out = []
-    for t in pool:
-        lo, hi = WASH_RANGE[quality][t]
-        v = hi if pity_reached else round(random.uniform(lo, hi), 4)
-        out.append({"type": t, "value": v})
-    return out
-
-def create_accessory_instance(item_id: int, quality: int = 1):
-    item = items.get_data_by_item_id(item_id)
-    uid = f"acc_{int(time.time())}_{random.randint(1,9999)}"
-    return {
-        "uid": uid,
-        "item_id": item_id,
-        "name": item["name"],
-        "part": item["part"],
-        "set_type": item["set_type"],
-        "quality": quality,
-        "affixes": roll_affixes(quality, 2),
-        "wash_count": 0
-    }
-
-def add_accessory_to_bag(user_id: str, item_id: int, quality: int = 1):
+    user_id = str(user_info["user_id"])
     data = _get_data(user_id)
-    ins = create_accessory_instance(item_id, quality)
-    data["bag"].append(ins)
-    _save_data(user_id, data)
-    return ins
 
-def _find_accessory_in_bag(data: dict, uid: str):
-    """在bag中按uid查找饰品，返回(index, item)"""
+    main_acc = data.get("equipped", {}).get(part)
+    if not main_acc:
+        await handle_send(bot, event, f"{part}当前未装备饰品，无法升阶")
+        return
+
+    if str(main_acc.get("uid", "")) != str(main_uid):
+        await handle_send(bot, event, f"主饰品UID不匹配：{part}当前装备并非该UID")
+        return
+
+    main_q = int(main_acc.get("quality", 1))
+    if main_q >= 5:
+        await handle_send(bot, event, "该饰品已达最高五阶，无法继续升阶")
+        return
+
+    need_cnt = _get_upgrade_cost(main_q)
+
     bag = data.get("bag", [])
+    candidate_idx = []
+    specified_idx = None
+
     for i, x in enumerate(bag):
-        if str(x.get("uid", "")) == str(uid):
-            return i, x
-    return -1, None
+        if str(x.get("uid", "")) == str(main_uid):
+            continue
 
+        if _is_same_accessory_for_upgrade(main_acc, x):
+            candidate_idx.append(i)
+            if str(x.get("uid", "")) == str(material_uid):
+                specified_idx = i
 
-def _parse_quality_arg(q_text: str):
-    """支持 1/2/3/4/5 或 一阶/二阶/三阶/四阶/五阶"""
-    q_text = str(q_text).strip()
-    mapping = {
-        "1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
-        "一阶": 1, "二阶": 2, "三阶": 3, "四阶": 4, "五阶": 5,
-        "q1": 1, "q2": 2, "q3": 3, "q4": 4, "q5": 5,
-        "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4, "Q5": 5,
-    }
-    return mapping.get(q_text, None)
+    if specified_idx is None:
+        await handle_send(bot, event, "材料UID无效：需为背包内同阶同款饰品")
+        return
 
+    if len(candidate_idx) < need_cnt:
+        await handle_send(
+            bot, event,
+            f"材料不足：当前升阶需 {need_cnt} 个同阶同款饰品，你只有 {len(candidate_idx)} 个",
+            md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2=f"查看饰品 {main_uid}"
+        )
+        return
 
-def _match_accessory_type(acc: dict, t: str):
-    """
-    类型匹配：
-    - 套装：烈阳/玄渊/天衡/星痕/龙魄
-    - 部位：手镯/戒指/手环/项链
-    - 全部
-    """
-    t = str(t).strip()
-    if t == "全部":
-        return True
-    if t in ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]:
-        return acc.get("set_type") == t
-    if t in ["手镯", "戒指", "手环", "项链"]:
-        return acc.get("part") == t
-    return False
+    consume_idx = [specified_idx]
+    for i in candidate_idx:
+        if i == specified_idx:
+            continue
+        if len(consume_idx) >= need_cnt:
+            break
+        consume_idx.append(i)
 
-def _find_accessory_anywhere(data: dict, uid: str):
-    """
-    按uid查找饰品，返回:
-    ("bag", idx, item) 或 ("equipped", slot, item) 或 (None, None, None)
-    """
-    for i, x in enumerate(data.get("bag", [])):
-        if str(x.get("uid", "")) == str(uid):
-            return "bag", i, x
+    for i in sorted(consume_idx, reverse=True):
+        del bag[i]
 
-    for s in SLOTS:
-        it = data.get("equipped", {}).get(s)
-        if it and str(it.get("uid", "")) == str(uid):
-            return "equipped", s, it
+    new_q = main_q + 1
+    old_cnt = len(main_acc.get("affixes", [])) if isinstance(main_acc.get("affixes", []), list) else 2
+    old_cnt = max(1, min(4, old_cnt))
 
-    return None, None, None
+    main_acc["quality"] = new_q
+    main_acc["affixes"] = roll_affixes(new_q, old_cnt)
+    main_acc["wash_count"] = int(main_acc.get("wash_count", 0))
 
+    data["equipped"][part] = main_acc
+    data["bag"] = bag
+    _save_data(user_id, data)
 
-def _get_upgrade_cost(cur_quality: int) -> int:
-    """
-    升阶材料数：
-    2->3:1, 3->4:2, 4->5:3
-    1->2建议给1，避免0消耗漏洞
-    """
-    if cur_quality <= 1:
-        return 1
-    return cur_quality - 1
+    await handle_send(
+        bot, event,
+        f"升阶成功：{main_acc.get('name', '未知饰品')} {quality_to_cn(main_q)} → {quality_to_cn(new_q)}\n消耗材料：{need_cnt}件同阶同款饰品",
+        md_type="背包",
+        k1="我的饰品", v1="我的饰品",
+        k2="饰品背包", v2="饰品背包",
+        k3="查看饰品", v3=f"查看饰品 {main_uid}"
+    )
 

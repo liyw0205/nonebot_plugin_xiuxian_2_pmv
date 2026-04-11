@@ -162,32 +162,53 @@ def get_players_attributes(user_id, level_ratios=None):
             item_data = items.get_data_by_item_id(item_id)
             buffs[display_name] = item_data
 
-    # 修复 faqi_data 未定义
     weapon_data = buffs.get('法器', {})
 
     final_attr = get_final_attributes(user_id, ratio=ratio, include_current=True)
     if not final_attr:
         return {"属性": {}, "其他": buff_data_info, "本命法宝": None}
 
+    # ===== 套装固定闪避点数 =====
+    set_bonus_effects = final_attr.get("set_bonus_effects", []) or []
+    set_dodge = 0
+    for sb in set_bonus_effects:
+        if sb.get("type") == "dodge":
+            set_dodge += float(sb.get("value", 0))
+
     attributes = {
         "user_id": final_attr["user_id"],
         "nickname": final_attr["nickname"],
+
         "max_hp": final_attr["max_hp"],
         "current_hp": final_attr["current_hp"],
         "max_mp": final_attr["max_mp"],
         "current_mp": final_attr["current_mp"],
+
         "mp_cost_modifier": weapon_data.get('mp_buff', 0),
         "attack": final_attr["final_atk"],
         "exp": final_attr["exp"],
+
+        # ===== 暴击体系 =====
         "critical_rate": final_attr["crit_rate"],
         "critical_damage": final_attr["crit_damage"],
+
+        # 抗暴：乘法区
+        "crit_resist": final_attr.get("crit_resist", 0),
+
+        # 减会心伤害：减法区
+        "crit_damage_reduction": final_attr.get("crit_damage_reduction", 0),
+
         "boss_damage_bonus": final_attr["boss_damage_bonus"],
         "damage_reduction": final_attr["damage_reduction"],
         "armor_penetration": final_attr["armor_penetration"],
+
         "accuracy": 100,
-        "dodge": 0,
+        "dodge": set_dodge,
         "speed": 10,
-        "start_skills": []
+        "start_skills": [],
+
+        # 套装扩展，交给战斗层继续处理
+        "set_bonus_effects": set_bonus_effects
     }
 
     natal_treasure = NatalTreasure(user_id)
@@ -198,7 +219,6 @@ def get_players_attributes(user_id, level_ratios=None):
     buffs["其他"] = buff_data_info
 
     return buffs
-
 
 def apply_player_buffs(player, player_data):
     buff_config = [
@@ -372,6 +392,8 @@ def get_boss_attributes(boss, bot_id):
         "exp": 2,
         "critical_rate": 0,
         "critical_damage": 1.5,
+        "crit_resist": 0,  # 抗暴
+        "crit_damage_reduction": 0,  # 减会伤
         "boss_damage_bonus": 0,
         "damage_reduction": 0,
         "armor_penetration": 0,
@@ -379,6 +401,7 @@ def get_boss_attributes(boss, bot_id):
         "dodge": 0,
         "speed": 0,
         "start_skills": [],
+        "set_bonus_effects": [],
         'monster_type': boss.get("monster_type", "boss")
     }
 
@@ -388,7 +411,6 @@ def get_boss_attributes(boss, bot_id):
 
 
 def generate_boss_buff(boss):
-    """初始化BOSS特殊buff（整合：禁疗/护盾/斩杀/再生）"""
     boss_buff = {
         'boss_zs': 0,
         'boss_hx': 0,
@@ -401,12 +423,10 @@ def generate_boss_buff(boss):
         'boss_cj': 0,
         'boss_js': 0,
         'boss_sb': 0,
-
-        # 新增4种（要求：4选1）
-        'boss_jl': 0,       # 禁疗
-        'boss_hd': 0,       # 护盾
-        'boss_zs_boss': 0,  # 斩杀
-        'boss_sz': 0,       # 再生
+        'boss_jl': 0,
+        'boss_hd': 0,
+        'boss_zs_boss': 0,
+        'boss_sz': 0,
     }
 
     boss_buff_map = {
@@ -420,8 +440,6 @@ def generate_boss_buff(boss):
         'boss_xl': [DebuffType.MANA_STEAL_DOWN, "千煌锁灵阵"],
         'boss_cj': [BuffType.ARMOR_PENETRATION_UP, "钉头七箭书"],
         'boss_js': [BuffType.DAMAGE_REDUCTION_UP, "护身罡气"],
-
-        # 你指定的命名
         'boss_sb': [BuffType.EVASION_UP, "虚妄无相"],
         'boss_jl': [DebuffType.HEALING_BLOCK, "枯血断脉"],
         'boss_hd': [BuffType.SHIELD_BUFF, "不灭金身"],
@@ -445,67 +463,22 @@ def generate_boss_buff(boss):
     cfg = None
 
     if boss_level == "祭道境" or current_rank_val < get_rank_val('祭道境初期'):
-        cfg = {
-            'js': 0.05,
-            'cj': (25, 50),
-            'g1': [1, 0.7, 2, 1],
-            'g2': [0.7, 0.7, 1.5, 1]
-        }
-
+        cfg = {'js': 0.05, 'cj': (25, 50), 'g1': [1, 0.7, 2, 1], 'g2': [0.7, 0.7, 1.5, 1]}
     elif get_rank_val('至尊境初期') < current_rank_val < get_rank_val('斩我境圆满'):
-        cfg = {
-            'js': (50, 55),
-            'cj': (15, 30),
-            'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100],
-            'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100]
-        }
-
+        cfg = {'js': (50, 55), 'cj': (15, 30), 'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100], 'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100]}
     elif get_rank_val('微光境初期') < current_rank_val < get_rank_val('遁一境圆满'):
-        cfg = {
-            'js': (40, 45),
-            'cj': (20, 40),
-            'g1': [0.4, 0.2, 0.7, lambda: random.randint(10, 100) / 100],
-            'g2': [0.4, 0.4, 0.7, lambda: random.randint(10, 100) / 100]
-        }
-
+        cfg = {'js': (40, 45), 'cj': (20, 40), 'g1': [0.4, 0.2, 0.7, lambda: random.randint(10, 100) / 100], 'g2': [0.4, 0.4, 0.7, lambda: random.randint(10, 100) / 100]}
     elif get_rank_val('星芒境初期') < current_rank_val < get_rank_val('至尊境圆满'):
-        cfg = {
-            'js': (30, 35),
-            'cj': (20, 40),
-            'g1': [0.6, 0.35, 1.1, lambda: random.randint(30, 100) / 100],
-            'g2': [0.5, 0.5, 0.9, lambda: random.randint(30, 100) / 100]
-        }
-
+        cfg = {'js': (30, 35), 'cj': (20, 40), 'g1': [0.6, 0.35, 1.1, lambda: random.randint(30, 100) / 100], 'g2': [0.5, 0.5, 0.9, lambda: random.randint(30, 100) / 100]}
     elif get_rank_val('月华境初期') < current_rank_val < get_rank_val('微光境圆满'):
-        cfg = {
-            'js': (20, 25),
-            'cj': (20, 40),
-            'g1': [0.7, 0.45, 1.3, lambda: random.randint(40, 100) / 100],
-            'g2': [0.55, 0.6, 1.0, lambda: random.randint(40, 100) / 100]
-        }
-
+        cfg = {'js': (20, 25), 'cj': (20, 40), 'g1': [0.7, 0.45, 1.3, lambda: random.randint(40, 100) / 100], 'g2': [0.55, 0.6, 1.0, lambda: random.randint(40, 100) / 100]}
     elif get_rank_val('耀日境初期') < current_rank_val < get_rank_val('星芒境圆满'):
-        cfg = {
-            'js': (10, 15),
-            'cj': (25, 45),
-            'g1': [0.85, 0.5, 1.5, lambda: random.randint(50, 100) / 100],
-            'g2': [0.6, 0.65, 1.1, lambda: random.randint(50, 100) / 100]
-        }
-
+        cfg = {'js': (10, 15), 'cj': (25, 45), 'g1': [0.85, 0.5, 1.5, lambda: random.randint(50, 100) / 100], 'g2': [0.6, 0.65, 1.1, lambda: random.randint(50, 100) / 100]}
     elif get_rank_val('祭道境初期') < current_rank_val < get_rank_val('月华境圆满'):
-        cfg = {
-            'js': 0.1,
-            'cj': (25, 45),
-            'g1': [0.9, 0.6, 1.7, lambda: random.randint(60, 100) / 100],
-            'g2': [0.62, 0.67, 1.2, lambda: random.randint(60, 100) / 100]
-        }
+        cfg = {'js': 0.1, 'cj': (25, 45), 'g1': [0.9, 0.6, 1.7, lambda: random.randint(60, 100) / 100], 'g2': [0.62, 0.67, 1.2, lambda: random.randint(60, 100) / 100]}
 
     if cfg:
-        if isinstance(cfg['js'], tuple):
-            boss_buff['boss_js'] = random.randint(*cfg['js']) / 100
-        else:
-            boss_buff['boss_js'] = cfg['js']
-
+        boss_buff['boss_js'] = random.randint(*cfg['js']) / 100 if isinstance(cfg['js'], tuple) else cfg['js']
         boss_buff['boss_cj'] = random.randint(*cfg['cj']) / 100
         apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
         apply_random_group(['boss_jg', 'boss_jh', 'boss_jb', 'boss_xl'], cfg['g2'])
@@ -513,7 +486,6 @@ def generate_boss_buff(boss):
         boss_buff['boss_js'] = 1.0
         boss_buff['boss_cj'] = 0
 
-    # 闪避 / 减伤收束
     boss_buff['boss_sb'] = int((1 - boss_buff['boss_js']) * 100 * random.uniform(0.1, 0.5))
     boss_buff['boss_js'] = 1 - boss_buff['boss_js']
 
@@ -528,20 +500,11 @@ def generate_boss_buff(boss):
 
     result = []
     for key, value in boss_buff.items():
-        if value == 0:
+        if value == 0 or key not in boss_buff_map:
             continue
-        if key not in boss_buff_map:
-            continue
-
         effect_type, effect_name = boss_buff_map[key]
         is_debuff = isinstance(effect_type, DebuffType)
-
-        result.append({
-            "name": effect_name,
-            "type": effect_type,
-            "value": value,
-            "is_debuff": is_debuff
-        })
+        result.append({"name": effect_name, "type": effect_type, "value": value, "is_debuff": is_debuff})
 
     return result
 
@@ -590,12 +553,10 @@ class SkillType(IntEnum):
     RANDOM_HIT = 5
     STACK_BUFF = 6
     RANDOM_ACQUIRE = 7
-
     MULTIPLIER_PERCENT_HP = 101
     MULTIPLIER_DEF_IGNORE = 102
     CC = 103
     SUMMON = 104
-
     TRIGGER_HP_BELOW = 104
     FIELD = 105
 
@@ -622,7 +583,6 @@ class BuffType(IntEnum):
     MP_REGEN_PERCENT = 13
     REFLECT_DAMAGE = 14
     SHIELD = 15
-
     SHIELD_BUFF = 16
     EXECUTE_EFFECT = 17
     REGENERATION = 18
@@ -643,7 +603,6 @@ class DebuffType(IntEnum):
     SKILL_DOT = 12
     BLEED_DOT = 13
     BURN_DOT = 14
-
     FATIGUE = 15
     STUN = 16
     FREEZE = 17
@@ -690,7 +649,6 @@ BUFF_DESC_TEMPLATES = {
     BuffType.MP_REGEN_PERCENT: "每回合回复 {value} 法力值",
     BuffType.REFLECT_DAMAGE: "反弹 {value} 伤害",
     BuffType.SHIELD: "获得 {value} 点护盾",
-
     BuffType.SHIELD_BUFF: "获得 {value} 点护盾",
     BuffType.EXECUTE_EFFECT: "激活斩杀效果 (血量低于 {value} 直接斩杀)",
     BuffType.REGENERATION: "获得再生效果 (每回合回复最大生命 {value})",
@@ -707,12 +665,10 @@ DEBUFF_DESC_TEMPLATES = {
     DebuffType.MANA_STEAL_DOWN: "法力偷取降低 {value}",
     DebuffType.LIFESTEAL_BLOCK: "无法进行生命偷取",
     DebuffType.MANA_STEAL_BLOCK: "无法进行法力偷取",
-
     DebuffType.POISON_DOT: "中毒，每回合受到 {value} 点伤害",
     DebuffType.SKILL_DOT: "持续技能伤害，每回合受到 {value} 点伤害",
     DebuffType.BLEED_DOT: "流血，每回合受到 {value} 点伤害",
     DebuffType.BURN_DOT: "灼烧，每回合受到 {value} 点伤害",
-
     DebuffType.FATIGUE: "陷入疲劳状态",
     DebuffType.STUN: "眩晕，无法行动",
     DebuffType.FREEZE: "冰冻，无法行动",
@@ -751,15 +707,12 @@ class Skill:
         self.target_type = int(data.get("target_type", 1))
         self.multi_count = int(data.get("multi_count", 1))
         self.hp_condition = float(data.get("hp_condition", 1))
-
         self.hp_cost_rate = float(data.get("hpcost", 0))
         self.mp_cost_rate = float(data.get("mpcost", 0))
-
         self.turn_cost = int(data.get("turncost", 0))
         self.rate = float(data.get("rate", 0))
         self.cd = float(data.get("cd", 0))
         self.remain_cd = float(data.get("remain_cd", 0))
-
         self.atk_values = data.get("atkvalue", [])
         self.atk_coefficient = float(data.get("atkvalue2", 0))
         self.skill_buff_type = int(data.get("bufftype", 0))
@@ -801,11 +754,18 @@ class Entity:
         self.base_atk = float(data.get("attack", 1))
         self.base_crit = float(data.get("critical_rate", 0))
         self.base_crit_dmg = float(data.get("critical_damage", 1.5))
+
+        # ===== 关键修复：分离两个防暴属性 =====
+        self.base_crit_resist = float(data.get("crit_resist", 0))  # 抗暴（乘法）
+        self.base_crit_damage_reduction = float(data.get("crit_damage_reduction", 0))  # 减会伤（减法）
+
         self.base_damage_reduction = float(data.get("damage_reduction", 0))
         self.base_armor_pen = float(data.get("armor_penetration", 0))
         self.base_accuracy = float(data.get("accuracy", 100))
         self.base_dodge = float(data.get("dodge", 0))
         self.base_speed = float(data.get("speed", 10))
+
+        self.set_bonus_effects = data.get("set_bonus_effects", []) or []
 
         self.buffs = []
         self.debuffs = []
@@ -1044,7 +1004,7 @@ class Entity:
     @property
     def crit_dmg_rate(self):
         val = self.base_crit_dmg + self._get_effect_value(BuffType.CRIT_DAMAGE_UP, DebuffType.CRIT_DAMAGE_DOWN)
-        return max(0, val)
+        return max(1.0, val)
 
     @property
     def damage_reduction_rate(self):
@@ -1199,8 +1159,7 @@ class BattleSystem:
         before_last, separator, after_last = msg.rpartition("伤害！")
         if separator:
             return before_last + "伤害！" + add_text + after_last
-        else:
-            return msg
+        return msg
 
     def _get_all_enemies(self, entity):
         def valid_target(e):
@@ -1214,26 +1173,39 @@ class BattleSystem:
 
         if entity.team_id == 0:
             return [e for e in self.team_b if valid_target(e)]
-        else:
-            return [e for e in self.team_a if valid_target(e)]
+        return [e for e in self.team_a if valid_target(e)]
 
     def _get_all_allies(self, entity):
         if entity.team_id == 0:
             return [e for e in self.team_a if e.is_alive and e.id != entity.id]
-        else:
-            return [e for e in self.team_b if e.is_alive and e.id != entity.id]
+        return [e for e in self.team_b if e.is_alive and e.id != entity.id]
 
     def _get_alive_allies_include_self_team(self, entity):
         if entity.team_id == 0:
             return [e for e in self.team_a if e.is_alive]
-        else:
-            return [e for e in self.team_b if e.is_alive]
+        return [e for e in self.team_b if e.is_alive]
 
     def _get_dead_allies(self, entity):
         if entity.team_id == 0:
             return [e for e in self.team_a if (not e.is_alive) and e.id != entity.id]
-        else:
-            return [e for e in self.team_b if (not e.is_alive) and e.id != entity.id]
+        return [e for e in self.team_b if (not e.is_alive) and e.id != entity.id]
+
+    def _get_set_bonus_total(self, entity, effect_type: str) -> float:
+        total = 0.0
+        for sb in getattr(entity, "set_bonus_effects", []) or []:
+            if sb.get("type") == effect_type:
+                total += float(sb.get("value", 0))
+        return total
+
+    def _apply_set_bonus_start_effects(self, unit):
+        # 开场护盾
+        shield_rate = self._get_set_bonus_total(unit, "shield")
+        if shield_rate > 0:
+            shield_amount = int(unit.max_hp * shield_rate)
+            if shield_amount > 0:
+                shield_effect = StatusEffect("套装护盾", BuffType.SHIELD, shield_amount, 1, False, duration=99, skill_type=0)
+                unit.add_status(shield_effect)
+                self.add_message(unit, f"【套装效果】开场获得{number_to(shield_amount)}点护盾！")
 
     def _calc_raw_damage(self, attacker, defender, multiplier, penetration=False):
         status = "Hit"
@@ -1243,10 +1215,28 @@ class BattleSystem:
         is_crit = random.random() < attacker.crit_rate
         crit_mult = attacker.crit_dmg_rate if is_crit else 1.0
 
-        if is_crit and defender.has_natal_effect(NatalEffectType.CRIT_RESIST):
-            crit_resist = defender.get_natal_effect_value(NatalEffectType.CRIT_RESIST)
-            crit_mult = max(1.0, crit_mult - crit_resist)
+        # ===== 修复点：减会伤(减法) + 抗暴(乘法) 分离 =====
+        if is_crit:
+            # 1. 减会心伤害（减法）
+            crit_dmg_reduce = float(getattr(defender, "base_crit_damage_reduction", 0.0))
 
+            # 如果以后你有 debuff/buff 想影响减会伤，可以继续往这里叠
+            # 例如：crit_dmg_reduce += xxx
+
+            # 2. 抗暴（乘法）
+            crit_resist_mul = float(getattr(defender, "base_crit_resist", 0.0))
+
+            # 本命法宝抗暴 -> 并入抗暴乘区
+            if defender.has_natal_effect(NatalEffectType.CRIT_RESIST):
+                crit_resist_mul += defender.get_natal_effect_value(NatalEffectType.CRIT_RESIST)
+
+            # 上限保护
+            crit_resist_mul = max(0.0, min(0.95, crit_resist_mul))
+
+            # 最终暴击倍率：先减法，再乘法
+            crit_mult = max(1.0, (crit_mult - crit_dmg_reduce) * (1 - crit_resist_mul))
+
+        # 减伤 / 穿透
         if defender.damage_reduction_rate < 0:
             dr_eff = defender.damage_reduction_rate
         elif penetration:
@@ -1268,10 +1258,9 @@ class BattleSystem:
     def _apply_damage_with_layers(self, attacker, target, dmg, damage_type="normal", shield_penetration=0.0):
         """
         统一伤害结算：
-        无敌 > 特殊伤害(true/dot) > 普通伤害(normal, 护盾+穿透) > 生命
-        规则：
-        - true / dot：无视护盾，直接扣血；受减伤影响
-        - normal：按护盾吸收+护盾穿透比例结算
+        - 无敌优先
+        - true/dot：无视护盾直接打血
+        - normal：走护盾 + 护盾穿透
         """
         if dmg <= 0:
             return 0, 0, False
@@ -1284,7 +1273,6 @@ class BattleSystem:
         absorbed = 0
         hp_loss = 0
 
-        # 真伤 / DOT：无视护盾，但受减伤影响
         if damage_type in ("true", "dot"):
             dr_eff = max(0, min(0.95, target.damage_reduction_rate))
             hp_loss = int(max(1, remain * (1 - dr_eff)))
@@ -1292,7 +1280,6 @@ class BattleSystem:
                 target.update_stat("hp", 2, hp_loss)
             return hp_loss, 0, False
 
-        # 普通伤害：可配置部分穿透护盾
         pen = max(0.0, min(1.0, float(shield_penetration)))
         direct_hp = int(remain * pen)
         shield_part = remain - direct_hp
@@ -1514,6 +1501,24 @@ class BattleSystem:
 
         return extra_true_damage, append_msgs
 
+    def _apply_set_bonus_attack_effects(self, attacker, defender, base_damage):
+        extra_true_damage = 0
+        append_msgs = []
+
+        # 套装真伤
+        true_damage_rate = self._get_set_bonus_total(attacker, "true_damage")
+        if true_damage_rate > 0:
+            td = int(attacker.atk_rate * true_damage_rate)
+            if td > 0:
+                hp_loss, absorbed, blocked = self._apply_damage_with_layers(attacker, defender, td, damage_type="true")
+                extra_true_damage += hp_loss
+                if blocked:
+                    append_msgs.append("套装真伤被无敌抵挡")
+                elif hp_loss > 0:
+                    append_msgs.append(f"套装附加真伤{number_to(hp_loss)}")
+
+        return extra_true_damage, append_msgs
+
     def _try_handle_natal_revive(self, unit, killer=None):
         if unit.hp > 0:
             return False
@@ -1727,10 +1732,12 @@ class BattleSystem:
                 skill_msg = f"{caster.name}的技能被{target.name}闪避了！"
 
             if total_dmg > 0 and target.is_alive:
-                extra_true_damage, extra_msgs = self._apply_natal_attack_effects(caster, target, total_dmg)
-                total_dmg += extra_true_damage
-                if extra_msgs:
-                    skill_msg += "（" + "，".join(extra_msgs) + "）"
+                extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, total_dmg)
+                extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, total_dmg)
+                total_dmg += extra_true_damage1 + extra_true_damage2
+                all_msgs = extra_msgs1 + extra_msgs2
+                if all_msgs:
+                    skill_msg += "（" + "，".join(all_msgs) + "）"
 
             if target.hp <= 0:
                 revived = self._try_handle_natal_revive(target, caster)
@@ -1810,10 +1817,12 @@ class BattleSystem:
                     else:
                         skill_msg += f"获得{rand_mult}倍加成，但伤害被护盾吸收{number_to(int(absorbed))}！"
 
-                    extra_true_damage, extra_msgs = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
-                    total_dmg += extra_true_damage
-                    if extra_msgs:
-                        skill_msg += "（" + "，".join(extra_msgs) + "）"
+                    extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
+                    extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
+                    total_dmg += extra_true_damage1 + extra_true_damage2
+                    all_msgs = extra_msgs1 + extra_msgs2
+                    if all_msgs:
+                        skill_msg += "（" + "，".join(all_msgs) + "）"
 
                     if target.hp <= 0:
                         revived = self._try_handle_natal_revive(target, caster)
@@ -1935,12 +1944,15 @@ class BattleSystem:
                     "damage_reduction": caster.base_damage_reduction * copy_ratio,
                     "critical_rate": caster.base_crit,
                     "critical_damage": caster.base_crit_dmg,
+                    "crit_resist": caster.base_crit_resist,
+                    "crit_damage_reduction": caster.base_crit_damage_reduction,
                     "boss_damage_bonus": 0,
                     "accuracy": caster.base_accuracy,
                     "dodge": caster.base_dodge,
                     "speed": caster.base_speed,
                     "start_skills": [],
                     "skills": [],
+                    "set_bonus_effects": caster.set_bonus_effects,
                     "is_boss": bool(getattr(caster, "is_boss", False))
                 }
 
@@ -1981,9 +1993,16 @@ class BattleSystem:
 
         if accuracy == "Hit":
             shield_pen = 0.0
+
+            # 本命法宝破盾
             if caster.has_natal_effect(NatalEffectType.SHIELD_BREAK):
                 if target.get_buffs("type", BuffType.SHIELD):
                     shield_pen = caster.get_natal_effect_value(NatalEffectType.SHIELD_BREAK)
+
+            # 套装破盾
+            set_shield_break = self._get_set_bonus_total(caster, "shield_break")
+            if set_shield_break > 0 and target.get_buffs("type", BuffType.SHIELD):
+                shield_pen = max(shield_pen, set_shield_break)
 
             hp_loss, absorbed, blocked = self._apply_damage_with_layers(
                 caster, target, dmg, damage_type="normal", shield_penetration=shield_pen
@@ -2003,21 +2022,29 @@ class BattleSystem:
             if shield_pen > 0:
                 skill_msg += f"（破盾生效：{round(shield_pen * 100, 2)}%伤害穿透护盾）"
 
-            extra_true_damage, extra_msgs = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
-            total_dmg += extra_true_damage
-            if extra_msgs:
-                skill_msg += "（" + "，".join(extra_msgs) + "）"
+            extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
+            extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
+            total_dmg += extra_true_damage1 + extra_true_damage2
+            all_msgs = extra_msgs1 + extra_msgs2
+            if all_msgs:
+                skill_msg += "（" + "，".join(all_msgs) + "）"
 
+            # 本命法宝反伤
+            reflect_rate = 0.0
             if target.has_natal_effect(NatalEffectType.REFLECT_DAMAGE):
-                reflect_rate = target.get_natal_effect_value(NatalEffectType.REFLECT_DAMAGE)
+                reflect_rate += target.get_natal_effect_value(NatalEffectType.REFLECT_DAMAGE)
+
+            # 套装反伤
+            reflect_rate += self._get_set_bonus_total(target, "reflect")
+
+            if reflect_rate > 0:
                 reflect_dmg = int(max(total_dmg, 0) * reflect_rate)
                 if reflect_dmg > 0:
                     r_hp_loss, r_absorbed, r_blocked = self._apply_damage_with_layers(target, caster, reflect_dmg, damage_type="true")
                     if r_blocked:
                         skill_msg += f"\n{caster.name}的无敌抵挡了反伤！"
-                    else:
-                        if r_hp_loss > 0:
-                            skill_msg += f"\n{target.name}反伤{number_to(r_hp_loss)}点！"
+                    elif r_hp_loss > 0:
+                        skill_msg += f"\n{target.name}反伤{number_to(r_hp_loss)}点！"
 
             if caster.has_natal_effect(NatalEffectType.DEATH_STRIKE) and target.hp > 0:
                 death_rate = caster.get_natal_effect_value(NatalEffectType.DEATH_STRIKE)
@@ -2091,6 +2118,7 @@ class BattleSystem:
             for unit in units:
                 enemies = self._get_all_enemies(unit)
                 self._apply_round_one_skills(unit, enemies, unit.start_skills)
+                self._apply_set_bonus_start_effects(unit)
                 self._apply_natal_periodic_effects(unit, force=True)
 
         for unit in units:
@@ -2290,4 +2318,3 @@ class BattleSystem:
         self.add_system_message("平局")
         winner = 2
         return self.play_list, winner, self.get_final_status_list()
-        
