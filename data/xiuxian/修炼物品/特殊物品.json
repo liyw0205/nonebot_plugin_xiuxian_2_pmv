@@ -184,7 +184,8 @@
         "seed_type": "herb_low",
         "grow_time": 60,
         "yield_min": 1,
-        "yield_max": 2
+        "yield_max": 2,
+        "item_type": "特殊物品"
     },
     "21002": {
         "name": "玄木灵种",
@@ -195,7 +196,8 @@
         "seed_type": "herb_mid",
         "grow_time": 180,
         "yield_min": 1,
-        "yield_max": 3
+        "yield_max": 3,
+        "item_type": "特殊物品"
     },
     "21003": {
         "name": "星砂神种",
@@ -206,7 +208,8 @@
         "seed_type": "god_low",
         "grow_time": 360,
         "yield_min": 1,
-        "yield_max": 2
+        "yield_max": 2,
+        "item_type": "特殊物品"
     },
     "21004": {
         "name": "混元神种",
@@ -217,6 +220,7 @@
         "seed_type": "god_high",
         "grow_time": 720,
         "yield_min": 1,
-        "yield_max": 2
+        "yield_max": 2,
+        "item_type": "特殊物品"
     }
 }

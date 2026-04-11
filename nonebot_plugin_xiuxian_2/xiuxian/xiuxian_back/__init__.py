@@ -3486,7 +3486,7 @@ ACCESSORY_SETS = ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]
 ACCESSORY_PARTS = ["手镯", "戒指", "手环", "项链"]
 QUALITY_RANGE = [1, 2, 3, 4, 5]
 # ===== 饰品洗练石配置 =====
-WASH_STONE_ID = 20030
+WASH_STONE_ID = 20023
 WASH_STONE_NAME = "洗练石"
 
 # 洗练消耗（按品质Q1~Q5）

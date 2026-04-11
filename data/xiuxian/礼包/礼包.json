@@ -14,7 +14,8 @@
         "buff_3": 1998,
         "type_3": "丹药",
         "name_3": "渡厄金丹",
-        "amount_3": 2
+        "amount_3": 2,
+        "item_type": "礼包"
     },
     "18051": {
         "name": "终极大礼包",
@@ -41,7 +42,8 @@
         "name_5": "感谢大礼包",
         "amount_5": 99,
         "name_6": "灵石",
-        "amount_6": 9999999999999
+        "amount_6": 9999999999999,
+        "item_type": "礼包"
     },
     "18052": {
         "name": "新手大礼包",
@@ -76,7 +78,8 @@
         "name_7": "易名符",
         "amount_7": 1,
         "name_8": "灵石",
-        "amount_8": 10000000
+        "amount_8": 10000000,
+        "item_type": "礼包"
     },
     "18053": {
         "name": "补偿",
@@ -85,7 +88,8 @@
         "buff_1": 20005,
         "type_1": "特殊道具",
         "name_1": "祈愿石",
-        "amount_1": 15
+        "amount_1": 15,
+        "item_type": "礼包"
     },
     "18054": {
         "name": "秘境大礼包",
@@ -94,7 +98,8 @@
         "buff_1": 20001,
         "type_1": "特殊道具",
         "name_1": "秘境钥匙",
-        "amount_1": 10
+        "amount_1": 10,
+        "item_type": "礼包"
     },
     "18055": {
         "name": "秘境大礼包2",
@@ -103,7 +108,8 @@
         "buff_1": 20007,
         "type_1": "特殊道具",
         "name_1": "秘藏令",
-        "amount_1": 10
+        "amount_1": 10,
+        "item_type": "礼包"
     },
     "18056": {
         "name": "秘境大礼包3",
@@ -116,7 +122,8 @@
         "buff_2": 20007,
         "type_2": "特殊道具",
         "name_2": "秘藏令",
-        "amount_2": 5
+        "amount_2": 5,
+        "item_type": "礼包"
     },
     "18057": {
         "name": "祈愿大礼包",
@@ -125,7 +132,8 @@
         "buff_1": 20005,
         "type_1": "特殊道具",
         "name_1": "祈愿石",
-        "amount_1": 10
+        "amount_1": 10,
+        "item_type": "礼包"
     },
     "18058": {
         "name": "一级聚灵旗礼包",
@@ -136,7 +144,8 @@
         "name_1": "一级聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 2000000
+        "amount_2": 2000000,
+        "item_type": "礼包"
     },
     "18059": {
         "name": "二级聚灵旗礼包",
@@ -147,7 +156,8 @@
         "name_1": "二级聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 5000000
+        "amount_2": 5000000,
+        "item_type": "礼包"
     },
     "18060": {
         "name": "三级聚灵旗礼包",
@@ -158,7 +168,8 @@
         "name_1": "三级聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 10000000
+        "amount_2": 10000000,
+        "item_type": "礼包"
     },
     "18061": {
         "name": "四级聚灵旗礼包",
@@ -169,7 +180,8 @@
         "name_1": "四级聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 20000000
+        "amount_2": 20000000,
+        "item_type": "礼包"
     },
     "18062": {
         "name": "仙级聚灵旗礼包",
@@ -180,7 +192,8 @@
         "name_1": "仙级聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 50000000
+        "amount_2": 50000000,
+        "item_type": "礼包"
     },
     "18063": {
         "name": "无上聚灵旗礼包",
@@ -191,7 +204,8 @@
         "name_1": "无上聚灵旗",
         "amount_1": 1,
         "name_2": "灵石",
-        "amount_2": 100000000
+        "amount_2": 100000000,
+        "item_type": "礼包"
     },
     "18064": {
         "name": "秘境冲刺豪华礼包",
@@ -216,7 +230,8 @@
         "buff_5": 20018,
         "type_5": "特殊道具",
         "name_5": "斩妖令",
-        "amount_5": 5
+        "amount_5": 5,
+        "item_type": "礼包"
     },
     "18065": {
         "name": "突破保底礼包·进阶",
@@ -241,7 +256,8 @@
         "buff_5": 1503,
         "type_5": "丹药",
         "name_5": "鬼面炼心丹",
-        "amount_5": 20
+        "amount_5": 20,
+        "item_type": "礼包"
     },
     "18066": {
         "name": "满血续航礼包",
@@ -258,7 +274,8 @@
         "buff_3": 1112,
         "type_3": "丹药",
         "name_3": "天命血凝丹",
-        "amount_3": 20
+        "amount_3": 20,
+        "item_type": "礼包"
     },
     "18067": {
         "name": "攻击丹爆发礼包",
@@ -275,7 +292,8 @@
         "buff_3": 2018,
         "type_3": "丹药",
         "name_3": "外道兴奋剂",
-        "amount_3": 5
+        "amount_3": 5,
+        "item_type": "礼包"
     },
     "18068": {
         "name": "主修功法成长礼包",
@@ -296,7 +314,8 @@
         "buff_4": 9700,
         "type_4": "功法",
         "name_4": "太乙玄功",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18069": {
         "name": "辅修功法成长礼包",
@@ -317,7 +336,8 @@
         "buff_4": 10402,
         "type_4": "辅修功法",
         "name_4": "真神威录",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18070": {
         "name": "身法瞳术双修礼包",
@@ -338,7 +358,8 @@
         "buff_4": 14114,
         "type_4": "瞳术",
         "name_4": "鸿蒙始瞳",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18071": {
         "name": "神通连击礼包",
@@ -359,7 +380,8 @@
         "buff_4": 8813,
         "type_4": "神通",
         "name_4": "大荒星陨指",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18072": {
         "name": "神通控制礼包",
@@ -380,7 +402,8 @@
         "buff_4": 8944,
         "type_4": "神通",
         "name_4": "天道敕令",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18073": {
         "name": "法器精选礼包",
@@ -401,7 +424,8 @@
         "buff_4": 7091,
         "type_4": "法器",
         "name_4": "无影剑",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18074": {
         "name": "防具精选礼包",
@@ -422,7 +446,8 @@
         "buff_4": 12003,
         "type_4": "防具",
         "name_4": "归墟甲",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18075": {
         "name": "神物飞升礼包",
@@ -443,7 +468,8 @@
         "buff_4": 15008,
         "type_4": "神物",
         "name_4": "神灵花",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18076": {
         "name": "炼丹材料礼包·初阶",
@@ -464,7 +490,8 @@
         "buff_4": 3073,
         "type_4": "药材",
         "name_4": "地黄参",
-        "amount_4": 30
+        "amount_4": 30,
+        "item_type": "礼包"
     },
     "18077": {
         "name": "炼丹材料礼包·高阶",
@@ -485,7 +512,8 @@
         "buff_4": 3106,
         "type_4": "药材",
         "name_4": "龙须藤",
-        "amount_4": 20
+        "amount_4": 20,
+        "item_type": "礼包"
     },
     "18078": {
         "name": "特殊道具功能礼包",
@@ -510,7 +538,8 @@
         "buff_5": 20017,
         "type_5": "特殊道具",
         "name_5": "合欢玉",
-        "amount_5": 6
+        "amount_5": 6,
+        "item_type": "礼包"
     },
     "18079": {
         "name": "灵石暴富礼包",
@@ -525,7 +554,8 @@
         "name_2": "天机灵石引",
         "amount_2": 10,
         "name_3": "灵石",
-        "amount_3": 50000000
+        "amount_3": 50000000,
+        "item_type": "礼包"
     },
     "18080": {
         "name": "冲境王者礼包",
@@ -546,7 +576,8 @@
         "buff_4": 1996,
         "type_4": "丹药",
         "name_4": "天命丹",
-        "amount_4": 5
+        "amount_4": 5,
+        "item_type": "礼包"
     },
     "18081": {
         "name": "均衡启程礼包",
@@ -573,7 +604,8 @@
         "name_5": "秘境钥匙",
         "amount_5": 5,
         "name_6": "灵石",
-        "amount_6": 5000000
+        "amount_6": 5000000,
+        "item_type": "礼包"
     },
     "18082": {
         "name": "洞府修行礼包",
@@ -598,7 +630,8 @@
         "buff_5": 20011,
         "type_5": "特殊道具",
         "name_5": "易名符",
-        "amount_5": 1
+        "amount_5": 1,
+        "item_type": "礼包"
     },
     "18083": {
         "name": "战斗爆发礼包",
@@ -623,7 +656,8 @@
         "buff_5": 2018,
         "type_5": "丹药",
         "name_5": "外道兴奋剂",
-        "amount_5": 3
+        "amount_5": 3,
+        "item_type": "礼包"
     },
     "18084": {
         "name": "秘境讨伐礼包",
@@ -648,7 +682,8 @@
         "buff_5": 20020,
         "type_5": "特殊道具",
         "name_5": "灵石福袋",
-        "amount_5": 10
+        "amount_5": 10,
+        "item_type": "礼包"
     },
     "18085": {
         "name": "丹道冲境礼包",
@@ -673,7 +708,8 @@
         "buff_5": 20003,
         "type_5": "特殊道具",
         "name_5": "神圣石",
-        "amount_5": 2
+        "amount_5": 2,
+        "item_type": "礼包"
     },
     "18086": {
         "name": "高阶混搭礼包",
@@ -702,7 +738,8 @@
         "buff_6": 20019,
         "type_6": "特殊道具",
         "name_6": "解绑符",
-        "amount_6": 2
+        "amount_6": 2,
+        "item_type": "礼包"
     },
     "18087": {
         "name": "身法流派礼包",
@@ -727,7 +764,8 @@
         "buff_5": 15006,
         "type_5": "神物",
         "name_5": "双子莲",
-        "amount_5": 1
+        "amount_5": 1,
+        "item_type": "礼包"
     },
     "18088": {
         "name": "瞳术流派礼包",
@@ -752,7 +790,8 @@
         "buff_5": 1997,
         "type_5": "丹药",
         "name_5": "天命渡劫丹",
-        "amount_5": 1
+        "amount_5": 1,
+        "item_type": "礼包"
     },
     "18089": {
         "name": "炼丹大师礼包",
@@ -775,7 +814,8 @@
         "name_4": "福缘石",
         "amount_4": 5,
         "name_5": "灵石",
-        "amount_5": 30000000
+        "amount_5": 30000000,
+        "item_type": "礼包"
     },
     "18090": {
         "name": "无上综合礼包",
@@ -804,7 +844,8 @@
         "buff_6": 20015,
         "type_6": "特殊道具",
         "name_6": "追捕令",
-        "amount_6": 10
+        "amount_6": 10,
+        "item_type": "礼包"
     },
     "18091": {
         "name": "秘境均衡礼包A",
@@ -831,7 +872,8 @@
         "name_5": "秘境钥匙",
         "amount_5": 8,
         "name_6": "灵石",
-        "amount_6": 12000000
+        "amount_6": 12000000,
+        "item_type": "礼包"
     },
     "18092": {
         "name": "秘境均衡礼包B",
@@ -858,7 +900,8 @@
         "name_5": "秘藏令",
         "amount_5": 8,
         "name_6": "灵石",
-        "amount_6": 12000000
+        "amount_6": 12000000,
+        "item_type": "礼包"
     },
     "18093": {
         "name": "斗战养成礼包",
@@ -883,7 +926,8 @@
         "buff_5": 1996,
         "type_5": "丹药",
         "name_5": "天命丹",
-        "amount_5": 2
+        "amount_5": 2,
+        "item_type": "礼包"
     },
     "18094": {
         "name": "丹道启灵礼包",
@@ -908,7 +952,8 @@
         "buff_5": 20006,
         "type_5": "特殊道具",
         "name_5": "福缘石",
-        "amount_5": 3
+        "amount_5": 3,
+        "item_type": "礼包"
     },
     "18095": {
         "name": "王道修行礼包",
@@ -933,7 +978,8 @@
         "buff_5": 20012,
         "type_5": "特殊道具",
         "name_5": "秘境加速券",
-        "amount_5": 10
+        "amount_5": 10,
+        "item_type": "礼包"
     },
     "18096": {
         "name": "帝道冲刺礼包",
@@ -958,7 +1004,8 @@
         "buff_5": 20015,
         "type_5": "特殊道具",
         "name_5": "追捕令",
-        "amount_5": 6
+        "amount_5": 6,
+        "item_type": "礼包"
     },
     "18097": {
         "name": "神兵战甲礼包A",
@@ -979,7 +1026,8 @@
         "buff_4": 20021,
         "type_4": "特殊道具",
         "name_4": "天机灵石引",
-        "amount_4": 8
+        "amount_4": 8,
+        "item_type": "礼包"
     },
     "18098": {
         "name": "神兵战甲礼包B",
@@ -1000,7 +1048,8 @@
         "buff_4": 20020,
         "type_4": "特殊道具",
         "name_4": "灵石福袋",
-        "amount_4": 10
+        "amount_4": 10,
+        "item_type": "礼包"
     },
     "18099": {
         "name": "控制流派礼包",
@@ -1025,7 +1074,8 @@
         "buff_5": 20005,
         "type_5": "特殊道具",
         "name_5": "祈愿石",
-        "amount_5": 8
+        "amount_5": 8,
+        "item_type": "礼包"
     },
     "18100": {
         "name": "暴击流派礼包",
@@ -1050,7 +1100,8 @@
         "buff_5": 20021,
         "type_5": "特殊道具",
         "name_5": "天机灵石引",
-        "amount_5": 5
+        "amount_5": 5,
+        "item_type": "礼包"
     },
     "18101": {
         "name": "反击流派礼包",
@@ -1075,7 +1126,8 @@
         "buff_5": 20019,
         "type_5": "特殊道具",
         "name_5": "解绑符",
-        "amount_5": 1
+        "amount_5": 1,
+        "item_type": "礼包"
     },
     "18102": {
         "name": "渡劫保命礼包",
@@ -1100,7 +1152,8 @@
         "buff_5": 20017,
         "type_5": "特殊道具",
         "name_5": "合欢玉",
-        "amount_5": 3
+        "amount_5": 3,
+        "item_type": "礼包"
     },
     "18103": {
         "name": "神物进阶礼包A",
@@ -1121,7 +1174,8 @@
         "buff_4": 20009,
         "type_4": "特殊道具",
         "name_4": "神秘经书",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18104": {
         "name": "神物进阶礼包B",
@@ -1142,7 +1196,8 @@
         "buff_4": 20010,
         "type_4": "特殊道具",
         "name_4": "灵签宝箓",
-        "amount_4": 3
+        "amount_4": 3,
+        "item_type": "礼包"
     },
     "18105": {
         "name": "冲榜礼包A",
@@ -1167,7 +1222,8 @@
         "buff_5": 20005,
         "type_5": "特殊道具",
         "name_5": "祈愿石",
-        "amount_5": 10
+        "amount_5": 10,
+        "item_type": "礼包"
     },
     "18106": {
         "name": "冲榜礼包B",
@@ -1192,7 +1248,8 @@
         "buff_5": 20015,
         "type_5": "特殊道具",
         "name_5": "追捕令",
-        "amount_5": 10
+        "amount_5": 10,
+        "item_type": "礼包"
     },
     "18107": {
         "name": "冲榜礼包C",
@@ -1217,7 +1274,8 @@
         "buff_5": 20003,
         "type_5": "特殊道具",
         "name_5": "神圣石",
-        "amount_5": 3
+        "amount_5": 3,
+        "item_type": "礼包"
     },
     "18108": {
         "name": "法器专精礼包",
@@ -1238,7 +1296,8 @@
         "buff_4": 20021,
         "type_4": "特殊道具",
         "name_4": "天机灵石引",
-        "amount_4": 12
+        "amount_4": 12,
+        "item_type": "礼包"
     },
     "18109": {
         "name": "防御坚壁礼包",
@@ -1259,7 +1318,8 @@
         "buff_4": 20002,
         "type_4": "特殊道具",
         "name_4": "化道石",
-        "amount_4": 2
+        "amount_4": 2,
+        "item_type": "礼包"
     },
     "18110": {
         "name": "高机动礼包",
@@ -1284,7 +1344,8 @@
         "buff_5": 20013,
         "type_5": "特殊道具",
         "name_5": "秘境大加速券",
-        "amount_5": 6
+        "amount_5": 6,
+        "item_type": "礼包"
     },
     "18111": {
         "name": "药材采集礼包A",
@@ -1305,7 +1366,8 @@
         "buff_4": 20001,
         "type_4": "特殊道具",
         "name_4": "秘境钥匙",
-        "amount_4": 6
+        "amount_4": 6,
+        "item_type": "礼包"
     },
     "18112": {
         "name": "药材采集礼包B",
@@ -1326,7 +1388,8 @@
         "buff_4": 20007,
         "type_4": "特殊道具",
         "name_4": "秘藏令",
-        "amount_4": 6
+        "amount_4": 6,
+        "item_type": "礼包"
     },
     "18113": {
         "name": "修为跃迁礼包A",
@@ -1347,7 +1410,8 @@
         "buff_4": 20022,
         "type_4": "特殊道具",
         "name_4": "三转玄丹",
-        "amount_4": 20
+        "amount_4": 20,
+        "item_type": "礼包"
     },
     "18114": {
         "name": "修为跃迁礼包B",
@@ -1368,7 +1432,8 @@
         "buff_4": 20022,
         "type_4": "特殊道具",
         "name_4": "三转玄丹",
-        "amount_4": 30
+        "amount_4": 30,
+        "item_type": "礼包"
     },
     "18115": {
         "name": "神秘抽取礼包",
@@ -1389,7 +1454,8 @@
         "buff_4": 20005,
         "type_4": "特殊道具",
         "name_4": "祈愿石",
-        "amount_4": 10
+        "amount_4": 10,
+        "item_type": "礼包"
     },
     "18116": {
         "name": "社交功能礼包",
@@ -1410,7 +1476,8 @@
         "buff_4": 20019,
         "type_4": "特殊道具",
         "name_4": "解绑符",
-        "amount_4": 2
+        "amount_4": 2,
+        "item_type": "礼包"
     },
     "18117": {
         "name": "悬赏追猎礼包",
@@ -1431,7 +1498,8 @@
         "buff_4": 8939,
         "type_4": "神通",
         "name_4": "九幽摄魂幡",
-        "amount_4": 1
+        "amount_4": 1,
+        "item_type": "礼包"
     },
     "18118": {
         "name": "顶级冲境礼包",
@@ -1456,7 +1524,8 @@
         "buff_5": 20002,
         "type_5": "特殊道具",
         "name_5": "化道石",
-        "amount_5": 3
+        "amount_5": 3,
+        "item_type": "礼包"
     },
     "18119": {
         "name": "无上终焉礼包",
@@ -1483,7 +1552,8 @@
         "name_5": "造化玉碟",
         "amount_5": 1,
         "name_6": "灵石",
-        "amount_6": 300000000
+        "amount_6": 300000000,
+        "item_type": "礼包"
     },
     "18120": {
         "name": "终极资源礼包",
@@ -1510,509 +1580,1728 @@
         "name_5": "灵石福袋",
         "amount_5": 20,
         "name_6": "灵石",
-        "amount_6": 100000000
+        "amount_6": 100000000,
+        "item_type": "礼包"
     },
-  "18121": {
-    "name": "随机一阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件一阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 1},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 1},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 1},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 1}
-    ]
-  },
-  "18122": {
-    "name": "随机二阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件二阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 2},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 2},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 2},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 2}
-    ]
-  },
-  "18123": {
-    "name": "随机三阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件三阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 3},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 3},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 3},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 3}
-    ]
-  },
-  "18124": {
-    "name": "随机四阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件四阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 4},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 4},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 4},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 4}
-    ]
-  },
-  "18125": {
-    "name": "随机五阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件五阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 5},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 5},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 5},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 5}
-    ]
-  },
-
-  "18126": {
-    "name": "一阶烈阳套装礼包",
-    "type": "礼包",
-    "desc": "烈阳手镯/戒指/手环/项链各1件（一阶）",
-    "buff_1": 19001, "type_1": "饰品", "name_1": "烈阳手镯", "amount_1": 1, "quality_1": 1,
-    "buff_2": 19002, "type_2": "饰品", "name_2": "烈阳戒指", "amount_2": 1, "quality_2": 1,
-    "buff_3": 19003, "type_3": "饰品", "name_3": "烈阳手环", "amount_3": 1, "quality_3": 1,
-    "buff_4": 19004, "type_4": "饰品", "name_4": "烈阳项链", "amount_4": 1, "quality_4": 1
-  },
-  "18127": {
-    "name": "一阶玄渊套装礼包",
-    "type": "礼包",
-    "desc": "玄渊手镯/戒指/手环/项链各1件（一阶）",
-    "buff_1": 19101, "type_1": "饰品", "name_1": "玄渊手镯", "amount_1": 1, "quality_1": 1,
-    "buff_2": 19102, "type_2": "饰品", "name_2": "玄渊戒指", "amount_2": 1, "quality_2": 1,
-    "buff_3": 19103, "type_3": "饰品", "name_3": "玄渊手环", "amount_3": 1, "quality_3": 1,
-    "buff_4": 19104, "type_4": "饰品", "name_4": "玄渊项链", "amount_4": 1, "quality_4": 1
-  },
-  "18128": {
-    "name": "一阶天衡套装礼包",
-    "type": "礼包",
-    "desc": "天衡手镯/戒指/手环/项链各1件（一阶）",
-    "buff_1": 19201, "type_1": "饰品", "name_1": "天衡手镯", "amount_1": 1, "quality_1": 1,
-    "buff_2": 19202, "type_2": "饰品", "name_2": "天衡戒指", "amount_2": 1, "quality_2": 1,
-    "buff_3": 19203, "type_3": "饰品", "name_3": "天衡手环", "amount_3": 1, "quality_3": 1,
-    "buff_4": 19204, "type_4": "饰品", "name_4": "天衡项链", "amount_4": 1, "quality_4": 1
-  },
-  "18129": {
-    "name": "一阶星痕套装礼包",
-    "type": "礼包",
-    "desc": "星痕手镯/戒指/手环/项链各1件（一阶）",
-    "buff_1": 19301, "type_1": "饰品", "name_1": "星痕手镯", "amount_1": 1, "quality_1": 1,
-    "buff_2": 19302, "type_2": "饰品", "name_2": "星痕戒指", "amount_2": 1, "quality_2": 1,
-    "buff_3": 19303, "type_3": "饰品", "name_3": "星痕手环", "amount_3": 1, "quality_3": 1,
-    "buff_4": 19304, "type_4": "饰品", "name_4": "星痕项链", "amount_4": 1, "quality_4": 1
-  },
-  "18130": {
-    "name": "一阶龙魄套装礼包",
-    "type": "礼包",
-    "desc": "龙魄手镯/戒指/手环/项链各1件（一阶）",
-    "buff_1": 19401, "type_1": "饰品", "name_1": "龙魄手镯", "amount_1": 1, "quality_1": 1,
-    "buff_2": 19402, "type_2": "饰品", "name_2": "龙魄戒指", "amount_2": 1, "quality_2": 1,
-    "buff_3": 19403, "type_3": "饰品", "name_3": "龙魄手环", "amount_3": 1, "quality_3": 1,
-    "buff_4": 19404, "type_4": "饰品", "name_4": "龙魄项链", "amount_4": 1, "quality_4": 1
-  },
-
-  "18131": {
-    "name": "随机一阶套装礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1套一阶饰品套装",
-    "roll_pool": [
-      {"buff": 18126, "type": "礼包", "name": "一阶烈阳套装礼包", "amount": 1, "quality": 1},
-      {"buff": 18127, "type": "礼包", "name": "一阶玄渊套装礼包", "amount": 1, "quality": 1},
-      {"buff": 18128, "type": "礼包", "name": "一阶天衡套装礼包", "amount": 1, "quality": 1},
-      {"buff": 18129, "type": "礼包", "name": "一阶星痕套装礼包", "amount": 1, "quality": 1},
-      {"buff": 18130, "type": "礼包", "name": "一阶龙魄套装礼包", "amount": 1, "quality": 1}
-    ]
-  },
-  "18132": {
-    "name": "随机一阶戒指饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件一阶戒指饰品",
-    "roll_pool": [
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 1},
-      {"buff": 19102, "type": "饰品", "name": "玄渊戒指", "amount": 1, "quality": 1},
-      {"buff": 19202, "type": "饰品", "name": "天衡戒指", "amount": 1, "quality": 1},
-      {"buff": 19302, "type": "饰品", "name": "星痕戒指", "amount": 1, "quality": 1},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 1}
-    ]
-  },
-
-  "18133": {
-    "name": "随机一至三阶饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件一~三阶任意饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 1},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 2},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 3},
-      {"buff": 19104, "type": "饰品", "name": "玄渊项链", "amount": 1, "quality": 1},
-      {"buff": 19201, "type": "饰品", "name": "天衡手镯", "amount": 1, "quality": 2},
-      {"buff": 19303, "type": "饰品", "name": "星痕手环", "amount": 1, "quality": 3},
-      {"buff": 19404, "type": "饰品", "name": "龙魄项链", "amount": 1, "quality": 2}
-    ]
-  },
-  "18134": {
-    "name": "随机四至五阶饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件四~五阶任意饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 4},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 5},
-      {"buff": 19103, "type": "饰品", "name": "玄渊手环", "amount": 1, "quality": 4},
-      {"buff": 19204, "type": "饰品", "name": "天衡项链", "amount": 1, "quality": 5},
-      {"buff": 19301, "type": "饰品", "name": "星痕手镯", "amount": 1, "quality": 4},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 5}
-    ]
-  },
-
-  "18135": {
-    "name": "随机二阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件二阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 2},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 2},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 2},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 2}
-    ]
-  },
-  "18136": {
-    "name": "随机三阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件三阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 3},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 3},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 3},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 3}
-    ]
-  },
-  "18137": {
-    "name": "随机四阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件四阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 4},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 4},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 4},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 4}
-    ]
-  },
-  "18138": {
-    "name": "随机五阶烈阳饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件五阶烈阳饰品",
-    "roll_pool": [
-      {"buff": 19001, "type": "饰品", "name": "烈阳手镯", "amount": 1, "quality": 5},
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 5},
-      {"buff": 19003, "type": "饰品", "name": "烈阳手环", "amount": 1, "quality": 5},
-      {"buff": 19004, "type": "饰品", "name": "烈阳项链", "amount": 1, "quality": 5}
-    ]
-  },
-
-  "18139": {
-    "name": "二阶烈阳套装礼包",
-    "type": "礼包",
-    "desc": "烈阳手镯/戒指/手环/项链各1件（二阶）",
-    "buff_1": 19001, "type_1": "饰品", "name_1": "烈阳手镯", "amount_1": 1, "quality_1": 2,
-    "buff_2": 19002, "type_2": "饰品", "name_2": "烈阳戒指", "amount_2": 1, "quality_2": 2,
-    "buff_3": 19003, "type_3": "饰品", "name_3": "烈阳手环", "amount_3": 1, "quality_3": 2,
-    "buff_4": 19004, "type_4": "饰品", "name_4": "烈阳项链", "amount_4": 1, "quality_4": 2
-  },
-  "18140": {
-    "name": "三阶烈阳套装礼包",
-    "type": "礼包",
-    "desc": "烈阳手镯/戒指/手环/项链各1件（三阶）",
-    "buff_1": 19001, "type_1": "饰品", "name_1": "烈阳手镯", "amount_1": 1, "quality_1": 3,
-    "buff_2": 19002, "type_2": "饰品", "name_2": "烈阳戒指", "amount_2": 1, "quality_2": 3,
-    "buff_3": 19003, "type_3": "饰品", "name_3": "烈阳手环", "amount_3": 1, "quality_3": 3,
-    "buff_4": 19004, "type_4": "饰品", "name_4": "烈阳项链", "amount_4": 1, "quality_4": 3
-  },
-  "18141": {
-    "name": "四阶烈阳套装礼包",
-    "type": "礼包",
-    "desc": "烈阳手镯/戒指/手环/项链各1件（四阶）",
-    "buff_1": 19001, "type_1": "饰品", "name_1": "烈阳手镯", "amount_1": 1, "quality_1": 4,
-    "buff_2": 19002, "type_2": "饰品", "name_2": "烈阳戒指", "amount_2": 1, "quality_2": 4,
-    "buff_3": 19003, "type_3": "饰品", "name_3": "烈阳手环", "amount_3": 1, "quality_3": 4,
-    "buff_4": 19004, "type_4": "饰品", "name_4": "烈阳项链", "amount_4": 1, "quality_4": 4
-  },
-  "18142": {
-    "name": "五阶烈阳套装礼包",
-    "type": "礼包",
-    "desc": "烈阳手镯/戒指/手环/项链各1件（五阶）",
-    "buff_1": 19001, "type_1": "饰品", "name_1": "烈阳手镯", "amount_1": 1, "quality_1": 5,
-    "buff_2": 19002, "type_2": "饰品", "name_2": "烈阳戒指", "amount_2": 1, "quality_2": 5,
-    "buff_3": 19003, "type_3": "饰品", "name_3": "烈阳手环", "amount_3": 1, "quality_3": 5,
-    "buff_4": 19004, "type_4": "饰品", "name_4": "烈阳项链", "amount_4": 1, "quality_4": 5
-  },
-
-  "18143": {
-    "name": "二阶玄渊套装礼包",
-    "type": "礼包",
-    "desc": "玄渊手镯/戒指/手环/项链各1件（二阶）",
-    "buff_1": 19101, "type_1": "饰品", "name_1": "玄渊手镯", "amount_1": 1, "quality_1": 2,
-    "buff_2": 19102, "type_2": "饰品", "name_2": "玄渊戒指", "amount_2": 1, "quality_2": 2,
-    "buff_3": 19103, "type_3": "饰品", "name_3": "玄渊手环", "amount_3": 1, "quality_3": 2,
-    "buff_4": 19104, "type_4": "饰品", "name_4": "玄渊项链", "amount_4": 1, "quality_4": 2
-  },
-  "18144": {
-    "name": "三阶玄渊套装礼包",
-    "type": "礼包",
-    "desc": "玄渊手镯/戒指/手环/项链各1件（三阶）",
-    "buff_1": 19101, "type_1": "饰品", "name_1": "玄渊手镯", "amount_1": 1, "quality_1": 3,
-    "buff_2": 19102, "type_2": "饰品", "name_2": "玄渊戒指", "amount_2": 1, "quality_2": 3,
-    "buff_3": 19103, "type_3": "饰品", "name_3": "玄渊手环", "amount_3": 1, "quality_3": 3,
-    "buff_4": 19104, "type_4": "饰品", "name_4": "玄渊项链", "amount_4": 1, "quality_4": 3
-  },
-  "18145": {
-    "name": "四阶玄渊套装礼包",
-    "type": "礼包",
-    "desc": "玄渊手镯/戒指/手环/项链各1件（四阶）",
-    "buff_1": 19101, "type_1": "饰品", "name_1": "玄渊手镯", "amount_1": 1, "quality_1": 4,
-    "buff_2": 19102, "type_2": "饰品", "name_2": "玄渊戒指", "amount_2": 1, "quality_2": 4,
-    "buff_3": 19103, "type_3": "饰品", "name_3": "玄渊手环", "amount_3": 1, "quality_3": 4,
-    "buff_4": 19104, "type_4": "饰品", "name_4": "玄渊项链", "amount_4": 1, "quality_4": 4
-  },
-  "18146": {
-    "name": "五阶玄渊套装礼包",
-    "type": "礼包",
-    "desc": "玄渊手镯/戒指/手环/项链各1件（五阶）",
-    "buff_1": 19101, "type_1": "饰品", "name_1": "玄渊手镯", "amount_1": 1, "quality_1": 5,
-    "buff_2": 19102, "type_2": "饰品", "name_2": "玄渊戒指", "amount_2": 1, "quality_2": 5,
-    "buff_3": 19103, "type_3": "饰品", "name_3": "玄渊手环", "amount_3": 1, "quality_3": 5,
-    "buff_4": 19104, "type_4": "饰品", "name_4": "玄渊项链", "amount_4": 1, "quality_4": 5
-  },
-
-  "18147": {
-    "name": "二阶天衡套装礼包",
-    "type": "礼包",
-    "desc": "天衡手镯/戒指/手环/项链各1件（二阶）",
-    "buff_1": 19201, "type_1": "饰品", "name_1": "天衡手镯", "amount_1": 1, "quality_1": 2,
-    "buff_2": 19202, "type_2": "饰品", "name_2": "天衡戒指", "amount_2": 1, "quality_2": 2,
-    "buff_3": 19203, "type_3": "饰品", "name_3": "天衡手环", "amount_3": 1, "quality_3": 2,
-    "buff_4": 19204, "type_4": "饰品", "name_4": "天衡项链", "amount_4": 1, "quality_4": 2
-  },
-  "18148": {
-    "name": "三阶天衡套装礼包",
-    "type": "礼包",
-    "desc": "天衡手镯/戒指/手环/项链各1件（三阶）",
-    "buff_1": 19201, "type_1": "饰品", "name_1": "天衡手镯", "amount_1": 1, "quality_1": 3,
-    "buff_2": 19202, "type_2": "饰品", "name_2": "天衡戒指", "amount_2": 1, "quality_2": 3,
-    "buff_3": 19203, "type_3": "饰品", "name_3": "天衡手环", "amount_3": 1, "quality_3": 3,
-    "buff_4": 19204, "type_4": "饰品", "name_4": "天衡项链", "amount_4": 1, "quality_4": 3
-  },
-  "18149": {
-    "name": "四阶天衡套装礼包",
-    "type": "礼包",
-    "desc": "天衡手镯/戒指/手环/项链各1件（四阶）",
-    "buff_1": 19201, "type_1": "饰品", "name_1": "天衡手镯", "amount_1": 1, "quality_1": 4,
-    "buff_2": 19202, "type_2": "饰品", "name_2": "天衡戒指", "amount_2": 1, "quality_2": 4,
-    "buff_3": 19203, "type_3": "饰品", "name_3": "天衡手环", "amount_3": 1, "quality_3": 4,
-    "buff_4": 19204, "type_4": "饰品", "name_4": "天衡项链", "amount_4": 1, "quality_4": 4
-  },
-  "18150": {
-    "name": "五阶天衡套装礼包",
-    "type": "礼包",
-    "desc": "天衡手镯/戒指/手环/项链各1件（五阶）",
-    "buff_1": 19201, "type_1": "饰品", "name_1": "天衡手镯", "amount_1": 1, "quality_1": 5,
-    "buff_2": 19202, "type_2": "饰品", "name_2": "天衡戒指", "amount_2": 1, "quality_2": 5,
-    "buff_3": 19203, "type_3": "饰品", "name_3": "天衡手环", "amount_3": 1, "quality_3": 5,
-    "buff_4": 19204, "type_4": "饰品", "name_4": "天衡项链", "amount_4": 1, "quality_4": 5
-  },
-
-  "18151": {
-    "name": "二阶星痕套装礼包",
-    "type": "礼包",
-    "desc": "星痕手镯/戒指/手环/项链各1件（二阶）",
-    "buff_1": 19301, "type_1": "饰品", "name_1": "星痕手镯", "amount_1": 1, "quality_1": 2,
-    "buff_2": 19302, "type_2": "饰品", "name_2": "星痕戒指", "amount_2": 1, "quality_2": 2,
-    "buff_3": 19303, "type_3": "饰品", "name_3": "星痕手环", "amount_3": 1, "quality_3": 2,
-    "buff_4": 19304, "type_4": "饰品", "name_4": "星痕项链", "amount_4": 1, "quality_4": 2
-  },
-  "18152": {
-    "name": "三阶星痕套装礼包",
-    "type": "礼包",
-    "desc": "星痕手镯/戒指/手环/项链各1件（三阶）",
-    "buff_1": 19301, "type_1": "饰品", "name_1": "星痕手镯", "amount_1": 1, "quality_1": 3,
-    "buff_2": 19302, "type_2": "饰品", "name_2": "星痕戒指", "amount_2": 1, "quality_2": 3,
-    "buff_3": 19303, "type_3": "饰品", "name_3": "星痕手环", "amount_3": 1, "quality_3": 3,
-    "buff_4": 19304, "type_4": "饰品", "name_4": "星痕项链", "amount_4": 1, "quality_4": 3
-  },
-  "18153": {
-    "name": "四阶星痕套装礼包",
-    "type": "礼包",
-    "desc": "星痕手镯/戒指/手环/项链各1件（四阶）",
-    "buff_1": 19301, "type_1": "饰品", "name_1": "星痕手镯", "amount_1": 1, "quality_1": 4,
-    "buff_2": 19302, "type_2": "饰品", "name_2": "星痕戒指", "amount_2": 1, "quality_2": 4,
-    "buff_3": 19303, "type_3": "饰品", "name_3": "星痕手环", "amount_3": 1, "quality_3": 4,
-    "buff_4": 19304, "type_4": "饰品", "name_4": "星痕项链", "amount_4": 1, "quality_4": 4
-  },
-  "18154": {
-    "name": "五阶星痕套装礼包",
-    "type": "礼包",
-    "desc": "星痕手镯/戒指/手环/项链各1件（五阶）",
-    "buff_1": 19301, "type_1": "饰品", "name_1": "星痕手镯", "amount_1": 1, "quality_1": 5,
-    "buff_2": 19302, "type_2": "饰品", "name_2": "星痕戒指", "amount_2": 1, "quality_2": 5,
-    "buff_3": 19303, "type_3": "饰品", "name_3": "星痕手环", "amount_3": 1, "quality_3": 5,
-    "buff_4": 19304, "type_4": "饰品", "name_4": "星痕项链", "amount_4": 1, "quality_4": 5
-  },
-
-  "18155": {
-    "name": "二阶龙魄套装礼包",
-    "type": "礼包",
-    "desc": "龙魄手镯/戒指/手环/项链各1件（二阶）",
-    "buff_1": 19401, "type_1": "饰品", "name_1": "龙魄手镯", "amount_1": 1, "quality_1": 2,
-    "buff_2": 19402, "type_2": "饰品", "name_2": "龙魄戒指", "amount_2": 1, "quality_2": 2,
-    "buff_3": 19403, "type_3": "饰品", "name_3": "龙魄手环", "amount_3": 1, "quality_3": 2,
-    "buff_4": 19404, "type_4": "饰品", "name_4": "龙魄项链", "amount_4": 1, "quality_4": 2
-  },
-  "18156": {
-    "name": "三阶龙魄套装礼包",
-    "type": "礼包",
-    "desc": "龙魄手镯/戒指/手环/项链各1件（三阶）",
-    "buff_1": 19401, "type_1": "饰品", "name_1": "龙魄手镯", "amount_1": 1, "quality_1": 3,
-    "buff_2": 19402, "type_2": "饰品", "name_2": "龙魄戒指", "amount_2": 1, "quality_2": 3,
-    "buff_3": 19403, "type_3": "饰品", "name_3": "龙魄手环", "amount_3": 1, "quality_3": 3,
-    "buff_4": 19404, "type_4": "饰品", "name_4": "龙魄项链", "amount_4": 1, "quality_4": 3
-  },
-  "18157": {
-    "name": "四阶龙魄套装礼包",
-    "type": "礼包",
-    "desc": "龙魄手镯/戒指/手环/项链各1件（四阶）",
-    "buff_1": 19401, "type_1": "饰品", "name_1": "龙魄手镯", "amount_1": 1, "quality_1": 4,
-    "buff_2": 19402, "type_2": "饰品", "name_2": "龙魄戒指", "amount_2": 1, "quality_2": 4,
-    "buff_3": 19403, "type_3": "饰品", "name_3": "龙魄手环", "amount_3": 1, "quality_3": 4,
-    "buff_4": 19404, "type_4": "饰品", "name_4": "龙魄项链", "amount_4": 1, "quality_4": 4
-  },
-  "18158": {
-    "name": "五阶龙魄套装礼包",
-    "type": "礼包",
-    "desc": "龙魄手镯/戒指/手环/项链各1件（五阶）",
-    "buff_1": 19401, "type_1": "饰品", "name_1": "龙魄手镯", "amount_1": 1, "quality_1": 5,
-    "buff_2": 19402, "type_2": "饰品", "name_2": "龙魄戒指", "amount_2": 1, "quality_2": 5,
-    "buff_3": 19403, "type_3": "饰品", "name_3": "龙魄手环", "amount_3": 1, "quality_3": 5,
-    "buff_4": 19404, "type_4": "饰品", "name_4": "龙魄项链", "amount_4": 1, "quality_4": 5
-  },
-
-  "18159": {
-    "name": "随机二阶套装礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1套二阶饰品套装",
-    "roll_pool": [
-      {"buff": 18139, "type": "礼包", "name": "二阶烈阳套装礼包", "amount": 1, "quality": 2},
-      {"buff": 18143, "type": "礼包", "name": "二阶玄渊套装礼包", "amount": 1, "quality": 2},
-      {"buff": 18147, "type": "礼包", "name": "二阶天衡套装礼包", "amount": 1, "quality": 2},
-      {"buff": 18151, "type": "礼包", "name": "二阶星痕套装礼包", "amount": 1, "quality": 2},
-      {"buff": 18155, "type": "礼包", "name": "二阶龙魄套装礼包", "amount": 1, "quality": 2}
-    ]
-  },
-  "18160": {
-    "name": "随机三阶套装礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1套三阶饰品套装",
-    "roll_pool": [
-      {"buff": 18140, "type": "礼包", "name": "三阶烈阳套装礼包", "amount": 1, "quality": 3},
-      {"buff": 18144, "type": "礼包", "name": "三阶玄渊套装礼包", "amount": 1, "quality": 3},
-      {"buff": 18148, "type": "礼包", "name": "三阶天衡套装礼包", "amount": 1, "quality": 3},
-      {"buff": 18152, "type": "礼包", "name": "三阶星痕套装礼包", "amount": 1, "quality": 3},
-      {"buff": 18156, "type": "礼包", "name": "三阶龙魄套装礼包", "amount": 1, "quality": 3}
-    ]
-  },
-  "18161": {
-    "name": "随机四阶套装礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1套四阶饰品套装",
-    "roll_pool": [
-      {"buff": 18141, "type": "礼包", "name": "四阶烈阳套装礼包", "amount": 1, "quality": 4},
-      {"buff": 18145, "type": "礼包", "name": "四阶玄渊套装礼包", "amount": 1, "quality": 4},
-      {"buff": 18149, "type": "礼包", "name": "四阶天衡套装礼包", "amount": 1, "quality": 4},
-      {"buff": 18153, "type": "礼包", "name": "四阶星痕套装礼包", "amount": 1, "quality": 4},
-      {"buff": 18157, "type": "礼包", "name": "四阶龙魄套装礼包", "amount": 1, "quality": 4}
-    ]
-  },
-  "18162": {
-    "name": "随机五阶套装礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1套五阶饰品套装",
-    "roll_pool": [
-      {"buff": 18142, "type": "礼包", "name": "五阶烈阳套装礼包", "amount": 1, "quality": 5},
-      {"buff": 18146, "type": "礼包", "name": "五阶玄渊套装礼包", "amount": 1, "quality": 5},
-      {"buff": 18150, "type": "礼包", "name": "五阶天衡套装礼包", "amount": 1, "quality": 5},
-      {"buff": 18154, "type": "礼包", "name": "五阶星痕套装礼包", "amount": 1, "quality": 5},
-      {"buff": 18158, "type": "礼包", "name": "五阶龙魄套装礼包", "amount": 1, "quality": 5}
-    ]
-  },
-
-  "18163": {
-    "name": "随机二阶戒指饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件二阶戒指饰品",
-    "roll_pool": [
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 2},
-      {"buff": 19102, "type": "饰品", "name": "玄渊戒指", "amount": 1, "quality": 2},
-      {"buff": 19202, "type": "饰品", "name": "天衡戒指", "amount": 1, "quality": 2},
-      {"buff": 19302, "type": "饰品", "name": "星痕戒指", "amount": 1, "quality": 2},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 2}
-    ]
-  },
-  "18164": {
-    "name": "随机三阶戒指饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件三阶戒指饰品",
-    "roll_pool": [
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 3},
-      {"buff": 19102, "type": "饰品", "name": "玄渊戒指", "amount": 1, "quality": 3},
-      {"buff": 19202, "type": "饰品", "name": "天衡戒指", "amount": 1, "quality": 3},
-      {"buff": 19302, "type": "饰品", "name": "星痕戒指", "amount": 1, "quality": 3},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 3}
-    ]
-  },
-  "18165": {
-    "name": "随机四阶戒指饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件四阶戒指饰品",
-    "roll_pool": [
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 4},
-      {"buff": 19102, "type": "饰品", "name": "玄渊戒指", "amount": 1, "quality": 4},
-      {"buff": 19202, "type": "饰品", "name": "天衡戒指", "amount": 1, "quality": 4},
-      {"buff": 19302, "type": "饰品", "name": "星痕戒指", "amount": 1, "quality": 4},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 4}
-    ]
-  },
-  "18166": {
-    "name": "随机五阶戒指饰品礼包",
-    "type": "礼包",
-    "roll": 1,
-    "desc": "随机获得1件五阶戒指饰品",
-    "roll_pool": [
-      {"buff": 19002, "type": "饰品", "name": "烈阳戒指", "amount": 1, "quality": 5},
-      {"buff": 19102, "type": "饰品", "name": "玄渊戒指", "amount": 1, "quality": 5},
-      {"buff": 19202, "type": "饰品", "name": "天衡戒指", "amount": 1, "quality": 5},
-      {"buff": 19302, "type": "饰品", "name": "星痕戒指", "amount": 1, "quality": 5},
-      {"buff": 19402, "type": "饰品", "name": "龙魄戒指", "amount": 1, "quality": 5}
-    ]
-  }
+    "18121": {
+        "name": "随机一阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件一阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 1
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18122": {
+        "name": "随机二阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件二阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 2
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18123": {
+        "name": "随机三阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件三阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 3
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18124": {
+        "name": "随机四阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件四阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 4
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18125": {
+        "name": "随机五阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件五阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 5
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18126": {
+        "name": "一阶烈阳套装礼包",
+        "type": "礼包",
+        "desc": "烈阳手镯\/戒指\/手环\/项链各1件（一阶）",
+        "buff_1": 19001,
+        "type_1": "饰品",
+        "name_1": "烈阳手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19002,
+        "type_2": "饰品",
+        "name_2": "烈阳戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19003,
+        "type_3": "饰品",
+        "name_3": "烈阳手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19004,
+        "type_4": "饰品",
+        "name_4": "烈阳项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
+    "18127": {
+        "name": "一阶玄渊套装礼包",
+        "type": "礼包",
+        "desc": "玄渊手镯\/戒指\/手环\/项链各1件（一阶）",
+        "buff_1": 19101,
+        "type_1": "饰品",
+        "name_1": "玄渊手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19102,
+        "type_2": "饰品",
+        "name_2": "玄渊戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19103,
+        "type_3": "饰品",
+        "name_3": "玄渊手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19104,
+        "type_4": "饰品",
+        "name_4": "玄渊项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
+    "18128": {
+        "name": "一阶天衡套装礼包",
+        "type": "礼包",
+        "desc": "天衡手镯\/戒指\/手环\/项链各1件（一阶）",
+        "buff_1": 19201,
+        "type_1": "饰品",
+        "name_1": "天衡手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19202,
+        "type_2": "饰品",
+        "name_2": "天衡戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19203,
+        "type_3": "饰品",
+        "name_3": "天衡手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19204,
+        "type_4": "饰品",
+        "name_4": "天衡项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
+    "18129": {
+        "name": "一阶星痕套装礼包",
+        "type": "礼包",
+        "desc": "星痕手镯\/戒指\/手环\/项链各1件（一阶）",
+        "buff_1": 19301,
+        "type_1": "饰品",
+        "name_1": "星痕手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19302,
+        "type_2": "饰品",
+        "name_2": "星痕戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19303,
+        "type_3": "饰品",
+        "name_3": "星痕手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19304,
+        "type_4": "饰品",
+        "name_4": "星痕项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
+    "18130": {
+        "name": "一阶龙魄套装礼包",
+        "type": "礼包",
+        "desc": "龙魄手镯\/戒指\/手环\/项链各1件（一阶）",
+        "buff_1": 19401,
+        "type_1": "饰品",
+        "name_1": "龙魄手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19402,
+        "type_2": "饰品",
+        "name_2": "龙魄戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19403,
+        "type_3": "饰品",
+        "name_3": "龙魄手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19404,
+        "type_4": "饰品",
+        "name_4": "龙魄项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
+    "18131": {
+        "name": "随机一阶套装礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1套一阶饰品套装",
+        "roll_pool": [
+            {
+                "buff": 18126,
+                "type": "礼包",
+                "name": "一阶烈阳套装礼包",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 18127,
+                "type": "礼包",
+                "name": "一阶玄渊套装礼包",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 18128,
+                "type": "礼包",
+                "name": "一阶天衡套装礼包",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 18129,
+                "type": "礼包",
+                "name": "一阶星痕套装礼包",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 18130,
+                "type": "礼包",
+                "name": "一阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 1
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18132": {
+        "name": "随机一阶戒指饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件一阶戒指饰品",
+        "roll_pool": [
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 1
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18133": {
+        "name": "随机一至三阶饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件一~三阶任意饰品（全套装全部位）",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19101,
+                "type": "饰品",
+                "name": "玄渊手镯",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19103,
+                "type": "饰品",
+                "name": "玄渊手环",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19104,
+                "type": "饰品",
+                "name": "玄渊项链",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19201,
+                "type": "饰品",
+                "name": "天衡手镯",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19203,
+                "type": "饰品",
+                "name": "天衡手环",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19204,
+                "type": "饰品",
+                "name": "天衡项链",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19301,
+                "type": "饰品",
+                "name": "星痕手镯",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19303,
+                "type": "饰品",
+                "name": "星痕手环",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19304,
+                "type": "饰品",
+                "name": "星痕项链",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19401,
+                "type": "饰品",
+                "name": "龙魄手镯",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19403,
+                "type": "饰品",
+                "name": "龙魄手环",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19404,
+                "type": "饰品",
+                "name": "龙魄项链",
+                "amount": 1,
+                "quality": 2
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18134": {
+        "name": "随机四至五阶饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件四~五阶任意饰品（全套装全部位）",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19101,
+                "type": "饰品",
+                "name": "玄渊手镯",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19103,
+                "type": "饰品",
+                "name": "玄渊手环",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19104,
+                "type": "饰品",
+                "name": "玄渊项链",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19201,
+                "type": "饰品",
+                "name": "天衡手镯",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19203,
+                "type": "饰品",
+                "name": "天衡手环",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19204,
+                "type": "饰品",
+                "name": "天衡项链",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19301,
+                "type": "饰品",
+                "name": "星痕手镯",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19303,
+                "type": "饰品",
+                "name": "星痕手环",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19304,
+                "type": "饰品",
+                "name": "星痕项链",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19401,
+                "type": "饰品",
+                "name": "龙魄手镯",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19403,
+                "type": "饰品",
+                "name": "龙魄手环",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19404,
+                "type": "饰品",
+                "name": "龙魄项链",
+                "amount": 1,
+                "quality": 5
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18135": {
+        "name": "随机二阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件二阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 2
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18136": {
+        "name": "随机三阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件三阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 3
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18137": {
+        "name": "随机四阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件四阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 4
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18138": {
+        "name": "随机五阶烈阳饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件五阶烈阳饰品",
+        "roll_pool": [
+            {
+                "buff": 19001,
+                "type": "饰品",
+                "name": "烈阳手镯",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19003,
+                "type": "饰品",
+                "name": "烈阳手环",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19004,
+                "type": "饰品",
+                "name": "烈阳项链",
+                "amount": 1,
+                "quality": 5
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18139": {
+        "name": "二阶烈阳套装礼包",
+        "type": "礼包",
+        "desc": "烈阳手镯\/戒指\/手环\/项链各1件（二阶）",
+        "buff_1": 19001,
+        "type_1": "饰品",
+        "name_1": "烈阳手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19002,
+        "type_2": "饰品",
+        "name_2": "烈阳戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19003,
+        "type_3": "饰品",
+        "name_3": "烈阳手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19004,
+        "type_4": "饰品",
+        "name_4": "烈阳项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18140": {
+        "name": "三阶烈阳套装礼包",
+        "type": "礼包",
+        "desc": "烈阳手镯\/戒指\/手环\/项链各1件（三阶）",
+        "buff_1": 19001,
+        "type_1": "饰品",
+        "name_1": "烈阳手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19002,
+        "type_2": "饰品",
+        "name_2": "烈阳戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19003,
+        "type_3": "饰品",
+        "name_3": "烈阳手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19004,
+        "type_4": "饰品",
+        "name_4": "烈阳项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18141": {
+        "name": "四阶烈阳套装礼包",
+        "type": "礼包",
+        "desc": "烈阳手镯\/戒指\/手环\/项链各1件（四阶）",
+        "buff_1": 19001,
+        "type_1": "饰品",
+        "name_1": "烈阳手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19002,
+        "type_2": "饰品",
+        "name_2": "烈阳戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19003,
+        "type_3": "饰品",
+        "name_3": "烈阳手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19004,
+        "type_4": "饰品",
+        "name_4": "烈阳项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18142": {
+        "name": "五阶烈阳套装礼包",
+        "type": "礼包",
+        "desc": "烈阳手镯\/戒指\/手环\/项链各1件（五阶）",
+        "buff_1": 19001,
+        "type_1": "饰品",
+        "name_1": "烈阳手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19002,
+        "type_2": "饰品",
+        "name_2": "烈阳戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19003,
+        "type_3": "饰品",
+        "name_3": "烈阳手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19004,
+        "type_4": "饰品",
+        "name_4": "烈阳项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
+    "18143": {
+        "name": "二阶玄渊套装礼包",
+        "type": "礼包",
+        "desc": "玄渊手镯\/戒指\/手环\/项链各1件（二阶）",
+        "buff_1": 19101,
+        "type_1": "饰品",
+        "name_1": "玄渊手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19102,
+        "type_2": "饰品",
+        "name_2": "玄渊戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19103,
+        "type_3": "饰品",
+        "name_3": "玄渊手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19104,
+        "type_4": "饰品",
+        "name_4": "玄渊项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18144": {
+        "name": "三阶玄渊套装礼包",
+        "type": "礼包",
+        "desc": "玄渊手镯\/戒指\/手环\/项链各1件（三阶）",
+        "buff_1": 19101,
+        "type_1": "饰品",
+        "name_1": "玄渊手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19102,
+        "type_2": "饰品",
+        "name_2": "玄渊戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19103,
+        "type_3": "饰品",
+        "name_3": "玄渊手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19104,
+        "type_4": "饰品",
+        "name_4": "玄渊项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18145": {
+        "name": "四阶玄渊套装礼包",
+        "type": "礼包",
+        "desc": "玄渊手镯\/戒指\/手环\/项链各1件（四阶）",
+        "buff_1": 19101,
+        "type_1": "饰品",
+        "name_1": "玄渊手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19102,
+        "type_2": "饰品",
+        "name_2": "玄渊戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19103,
+        "type_3": "饰品",
+        "name_3": "玄渊手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19104,
+        "type_4": "饰品",
+        "name_4": "玄渊项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18146": {
+        "name": "五阶玄渊套装礼包",
+        "type": "礼包",
+        "desc": "玄渊手镯\/戒指\/手环\/项链各1件（五阶）",
+        "buff_1": 19101,
+        "type_1": "饰品",
+        "name_1": "玄渊手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19102,
+        "type_2": "饰品",
+        "name_2": "玄渊戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19103,
+        "type_3": "饰品",
+        "name_3": "玄渊手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19104,
+        "type_4": "饰品",
+        "name_4": "玄渊项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
+    "18147": {
+        "name": "二阶天衡套装礼包",
+        "type": "礼包",
+        "desc": "天衡手镯\/戒指\/手环\/项链各1件（二阶）",
+        "buff_1": 19201,
+        "type_1": "饰品",
+        "name_1": "天衡手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19202,
+        "type_2": "饰品",
+        "name_2": "天衡戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19203,
+        "type_3": "饰品",
+        "name_3": "天衡手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19204,
+        "type_4": "饰品",
+        "name_4": "天衡项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18148": {
+        "name": "三阶天衡套装礼包",
+        "type": "礼包",
+        "desc": "天衡手镯\/戒指\/手环\/项链各1件（三阶）",
+        "buff_1": 19201,
+        "type_1": "饰品",
+        "name_1": "天衡手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19202,
+        "type_2": "饰品",
+        "name_2": "天衡戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19203,
+        "type_3": "饰品",
+        "name_3": "天衡手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19204,
+        "type_4": "饰品",
+        "name_4": "天衡项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18149": {
+        "name": "四阶天衡套装礼包",
+        "type": "礼包",
+        "desc": "天衡手镯\/戒指\/手环\/项链各1件（四阶）",
+        "buff_1": 19201,
+        "type_1": "饰品",
+        "name_1": "天衡手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19202,
+        "type_2": "饰品",
+        "name_2": "天衡戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19203,
+        "type_3": "饰品",
+        "name_3": "天衡手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19204,
+        "type_4": "饰品",
+        "name_4": "天衡项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18150": {
+        "name": "五阶天衡套装礼包",
+        "type": "礼包",
+        "desc": "天衡手镯\/戒指\/手环\/项链各1件（五阶）",
+        "buff_1": 19201,
+        "type_1": "饰品",
+        "name_1": "天衡手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19202,
+        "type_2": "饰品",
+        "name_2": "天衡戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19203,
+        "type_3": "饰品",
+        "name_3": "天衡手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19204,
+        "type_4": "饰品",
+        "name_4": "天衡项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
+    "18151": {
+        "name": "二阶星痕套装礼包",
+        "type": "礼包",
+        "desc": "星痕手镯\/戒指\/手环\/项链各1件（二阶）",
+        "buff_1": 19301,
+        "type_1": "饰品",
+        "name_1": "星痕手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19302,
+        "type_2": "饰品",
+        "name_2": "星痕戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19303,
+        "type_3": "饰品",
+        "name_3": "星痕手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19304,
+        "type_4": "饰品",
+        "name_4": "星痕项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18152": {
+        "name": "三阶星痕套装礼包",
+        "type": "礼包",
+        "desc": "星痕手镯\/戒指\/手环\/项链各1件（三阶）",
+        "buff_1": 19301,
+        "type_1": "饰品",
+        "name_1": "星痕手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19302,
+        "type_2": "饰品",
+        "name_2": "星痕戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19303,
+        "type_3": "饰品",
+        "name_3": "星痕手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19304,
+        "type_4": "饰品",
+        "name_4": "星痕项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18153": {
+        "name": "四阶星痕套装礼包",
+        "type": "礼包",
+        "desc": "星痕手镯\/戒指\/手环\/项链各1件（四阶）",
+        "buff_1": 19301,
+        "type_1": "饰品",
+        "name_1": "星痕手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19302,
+        "type_2": "饰品",
+        "name_2": "星痕戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19303,
+        "type_3": "饰品",
+        "name_3": "星痕手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19304,
+        "type_4": "饰品",
+        "name_4": "星痕项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18154": {
+        "name": "五阶星痕套装礼包",
+        "type": "礼包",
+        "desc": "星痕手镯\/戒指\/手环\/项链各1件（五阶）",
+        "buff_1": 19301,
+        "type_1": "饰品",
+        "name_1": "星痕手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19302,
+        "type_2": "饰品",
+        "name_2": "星痕戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19303,
+        "type_3": "饰品",
+        "name_3": "星痕手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19304,
+        "type_4": "饰品",
+        "name_4": "星痕项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
+    "18155": {
+        "name": "二阶龙魄套装礼包",
+        "type": "礼包",
+        "desc": "龙魄手镯\/戒指\/手环\/项链各1件（二阶）",
+        "buff_1": 19401,
+        "type_1": "饰品",
+        "name_1": "龙魄手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19402,
+        "type_2": "饰品",
+        "name_2": "龙魄戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19403,
+        "type_3": "饰品",
+        "name_3": "龙魄手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19404,
+        "type_4": "饰品",
+        "name_4": "龙魄项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18156": {
+        "name": "三阶龙魄套装礼包",
+        "type": "礼包",
+        "desc": "龙魄手镯\/戒指\/手环\/项链各1件（三阶）",
+        "buff_1": 19401,
+        "type_1": "饰品",
+        "name_1": "龙魄手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19402,
+        "type_2": "饰品",
+        "name_2": "龙魄戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19403,
+        "type_3": "饰品",
+        "name_3": "龙魄手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19404,
+        "type_4": "饰品",
+        "name_4": "龙魄项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18157": {
+        "name": "四阶龙魄套装礼包",
+        "type": "礼包",
+        "desc": "龙魄手镯\/戒指\/手环\/项链各1件（四阶）",
+        "buff_1": 19401,
+        "type_1": "饰品",
+        "name_1": "龙魄手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19402,
+        "type_2": "饰品",
+        "name_2": "龙魄戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19403,
+        "type_3": "饰品",
+        "name_3": "龙魄手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19404,
+        "type_4": "饰品",
+        "name_4": "龙魄项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18158": {
+        "name": "五阶龙魄套装礼包",
+        "type": "礼包",
+        "desc": "龙魄手镯\/戒指\/手环\/项链各1件（五阶）",
+        "buff_1": 19401,
+        "type_1": "饰品",
+        "name_1": "龙魄手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19402,
+        "type_2": "饰品",
+        "name_2": "龙魄戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19403,
+        "type_3": "饰品",
+        "name_3": "龙魄手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19404,
+        "type_4": "饰品",
+        "name_4": "龙魄项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
+    "18159": {
+        "name": "随机二阶套装礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1套二阶饰品套装",
+        "roll_pool": [
+            {
+                "buff": 18139,
+                "type": "礼包",
+                "name": "二阶烈阳套装礼包",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 18143,
+                "type": "礼包",
+                "name": "二阶玄渊套装礼包",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 18147,
+                "type": "礼包",
+                "name": "二阶天衡套装礼包",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 18151,
+                "type": "礼包",
+                "name": "二阶星痕套装礼包",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 18155,
+                "type": "礼包",
+                "name": "二阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 2
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18160": {
+        "name": "随机三阶套装礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1套三阶饰品套装",
+        "roll_pool": [
+            {
+                "buff": 18140,
+                "type": "礼包",
+                "name": "三阶烈阳套装礼包",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 18144,
+                "type": "礼包",
+                "name": "三阶玄渊套装礼包",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 18148,
+                "type": "礼包",
+                "name": "三阶天衡套装礼包",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 18152,
+                "type": "礼包",
+                "name": "三阶星痕套装礼包",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 18156,
+                "type": "礼包",
+                "name": "三阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 3
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18161": {
+        "name": "随机四阶套装礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1套四阶饰品套装",
+        "roll_pool": [
+            {
+                "buff": 18141,
+                "type": "礼包",
+                "name": "四阶烈阳套装礼包",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 18145,
+                "type": "礼包",
+                "name": "四阶玄渊套装礼包",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 18149,
+                "type": "礼包",
+                "name": "四阶天衡套装礼包",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 18153,
+                "type": "礼包",
+                "name": "四阶星痕套装礼包",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 18157,
+                "type": "礼包",
+                "name": "四阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 4
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18162": {
+        "name": "随机五阶套装礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1套五阶饰品套装",
+        "roll_pool": [
+            {
+                "buff": 18142,
+                "type": "礼包",
+                "name": "五阶烈阳套装礼包",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 18146,
+                "type": "礼包",
+                "name": "五阶玄渊套装礼包",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 18150,
+                "type": "礼包",
+                "name": "五阶天衡套装礼包",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 18154,
+                "type": "礼包",
+                "name": "五阶星痕套装礼包",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 18158,
+                "type": "礼包",
+                "name": "五阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 5
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18163": {
+        "name": "随机二阶戒指饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件二阶戒指饰品",
+        "roll_pool": [
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 2
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18164": {
+        "name": "随机三阶戒指饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件三阶戒指饰品",
+        "roll_pool": [
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 3
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18165": {
+        "name": "随机四阶戒指饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件四阶戒指饰品",
+        "roll_pool": [
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 4
+            }
+        ],
+        "item_type": "礼包"
+    },
+    "18166": {
+        "name": "随机五阶戒指饰品礼包",
+        "type": "礼包",
+        "roll": 1,
+        "desc": "随机获得1件五阶戒指饰品",
+        "roll_pool": [
+            {
+                "buff": 19002,
+                "type": "饰品",
+                "name": "烈阳戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19102,
+                "type": "饰品",
+                "name": "玄渊戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19202,
+                "type": "饰品",
+                "name": "天衡戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19302,
+                "type": "饰品",
+                "name": "星痕戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19402,
+                "type": "饰品",
+                "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 5
+            }
+        ],
+        "item_type": "礼包"
+    }
 }
