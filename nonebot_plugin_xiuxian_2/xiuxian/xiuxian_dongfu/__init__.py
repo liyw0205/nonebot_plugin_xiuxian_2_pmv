@@ -244,7 +244,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"位置：{d.get('realm')}·{d.get('heaven')}·{d.get('node_name')}\n"
         f"阵法等级：{d.get('array_level', 0)}\n"
         f"种植状态：{pmsg}\n"
-        f"今日剩余可被潜入intr    msgdong_cost, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+        f"今日剩余可被潜入次数：{intrude_left}"
+    )
+    await handle_send(bot, event, msg)
+
+
+@dongfu_plant.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
     if not ok:
@@ -259,7 +265,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     now = _now()
 
-    # 收获
+    # =========================
+    # 收获逻辑：若当前正在种植
+    # =========================
     if int(d.get("planting", 0)) == 1:
         finish = _parse_dt(d.get("plant_finish", ""))
         if finish and now >= finish:
@@ -267,6 +275,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             array_lv = int(d.get("array_level", 0))
             drops = _roll_harvest(seed_id, array_lv)
 
+            # 清空种植状态
             d["planting"] = 0
             d["plant_seed_id"] = 0
             d["plant_start"] = ""
@@ -277,10 +286,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 await handle_send(bot, event, "收获失败，灵田无产出。")
                 return
 
-            lines = ["洞府收获完成："]
+            lines = ["🌾 洞府收获完成："]
             for gid, name, tp, num in drops:
                 sql_message.send_back(uid, gid, name, tp, num, 1)
                 lines.append(f"- {name} x{num}")
+
             await handle_send(bot, event, "\n".join(lines))
             return
         else:
@@ -288,7 +298,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, f"灵田仍在生长中，约剩余{remain}分钟。")
             return
 
-    # 播种
+    # =========================
+    # 播种逻辑：当前空闲时
+    # =========================
     seed_name = args.extract_plain_text().strip()
     if not seed_name:
         await handle_send(bot, event, "请指定种子名，例如：洞府种植 青灵草种")
@@ -299,6 +311,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if conf["name"] == seed_name:
             seed_id = sid
             break
+
     if seed_id is None:
         await handle_send(bot, event, f"未识别种子【{seed_name}】。")
         return
@@ -308,8 +321,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"你没有【{seed_name}】，请先去种子商店购买。")
         return
 
+    # 扣种子
     sql_message.update_back_j(uid, seed_id, 1)
 
+    # 阵法加速（平衡后：每级4%）
     array_lv = int(d.get("array_level", 0))
     base_minutes = int(SEED_CONFIG[seed_id]["minutes"])
     speed = 1 + array_lv * 0.04
@@ -391,15 +406,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @infiltrate_dongfu.handle(parameterless=[Cooldown(cd_time=1.8, stamina_cost=INFILTRATE_STAMINA)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    潜入洞府 道号
-    规则：
-    1. 目标必须在附近（同节点）
-    2. 目标必须有洞府且正在种植
-    3. 每个洞府每天最多被潜入3次
-    4. 阵法等级越高越容易发现
-    5. 成功只偷部分材料，不偷全部
-    """
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
     if not ok:
@@ -447,29 +453,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "目标洞府种植数据异常。")
         return
 
-    # 先占用今日被潜入次数
+    # 占用目标当日被潜入次数
     current_intrude = _consume_intrude_count(target_uid)
 
     now = _now()
     array_lv = int(td.get("array_level", 0))
 
-    # 阵法发现概率：基础20%，每级+6%，最高80%
     detect_rate = min(0.80, 0.20 + array_lv * 0.06)
-
-    # 若作物已成熟，偷取率更高；未成熟则偷苗/偷灵机，收益更少
     matured = now >= finish
-
-    if matured:
-        # 成熟时：可偷部分成品
-        success_rate = max(0.20, 0.72 - array_lv * 0.04)
-    else:
-        # 未成熟时：更难偷到，只能窃取少量“灵机”
-        success_rate = max(0.12, 0.45 - array_lv * 0.03)
+    success_rate = max(0.20, 0.72 - array_lv * 0.04) if matured else max(0.12, 0.45 - array_lv * 0.03)
 
     detected = random.random() < detect_rate
     success = random.random() < success_rate
 
-    # 被发现后的惩罚
     if detected and not success:
         loss_stone = random.randint(50000, 200000) * max(1, array_lv)
         sql_message.update_ls(my_uid, loss_stone, 2)
@@ -484,43 +480,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         return
 
-    if detected and success:
-        # 成功偷到但被发现，收益打折
-        stealth_penalty = 0.6
-    else:
-        stealth_penalty = 1.0
-
+    stealth_penalty = 0.6 if (detected and success) else 1.0
     rewards = []
 
     if matured:
-        # 模拟偷取最终收获的一部分，不清空对方作物
         all_drops = _roll_harvest(seed_id, array_lv)
-        if not all_drops:
-            left = max(0, INFILTRATE_DAILY_LIMIT - current_intrude)
-            await handle_send(
-                bot,
-                event,
-                f"你潜入了【{tname}】的洞府，但灵田气息微弱，未能偷到任何东西。\n"
-                f"该洞府今日剩余可被潜入次数：{left}"
-            )
-            return
+        if all_drops:
+            take_n = max(1, min(len(all_drops), int(len(all_drops) * 0.5)))
+            random.shuffle(all_drops)
+            steal_drops = all_drops[:take_n]
+            if stealth_penalty < 1.0 and len(steal_drops) > 1:
+                steal_drops = steal_drops[:max(1, len(steal_drops) // 2)]
 
-        # 只偷其中一部分：至少1个，至多一半
-        take_n = max(1, min(len(all_drops), int(len(all_drops) * 0.5)))
-        random.shuffle(all_drops)
-        steal_drops = all_drops[:take_n]
-
-        # 若被发现仍成功，则再砍一半
-        if stealth_penalty < 1.0 and len(steal_drops) > 1:
-            steal_drops = steal_drops[:max(1, len(steal_drops) // 2)]
-
-        for gid, name, tp, num in steal_drops:
-            sql_message.send_back(my_uid, gid, name, tp, num, 1)
-            rewards.append(f"{name} x{num}")
-
+            for gid, name, tp, num in steal_drops:
+                sql_message.send_back(my_uid, gid, name, tp, num, 1)
+                rewards.append(f"{name} x{num}")
     else:
-        # 未成熟：偷“灵机” => 少量低档材料/灵石
-        temp_rewards = []
         conf = SEED_CONFIG.get(seed_id, {})
         pool_name = conf.get("pool", "herb_low")
 
@@ -529,7 +504,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         elif pool_name == "herb_mid":
             pool = HERB_MID[:8]
         elif pool_name == "god_low":
-            # 未成熟神种不给高神物，只给低档替代资源
             pool = HERB_MID[:8]
         else:
             pool = HERB_LOW[:8]
@@ -543,15 +517,31 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             item = items.get_data_by_item_id(gid)
             if item:
                 sql_message.send_back(my_uid, gid, item["name"], item.get("type", "药材"), 1, 1)
-                temp_rewards.append(f"{item['name']} x1")
+                rewards.append(f"{item['name']} x1")
 
-        # 附带少量灵石
         ls_gain = int(random.randint(30000, 80000) * stealth_penalty)
         if ls_gain > 0:
             sql_message.update_ls(my_uid, ls_gain, 1)
-            temp_rewards.append(f"灵石 x{number_to(ls_gain)}")
+            rewards.append(f"灵石 x{number_to(ls_gain)}")
 
-        rewards = temp_rewards
+    # ===== 新增：偷取成功时，目标增加种植时间 =====
+    added_minutes = 0
+    if success and rewards:
+        # 成熟被偷影响更大，未成熟影响较小；阵法高会造成更强“反制扰动”
+        if matured:
+            base_delay = random.randint(20, 45)
+        else:
+            base_delay = random.randint(8, 20)
+
+        added_minutes = base_delay + int(array_lv * 2)
+
+        # 上限保护：单次最多+180分钟
+        added_minutes = min(180, added_minutes)
+
+        old_finish = finish
+        new_finish = old_finish + timedelta(minutes=added_minutes)
+        td["plant_finish"] = _fmt_dt(new_finish)
+        _save_dongfu(target_uid, td)
 
     left = max(0, INFILTRATE_DAILY_LIMIT - current_intrude)
 
@@ -572,16 +562,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             )
         return
 
+    delay_msg = f"\n对方灵田受扰，生长时间额外增加 {added_minutes} 分钟。" if added_minutes > 0 else ""
+
     if detected:
         msg = (
             f"⚠️ 你潜入【{tname}】洞府时触动阵纹，但仍抢先带走部分灵材！\n"
-            f"获得：{'、'.join(rewards)}\n"
+            f"获得：{'、'.join(rewards)}"
+            f"{delay_msg}\n"
             f"该洞府今日剩余可被潜入次数：{left}"
         )
     else:
         msg = (
             f"🕶️ 你悄然潜入【{tname}】的洞府，顺走了一批灵材。\n"
-            f"获得：{'、'.join(rewards)}\n"
+            f"获得：{'、'.join(rewards)}"
+            f"{delay_msg}\n"
             f"该洞府今日剩余可被潜入次数：{left}"
         )
 
