@@ -32,13 +32,13 @@ tianti_level_help = on_command("炼体境界", priority=10, block=True)
 
 def _get_tianti_cap(data: dict) -> int:
     """
-    上限规则：next_need_hp * closing_exp_upper_limit - 1
+    上限规则：next_need_hp * closing_exp_upper_limit
     """
     next_name = get_next_tianti_level_name(data["tianti_level"])
     if not next_name:
         return 10**30
     need_hp = int(get_tianti_level_data(next_name)["need_hp"])
-    return max(0, int(need_hp * XiuConfig().closing_exp_upper_limit) - 1)
+    return int(need_hp * XiuConfig().closing_exp_upper_limit)
 
 
 def _calc_qiaoxue_bonus(data: dict):
@@ -82,13 +82,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data = tianti_manager.get_user_tianti_info(user_id)
     now_t = datetime.now()
 
-    if not data["last_settle_time"]:
+    # 兼容 None / "None" / "null" / "0" / 空字符串
+    last_settle_str = data.get("last_settle_time")
+    if (not last_settle_str) or str(last_settle_str).strip().lower() in ("none", "null", "0", ""):
         data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
         tianti_manager.save_user_tianti_info(user_id, data)
         await handle_send(bot, event, "已初始化炼体计时，请稍后再来结算。")
         return
 
-    last_t = datetime.strptime(data["last_settle_time"], "%Y-%m-%d %H:%M:%S")
+    # 兼容旧格式异常数据
+    try:
+        last_t = datetime.strptime(str(last_settle_str), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
+        tianti_manager.save_user_tianti_info(user_id, data)
+        await handle_send(bot, event, "检测到旧计时数据异常，已自动重置，请稍后再来结算。")
+        return
+
     mins = max(0, int((now_t - last_t).total_seconds() // 60))
     if mins <= 0:
         await handle_send(bot, event, "时间太短，暂无可结算炼体收益。")
@@ -97,11 +107,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     lvl_data = get_tianti_level_data(data["tianti_level"])
     base_per_min = int(lvl_data["hp_gain_per_min"])
 
+    # 窍穴加成
     base_ratio, gain_pct = _calc_qiaoxue_bonus(data)
 
     real_per_min = int(base_per_min * (1 + base_ratio))
     gain = int(mins * real_per_min * (1 + gain_pct))
 
+    # 当前境界上限
     cap = _get_tianti_cap(data)
     old_hp = int(data["tianti_hp"])
     new_hp = min(cap, old_hp + gain)
@@ -134,8 +146,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     stone_cost = int(txt)
-    if stone_cost <= 0:
-        await handle_send(bot, event, "请输入大于0的灵石数量。")
+    if stone_cost <= 9:
+        await handle_send(bot, event, "请输入大于10的灵石数量。")
         return
     if stone_cost > int(user_info["stone"]):
         await handle_send(bot, event, "你的灵石不足。")
@@ -185,20 +197,39 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     need_hp = int(next_cfg["need_hp"])
     min_xx = next_cfg["min_xx_level"]
 
+    # 修仙境界校验
     user_xx_rank = get_tianti_level_index(user_info["level"], is_xiuxian=True)
     need_xx_rank = get_tianti_level_index(min_xx, is_xiuxian=True)
     if user_xx_rank > need_xx_rank:
         await handle_send(bot, event, f"突破失败：修仙境界不足，需达到【{min_xx}】。")
         return
 
-    if int(data["tianti_hp"]) < need_hp:
+    cur_hp = int(data["tianti_hp"])
+    if cur_hp < need_hp:
         await handle_send(bot, event, f"突破失败：炼体气血不足，需{number_to(need_hp)}。")
         return
 
-    data["tianti_level"] = next_name
-    tianti_manager.save_user_tianti_info(user_id, data)
-    await handle_send(bot, event, f"炼体突破成功！当前境界：{next_name}")
+    # 无论成败先扣 5% 当前气血
+    cost_hp = max(1, int(cur_hp * 0.05))
+    data["tianti_hp"] = max(0, cur_hp - cost_hp)
 
+    # 固定 50% 成功率
+    success = random.random() < 0.5
+    if success:
+        data["tianti_level"] = next_name
+        tianti_manager.save_user_tianti_info(user_id, data)
+        await handle_send(
+            bot, event,
+            f"炼体突破成功！当前境界：{next_name}\n"
+            f"本次消耗炼体气血：{number_to(cost_hp)}"
+        )
+    else:
+        tianti_manager.save_user_tianti_info(user_id, data)
+        await handle_send(
+            bot, event,
+            f"炼体突破失败！\n"
+            f"本次消耗炼体气血：{number_to(cost_hp)}"
+        )
 
 @tianti_info.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -236,7 +267,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @tianti_chongqiao.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
-    冲窍：只读取固定 effect_value
+    冲窍
     """
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -288,13 +319,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data["qiaoxue_stage_opened"] = stage_opened_map
 
     tianti_manager.save_user_tianti_info(user_id, data)
+    effect_cn = _effect_type_cn(chosen["effect_type"])
 
     await handle_send(
         bot, event,
         f"冲窍成功！\n"
         f"消耗炼体气血：{number_to(cost)}\n"
         f"新开窍穴：{chosen['name']}\n"
-        f"效果：{chosen['effect_type']} +{real_val * 100:.2f}%\n"
+        f"效果：{effect_cn} +{real_val * 100:.2f}%\n"
         f"当前【{stage_name}】已开：{stage_opened_map[stage_name]}/3"
     )
 
