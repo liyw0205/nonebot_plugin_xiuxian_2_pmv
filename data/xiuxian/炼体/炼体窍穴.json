@@ -1,0 +1,769 @@
+{
+  "meta": {
+    "total": 108,
+    "tiangang": 36,
+    "disha": 72,
+    "effect_types": {
+      "base_per_min_ratio": "每分钟基础气血收益倍率加成",
+      "hp_gain_pct": "获得气血百分比加成"
+    }
+  },
+  "窍穴": [
+    {
+      "id": 1,
+      "name": "天罡·魁星窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0046
+    },
+    {
+      "id": 2,
+      "name": "天罡·天罡窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0053
+    },
+    {
+      "id": 3,
+      "name": "天罡·天机窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0055
+    },
+    {
+      "id": 4,
+      "name": "天罡·天闲窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0056
+    },
+    {
+      "id": 5,
+      "name": "天罡·天勇窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0048
+    },
+    {
+      "id": 6,
+      "name": "天罡·天雄窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0051
+    },
+    {
+      "id": 7,
+      "name": "天罡·天猛窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0055
+    },
+    {
+      "id": 8,
+      "name": "天罡·天威窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0055
+    },
+    {
+      "id": 9,
+      "name": "天罡·天英窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0046
+    },
+    {
+      "id": 10,
+      "name": "天罡·天贵窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0053
+    },
+    {
+      "id": 11,
+      "name": "天罡·天富窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0042
+    },
+    {
+      "id": 12,
+      "name": "天罡·天满窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0042
+    },
+    {
+      "id": 13,
+      "name": "天罡·天孤窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0048
+    },
+    {
+      "id": 14,
+      "name": "天罡·天伤窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0041
+    },
+    {
+      "id": 15,
+      "name": "天罡·天立窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0045
+    },
+    {
+      "id": 16,
+      "name": "天罡·天捷窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0048
+    },
+    {
+      "id": 17,
+      "name": "天罡·天暗窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0051
+    },
+    {
+      "id": 18,
+      "name": "天罡·天佑窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0058
+    },
+    {
+      "id": 19,
+      "name": "天罡·天空窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0059
+    },
+    {
+      "id": 20,
+      "name": "天罡·天速窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0058
+    },
+    {
+      "id": 21,
+      "name": "天罡·天异窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0058
+    },
+    {
+      "id": 22,
+      "name": "天罡·天杀窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0044
+    },
+    {
+      "id": 23,
+      "name": "天罡·天微窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0057
+    },
+    {
+      "id": 24,
+      "name": "天罡·天究窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.005
+    },
+    {
+      "id": 25,
+      "name": "天罡·天退窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0059
+    },
+    {
+      "id": 26,
+      "name": "天罡·天寿窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0044
+    },
+    {
+      "id": 27,
+      "name": "天罡·天剑窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0041
+    },
+    {
+      "id": 28,
+      "name": "天罡·天平窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0058
+    },
+    {
+      "id": 29,
+      "name": "天罡·天罪窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0045
+    },
+    {
+      "id": 30,
+      "name": "天罡·天损窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0054
+    },
+    {
+      "id": 31,
+      "name": "天罡·天败窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0051
+    },
+    {
+      "id": 32,
+      "name": "天罡·天牢窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0043
+    },
+    {
+      "id": 33,
+      "name": "天罡·天慧窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0043
+    },
+    {
+      "id": 34,
+      "name": "天罡·天暴窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0048
+    },
+    {
+      "id": 35,
+      "name": "天罡·天哭窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.005
+    },
+    {
+      "id": 36,
+      "name": "天罡·天巧窍",
+      "group": "天罡",
+      "effect_type": "base_per_min_ratio",
+      "effect_value": 0.0043
+    },
+    {
+      "id": 37,
+      "name": "地煞·地魁窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 38,
+      "name": "地煞·地煞窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 39,
+      "name": "地煞·地勇窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0036
+    },
+    {
+      "id": 40,
+      "name": "地煞·地杰窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 41,
+      "name": "地煞·地雄窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 42,
+      "name": "地煞·地威窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 43,
+      "name": "地煞·地英窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 44,
+      "name": "地煞·地奇窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 45,
+      "name": "地煞·地猛窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 46,
+      "name": "地煞·地文窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 47,
+      "name": "地煞·地正窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 48,
+      "name": "地煞·地阔窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 49,
+      "name": "地煞·地阖窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 50,
+      "name": "地煞·地强窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 51,
+      "name": "地煞·地暗窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 52,
+      "name": "地煞·地轴窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 53,
+      "name": "地煞·地会窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 54,
+      "name": "地煞·地佐窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 55,
+      "name": "地煞·地佑窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 56,
+      "name": "地煞·地灵窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 57,
+      "name": "地煞·地兽窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 58,
+      "name": "地煞·地微窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0024
+    },
+    {
+      "id": 59,
+      "name": "地煞·地慧窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 60,
+      "name": "地煞·地暴窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0036
+    },
+    {
+      "id": 61,
+      "name": "地煞·地默窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 62,
+      "name": "地煞·地退窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 63,
+      "name": "地煞·地满窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 64,
+      "name": "地煞·地遂窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 65,
+      "name": "地煞·地周窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 66,
+      "name": "地煞·地隐窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 67,
+      "name": "地煞·地异窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 68,
+      "name": "地煞·地理窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 69,
+      "name": "地煞·地俊窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 70,
+      "name": "地煞·地乐窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0025
+    },
+    {
+      "id": 71,
+      "name": "地煞·地捷窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 72,
+      "name": "地煞·地速窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0032
+    },
+    {
+      "id": 73,
+      "name": "地煞·地镇窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 74,
+      "name": "地煞·地稽窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0036
+    },
+    {
+      "id": 75,
+      "name": "地煞·地魔窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 76,
+      "name": "地煞·地妖窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 77,
+      "name": "地煞·地鬼窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0024
+    },
+    {
+      "id": 78,
+      "name": "地煞·地阴窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 79,
+      "name": "地煞·地阳窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 80,
+      "name": "地煞·地魄窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 81,
+      "name": "地煞·地魂窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 82,
+      "name": "地煞·地机窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 83,
+      "name": "地煞·地玄窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.003
+    },
+    {
+      "id": 84,
+      "name": "地煞·地黄窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0025
+    },
+    {
+      "id": 85,
+      "name": "地煞·地宇窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0036
+    },
+    {
+      "id": 86,
+      "name": "地煞·地宙窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 87,
+      "name": "地煞·地洪窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0024
+    },
+    {
+      "id": 88,
+      "name": "地煞·地荒窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.003
+    },
+    {
+      "id": 89,
+      "name": "地煞·地日窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 90,
+      "name": "地煞·地月窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 91,
+      "name": "地煞·地星窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0027
+    },
+    {
+      "id": 92,
+      "name": "地煞·地辰窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0036
+    },
+    {
+      "id": 93,
+      "name": "地煞·地山窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 94,
+      "name": "地煞·地川窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 95,
+      "name": "地煞·地泽窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0031
+    },
+    {
+      "id": 96,
+      "name": "地煞·地火窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 97,
+      "name": "地煞·地风窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 98,
+      "name": "地煞·地雷窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 99,
+      "name": "地煞·地电窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0035
+    },
+    {
+      "id": 100,
+      "name": "地煞·地雨窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 101,
+      "name": "地煞·地雪窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0026
+    },
+    {
+      "id": 102,
+      "name": "地煞·地霜窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0028
+    },
+    {
+      "id": 103,
+      "name": "地煞·地云窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0033
+    },
+    {
+      "id": 104,
+      "name": "地煞·地雾窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.003
+    },
+    {
+      "id": 105,
+      "name": "地煞·地岚窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0025
+    },
+    {
+      "id": 106,
+      "name": "地煞·地霆窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0034
+    },
+    {
+      "id": 107,
+      "name": "地煞·地焰窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0029
+    },
+    {
+      "id": 108,
+      "name": "地煞·地渊窍",
+      "group": "地煞",
+      "effect_type": "hp_gain_pct",
+      "effect_value": 0.0062
+    }
+  ]
+}

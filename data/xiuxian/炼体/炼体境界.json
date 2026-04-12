@@ -1,0 +1,727 @@
+{
+  "淬体境一重": {
+    "rank": 1,
+    "need_hp": 0,
+    "hp_gain_per_min": 80,
+    "hp_to_atk": 100,
+    "min_xx_level": "江湖好手",
+    "desc": "炼体入门，淬炼皮膜。"
+  },
+  "淬体境二重": {
+    "rank": 2,
+    "need_hp": 12000,
+    "hp_gain_per_min": 90,
+    "hp_to_atk": 100,
+    "min_xx_level": "感气境初期",
+    "desc": "筋骨初成，耐力渐增。"
+  },
+  "淬体境三重": {
+    "rank": 3,
+    "need_hp": 30000,
+    "hp_gain_per_min": 100,
+    "hp_to_atk": 100,
+    "min_xx_level": "感气境中期",
+    "desc": "血肉更盛，体魄稳固。"
+  },
+  "淬体境四重": {
+    "rank": 4,
+    "need_hp": 55000,
+    "hp_gain_per_min": 112,
+    "hp_to_atk": 100,
+    "min_xx_level": "感气境圆满",
+    "desc": "皮骨齐鸣，气血奔腾。"
+  },
+  "淬体境五重": {
+    "rank": 5,
+    "need_hp": 90000,
+    "hp_gain_per_min": 125,
+    "hp_to_atk": 100,
+    "min_xx_level": "练气境初期",
+    "desc": "血气如炉，抗击增强。"
+  },
+  "淬体境六重": {
+    "rank": 6,
+    "need_hp": 140000,
+    "hp_gain_per_min": 140,
+    "hp_to_atk": 100,
+    "min_xx_level": "练气境中期",
+    "desc": "筋络贯通，力量上涨。"
+  },
+  "淬体境七重": {
+    "rank": 7,
+    "need_hp": 210000,
+    "hp_gain_per_min": 158,
+    "hp_to_atk": 100,
+    "min_xx_level": "练气境圆满",
+    "desc": "脏腑凝练，体质蜕变。"
+  },
+  "淬体境八重": {
+    "rank": 8,
+    "need_hp": 300000,
+    "hp_gain_per_min": 178,
+    "hp_to_atk": 100,
+    "min_xx_level": "筑基境初期",
+    "desc": "肉身沉稳，攻守兼备。"
+  },
+  "淬体境九重": {
+    "rank": 9,
+    "need_hp": 420000,
+    "hp_gain_per_min": 200,
+    "hp_to_atk": 100,
+    "min_xx_level": "筑基境中期",
+    "desc": "体魄大成，气血充盈。"
+  },
+  "淬体境十重": {
+    "rank": 10,
+    "need_hp": 580000,
+    "hp_gain_per_min": 225,
+    "hp_to_atk": 100,
+    "min_xx_level": "筑基境圆满",
+    "desc": "淬体圆满，准备冲击更高层次。"
+  },
+  "金刚境一重": {
+    "rank": 11,
+    "need_hp": 800000,
+    "hp_gain_per_min": 255,
+    "hp_to_atk": 100,
+    "min_xx_level": "结丹境初期",
+    "desc": "肉身如铁，恢复迅速。"
+  },
+  "金刚境二重": {
+    "rank": 12,
+    "need_hp": 1100000,
+    "hp_gain_per_min": 290,
+    "hp_to_atk": 100,
+    "min_xx_level": "结丹境中期",
+    "desc": "筋骨若钢，冲击力提升。"
+  },
+  "金刚境三重": {
+    "rank": 13,
+    "need_hp": 1500000,
+    "hp_gain_per_min": 330,
+    "hp_to_atk": 100,
+    "min_xx_level": "结丹境圆满",
+    "desc": "气血厚重，战场持久。"
+  },
+  "金刚境四重": {
+    "rank": 14,
+    "need_hp": 2050000,
+    "hp_gain_per_min": 378,
+    "hp_to_atk": 100,
+    "min_xx_level": "金丹境初期",
+    "desc": "体若金刚，杀伐强横。"
+  },
+  "金刚境五重": {
+    "rank": 15,
+    "need_hp": 2800000,
+    "hp_gain_per_min": 435,
+    "hp_to_atk": 100,
+    "min_xx_level": "金丹境中期",
+    "desc": "内外合一，血力如潮。"
+  },
+  "金刚境六重": {
+    "rank": 16,
+    "need_hp": 3800000,
+    "hp_gain_per_min": 500,
+    "hp_to_atk": 100,
+    "min_xx_level": "金丹境圆满",
+    "desc": "金刚中期，愈战愈勇。"
+  },
+  "金刚境七重": {
+    "rank": 17,
+    "need_hp": 5100000,
+    "hp_gain_per_min": 575,
+    "hp_to_atk": 100,
+    "min_xx_level": "元神境初期",
+    "desc": "体魄压制，刚猛无俦。"
+  },
+  "金刚境八重": {
+    "rank": 18,
+    "need_hp": 6800000,
+    "hp_gain_per_min": 660,
+    "hp_to_atk": 100,
+    "min_xx_level": "元神境中期",
+    "desc": "血肉再塑，根骨通透。"
+  },
+  "金刚境九重": {
+    "rank": 19,
+    "need_hp": 9000000,
+    "hp_gain_per_min": 760,
+    "hp_to_atk": 100,
+    "min_xx_level": "元神境圆满",
+    "desc": "金刚极境，气血滔天。"
+  },
+  "金刚境十重": {
+    "rank": 20,
+    "need_hp": 12000000,
+    "hp_gain_per_min": 880,
+    "hp_to_atk": 100,
+    "min_xx_level": "化神境初期",
+    "desc": "金刚圆满，迈向神体。"
+  },
+  "龙象境一重": {
+    "rank": 21,
+    "need_hp": 15500000,
+    "hp_gain_per_min": 1020,
+    "hp_to_atk": 100,
+    "min_xx_level": "化神境中期",
+    "desc": "龙象初现，筋骨轰鸣。"
+  },
+  "龙象境二重": {
+    "rank": 22,
+    "need_hp": 19800000,
+    "hp_gain_per_min": 1180,
+    "hp_to_atk": 100,
+    "min_xx_level": "化神境圆满",
+    "desc": "象力入髓，体魄再升。"
+  },
+  "龙象境三重": {
+    "rank": 23,
+    "need_hp": 25200000,
+    "hp_gain_per_min": 1360,
+    "hp_to_atk": 100,
+    "min_xx_level": "炼神境初期",
+    "desc": "龙力贯脉，血海翻腾。"
+  },
+  "龙象境四重": {
+    "rank": 24,
+    "need_hp": 32000000,
+    "hp_gain_per_min": 1560,
+    "hp_to_atk": 100,
+    "min_xx_level": "炼神境中期",
+    "desc": "龙象并驱，威势初成。"
+  },
+  "龙象境五重": {
+    "rank": 25,
+    "need_hp": 40500000,
+    "hp_gain_per_min": 1780,
+    "hp_to_atk": 100,
+    "min_xx_level": "炼神境圆满",
+    "desc": "身若古岳，力镇八荒。"
+  },
+  "龙象境六重": {
+    "rank": 26,
+    "need_hp": 51000000,
+    "hp_gain_per_min": 2030,
+    "hp_to_atk": 100,
+    "min_xx_level": "返虚境初期",
+    "desc": "龙象合鸣，内劲如潮。"
+  },
+  "龙象境七重": {
+    "rank": 27,
+    "need_hp": 64000000,
+    "hp_gain_per_min": 2310,
+    "hp_to_atk": 100,
+    "min_xx_level": "返虚境中期",
+    "desc": "骨若神铁，百战不疲。"
+  },
+  "龙象境八重": {
+    "rank": 28,
+    "need_hp": 80000000,
+    "hp_gain_per_min": 2630,
+    "hp_to_atk": 100,
+    "min_xx_level": "返虚境圆满",
+    "desc": "龙象真形，气血冲霄。"
+  },
+  "龙象境九重": {
+    "rank": 29,
+    "need_hp": 100000000,
+    "hp_gain_per_min": 2990,
+    "hp_to_atk": 100,
+    "min_xx_level": "大乘境初期",
+    "desc": "体魄无瑕，战意无穷。"
+  },
+  "龙象境十重": {
+    "rank": 30,
+    "need_hp": 125000000,
+    "hp_gain_per_min": 3400,
+    "hp_to_atk": 100,
+    "min_xx_level": "大乘境中期",
+    "desc": "龙象圆满，半步神藏。"
+  },
+
+  "神藏境一重": {
+    "rank": 31,
+    "need_hp": 156000000,
+    "hp_gain_per_min": 3870,
+    "hp_to_atk": 100,
+    "min_xx_level": "大乘境圆满",
+    "desc": "神藏初开，生机如海。"
+  },
+  "神藏境二重": {
+    "rank": 32,
+    "need_hp": 194000000,
+    "hp_gain_per_min": 4410,
+    "hp_to_atk": 100,
+    "min_xx_level": "虚道境初期",
+    "desc": "血海凝神，体内藏真。"
+  },
+  "神藏境三重": {
+    "rank": 33,
+    "need_hp": 242000000,
+    "hp_gain_per_min": 5030,
+    "hp_to_atk": 100,
+    "min_xx_level": "虚道境中期",
+    "desc": "神藏稳固，气机自成。"
+  },
+  "神藏境四重": {
+    "rank": 34,
+    "need_hp": 302000000,
+    "hp_gain_per_min": 5740,
+    "hp_to_atk": 100,
+    "min_xx_level": "虚道境圆满",
+    "desc": "内藏乾坤，举手裂石。"
+  },
+  "神藏境五重": {
+    "rank": 35,
+    "need_hp": 377000000,
+    "hp_gain_per_min": 6550,
+    "hp_to_atk": 100,
+    "min_xx_level": "斩我境初期",
+    "desc": "神藏中期，体魄通灵。"
+  },
+  "神藏境六重": {
+    "rank": 36,
+    "need_hp": 470000000,
+    "hp_gain_per_min": 7480,
+    "hp_to_atk": 100,
+    "min_xx_level": "斩我境中期",
+    "desc": "神血流转，生生不息。"
+  },
+  "神藏境七重": {
+    "rank": 37,
+    "need_hp": 586000000,
+    "hp_gain_per_min": 8540,
+    "hp_to_atk": 100,
+    "min_xx_level": "斩我境圆满",
+    "desc": "肉身映神，威压四方。"
+  },
+  "神藏境八重": {
+    "rank": 38,
+    "need_hp": 730000000,
+    "hp_gain_per_min": 9760,
+    "hp_to_atk": 100,
+    "min_xx_level": "遁一境初期",
+    "desc": "神藏八重，势若洪涛。"
+  },
+  "神藏境九重": {
+    "rank": 39,
+    "need_hp": 910000000,
+    "hp_gain_per_min": 11150,
+    "hp_to_atk": 100,
+    "min_xx_level": "遁一境中期",
+    "desc": "神光护体，万法难侵。"
+  },
+  "神藏境十重": {
+    "rank": 40,
+    "need_hp": 1130000000,
+    "hp_gain_per_min": 12750,
+    "hp_to_atk": 100,
+    "min_xx_level": "遁一境圆满",
+    "desc": "神藏圆满，迈向圣体。"
+  },
+
+  "圣体境一重": {
+    "rank": 41,
+    "need_hp": 1400000000,
+    "hp_gain_per_min": 14580,
+    "hp_to_atk": 100,
+    "min_xx_level": "至尊境初期",
+    "desc": "圣体初凝，万邪难染。"
+  },
+  "圣体境二重": {
+    "rank": 42,
+    "need_hp": 1730000000,
+    "hp_gain_per_min": 16680,
+    "hp_to_atk": 100,
+    "min_xx_level": "至尊境中期",
+    "desc": "圣纹隐现，体魄超凡。"
+  },
+  "圣体境三重": {
+    "rank": 43,
+    "need_hp": 2140000000,
+    "hp_gain_per_min": 19080,
+    "hp_to_atk": 100,
+    "min_xx_level": "至尊境圆满",
+    "desc": "圣血奔流，撼山断岳。"
+  },
+  "圣体境四重": {
+    "rank": 44,
+    "need_hp": 2650000000,
+    "hp_gain_per_min": 21830,
+    "hp_to_atk": 100,
+    "min_xx_level": "微光境初期",
+    "desc": "圣体大成，生机无尽。"
+  },
+  "圣体境五重": {
+    "rank": 45,
+    "need_hp": 3280000000,
+    "hp_gain_per_min": 24970,
+    "hp_to_atk": 100,
+    "min_xx_level": "微光境中期",
+    "desc": "气血化霞，百炼不灭。"
+  },
+  "圣体境六重": {
+    "rank": 46,
+    "need_hp": 4060000000,
+    "hp_gain_per_min": 28570,
+    "hp_to_atk": 100,
+    "min_xx_level": "微光境圆满",
+    "desc": "圣体六重，战意冲霄。"
+  },
+  "圣体境七重": {
+    "rank": 47,
+    "need_hp": 5030000000,
+    "hp_gain_per_min": 32680,
+    "hp_to_atk": 100,
+    "min_xx_level": "星芒境初期",
+    "desc": "躯壳若圣兵，坚不可摧。"
+  },
+  "圣体境八重": {
+    "rank": 48,
+    "need_hp": 6240000000,
+    "hp_gain_per_min": 37390,
+    "hp_to_atk": 100,
+    "min_xx_level": "星芒境中期",
+    "desc": "圣辉护体，神勇无双。"
+  },
+  "圣体境九重": {
+    "rank": 49,
+    "need_hp": 7740000000,
+    "hp_gain_per_min": 42780,
+    "hp_to_atk": 100,
+    "min_xx_level": "星芒境圆满",
+    "desc": "圣体巅峰，举世罕敌。"
+  },
+  "圣体境十重": {
+    "rank": 50,
+    "need_hp": 9600000000,
+    "hp_gain_per_min": 48950,
+    "hp_to_atk": 100,
+    "min_xx_level": "月华境初期",
+    "desc": "圣体圆满，启玄黄门。"
+  },
+  "玄黄境一重": {
+    "rank": 51,
+    "need_hp": 11900000000,
+    "hp_gain_per_min": 56000,
+    "hp_to_atk": 100,
+    "min_xx_level": "月华境中期",
+    "desc": "玄黄初启，混元为基。"
+  },
+  "玄黄境二重": {
+    "rank": 52,
+    "need_hp": 14700000000,
+    "hp_gain_per_min": 64100,
+    "hp_to_atk": 100,
+    "min_xx_level": "月华境圆满",
+    "desc": "玄黄之气，淬炼周身。"
+  },
+  "玄黄境三重": {
+    "rank": 53,
+    "need_hp": 18200000000,
+    "hp_gain_per_min": 73300,
+    "hp_to_atk": 100,
+    "min_xx_level": "耀日境初期",
+    "desc": "体内乾坤，气血自生。"
+  },
+  "玄黄境四重": {
+    "rank": 54,
+    "need_hp": 22500000000,
+    "hp_gain_per_min": 83800,
+    "hp_to_atk": 100,
+    "min_xx_level": "耀日境中期",
+    "desc": "玄黄四转，筋骨通玄。"
+  },
+  "玄黄境五重": {
+    "rank": 55,
+    "need_hp": 27800000000,
+    "hp_gain_per_min": 95800,
+    "hp_to_atk": 100,
+    "min_xx_level": "耀日境圆满",
+    "desc": "五脏如炉，血气冲关。"
+  },
+  "玄黄境六重": {
+    "rank": 56,
+    "need_hp": 34400000000,
+    "hp_gain_per_min": 109500,
+    "hp_to_atk": 100,
+    "min_xx_level": "祭道境初期",
+    "desc": "玄黄六重，体若天柱。"
+  },
+  "玄黄境七重": {
+    "rank": 57,
+    "need_hp": 42600000000,
+    "hp_gain_per_min": 125200,
+    "hp_to_atk": 100,
+    "min_xx_level": "祭道境中期",
+    "desc": "玄黄神辉，照彻百脉。"
+  },
+  "玄黄境八重": {
+    "rank": 58,
+    "need_hp": 52700000000,
+    "hp_gain_per_min": 143100,
+    "hp_to_atk": 100,
+    "min_xx_level": "祭道境圆满",
+    "desc": "体魄凝界，战意无疆。"
+  },
+  "玄黄境九重": {
+    "rank": 59,
+    "need_hp": 65200000000,
+    "hp_gain_per_min": 163600,
+    "hp_to_atk": 100,
+    "min_xx_level": "自在境初期",
+    "desc": "玄黄九极，万力归一。"
+  },
+  "玄黄境十重": {
+    "rank": 60,
+    "need_hp": 80600000000,
+    "hp_gain_per_min": 187000,
+    "hp_to_atk": 100,
+    "min_xx_level": "自在境中期",
+    "desc": "玄黄圆满，太初将启。"
+  },
+
+  "太初境一重": {
+    "rank": 61,
+    "need_hp": 99600000000,
+    "hp_gain_per_min": 213800,
+    "hp_to_atk": 100,
+    "min_xx_level": "自在境圆满",
+    "desc": "太初一炁，返本归元。"
+  },
+  "太初境二重": {
+    "rank": 62,
+    "need_hp": 123000000000,
+    "hp_gain_per_min": 244400,
+    "hp_to_atk": 100,
+    "min_xx_level": "破虚境初期",
+    "desc": "太初演化，血海如渊。"
+  },
+  "太初境三重": {
+    "rank": 63,
+    "need_hp": 152000000000,
+    "hp_gain_per_min": 279400,
+    "hp_to_atk": 100,
+    "min_xx_level": "破虚境中期",
+    "desc": "太初三转，体若古星。"
+  },
+  "太初境四重": {
+    "rank": 64,
+    "need_hp": 188000000000,
+    "hp_gain_per_min": 319400,
+    "hp_to_atk": 100,
+    "min_xx_level": "破虚境圆满",
+    "desc": "太初道纹，铭刻骨血。"
+  },
+  "太初境五重": {
+    "rank": 65,
+    "need_hp": 233000000000,
+    "hp_gain_per_min": 365200,
+    "hp_to_atk": 100,
+    "min_xx_level": "无界境初期",
+    "desc": "太初中期，肉身无漏。"
+  },
+  "太初境六重": {
+    "rank": 66,
+    "need_hp": 288000000000,
+    "hp_gain_per_min": 417700,
+    "hp_to_atk": 100,
+    "min_xx_level": "无界境中期",
+    "desc": "体化太初，万法不侵。"
+  },
+  "太初境七重": {
+    "rank": 67,
+    "need_hp": 356000000000,
+    "hp_gain_per_min": 477700,
+    "hp_to_atk": 100,
+    "min_xx_level": "无界境圆满",
+    "desc": "太初七曜，血力无穷。"
+  },
+  "太初境八重": {
+    "rank": 68,
+    "need_hp": 440000000000,
+    "hp_gain_per_min": 546400,
+    "hp_to_atk": 100,
+    "min_xx_level": "混元境初期",
+    "desc": "太初八重，举世难伤。"
+  },
+  "太初境九重": {
+    "rank": 69,
+    "need_hp": 544000000000,
+    "hp_gain_per_min": 625000,
+    "hp_to_atk": 100,
+    "min_xx_level": "混元境中期",
+    "desc": "太初九极，力压群雄。"
+  },
+  "太初境十重": {
+    "rank": 70,
+    "need_hp": 672000000000,
+    "hp_gain_per_min": 714800,
+    "hp_to_atk": 100,
+    "min_xx_level": "混元境圆满",
+    "desc": "太初圆满，鸿蒙将生。"
+  },
+
+  "鸿蒙境一重": {
+    "rank": 71,
+    "need_hp": 830000000000,
+    "hp_gain_per_min": 817600,
+    "hp_to_atk": 100,
+    "min_xx_level": "造化境初期",
+    "desc": "鸿蒙初辟，万象初开。"
+  },
+  "鸿蒙境二重": {
+    "rank": 72,
+    "need_hp": 1025000000000,
+    "hp_gain_per_min": 935300,
+    "hp_to_atk": 100,
+    "min_xx_level": "造化境中期",
+    "desc": "鸿蒙之力，贯穿寰宇。"
+  },
+  "鸿蒙境三重": {
+    "rank": 73,
+    "need_hp": 1265000000000,
+    "hp_gain_per_min": 1069900,
+    "hp_to_atk": 100,
+    "min_xx_level": "造化境圆满",
+    "desc": "鸿蒙三重，血动乾坤。"
+  },
+  "鸿蒙境四重": {
+    "rank": 74,
+    "need_hp": 1560000000000,
+    "hp_gain_per_min": 1224000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境初期",
+    "desc": "鸿蒙道躯，初窥不灭。"
+  },
+  "鸿蒙境五重": {
+    "rank": 75,
+    "need_hp": 1920000000000,
+    "hp_gain_per_min": 1400000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境中期",
+    "desc": "鸿蒙中境，体承万法。"
+  },
+  "鸿蒙境六重": {
+    "rank": 76,
+    "need_hp": 2360000000000,
+    "hp_gain_per_min": 1602000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "鸿蒙六转，神力无尽。"
+  },
+  "鸿蒙境七重": {
+    "rank": 77,
+    "need_hp": 2900000000000,
+    "hp_gain_per_min": 1832000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "鸿蒙七重，气吞万界。"
+  },
+  "鸿蒙境八重": {
+    "rank": 78,
+    "need_hp": 3560000000000,
+    "hp_gain_per_min": 2096000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "鸿蒙八重，肉身化道。"
+  },
+  "鸿蒙境九重": {
+    "rank": 79,
+    "need_hp": 4370000000000,
+    "hp_gain_per_min": 2399000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "鸿蒙九极，万劫不朽。"
+  },
+  "鸿蒙境十重": {
+    "rank": 80,
+    "need_hp": 5360000000000,
+    "hp_gain_per_min": 2745000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "鸿蒙圆满，永恒体在望。"
+  },
+
+  "永恒体一重": {
+    "rank": 81,
+    "need_hp": 6570000000000,
+    "hp_gain_per_min": 3140000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒体初成，不朽之始。"
+  },
+  "永恒体二重": {
+    "rank": 82,
+    "need_hp": 8060000000000,
+    "hp_gain_per_min": 3592000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒神辉，护体不灭。"
+  },
+  "永恒体三重": {
+    "rank": 83,
+    "need_hp": 9880000000000,
+    "hp_gain_per_min": 4109000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒三转，血若星海。"
+  },
+  "永恒体四重": {
+    "rank": 84,
+    "need_hp": 12120000000000,
+    "hp_gain_per_min": 4700000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒四极，道躯无瑕。"
+  },
+  "永恒体五重": {
+    "rank": 85,
+    "need_hp": 14840000000000,
+    "hp_gain_per_min": 5376000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒中境，生机无穷。"
+  },
+  "永恒体六重": {
+    "rank": 86,
+    "need_hp": 18170000000000,
+    "hp_gain_per_min": 6148000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒六重，万法难伤。"
+  },
+  "永恒体七重": {
+    "rank": 87,
+    "need_hp": 22230000000000,
+    "hp_gain_per_min": 7031000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒七曜，镇压八荒。"
+  },
+  "永恒体八重": {
+    "rank": 88,
+    "need_hp": 27190000000000,
+    "hp_gain_per_min": 8040000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒八重，体化天宙。"
+  },
+  "永恒体九重": {
+    "rank": 89,
+    "need_hp": 33250000000000,
+    "hp_gain_per_min": 9195000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒九极，万劫不磨。"
+  },
+  "永恒体十重": {
+    "rank": 90,
+    "need_hp": 40650000000000,
+    "hp_gain_per_min": 10516000,
+    "hp_to_atk": 100,
+    "min_xx_level": "永恒境圆满",
+    "desc": "永恒体大圆满，肉身证道。"
+  }
+}
