@@ -32,14 +32,14 @@ from .team_manager import (
     create_team, add_member_to_team,
     remove_member_from_team, disband_team, get_user_team,
     get_team_info, team_invite_cache, expire_team_invite,
-    load_teams
+    load_teams, save_team
 )
 
 # =========================
 # 组队冷却配置
 # =========================
 TEAM_CD_TABLE = "team_cd"
-TEAM_JOIN_CD_HOURS = 6
+TEAM_JOIN_CD_HOURS = 3
 
 
 def _now_dt():
@@ -119,6 +119,7 @@ kick_team_cmd = on_command("踢出队伍", aliases={"移除队员"}, priority=5,
 disband_team_cmd = on_command("解散队伍", aliases={"解散组队"}, priority=5, block=True)
 view_team_cmd = on_command("查看队伍", aliases={"队伍信息", "我的队伍"}, priority=5, block=True)
 help_team_cmd = on_command("队伍帮助", aliases={"组队帮助", "组队指令"}, priority=5, block=True)
+transfer_team_cmd = on_command("转移队长", aliases={"队长转让", "转让队长"}, priority=5, block=True)
 # ----------副本----------
 # 副本
 dungeon_info = on_command("副本信息", aliases={"今日副本"}, priority=5, block=True)
@@ -153,6 +154,7 @@ __team_help__ = f"""
 踢出队伍 道号 - 踢出队员（队长权限）
 解散队伍 - 解散队伍（队长权限）
 查看队伍 - 查看队伍信息
+转让队长 道号 - 将队长转移给队伍内成员（队长权限）
 组队帮助 - 查看指令
 """.strip()
 
@@ -633,6 +635,76 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     await handle_send(bot, event, msg, md_type="team", k1="探索副本", v1="探索副本", k2="离开队伍", v2="离开队伍", k3="队伍帮助", v3="队伍帮助")
     await view_team_cmd.finish()
+
+
+@transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
+    """转移队长"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await transfer_team_cmd.finish()
+
+    user_id = str(user_info['user_id'])
+
+    team_id = get_user_team(user_id)
+    if not team_id:
+        msg = "你不在任何队伍中！"
+        await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    team_info = get_team_info(team_id)
+    if not team_info:
+        msg = "队伍信息异常！"
+        await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    if team_info['leader'] != user_id:
+        msg = "只有队长才能转移队长职位！"
+        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    arg = args.extract_plain_text().strip()
+    target_user_id = None
+
+    for arg_item in args:
+        if arg_item.type == "at":
+            target_user_id = str(arg_item.data.get("qq", ""))
+            break
+
+    if not target_user_id and arg:
+        target_db_info = sql_message.get_user_info_with_name(arg)
+        if target_db_info:
+            target_user_id = str(target_db_info['user_id'])
+
+    if not target_user_id:
+        msg = "未找到指定成员，请检查道号或艾特是否正确！"
+        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    if target_user_id == user_id:
+        msg = "你已经是队长了，无需转移给自己。"
+        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    if target_user_id not in team_info.get("members", []):
+        msg = "只能将队长转移给当前队伍内的成员！"
+        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="邀请组队", v2="邀请组队", k3="队伍帮助", v3="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    target_info = sql_message.get_user_info_with_id(target_user_id)
+    if not target_info:
+        msg = "目标成员信息异常，无法转移。"
+        await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
+        await transfer_team_cmd.finish()
+
+    team_info["leader"] = target_user_id
+    save_team(team_info)
+
+    msg = f"👑 队长已成功转移给 {target_info['user_name']}！"
+    await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="探索副本", v2="探索副本", k3="队伍帮助", v3="队伍帮助")
+    await transfer_team_cmd.finish()
 
 
 # 每日零点自动重置副本

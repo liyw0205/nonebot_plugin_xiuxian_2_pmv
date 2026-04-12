@@ -12,7 +12,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, number_to, check_user_type, send_msg_handler
+from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_msg_handler
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
@@ -116,7 +116,7 @@ ACTION_ITEM_POOLS = {
 
     # 饰品礼包池
     "acc_pack_low": [
-        18121, 18131, 18132, 18133,
+        18121, 18131, 18132, 18133, 18134
         18135, 18136, 18159, 18160,
         18163, 18164
     ],
@@ -1284,10 +1284,6 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     uid = str(user_info["user_id"])
-    is_type, msg = check_user_type(uid, 0)
-    if not is_type:
-        await handle_send(bot, event, msg)
-        return
 
     can_use, cur_cnt, cap = _check_daily_cap(uid, "combat_count", DAILY_LIMIT_CONFIG["combat"])
     if not can_use:
@@ -1459,10 +1455,6 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
 
     uid = str(user_info["user_id"])
-    is_type, msg = check_user_type(uid, 0)
-    if not is_type:
-        await handle_send(bot, event, msg)
-        return
 
     can_use, cur_cnt, cap = _check_daily_cap(uid, "explore_count", DAILY_LIMIT_CONFIG["explore"])
     if not can_use:
