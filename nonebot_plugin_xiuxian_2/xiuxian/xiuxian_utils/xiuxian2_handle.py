@@ -3780,7 +3780,6 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     main_def = float(main.get("def_buff", 0))
 
     # ===== 独立减会心伤害（减法区）=====
-    # 目前主功法/装备若未来配置该字段，可自动接入
     main_crit_dmg_reduce = float(main.get("crit_damage_reduction", 0))
 
     # 装备
@@ -3803,7 +3802,6 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     impart_burst = float(impart.get("impart_burst_per", 0))
     boss_atk = float(impart.get("boss_atk", 0))
 
-    # 如果未来传承也有减会伤配置，可接这里
     impart_crit_dmg_reduce = float(impart.get("crit_damage_reduction", 0))
 
     # 修炼等级
@@ -3898,6 +3896,12 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     current_hp = int(current_hp * ratio) if include_current else max_hp
     current_mp = int(current_mp * ratio) if include_current else max_mp
     final_atk = int(final_atk * ratio)
+
+    # 当前值不能超过上限，也不能低于0
+    max_hp = max(1, max_hp)
+    max_mp = max(1, max_mp)
+    current_hp = max(0, min(current_hp, max_hp))
+    current_mp = max(0, min(current_mp, max_mp))
 
     return {
         **base,
