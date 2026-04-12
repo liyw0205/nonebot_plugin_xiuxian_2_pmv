@@ -3903,6 +3903,30 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     current_hp = max(0, min(current_hp, max_hp))
     current_mp = max(0, min(current_mp, max_mp))
 
+    # ===== 炼体固定加值=====
+    _tianti_hp = 0
+    _tianti_add_hp = 0
+    _tianti_add_atk = 0
+    try:
+        from ..xiuxian_tianti.tianti_data import TiantiDataManager
+        _tm = TiantiDataManager()
+        _tdata = _tm.get_user_tianti_info(user_id)
+        _tianti_hp = int(_tdata.get("tianti_hp", 0))
+
+        # 规则：1炼体气血 = 1hp；100炼体气血 = 1攻击
+        _tianti_add_hp = _tianti_hp
+        _tianti_add_atk = _tianti_hp // 100
+
+        max_hp += _tianti_add_hp
+        current_hp += _tianti_add_hp
+        final_atk += _tianti_add_atk
+
+        # 再次防溢出
+        max_hp = max(1, max_hp)
+        current_hp = max(0, min(current_hp, max_hp))
+    except Exception:
+        pass
+
     return {
         **base,
         "max_hp": max_hp,
@@ -3925,6 +3949,10 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         # 饰品/套装扩展
         "accessory_effect": acc_effect,
         "set_bonus_effects": set_bonus_effects,
+
+        # 炼体扩展
+        "tianti_hp_raw": _tianti_hp,
+        "tianti_atk_add": _tianti_add_atk
     }
 
 def get_weapon_info_msg(weapon_id, weapon_info=None):

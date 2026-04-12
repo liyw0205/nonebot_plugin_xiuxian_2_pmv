@@ -16,6 +16,7 @@ from ..xiuxian_utils.utils import check_user, handle_send, number_to, check_user
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
+from ..xiuxian_config import base_rank
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -43,19 +44,18 @@ TRAVEL_NODE_TYPES = {"交通", "渡口", "驿站"}
 SEED_SHOP_TYPES = {"坊市", "城池", "驿站"}
 
 # =========================================
-# 每日限制配置（新增）
+# 每日限制配置
 # =========================================
 DAILY_LIMIT_CONFIG = {
-    "gather": 30,   # 钓鱼/挖矿/采集 总上限
-    "combat": 5,   # 节点战斗
-    "explore": 3,   # 开始探索次数
+    "gather": 30,
+    "combat": 15,
+    "explore": 5,
 }
 
 # 收益衰减配置（按当日总资源行为次数）
-# <=20:100%, <=40:70%, >40:35%
 REWARD_DECAY_STEPS = [
-    (10, 1.00),
-    (20, 0.70),
+    (20, 1.00),
+    (30, 0.70),
     (999999, 0.35),
 ]
 
@@ -73,21 +73,66 @@ SEED_CONFIG = {
 # 地图掉落池
 # =========================================
 ACTION_ITEM_POOLS = {
-    "fish": [40001, 40002, 40003],
-    "ore": [40006, 40007, 40008],
-    "herb_low": [3001, 3002, 3003, 3004, 3005, 3006],
-    "herb_mid": [3037, 3038, 3039, 3040, 3041],
+    # 水域掉落：偏灵草、果实、灵液感
+    "fish": [
+        3001, 3002, 3004, 3006,
+        3037, 3038, 3040, 3042,
+        3053, 3074, 3078
+    ],
 
+    # 矿脉掉落：偏根茎、矿质、硬质材料感
+    "ore": [
+        3005, 3007, 3013, 3016,
+        3073, 3086, 3093, 3105,
+        3106, 3026, 3034
+    ],
+
+    # 低阶采药
+    "herb_low": [
+        3001, 3002, 3003, 3004, 3005, 3006,
+        3037, 3038, 3039, 3040, 3041, 3042,
+        3073, 3074, 3075, 3076, 3077, 3078
+    ],
+
+    # 中阶采药
+    "herb_mid": [
+        3009, 3010, 3011, 3012, 3013, 3014, 3015, 3016,
+        3045, 3046, 3047, 3048, 3049, 3050, 3051, 3052,
+        3081, 3082, 3083, 3084, 3085, 3086, 3087, 3088
+    ],
+
+    # 灵石奖励
     "stone_low": ["LS_50000", "LS_80000", "LS_120000"],
     "stone_mid": ["LS_150000", "LS_220000", "LS_300000"],
     "stone_high": ["LS_500000", "LS_800000"],
 
+    # 额外资源
     "wash_stone_low": [20023],
-    "token_common": [20001, 20007, 20012],
-    "token_rare": [20005, 20014],
+    "token_common": [20001, 20012, 20014],
+    "token_rare": [20005, 20007, 20013, 20018],
 
-    "god_frag": [15000, 15001, 15002],
-    "acc_pack_low": [18121, 18131, 18132],
+    # 神物碎片/高阶资源池
+    "god_frag": [15000, 15001, 15002, 15003, 15004],
+
+    # 饰品礼包池
+    "acc_pack_low": [
+        18121, 18131, 18132, 18133,
+        18135, 18136, 18159, 18160,
+        18163, 18164
+    ],
+}
+
+# =========================================
+# 技能/装备掉落配置
+# =========================================
+SKILL_EQUIP_TYPES = ["功法", "神通", "辅修功法", "法器", "防具", "身法", "瞳术"]
+
+MAP_EXTRA_DROP_RATE = {
+    "gather": 0.06,
+    "combat_trial": 0.12,
+    "combat_risk": 0.18,
+    "explore_normal": 0.08,
+    "explore_rare": 0.22,
 }
 
 # =========================================
@@ -133,7 +178,6 @@ NODE_ACTION_CONFIG = {
     "仙山": {"cmd": "采集", "cost": 4, "pool_key": "herb_mid", "desc": "探寻灵材"},
 }
 
-# 只保留“交互进行中”状态在内存（短时）
 INTERACTIVE_ACTION_STATE = {}
 
 # =========================================
@@ -179,7 +223,6 @@ COMBAT_CONFIG = {
     },
 }
 
-# 旧内存CD弃用，改持久化
 COMBAT_CD_STATE = {}
 
 # =========================================
@@ -260,7 +303,7 @@ start_explore_cmd = on_command("开始探索", aliases={"节点探索"}, priorit
 settle_explore_cmd = on_command("探索结算", priority=8, block=True)
 
 # =========================================
-# 限制/冷却工具（新增）
+# 限制/冷却工具
 # =========================================
 def _today_str():
     return datetime.now().strftime("%Y-%m-%d")
@@ -288,7 +331,7 @@ def _get_daily_limit(uid: str):
             "gather_count": 0,
             "combat_count": 0,
             "explore_count": 0,
-            "resource_total_count": 0,  # 用于收益衰减
+            "resource_total_count": 0,
         }
         for k, v in d.items():
             player_data_manager.update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
@@ -457,7 +500,7 @@ def get_current_node_name(user_id: str) -> str | None:
     return node["name"] if node else None
 
 # =========================================
-# 奖励工具（新增衰减）
+# 奖励工具
 # =========================================
 def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
     rewards = []
@@ -468,8 +511,6 @@ def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
         if not pool_ids:
             continue
         cnt = random.randint(cmin, cmax)
-
-        # 衰减：数量层面衰减（至少1次抽取）
         cnt = max(1, int(round(cnt * decay_ratio)))
 
         for _ in range(cnt):
@@ -487,9 +528,47 @@ def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
                 continue
             gname = info["name"]
             gtype = info.get("type", "材料")
-            sql_message.send_back(user_id, gid, gname, gtype, 1, 0)
+            sql_message.send_back(user_id, gid, gname, gtype, 1, 1)
             rewards.append(f"{gname}x1")
     return rewards
+
+
+def _grant_skill_equip_drop(user_info: dict, drop_rate: float = 0.1):
+    """
+    随机掉落技能/装备
+    """
+    if random.random() > drop_rate:
+        return None
+
+    user_id = str(user_info["user_id"])
+    user_level = user_info.get("level", "江湖好手")
+
+    item_type = random.choice(SKILL_EQUIP_TYPES)
+
+    if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
+        zx_rank = base_rank(user_level, 16)
+    else:
+        zx_rank = base_rank(user_level, 5)
+
+    item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
+    if not item_id_list:
+        return None
+
+    item_id = random.choice(item_id_list)
+    item_info = items.get_data_by_item_id(item_id)
+    if not item_info:
+        return None
+
+    sql_message.send_back(
+        user_id,
+        item_id,
+        item_info["name"],
+        item_info.get("type", item_type),
+        1,
+        1
+    )
+
+    return f"{item_info.get('level', '未知品级')}:{item_info['name']}x1"
 
 
 def _merge_reward_text(rewards: list[str]) -> str:
@@ -594,7 +673,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "6. 长时玩法：开始探索 [分钟] / 探索结算（含每日上限）\n"
         "7. 商店玩法：种子商店 / 购买种子\n"
         "8. 洞府互动：我的洞府 / 洞府种植 / 洞府布阵 / 潜入洞府\n"
-        "注：地图收益存在日内衰减机制。"
+        "注：地图收益存在日内衰减机制，且现可额外掉落技能与装备。"
     )
     await handle_send(bot, event, msg)
 
@@ -785,6 +864,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"👣 移动成功！\n已前往【{tar_node['name']}】\n跨越 {steps} 个节点，消耗体力：{cost}")
         return
 
+
 # =========================================
 # 社交
 # =========================================
@@ -902,6 +982,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     rate = (win_n / total * 100) if total else 0.0
     await handle_send(bot, event, f"【论道战绩】{show_name}\n总场次：{total}\n胜场：{win_n}\n负场：{lose_n}\n胜率：{rate:.1f}%")
 
+
 # =========================================
 # 种子商店
 # =========================================
@@ -985,6 +1066,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     sql_message.send_back(uid, seed_id, SEED_CONFIG[seed_id]["name"], "特殊物品", num, 1)
     await handle_send(bot, event, f"购买成功：{SEED_CONFIG[seed_id]['name']} x{num}，花费{number_to(cost)}灵石。")
 
+
 # =========================================
 # 采集逻辑（已加每日次数+持久化CD）
 # =========================================
@@ -997,20 +1079,17 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
     uid = str(user_info["user_id"])
     now = datetime.now()
 
-    # 每日次数检查（采集总次数）
     can_use, cur_cnt, cap = _check_daily_cap(uid, "gather_count", DAILY_LIMIT_CONFIG["gather"])
     if not can_use:
         await handle_send(bot, event, f"今日采集次数已达上限（{cap}次），请明日再来。")
         return
 
-    # 持久化CD
     gather_cd = _get_cd(uid, "gather_cd_until")
     if gather_cd and now < gather_cd:
         sec = int((gather_cd - now).total_seconds())
         await handle_send(bot, event, f"你刚忙完，先歇会儿吧（冷却剩余 {sec}s）")
         return
 
-    # 内存中的交互态（用于等待触发）
     st = INTERACTIVE_ACTION_STATE.get(uid)
     if st:
         if st.get("expire_ts") and now > st["expire_ts"]:
@@ -1073,7 +1152,6 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
             return
         if cur2.get("action") == action_type and cur2.get("ready") is True:
             INTERACTIVE_ACTION_STATE.pop(uid, None)
-            # 失败也给冷却，防刷触发
             _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
             await handle_send(bot, event, f"❌ 时机已过，{action_type}失败（{node['name']}）")
 
@@ -1115,17 +1193,14 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         await handle_send(bot, event, f"❌ 时机已过，{action}失败。")
         return
 
-    # 成功率判定
     if random.random() > ia["success_rate"]:
         INTERACTIVE_ACTION_STATE.pop(uid, None)
         _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
         await handle_send(bot, event, f"💨 你动作慢了半拍，{action}失败（目标跑了）")
         return
 
-    # 每日次数 +1（采集）
     _inc_daily_count(uid, "gather_count", 1)
 
-    # 收益衰减
     decay = _get_reward_decay(uid)
 
     roll = random.random()
@@ -1148,6 +1223,10 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
             ("stone_low", 1, 1, 0.55),
         ], decay_ratio=decay)
 
+    extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["gather"])
+    if extra:
+        rewards.append(extra)
+
     INTERACTIVE_ACTION_STATE.pop(uid, None)
     _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
 
@@ -1157,6 +1236,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         await handle_send(bot, event, f"✅ {action}成功！\n地点：{st['node_name']}\n获得：{_merge_reward_text(rewards)}{tip}{decay_tip}")
     else:
         await handle_send(bot, event, f"✅ {action}完成，但这次没有收获。{decay_tip}")
+
 
 # =========================================
 # 战斗节点：真实战斗（已加每日次数+持久化CD）
@@ -1209,7 +1289,6 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg)
         return
 
-    # 每日次数检查（战斗）
     can_use, cur_cnt, cap = _check_daily_cap(uid, "combat_count", DAILY_LIMIT_CONFIG["combat"])
     if not can_use:
         await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
@@ -1245,7 +1324,6 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
     result, victor, bossinfo_new = await Boss_fight(uid, enemy, bot_id=bot.self_id)
     await send_msg_handler(bot, event, result)
 
-    # 次数消耗放在战斗发起后（避免白嫖探情报）
     _inc_daily_count(uid, "combat_count", 1)
 
     if victor != "群友赢了":
@@ -1270,9 +1348,16 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
     decay = _get_reward_decay(uid)
     plan = conf["reward_plan_big_win"] if big_win else conf["reward_plan_win"]
     rewards = _grant_rewards(uid, plan, decay_ratio=decay)
+
+    drop_rate = MAP_EXTRA_DROP_RATE["combat_trial"] if ntype == "试炼" else MAP_EXTRA_DROP_RATE["combat_risk"]
+    extra = _grant_skill_equip_drop(user_info, drop_rate)
+    if extra:
+        rewards.append(extra)
+
     title = "大胜而归" if big_win else "战而胜之"
     decay_tip = f"\n当前收益系数：{int(decay * 100)}%" if decay < 1 else ""
     await handle_send(bot, event, f"⚔️ 你在【{node['name']}】{title}！\n战利品：{_merge_reward_text(rewards)}{decay_tip}")
+
 
 # =========================================
 # 探索状态
@@ -1298,6 +1383,7 @@ def _save_explore_status(uid: str, d: dict):
     for k, v in d.items():
         player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
 
+
 # =========================================
 # 探索事件流
 # =========================================
@@ -1309,7 +1395,7 @@ def _pick_explore_event(ntype: str):
     return random.choices(keys, weights=vals, k=1)[0]
 
 
-def _resolve_explore_event(uid: str, node_type: str, node_name: str):
+def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name: str):
     event_type = _pick_explore_event(node_type)
 
     if event_type == "empty":
@@ -1326,6 +1412,9 @@ def _resolve_explore_event(uid: str, node_type: str, node_name: str):
             ("herb_low", 1, 1, 0.55),
             ("wash_stone_low", 1, 1, 0.12),
         ], decay_ratio=_get_reward_decay(uid))
+        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
+        if extra:
+            rewards.append(extra)
         return f"你在【{node_name}】有所收获。", rewards
 
     if event_type == "good":
@@ -1335,6 +1424,9 @@ def _resolve_explore_event(uid: str, node_type: str, node_name: str):
             ("token_common", 1, 1, 0.18),
             ("wash_stone_low", 1, 1, 0.25),
         ], decay_ratio=_get_reward_decay(uid))
+        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
+        if extra:
+            rewards.append(extra)
         return f"你在【{node_name}】发现了一处隐秘资源点。", rewards
 
     if event_type == "rare":
@@ -1344,6 +1436,9 @@ def _resolve_explore_event(uid: str, node_type: str, node_name: str):
             ("acc_pack_low", 1, 1, 0.04),
             ("god_frag", 1, 1, 0.02),
         ], decay_ratio=_get_reward_decay(uid))
+        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_rare"])
+        if extra:
+            rewards.append(extra)
         return f"你在【{node_name}】触发了一场罕见机缘！", rewards
 
     rewards = _grant_rewards(uid, [
@@ -1351,6 +1446,9 @@ def _resolve_explore_event(uid: str, node_type: str, node_name: str):
         ("wash_stone_low", 1, 2, 0.45),
         ("token_common", 1, 1, 0.25),
     ], decay_ratio=_get_reward_decay(uid))
+    extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
+    if extra:
+        rewards.append(extra)
     return f"你在【{node_name}】遭遇阻击，鏖战后夺得战利品。", rewards
 
 
@@ -1366,13 +1464,11 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg)
         return
 
-    # 每日次数检查（探索发起）
     can_use, cur_cnt, cap = _check_daily_cap(uid, "explore_count", DAILY_LIMIT_CONFIG["explore"])
     if not can_use:
         await handle_send(bot, event, f"今日探索发起次数已达上限（{cap}次），请明日再来。")
         return
 
-    # 持久化发起CD
     now = datetime.now()
     cd = _get_cd(uid, "explore_start_cd_until")
     if cd and now < cd:
@@ -1408,11 +1504,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         duration_min = max(5, duration_arg)
 
     sql_message.update_user_stamina(uid, need_stamina, 2)
-
-    # 次数+1
     _inc_daily_count(uid, "explore_count", 1)
-
-    # 发起CD
     _set_cd(uid, "explore_start_cd_until", 60)
 
     new_st = {
@@ -1474,7 +1566,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     all_rewards = []
 
     for i in range(rounds):
-        line, rewards = _resolve_explore_event(uid, node_type, node_name)
+        line, rewards = _resolve_explore_event(uid, user_info, node_type, node_name)
         event_lines.append(f"{i + 1}. {line}")
         all_rewards.extend(rewards)
 
@@ -1500,6 +1592,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         f"\n—— 总收益 ——\n{_merge_reward_text(all_rewards)}{decay_tip}"
     )
     await handle_send(bot, event, msg)
+
 
 # =========================================
 # 命令入口

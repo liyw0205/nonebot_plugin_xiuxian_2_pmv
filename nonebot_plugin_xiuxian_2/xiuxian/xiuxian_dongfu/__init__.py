@@ -401,7 +401,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     lv += 1
     d["array_level"] = lv
     _save_dongfu(uid, d)
-    await handle_send(bot, event, f"洞府布阵成功，当前阵法等级：{lv}")
+    await handle_send(bot, event, f"消耗{number_to(cost)}灵石，洞府布阵成功，当前阵法等级：{lv}")
 
 
 @infiltrate_dongfu.handle(parameterless=[Cooldown(cd_time=1.8, stamina_cost=INFILTRATE_STAMINA)])

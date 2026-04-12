@@ -15,6 +15,7 @@
 - xiuxian_beg ：新手礼包/仙途奇缘
 - xiuxian_boss ：世界BOSS
 - xiuxian_buff ：双修/修炼/闭关/切磋/洞天福地
+- xiuxian_dongfu ：洞府
 - xiuxian_dufang ：鉴石
 - xiuxian_dungeon ：组队/副本
 - xiuxian_entertainment ：娱乐
@@ -24,12 +25,14 @@
 - xiuxian_impart_pk ：虚神界
 - xiuxian_info ：修仙信息
 - xiuxian_lunhui ：轮回重修
+- xiuxian_map ：地图
 - xiuxian_mixelixir ：炼丹
 - xiuxian_natal_treasure ：本命法宝
 - xiuxian_past_life ：前尘往事
 - xiuxian_puppet ：灵田傀儡
 - xiuxian_rift ：秘境
 - xiuxian_sect ：宗门
+- xiuxian_tianti ：炼体
 - xiuxian_title ：称号
 - xiuxian_tower ：通天塔
 - xiuxian_trade ：交易
