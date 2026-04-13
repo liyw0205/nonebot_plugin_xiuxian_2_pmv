@@ -2986,12 +2986,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    - 150次保底：词条值固定上限，仅词条类型变化
 
 7）饰品升阶：
-   发送：饰品升阶 部位 主饰品UID 材料UID
+   发送：饰品升阶 部位 材料UID1 [材料UID2 ...]
+   例如：饰品升阶 项链 UID1 UID2
    规则：
-   - 主饰品必须已装备在对应部位
-   - 材料必须同阶同款（同 item_id / 部位 / 套装）
-   - 3->4需2个材料，4->5需3个材料
-   - 最高五阶
+   - 主饰品固定为该部位“当前已装备”的饰品
+   - 该部位未装备时不可升阶
+   - 材料必须在背包中，且与主饰品同阶同款
+   - 升阶消耗：
+     1→2：1件材料
+     2→3：1件材料
+     3→4：2件材料
+     4→5：3件材料
+   - 最高五阶，五阶不可继续升阶
+   - 升阶后：保留当前词条，仅重置洗练次数（wash_count=0）
+
 
 三、分解功能
 8）单件分解：
@@ -3517,15 +3525,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     parts = args.extract_plain_text().split()
-    if len(parts) != 3:
+    if len(parts) < 2:
         await handle_send(
             bot, event,
-            "用法：饰品升阶 部位 主饰品UID 材料UID\n例如：饰品升阶 项链 UID1 UID2",
+            "用法：饰品升阶 部位 材料UID1 [材料UID2 ...]\n例如：饰品升阶 项链 UID1 UID2",
             md_type="背包", k1="饰品", v1="饰品背包", k2="帮助", v2="饰品帮助"
         )
         return
 
-    part, main_uid, material_uid = parts
+    part = parts[0]
+    material_uids = parts[1:]
+
     if part not in SLOTS:
         await handle_send(bot, event, f"部位错误，可用：{'/'.join(SLOTS)}")
         return
@@ -3533,13 +3543,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_id = str(user_info["user_id"])
     data = _get_data(user_id)
 
+    # 主饰品=该部位已装备饰品
     main_acc = data.get("equipped", {}).get(part)
     if not main_acc:
         await handle_send(bot, event, f"{part}当前未装备饰品，无法升阶")
-        return
-
-    if str(main_acc.get("uid", "")) != str(main_uid):
-        await handle_send(bot, event, f"主饰品UID不匹配：{part}当前装备并非该UID")
         return
 
     main_q = int(main_acc.get("quality", 1))
@@ -3549,49 +3556,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     need_cnt = _get_upgrade_cost(main_q)
 
+    # 材料UID去重，避免重复传同一个
+    material_uids = list(dict.fromkeys(material_uids))
+
+    if len(material_uids) < need_cnt:
+        await handle_send(bot, event, f"材料数量不足：当前升阶需 {need_cnt} 个材料UID")
+        return
+
     bag = data.get("bag", [])
-    candidate_idx = []
-    specified_idx = None
-
+    uid_to_idx = {}
     for i, x in enumerate(bag):
-        if str(x.get("uid", "")) == str(main_uid):
-            continue
+        uid_to_idx[str(x.get("uid", ""))] = i
 
-        if _is_same_accessory_for_upgrade(main_acc, x):
-            candidate_idx.append(i)
-            if str(x.get("uid", "")) == str(material_uid):
-                specified_idx = i
+    consume_idx = []
+    for mu in material_uids:
+        idx = uid_to_idx.get(str(mu))
+        if idx is None:
+            await handle_send(bot, event, f"材料UID无效或不在背包中：{mu}")
+            return
 
-    if specified_idx is None:
-        await handle_send(bot, event, "材料UID无效：需为背包内同阶同款饰品")
-        return
+        mat = bag[idx]
+        # 材料必须同阶同款（同 item_id/part/set_type/quality）
+        if not _is_same_accessory_for_upgrade(main_acc, mat):
+            await handle_send(bot, event, f"材料不匹配：{mu} 不是同阶同款饰品")
+            return
 
-    if len(candidate_idx) < need_cnt:
-        await handle_send(
-            bot, event,
-            f"材料不足：当前升阶需 {need_cnt} 个同阶同款饰品，你只有 {len(candidate_idx)} 个",
-            md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2=f"查看饰品 {main_uid}"
-        )
-        return
+        consume_idx.append(idx)
 
-    consume_idx = [specified_idx]
-    for i in candidate_idx:
-        if i == specified_idx:
-            continue
-        if len(consume_idx) >= need_cnt:
-            break
-        consume_idx.append(i)
+    # 只取需要数量
+    consume_idx = consume_idx[:need_cnt]
 
-    for i in sorted(consume_idx, reverse=True):
+    # 删除材料（倒序删）
+    for i in sorted(set(consume_idx), reverse=True):
         del bag[i]
 
-    new_q = main_q + 1
-    old_cnt = len(main_acc.get("affixes", [])) if isinstance(main_acc.get("affixes", []), list) else 2
-    old_cnt = max(1, min(4, old_cnt))
-
+    # 升阶：仅提升品阶 + 重置洗练次数；保留原词条
+    old_q = main_q
+    new_q = old_q + 1
     main_acc["quality"] = new_q
-    main_acc["affixes"] = roll_affixes(new_q, old_cnt)
-    main_acc["wash_count"] = int(main_acc.get("wash_count", 0))
+    main_acc["wash_count"] = 0
 
     data["equipped"][part] = main_acc
     data["bag"] = bag
@@ -3599,10 +3602,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await handle_send(
         bot, event,
-        f"升阶成功：{main_acc.get('name', '未知饰品')} {quality_to_cn(main_q)} → {quality_to_cn(new_q)}\n消耗材料：{need_cnt}件同阶同款饰品",
+        f"升阶成功：{main_acc.get('name', '未知饰品')} {quality_to_cn(old_q)} → {quality_to_cn(new_q)}\n"
+        f"消耗材料：{need_cnt}件同阶同款饰品\n"
+        f"当前词条已保留，仅重置洗练次数",
         md_type="背包",
         k1="我的饰品", v1="我的饰品",
         k2="饰品背包", v2="饰品背包",
-        k3="查看饰品", v3=f"查看饰品 {main_uid}"
+        k3="查看饰品", v3=f"查看饰品 {main_acc.get('uid', '')}"
     )
 
