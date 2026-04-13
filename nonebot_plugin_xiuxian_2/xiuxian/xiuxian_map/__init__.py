@@ -198,7 +198,7 @@ COMBAT_CONFIG = {
             ("stone_high", 1, 1, 1.0),
             ("wash_stone_low", 1, 2, 0.65),
             ("token_common", 1, 1, 0.35),
-            ("acc_pack_low", 1, 1, 0.05),
+            ("acc_pack_low", 1, 1, 0.15),
         ],
         "fail_msg": "试炼失利，你负伤而退。",
     },
@@ -217,7 +217,7 @@ COMBAT_CONFIG = {
             ("token_common", 1, 2, 0.40),
             ("token_rare", 1, 1, 0.16),
             ("god_frag", 1, 1, 0.04),
-            ("acc_pack_low", 1, 1, 0.08),
+            ("acc_pack_low", 1, 1, 0.18),
         ],
         "fail_msg": "险地凶险万分，你仓促脱身。",
     },
@@ -1429,7 +1429,7 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
         rewards = _grant_rewards(uid, [
             ("stone_high", 1, 1, 1.0),
             ("token_rare", 1, 1, 0.20),
-            ("acc_pack_low", 1, 1, 0.04),
+            ("acc_pack_low", 1, 1, 0.14),
             ("god_frag", 1, 1, 0.02),
         ], decay_ratio=_get_reward_decay(uid))
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_rare"])
