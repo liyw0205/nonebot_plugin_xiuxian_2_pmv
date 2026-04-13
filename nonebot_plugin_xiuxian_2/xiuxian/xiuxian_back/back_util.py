@@ -418,6 +418,77 @@ def get_user_equipment_msg(user_id):
     
     return l_msg
 
+
+def get_user_danyao_back_msg(user_id):
+    """
+    获取丹药背包信息
+    按丹药类型分类展示：
+    - 气血回复丹药
+    - 全状态回复丹药
+    - 突破丹药
+    - 大境界突破丹药
+    - 永久攻击丹药
+    - 经验增加丹药
+    - 其他丹药
+    """
+    l_msg = []
+    user_backs = sql_message.get_back_msg(user_id)
+    if user_backs is None:
+        return l_msg
+
+    danyao_type_map = {
+        "hp": "气血回复丹药",
+        "all": "全状态回复丹药",
+        "level_up_rate": "突破丹药",
+        "level_up_big": "大境界突破丹药",
+        "atk_buff": "永久攻击丹药",
+        "exp_up": "经验增加丹药",
+        "level_up": "突破辅助丹药",
+    }
+
+    sorted_danyao = {
+        "气血回复丹药": [],
+        "全状态回复丹药": [],
+        "突破丹药": [],
+        "大境界突破丹药": [],
+        "永久攻击丹药": [],
+        "经验增加丹药": [],
+        "突破辅助丹药": [],
+        "其他丹药": []
+    }
+
+    for user_back in user_backs:
+        if user_back['goods_type'] == "丹药":
+            item_info = items.get_data_by_item_id(user_back['goods_id'])
+            if not item_info:
+                continue
+
+            buff_type = item_info.get("buff_type", "")
+            category = danyao_type_map.get(buff_type, "其他丹药")
+
+            sorted_danyao[category].append({
+                'id': user_back['goods_id'],
+                'name': item_info['name'],
+                'level': item_info.get('level', ''),
+                'num': user_back['goods_num'],
+                'bind_num': user_back['bind_num'],
+                'desc': item_info.get('desc', '')
+            })
+
+    for category, danyao_list in sorted_danyao.items():
+        if danyao_list:
+            l_msg.append(f"☆------{category}------☆")
+            for danyao in danyao_list:
+                msg = f"名字：{danyao['name']}\n"
+                if danyao['level']:
+                    msg += f"品级：{danyao['level']}\n"
+                msg += f"ID：{danyao['id']}\n"
+                msg += f"拥有数量：{danyao['num']}，绑定数量：{danyao['bind_num']}"
+                l_msg.append(msg)
+
+    return l_msg
+
+
 def get_user_yaocai_back_msg(user_id):
     """
     获取药材背包信息

@@ -6,14 +6,24 @@ import re
 import ast
 import platform
 import time
-import pty
 import signal
 import subprocess
 import select
-import fcntl
-import termios
 import struct
 import threading
+import random
+import uuid
+
+IS_WINDOWS = platform.system() == "Windows"
+
+if not IS_WINDOWS:
+    import pty
+    import fcntl
+    import termios
+else:
+    pty = None
+    fcntl = None
+    termios = None
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -3320,7 +3330,10 @@ def download_file(filepath):
 terminal_sessions = {}
 
 def get_terminal_session(admin_id):
-    """获取或创建一个持久的 bash 会话"""
+    """获取或创建一个持久的 bash 会话，仅支持 Linux/Unix"""
+    if IS_WINDOWS:
+        raise RuntimeError("Web终端功能仅支持 Linux/Unix 环境，Windows 不支持。")
+
     if admin_id in terminal_sessions:
         # 检查进程是否还在运行
         pid = terminal_sessions[admin_id]['pid']
@@ -3329,13 +3342,15 @@ def get_terminal_session(admin_id):
             return terminal_sessions[admin_id]
         except OSError:
             # 进程已死，清理
-            try: os.close(terminal_sessions[admin_id]['fd'])
-            except: pass
+            try:
+                os.close(terminal_sessions[admin_id]['fd'])
+            except:
+                pass
             del terminal_sessions[admin_id]
 
     # 创建新的伪终端对
     master_fd, slave_fd = pty.openpty()
-    
+
     # 启动 bash 子进程
     pid = os.fork()
 
@@ -3345,76 +3360,79 @@ def get_terminal_session(admin_id):
         os.dup2(slave_fd, 1)
         os.dup2(slave_fd, 2)
         os.close(master_fd)
-        
+
         env = os.environ.copy()
         env["TERM"] = "xterm-256color"
         env["LANG"] = "zh_CN.UTF-8"
-        
-        # 这里的 PS1 控制【上面终端显示区】的样式
-        # \[\033[01;32m\] 为绿色 (用户)
-        # \[\033[01;34m\] 为蓝色 (路径)
-        # 这里的设置会通过 ansi_up 插件在网页上渲染出颜色
         env["PS1"] = "\[\033[01;32m\]\\u\[\033[00m\]:\[\033[01;34m\]\\w\[\033[00m\]\\$ "
-        
+
         os.execve("/bin/bash", ["/bin/bash", "--login", "-i"], env)
-    
+
     # 父进程
     os.close(slave_fd)
-    
-    # 将 master_fd 设置为非阻塞模式，防止读取时卡死整个 Flask
+
+    # 设置非阻塞
     fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
     fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-    
+
     session_data = {'fd': master_fd, 'pid': pid}
     terminal_sessions[admin_id] = session_data
     return session_data
+
 
 @app.route('/terminal')
 def terminal():
     if 'admin_id' not in session:
         return redirect(url_for('login'))
+    if IS_WINDOWS:
+        return "Web终端功能仅支持 Linux/Unix，Windows 暂不支持", 400
     return render_template('terminal.html', admin_id=session['admin_id'])
+
 
 @app.route('/terminal/output')
 def terminal_output():
     """流式读取终端输出的 Generator"""
     if 'admin_id' not in session:
         return "Unauthorized", 401
-    
+    if IS_WINDOWS:
+        return "Windows 不支持该功能", 400
+
     admin_id = session['admin_id']
     term = get_terminal_session(admin_id)
 
     def generate():
         fd = term['fd']
         while True:
-            # 使用 select 监听文件描述符是否有数据可读
             r, _, _ = select.select([fd], [], [], 0.5)
             if r:
                 try:
                     data = os.read(fd, 1024 * 16)
-                    if not data: break
+                    if not data:
+                        break
                     yield data.decode('utf-8', errors='replace')
                 except (OSError, Exception):
                     break
-            # 检查进程是否还存活
             try:
                 os.kill(term['pid'], 0)
             except OSError:
                 yield "\n[Session Terminated]\n"
                 break
-    
+
     return Response(generate(), mimetype='text/plain')
+
 
 @app.route('/terminal/write', methods=['POST'])
 def terminal_write():
     """向终端写入数据（支持多字符组合键）"""
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "Not logged in"})
-    
+    if IS_WINDOWS:
+        return jsonify({"success": False, "error": "Windows 不支持该功能"})
+
     admin_id = session['admin_id']
-    data = request.get_json()
+    data = request.get_json() or {}
     input_str = data.get('input', '')
-    
+
     term = get_terminal_session(admin_id)
     try:
         os.write(term['fd'], input_str.encode('utf-8'))
@@ -3422,16 +3440,22 @@ def terminal_write():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+
 @app.route('/terminal/pwd')
 def terminal_pwd():
-    if 'admin_id' not in session: return jsonify({"cwd": "/"})
+    if 'admin_id' not in session:
+        return jsonify({"cwd": "/"})
+    if IS_WINDOWS:
+        return jsonify({"cwd": "Windows not supported"})
+
     admin_id = session['admin_id']
     if admin_id in terminal_sessions:
         pid = terminal_sessions[admin_id]['pid']
         try:
             cwd = os.readlink(f"/proc/{pid}/cwd")
             return jsonify({"cwd": cwd})
-        except: pass
+        except:
+            pass
     return jsonify({"cwd": "~"})
 
 def run_async(coro):
