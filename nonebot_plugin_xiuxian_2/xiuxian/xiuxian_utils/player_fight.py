@@ -1118,7 +1118,7 @@ class BattleSystem:
         self.team_b = team_b
         self.play_list = []
         self.round = 0
-        self.max_rounds = 50
+        self.max_rounds = 30
 
     def add_message(self, unit, message):
         msg_dict = {
