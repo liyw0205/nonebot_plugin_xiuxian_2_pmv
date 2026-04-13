@@ -2285,36 +2285,36 @@
         "item_type": "礼包"
     },
     "18135": {
-        "name": "随机二阶烈阳饰品礼包",
+        "name": "随机二阶玄渊饰品礼包",
         "type": "礼包",
         "roll": 1,
-        "desc": "随机获得1件二阶烈阳饰品",
+        "desc": "随机获得1件二阶玄渊饰品",
         "roll_pool": [
             {
-                "buff": 19001,
+                "buff": 19101,
                 "type": "饰品",
-                "name": "烈阳手镯",
+                "name": "玄渊手镯",
                 "amount": 1,
                 "quality": 2
             },
             {
-                "buff": 19002,
+                "buff": 19102,
                 "type": "饰品",
-                "name": "烈阳戒指",
+                "name": "玄渊戒指",
                 "amount": 1,
                 "quality": 2
             },
             {
-                "buff": 19003,
+                "buff": 19103,
                 "type": "饰品",
-                "name": "烈阳手环",
+                "name": "玄渊手环",
                 "amount": 1,
                 "quality": 2
             },
             {
-                "buff": 19004,
+                "buff": 19104,
                 "type": "饰品",
-                "name": "烈阳项链",
+                "name": "玄渊项链",
                 "amount": 1,
                 "quality": 2
             }
@@ -2322,36 +2322,36 @@
         "item_type": "礼包"
     },
     "18136": {
-        "name": "随机三阶烈阳饰品礼包",
+        "name": "随机三阶天衡饰品礼包",
         "type": "礼包",
         "roll": 1,
-        "desc": "随机获得1件三阶烈阳饰品",
+        "desc": "随机获得1件三阶天衡饰品",
         "roll_pool": [
             {
-                "buff": 19001,
+                "buff": 19201,
                 "type": "饰品",
-                "name": "烈阳手镯",
+                "name": "天衡手镯",
                 "amount": 1,
                 "quality": 3
             },
             {
-                "buff": 19002,
+                "buff": 19202,
                 "type": "饰品",
-                "name": "烈阳戒指",
+                "name": "天衡戒指",
                 "amount": 1,
                 "quality": 3
             },
             {
-                "buff": 19003,
+                "buff": 19203,
                 "type": "饰品",
-                "name": "烈阳手环",
+                "name": "天衡手环",
                 "amount": 1,
                 "quality": 3
             },
             {
-                "buff": 19004,
+                "buff": 19204,
                 "type": "饰品",
-                "name": "烈阳项链",
+                "name": "天衡项链",
                 "amount": 1,
                 "quality": 3
             }
@@ -2359,36 +2359,36 @@
         "item_type": "礼包"
     },
     "18137": {
-        "name": "随机四阶烈阳饰品礼包",
+        "name": "随机四阶星痕饰品礼包",
         "type": "礼包",
         "roll": 1,
-        "desc": "随机获得1件四阶烈阳饰品",
+        "desc": "随机获得1件四阶星痕饰品",
         "roll_pool": [
             {
-                "buff": 19001,
+                "buff": 19301,
                 "type": "饰品",
-                "name": "烈阳手镯",
+                "name": "星痕手镯",
                 "amount": 1,
                 "quality": 4
             },
             {
-                "buff": 19002,
+                "buff": 19302,
                 "type": "饰品",
-                "name": "烈阳戒指",
+                "name": "星痕戒指",
                 "amount": 1,
                 "quality": 4
             },
             {
-                "buff": 19003,
+                "buff": 19303,
                 "type": "饰品",
-                "name": "烈阳手环",
+                "name": "星痕手环",
                 "amount": 1,
                 "quality": 4
             },
             {
-                "buff": 19004,
+                "buff": 19304,
                 "type": "饰品",
-                "name": "烈阳项链",
+                "name": "星痕项链",
                 "amount": 1,
                 "quality": 4
             }
@@ -2396,36 +2396,36 @@
         "item_type": "礼包"
     },
     "18138": {
-        "name": "随机五阶烈阳饰品礼包",
+        "name": "随机五阶龙魄饰品礼包",
         "type": "礼包",
         "roll": 1,
-        "desc": "随机获得1件五阶烈阳饰品",
+        "desc": "随机获得1件五阶龙魄饰品",
         "roll_pool": [
             {
-                "buff": 19001,
+                "buff": 19401,
                 "type": "饰品",
-                "name": "烈阳手镯",
+                "name": "龙魄手镯",
                 "amount": 1,
                 "quality": 5
             },
             {
-                "buff": 19002,
+                "buff": 19402,
                 "type": "饰品",
-                "name": "烈阳戒指",
+                "name": "龙魄戒指",
                 "amount": 1,
                 "quality": 5
             },
             {
-                "buff": 19003,
+                "buff": 19403,
                 "type": "饰品",
-                "name": "烈阳手环",
+                "name": "龙魄手环",
                 "amount": 1,
                 "quality": 5
             },
             {
-                "buff": 19004,
+                "buff": 19404,
                 "type": "饰品",
-                "name": "烈阳项链",
+                "name": "龙魄项链",
                 "amount": 1,
                 "quality": 5
             }
