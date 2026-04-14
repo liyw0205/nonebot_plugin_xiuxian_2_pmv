@@ -42,6 +42,9 @@ def _get_tianti_cap(data: dict) -> int:
 
 
 def _calc_qiaoxue_bonus(data: dict):
+    """
+    统计已开窍穴总加成
+    """
     base_ratio = 0.0
     gain_pct = 0.0
     detail_list = data.get("opened_qiaoxue_detail", [])
@@ -55,6 +58,15 @@ def _calc_qiaoxue_bonus(data: dict):
     return base_ratio, gain_pct
 
 
+def _get_qiaoxue_unlock_limit(data: dict) -> int:
+    """
+    冲窍额度规则：
+    每个炼体小境界解锁 1 个可开窍数量
+    例如 rank=15，则累计最多可开 15 个窍穴
+    """
+    return int(min(get_tianti_level_data(data["tianti_level"])["rank"] * 3, 108))
+
+
 @tianti_help.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -63,7 +75,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 2）灵石炼体 数量：消耗灵石换炼体气血（1灵石=0.1炼体气血）
 3）炼体突破：满足修仙境界+炼体气血后突破
 4）冲窍：消耗当前10%炼体气血，随机冲击一个未开的窍穴
-5）我的体窍 [窍穴名]：查看体窍进度/指定窍穴信息
+   ※ 每提升1个炼体小境界，累计解锁1个可开窍数量
+5）我的体窍 [窍穴名/天罡/地煞]：查看体窍总览/分组/单个窍穴
 6）我的炼体：查看当前炼体状态
 7）炼体境界：查看炼体境界表
 """
@@ -231,6 +244,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"本次消耗炼体气血：{number_to(cost_hp)}"
         )
 
+
 @tianti_info.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -244,13 +258,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     lvl = data["tianti_level"]
     hp = int(data["tianti_hp"])
     opened = get_opened_qiaoxue_count(data)
+    unlock_limit = _get_qiaoxue_unlock_limit(data)
 
     next_name = get_next_tianti_level_name(lvl)
     if next_name:
         need_hp = int(get_tianti_level_data(next_name)["need_hp"])
         remain = max(0, need_hp - hp)
         cap = _get_tianti_cap(data)
-        brk = f"下一境界：{next_name}\n突破需求：{number_to(need_hp)}（还需{number_to(remain)}）\n当前境界气血上限：{number_to(cap)}"
+        brk = (
+            f"下一境界：{next_name}\n"
+            f"突破需求：{number_to(need_hp)}（还需{number_to(remain)}）\n"
+            f"当前境界气血上限：{number_to(cap)}"
+        )
     else:
         brk = "已达炼体最高境界"
 
@@ -260,6 +279,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"境界：{lvl}\n"
         f"炼体气血：{number_to(hp)}\n"
         f"已开窍：{opened}/108\n"
+        f"当前可开上限：{unlock_limit}/108\n"
         f"{brk}"
     )
 
@@ -268,6 +288,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
     冲窍
+    修正逻辑：
+    - 每个炼体小境界解锁 1 个可开窍数量
+    - 解锁的是“累计可开启总数”
+    - 不是“当前境界/当前大境界只能冲一次”
     """
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -278,16 +302,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = str(user_info["user_id"])
     data = tianti_manager.get_user_tianti_info(user_id)
 
-    opened = data["opened_qiaoxue"]
+    opened = data.get("opened_qiaoxue", [])
+    opened_count = len(opened)
+    unlock_limit = _get_qiaoxue_unlock_limit(data)
     pool = get_qiaoxue_pool()
 
-    cur_level = data["tianti_level"]
-    stage_name = cur_level[:-2] if cur_level.endswith(("一重","二重","三重","四重","五重","六重","七重","八重","九重","十重")) else cur_level
-
-    stage_opened_map = data["qiaoxue_stage_opened"]
-    opened_in_stage = int(stage_opened_map.get(stage_name, 0))
-    if opened_in_stage >= 3:
-        await handle_send(bot, event, f"当前【{stage_name}】最多只能开3个窍穴，你已开满。请先突破到下一炼体境界。")
+    # 按当前炼体境界 rank 判断累计可冲窍数量
+    if opened_count >= unlock_limit:
+        await handle_send(
+            bot,
+            event,
+            f"你当前境界【{data['tianti_level']}】累计最多可开 {unlock_limit} 个窍穴，"
+            f"你已开启 {opened_count} 个。请继续突破炼体境界后再来冲窍。"
+        )
         return
 
     unopen = [q for q in pool if q["name"] not in set(opened)]
@@ -302,9 +329,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     chosen = random.choice(unopen)
-    real_val = float(chosen["effect_value"])  # 固定值
+    real_val = float(chosen["effect_value"])
 
-    detail_list = data["opened_qiaoxue_detail"]
+    detail_list = data.get("opened_qiaoxue_detail", [])
     detail_list.append({
         "name": chosen["name"],
         "group": chosen["group"],
@@ -315,8 +342,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data["tianti_hp"] = max(0, cur_hp - cost)
     data["opened_qiaoxue"] = opened + [chosen["name"]]
     data["opened_qiaoxue_detail"] = detail_list
-    stage_opened_map[stage_name] = opened_in_stage + 1
-    data["qiaoxue_stage_opened"] = stage_opened_map
+
+    # 兼容保留旧字段，但不再作为限制依据
+    if "qiaoxue_stage_opened" not in data or not isinstance(data["qiaoxue_stage_opened"], dict):
+        data["qiaoxue_stage_opened"] = {}
 
     tianti_manager.save_user_tianti_info(user_id, data)
     effect_cn = _effect_type_cn(chosen["effect_type"])
@@ -327,7 +356,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"消耗炼体气血：{number_to(cost)}\n"
         f"新开窍穴：{chosen['name']}\n"
         f"效果：{effect_cn} +{real_val * 100:.2f}%\n"
-        f"当前【{stage_name}】已开：{stage_opened_map[stage_name]}/3"
+        f"已开窍数：{opened_count + 1}/108\n"
+        f"当前境界可开上限：{unlock_limit}/108"
     )
 
 
@@ -373,10 +403,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not arg:
         opened_tg = len([q for q in qpool if q.get("group") == "天罡" and q.get("name") in opened])
         opened_ds = len([q for q in qpool if q.get("group") == "地煞" and q.get("name") in opened])
+        unlock_limit = _get_qiaoxue_unlock_limit(data)
+
         await handle_send(
             bot, event,
             f"【我的体窍】\n"
-            f"已开窍：{len(opened)}/108（天罡{opened_tg}/36，地煞{opened_ds}/72）\n"
+            f"已开窍：{len(opened)}/108（当前可开上限：{unlock_limit}/108）\n"
+            f"天罡：{opened_tg}/36\n"
+            f"地煞：{opened_ds}/72\n"
             f"每分钟气血：{base_ratio * 100:.2f}%\n"
             f"获得气血：{gain_pct * 100:.2f}%"
         )
@@ -385,7 +419,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 参数=天罡/地煞：列出该组窍穴
     if arg in ("天罡", "地煞"):
         group_list = [q for q in qpool if q.get("group") == arg]
-        # 已开启在前，未开启在后；组内按名称排序
         group_list.sort(key=lambda q: (q.get("name") not in opened, q.get("name", "")))
 
         lines = [f"【{arg}窍穴】"]

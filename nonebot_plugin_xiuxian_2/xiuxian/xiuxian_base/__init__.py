@@ -421,100 +421,167 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
     msg = f"""【修仙帮助】
-    
-🌟 核心功能
-- 启程修仙: 发送"我要修仙"
-- 存档查询: 发送"我的修仙信息"
-- 每日签到: 发送"修仙签到"
-- 突破境界: 发送"突破"
-  - 支持"连续突破"五次
-- 灵石交互: 送/偷/抢灵石+道号+数量
-- 修改道号: 发送"修仙改名+道号"
-- 加入官群: 发送"官群"
-- 邀请奖励: 发送"邀请帮助"
-- 更新日志: 发送"更新日志"，查看游戏最新内容
 
-📊 排行榜单
+🌟 基础入门
+- 我要修仙：创建角色
+- 我的修仙信息：查看存档
+- 修仙签到：每日签到
+- 修仙改名：修改道号
+- 官群：加入交流群
+- 更新日志：查看版本内容
+
+📈 境界成长
+- 突破 / 直接突破 / 渡厄突破
+- 连续突破 / 连续渡厄突破 / 连续金丹突破
+- 我的突破概率
+- 我的体力
+- 渡劫 / 开始渡劫 / 天命渡劫 / 渡心魔劫
+
+🧘 修炼相关
+- 闭关 / 出关 / 灵石出关
+- 灵石修炼 / 双修
+- 我的修为
+- 境界帮助 / 品阶帮助 / 灵根帮助
+- 重入仙途
+
+💰 资源交互
+- 送灵石 / 偷灵石 / 抢灵石
+- 鸿运
+- 仙缘帮助
+- 交易帮助
+- 灵庄帮助
+
+
+🧪 功能系统
+- 炼丹帮助
+- 灵田帮助
+- 合成帮助
+- 仙途奇缘帮助
+- 虚神界帮助
+- 炼体帮助
+- 本命法宝帮助
+- 宗门帮助
+- 邀请帮助
+- 道侣帮助
+- 论道切磋
+- 附近道友
+- 地图帮助
+- 秘境帮助
+- 历练帮助
+- 世界boss帮助
+- 通天塔帮助
+- 悬赏令帮助
+- 幻境寻心
+- 虚神界帮助
+- 竞技场帮助
+- 前尘帮助
+
+📊 排行榜
 - 修仙排行榜
 - 灵石排行榜
 - 战力排行榜
 - 宗门排行榜
 - 轮回排行榜
 
-🌈 角色养成
-- 修炼方式: 闭关/出关/灵石出关/灵石修炼/双修
-- 灵根重置: 发送"重入仙途"（需{number_to(XiuConfig().remake)}灵石）
-- 功法体系: 发送"境界/品阶/灵根帮助"
-- 轮回重修: 发送"轮回重修帮助"
-- 渡劫系统: 发送"渡劫"查看渡劫信息
+🌍 其他信息
+- 修仙界信息
+- 修仙日志
+- 修仙数据
 
-🔧 系统功能
-- 交易功能: 发送"交易帮助"
-- 宗门体系: 发送"宗门帮助"
-- 灵庄系统: 发送"灵庄帮助"
-- 秘境探索: 发送"秘境帮助"
-- 炼丹指南: 发送"炼丹帮助"
-- 灵田管理: 发送"灵田帮助"
-- 物品合成: 发送"合成帮助"
-- 仙缘奇遇: 发送"仙途奇缘帮助"
-- 虚神界: 发送"虚神界帮助"
-- 仙缘帮助: 发送"仙缘帮助"
-
-🎯 任务系统
-- 悬赏任务: 发送"悬赏令帮助"
-- 无限爬塔: 发送"通天塔帮助"
-- 炼心明志: 发送"幻境寻心"
-- 仙路历练: 发送"历练帮助"
-
-🐉 世界挑战
-- 世界BOSS: 发送"世界boss帮助"
-- 通天塔: 发送"通天塔帮助"
+※ 说明：
+发送“XX帮助”可查看对应玩法详细说明。
 """
 
     md_msg = f"""【修仙帮助】
->🌟 核心功能
-😇 启程修仙: [我要修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)
-📁 存档查询: [我的修仙信息](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)
-✅ 每日签到: [修仙签到](mqqapi://aio/inlinecmd?command=修仙签到&enter=false&reply=false)
-⚡ 突破境界: [突破](mqqapi://aio/inlinecmd?command=突破&enter=false&reply=false)
-  🔁 支持[连续突破](mqqapi://aio/inlinecmd?command=连续突破&enter=false&reply=false)五次
-💰 灵石交互: [送](mqqapi://aio/inlinecmd?command=送灵石&enter=false&reply=false)/[偷](mqqapi://aio/inlinecmd?command=偷灵石&enter=false&reply=false)/[抢](mqqapi://aio/inlinecmd?command=抢灵石&enter=false&reply=false)灵石+道号+数量
-✏️ 修改道号: [修仙改名](mqqapi://aio/inlinecmd?command=修仙改名&enter=false&reply=false)+道号
-👥 加入官群: [官群](mqqapi://aio/inlinecmd?command=官群&enter=false&reply=false)
-🎁 邀请奖励: [邀请帮助](mqqapi://aio/inlinecmd?command=邀请帮助&enter=false&reply=false)
-📢 更新日志: [更新日志](mqqapi://aio/inlinecmd?command=更新日志&enter=false&reply=false)，查看游戏最新内容
-🧘 修炼方式: [闭关](mqqapi://aio/inlinecmd?command=闭关&enter=false&reply=false)/[灵石出关](mqqapi://aio/inlinecmd?command=灵石出关&enter=false&reply=false)/[灵石修炼](mqqapi://aio/inlinecmd?command=灵石修炼&enter=false&reply=false)/[双修](mqqapi://aio/inlinecmd?command=双修&enter=false&reply=false)/[虚神界闭关](mqqapi://aio/inlinecmd?command=虚神界闭关&enter=false&reply=false)
-📖 功法体系: [境界](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false)/[品阶](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)/[灵根](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false)
+>🌟 基础入门  
+😇 启程修仙：[我要修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)  
+📁 存档查询：[我的修仙信息](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)  
+✅ 每日签到：[修仙签到](mqqapi://aio/inlinecmd?command=修仙签到&enter=false&reply=false)  
+✏️ 修改道号：[修仙改名](mqqapi://aio/inlinecmd?command=修仙改名&enter=false&reply=false)  
+📢 更新日志：[更新日志](mqqapi://aio/inlinecmd?command=更新日志&enter=false&reply=false)  
+👥 官群入口：[官群](mqqapi://aio/inlinecmd?command=官群&enter=false&reply=false)  
+
+>📈 境界成长  
+⚡ [突破](mqqapi://aio/inlinecmd?command=突破&enter=false&reply=false) / [直接突破](mqqapi://aio/inlinecmd?command=直接突破&enter=false&reply=false) / [渡厄突破](mqqapi://aio/inlinecmd?command=渡厄突破&enter=false&reply=false)  
+🔁 [连续突破](mqqapi://aio/inlinecmd?command=连续突破&enter=false&reply=false) / [连续渡厄突破](mqqapi://aio/inlinecmd?command=连续渡厄突破&enter=false&reply=false) / [连续金丹突破](mqqapi://aio/inlinecmd?command=连续金丹突破&enter=false&reply=false)  
+🌩️ [渡劫](mqqapi://aio/inlinecmd?command=渡劫&enter=false&reply=false) / [开始渡劫](mqqapi://aio/inlinecmd?command=开始渡劫&enter=false&reply=false) / [天命渡劫](mqqapi://aio/inlinecmd?command=天命渡劫&enter=false&reply=false) / [渡心魔劫](mqqapi://aio/inlinecmd?command=渡心魔劫&enter=false&reply=false)  
+📌 [我的突破概率](mqqapi://aio/inlinecmd?command=我的突破概率&enter=false&reply=false) / [我的体力](mqqapi://aio/inlinecmd?command=我的体力&enter=false&reply=false)  
+
+>🧘 修炼相关  
+🛌 [闭关](mqqapi://aio/inlinecmd?command=闭关&enter=false&reply=false) / [出关](mqqapi://aio/inlinecmd?command=出关&enter=false&reply=false) / [灵石出关](mqqapi://aio/inlinecmd?command=灵石出关&enter=false&reply=false)  
+💠 [灵石修炼](mqqapi://aio/inlinecmd?command=灵石修炼&enter=false&reply=false) / [双修](mqqapi://aio/inlinecmd?command=双修&enter=false&reply=false)  
+📖 [境界帮助](mqqapi://aio/inlinecmd?command=境界帮助&enter=false&reply=false) / [灵根帮助](mqqapi://aio/inlinecmd?command=灵根帮助&enter=false&reply=false) / [品阶帮助](mqqapi://aio/inlinecmd?command=品阶帮助&enter=false&reply=false)  
+🔄 [重入仙途](mqqapi://aio/inlinecmd?command=重入仙途&enter=false&reply=false)  
+
+>💰 资源交互  
+💸 [送灵石](mqqapi://aio/inlinecmd?command=送灵石&enter=false&reply=false) / [偷灵石](mqqapi://aio/inlinecmd?command=偷灵石&enter=false&reply=false) / [抢灵石](mqqapi://aio/inlinecmd?command=抢灵石&enter=false&reply=false)  
+🎉 [鸿运](mqqapi://aio/inlinecmd?command=鸿运&enter=false&reply=false)  
+✨ [仙缘帮助](mqqapi://aio/inlinecmd?command=仙缘帮助&enter=false&reply=false) / [交易帮助](mqqapi://aio/inlinecmd?command=交易帮助&enter=false&reply=false) / [灵庄帮助](mqqapi://aio/inlinecmd?command=灵庄帮助&enter=false&reply=false)  
+
+>🧪 功能系统  
+🏔️ [宗门帮助](mqqapi://aio/inlinecmd?command=宗门帮助&enter=false&reply=false)  
+🎁 [邀请帮助](mqqapi://aio/inlinecmd?command=邀请帮助&enter=false&reply=false)  
+💞 [道侣帮助](mqqapi://aio/inlinecmd?command=道侣帮助&enter=false&reply=false)  
+🧭 [地图帮助](mqqapi://aio/inlinecmd?command=地图帮助&enter=false&reply=false) / [地图](mqqapi://aio/inlinecmd?command=地图&enter=false&reply=false) / [我的位置](mqqapi://aio/inlinecmd?command=我的位置&enter=false&reply=false)  
+🌀 [秘境帮助](mqqapi://aio/inlinecmd?command=秘境帮助&enter=false&reply=false) / 🧳 [历练帮助](mqqapi://aio/inlinecmd?command=历练帮助&enter=false&reply=false)  
+🐉 [世界boss帮助](mqqapi://aio/inlinecmd?command=世界boss帮助&enter=false&reply=false)  
+🗼 [通天塔帮助](mqqapi://aio/inlinecmd?command=通天塔帮助&enter=false&reply=false)  
+📜 [悬赏令帮助](mqqapi://aio/inlinecmd?command=悬赏令帮助&enter=false&reply=false)  
+🪞 [幻境寻心](mqqapi://aio/inlinecmd?command=幻境寻心&enter=false&reply=false)  
+🌌 [虚神界帮助](mqqapi://aio/inlinecmd?command=虚神界帮助&enter=false&reply=false)  
+🏟️ [竞技场帮助](mqqapi://aio/inlinecmd?command=竞技场帮助&enter=false&reply=false)  
+🕯️ [前尘帮助](mqqapi://aio/inlinecmd?command=前尘帮助&enter=false&reply=false)  
+⚗️ [炼丹帮助](mqqapi://aio/inlinecmd?command=炼丹帮助&enter=false&reply=false) / 🌾 [灵田帮助](mqqapi://aio/inlinecmd?command=灵田帮助&enter=false&reply=false) / 🔨 [合成帮助](mqqapi://aio/inlinecmd?command=合成帮助&enter=false&reply=false)  
+✨ [仙途奇缘帮助](mqqapi://aio/inlinecmd?command=仙途奇缘帮助&enter=false&reply=false)  
+🧍 [炼体帮助](mqqapi://aio/inlinecmd?command=炼体帮助&enter=false&reply=false) / 🪙 [本命法宝帮助](mqqapi://aio/inlinecmd?command=本命法宝帮助&enter=false&reply=false)  
+
+>📊 其他  
+🏆 [排行榜](mqqapi://aio/inlinecmd?command=排行榜&enter=false&reply=false)  
+📘 [修仙日志](mqqapi://aio/inlinecmd?command=修仙日志&enter=false&reply=false) / 📈 [修仙数据](mqqapi://aio/inlinecmd?command=修仙数据&enter=false&reply=false) / 🌍 [修仙界信息](mqqapi://aio/inlinecmd?command=修仙界信息&enter=false&reply=false)  
+
+***发送“XX帮助”可查看对应系统详细说明***
 """
 
     if XiuConfig().markdown_status and not is_channel_event(event):
         if XiuConfig().markdown_id:
             title_param = {
-            "key": "t1",
-            "values": [
-                    generate_command("🌟 启程修仙", command="我要修仙", status="start", msg2="\r📊 存档查询\r\r> "),
-                    generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r📅 每日签到\r\r> "),
-                    generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r✏️ 修改道号\r\r> "),
-                    generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r📚 功法体系\r\r> "),
-                    generate_command("境界", command="境界帮助", status="start", msg2="/"),
-                    generate_command("灵根", command="灵根帮助", status="start", msg2="/"),
-                    generate_command("品阶", command="品阶帮助", status="start", msg2="\r\r🧘 修炼方式\r\r> "),
-                    generate_command("修炼", command="修炼", status="start", msg2="/"),
-                    generate_command("闭关", command="闭关", status="end", msg2="\r\r---\r\r"),
-                    generate_command("***必死之境机逢仙缘，修仙之路波澜壮阔！***")
-            ]}
+                "key": "t1",
+                "values": [
+                    generate_command("🌟 基础入门", command="我要修仙", status="start", msg2="\r📁 存档查询\r\r> "),
+                    generate_command("我的修仙信息", command="我的修仙信息", status="start", msg2="\r\r✅ 每日签到\r\r> "),
+                    generate_command("修仙签到", command="修仙签到", status="start", msg2="\r\r🗺️ 地图系统\r\r> "),
+                    generate_command("地图帮助", command="地图帮助", status="start", msg2="\r\r⚔️ 战斗玩法\r\r> "),
+                    generate_command("世界boss帮助", command="世界boss帮助", status="start", msg2="/"),
+                    generate_command("悬赏令帮助", command="悬赏令帮助", status="start", msg2="/"),
+                    generate_command("竞技场帮助", command="竞技场帮助", status="start", msg2="\r\r🧪 功能系统\r\r> "),
+                    generate_command("炼体帮助", command="炼体帮助", status="start", msg2="/"),
+                    generate_command("本命法宝帮助", command="本命法宝帮助", status="end", msg2="\r\r---\r\r"),
+                    generate_command("***发送“XX帮助”可查看对应玩法详细说明***")
+                ]
+            }
             msg_param = MessageSegment.markdown_param("t2", " ")
             shell_param = MessageSegment.markdown_param("s1", " ")
             param = [title_param, msg_param, shell_param]
-            md_msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id, param, XiuConfig().button_id2)
-            await bot.send(event=event, message=md_msg)
+            md_msg_template = MessageSegment.markdown_template(bot, XiuConfig().markdown_id, param, XiuConfig().button_id2)
+            await bot.send(event=event, message=md_msg_template)
             await help_in.finish()
         else:
-            msg = MessageSegment.markdown(bot, md_msg, button_id=XiuConfig().button_id2)
-            await bot.send(event=event, message=msg)
+            msg_send = MessageSegment.markdown(bot, md_msg, button_id=XiuConfig().button_id2)
+            await bot.send(event=event, message=msg_send)
             await help_in.finish()
-    else:    
-        await handle_send(bot, event, msg)
+    else:
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="修仙",
+            k1="存档",
+            v1="我的修仙信息",
+            k2="地图",
+            v2="地图帮助",
+            k3="法宝",
+            v3="本命法宝帮助"
+        )
         await help_in.finish()
 
 @level_help.handle(parameterless=[Cooldown(cd_time=1.4)])
