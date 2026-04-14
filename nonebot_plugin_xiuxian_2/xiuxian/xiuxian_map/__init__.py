@@ -24,6 +24,7 @@ items = Items()
 
 MAP_FILE = Path() / "data" / "xiuxian" / "地图.json"
 MAP_TABLE = "map_status"
+MAP_MISSION_TABLE = "map_mission"
 DONGFU_TABLE = "dongfu_status"
 EXPLORE_TABLE = "map_explore_status"
 
@@ -58,6 +59,27 @@ REWARD_DECAY_STEPS = [
     (30, 0.70),
     (999999, 0.35),
 ]
+
+MAP_MISSION_CONFIG = {
+    "gather": {
+        "name": "采集委托",
+        "count_key": "gather_count",
+        "targets": [3, 5, 8],
+        "desc": lambda n: f"今日完成采集 {n} 次",
+    },
+    "combat": {
+        "name": "战斗委托",
+        "count_key": "combat_count",
+        "targets": [1, 2, 3],
+        "desc": lambda n: f"今日完成节点战斗 {n} 次",
+    },
+    "explore": {
+        "name": "探索委托",
+        "count_key": "explore_count",
+        "targets": [1, 2, 3],
+        "desc": lambda n: f"今日发起探索 {n} 次",
+    },
+}
 
 # =========================================
 # 种子商店配置
@@ -102,9 +124,9 @@ ACTION_ITEM_POOLS = {
     ],
 
     # 灵石奖励
-    "stone_low": ["LS_50000", "LS_80000", "LS_120000"],
-    "stone_mid": ["LS_150000", "LS_220000", "LS_300000"],
-    "stone_high": ["LS_500000", "LS_800000"],
+    "stone_low": ["LS_150000", "LS_180000", "LS_1100000"],
+    "stone_mid": ["LS_1500000", "LS_2200000", "LS_3000000"],
+    "stone_high": ["LS_5000000", "LS_8000000"],
 
     # 额外资源
     "wash_stone_low": [20023],
@@ -302,6 +324,10 @@ node_combat_cmd = on_command("节点战斗", aliases={"试炼挑战", "险地挑
 start_explore_cmd = on_command("开始探索", aliases={"节点探索"}, priority=8, block=True)
 settle_explore_cmd = on_command("探索结算", priority=8, block=True)
 
+map_mission_cmd = on_command("地图委托", priority=8, block=True)
+map_mission_accept_cmd = on_command("接取委托", priority=8, block=True)
+map_mission_claim_cmd = on_command("委托完成", priority=8, block=True)
+
 # =========================================
 # 限制/冷却工具
 # =========================================
@@ -377,6 +403,95 @@ def _set_cd(uid: str, cd_key: str, seconds: int):
     player_data_manager.update_or_write_data(uid, MAP_CD_TABLE, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
     return t
 
+
+def _default_map_mission():
+    return {
+        "date": _today_str(),
+        "mission_type": "",
+        "target": 0,
+        "claimed": 0,
+    }
+
+
+def _get_map_mission(uid: str):
+    d = player_data_manager.get_fields(str(uid), MAP_MISSION_TABLE) or {}
+    default = _default_map_mission()
+
+    # 跨天重置
+    if d.get("date") != _today_str():
+        d = default.copy()
+        for k, v in d.items():
+            player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+        return d
+
+    for k, v in default.items():
+        if k not in d or d.get(k) is None:
+            d[k] = v
+            player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+    return d
+
+
+def _save_map_mission(uid: str, d: dict):
+    for k, v in d.items():
+        player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+
+
+def _roll_new_map_mission(uid: str):
+    mission_type = random.choice(list(MAP_MISSION_CONFIG.keys()))
+    conf = MAP_MISSION_CONFIG[mission_type]
+    target = random.choice(conf["targets"])
+
+    d = {
+        "date": _today_str(),
+        "mission_type": mission_type,
+        "target": target,
+        "claimed": 0,
+    }
+    _save_map_mission(uid, d)
+    return d
+
+
+def _get_map_mission_progress(uid: str, mission_data: dict):
+    mission_type = mission_data.get("mission_type")
+    if not mission_type or mission_type not in MAP_MISSION_CONFIG:
+        return 0
+
+    daily = _get_daily_limit(uid)
+    count_key = MAP_MISSION_CONFIG[mission_type]["count_key"]
+    return int(daily.get(count_key, 0))
+
+
+def _get_mission_desc(mission_data: dict):
+    mission_type = mission_data.get("mission_type")
+    target = int(mission_data.get("target", 0))
+    if not mission_type or mission_type not in MAP_MISSION_CONFIG:
+        return "暂无委托"
+    return MAP_MISSION_CONFIG[mission_type]["desc"](target)
+
+
+def _grant_map_mission_reward(uid: str, user_info: dict):
+    rewards = []
+
+    # 基础灵石奖励：从 stone_high 抽一个
+    stone_pool = ACTION_ITEM_POOLS.get("stone_high", [])
+    if stone_pool:
+        stone_pick = random.choice(stone_pool)
+        if isinstance(stone_pick, str) and stone_pick.startswith("LS_"):
+            stone_num = int(stone_pick.split("_")[1])
+            sql_message.update_ls(uid, stone_num, 1)
+            rewards.append(f"灵石x{number_to(stone_num)}")
+
+    # 额外奖励池：先随机选池
+    extra_pool_key = random.choice(["acc_pack_low", "god_frag", "token_rare"])
+    extra_pool = ACTION_ITEM_POOLS.get(extra_pool_key, [])
+    if extra_pool:
+        gid = random.choice(extra_pool)
+        info = items.get_data_by_item_id(str(gid))
+        if info:
+            sql_message.send_back(uid, gid, info["name"], info.get("type", "材料"), 1, 1)
+            rewards.append(f"{info['name']}x1")
+
+    return rewards
 # =========================================
 # 地图工具
 # =========================================
@@ -673,7 +788,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "6. 长时玩法：开始探索 [分钟] / 探索结算（含每日上限）\n"
         "7. 商店玩法：种子商店 / 购买种子\n"
         "8. 洞府互动：我的洞府 / 洞府种植 / 洞府布阵 / 潜入洞府\n"
-        "注：地图收益存在日内衰减机制，且现可额外掉落技能与装备。"
+        "9. 地图委托：地图委托 / 接取委托 / 委托完成\n"
+        "注：地图收益存在日内衰减机制"
     )
     await handle_send(bot, event, msg)
 
@@ -1642,3 +1758,103 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     await _settle_explore(bot, event)
+
+@map_mission_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    ok, user_info, m = check_user(event)
+    if not ok:
+        await handle_send(bot, event, m, md_type="我要修仙")
+        return
+
+    uid = str(user_info["user_id"])
+    mission = _get_map_mission(uid)
+
+    if not mission.get("mission_type"):
+        await handle_send(
+            bot, event,
+            "今日尚未接取地图委托。\n发送【接取委托】获取今日任务。"
+        )
+        return
+
+    desc = _get_mission_desc(mission)
+    progress = _get_map_mission_progress(uid, mission)
+    target = int(mission.get("target", 0))
+    claimed = int(mission.get("claimed", 0))
+
+    status = "已领取" if claimed else ("可完成" if progress >= target else "进行中")
+
+    msg = (
+        f"【地图委托】\n"
+        f"任务：{desc}\n"
+        f"进度：{progress}/{target}\n"
+        f"状态：{status}\n"
+        f"奖励：高额灵石 + 额外随机宝物"
+    )
+    await handle_send(bot, event, msg)
+
+@map_mission_accept_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    ok, user_info, m = check_user(event)
+    if not ok:
+        await handle_send(bot, event, m, md_type="我要修仙")
+        return
+
+    uid = str(user_info["user_id"])
+    mission = _get_map_mission(uid)
+
+    if not mission.get("mission_type"):
+        mission = _roll_new_map_mission(uid)
+
+    desc = _get_mission_desc(mission)
+    progress = _get_map_mission_progress(uid, mission)
+    target = int(mission.get("target", 0))
+
+    msg = (
+        f"已接取今日地图委托！\n"
+        f"任务：{desc}\n"
+        f"当前进度：{progress}/{target}\n"
+        f"完成后发送【委托完成】领取奖励。"
+    )
+    await handle_send(bot, event, msg)
+
+@map_mission_claim_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    ok, user_info, m = check_user(event)
+    if not ok:
+        await handle_send(bot, event, m, md_type="我要修仙")
+        return
+
+    uid = str(user_info["user_id"])
+    mission = _get_map_mission(uid)
+
+    if not mission.get("mission_type"):
+        await handle_send(bot, event, "你今日尚未接取地图委托，请先发送【接取委托】。")
+        return
+
+    if int(mission.get("claimed", 0)) == 1:
+        await handle_send(bot, event, "今日地图委托奖励已领取。")
+        return
+
+    progress = _get_map_mission_progress(uid, mission)
+    target = int(mission.get("target", 0))
+
+    if progress < target:
+        await handle_send(
+            bot, event,
+            f"委托尚未完成。\n当前进度：{progress}/{target}"
+        )
+        return
+
+    rewards = _grant_map_mission_reward(uid, user_info)
+    mission["claimed"] = 1
+    _save_map_mission(uid, mission)
+
+    msg = (
+        f"✅ 地图委托完成！\n"
+        f"任务：{_get_mission_desc(mission)}\n"
+        f"获得奖励：{_merge_reward_text(rewards)}"
+    )
+    await handle_send(bot, event, msg)
