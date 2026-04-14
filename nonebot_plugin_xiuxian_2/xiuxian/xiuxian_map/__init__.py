@@ -126,7 +126,7 @@ ACTION_ITEM_POOLS = {
     # 灵石奖励
     "stone_low": ["LS_150000", "LS_180000", "LS_1100000"],
     "stone_mid": ["LS_1500000", "LS_2200000", "LS_3000000"],
-    "stone_high": ["LS_5000000", "LS_8000000"],
+    "stone_high": ["LS_2500000", "LS_3500000"],
 
     # 额外资源
     "wash_stone_low": [20023],
