@@ -21,6 +21,7 @@ from .mod.half_ten import *
 from .mod.gomoku import *
 from .mod.minesweeper import *
 from .mod.guess_number import *
+from .mod.random_girl_video import *
 
 
 fun_menu_cmd = on_command("娱乐帮助", aliases={"娱乐菜单", "娱乐功能"}, priority=5, block=True)
@@ -167,7 +168,6 @@ def _build_fun_help_page(page: int):
             "1、小游戏帮助\n"
             "2、点歌帮助\n"
             "3、哈基米\n\n"
-            "小游戏新增：\n"
             "4、猜数字\n"
             "   - 开始猜数字\n"
             "   - 猜 50\n"

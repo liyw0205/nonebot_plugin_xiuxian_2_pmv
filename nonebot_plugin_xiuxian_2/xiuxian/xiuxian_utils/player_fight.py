@@ -1197,8 +1197,64 @@ class BattleSystem:
                 total += float(sb.get("value", 0))
         return total
 
+    # =========================
+    # 反伤可触发判定
+    # =========================
+    def _can_trigger_reflect(self, defender):
+        """
+        仅当 defender 在本次受击后“真实存活”时，才允许反伤。
+        假死状态（涅槃等待/魂返灵体）禁止反伤。
+        """
+        if not defender:
+            return False
+        if not defender.is_alive:
+            return False
+        if defender.natal_runtime.get("is_nirvana_waiting", False):
+            return False
+        if defender.natal_runtime.get("is_soul_form", False):
+            return False
+        return True
+
+    def _get_reflect_rate(self, defender):
+        reflect_rate = 0.0
+        if defender.has_natal_effect(NatalEffectType.REFLECT_DAMAGE):
+            reflect_rate += defender.get_natal_effect_value(NatalEffectType.REFLECT_DAMAGE)
+        reflect_rate += self._get_set_bonus_total(defender, "reflect")
+        return max(0.0, reflect_rate)
+
+    def _try_apply_reflect(self, attacker, defender, damage_for_reflect):
+        """
+        统一反伤结算入口：
+        - defender 需满足 _can_trigger_reflect
+        - 反伤基于 damage_for_reflect（通常为本次实际造成的HP伤害总和）
+        返回:
+          (msg_text, reflected_hp_loss)
+        """
+        if damage_for_reflect <= 0:
+            return "", 0
+
+        if not self._can_trigger_reflect(defender):
+            return "", 0
+
+        reflect_rate = self._get_reflect_rate(defender)
+        if reflect_rate <= 0:
+            return "", 0
+
+        reflect_dmg = int(max(damage_for_reflect, 0) * reflect_rate)
+        if reflect_dmg <= 0:
+            return "", 0
+
+        r_hp_loss, r_absorbed, r_blocked = self._apply_damage_with_layers(
+            defender, attacker, reflect_dmg, damage_type="true"
+        )
+
+        if r_blocked:
+            return f"\n{attacker.name}的无敌抵挡了反伤！", 0
+        if r_hp_loss > 0:
+            return f"\n{defender.name}反伤{number_to(r_hp_loss)}点！", r_hp_loss
+        return "", 0
+
     def _apply_set_bonus_start_effects(self, unit):
-        # 开场护盾
         shield_rate = self._get_set_bonus_total(unit, "shield")
         if shield_rate > 0:
             shield_amount = int(unit.max_hp * shield_rate)
@@ -1215,28 +1271,16 @@ class BattleSystem:
         is_crit = random.random() < attacker.crit_rate
         crit_mult = attacker.crit_dmg_rate if is_crit else 1.0
 
-        # ===== 修复点：减会伤(减法) + 抗暴(乘法) 分离 =====
         if is_crit:
-            # 1. 减会心伤害（减法）
             crit_dmg_reduce = float(getattr(defender, "base_crit_damage_reduction", 0.0))
-
-            # 如果以后你有 debuff/buff 想影响减会伤，可以继续往这里叠
-            # 例如：crit_dmg_reduce += xxx
-
-            # 2. 抗暴（乘法）
             crit_resist_mul = float(getattr(defender, "base_crit_resist", 0.0))
 
-            # 本命法宝抗暴 -> 并入抗暴乘区
             if defender.has_natal_effect(NatalEffectType.CRIT_RESIST):
                 crit_resist_mul += defender.get_natal_effect_value(NatalEffectType.CRIT_RESIST)
 
-            # 上限保护
             crit_resist_mul = max(0.0, min(0.95, crit_resist_mul))
-
-            # 最终暴击倍率：先减法，再乘法
             crit_mult = max(1.0, (crit_mult - crit_dmg_reduce) * (1 - crit_resist_mul))
 
-        # 减伤 / 穿透
         if defender.damage_reduction_rate < 0:
             dr_eff = defender.damage_reduction_rate
         elif penetration:
@@ -1256,12 +1300,6 @@ class BattleSystem:
         return int(max(1, damage)), is_crit, status
 
     def _apply_damage_with_layers(self, attacker, target, dmg, damage_type="normal", shield_penetration=0.0):
-        """
-        统一伤害结算：
-        - 无敌优先
-        - true/dot：无视护盾直接打血
-        - normal：走护盾 + 护盾穿透
-        """
         if dmg <= 0:
             return 0, 0, False
 
@@ -1505,7 +1543,6 @@ class BattleSystem:
         extra_true_damage = 0
         append_msgs = []
 
-        # 套装真伤
         true_damage_rate = self._get_set_bonus_total(attacker, "true_damage")
         if true_damage_rate > 0:
             td = int(attacker.atk_rate * true_damage_rate)
@@ -1706,6 +1743,9 @@ class BattleSystem:
         total_dmg = 0
         skill.trigger_cd()
 
+        # 用于反伤累计（仅本次技能）
+        reflect_damage_base = {}
+
         if skill.skill_type == SkillType.MULTI_HIT:
             hits = skill.atk_values if isinstance(skill.atk_values, list) else [skill.atk_values]
             target = targets[0]
@@ -1721,6 +1761,7 @@ class BattleSystem:
                         crit_str = "💥" if is_crit else ""
                         skill_msg += f"{crit_str}{number_to(int(hp_loss))}伤害、"
                         total_dmg += hp_loss
+                        reflect_damage_base[target.id] = reflect_damage_base.get(target.id, 0) + hp_loss
                     elif absorbed > 0:
                         skill_msg += f"护盾吸收{number_to(int(absorbed))}、"
                 else:
@@ -1735,6 +1776,8 @@ class BattleSystem:
                 extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, total_dmg)
                 extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, total_dmg)
                 total_dmg += extra_true_damage1 + extra_true_damage2
+                if extra_true_damage1 + extra_true_damage2 > 0:
+                    reflect_damage_base[target.id] = reflect_damage_base.get(target.id, 0) + (extra_true_damage1 + extra_true_damage2)
                 all_msgs = extra_msgs1 + extra_msgs2
                 if all_msgs:
                     skill_msg += "（" + "，".join(all_msgs) + "）"
@@ -1743,6 +1786,16 @@ class BattleSystem:
                 revived = self._try_handle_natal_revive(target, caster)
                 if not revived:
                     skill_msg += f"\n{target.name}💀倒下了！"
+
+            # 反伤（目标最终活着且非假死）
+            base = reflect_damage_base.get(target.id, 0)
+            ref_msg, _ = self._try_apply_reflect(caster, target, base)
+            if ref_msg:
+                skill_msg += ref_msg
+                if caster.hp <= 0:
+                    revived = self._try_handle_natal_revive(caster, target)
+                    if not revived:
+                        skill_msg += f"\n{caster.name}💀倒下了！"
 
             if skill.turn_cost > 0:
                 effect = StatusEffect(skill.name, DebuffType.FATIGUE, 0, 1, True, skill.turn_cost, skill.skill_type)
@@ -1803,8 +1856,10 @@ class BattleSystem:
             rand_mult = round(random.uniform(min_mult, max_mult), 2)
             dmg, is_crit, status = self._calc_raw_damage(caster, targets[0], rand_mult)
 
+            target = targets[0]
+            reflect_base = 0
+
             if status == "Hit":
-                target = targets[0]
                 hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
                 if blocked:
                     skill_msg += f"获得{rand_mult}倍加成，但被{target.name}无敌抵挡！"
@@ -1813,6 +1868,7 @@ class BattleSystem:
                     crit_str = "💥并且发生了会心一击，" if is_crit else ""
                     total_dmg = hp_loss
                     if hp_loss > 0:
+                        reflect_base += hp_loss
                         skill_msg += f"获得{rand_mult}倍加成，{crit_str}造成{number_to(int(total_dmg))}伤害！"
                     else:
                         skill_msg += f"获得{rand_mult}倍加成，但伤害被护盾吸收{number_to(int(absorbed))}！"
@@ -1820,6 +1876,8 @@ class BattleSystem:
                     extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
                     extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
                     total_dmg += extra_true_damage1 + extra_true_damage2
+                    if extra_true_damage1 + extra_true_damage2 > 0:
+                        reflect_base += (extra_true_damage1 + extra_true_damage2)
                     all_msgs = extra_msgs1 + extra_msgs2
                     if all_msgs:
                         skill_msg += "（" + "，".join(all_msgs) + "）"
@@ -1828,6 +1886,15 @@ class BattleSystem:
                         revived = self._try_handle_natal_revive(target, caster)
                         if not revived:
                             skill_msg += f"\n{target.name}💀倒下了！"
+
+                    # 反伤
+                    ref_msg, _ = self._try_apply_reflect(caster, target, reflect_base)
+                    if ref_msg:
+                        skill_msg += ref_msg
+                        if caster.hp <= 0:
+                            revived = self._try_handle_natal_revive(caster, target)
+                            if not revived:
+                                skill_msg += f"\n{caster.name}💀倒下了！"
             else:
                 skill_msg = f"{caster.name}的技能被{targets[0].name}闪避了！"
 
@@ -1848,6 +1915,7 @@ class BattleSystem:
         elif skill.skill_type == SkillType.MULTIPLIER_PERCENT_HP:
             skill_miss_msg = ""
             for target in targets:
+                reflect_base = 0
                 dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values)
                 if status == "Hit":
                     dmg = dmg + int(target.max_hp * skill.atk_coefficient)
@@ -1858,6 +1926,7 @@ class BattleSystem:
 
                     crit_str = "💥并且发生了会心一击，" if is_crit else ""
                     if hp_loss > 0:
+                        reflect_base += hp_loss
                         skill_msg += f"{crit_str}对{target.name}造成{number_to(int(hp_loss))}伤害！"
                         total_dmg += hp_loss
                     elif absorbed > 0:
@@ -1867,6 +1936,15 @@ class BattleSystem:
                         revived = self._try_handle_natal_revive(target, caster)
                         if not revived:
                             skill_msg += f"\n{target.name}💀倒下了！"
+
+                    # 反伤
+                    ref_msg, _ = self._try_apply_reflect(caster, target, reflect_base)
+                    if ref_msg:
+                        skill_msg += ref_msg
+                        if caster.hp <= 0:
+                            revived = self._try_handle_natal_revive(caster, target)
+                            if not revived:
+                                skill_msg += f"\n{caster.name}💀倒下了！"
                 else:
                     skill_miss_msg += f"{caster.name}的技能被{target.name}闪避了！"
 
@@ -1879,6 +1957,7 @@ class BattleSystem:
         elif skill.skill_type == SkillType.MULTIPLIER_DEF_IGNORE:
             skill_miss_msg = ""
             for target in targets:
+                reflect_base = 0
                 dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values, True)
                 if status == "Hit":
                     hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
@@ -1888,6 +1967,7 @@ class BattleSystem:
 
                     crit_str = "💥并且发生了会心一击，" if is_crit else ""
                     if hp_loss > 0:
+                        reflect_base += hp_loss
                         skill_msg += f"{crit_str}对{target.name}造成{number_to(int(hp_loss))}伤害！"
                         total_dmg += hp_loss
                     elif absorbed > 0:
@@ -1897,6 +1977,15 @@ class BattleSystem:
                         revived = self._try_handle_natal_revive(target, caster)
                         if not revived:
                             skill_msg += f"\n{target.name}💀倒下了！"
+
+                    # 反伤
+                    ref_msg, _ = self._try_apply_reflect(caster, target, reflect_base)
+                    if ref_msg:
+                        skill_msg += ref_msg
+                        if caster.hp <= 0:
+                            revived = self._try_handle_natal_revive(caster, target)
+                            if not revived:
+                                skill_msg += f"\n{caster.name}💀倒下了！"
                 else:
                     skill_miss_msg += f"{caster.name}的技能被{target.name}闪避了！"
 
@@ -1994,12 +2083,10 @@ class BattleSystem:
         if accuracy == "Hit":
             shield_pen = 0.0
 
-            # 本命法宝破盾
             if caster.has_natal_effect(NatalEffectType.SHIELD_BREAK):
                 if target.get_buffs("type", BuffType.SHIELD):
                     shield_pen = caster.get_natal_effect_value(NatalEffectType.SHIELD_BREAK)
 
-            # 套装破盾
             set_shield_break = self._get_set_bonus_total(caster, "shield_break")
             if set_shield_break > 0 and target.get_buffs("type", BuffType.SHIELD):
                 shield_pen = max(shield_pen, set_shield_break)
@@ -2010,8 +2097,11 @@ class BattleSystem:
             if blocked:
                 return f"{caster.name}发起攻击，但被{target.name}的无敌效果抵挡了！", 0
 
+            reflect_base = 0
+
             if hp_loss > 0:
                 total_dmg = hp_loss
+                reflect_base += hp_loss
                 if is_crit:
                     skill_msg += f"{caster.name}发起攻击，💥并且发生了会心一击，对{target.name}造成{number_to(int(total_dmg))}伤害！"
                 else:
@@ -2025,26 +2115,11 @@ class BattleSystem:
             extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
             extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
             total_dmg += extra_true_damage1 + extra_true_damage2
+            if extra_true_damage1 + extra_true_damage2 > 0:
+                reflect_base += (extra_true_damage1 + extra_true_damage2)
             all_msgs = extra_msgs1 + extra_msgs2
             if all_msgs:
                 skill_msg += "（" + "，".join(all_msgs) + "）"
-
-            # 本命法宝反伤
-            reflect_rate = 0.0
-            if target.has_natal_effect(NatalEffectType.REFLECT_DAMAGE):
-                reflect_rate += target.get_natal_effect_value(NatalEffectType.REFLECT_DAMAGE)
-
-            # 套装反伤
-            reflect_rate += self._get_set_bonus_total(target, "reflect")
-
-            if reflect_rate > 0:
-                reflect_dmg = int(max(total_dmg, 0) * reflect_rate)
-                if reflect_dmg > 0:
-                    r_hp_loss, r_absorbed, r_blocked = self._apply_damage_with_layers(target, caster, reflect_dmg, damage_type="true")
-                    if r_blocked:
-                        skill_msg += f"\n{caster.name}的无敌抵挡了反伤！"
-                    elif r_hp_loss > 0:
-                        skill_msg += f"\n{target.name}反伤{number_to(r_hp_loss)}点！"
 
             if caster.has_natal_effect(NatalEffectType.DEATH_STRIKE) and target.hp > 0:
                 death_rate = caster.get_natal_effect_value(NatalEffectType.DEATH_STRIKE)
@@ -2059,10 +2134,20 @@ class BattleSystem:
                     target.hp = 0
                     skill_msg += f"\n{target.name}触发斩杀线，被直接终结！"
 
+            # 先处理目标死亡/复活
             if target.hp <= 0:
                 revived = self._try_handle_natal_revive(target, caster)
                 if not revived:
                     skill_msg += f"\n{target.name}💀倒下了！"
+
+            # 再反伤（仅目标最终活着且非假死）
+            ref_msg, _ = self._try_apply_reflect(caster, target, reflect_base)
+            if ref_msg:
+                skill_msg += ref_msg
+                if caster.hp <= 0:
+                    revived = self._try_handle_natal_revive(caster, target)
+                    if not revived:
+                        skill_msg += f"\n{caster.name}💀倒下了！"
 
             if caster.has_natal_effect(NatalEffectType.TWIN_STRIKE) and target.is_alive:
                 twin_chance = caster.get_natal_effect_value(NatalEffectType.TWIN_STRIKE)
@@ -2083,6 +2168,7 @@ class BattleSystem:
                                 revived = self._try_handle_natal_revive(target, caster)
                                 if not revived:
                                     skill_msg += f"\n{target.name}💀倒下了！"
+                    # 双生这段是否再触发反伤；默认不再二次触发，避免过强
 
         else:
             skill_msg += f"{caster.name}使用普通攻击，被{target.name}躲开了"

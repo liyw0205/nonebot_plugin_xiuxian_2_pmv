@@ -41,7 +41,7 @@ from ..xiuxian_rift import group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
 from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
-from ..xiuxian_dungeon.dungeon_manager import DungeonManager
+from ..xiuxian_dungeon import dungeon_manager
 from .two_exp_cd import two_exp_cd
 from nonebot.permission import SUPERUSER
 
@@ -51,7 +51,6 @@ partner_invite_cache = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
-dungeon_manager = DungeonManager()
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 two_exp_limit = 3 # 默认双修次数上限，修仙之人一天3次也不奇怪（
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
@@ -1191,7 +1190,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mind_state.finish()
 
     user_id = user_msg['user_id']
-    sql_message.update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+    sql_message.update_last_check_info_time(user_id)
 
     player_data = sql_message.get_player_data(user_id)
     if not player_data:
@@ -1202,7 +1201,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_info = sql_message.get_user_info_with_id(user_id)
     current_status = load_player_user(user_id)
 
-    # 统一属性口径
     base_attr = get_base_attributes(user_id)
     final_attr = get_final_attributes(user_id)
 
@@ -1211,7 +1209,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await mind_state.finish()
 
-    # 状态映射
     status_map = {
         "on": "开启",
         "off": "关闭",
@@ -1219,33 +1216,86 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     }
     current_status_display = status_map.get(current_status, "关闭")
 
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
-    realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
+    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     user_buff_data = UserBuffDate(user_id)
-    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
+    user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
+    sub_buff_data = user_buff_data.get_user_sub_buff_data()
 
-    # 传承数据（用于展示）
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_burst_per = impart_data['impart_burst_per'] if impart_data is not None else 0
-    boss_atk = impart_data['boss_atk'] if impart_data is not None else 0
+    boss_damage_bonus = float(final_attr.get("boss_damage_bonus", 0) * 100)
 
-    # 武器/功法会心伤害加成（展示）
-    weapon_critatk_data = UserBuffDate(user_id).get_user_weapon_data()
-    weapon_critatk = weapon_critatk_data['critatk'] if weapon_critatk_data is not None else 0
-    user_main_critatk = UserBuffDate(user_id).get_user_main_buff_data()
-    main_critatk = user_main_critatk['critatk'] if user_main_critatk is not None else 0
+    main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
+    leveluprate = int(user_info['level_up_rate'])
+    main_buff_number = main_buff_data["number"] if main_buff_data is not None else 0
 
     user_attack = int(final_attr["final_atk"])
     total_crit_rate = float(final_attr["crit_rate"] * 100)
-    user_js = int(final_attr["damage_reduction"] * 100)
+    user_js = float(final_attr["damage_reduction"] * 100)
     max_hp = int(final_attr["max_hp"])
     max_mp = int(final_attr["max_mp"])
+
+    crit_resist = float(final_attr.get("crit_resist", 0) * 100)
+    crit_damage_reduction = float(final_attr.get("crit_damage_reduction", 0) * 100)
+    armor_penetration = float(final_attr.get("armor_penetration", 0) * 100)
+
+    accessory_effect = final_attr.get("accessory_effect", {}) or {}
+    set_bonus_effects = final_attr.get("set_bonus_effects", []) or []
+
+    # 饰品加成展示
+    accessory_lines = []
+    if accessory_effect:
+        hp_pct = accessory_effect.get("hp_pct", 0)
+        atk_pct = accessory_effect.get("atk_pct", 0)
+        crit_rate_pct = accessory_effect.get("crit_rate", 0)
+        crit_damage_pct = accessory_effect.get("crit_damage", 0)
+        dmg_reduction_pct = accessory_effect.get("dmg_reduction", 0)
+        crit_resist_pct = accessory_effect.get("crit_resist", 0)
+
+        if hp_pct:
+            accessory_lines.append(f"气血+{hp_pct * 100:.2f}%")
+        if atk_pct:
+            accessory_lines.append(f"攻击+{atk_pct * 100:.2f}%")
+        if crit_rate_pct:
+            accessory_lines.append(f"会心+{crit_rate_pct * 100:.2f}%")
+        if crit_damage_pct:
+            accessory_lines.append(f"会伤+{crit_damage_pct * 100:.2f}%")
+        if dmg_reduction_pct:
+            accessory_lines.append(f"减伤+{dmg_reduction_pct * 100:.2f}%")
+        if crit_resist_pct:
+            accessory_lines.append(f"抗暴+{crit_resist_pct * 100:.2f}%")
+
+    # 套装效果展示
+    set_bonus_lines = []
+    if set_bonus_effects:
+        type_name_map = {
+            "attack": "攻击提升",
+            "true_damage": "附加真伤",
+            "shield": "开场护盾",
+            "reflect": "反伤",
+            "armor_pen": "护甲穿透",
+            "dmg_reduction": "伤害减免",
+            "crit_rate": "会心率",
+            "dodge": "闪避",
+            "shield_break": "护盾穿透",
+        }
+        for sb in set_bonus_effects:
+            set_name = sb.get("set", "未知")
+            pieces = sb.get("pieces", 0)
+            sb_type = sb.get("type", "")
+            sb_value = float(sb.get("value", 0))
+            show_name = type_name_map.get(sb_type, sb_type)
+
+            if sb_type == "dodge":
+                set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value:.0f}点")
+            else:
+                set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value * 100:.2f}%")
 
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     if list_all == now_index:
-        exp_meg = f"位面至高"
+        exp_meg = "位面至高"
     else:
         is_updata_level = OtherSet().level[now_index + 1]
         need_exp = sql_message.get_level_power(is_updata_level)
@@ -1253,28 +1303,39 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if get_exp > 0:
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
         else:
-            exp_meg = f"可突破！"
+            exp_meg = "可突破！"
 
-    main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
-    leveluprate = int(user_info['level_up_rate'])
-    number = user_main_critatk["number"] if user_main_critatk is not None else 0
+    accessory_msg = "无"
+    if accessory_lines:
+        accessory_msg = "、".join(accessory_lines)
+
+    set_bonus_msg = "无"
+    if set_bonus_lines:
+        set_bonus_msg = "；".join(set_bonus_lines)
 
     msg = f"""
 道号：{player_data['道号']}
-气血:{number_to(player_data['气血'])}/{number_to(max_hp)}({((player_data['气血'] / max_hp) * 100):.2f}%)
-真元:{number_to(player_data['真元'])}/{number_to(max_mp)}({((player_data['真元'] / user_info['exp']) * 100):.2f}%)
-攻击:{number_to(user_attack)}
-突破状态: {exp_meg}(概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%)
-攻击修炼:{user_info['atkpractice']}级(提升攻击力{user_info['atkpractice'] * 4}%)
-元血修炼:{user_info['hppractice']}级(提升气血{user_info['hppractice'] * 5}%)
-灵海修炼:{user_info['mppractice']}级(提升真元{user_info['mppractice'] * 5}%)
-修炼效率:{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%
-会心:{total_crit_rate:.1f}%
-减伤率:{user_js}%
-boss战增益:{int(boss_atk * 100)}%
-会心伤害增益:{int((1.5 + impart_burst_per + weapon_critatk + main_critatk) * 100)}%
-双修保护状态：{current_status_display}"""
-    sql_message.update_last_check_info_time(user_id)
+气血：{number_to(player_data['气血'])}/{number_to(max_hp)} ({((player_data['气血'] / max_hp) * 100):.2f}%)
+真元：{number_to(player_data['真元'])}/{number_to(max_mp)} ({((player_data['真元'] / max_mp) * 100):.2f}%)
+攻击：{number_to(user_attack)}
+
+突破状态：{exp_meg} (概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + main_buff_number}%)
+
+攻击修炼：{user_info['atkpractice']}级 (提升攻击力{user_info['atkpractice'] * 4}%)
+元血修炼：{user_info['hppractice']}级 (提升气血{user_info['hppractice'] * 5}%)
+灵海修炼：{user_info['mppractice']}级 (提升真元{user_info['mppractice'] * 5}%)
+
+修炼效率：{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%
+会心率：{total_crit_rate:.2f}%
+减伤率：{user_js:.2f}%
+抗暴率：{crit_resist:.2f}%
+减会伤：{crit_damage_reduction:.2f}%
+护甲穿透：{armor_penetration:.2f}%
+boss增伤：{boss_damage_bonus:.2f}%
+
+双修保护状态：{current_status_display}
+""".strip()
+
     await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="修为", v3="我的修为")
     await mind_state.finish()
 

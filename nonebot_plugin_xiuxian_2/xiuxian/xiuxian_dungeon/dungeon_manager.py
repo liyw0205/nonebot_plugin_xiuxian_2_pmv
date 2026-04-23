@@ -1,8 +1,11 @@
 import json
 import random
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+from nonebot.log import logger
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
@@ -10,7 +13,7 @@ from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 item_s = Items()
-player_data = PlayerDataManager()  # PlayerDataManager实例
+player_data = PlayerDataManager()
 
 
 # 只保留大境界（用于怪物jj）
@@ -56,7 +59,7 @@ class DungeonTemplate:
     def __init__(self, template_data: Dict):
         self.id = template_data.get("id")
         self.name = template_data.get("name")
-        self.type = template_data.get("type", "explore")  # explore/challenge/puzzle
+        self.type = template_data.get("type", "explore")
         self.description = template_data.get("description")
         self.total_layers = template_data.get("total_layers", 5)
 
@@ -88,7 +91,6 @@ class DungeonTemplate:
         if not isinstance(skill_pool, list):
             skill_pool = []
 
-        # 普通小怪默认1技能，精英2技能
         if skill_pool:
             pick_n = 1 if template_type == "common" else min(2, len(skill_pool))
             skills = random.sample(skill_pool, pick_n)
@@ -130,11 +132,14 @@ class DungeonTemplate:
 class DungeonManager:
     """副本管理器"""
 
+    _instance = None
+    _has_init = False
+    _lock = threading.RLock()
+
     DUNGEON_GLOBAL_STATE_TABLE = "dungeon_global_state"
     PLAYER_DUNGEON_STATUS_TABLE = "player_dungeon_status"
     GLOBAL_USER_ID = "0"
 
-    # 按副本类型动态事件权重（覆盖json原weight）
     TYPE_EVENT_WEIGHTS = {
         "explore": {
             "trap": 10,
@@ -159,39 +164,49 @@ class DungeonManager:
         }
     }
 
-    # 类型难度倍率（怪物属性）
     TYPE_DIFFICULTY_MULT = {
         "explore": (0.90, 1.10),
         "challenge": (1.20, 1.60),
         "puzzle": (1.00, 1.25),
     }
 
-    # 类型奖励倍率（怪物掉落修为/灵石）
     TYPE_REWARD_MULT = {
         "explore": 1.00,
         "challenge": 1.60,
         "puzzle": 1.25,
     }
 
-    # 非战斗事件奖励倍率（灵石/宝物质量）
     TYPE_NON_BATTLE_REWARD_MULT = {
         "explore": 1.00,
         "challenge": 1.50,
         "puzzle": 1.20
     }
 
+    def __new__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(DungeonManager, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.data_path = Path(__file__).parent.absolute()
-        self.dungeon_data_path = self.data_path / "data"
-        self.config_file = self.dungeon_data_path / "副本.json"
+        with self._lock:
+            if self.__class__._has_init:
+                return
+            self.__class__._has_init = True
 
-        self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
+            self.data_path = Path(__file__).parent.absolute()
+            self.dungeon_data_path = self.data_path / "data"
+            self.config_file = self.dungeon_data_path / "副本.json"
 
-        self.dungeon_templates = self._load_dungeon_templates()
-        self._init_dungeon_tables()
+            self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
 
-        self.current_dungeon: Optional[DungeonTemplate] = None
-        self.reset_dungeon()
+            self.dungeon_templates = self._load_dungeon_templates()
+            self._init_dungeon_tables()
+
+            self.current_dungeon: Optional[DungeonTemplate] = None
+            self._load_or_init_today_dungeon()
+
+            logger.info("DungeonManager 初始化完成")
 
     def _get_current_date(self) -> str:
         return datetime.now().strftime("%Y-%m-%d")
@@ -228,45 +243,117 @@ class DungeonManager:
                 for template_data in config_data:
                     templates.append(DungeonTemplate(template_data))
             except Exception as e:
-                print(f"加载副本模板失败: {e}")
+                logger.error(f"加载副本模板失败: {e}")
+        else:
+            logger.warning(f"副本配置文件不存在: {self.config_file}")
         return templates
 
-    def reset_dungeon(self) -> None:
-        current_date = self._get_current_date()
-        global_dungeon_state = player_data.get_fields(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE)
+    def _get_global_state(self) -> dict | None:
+        return player_data.get_fields(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE)
 
-        new_dungeon_selected = False
-        if global_dungeon_state and global_dungeon_state.get("date") == current_date:
-            saved_dungeon_id = global_dungeon_state.get("dungeon_id")
-            found_template = False
-            for template in self.dungeon_templates:
-                if template.id == saved_dungeon_id:
+    def _save_global_state(self, dungeon: DungeonTemplate, date_str: str):
+        data = {
+            "dungeon_id": dungeon.id,
+            "dungeon_name": dungeon.name,
+            "date": date_str
+        }
+        for key, value in data.items():
+            player_data.update_or_write_data(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE, key, value)
+
+    def _find_template_by_id(self, dungeon_id: str) -> Optional[DungeonTemplate]:
+        for template in self.dungeon_templates:
+            if template.id == dungeon_id:
+                return template
+        return None
+
+    def _load_or_init_today_dungeon(self):
+        """
+        仅初始化或同步今日副本。
+        不清空玩家状态。
+        """
+        with self._lock:
+            current_date = self._get_current_date()
+            global_state = self._get_global_state()
+
+            if global_state and global_state.get("date") == current_date:
+                template = self._find_template_by_id(global_state.get("dungeon_id"))
+                if template:
                     self.current_dungeon = template
-                    found_template = True
-                    break
-            if not found_template:
-                self.current_dungeon = random.choice(self.dungeon_templates)
-                new_dungeon_selected = True
-        else:
+                    return
+
+            if not self.dungeon_templates:
+                self.current_dungeon = None
+                logger.error("未加载到任何副本模板")
+                return
+
             self.current_dungeon = random.choice(self.dungeon_templates)
-            new_dungeon_selected = True
+            self._save_global_state(self.current_dungeon, current_date)
+            logger.info(
+                f"初始化今日副本成功: {self.current_dungeon.id} - {self.current_dungeon.name} - {current_date}"
+            )
 
-        if new_dungeon_selected or not global_dungeon_state or global_dungeon_state.get("date") != current_date:
-            dungeon_info_to_save = {
-                "dungeon_id": self.current_dungeon.id,
-                "dungeon_name": self.current_dungeon.name,
-                "date": current_date
-            }
-            for key, value in dungeon_info_to_save.items():
-                player_data.update_or_write_data(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE, key, value)
+    def sync_current_dungeon(self):
+        """
+        从全局状态同步当前副本到内存。
+        如果跨天则自动刷新当天副本。
+        """
+        with self._lock:
+            current_date = self._get_current_date()
+            global_state = self._get_global_state()
 
-        self.clear_all_player_status()
+            if not global_state:
+                logger.warning("未找到副本全局状态，自动初始化")
+                self._load_or_init_today_dungeon()
+                return
+
+            if global_state.get("date") != current_date:
+                logger.info("检测到跨天，自动刷新今日副本")
+                self.reset_dungeon()
+                return
+
+            dungeon_id = global_state.get("dungeon_id")
+            if self.current_dungeon and self.current_dungeon.id == dungeon_id:
+                return
+
+            template = self._find_template_by_id(dungeon_id)
+            if template:
+                self.current_dungeon = template
+            else:
+                logger.warning(f"全局副本ID无效: {dungeon_id}，重新初始化今日副本")
+                self._load_or_init_today_dungeon()
+
+    def reset_dungeon(self) -> None:
+        """
+        每日刷新副本。
+        只有这里才会重置所有玩家副本状态。
+        """
+        with self._lock:
+            current_date = self._get_current_date()
+
+            if not self.dungeon_templates:
+                self.current_dungeon = None
+                logger.error("副本刷新失败：没有可用副本模板")
+                return
+
+            self.current_dungeon = random.choice(self.dungeon_templates)
+            self._save_global_state(self.current_dungeon, current_date)
+            self.clear_all_player_status()
+
+            logger.info(
+                f"每日副本已刷新: {self.current_dungeon.id} - {self.current_dungeon.name} - {current_date}"
+            )
 
     def get_dungeon_progress(self) -> Dict[str, Any]:
+        self.sync_current_dungeon()
+
         if not self.current_dungeon:
-            self.reset_dungeon()
-            if not self.current_dungeon:
-                return {"name": "未知副本", "description": "副本数据加载失败", "total_layers": 0, "date": self._get_current_date()}
+            return {
+                "name": "未知副本",
+                "description": "副本数据加载失败",
+                "total_layers": 0,
+                "date": self._get_current_date(),
+                "type": "explore"
+            }
 
         return {
             "name": self.current_dungeon.name,
@@ -277,6 +364,13 @@ class DungeonManager:
         }
 
     def get_player_status(self, user_id) -> Dict[str, Any]:
+        """
+        获取玩家副本状态。
+        仅在“当天无记录”或“跨天”时初始化。
+        不再因为旧实例 current_dungeon 不一致而刷状态。
+        """
+        self.sync_current_dungeon()
+
         user_id_str = str(user_id)
         player_status_record = player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
 
@@ -285,10 +379,14 @@ class DungeonManager:
         current_dungeon_layers = self.current_dungeon.total_layers if self.current_dungeon else 0
         current_date = self._get_current_date()
 
-        if not player_status_record or \
-           player_status_record.get("dungeon_id") != current_dungeon_id or \
-           player_status_record.get("last_reset_date") != current_date:
+        need_init = False
 
+        if not player_status_record:
+            need_init = True
+        elif player_status_record.get("last_reset_date") != current_date:
+            need_init = True
+
+        if need_init:
             new_status = {
                 "dungeon_id": current_dungeon_id,
                 "dungeon_name": current_dungeon_name,
@@ -298,12 +396,35 @@ class DungeonManager:
                 "last_reset_date": current_date
             }
             for key, value in new_status.items():
-                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value)
+                if key in ("current_layer", "total_layers"):
+                    player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="INTEGER")
+                else:
+                    player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
+
+            logger.info(f"初始化玩家副本状态: user_id={user_id_str}, dungeon_id={current_dungeon_id}")
+            return player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
+
+        # 如果今天记录存在，但副本名称/总层数不同，则温和同步，不重置进度
+        patched = False
+        if player_status_record.get("dungeon_id") != current_dungeon_id:
+            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "dungeon_id", current_dungeon_id, data_type="TEXT")
+            patched = True
+        if player_status_record.get("dungeon_name") != current_dungeon_name:
+            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "dungeon_name", current_dungeon_name, data_type="TEXT")
+            patched = True
+        if int(player_status_record.get("total_layers", 0) or 0) != int(current_dungeon_layers):
+            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "total_layers", current_dungeon_layers, data_type="INTEGER")
+            patched = True
+
+        if patched:
+            logger.warning(f"玩家副本状态字段已同步但未重置进度: user_id={user_id_str}")
             return player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
 
         return player_status_record
 
     def update_player_progress(self, user_id, layer_increment=1, status: Optional[str] = None):
+        self.sync_current_dungeon()
+
         user_id_str = str(user_id)
         player_data_record = self.get_player_status(user_id)
 
@@ -320,9 +441,16 @@ class DungeonManager:
                     player_data_record["current_layer"] = player_data_record["total_layers"]
 
         for key, value in player_data_record.items():
-            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value)
+            if key in ("current_layer", "total_layers"):
+                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="INTEGER")
+            else:
+                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
 
     def clear_all_player_status(self) -> None:
+        """
+        重置所有玩家副本状态。
+        仅应在 reset_dungeon() 时调用。
+        """
         self._init_dungeon_tables()
 
         current_date = self._get_current_date()
@@ -352,11 +480,14 @@ class DungeonManager:
                 else:
                     player_data.update_or_write_data(uid, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
 
+        logger.info(f"已重置全部玩家副本状态，共 {len(all_records)} 条")
+
     # =========================
     # 业务辅助
     # =========================
 
     def _get_dungeon_type(self) -> str:
+        self.sync_current_dungeon()
         if not self.current_dungeon:
             return "explore"
         t = str(self.current_dungeon.type or "explore").lower()
@@ -372,14 +503,10 @@ class DungeonManager:
             return 100
 
     def _choose_main_jinjie_by_player(self, user_level: str, prefer_player_level_for_boss=False):
-        """
-        根据玩家等级，选择怪物主境界（返回例如：遁一境）
-        """
         player_rank_val, _ = convert_rank(user_level)
         if player_rank_val is None:
             player_rank_val = convert_rank("江湖好手")[0] or 0
 
-        # 提取玩家当前大境界名
         player_main_jj = ""
         for jj in jinjie_list:
             if user_level.startswith(jj):
@@ -398,7 +525,6 @@ class DungeonManager:
             rank_val, _ = convert_rank(f"{jj}初期")
             if rank_val is None:
                 continue
-            # 允许上下浮动一些
             if rank_val <= player_rank_val + 5:
                 available.append((jj, rank_val))
 
@@ -430,7 +556,6 @@ class DungeonManager:
     # =========================
 
     def generate_drop_item(self, user_level, drop_items):
-        """根据用户等级和掉落权重生成随机物品ID"""
         if not drop_items:
             return 0
 
@@ -446,7 +571,6 @@ class DungeonManager:
         item_base_rank = max(player_rank_val - random.randint(15, 20), 5)
         item_final_rank = random.randint(item_base_rank, min(item_base_rank + random.randint(5, 10), max_rank))
 
-        # 避免过低概率过高
         if item_final_rank <= 10 and random.random() < 0.2:
             item_final_rank = random.randint(11, 20)
 
@@ -456,36 +580,26 @@ class DungeonManager:
         return random.choice(items_id)
 
     def creating_monsters(self, user_level, user_exp, monsters_info, monster_type="minion"):
-        """
-        根据玩家境界和经验创建怪物（按副本类型动态难度/奖励）
-        """
+        self.sync_current_dungeon()
         if not self.current_dungeon:
             return {}
 
         dungeon_type = self._get_dungeon_type()
         diff_low, diff_high, reward_mult, _ = self._get_type_multipliers()
 
-        # boss优先与玩家大境界贴合
         prefer_player_level_for_boss = monster_type == "boss"
         monsters_jj_main = self._choose_main_jinjie_by_player(user_level, prefer_player_level_for_boss)
 
-        # 计算怪物基础强度锚点
         if monsters_jj_main in ("江湖好手", "至高"):
             monster_level_key = monsters_jj_main
         else:
             monster_level_key = f"{monsters_jj_main}初期"
 
         monster_base_exp_for_level = self._safe_level_power(monster_level_key)
-
-        # 玩家当前境界基准
         player_level_power = self._safe_level_power(user_level)
-        # 玩家修为影响
         player_exp_factor = max(0.8, min(1.3, (user_exp / max(1, player_level_power)) ** 0.2))
-
-        # 副本类型难度影响
         type_diff_factor = random.uniform(diff_low, diff_high)
 
-        # boss进一步增强
         if monster_type == "boss":
             boss_bonus = 1.25 if dungeon_type == "challenge" else 1.10
             power_anchor = int(max(monster_base_exp_for_level, user_exp) * player_exp_factor * boss_bonus)
@@ -494,7 +608,6 @@ class DungeonManager:
 
         power_anchor = max(100, power_anchor)
 
-        # 属性生成
         hp = int(power_anchor * monsters_info.get("hp_base_multiplier", 60) * random.uniform(0.92, 1.08))
         mp = int(power_anchor * monsters_info.get("mp_base_multiplier", 1.5) * random.uniform(0.92, 1.08))
         attack = int(power_anchor * monsters_info.get("attack_base_multiplier", 0.15) * random.uniform(0.92, 1.08))
@@ -503,10 +616,8 @@ class DungeonManager:
         mp = max(mp, 10)
         attack = max(attack, 20)
 
-        # 奖励生成
         reward_cfg = monsters_info.get("reward", {})
 
-        # 灵石
         spirit_stone_cfg = reward_cfg.get("spirit_stone", [0.2, 0.6])
         if not isinstance(spirit_stone_cfg, list) or len(spirit_stone_cfg) != 2:
             spirit_stone_cfg = [0.2, 0.6]
@@ -514,16 +625,13 @@ class DungeonManager:
         stone_base = 12000 if monster_type == "boss" else 8000
         final_stone_value = int(stone_base * rand_stone_mul * reward_mult * random.uniform(90, 150))
 
-        # 修为
         exp_ratio = float(reward_cfg.get("experience", 0.002))
         base_exp_reward = power_anchor * 180 * exp_ratio * reward_mult * random.uniform(1.0, 1.8)
         if monster_type == "boss":
             base_exp_reward *= 1.6
         final_exp_reward = int(base_exp_reward)
 
-        # 掉落
         drop_chance = float(reward_cfg.get("drop_chance", 0.01))
-        # challenge略提掉落，puzzle中等提升
         if dungeon_type == "challenge":
             drop_chance *= 1.20
         elif dungeon_type == "puzzle":
@@ -535,7 +643,6 @@ class DungeonManager:
             drop_items = reward_cfg.get("drop_items", {})
             item_id = self.generate_drop_item(user_level, drop_items)
 
-        # skills确保为列表
         skills = monsters_info.get("skills", [])
         if not isinstance(skills, list):
             skills = []
@@ -544,12 +651,12 @@ class DungeonManager:
 
         return {
             "name": monsters_info.get("name", "怪物"),
-            "jj": monsters_jj_main,      # 供战斗系统做buff档位判断
+            "jj": monsters_jj_main,
             "气血": hp,
             "总血量": hp,
             "真元": mp,
             "攻击": attack,
-            "skills": skills,            # ✅确保BOSS神通传入
+            "skills": skills,
             "experience": max(1, final_exp_reward),
             "stone": max(1, final_stone_value),
             "item_id": item_id,
@@ -561,9 +668,8 @@ class DungeonManager:
     # =========================
 
     def _pick_event_by_type(self) -> DungeonEvent:
-        """
-        按副本类型动态概率选事件，不依赖json固定weight
-        """
+        self.sync_current_dungeon()
+
         e_map = self.current_dungeon.get_event_map()
         dungeon_type = self._get_dungeon_type()
         cfg = self.TYPE_EVENT_WEIGHTS.get(dungeon_type, self.TYPE_EVENT_WEIGHTS["explore"])
@@ -575,7 +681,6 @@ class DungeonManager:
                 candidates.append(e_map[eid])
                 weights.append(w)
 
-        # 兜底：若配置缺失，回退模板事件原权重
         if not candidates:
             if not self.current_dungeon.events:
                 return DungeonEvent({"event_id": "nothing", "description": "无事发生", "weight": 1})
@@ -585,7 +690,8 @@ class DungeonManager:
         return random.choices(candidates, weights=weights, k=1)[0]
 
     def trigger_event(self, user_level, user_exp):
-        """触发一个随机事件（按副本类型动态）"""
+        self.sync_current_dungeon()
+
         event = self._pick_event_by_type()
         dungeon_type = self._get_dungeon_type()
         _, _, _, non_battle_reward_mult = self._get_type_multipliers()
@@ -596,7 +702,6 @@ class DungeonManager:
         }
 
         if event.event_type == "trap":
-            # puzzle偏重负面，伤害略高
             low, high = event.damage if hasattr(event, "damage") else (0.1, 0.2)
             if dungeon_type == "puzzle":
                 low *= 1.10
@@ -613,7 +718,6 @@ class DungeonManager:
 
             enemy_data = []
 
-            # challenge：最多3小怪；其它：1小怪
             if dungeon_type == "challenge":
                 minion_count = random.randint(1, 3)
                 elite_chance = min(0.5, elite_chance + 0.15)
@@ -638,8 +742,6 @@ class DungeonManager:
 
         elif event.event_type == "treasure":
             drop_items = getattr(event, "drop_items", {}) or {}
-            # 非战斗奖励倍率提高 -> 通过提高“高质量段位”体现
-            # 这里简单处理为多次roll取最优
             roll_times = 1
             if dungeon_type == "puzzle":
                 roll_times = 2
@@ -683,20 +785,15 @@ class DungeonManager:
     # =========================
 
     def get_boss_data(self, user_level, user_exp):
-        """
-        获取Boss层数据
-        - challenge: 1 BOSS + 1~3 小怪
-        - 其他:       1 BOSS + 1 小怪
-        """
+        self.sync_current_dungeon()
+
         enemy_data = []
         dungeon_type = self._get_dungeon_type()
 
-        # BOSS
         boss_info = self.current_dungeon.get_boss_info()
         boss = self.creating_monsters(user_level, user_exp, boss_info, monster_type="boss")
         enemy_data.append(boss)
 
-        # 小怪数量
         if dungeon_type == "challenge":
             minion_count = random.randint(1, 3)
             minion_template_type = "elite" if random.random() < 0.6 else "common"

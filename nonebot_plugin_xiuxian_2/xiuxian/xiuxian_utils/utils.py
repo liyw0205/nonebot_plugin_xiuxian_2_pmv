@@ -1771,34 +1771,37 @@ def get_statistics_data(user_id: str, key: str = None):
 def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
     """
     更新统计数据的参数值
-    
-    参数:
-        user_id: 用户ID
-        key: 要更新的参数键名
-        value: 要设置的具体值（如果提供，则直接设置为此值）
-        increment: 增量值（默认为1，当value为None时使用）
-        
-    返回:
-        更新后的统计数据字典
     """
     try:
-        original_user_id = user_id
+        original_user_id = str(user_id)
         user_id_for_stats = original_user_id
+
         if original_user_id in _impersonating_users:
             user_id_for_stats = _impersonating_users[original_user_id]
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
+
         stats_data = player_data_manager.get_fields(str(user_id_for_stats), "statistics")
         if not stats_data:
             stats_data = {}
-        # 更新指定键的值
+
         if value is not None:
-            # 直接设置具体值
-            player_data_manager.update_or_write_data(str(user_id_for_stats), "statistics", key, value)
+            player_data_manager.update_or_write_data(
+                str(user_id_for_stats), "statistics", key, int(value), data_type="INTEGER"
+            )
         else:
-            # 增量更新（如果键不存在则初始化为0）
             current_value = stats_data.get(key, 0)
-            player_data_manager.update_or_write_data(str(user_id_for_stats), "statistics", key, current_value + increment)
-            
+            if current_value is None:
+                current_value = 0
+
+            try:
+                current_value = int(current_value)
+            except (TypeError, ValueError):
+                current_value = 0
+
+            player_data_manager.update_or_write_data(
+                str(user_id_for_stats), "statistics", key, current_value + int(increment), data_type="INTEGER"
+            )
+
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
 

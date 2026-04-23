@@ -126,7 +126,7 @@ ACTION_ITEM_POOLS = {
     # 灵石奖励
     "stone_low": ["LS_150000", "LS_180000", "LS_1100000"],
     "stone_mid": ["LS_1500000", "LS_2200000", "LS_3000000"],
-    "stone_high": ["LS_2500000", "LS_3500000"],
+    "stone_high": ["LS_5000000", "LS_8000000"],
 
     # 额外资源
     "wash_stone_low": [20023],
@@ -214,13 +214,13 @@ COMBAT_CONFIG = {
         "reward_plan_win": [
             ("stone_mid", 1, 2, 1.0),
             ("wash_stone_low", 1, 1, 0.35),
-            ("token_common", 1, 1, 0.18),
+            ("token_common", 1, 1, 0.10),
         ],
         "reward_plan_big_win": [
             ("stone_high", 1, 1, 1.0),
             ("wash_stone_low", 1, 2, 0.65),
-            ("token_common", 1, 1, 0.35),
-            ("acc_pack_low", 1, 1, 0.15),
+            ("token_common", 1, 1, 0.15),
+            ("acc_pack_low", 1, 1, 0.05),
         ],
         "fail_msg": "试炼失利，你负伤而退。",
     },
@@ -229,17 +229,17 @@ COMBAT_CONFIG = {
         "cooldown_sec": 45,
         "reward_plan_win": [
             ("stone_high", 1, 2, 1.0),
-            ("wash_stone_low", 1, 2, 0.55),
-            ("token_common", 1, 1, 0.28),
-            ("token_rare", 1, 1, 0.08),
+            ("wash_stone_low", 1, 2, 0.30),
+            ("token_common", 1, 1, 0.15),
+            ("token_rare", 1, 1, 0.10),
         ],
         "reward_plan_big_win": [
             ("stone_high", 2, 2, 1.0),
-            ("wash_stone_low", 2, 3, 0.75),
+            ("wash_stone_low", 2, 3, 0.65),
             ("token_common", 1, 2, 0.40),
-            ("token_rare", 1, 1, 0.16),
+            ("token_rare", 1, 1, 0.10),
             ("god_frag", 1, 1, 0.04),
-            ("acc_pack_low", 1, 1, 0.18),
+            ("acc_pack_low", 1, 1, 0.10),
         ],
         "fail_msg": "险地凶险万分，你仓促脱身。",
     },
@@ -1328,7 +1328,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         extra_msg = "你惊动了附近的异兽，只来得及捡走些散落资源。"
     elif roll < 0.30:
         rewards = _grant_rewards(uid, [
-            (st["pool_key"], 2, 3, 1.0),
+            (st["pool_key"], 1, 2, 1.0),
             ("stone_low", 1, 2, 1.0),
             ("wash_stone_low", 1, 1, 0.15),
         ], decay_ratio=decay)
@@ -1533,7 +1533,7 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
         rewards = _grant_rewards(uid, [
             ("stone_mid", 1, 2, 1.0),
             ("herb_mid", 1, 2, 0.65),
-            ("token_common", 1, 1, 0.18),
+            ("token_common", 1, 1, 0.10),
             ("wash_stone_low", 1, 1, 0.25),
         ], decay_ratio=_get_reward_decay(uid))
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
@@ -1544,8 +1544,8 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
     if event_type == "rare":
         rewards = _grant_rewards(uid, [
             ("stone_high", 1, 1, 1.0),
-            ("token_rare", 1, 1, 0.20),
-            ("acc_pack_low", 1, 1, 0.14),
+            ("token_rare", 1, 1, 0.15),
+            ("acc_pack_low", 1, 1, 0.05),
             ("god_frag", 1, 1, 0.02),
         ], decay_ratio=_get_reward_decay(uid))
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_rare"])
@@ -1555,8 +1555,8 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
 
     rewards = _grant_rewards(uid, [
         ("stone_mid", 1, 2, 1.0),
-        ("wash_stone_low", 1, 2, 0.45),
-        ("token_common", 1, 1, 0.25),
+        ("wash_stone_low", 1, 2, 0.30),
+        ("token_common", 1, 1, 0.15),
     ], decay_ratio=_get_reward_decay(uid))
     extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
     if extra:

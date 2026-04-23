@@ -2,9 +2,12 @@ import asyncio
 import random
 from datetime import datetime, timedelta
 from typing import Union, Any
-from nonebot import on_command
+
+from nonebot import on_command, require
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
+from nonebot.log import logger
+
 from ..adapter_compat import (
     Bot,
     GroupMessageEvent,
@@ -20,20 +23,21 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
+
 from .dungeon_manager import DungeonManager
-from pathlib import Path
-from nonebot import require
-
-sql_message = XiuxianDateManage()  # sql类
-player_data = PlayerDataManager()
-
-# 导入组队管理器
 from .team_manager import (
     create_team, add_member_to_team,
     remove_member_from_team, disband_team, get_user_team,
     get_team_info, team_invite_cache, expire_team_invite,
     load_teams, save_team
 )
+
+sql_message = XiuxianDateManage()
+player_data = PlayerDataManager()
+items = Items()
+
+# 统一单例 DungeonManager
+dungeon_manager = DungeonManager()
 
 # =========================
 # 组队冷却配置
@@ -109,7 +113,9 @@ def format_seconds(sec: int):
     return f"{s}秒"
 
 
-# 组队
+# =========================
+# 指令注册
+# =========================
 create_team_cmd = on_command("创建队伍", aliases={"新建队伍"}, priority=5, block=True)
 invite_team_cmd = on_command("邀请组队", aliases={"邀请入队", "组队邀请"}, priority=5, block=True)
 agree_team_cmd = on_command("同意组队", aliases={"加入队伍", "接受组队", "组队同意"}, priority=5, block=True)
@@ -120,8 +126,7 @@ disband_team_cmd = on_command("解散队伍", aliases={"解散组队"}, priority
 view_team_cmd = on_command("查看队伍", aliases={"队伍信息", "我的队伍"}, priority=5, block=True)
 help_team_cmd = on_command("队伍帮助", aliases={"组队帮助", "组队指令"}, priority=5, block=True)
 transfer_team_cmd = on_command("转移队长", aliases={"队长转让", "转让队长"}, priority=5, block=True)
-# ----------副本----------
-# 副本
+
 dungeon_info = on_command("副本信息", aliases={"今日副本"}, priority=5, block=True)
 explore_dungeon = on_command("探索副本", aliases={"副本探索", "挑战副本"}, priority=5, block=True)
 dungeon_status = on_command("我的副本状态", aliases={"副本状态", "我的副本信息"}, priority=5, block=True)
@@ -129,9 +134,6 @@ reset_command = on_command("重置副本", aliases={"手动重置"}, priority=5,
 help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5, block=True)
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
-# 初始化副本管理器
-dungeon_manager = DungeonManager()
-items = Items()
 
 cache_team_help = {}
 cache_dungeon_help = {}
@@ -159,6 +161,9 @@ __team_help__ = f"""
 """.strip()
 
 
+# =========================
+# 帮助
+# =========================
 @help_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -167,9 +172,19 @@ async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await help_team_cmd.finish()
 
 
+@help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    msg = __dungeon_help__
+    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
+    await help_dungeon_cmd.finish()
+
+
+# =========================
+# 组队逻辑
+# =========================
 @create_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
-    """创建队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -179,7 +194,6 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     user_id = str(user_info['user_id'])
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
 
-    # 冷却检查
     in_cd, remain = is_in_team_cd(user_id)
     if in_cd:
         msg = f"你当前处于组队冷却中，剩余：{format_seconds(remain)}，不可创建队伍。"
@@ -191,19 +205,16 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
         await create_team_cmd.finish()
 
-    # 检查是否已在队伍中
     existing_team_id = get_user_team(user_id)
     if existing_team_id:
         msg = "你已经在一个队伍中了，请先退出当前队伍！"
         await handle_send(bot, event, msg, md_type="team", k1="离开队伍", v1="离开队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
         await create_team_cmd.finish()
 
-    # 获取队伍名称
     team_name = args.extract_plain_text().strip()
     if not team_name:
         team_name = f"{user_info['user_name']}的队伍"
 
-    # 创建队伍
     team_id = create_team(team_name, user_id, group_id)
 
     msg = f"🎉 队伍【{team_name}】创建成功！\n队伍ID：{team_id}\n👑 队长：{user_info['user_name']}\n📢 使用【邀请组队 道号】来邀请其他人加入！"
@@ -213,7 +224,6 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 @invite_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
-    """邀请成员组队"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -221,8 +231,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await invite_team_cmd.finish()
 
     user_id = str(user_info['user_id'])
-
-    # 检查用户是否在队伍中且是队长
     team_id = get_user_team(user_id)
     if not team_id:
         msg = "你还没有创建或加入任何队伍！"
@@ -235,29 +243,24 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 检查是否是队长
     if team_info['leader'] != user_id:
         msg = "只有队长才能邀请成员！"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 检查队伍是否已满
     if len(team_info['members']) >= team_info['max_members']:
         msg = f"队伍已满（{len(team_info['members'])}/{team_info['max_members']}），无法邀请新成员！"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 解析被邀请人
     arg = args.extract_plain_text().strip()
     target_user_id = None
 
-    # 优先解析艾特
     for arg_item in args:
         if arg_item.type == "at":
             target_user_id = str(arg_item.data.get("qq", ""))
             break
 
-    # 如果没有艾特，再尝试解析道号/用户名
     if not target_user_id and arg:
         target_db_info = sql_message.get_user_info_with_name(arg)
         if target_db_info:
@@ -267,14 +270,12 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         msg = "未找到指定的用户，请检查道号或艾特是否正确！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await invite_team_cmd.finish()
-    
-    # 检查目标用户是否已注册修仙
+
     is_target_user, target_user_info, target_msg = check_user(target_user_id)
     if not is_target_user:
         await handle_send(bot, event, target_msg)
         await invite_team_cmd.finish()
 
-    # 冷却检查：被邀请人冷却中不可被邀请
     in_cd, remain = is_in_team_cd(target_user_id)
     if in_cd:
         target_name = target_user_info['user_name']
@@ -282,7 +283,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 检查目标用户是否已在队伍中
     target_team = get_user_team(target_user_id)
     if target_team:
         target_name = target_user_info['user_name']
@@ -290,7 +290,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 检查是否已有未处理的邀请
     if target_user_id in team_invite_cache:
         inviter_id = team_invite_cache[target_user_id]['inviter']
         inviter_info = sql_message.get_user_info_with_id(inviter_id)
@@ -299,7 +298,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await invite_team_cmd.finish()
 
-    # 创建邀请
     invite_id = f"{team_id}_{target_user_id}_{datetime.now().timestamp()}"
     team_invite_cache[target_user_id] = {
         'team_id': team_id,
@@ -309,25 +307,26 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         'group_id': event.group_id
     }
 
-    # 设置60秒过期
     asyncio.create_task(expire_team_invite(target_user_id, invite_id, bot, event))
 
     target_name = target_user_info['user_name']
     msg = f"📨 已向{target_name}发送组队邀请，等待对方回应..."
     await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-    
+
     try:
         if isinstance(event, GroupMessageEvent):
-            await bot.send_private_msg(user_id=str(target_user_id), message=f"你在群{event.group_id}收到了来自{user_info['user_name']}的组队邀请，请在1分钟内回复【同意组队】或【拒绝组队】。")
+            await bot.send_private_msg(
+                user_id=str(target_user_id),
+                message=f"你在群{event.group_id}收到了来自{user_info['user_name']}的组队邀请，请在1分钟内回复【同意组队】或【拒绝组队】。"
+            )
     except Exception as e:
-        print(f"私聊通知被邀请者失败: {e}")
+        logger.warning(f"私聊通知被邀请者失败: {e}")
 
     await invite_team_cmd.finish()
 
 
 @agree_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    """同意组队邀请"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -336,7 +335,6 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
     user_id = str(user_info['user_id'])
 
-    # 检查是否有邀请
     if user_id not in team_invite_cache:
         msg = "没有待处理的组队邀请！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
@@ -352,33 +350,28 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await agree_team_cmd.finish()
 
-    # 检查队伍是否还存在
     team_info = get_team_info(team_id)
     if not team_info:
         msg = "该队伍已解散！"
         del team_invite_cache[user_id]
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await agree_team_cmd.finish()
-    
-    # 再次检查被邀请者是否已在队伍中
+
     if get_user_team(user_id):
         msg = "你已经在一个队伍中了，无法接受邀请！"
         del team_invite_cache[user_id]
         await handle_send(bot, event, msg, md_type="team", k1="离开队伍", v1="离开队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
         await agree_team_cmd.finish()
 
-    # 检查队伍是否已满
     if len(team_info['members']) >= team_info['max_members']:
         msg = "该队伍已满员！"
         del team_invite_cache[user_id]
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
-    # 添加用户到队伍
     success = add_member_to_team(team_id, user_id)
 
     if success:
-        # 首次入队标记（首次无冷却）
         cd_info = get_team_cd_info(user_id)
         if int(cd_info.get("had_first_join", 0)) == 0:
             set_first_join_flag(user_id)
@@ -389,16 +382,12 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
         msg = f"✅ 你已成功加入队伍【{team_info['team_name']}】！\n👑 队长：{inviter_info['user_name']}\n👥 当前成员：{len(team_info['members'])}/{team_info['max_members']}"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="副本信息", v2="副本信息", k3="队伍帮助", v3="队伍帮助")
+
         try:
-            if team_info['group_id'] and team_info['group_id'] != str(event.group_id):
+            if team_info['group_id'] and team_info['group_id'] != str(getattr(event, "group_id", "")):
                 await bot.send_group_msg(group_id=str(team_info['group_id']), message=f"你的队伍【{team_info['team_name']}】加入了新成员：{user_info['user_name']}！")
-            elif team_info['group_id'] and team_info['group_id'] == str(event.group_id):
-                pass
-            else:
-                await bot.send_private_msg(user_id=str(inviter_id), message=f"你的队伍【{team_info['team_name']}】加入了新成员：{user_info['user_name']}！")
         except Exception as e:
-            print(f"通知队长失败: {e}")
-            
+            logger.warning(f"通知队长失败: {e}")
     else:
         msg = "加入队伍失败！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
@@ -408,7 +397,6 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 @reject_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    """拒绝组队邀请"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -421,7 +409,7 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         msg = "没有待处理的组队邀请！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
-    
+
     invite_data = team_invite_cache[user_id]
     invite_group_id = invite_data['group_id']
 
@@ -439,7 +427,6 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 @leave_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    """离开队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -455,11 +442,9 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await leave_team_cmd.finish()
 
     team_info = get_team_info(team_id)
-
     success = remove_member_from_team(team_id, user_id)
 
     if success:
-        # 离队触发6小时冷却（首次入队后才有冷却概念）
         cd_info = get_team_cd_info(user_id)
         if int(cd_info.get("had_first_join", 0)) == 1:
             set_team_cd(user_id, TEAM_JOIN_CD_HOURS)
@@ -482,7 +467,6 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 @kick_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
-    """踢出队伍成员"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -534,7 +518,6 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     success = remove_member_from_team(team_id, target_user_id)
 
     if success:
-        # 被踢触发冷却
         cd_info = get_team_cd_info(target_user_id)
         if int(cd_info.get("had_first_join", 0)) == 1:
             set_team_cd(target_user_id, TEAM_JOIN_CD_HOURS)
@@ -550,7 +533,6 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
 @disband_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    """解散队伍"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -571,7 +553,6 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await disband_team_cmd.finish()
 
-    # 解散前，给所有成员上冷却（首次加入后才会受冷却约束）
     members = team_info.get("members", [])[:]
     for mid in members:
         cd_info = get_team_cd_info(mid)
@@ -591,7 +572,6 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
 
 @view_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    """查看队伍信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -639,7 +619,6 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
 @transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
-    """转移队长"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -707,67 +686,15 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
     await transfer_team_cmd.finish()
 
 
-# 每日零点自动重置副本
-@scheduler.scheduled_job("cron", hour=0, minute=1)
-async def daily_dungeon_reset():
-    """每日自动重置副本和玩家状态"""
-    print("执行每日副本重置任务...")
-    dungeon_manager.reset_dungeon()
-    print("每日副本重置任务完成。")
-
-
-@reset_command.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """手动重置副本和玩家状态"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    dungeon_manager.reset_dungeon()
-    msg = "✅ 副本和所有玩家的副本进度已重置。"
-    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
-    await reset_command.finish()
-
-
-@help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = __dungeon_help__
-    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
-    await help_dungeon_cmd.finish()
-
-
-@dungeon_info.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """查看副本信息"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    dungeon_data = dungeon_manager.get_dungeon_progress()
-
-    msg = (
-        "═══  ✨ 今日副本 ✨  ═══\n"
-        f"{dungeon_data['name']}\n"
-        f"\n> {dungeon_data['description']}\n\n"
-        f"总层数：{dungeon_data['total_layers']}层\n"
-        f"副本日期：{dungeon_data['date']}\n"
-        "═════════════\n"
-        "🎮 使用「探索副本」指令开始冒险！"
-    )
-
-    await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
-    await dungeon_info.finish()
-
-
 # =========================
-# 新奖励结算逻辑
+# 奖励结算
 # =========================
-
 def _get_level_initial_exp(user_level: str) -> int:
-    """
-    获取“当前境界初期”的修为基数（用于上限）
-    """
     if user_level == "江湖好手":
         return int(jsondata.level_data().get("江湖好手", {}).get("power", 100))
     if user_level == "至高":
         return int(jsondata.level_data().get("至高", {}).get("power", 100))
 
-    # 截取大境界名（去掉“初期/中期/圆满”）
     if user_level.endswith("初期") or user_level.endswith("中期") or user_level.endswith("圆满"):
         main = user_level[:-2]
     else:
@@ -778,24 +705,14 @@ def _get_level_initial_exp(user_level: str) -> int:
 
 
 def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict):
-    """
-    按规则计算每人分配占比：
-    - 队长20%
-    - 每个队友10%
-    - 剩余按贡献度分
-    - 单人固定50%
-    - 多人每人上限50%，超出部分直接作废（不再分配）
-    """
     member_ids = [str(x) for x in team_member_ids]
     n = len(member_ids)
     if n <= 0:
         return {}
 
-    # 单人特例
     if n == 1:
         return {member_ids[0]: 0.5}
 
-    # 固定份额
     fixed = {}
     fixed_pool = 0.0
     for uid in member_ids:
@@ -807,7 +724,6 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
 
     remain_pool = max(0.0, 1.0 - fixed_pool)
 
-    # 贡献
     contrib = {}
     contrib_sum = 0
     for uid in member_ids:
@@ -817,10 +733,8 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
 
     dist = dict(fixed)
 
-    # 分贡献池
     if remain_pool > 0:
         if contrib_sum <= 0:
-            # 没有贡献时，剩余池均分（之后仍会受50%上限）
             avg = remain_pool / n
             for uid in member_ids:
                 dist[uid] += avg
@@ -828,7 +742,6 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
             for uid in member_ids:
                 dist[uid] += remain_pool * (contrib[uid] / contrib_sum)
 
-    # 上限：50%，超出作废
     cap = 0.5
     for uid in member_ids:
         if dist[uid] > cap:
@@ -838,11 +751,6 @@ def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict
 
 
 def _get_reward_caps(user_level: str, is_boss: bool):
-    """
-    返回(灵石上限, 修为上限)
-    小怪：500w, 当前境界初期 * 0.01
-    BOSS：1000w, 当前境界初期 * 0.03
-    """
     level_initial_exp = _get_level_initial_exp(user_level)
     stone_cap = 10_000_000 if is_boss else 5_000_000
     exp_cap_ratio = 0.03 if is_boss else 0.01
@@ -851,22 +759,11 @@ def _get_reward_caps(user_level: str, is_boss: bool):
 
 
 def battle_settlement(user_info, members_info, monsters_list, status_list):
-    """
-    新结算：
-    1) 按伤害算贡献
-    2) 队长20%、队友10%、剩余按贡献
-    3) 单人固定50%
-    4) 小怪/BOSS上限
-    5) 物品仅队长
-    """
-    # 是否BOSS战（只要有boss类型怪）
     is_boss = any(m.get("monster_type") == "boss" for m in monsters_list)
 
-    # 总基础奖励池（来自怪物）
     total_stone_pool = sum(int(monster.get("stone", 0)) for monster in monsters_list)
     total_exp_pool = sum(int(monster.get("experience", 0)) for monster in monsters_list)
 
-    # 伤害统计
     dmg_map = {}
     for d in status_list:
         for _, stats in d.items():
@@ -874,7 +771,6 @@ def battle_settlement(user_info, members_info, monsters_list, status_list):
                 uid = str(stats['user_id'])
                 dmg_map[uid] = max(0, int(stats.get("total_dmg", 0)))
 
-    # 队伍成员（实际参战成员）
     real_members = []
     member_info_map = {}
     for m in members_info:
@@ -883,15 +779,12 @@ def battle_settlement(user_info, members_info, monsters_list, status_list):
             real_members.append(uid)
             member_info_map[uid] = m
 
-    # 如果没有有效参战成员，直接返回
     if not real_members:
         return "\n副本奖励：无，本次战斗无人获得奖励。"
 
-    # 分配占比
     leader_id = str(user_info["user_id"])
     dist = _calc_team_distribution(real_members, leader_id, dmg_map)
 
-    # 物品池（仅队长）
     item_ids = [m["item_id"] for m in monsters_list if int(m.get("item_id", 0)) != 0]
 
     msg = "\n副本奖励："
@@ -903,36 +796,30 @@ def battle_settlement(user_info, members_info, monsters_list, status_list):
 
         ratio = dist.get(uid, 0.0)
 
-        # 按占比分配
         stone_raw = int(total_stone_pool * ratio)
         exp_raw = int(total_exp_pool * ratio)
 
-        # 上限处理（按个人境界）
         stone_cap, exp_cap = _get_reward_caps(m_info["level"], is_boss)
         stone_final = min(stone_raw, stone_cap)
         exp_final = min(exp_raw, exp_cap)
 
         rewards_msg = []
 
-        # 灵石
         if stone_final > 0:
             sql_message.update_ls(uid, stone_final, 1)
             rewards_msg.append(f"灵石{number_to(stone_final)}")
 
-        # 修为
         if exp_final > 0:
             sql_message.update_exp(uid, exp_final)
             sql_message.update_power2(uid)
             rewards_msg.append(f"修为{number_to(exp_final)}")
 
-        # 物品仅队长
         if uid == leader_id and item_ids:
             item_id = random.choice(item_ids)
             item_info = items.get_data_by_item_id(item_id)
             sql_message.send_back(uid, item_id, item_info['name'], item_info['type'], 1)
             rewards_msg.append(f"{item_info['name']}")
 
-        # 贡献显示（按伤害占比）
         total_dmg = sum(dmg_map.values()) if sum(dmg_map.values()) > 0 else 1
         contrib_percent = dmg_map.get(uid, 0) / total_dmg * 100
         alloc_percent = ratio * 100
@@ -959,10 +846,79 @@ def check_user_state(user_info):
     return False, "正常"
 
 
+# =========================
+# 副本定时任务
+# =========================
+@scheduler.scheduled_job("cron", hour=0, minute=1)
+async def daily_dungeon_reset():
+    """每日自动重置副本和玩家状态"""
+    try:
+        logger.info("开始执行每日副本重置任务")
+        dungeon_manager.reset_dungeon()
+        dungeon_info = dungeon_manager.get_dungeon_progress()
+        logger.info(
+            f"每日副本重置完成: {dungeon_info.get('name', '未知副本')} | "
+            f"层数={dungeon_info.get('total_layers', 0)} | "
+            f"日期={dungeon_info.get('date', '未知')}"
+        )
+    except Exception as e:
+        logger.exception(f"每日副本重置任务执行失败: {e}")
+
+
+# =========================
+# 手动重置
+# =========================
+@reset_command.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    try:
+        dungeon_manager.reset_dungeon()
+        dungeon_info = dungeon_manager.get_dungeon_progress()
+        msg = (
+            f"✅ 副本和所有玩家的副本进度已重置。\n"
+            f"当前副本：{dungeon_info.get('name', '未知副本')}\n"
+            f"总层数：{dungeon_info.get('total_layers', 0)}"
+        )
+        logger.info(f"管理员手动重置副本成功: {dungeon_info}")
+    except Exception as e:
+        logger.exception(f"管理员手动重置副本失败: {e}")
+        msg = f"❌ 副本重置失败：{e}"
+
+    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
+    await reset_command.finish()
+
+
+# =========================
+# 副本信息
+# =========================
+@dungeon_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    dungeon_data = dungeon_manager.get_dungeon_progress()
+
+    msg = (
+        "═══  ✨ 今日副本 ✨  ═══\n"
+        f"{dungeon_data['name']}\n"
+        f"\n> {dungeon_data['description']}\n\n"
+        f"副本类型：{dungeon_data.get('type', 'explore')}\n"
+        f"总层数：{dungeon_data['total_layers']}层\n"
+        f"副本日期：{dungeon_data['date']}\n"
+        "═════════════\n"
+        "🎮 使用「探索副本」指令开始冒险！"
+    )
+
+    await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
+    await dungeon_info.finish()
+
+
+# =========================
+# 探索副本
+# =========================
 @explore_dungeon.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """探索副本"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -987,14 +943,14 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             msg = "你不是队长，无法带领队伍探索副本！"
             await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
             await explore_dungeon.finish()
-        
+
         members_info = [
             sql_message.get_user_info_with_id(member_id)
             for member_id in team_info["members"]
         ]
         members_info = [m for m in members_info if m is not None]
         user_ids_in_battle = [member["user_id"] for member in members_info]
-        
+
         if user_exp > 0:
             exp_ratios = {
                 member["user_id"]: max(0.5, min(1.0, user_exp / member["exp"])) if member["exp"] > 0 else 1.0
@@ -1026,11 +982,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         try:
             await send_msg_handler(bot, event, result)
         except Exception:
-            msg += f"\n对战消息发送错误,可能被风控!"
+            msg += f"\n对战消息发送错误，可能被风控！"
+
         await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
         await explore_dungeon.finish()
 
-    # 触发事件
     event_result = dungeon_manager.trigger_event(user_info['level'], user_exp)
 
     if event_result["type"] == "trap":
@@ -1050,21 +1006,20 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             msg += battle_settlement(user_info, members_info, event_result["monster_data"], status)
         else:
             msg += f"\n道友不敌，重伤逃遁。"
+
         try:
             await send_msg_handler(bot, event, result)
         except Exception:
-            msg += f"\n对战消息发送错误,可能被风控!"
+            msg += f"\n对战消息发送错误，可能被风控！"
 
     elif event_result["type"] == "treasure":
         item_id = event_result.get('drop_items', 9001)
         item_info = items.get_data_by_item_id(item_id)
-        # 非战斗宝箱事件：仅发起者（队长）获得
         sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
         msg = f"{event_result.get('description', '')}，凑近一看居然是{item_info['name']}"
 
     elif event_result["type"] == "spirit_stone":
         stones = int(event_result.get('stones', 0))
-        # 非战斗灵石事件：仅发起者（队长）获得
         msg = f"{event_result.get('description', '')}，获得{number_to(stones)}灵石"
         sql_message.update_ls(user_id, stones, 1)
 
@@ -1088,10 +1043,13 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     await explore_dungeon.finish()
 
 
+# =========================
+# 我的副本状态
+# =========================
 @dungeon_status.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """副本状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -1100,13 +1058,14 @@ async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMess
     user_id = user_info["user_id"]
     player_status = dungeon_manager.get_player_status(user_id)
 
-    name, status_text, total, current = (
-        player_status.get('dungeon_name', '未知'),
-        {'not_started': '未开始', 'exploring': '探索中', 'completed': '已完成'}.get(
-            player_status.get('dungeon_status', 'not_started'), '未知'),
-        player_status.get('total_layers', 0),
-        player_status.get('current_layer', 0)
-    )
+    name = player_status.get('dungeon_name', '未知')
+    status_text = {
+        'not_started': '未开始',
+        'exploring': '探索中',
+        'completed': '已完成'
+    }.get(player_status.get('dungeon_status', 'not_started'), '未知')
+    total = player_status.get('total_layers', 0)
+    current = player_status.get('current_layer', 0)
 
     msg = (
         f"═══  副本信息  ════\n"

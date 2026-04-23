@@ -29,7 +29,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, PlayerDataManager, get_weapon_info_msg, get_armor_info_msg,
-    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate, OtherSet
+    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate, OtherSet, calc_accessory_effects
 )
 from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_boss, use_rift_speedup, use_rift_big_speedup
 from ..xiuxian_impart import use_wishing_stone, use_love_sand
@@ -174,7 +174,9 @@ decompose_accessory = on_command("饰品分解", priority=10, block=True)
 quick_decompose_accessory = on_command("快速分解饰品", aliases={"饰品快速分解"}, priority=10, block=True)
 accessory_help = on_command("饰品帮助", aliases={"饰品系统帮助"}, priority=10, block=True)
 check_accessory = on_command("查看饰品", priority=10, block=True)
-upgrade_accessory = on_command("饰品升阶", priority=10, block=True)
+upgrade_accessory = on_command("饰品升阶", aliases={"升阶饰品"}, priority=10, block=True)
+accessory_preset = on_command("饰品预设", aliases={"预设饰品"}, priority=10, block=True)
+quick_equip_accessory = on_command("快速装备饰品", priority=10, block=True)
 # 管理员命令
 check_user_equipment = on_command("装备检测", permission=SUPERUSER, priority=6, block=True)
 check_user_back = on_command("背包检测", permission=SUPERUSER, priority=6, block=True)
@@ -2817,6 +2819,112 @@ def _find_accessory_anywhere(data: dict, uid: str):
             return "equipped", s, it
     return None, None, None
 
+def _default_accessory_preset():
+    return {"手镯": None, "戒指": None, "手环": None, "项链": None}
+
+def _get_accessory_preset(user_id: str, preset_idx: int):
+    field = f"preset_{preset_idx}"
+    raw = player_data_manager.get_field_data(str(user_id), TABLE, field)
+
+    if not isinstance(raw, dict):
+        raw = _default_accessory_preset()
+
+    for s in SLOTS:
+        if s not in raw:
+            raw[s] = None
+
+    return raw
+
+def _save_accessory_preset(user_id: str, preset_idx: int, preset_data: dict):
+    field = f"preset_{preset_idx}"
+    normalized = _default_accessory_preset()
+    if isinstance(preset_data, dict):
+        for s in SLOTS:
+            normalized[s] = preset_data.get(s)
+    player_data_manager.update_or_write_data(str(user_id), TABLE, field, normalized, data_type="TEXT")
+
+def _accessory_uid_exists(data: dict, uid: str):
+    if not uid:
+        return False
+
+    # 查背包
+    for x in data.get("bag", []):
+        if str(x.get("uid", "")) == str(uid):
+            return True
+
+    # 查已装备
+    for s in SLOTS:
+        it = data.get("equipped", {}).get(s)
+        if it and str(it.get("uid", "")) == str(uid):
+            return True
+
+    return False
+
+def _clean_accessory_preset(user_id: str, preset_idx: int):
+    data = _get_data(str(user_id))
+    preset = _get_accessory_preset(str(user_id), preset_idx)
+
+    changed = False
+    result = _default_accessory_preset()
+
+    for s in SLOTS:
+        uid = preset.get(s)
+        if uid and _accessory_uid_exists(data, uid):
+            result[s] = uid
+        else:
+            if uid is not None:
+                changed = True
+            result[s] = None
+
+    if changed:
+        _save_accessory_preset(str(user_id), preset_idx, result)
+
+    return result
+
+def _get_accessory_by_uid(data: dict, uid: str):
+    if not uid:
+        return None
+
+    for x in data.get("bag", []):
+        if str(x.get("uid", "")) == str(uid):
+            return x
+
+    for s in SLOTS:
+        it = data.get("equipped", {}).get(s)
+        if it and str(it.get("uid", "")) == str(uid):
+            return it
+
+    return None
+
+def _format_accessory_preset(user_id: str, preset_idx: int):
+    data = _get_data(str(user_id))
+    preset = _clean_accessory_preset(str(user_id), preset_idx)
+
+    lines = [f"【预设{preset_idx}】"]
+    empty = True
+
+    for s in SLOTS:
+        uid = preset.get(s)
+        if not uid:
+            lines.append(f"{s}：未记录")
+            continue
+
+        acc = _get_accessory_by_uid(data, uid)
+        if not acc:
+            lines.append(f"{s}：未记录")
+            continue
+
+        empty = False
+        lines.append(
+            f"{s}：{acc.get('name', '未知饰品')}[{quality_to_cn(acc.get('quality', 1))}] "
+            f"({acc.get('set_type', '未知')}·UID:{uid})"
+        )
+
+    if empty:
+        lines.append("（当前预设为空）")
+
+    return "\n".join(lines)
+
 def _get_upgrade_cost(cur_quality: int) -> int:
     if cur_quality <= 1:
         return 1
@@ -3012,6 +3120,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    品阶：全部 / 1~5 / 一阶~五阶
    安全规则：
    - 当“类型=全部”或“品阶=全部”时，自动忽略4/5阶
+
+10）饰品预设：
+   发送：饰品预设 1/2/3
+   - 保存当前已装备饰品到对应预设位
+   - 若原有记录存在，则自动覆盖
+   - 直接发送【饰品预设】可查看所有预设
+
+11）快速装备饰品：
+   发送：快速装备饰品 1/2/3
+   - 一键装备对应预设中的饰品
+   - 若预设中某个UID已不存在，会自动清理该失效记录
 """.strip()
 
     await handle_send(
@@ -3028,17 +3147,96 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
+
     user_id = str(user_info["user_id"])
     data = _get_data(user_id)
     eq = data["equipped"]
+
     lines = ["☆------我的饰品------☆"]
+
+    # 已装备饰品
     for s in SLOTS:
         it = eq.get(s)
         if not it:
             lines.append(f"{s}：未装备")
         else:
-            lines.append(f"{s}：{it['name']}[{quality_to_cn(it.get('quality', 1))}]")
-    await handle_send(bot, event, "\n".join(lines))
+            lines.append(
+                f"{s}：{it['name']}[{quality_to_cn(it.get('quality', 1))}]"
+                f"（{it.get('set_type', '未知')}·{it.get('part', s)}）"
+            )
+
+    # 汇总饰品总加成
+    effect = calc_accessory_effects(user_id)
+
+    bonus_lines = []
+    if effect.get("hp_pct", 0):
+        bonus_lines.append(f"气血 +{effect['hp_pct'] * 100:.2f}%")
+    if effect.get("atk_pct", 0):
+        bonus_lines.append(f"攻击 +{effect['atk_pct'] * 100:.2f}%")
+    if effect.get("crit_rate", 0):
+        bonus_lines.append(f"会心 +{effect['crit_rate'] * 100:.2f}%")
+    if effect.get("crit_damage", 0):
+        bonus_lines.append(f"会心伤害 +{effect['crit_damage'] * 100:.2f}%")
+    if effect.get("dmg_reduction", 0):
+        bonus_lines.append(f"减伤 +{effect['dmg_reduction'] * 100:.2f}%")
+    if effect.get("crit_resist", 0):
+        bonus_lines.append(f"抗暴 +{effect['crit_resist'] * 100:.2f}%")
+
+    lines.append("")
+    lines.append("【饰品总加成】")
+    if bonus_lines:
+        lines.extend([f" - {x}" for x in bonus_lines])
+    else:
+        lines.append(" - 暂无加成")
+
+    # 套装件数
+    set_count = effect.get("set_count", {})
+    lines.append("")
+    lines.append("【套装件数】")
+    if set_count:
+        for set_name, cnt in set_count.items():
+            lines.append(f" - {set_name}：{cnt}件")
+    else:
+        lines.append(" - 暂无套装")
+
+    # 套装效果
+    type_name_map = {
+        "attack": "攻击提升",
+        "true_damage": "附加真伤",
+        "shield": "开场护盾",
+        "reflect": "反伤",
+        "armor_pen": "护甲穿透",
+        "dmg_reduction": "伤害减免",
+        "crit_rate": "会心率",
+        "dodge": "闪避",
+        "shield_break": "护盾穿透",
+    }
+
+    set_bonus = effect.get("set_bonus", [])
+    lines.append("")
+    lines.append("【已激活套装效果】")
+    if set_bonus:
+        for sb in set_bonus:
+            set_name = sb.get("set", "未知")
+            pieces = sb.get("pieces", 0)
+            sb_type = sb.get("type", "")
+            sb_value = float(sb.get("value", 0))
+            show_name = type_name_map.get(sb_type, sb_type)
+
+            if sb_type == "dodge":
+                lines.append(f" - {set_name}{pieces}件：{show_name} +{sb_value:.0f}点")
+            else:
+                lines.append(f" - {set_name}{pieces}件：{show_name} +{sb_value * 100:.2f}%")
+    else:
+        lines.append(" - 暂无激活效果")
+
+    await handle_send(
+        bot, event, "\n".join(lines),
+        md_type="背包",
+        k1="饰品背包", v1="饰品背包",
+        k2="查看饰品", v2="查看饰品",
+        k3="饰品帮助", v3="饰品帮助"
+    )
 
 @accessory_bag.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -3611,3 +3809,173 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         k3="查看饰品", v3=f"查看饰品 {main_acc.get('uid', '')}"
     )
 
+@accessory_preset.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = str(user_info["user_id"])
+    arg = args.extract_plain_text().strip()
+
+    # 不带参数：显示全部预设
+    if not arg:
+        msg = "\n\n".join([
+            "☆------饰品预设------☆",
+            _format_accessory_preset(user_id, 1),
+            _format_accessory_preset(user_id, 2),
+            _format_accessory_preset(user_id, 3),
+        ])
+        await handle_send(
+            bot, event, msg,
+            md_type="背包",
+            k1="保存1", v1="饰品预设 1",
+            k2="保存2", v2="饰品预设 2",
+            k3="快速装备", v3="快速装备饰品 1"
+        )
+        return
+
+    if arg not in {"1", "2", "3"}:
+        await handle_send(bot, event, "用法：饰品预设 1/2/3\n或直接发送【饰品预设】查看当前预设")
+        return
+
+    preset_idx = int(arg)
+    old_preset = _clean_accessory_preset(user_id, preset_idx)
+
+    data = _get_data(user_id)
+    eq = data.get("equipped", {})
+
+    new_preset = _default_accessory_preset()
+    for s in SLOTS:
+        it = eq.get(s)
+        new_preset[s] = it.get("uid") if it else None
+
+    had_old = any(old_preset.get(s) for s in SLOTS)
+    _save_accessory_preset(user_id, preset_idx, new_preset)
+
+    msg_lines = [f"已保存当前装备到饰品预设{preset_idx}。"]
+    if had_old:
+        msg_lines.append("检测到原有记录，本次已覆盖。")
+    msg_lines.append("")
+    msg_lines.append(_format_accessory_preset(user_id, preset_idx))
+
+    await handle_send(
+        bot, event, "\n".join(msg_lines),
+        md_type="背包",
+        k1="查看预设", v1="饰品预设",
+        k2="快速装备", v2=f"快速装备饰品 {preset_idx}",
+        k3="我的饰品", v3="我的饰品"
+    )
+
+@quick_equip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = str(user_info["user_id"])
+    arg = args.extract_plain_text().strip()
+
+    if arg not in {"1", "2", "3"}:
+        await handle_send(bot, event, "用法：快速装备饰品 1/2/3")
+        return
+
+    preset_idx = int(arg)
+    preset = _clean_accessory_preset(user_id, preset_idx)
+
+    if not any(preset.get(s) for s in SLOTS):
+        await handle_send(bot, event, f"饰品预设{preset_idx}为空，无法快速装备。")
+        return
+
+    result = {
+        "equipped": [],
+        "skipped": [],
+        "missing": []
+    }
+
+    def _mut(doc):
+        doc = _normalize_accessory_doc(doc)
+
+        for s in SLOTS:
+            uid = preset.get(s)
+            if not uid:
+                continue
+
+            # 已在该部位装备
+            current_eq = doc.get("equipped", {}).get(s)
+            if current_eq and str(current_eq.get("uid", "")) == str(uid):
+                result["skipped"].append(f"{s}已是目标饰品")
+                continue
+
+            # 在背包中找
+            hit_idx = -1
+            hit = None
+            for i, x in enumerate(doc.get("bag", [])):
+                if str(x.get("uid", "")) == str(uid):
+                    hit_idx = i
+                    hit = x
+                    break
+
+            # 不在背包，再看看是不是装备在别的地方（理论上正常不会错部位，但做兼容）
+            if not hit:
+                for slot_name in SLOTS:
+                    it = doc.get("equipped", {}).get(slot_name)
+                    if it and str(it.get("uid", "")) == str(uid):
+                        hit = it
+                        doc["equipped"][slot_name] = None
+                        break
+
+            if not hit:
+                result["missing"].append(f"{s}预设饰品已不存在")
+                continue
+
+            # 部位校验
+            if hit.get("part") != s:
+                result["skipped"].append(f"{hit.get('name', '未知饰品')}部位不匹配，跳过")
+                continue
+
+            # 当前部位旧装备回背包
+            old = doc["equipped"].get(s)
+            if old:
+                doc["bag"].append(old)
+
+            # 如果命中对象来自背包则删掉
+            if hit_idx >= 0:
+                del doc["bag"][hit_idx]
+
+            doc["equipped"][s] = hit
+            result["equipped"].append(f"{s}→{hit.get('name', '未知饰品')}")
+
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    msg_lines = [f"☆------快速装备饰品{preset_idx}------☆"]
+
+    if result["equipped"]:
+        msg_lines.append("【成功装备】")
+        msg_lines.extend([f" - {x}" for x in result["equipped"]])
+
+    if result["skipped"]:
+        msg_lines.append("【跳过】")
+        msg_lines.extend([f" - {x}" for x in result["skipped"]])
+
+    if result["missing"]:
+        msg_lines.append("【失效记录已清理】")
+        msg_lines.extend([f" - {x}" for x in result["missing"]])
+
+    await handle_send(
+        bot, event, "\n".join(msg_lines),
+        md_type="背包",
+        k1="我的饰品", v1="我的饰品",
+        k2="饰品预设", v2="饰品预设",
+        k3="饰品背包", v3="饰品背包"
+    )
