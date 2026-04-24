@@ -171,15 +171,15 @@ class ArenaLimit:
 
     def calculate_rank(self, score):
         """根据积分计算段位"""
-        if score >= 2500:
+        if score >= 3200:
             return "王者"
-        elif score >= 2000:
+        elif score >= 2700:
             return "钻石"
-        elif score >= 1500:
+        elif score >= 2300:
             return "铂金"
-        elif score >= 1200:
+        elif score >= 1900:
             return "黄金"
-        elif score >= 1000:
+        elif score >= 1500:
             return "白银"
         else:
             return "青铜"
@@ -198,5 +198,74 @@ class ArenaLimit:
         # 按积分排序
         sorted_users = sorted(all_users, key=lambda x: x[1], reverse=True)
         return sorted_users[:limit]
+
+    def get_rank_order(self):
+        """段位顺序（低 -> 高）"""
+        return ["青铜", "白银", "黄金", "铂金", "钻石", "王者"]
+    
+    def reduce_all_users_rank(self, reduce_steps=2):
+        """
+        给所有竞技场玩家降段
+        :param reduce_steps: 默认降2个大段
+        规则：
+        - 根据当前 rank 降低指定段位
+        - 当前积分直接设置为目标段位的初始积分
+        - 最低不会低于青铜
+        返回统计信息
+        """
+        reduce_steps = max(0, int(reduce_steps))
+        rank_order = self.get_rank_order()
+    
+        # 各段位初始积分
+        rank_initial_score = {
+            "青铜": 1000,
+            "白银": 1500,
+            "黄金": 1900,
+            "铂金": 2300,
+            "钻石": 2700,
+            "王者": 3200
+        }
+    
+        all_users = player_data_manager.get_all_field_data(self.table_name, "score")
+        total_users = 0
+        changed_users = 0
+        result_detail = []
+    
+        for user_id, _ in all_users:
+            user_id = str(user_id)
+            arena_info = self.get_user_arena_info(user_id)
+            current_rank = arena_info.get("rank", self.calculate_rank(arena_info.get("score", self.initial_score)))
+    
+            if current_rank not in rank_order:
+                current_rank = self.calculate_rank(arena_info.get("score", self.initial_score))
+    
+            total_users += 1
+    
+            old_index = rank_order.index(current_rank)
+            new_index = max(0, old_index - reduce_steps)
+            new_rank = rank_order[new_index]
+            new_score = rank_initial_score[new_rank]
+    
+            # 只有实际发生变化才更新
+            if new_rank != current_rank or arena_info.get("score") != new_score:
+                self.update_arena_data(user_id, {
+                    "rank": new_rank,
+                    "score": new_score,
+                    "win_streak": 0
+                })
+                changed_users += 1
+                result_detail.append({
+                    "user_id": user_id,
+                    "old_rank": current_rank,
+                    "new_rank": new_rank,
+                    "new_score": new_score
+                })
+    
+        return {
+            "total_users": total_users,
+            "changed_users": changed_users,
+            "reduce_steps": reduce_steps,
+            "details": result_detail
+        }
 
 arena_limit = ArenaLimit()

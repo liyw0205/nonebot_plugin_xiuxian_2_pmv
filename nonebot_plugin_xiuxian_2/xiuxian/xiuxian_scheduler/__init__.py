@@ -6,7 +6,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XIUXIAN_IMPART_BUFF,
     backup_db_files
 )
-from ..xiuxian_arena import reset_arena_daily_challenges
+from ..xiuxian_arena import reset_arena_daily_challenges, reduce_arena_rank
 from ..xiuxian_base import (
     reset_lottery_participants,
     reset_stone_limits,
@@ -158,6 +158,21 @@ async def daily_reset_arena():
     """竞技场每日重置"""
     await _run_job("竞技场每日重置", reset_arena_daily_challenges)
 
+
+@scheduler.scheduled_job(
+    "cron",
+    day_of_week="fri",
+    hour=20,
+    minute=0,
+    second=0,
+    id="weekly_reduce_arena_rank",
+    misfire_grace_time=600,
+    coalesce=True,
+    max_instances=1
+)
+async def weekly_reduce_arena_rank():
+    """每周五晚8点竞技场降段"""
+    await _run_job("竞技场每周降段", reduce_arena_rank, 2)
 
 @scheduler.scheduled_job(
     "cron",

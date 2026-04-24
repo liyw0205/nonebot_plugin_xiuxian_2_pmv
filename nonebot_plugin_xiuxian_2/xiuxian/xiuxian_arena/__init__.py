@@ -20,6 +20,7 @@ from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
+arena_view = on_command("竞技场查看", priority=10, block=True)
 arena_ranking = on_command("竞技场排行榜", priority=10, block=True)
 arena_myinfo = on_command("我的竞技场", priority=10, block=True)
 arena_help = on_command("竞技场帮助", priority=10, block=True)
@@ -36,6 +37,7 @@ __arena_help__ = """
 • 我的荣誉 - 查看荣誉信息
 • 竞技场排行榜 - 查看排行榜
 • 我的竞技场 - 查看个人战绩
+• 竞技场查看 - 查看与你积分最近的3位道友
 
 基础规则：
 
@@ -47,12 +49,12 @@ __arena_help__ = """
 
 段位系统：
 
-> • 王者（2500+）- 1000荣誉值
-• 钻石（2000-2499）- 600荣誉值  
-• 铂金（1500-1999）- 400荣誉值
-• 黄金（1200-1499）- 300荣誉值
-• 白银（1000-1199）- 200荣誉值
-• 青铜（1000以下）- 100荣誉值
+> • 王者（3200+）- 1000荣誉值
+• 钻石（2700-3199）- 600荣誉值  
+• 铂金（2300-2699）- 400荣誉值
+• 黄金（1900-2299）- 300荣誉值
+• 白银（1500-1899）- 200荣誉值
+• 青铜（1500以下）- 100荣誉值
 
 排名奖励（前100名额外）：
 
@@ -63,6 +65,16 @@ __arena_help__ = """
 • 第51-100名：+50荣誉值
 """
 
+# 竞技场最近查看对手缓存
+# {
+#   user_id: {
+#       "targets": [{"user_id": "...", "score": 1000}, ...],
+#       "expire_time": datetime
+#   }
+# }
+arena_opponent_cache = {}
+ARENA_CACHE_EXPIRE_SECONDS = 180
+
 @arena_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场帮助信息"""
@@ -71,39 +83,77 @@ async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await arena_help.finish()
 
 @arena_challenge.handle(parameterless=[Cooldown(cd_time=30)])
-async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """竞技场挑战"""
+async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """竞技场挑战，支持挑战最近查看缓存的1/2/3号对手"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await arena_challenge.finish()
     
-    user_id = user_info['user_id']
-    
+    user_id = str(user_info['user_id'])
+    arg_text = args.extract_plain_text().strip()
+
     # 检查挑战次数
     if not arena_limit.can_challenge_today(user_id):
         msg = "今日挑战次数已用完，请明日再来！"
         await handle_send(bot, event, msg)
         await arena_challenge.finish()
-    
+
+    opponent_id = None
+    use_cached_target = False
+
+    # 支持竞技场挑战 1/2/3
+    if arg_text in {"1", "2", "3"}:
+        cache_targets = get_arena_opponent_cache(user_id)
+        if not cache_targets:
+            await handle_send(bot, event, "最近查看缓存不存在或已过期，请先发送【竞技场查看】")
+            await arena_challenge.finish()
+
+        idx = int(arg_text) - 1
+        if idx < 0 or idx >= len(cache_targets):
+            await handle_send(bot, event, f"缓存中没有第{arg_text}位对手，请先重新发送【竞技场查看】")
+            await arena_challenge.finish()
+
+        opponent_id = str(cache_targets[idx]["user_id"])
+        use_cached_target = True
+    else:
+        # 无参数则随机匹配
+        opponent_id = await find_arena_opponent(user_id)
+
     # 使用一次挑战次数
     arena_limit.use_challenge(user_id)
-    
-    # 随机匹配对手（积分相近的玩家）
-    opponent_id = await find_arena_opponent(user_id)
-    
+
     if opponent_id:
-        # 有匹配对手，进行战斗
+        # 重新获取对手当前信息，避免缓存期间积分变化/用户失效
+        opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+        if not opponent_user_info:
+            if use_cached_target:
+                clear_arena_opponent_cache(user_id)
+            new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=None)
+            msg = f"目标对手信息已失效，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
+            await handle_send(bot, event, msg)
+            await arena_challenge.finish()
+
+        # 清理缓存：被挑战后清除
+        if use_cached_target:
+            clear_arena_opponent_cache(user_id)
+
+        # 进行战斗
         user1_info = sql_message.get_user_real_info(user_id)
         user2_info = sql_message.get_user_real_info(opponent_id)
-        
-        # 进行战斗
+
+        if not user1_info or not user2_info:
+            new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=None)
+            msg = f"战斗数据异常，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
+            await handle_send(bot, event, msg)
+            await arena_challenge.finish()
+
         result, victor = Player_fight(user_id, opponent_id, 1, bot.self_id)
-        
+
         # 发送战斗过程
         await send_msg_handler(bot, event, result)
-        
+
         # 处理战斗结果
         if victor == user1_info['user_name']:
             # 挑战者胜利
@@ -121,6 +171,120 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     await handle_send(bot, event, msg)
     await arena_challenge.finish()
+
+@arena_view.handle(parameterless=[Cooldown(cd_time=5)])
+async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """竞技场查看：优先展示缓存，没有缓存才重新生成"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await arena_view.finish()
+
+    user_id = str(user_info['user_id'])
+    my_arena_info = arena_limit.get_user_arena_info(user_id)
+    my_score = int(my_arena_info['score'])
+
+    # 先读缓存
+    cache_targets = get_arena_opponent_cache(user_id)
+    from_cache = False
+
+    if cache_targets:
+        nearest_three = []
+        for item in cache_targets:
+            opponent_id = str(item.get("user_id", ""))
+            cached_score = item.get("score", 0)
+
+            opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+            if not opponent_user_info:
+                continue
+
+            try:
+                cached_score = int(cached_score)
+            except (TypeError, ValueError):
+                cached_score = 0
+
+            nearest_three.append({
+                "user_id": opponent_id,
+                "user_name": opponent_user_info["user_name"],
+                "score": cached_score,
+                "diff": abs(cached_score - my_score)
+            })
+
+        if nearest_three:
+            from_cache = True
+        else:
+            clear_arena_opponent_cache(user_id)
+            cache_targets = None
+
+    # 没缓存才重新生成
+    if not cache_targets:
+        all_players = player_data_manager.get_all_field_data("arena", "score")
+        if not all_players:
+            await handle_send(bot, event, "当前竞技场暂无其他对手。")
+            await arena_view.finish()
+
+        candidates = []
+        for opponent_id, opponent_score in all_players:
+            opponent_id = str(opponent_id)
+            if opponent_id == user_id:
+                continue
+
+            try:
+                opponent_score = int(opponent_score)
+            except (TypeError, ValueError):
+                continue
+
+            opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+            if not opponent_user_info:
+                continue
+
+            candidates.append({
+                "user_id": opponent_id,
+                "user_name": opponent_user_info["user_name"],
+                "score": opponent_score,
+                "diff": abs(opponent_score - my_score)
+            })
+
+        if not candidates:
+            await handle_send(bot, event, "当前竞技场暂无可挑战的对手。")
+            await arena_view.finish()
+
+        candidates.sort(key=lambda x: (x["diff"], x["score"]))
+        nearest_three = candidates[:3]
+
+        # 写缓存
+        cache_targets = [{"user_id": x["user_id"], "score": x["score"]} for x in nearest_three]
+        set_arena_opponent_cache(user_id, cache_targets)
+
+    msg_lines = [
+        "⚔️ 【竞技场查看】",
+        f"当前积分：{my_score}",
+    ]
+
+    if from_cache:
+        msg_lines.append("以下为最近一次查看缓存（可能不是实时积分）：")
+    else:
+        msg_lines.append("以下是与你积分最近的3位道友：")
+
+    for idx, opponent in enumerate(nearest_three, start=1):
+        msg_lines.append(
+            f"{idx}. {opponent['user_name']} | 积分：{opponent['score']} | 差值：{opponent['diff']}"
+        )
+
+    msg_lines.append("")
+    msg_lines.append("请输入【竞技场挑战 1】、【竞技场挑战 2】或【竞技场挑战 3】发起挑战")
+    msg_lines.append("缓存有效期：3分钟，被挑战后自动清除")
+    msg_lines.append("挑战时会按对手实时数据进行结算")
+
+    await handle_send(
+        bot, event, "\n".join(msg_lines),
+        md_type="竞技场",
+        k1="挑战1", v1="竞技场挑战 1",
+        k2="挑战2", v2="竞技场挑战 2",
+        k3="挑战3", v3="竞技场挑战 3"
+    )
+    await arena_view.finish()
 
 @arena_ranking.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -341,28 +505,76 @@ def check_rank_requirement(current_rank, required_rank):
     return current_index >= required_index
 
 async def find_arena_opponent(user_id):
-    """为玩家寻找合适的竞技场对手"""
+    """为玩家寻找合适的竞技场对手，优先积分相近，否则返回最近的一个"""
+    user_id = str(user_id)
     user_arena_data = arena_limit.get_user_arena_info(user_id)
-    user_score = user_arena_data['score']
+    user_score = int(user_arena_data['score'])
     
     # 获取所有玩家数据
     all_players = player_data_manager.get_all_field_data("arena", "score")
-    
-    # 过滤掉自己和今日已挑战过的玩家，寻找积分相近的对手
-    potential_opponents = []
+    if not all_players:
+        return None
+
+    candidates = []
+    close_candidates = []
+
     for opponent_id, opponent_score in all_players:
+        opponent_id = str(opponent_id)
         if opponent_id == user_id:
             continue
-        
-        # 积分相差在200分以内视为合适对手
-        if abs(opponent_score - user_score) <= 200:
-            potential_opponents.append(opponent_id)
-    
-    # 随机选择一个对手
-    if potential_opponents:
-        return random.choice(potential_opponents)
-    else:
+
+        try:
+            opponent_score = int(opponent_score)
+        except (TypeError, ValueError):
+            continue
+
+        opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+        if not opponent_user_info:
+            continue
+
+        diff = abs(opponent_score - user_score)
+        candidates.append((opponent_id, opponent_score, diff))
+
+        if diff <= 200:
+            close_candidates.append(opponent_id)
+
+    # 优先随机选取积分接近的
+    if close_candidates:
+        return random.choice(close_candidates)
+
+    # 没有接近的，就选最近的一个
+    if candidates:
+        candidates.sort(key=lambda x: x[2])
+        return candidates[0][0]
+
+    return None
+
+def set_arena_opponent_cache(user_id: str, targets: list):
+    """设置竞技场对手缓存"""
+    arena_opponent_cache[str(user_id)] = {
+        "targets": targets,
+        "expire_time": datetime.now().timestamp() + ARENA_CACHE_EXPIRE_SECONDS
+    }
+
+
+def get_arena_opponent_cache(user_id: str):
+    """获取竞技场对手缓存，若过期则自动清除"""
+    user_id = str(user_id)
+    cache = arena_opponent_cache.get(user_id)
+    if not cache:
         return None
+
+    expire_time = cache.get("expire_time", 0)
+    if datetime.now().timestamp() > expire_time:
+        arena_opponent_cache.pop(user_id, None)
+        return None
+
+    return cache.get("targets", [])
+
+
+def clear_arena_opponent_cache(user_id: str):
+    """清除竞技场对手缓存"""
+    arena_opponent_cache.pop(str(user_id), None)
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
@@ -391,3 +603,11 @@ async def reset_arena_daily_challenges():
             }
     
     logger.opt(colors=True).info(f"<green>竞技场每日挑战次数已重置！荣誉值发放完成，共发放{len(honor_distribution)}名玩家</green>")
+
+async def reduce_arena_rank(reduce_steps=2):
+    """每周竞技场统一降段"""
+    result = arena_limit.reduce_all_users_rank(reduce_steps)
+    logger.opt(colors=True).info(
+        f"<green>竞技场降段完成！共处理{result['total_users']}名玩家，"
+        f"实际降段{result['changed_users']}名玩家，降段数：{result['reduce_steps']}</green>"
+    )
