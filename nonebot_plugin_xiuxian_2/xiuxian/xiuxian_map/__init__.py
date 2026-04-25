@@ -49,7 +49,7 @@ SEED_SHOP_TYPES = {"坊市", "城池", "驿站"}
 # =========================================
 DAILY_LIMIT_CONFIG = {
     "gather": 30,
-    "combat": 15,
+    "combat": 7,
     "explore": 5,
 }
 
@@ -64,7 +64,7 @@ MAP_MISSION_CONFIG = {
     "gather": {
         "name": "采集委托",
         "count_key": "gather_count",
-        "targets": [3, 5, 8],
+        "targets": [5, 8, 10],
         "desc": lambda n: f"今日完成采集 {n} 次",
     },
     "combat": {

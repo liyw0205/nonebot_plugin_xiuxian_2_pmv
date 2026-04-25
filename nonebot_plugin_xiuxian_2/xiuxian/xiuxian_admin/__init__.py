@@ -7,11 +7,12 @@ import os
 import random
 import requests
 import asyncio
-from nonebot.compat import model_dump
 from pathlib import Path
 from typing import Any
 from nonebot.compat import model_dump
-from datetime import datetime
+import sqlite3
+import uuid
+from datetime import datetime, timedelta
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -30,6 +31,16 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment,
     is_channel_event,
+    get_chat_scene,
+    get_group_id,
+    get_user_id,
+    get_message_db_path,
+)
+
+from ..broadcast_manager import (
+    start_broadcast,
+    format_broadcast_status,
+    cancel_broadcast,
 )
 
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -83,6 +94,19 @@ migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, bl
 update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
 swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
 parse_event_cmd = on_command("消息信息", permission=SUPERUSER, priority=100, block=True)
+group_broadcast_cmd = on_command("群聊广播", permission=SUPERUSER, priority=5, block=True)
+private_broadcast_cmd = on_command("私聊广播", permission=SUPERUSER, priority=5, block=True)
+global_broadcast_cmd = on_command("全局广播", permission=SUPERUSER, priority=5, block=True)
+
+view_broadcast_cmd = on_command("查看广播", aliases={"广播列表"}, permission=SUPERUSER, priority=5, block=True)
+cancel_broadcast_cmd = on_command("取消广播", permission=SUPERUSER, priority=5, block=True)
+broadcast_help_cmd = on_command(
+    "广播帮助",
+    aliases={"广播说明", "广播指令"},
+    permission=SUPERUSER,
+    priority=5,
+    block=True
+)
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -1218,6 +1242,14 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 重载items - 重新获取物品数据
 → 用户伪装 [目标ID] - 伪装成指定ID
 
+⚡ 广播管理：
+→ 广播帮助 - 查看广播系统说明
+→ 群聊广播 [内容] - 向群聊广播，每群一次
+→ 私聊广播 [内容] - 向私聊广播，每人一次
+→ 全局广播 [内容] - 群聊+私聊全局广播
+→ 查看广播 / 广播列表 - 查看当前广播任务
+→ 取消广播 [广播ID] - 取消指定广播
+
 → 更新日志 - 获取版本日志
 → 版本更新 - 指定版本号更新/latest：更新最新版本
 → 版本查询 - 获取最近发布的版本
@@ -1612,12 +1644,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
         # 1.2 无模板ID -> 走原生MD
         elif not is_channel_event(event):
             try:
-                md_msg = (
-                    f"## 提示\r"
-                    f"![img #1280px #720px]({image_url})\r"
-                    f"{text_msg}"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+                md_msg = " "
+                #await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
                 return
             except Exception as e:
                 logger.warning(f"默认回复原生Markdown发送失败，准备降级: {e}")
@@ -1866,7 +1894,7 @@ def _pretty_event_json(data) -> str:
         return _unescape_slashes(_safe_str(data))
 
 
-def _truncate_for_send(text: str, limit: int = 3000) -> str:
+def _truncate_for_send(text: str, limit: int = 10000) -> str:
     if not text:
         return ""
     if len(text) <= limit:
@@ -2053,3 +2081,212 @@ async def _send_event_info_by_config(
         await bot.send(event=event, message=plain)
     except Exception:
         await handle_send(bot, event, plain)
+
+
+@group_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def group_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    content = str(args).strip()
+    if not content:
+        await handle_send(bot, event, "用法：群聊广播 广播内容")
+        return
+
+    msg = await start_broadcast(bot, "group", content)
+    await handle_send(bot, event, msg)
+
+
+@private_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def private_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    content = str(args).strip()
+    if not content:
+        await handle_send(bot, event, "用法：私聊广播 广播内容")
+        return
+
+    msg = await start_broadcast(bot, "private", content)
+    await handle_send(bot, event, msg)
+
+
+@global_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def global_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    content = str(args).strip()
+    if not content:
+        await handle_send(bot, event, "用法：全局广播 广播内容")
+        return
+
+    msg = await start_broadcast(bot, "global", content)
+    await handle_send(bot, event, msg)
+
+
+@view_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def view_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    await handle_send(bot, event, format_broadcast_status())
+
+
+@cancel_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def cancel_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    bid = args.extract_plain_text().strip()
+    await handle_send(bot, event, cancel_broadcast(bid))
+
+@broadcast_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def broadcast_help_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    msg = """
+【广播系统帮助】
+
+一、创建广播
+
+1. 群聊广播
+指令：
+群聊广播 广播内容
+
+说明：
+只向群聊/频道群聊发送广播。
+每个群只发送一次。
+
+示例：
+群聊广播 服务器将在今晚 23:00 维护，请提前下线。
+
+
+2. 私聊广播
+指令：
+私聊广播 广播内容
+
+说明：
+只向私聊/频道私信用户发送广播。
+每个用户只发送一次。
+
+示例：
+私聊广播 今日活动已开启，记得上线领取奖励。
+
+
+3. 全局广播
+指令：
+全局广播 广播内容
+
+说明：
+同时面向群聊和私聊广播。
+每个群/每个用户只发送一次。
+
+示例：
+全局广播 # 系统通知
+今日更新已完成，祝各位道友修仙愉快。
+
+
+二、查看广播
+
+指令：
+查看广播
+
+或：
+广播列表
+
+说明：
+查看当前内存中的广播任务，包括：
+- 广播ID
+- 状态
+- 广播类型
+- 适配器
+- 是否 Markdown
+- 已发群数量
+- 已发用户数量
+- 错误数量
+- 内容预览
+
+
+三、取消广播
+
+指令：
+取消广播 广播ID
+
+示例：
+取消广播 BC12AB34CD
+
+说明：
+取消指定广播后，不再自动补发。
+已发送过的群/用户不会撤回。
+
+
+四、广播ID
+
+每次创建广播时会自动生成广播ID，例如：
+BC12AB34CD
+
+请保存该ID，用于后续查看或取消广播。
+
+
+五、发送机制说明
+
+【QQ适配器】
+QQ官方适配器无法完全主动发送广播。
+创建广播时：
+- 只会向最近1分钟内有消息的群/用户发送。
+- 后续如果某个未发送过的群/用户再次发消息，会自动补发。
+- 每个群/每个用户只发一次。
+
+【OneBot V11适配器】
+OB11支持主动发送。
+创建广播时：
+- 会读取历史消息中出现过的群ID/用户ID并发送。
+- 后续如果出现新群/新用户，会自动补发。
+- 每个群/每个用户只发一次。
+
+
+六、Markdown说明
+
+如果配置中 markdown_status = True：
+- QQ适配器：使用原生Markdown发送。
+- OB11适配器：使用合并转发方式发送Markdown内容。
+
+如果 markdown_status = False：
+- 使用普通文本消息发送。
+
+
+七、注意事项
+
+1. 广播任务只保存在内存中。
+   机器人重启后，广播任务会自动丢失。
+
+2. 同一个广播任务中：
+   每个群只发一次，每个用户只发一次。
+
+3. QQ适配器补发依赖用户/群的新消息。
+   如果某个群或用户一直没有发消息，就不会触发补发。
+
+4. 被屏蔽的群聊或私聊不会补发广播。
+
+5. 如果需要停止后续补发，请使用：
+   取消广播 广播ID
+""".strip()
+
+    await handle_send(bot, event, msg)

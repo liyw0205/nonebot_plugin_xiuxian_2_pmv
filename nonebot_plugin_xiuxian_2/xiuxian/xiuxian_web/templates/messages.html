@@ -1,0 +1,2068 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="qq-page">
+    <div class="qq-shell">
+        <!-- 左侧会话 -->
+        <aside id="sessionPane" class="qq-session-pane">
+            <div class="qq-side-header">
+                <div>
+                    <h2><i class="fas fa-comments"></i> 消息</h2>
+                    <p>Web QQ / NTQQ 风格消息面板</p>
+                </div>
+                <button class="icon-btn" onclick="refreshAll()" title="刷新">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+
+            <div class="qq-filter-bar">
+                <select id="sceneSelect" onchange="onSceneChange()">
+                    <option value="group">群消息</option>
+                    <option value="private">私聊消息</option>
+                    <option value="channel_group">频道消息</option>
+                    <option value="channel_private">频道私信</option>
+                </select>
+
+                <select id="adapterSelect" onchange="onAdapterChange()">
+                    <option value="">全部适配器</option>
+                </select>
+            </div>
+
+            <div class="qq-search">
+                <i class="fas fa-search"></i>
+                <input
+                    id="keywordInput"
+                    type="text"
+                    placeholder="搜索消息、昵称、ID"
+                    onkeydown="if(event.key==='Enter') reloadCurrentConversation()"
+                >
+            </div>
+
+            <div id="sessionList" class="qq-session-list">
+                <div class="loading">正在加载会话...</div>
+            </div>
+        </aside>
+
+        <!-- 右侧聊天 -->
+        <section id="chatPane" class="qq-chat-pane">
+            <div class="qq-chat-header">
+                <button class="mobile-back" onclick="backToSessions()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+
+                <div id="chatAvatar" class="qq-chat-avatar">?</div>
+
+                <div class="qq-chat-title-wrap">
+                    <div id="chatTitle" class="qq-chat-title">请选择一个会话</div>
+                    <div id="chatSubTitle" class="qq-chat-subtitle">左侧选择群聊或私聊后查看消息</div>
+
+                    <div class="chat-date-row">
+                        <select id="dateSelect" onchange="onDateChange()" disabled>
+                            <option value="">今天</option>
+                        </select>
+
+                        <div class="qq-header-tools">
+                            <button onclick="scrollMessagesToTop()" title="最旧消息" type="button">
+                                <i class="fas fa-angles-up"></i>
+                            </button>
+                            <button onclick="scrollMessagesToBottom()" title="最新消息" type="button">
+                                <i class="fas fa-angles-down"></i>
+                            </button>
+                            <button onclick="jumpPrevMessage()" title="上一条消息" type="button">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button onclick="jumpNextMessage()" title="下一条消息" type="button">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="autoRefreshBtn" class="icon-btn" onclick="toggleAutoRefresh()" title="自动刷新">
+                    <i class="fas fa-bolt"></i>
+                </button>
+            </div>
+
+            <div id="messageList" class="qq-message-list">
+                <div class="empty-state">
+                    <i class="fas fa-comments"></i>
+                    <p>请选择左侧会话</p>
+                </div>
+            </div>
+
+            <!-- 输入区：默认收起，媒体面板独立 -->
+            <div class="qq-composer" id="composerBox">
+                <div id="replyBar" class="reply-bar hidden">
+                    <div>
+                        <i class="fas fa-reply"></i>
+                        <span id="replyText">正在回复指定消息</span>
+                    </div>
+                    <button onclick="clearReplyTarget()" type="button" title="取消回复目标">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="composer-collapsed" id="composerCollapsed" onclick="expandComposer()">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>输入消息...</span>
+                    <button type="button" onclick="event.stopPropagation(); toggleMediaPanel()" title="发送媒体">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+
+                <div class="composer-expanded hidden" id="composerExpanded">
+                    <div class="composer-toolbar">
+                        <button id="sendModeToggleBtn" class="mode-toggle-card" onclick="toggleSendMode()" type="button">
+                            <i id="sendModeIcon" class="fas fa-comment-dots"></i>
+                            <span id="sendModeText">普通消息</span>
+                        </button>
+                    
+                        <button id="mdPreviewBtn" class="preview-btn" onclick="toggleMarkdownPreview()" type="button">
+                            <i class="fas fa-eye"></i> 预览
+                        </button>
+                    </div>
+
+                    <div id="mdPreviewBox" class="md-preview-box hidden"></div>
+
+                    <textarea id="messageInput" placeholder="输入消息..." rows="2"></textarea>
+
+                    <div class="composer-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="collapseComposer()" type="button">
+                            收起
+                        </button>
+
+                        <div>
+                            <button class="btn btn-secondary btn-sm" onclick="clearInput()" type="button">
+                                清空
+                            </button>
+                            <button id="sendBtn" class="btn btn-success btn-sm" onclick="sendMessage()" disabled type="button">
+                                <i class="fas fa-paper-plane"></i> 发送
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mediaPanel" class="media-panel hidden">
+                    <input type="hidden" id="mediaType" value="">
+
+                    <div class="media-type-row">
+                        <button onclick="chooseMediaType('image')" type="button">
+                            <i class="fas fa-image"></i>
+                            图片
+                        </button>
+                        <button onclick="chooseMediaType('audio')" type="button">
+                            <i class="fas fa-microphone"></i>
+                            语音
+                        </button>
+                        <button onclick="chooseMediaType('video')" type="button">
+                            <i class="fas fa-video"></i>
+                            视频
+                        </button>
+                        <button onclick="chooseMediaType('file')" type="button">
+                            <i class="fas fa-file"></i>
+                            文件
+                        </button>
+                    </div>
+
+                    <div id="mediaInputBox" class="media-input-box hidden">
+                        <div class="media-current">
+                            当前媒体：<strong id="mediaCurrentText">未选择</strong>
+                            <button onclick="clearMedia()" type="button">清除</button>
+                        </div>
+
+                        <input id="mediaUrl" type="text" placeholder="媒体链接，可留空">
+
+                        <label class="upload-btn">
+                            <i class="fas fa-paperclip"></i>
+                            <input id="mediaFile" type="file" hidden onchange="onFileChosen()">
+                            <span id="fileNameText">选择文件</span>
+                        </label>
+
+                        <button id="sendMediaBtn" class="btn btn-success btn-sm" onclick="sendMessage()" disabled type="button">
+                            <i class="fas fa-paper-plane"></i> 发送媒体
+                        </button>
+                    </div>
+                </div>
+
+                <span id="sendHint">未选择会话</span>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
+<style>
+.qq-page {
+    height: calc(100vh - 130px);
+    min-height: 680px;
+}
+
+.qq-shell {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 330px minmax(0, 1fr);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 25px var(--shadow-color);
+}
+
+/* 左侧会话 */
+.qq-session-pane {
+    border-right: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 80%, var(--bg-secondary));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.qq-side-header {
+    height: 78px;
+    padding: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.qq-side-header h2 {
+    font-size: 1.25rem;
+    margin: 0;
+    padding: 0;
+}
+
+.qq-side-header p {
+    margin: 2px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.icon-btn {
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    box-shadow: 0 2px 6px var(--shadow-color);
+}
+
+.icon-btn:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+.qq-filter-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 0 12px 10px;
+}
+
+.qq-filter-bar select {
+    padding: 8px;
+    font-size: 13px;
+}
+
+.qq-search {
+    margin: 0 12px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+}
+
+.qq-search input {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 9px 0;
+}
+
+.qq-search input:focus {
+    box-shadow: none;
+}
+
+.qq-session-list {
+    overflow-y: auto;
+    padding: 6px 8px 12px;
+    flex: 1;
+}
+
+.session-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: 0.18s;
+    margin-bottom: 4px;
+}
+
+.session-item:hover {
+    background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+
+.session-item.active {
+    background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+
+.session-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-color), var(--info-color));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.session-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-title-row {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.session-title {
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.session-time {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.session-meta {
+    margin-top: 3px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 右侧聊天 */
+.qq-chat-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+    background:
+        radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--accent-color) 8%, transparent), transparent 30%),
+        var(--bg-secondary);
+}
+
+.qq-chat-header {
+    min-height: 74px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    backdrop-filter: blur(8px);
+}
+
+.mobile-back {
+    display: none;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+}
+
+.qq-chat-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-color), var(--success-color));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.qq-chat-title-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.qq-chat-title {
+    font-weight: 800;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.qq-chat-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-date-row {
+    margin-top: 3px;
+}
+
+.chat-date-row select {
+    width: auto;
+    min-width: 112px;
+    max-width: 180px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    border-radius: 999px;
+    background: var(--bg-primary);
+}
+
+.qq-message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 18px 12px;
+    scroll-behavior: smooth;
+}
+
+.msg-date-divider {
+    text-align: center;
+    margin: 12px 0;
+}
+
+.msg-date-divider span {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+    border: 1px solid var(--border-color);
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.msg-row {
+    display: flex;
+    gap: 9px;
+    margin-bottom: 13px;
+    align-items: flex-start;
+}
+
+.msg-row.send {
+    flex-direction: row-reverse;
+}
+
+.msg-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--info-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.msg-main {
+    max-width: min(72%, 760px);
+}
+
+.msg-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.msg-row.send .msg-meta {
+    justify-content: flex-end;
+}
+
+.msg-name {
+    font-weight: 600;
+}
+
+.msg-bubble {
+    position: relative;
+    padding: 9px 12px;
+    border-radius: 13px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    word-break: break-word;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.msg-row.recv .msg-bubble {
+    border-top-left-radius: 4px;
+}
+
+.msg-row.send .msg-bubble {
+    background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
+    border-color: color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+    border-top-right-radius: 4px;
+}
+
+.msg-row.can-reply .msg-bubble {
+    cursor: pointer;
+}
+
+.msg-row.can-reply .msg-bubble:hover {
+    border-color: var(--accent-color);
+}
+
+.msg-row.reply-selected .msg-bubble {
+    outline: 2px solid var(--accent-color);
+    background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-primary));
+}
+
+.msg-md {
+    line-height: 1.55;
+}
+
+.msg-md p {
+    margin: 0.25rem 0;
+}
+
+.msg-md table {
+    width: auto;
+    max-width: 100%;
+    font-size: 0.85rem;
+}
+
+.msg-md code {
+    background: rgba(0,0,0,.12);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.msg-raw {
+    white-space: pre-wrap;
+}
+
+/* Markdown 代码块默认折叠 */
+.md-code-fold {
+    background: rgba(0, 0, 0, .12);
+    border-radius: 8px;
+    margin: 6px 0;
+    overflow: hidden;
+}
+
+.md-code-fold summary {
+    cursor: pointer;
+    padding: 7px 9px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.md-code-fold pre {
+    margin: 0;
+    padding: 8px;
+    border-radius: 0;
+    max-height: 360px;
+    overflow: auto;
+    background: rgba(0, 0, 0, .16);
+}
+
+.msg-extra {
+    margin-top: 4px;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+    opacity: 0.78;
+}
+
+.chat-date-row {
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.chat-date-row select {
+    width: auto;
+    min-width: 112px;
+    max-width: 180px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    border-radius: 999px;
+    background: var(--bg-primary);
+}
+
+.qq-header-tools {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.qq-header-tools button {
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 2px 6px var(--shadow-color);
+    cursor: pointer;
+    font-size: 0.72rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qq-header-tools button:hover {
+    background: var(--accent-color);
+    color: #fff;
+}
+
+/* 输入区 */
+.qq-composer {
+    border-top: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    padding: 9px 10px;
+}
+
+.reply-bar {
+    margin-bottom: 6px;
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+    border-left: 4px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 7px 9px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+}
+
+.reply-bar button {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.composer-collapsed {
+    min-height: 42px;
+    border-radius: 999px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    cursor: text;
+}
+
+.composer-collapsed span {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.composer-collapsed button {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-color);
+    color: white;
+    cursor: pointer;
+}
+
+.composer-expanded {
+    animation: fadeIn .18s ease-out;
+}
+
+.composer-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.mode-toggle-card {
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-radius: 999px;
+    padding: 7px 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px var(--shadow-color);
+    transition: all .18s ease;
+}
+
+.mode-toggle-card:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.mode-toggle-card.markdown {
+    background: var(--accent-color);
+    color: #fff;
+    border-color: var(--accent-color);
+}
+
+.mode-toggle-card.markdown:hover {
+    color: #fff;
+    filter: brightness(0.96);
+}
+
+.preview-btn {
+    display: none;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+}
+
+.preview-btn.show {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#messageInput {
+    resize: vertical;
+    min-height: 54px;
+    max-height: 140px;
+    font-family: Consolas, Monaco, monospace;
+}
+
+.md-preview-box {
+    min-height: 54px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 6px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.media-panel {
+    margin-top: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+}
+
+.media-type-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.media-type-row button {
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 10px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.media-type-row button:hover {
+    background: var(--accent-color);
+    color: #fff;
+}
+
+.media-input-box {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.media-current {
+    grid-column: 1 / -1;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.media-current button {
+    margin-left: 8px;
+    border: none;
+    background: transparent;
+    color: var(--danger-color);
+    cursor: pointer;
+}
+
+.upload-btn {
+    margin: 0;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 0 12px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    min-width: 92px;
+    justify-content: center;
+}
+
+.composer-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+}
+
+#sendHint {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    margin-top: 5px;
+}
+
+.empty-state {
+    height: 100%;
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--text-secondary);
+}
+
+/* 手机端：QQ 手机版逻辑 */
+@media (max-width: 768px) {
+    .qq-page {
+        height: calc(100vh - 90px);
+        min-height: 0;
+    }
+
+    .qq-shell {
+        display: block;
+        border-radius: 0;
+        height: 100%;
+    }
+
+    .qq-session-pane,
+    .qq-chat-pane {
+        width: 100%;
+        height: 100%;
+    }
+
+    .qq-chat-pane {
+        display: none;
+    }
+
+    .qq-shell.mobile-chat-open .qq-session-pane {
+        display: none;
+    }
+
+    .qq-shell.mobile-chat-open .qq-chat-pane {
+        display: flex;
+    }
+
+    .mobile-back {
+        display: block;
+    }
+
+    .qq-chat-header {
+        min-height: 66px;
+        padding: 8px 10px;
+    }
+
+    .qq-chat-avatar {
+        width: 38px;
+        height: 38px;
+    }
+
+    .msg-main {
+        max-width: 82%;
+    }
+
+    .qq-message-list {
+        padding: 12px 10px;
+    }
+
+    @media (max-width: 768px) {
+        .qq-header-tools button {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+        }
+    }
+
+    .qq-composer {
+        padding: 8px;
+    }
+
+    .composer-expanded textarea {
+        min-height: 52px !important;
+        max-height: 110px;
+    }
+
+    .media-input-box {
+        grid-template-columns: 1fr;
+    }
+
+    .composer-actions {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .composer-actions > div {
+        display: flex;
+        gap: 8px;
+    }
+
+    .composer-actions .btn {
+        flex: 1;
+    }
+
+    .msg-extra {
+        font-size: 0.62rem;
+    }
+}
+
+    .msg-bubble img,
+    .msg-md img {
+        display: block;
+        max-width: min(260px, 100%);
+        max-height: 320px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 10px;
+        margin-top: 6px;
+        box-shadow: 0 2px 8px var(--shadow-color);
+    }
+    
+    .msg-row.send .msg-bubble img,
+    .msg-row.send .msg-md img {
+        margin-left: auto;
+    }
+    
+    @media (max-width: 768px) {
+        .msg-bubble img,
+        .msg-md img {
+            max-width: min(220px, 100%);
+            max-height: 260px;
+        }
+    }
+</style>
+
+<script>
+let currentSession = null;
+let sessionsCache = [];
+let autoRefresh = true; // 默认开启
+let autoRefreshTimer = null;
+let isLoadingMessages = false;
+let sendMode = localStorage.getItem('webMessageSendMode') || 'plain';
+let mdPreviewing = false;
+let currentJumpIndex = -1;
+
+let currentDate = '';
+let selectedReplyMessageId = '';
+let selectedReplyRowId = '';
+let composerExpanded = false;
+let mediaPanelOpen = false;
+let mediaSendType = '';
+let currentLastRowId = 0;
+
+let lastRenderedMessageKeys = [];
+let lastRenderedSessionKeys = [];
+let hasUnreadWhileReadingHistory = false;
+
+const SCENE_LABELS = {
+    group: "群消息",
+    private: "私聊消息",
+    channel_group: "频道消息",
+    channel_private: "频道私信",
+};
+
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[m]));
+}
+
+function fmtTime(s) {
+    if (!s) return '';
+    return String(s).replace('T', ' ').slice(0, 19);
+}
+
+function shortTime(s) {
+    if (!s) return '';
+    const x = fmtTime(s);
+    const today = new Date().toISOString().slice(0, 10);
+    if (x.startsWith(today)) return x.slice(11, 16);
+    return x.slice(5, 16);
+}
+
+function getInitial(text, fallback = '?') {
+    text = String(text || '').trim();
+    return text ? text.slice(0, 1).toUpperCase() : fallback;
+}
+
+function sceneTargetKey(scene) {
+    if (scene === 'group' || scene === 'channel_group') return 'group_id';
+    return 'user_id';
+}
+
+function shouldStickToBottom(el, threshold = 120) {
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
+}
+
+function scrollMessagesToBottom() {
+    const box = document.getElementById('messageList');
+    box.scrollTop = box.scrollHeight;
+    hasUnreadWhileReadingHistory = false;
+    hideUnreadHint();
+}
+
+function scrollMessagesToTop() {
+    const box = document.getElementById('messageList');
+    box.scrollTop = 0;
+}
+
+function getSessionKey(s) {
+    return `${s.adapter || ''}__${s.scene || ''}__${s.target_id || ''}`;
+}
+
+function getMessageKey(row) {
+    return String(row.message_id || row.id || `${row.created_at}_${row.user_id}_${row.content || ''}`);
+}
+
+function arraysEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight) {
+    const newScrollHeight = box.scrollHeight;
+    const delta = newScrollHeight - oldScrollHeight;
+    box.scrollTop = oldScrollTop + delta;
+}
+
+function showUnreadHint() {
+    let hint = document.getElementById('newMessageHint');
+    if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'newMessageHint';
+        hint.innerHTML = `<i class="fas fa-arrow-down"></i> 有新消息`;
+        hint.style.cssText = `
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 190px;
+            z-index: 20;
+            background: var(--accent-color);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            box-shadow: 0 3px 10px var(--shadow-color);
+            cursor: pointer;
+        `;
+        hint.onclick = () => {
+            scrollMessagesToBottom();
+            hasUnreadWhileReadingHistory = false;
+            hint.remove();
+        };
+        document.getElementById('chatPane').appendChild(hint);
+    }
+}
+
+function hideUnreadHint() {
+    const hint = document.getElementById('newMessageHint');
+    if (hint) hint.remove();
+}
+
+function extractMarkdownPreviewText(text) {
+    text = String(text || '');
+    if (!text.includes('<markdown:MessageMarkdown')) return text;
+
+    const m = text.match(/content=(['"])((?:\\.|(?!\1).)*)\1/s);
+    if (!m) return text;
+
+    let val = m[2] || '';
+    val = val
+        .replace(/\\\\/g, '\0')
+        .replace(/\\r/g, '\r')
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\0/g, '\\');
+
+    return val;
+}
+
+function buildSessionPreview(s) {
+    // 后端如果已经给了 last_preview，直接使用，避免 “昵称：昵称：内容”
+    if (s.last_preview) {
+        let preview = extractMarkdownPreviewText(s.last_preview);
+        preview = String(preview).replace(/\r/g, ' ').replace(/\n/g, ' ').trim();
+        if (!preview) preview = '[空消息]';
+        if (preview.length > 60) preview = preview.slice(0, 60) + '...';
+        return preview;
+    }
+
+    let raw = s.last_content || s.raw_message || '';
+    raw = extractMarkdownPreviewText(raw);
+    raw = String(raw).replace(/\r/g, ' ').replace(/\n/g, ' ').trim();
+
+    if (!raw) raw = '[空消息]';
+    if (raw.length > 60) raw = raw.slice(0, 60) + '...';
+
+    if (s.scene === 'group' || s.scene === 'channel_group') {
+        if (s.direction === 'send') return raw;
+
+        const sender = s.username || s.nickname || s.user_id || '未知用户';
+
+        // 防御：如果内容本身已经以 “昵称：” 开头，不再重复拼接
+        if (raw.startsWith(`${sender}：`) || raw.startsWith(`${sender}:`)) {
+            return raw;
+        }
+
+        return `${sender}：${raw}`;
+    }
+
+    return raw;
+}
+
+function renderMarkdown(text) {
+    try {
+        if (!window.marked) {
+            return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+        }
+
+        const renderer = new marked.Renderer();
+
+        renderer.code = function(code, lang) {
+            let codeText = code;
+            let language = lang || 'code';
+
+            if (typeof code === 'object' && code !== null) {
+                codeText = code.text || code.raw || '';
+                language = code.lang || 'code';
+            }
+
+            language = language || 'code';
+
+            return `
+                <details class="md-code-fold">
+                    <summary>
+                        <i class="fas fa-code"></i>
+                        代码块 ${language ? `(${escapeHtml(language)})` : ''}
+                    </summary>
+                    <pre><code class="language-${escapeHtml(language)}">${escapeHtml(codeText)}</code></pre>
+                </details>
+            `;
+        };
+
+        const raw = marked.parse(String(text || ''), { renderer });
+        const clean = window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
+
+        return `<div class="msg-md">${clean}</div>`;
+    } catch (e) {
+        return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+    }
+}
+
+function looksLikeMarkdown(text) {
+    text = String(text || '');
+    return /(^#{1,6}\s)|(\*\*.+\*\*)|(```)|(^[-*]\s)|(\$\$.+\$\$)|(\|.+\|)/m.test(text);
+}
+
+function renderMessageContent(text) {
+    if (looksLikeMarkdown(text)) return renderMarkdown(text);
+    return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+}
+
+function renderAvatar(row, isSend = false) {
+    if (isSend) {
+        return `<div class="msg-avatar" style="background:var(--success-color);"><i class="fas fa-robot"></i></div>`;
+    }
+
+    const avatar = row.avatar || '';
+    const name = row.username || row.nickname || row.user_id || '人';
+
+    if (avatar && /^https?:\/\//i.test(avatar)) {
+        return `<div class="msg-avatar"><img src="${escapeHtml(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>`;
+    }
+
+    return `<div class="msg-avatar">${escapeHtml(getInitial(name, '人'))}</div>`;
+}
+
+function toggleSendMode() {
+    setSendMode(sendMode === 'markdown' ? 'plain' : 'markdown');
+}
+
+function setSendMode(mode) {
+    sendMode = mode === 'markdown' ? 'markdown' : 'plain';
+    localStorage.setItem('webMessageSendMode', sendMode);
+
+    const toggleBtn = document.getElementById('sendModeToggleBtn');
+    const modeIcon = document.getElementById('sendModeIcon');
+    const modeText = document.getElementById('sendModeText');
+
+    if (toggleBtn) {
+        toggleBtn.classList.toggle('markdown', sendMode === 'markdown');
+    }
+
+    if (modeIcon) {
+        modeIcon.className = sendMode === 'markdown'
+            ? 'fab fa-markdown'
+            : 'fas fa-comment-dots';
+    }
+
+    if (modeText) {
+        modeText.innerText = sendMode === 'markdown'
+            ? 'Markdown消息'
+            : '普通消息';
+    }
+
+    const previewBtn = document.getElementById('mdPreviewBtn');
+    if (previewBtn) {
+        previewBtn.classList.toggle('show', sendMode === 'markdown');
+    }
+
+    if (sendMode !== 'markdown' && mdPreviewing) {
+        toggleMarkdownPreview(true);
+    }
+}
+
+function toggleMarkdownPreview(forceOff = false) {
+    if (sendMode !== 'markdown') return;
+
+    const input = document.getElementById('messageInput');
+    const box = document.getElementById('mdPreviewBox');
+    const btn = document.getElementById('mdPreviewBtn');
+
+    if (forceOff || mdPreviewing) {
+        mdPreviewing = false;
+        box.classList.add('hidden');
+        input.classList.remove('hidden');
+        btn.innerHTML = '<i class="fas fa-eye"></i> 预览';
+    } else {
+        mdPreviewing = true;
+        box.innerHTML = renderMarkdown(input.value || ' ');
+        box.classList.remove('hidden');
+        input.classList.add('hidden');
+        btn.innerHTML = '<i class="fas fa-pen"></i> 编辑';
+    }
+}
+
+function expandComposer() {
+    composerExpanded = true;
+    document.getElementById('composerCollapsed').classList.add('hidden');
+    document.getElementById('composerExpanded').classList.remove('hidden');
+
+    setTimeout(() => {
+        document.getElementById('messageInput').focus();
+    }, 50);
+}
+
+function collapseComposer() {
+    composerExpanded = false;
+    document.getElementById('composerExpanded').classList.add('hidden');
+    document.getElementById('composerCollapsed').classList.remove('hidden');
+
+    if (mdPreviewing) toggleMarkdownPreview(true);
+}
+
+function toggleMediaPanel() {
+    mediaPanelOpen = !mediaPanelOpen;
+    document.getElementById('mediaPanel').classList.toggle('hidden', !mediaPanelOpen);
+}
+
+function chooseMediaType(type) {
+    mediaSendType = type;
+    document.getElementById('mediaType').value = type;
+
+    const textMap = {
+        image: '图片',
+        audio: '语音',
+        video: '视频',
+        file: '文件'
+    };
+
+    document.getElementById('mediaCurrentText').innerText = textMap[type] || type;
+    document.getElementById('mediaInputBox').classList.remove('hidden');
+}
+
+function clearMedia() {
+    mediaSendType = '';
+    document.getElementById('mediaType').value = '';
+    document.getElementById('mediaUrl').value = '';
+    document.getElementById('mediaFile').value = '';
+    document.getElementById('fileNameText').innerText = '选择文件';
+    document.getElementById('mediaInputBox').classList.add('hidden');
+}
+
+function onFileChosen() {
+    const f = document.getElementById('mediaFile').files[0];
+    document.getElementById('fileNameText').innerText = f ? f.name.slice(0, 12) : '选择文件';
+}
+
+async function loadBots() {
+    const sel = document.getElementById('adapterSelect');
+
+    try {
+        const res = await fetch('/api/messages/bots');
+        const data = await res.json();
+
+        if (!data.success) return;
+
+        const adapters = new Set();
+        (data.bots || []).forEach(b => {
+            if (b.adapter) adapters.add(b.adapter);
+        });
+
+        let html = `<option value="">全部适配器</option>`;
+        Array.from(adapters).forEach(a => {
+            html += `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`;
+        });
+
+        if (adapters.size > 0) sel.innerHTML = html;
+    } catch (e) {}
+}
+
+async function loadSessions(silent = false) {
+    const scene = document.getElementById('sceneSelect').value;
+    const adapter = document.getElementById('adapterSelect').value;
+    const list = document.getElementById('sessionList');
+
+    if (!silent) {
+        list.innerHTML = `<div class="loading"><i class="fas fa-spinner fa-spin"></i> 正在加载会话...</div>`;
+    }
+
+    try {
+        const qs = new URLSearchParams({ scene });
+        if (adapter) qs.set('adapter', adapter);
+
+        const res = await fetch('/api/messages/sessions?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            if (!silent) {
+                list.innerHTML = `<div class="error">加载失败：${escapeHtml(data.error || '未知错误')}</div>`;
+            }
+            return;
+        }
+
+        const newRows = data.rows || [];
+
+        newRows.forEach(s => {
+            if (!s.title || String(s.title).trim().toLowerCase() === 'bot') {
+                s.title = s.target_id || '未知会话';
+            }
+            s.last_preview = buildSessionPreview(s);
+        });
+
+        const newKeys = newRows.map(getSessionKey);
+
+        if (silent && arraysEqual(lastRenderedSessionKeys, newKeys)) {
+            sessionsCache = newRows;
+            return;
+        }
+
+        const oldScrollTop = list.scrollTop;
+
+        sessionsCache = newRows;
+        lastRenderedSessionKeys = newKeys;
+
+        if (!sessionsCache.length) {
+            list.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无会话</p></div>`;
+            return;
+        }
+
+        list.innerHTML = sessionsCache.map((s, idx) => {
+            const active = currentSession &&
+                currentSession.scene === s.scene &&
+                currentSession.target_id === s.target_id &&
+                currentSession.adapter === s.adapter;
+
+            const title = s.title || s.target_id || '未知会话';
+
+            return `
+                <div class="session-item ${active ? 'active' : ''}" onclick="selectSession(${idx})">
+                    <div class="session-avatar">${escapeHtml(s.avatar_text || getInitial(title))}</div>
+                    <div class="session-info">
+                        <div class="session-title-row">
+                            <div class="session-title">${escapeHtml(title)}</div>
+                            <div class="session-time">${escapeHtml(shortTime(s.last_time))}</div>
+                        </div>
+                        <div class="session-meta">${escapeHtml(s.last_preview || s.target_id || '')}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (silent) {
+            list.scrollTop = oldScrollTop;
+        }
+    } catch (e) {
+        if (!silent) {
+            list.innerHTML = `<div class="error">请求异常：${escapeHtml(e)}</div>`;
+        }
+    }
+}
+
+function selectSession(index) {
+    const s = sessionsCache[index];
+    if (!s) return;
+
+    lastRenderedMessageKeys = [];
+    hideUnreadHint();
+    hasUnreadWhileReadingHistory = false;
+
+    currentSession = {
+        adapter: s.adapter || document.getElementById('adapterSelect').value || '',
+        scene: s.scene,
+        target_id: s.target_id,
+        title: s.title || s.target_id,
+        avatar_text: s.avatar_text || getInitial(s.title || s.target_id)
+    };
+
+    selectedReplyMessageId = '';
+    selectedReplyRowId = '';
+
+    document.getElementById('chatAvatar').innerText = currentSession.avatar_text || '?';
+    document.getElementById('chatTitle').innerText = currentSession.title || '未知会话';
+    document.getElementById('chatSubTitle').innerText =
+        `${currentSession.adapter || '全部适配器'} ｜ ${SCENE_LABELS[currentSession.scene] || currentSession.scene} ｜ ${currentSession.target_id}`;
+
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('sendMediaBtn').disabled = false;
+    document.getElementById('sendHint').innerText =
+        `发送到：${currentSession.title}（${currentSession.adapter || '自动'}）`;
+
+    document.querySelector('.qq-shell').classList.add('mobile-chat-open');
+
+    loadSessions(true);
+    loadMessageDates().then(() => loadMessages(true, false));
+}
+
+function backToSessions() {
+    document.querySelector('.qq-shell').classList.remove('mobile-chat-open');
+}
+
+async function loadMessageDates() {
+    const sel = document.getElementById('dateSelect');
+
+    if (!currentSession) {
+        sel.disabled = true;
+        sel.innerHTML = `<option value="">今天</option>`;
+        return;
+    }
+
+    try {
+        const qs = new URLSearchParams({
+            scene: currentSession.scene,
+            target_id: currentSession.target_id
+        });
+
+        if (currentSession.adapter) {
+            qs.set('adapter', currentSession.adapter);
+        }
+
+        const res = await fetch('/api/messages/dates?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            const today = new Date().toISOString().slice(0, 10);
+            currentDate = today;
+            sel.innerHTML = `<option value="${today}">今天</option>`;
+            sel.value = today;
+            sel.disabled = false;
+            return;
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = data.rows || [];
+
+        if (!rows.some(x => x.date === today)) {
+            rows.unshift({
+                date: today,
+                label: '今天',
+                count: 0
+            });
+        }
+
+        sel.innerHTML = rows.map(x => {
+            return `<option value="${escapeHtml(x.date)}">${escapeHtml(x.label)} (${x.count})</option>`;
+        }).join('');
+
+        currentDate = rows[0]?.date || today;
+        sel.value = currentDate;
+        sel.disabled = false;
+
+    } catch (e) {
+        const today = new Date().toISOString().slice(0, 10);
+        currentDate = today;
+        sel.innerHTML = `<option value="${today}">今天</option>`;
+        sel.value = today;
+        sel.disabled = false;
+    }
+}
+
+function onDateChange() {
+    currentDate = document.getElementById('dateSelect').value;
+    clearReplyTarget();
+    lastRenderedMessageKeys = [];
+    hideUnreadHint();
+    loadMessages(true, false);
+}
+
+async function loadMessagesSince() {
+    if (!currentSession || isLoadingMessages) return;
+
+    const box = document.getElementById('messageList');
+    const wasBottom = shouldStickToBottom(box, 120);
+
+    try {
+        const qs = new URLSearchParams({
+            scene: currentSession.scene,
+            target_id: currentSession.target_id,
+            last_row_id: String(currentLastRowId || 0)
+        });
+
+        if (currentSession.adapter) qs.set('adapter', currentSession.adapter);
+        if (currentDate) qs.set('date', currentDate);
+
+        const res = await fetch('/api/messages/list_since?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success || !data.rows || !data.rows.length) return;
+
+        appendMessages(data.rows);
+
+        currentLastRowId = Number(data.last_row_id || currentLastRowId);
+
+        if (wasBottom) {
+            scrollMessagesToBottom();
+            hideUnreadHint();
+            hasUnreadWhileReadingHistory = false;
+        } else {
+            hasUnreadWhileReadingHistory = true;
+            showUnreadHint();
+        }
+
+    } catch (e) {
+        console.error('增量加载失败', e);
+    }
+}
+
+function appendMessages(rows) {
+    const box = document.getElementById('messageList');
+    let html = '';
+
+    rows.forEach((row) => {
+        const isSend = row.direction === 'send';
+        const name = isSend ? 'Bot' : (row.username || row.nickname || row.user_id || '未知用户');
+        const content = row.display_content || row.content || row.raw_message || '';
+        const messageId = row.message_id || '';
+        const replyUsed = Number(row.reply_used_count || 0);
+        const canReply = !!row.can_reply;
+        const replyExpired = !!row.reply_expired;
+
+        const contentHtml = row.content_format === 'markdown'
+            ? renderMarkdown(content)
+            : renderMessageContent(content);
+
+        const rowClasses = [
+            'msg-row',
+            isSend ? 'send' : 'recv',
+            canReply ? 'can-reply' : ''
+        ].filter(Boolean).join(' ');
+
+        html += `
+            <div
+                class="${rowClasses}"
+                data-msg-index="0"
+                data-row-id="${escapeHtml(row.id || '')}"
+                data-message-id="${escapeHtml(messageId)}"
+                data-is-send="${isSend ? '1' : '0'}"
+                data-can-reply="${canReply ? '1' : '0'}"
+                data-name="${escapeHtml(name)}"
+                data-preview="${escapeHtml(String(content || '').slice(0, 60))}"
+                onclick="onMessageClick(this)"
+            >
+                ${renderAvatar(row, isSend)}
+                <div class="msg-main">
+                    <div class="msg-meta">
+                        <span class="msg-name">${escapeHtml(name)}</span>
+                        <span>${escapeHtml(shortTime(row.created_at))}</span>
+                        <span>${escapeHtml(row.adapter || '')}</span>
+                    </div>
+                    <div class="msg-bubble">
+                        ${contentHtml}
+                    </div>
+                    <div class="msg-extra">
+                        ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
+                        ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
+                        ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    box.insertAdjacentHTML('beforeend', html);
+}
+
+
+async function loadMessages(forceBottom = false, silent = false) {
+    if (!currentSession || isLoadingMessages) return;
+
+    isLoadingMessages = true;
+
+    const box = document.getElementById('messageList');
+    const wasBottom = shouldStickToBottom(box, 120);
+    const oldScrollTop = box.scrollTop;
+    const oldScrollHeight = box.scrollHeight;
+
+    try {
+        const keyword = document.getElementById('keywordInput').value.trim();
+
+        const qs = new URLSearchParams({
+            scene: currentSession.scene,
+            direction: 'ALL',
+            page: '1',
+            page_size: '180'
+        });
+
+        if (keyword) qs.set('keyword', keyword);
+        if (currentSession.adapter) qs.set('adapter', currentSession.adapter);
+        if (currentDate) qs.set('date', currentDate);
+
+        qs.set(sceneTargetKey(currentSession.scene), currentSession.target_id);
+
+        const res = await fetch('/api/messages/list?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            if (!silent) {
+                box.innerHTML = `<div class="error">加载失败：${escapeHtml(data.error || '未知错误')}</div>`;
+            }
+            return;
+        }
+
+        let rows = data.rows || [];
+        rows = rows.slice().reverse();
+
+        const newKeys = rows.map(getMessageKey);
+        const hasChanged = !arraysEqual(lastRenderedMessageKeys, newKeys);
+
+        if (!hasChanged) {
+            return;
+        }
+
+        if (!rows.length) {
+            box.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无消息</p></div>`;
+            lastRenderedMessageKeys = [];
+            return;
+        }
+
+        let lastDate = '';
+        let html = '';
+
+        rows.forEach((row, idx) => {
+            const datePart = (row.created_at || '').slice(0, 10);
+            if (datePart && datePart !== lastDate) {
+                lastDate = datePart;
+                html += `<div class="msg-date-divider"><span>${escapeHtml(datePart)}</span></div>`;
+            }
+
+            const isSend = row.direction === 'send';
+            const name = isSend ? 'Bot' : (row.username || row.nickname || row.user_id || '未知用户');
+            const content = row.display_content || row.content || row.raw_message || '';
+            const messageId = row.message_id || '';
+            const replyUsed = Number(row.reply_used_count || 0);
+            const canReply = !!row.can_reply;
+            const replyExpired = !!row.reply_expired;
+
+            const contentHtml = row.content_format === 'markdown'
+                ? renderMarkdown(content)
+                : renderMessageContent(content);
+
+            const rowClasses = [
+                'msg-row',
+                isSend ? 'send' : 'recv',
+                canReply ? 'can-reply' : '',
+                selectedReplyMessageId && selectedReplyMessageId === messageId ? 'reply-selected' : ''
+            ].filter(Boolean).join(' ');
+
+            html += `
+                <div
+                    class="${rowClasses}"
+                    data-msg-index="${idx}"
+                    data-row-id="${escapeHtml(row.id || '')}"
+                    data-message-id="${escapeHtml(messageId)}"
+                    data-is-send="${isSend ? '1' : '0'}"
+                    data-can-reply="${canReply ? '1' : '0'}"
+                    data-name="${escapeHtml(name)}"
+                    data-preview="${escapeHtml(String(content || '').slice(0, 60))}"
+                    onclick="onMessageClick(this)"
+                >
+                    ${renderAvatar(row, isSend)}
+                    <div class="msg-main">
+                        <div class="msg-meta">
+                            <span class="msg-name">${escapeHtml(name)}</span>
+                            <span>${escapeHtml(shortTime(row.created_at))}</span>
+                            <span>${escapeHtml(row.adapter || '')}</span>
+                        </div>
+                        <div class="msg-bubble">
+                            ${contentHtml}
+                        </div>
+                        <div class="msg-extra">
+                            ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
+                            ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
+                            ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        box.innerHTML = html;
+        lastRenderedMessageKeys = newKeys;
+        currentJumpIndex = rows.length - 1;
+        
+        if (rows.length) {
+            currentLastRowId = Number(rows[rows.length - 1].id || 0);
+        } else {
+            currentLastRowId = 0;
+        }
+
+        if (forceBottom || wasBottom) {
+            setTimeout(() => {
+                scrollMessagesToBottom();
+                hasUnreadWhileReadingHistory = false;
+                hideUnreadHint();
+            }, 30);
+        } else {
+            preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight);
+            hasUnreadWhileReadingHistory = true;
+            showUnreadHint();
+        }
+
+    } catch (e) {
+        if (!silent) {
+            box.innerHTML = `<div class="error">请求异常：${escapeHtml(e)}</div>`;
+        }
+    } finally {
+        isLoadingMessages = false;
+    }
+}
+
+function onMessageClick(el) {
+    if (!currentSession) return;
+
+    const isSend = el.dataset.isSend === '1';
+    const canReply = el.dataset.canReply === '1';
+
+    if (isSend) return;
+    if (!canReply) return;
+
+    const msgId = el.dataset.messageId || '';
+    const rowId = el.dataset.rowId || '';
+
+    if (!msgId) return;
+
+    if (selectedReplyMessageId === msgId) {
+        clearReplyTarget();
+        return;
+    }
+
+    selectedReplyMessageId = msgId;
+    selectedReplyRowId = rowId;
+
+    document.querySelectorAll('.msg-row').forEach(x => x.classList.remove('reply-selected'));
+    el.classList.add('reply-selected');
+
+    const name = el.dataset.name || '对方';
+    const preview = el.dataset.preview || '[消息]';
+
+    document.getElementById('replyText').innerText = `回复 ${name}: ${preview}`;
+    document.getElementById('replyBar').classList.remove('hidden');
+}
+
+function clearReplyTarget() {
+    selectedReplyMessageId = '';
+    selectedReplyRowId = '';
+
+    document.querySelectorAll('.msg-row').forEach(x => x.classList.remove('reply-selected'));
+    document.getElementById('replyBar').classList.add('hidden');
+}
+
+function getMessageRows() {
+    return Array.from(document.querySelectorAll('.msg-row'));
+}
+
+function jumpToMessage(index) {
+    const rows = getMessageRows();
+    if (!rows.length) return;
+
+    index = Math.max(0, Math.min(index, rows.length - 1));
+    currentJumpIndex = index;
+
+    rows[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rows[index].style.outline = '2px solid var(--accent-color)';
+    setTimeout(() => rows[index].style.outline = '', 800);
+}
+
+function jumpPrevMessage() {
+    const rows = getMessageRows();
+    if (!rows.length) return;
+
+    if (currentJumpIndex < 0) currentJumpIndex = rows.length - 1;
+    jumpToMessage(currentJumpIndex - 1);
+}
+
+function jumpNextMessage() {
+    const rows = getMessageRows();
+    if (!rows.length) return;
+
+    if (currentJumpIndex < 0) currentJumpIndex = 0;
+    jumpToMessage(currentJumpIndex + 1);
+}
+
+function reloadCurrentConversation() {
+    if (currentSession) {
+        clearReplyTarget();
+        lastRenderedMessageKeys = [];
+        hideUnreadHint();
+        loadMessages(true, false);
+    } else {
+        loadSessions(false);
+    }
+}
+
+function onSceneChange() {
+    currentSession = null;
+    currentDate = '';
+    clearReplyTarget();
+    lastRenderedMessageKeys = [];
+    lastRenderedSessionKeys = [];
+    hideUnreadHint();
+    resetChatPanel();
+    loadSessions(false);
+}
+
+function onAdapterChange() {
+    currentSession = null;
+    currentDate = '';
+    clearReplyTarget();
+    lastRenderedMessageKeys = [];
+    lastRenderedSessionKeys = [];
+    hideUnreadHint();
+    resetChatPanel();
+    loadSessions(false);
+}
+
+function resetChatPanel() {
+    document.getElementById('chatAvatar').innerText = '?';
+    document.getElementById('chatTitle').innerText = '请选择一个会话';
+    document.getElementById('chatSubTitle').innerText = '左侧选择群聊或私聊后查看消息';
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('sendMediaBtn').disabled = true;
+    document.getElementById('sendHint').innerText = '未选择会话';
+
+    const dateSelect = document.getElementById('dateSelect');
+    dateSelect.disabled = true;
+    dateSelect.innerHTML = '<option value="">今天</option>';
+
+    document.getElementById('messageList').innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-comments"></i>
+            <p>请选择左侧会话</p>
+        </div>
+    `;
+}
+
+function clearInput() {
+    document.getElementById('messageInput').value = '';
+    clearMedia();
+    if (mdPreviewing) toggleMarkdownPreview(true);
+}
+
+async function sendMessage() {
+    if (!currentSession) {
+        alert('请先选择会话');
+        return;
+    }
+
+    const input = document.getElementById('messageInput');
+    const content = input.value;
+    const mediaType = document.getElementById('mediaType').value;
+    const mediaUrl = document.getElementById('mediaUrl').value.trim();
+    const mediaFile = document.getElementById('mediaFile').files[0];
+
+    if (!content.trim() && !mediaUrl && !mediaFile) {
+        alert('消息不能为空');
+        return;
+    }
+
+    const adapter = currentSession.adapter || document.getElementById('adapterSelect').value;
+    if (!adapter) {
+        alert('无法确定适配器，请选择明确会话或顶部适配器');
+        return;
+    }
+
+    const btn = document.getElementById('sendBtn');
+    const mediaBtn = document.getElementById('sendMediaBtn');
+    const old = btn.innerHTML;
+    const oldMedia = mediaBtn.innerHTML;
+
+    btn.disabled = true;
+    mediaBtn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
+    mediaBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
+
+    try {
+        const fd = new FormData();
+        fd.append('adapter', adapter);
+        fd.append('scene', currentSession.scene);
+        fd.append('target_id', currentSession.target_id);
+        fd.append('content', content);
+        fd.append('send_mode', sendMode);
+        fd.append('media_type', mediaType);
+        fd.append('media_url', mediaUrl);
+        fd.append('reply_message_id', selectedReplyMessageId || '');
+
+        if (mediaFile) {
+            fd.append('file', mediaFile);
+        }
+
+        const res = await fetch('/api/messages/send', {
+            method: 'POST',
+            body: fd
+        });
+
+        const data = await res.json();
+
+                if (data.success) {
+            clearInput();
+            clearReplyTarget();
+            lastRenderedMessageKeys = [];
+        
+            setTimeout(async () => {
+                try {
+                    await loadMessages(true, false);
+                    await loadSessions(true);
+                    await loadMessageDates();
+                } catch (e) {
+                    console.error('发送后刷新失败:', e);
+                }
+            }, 100);
+        
+        } else {
+            alert('发送失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('发送异常：' + e);
+    } finally {
+        btn.disabled = false;
+        mediaBtn.disabled = false;
+        btn.innerHTML = old;
+        mediaBtn.innerHTML = oldMedia;
+    }
+}
+
+function toggleAutoRefresh(force = null) {
+    autoRefresh = (force === null) ? !autoRefresh : !!force;
+    const btn = document.getElementById('autoRefreshBtn');
+
+    if (autoRefresh) {
+        btn.style.background = 'var(--success-color)';
+        btn.style.color = '#fff';
+
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+
+        autoRefreshTimer = setInterval(async () => {
+            await loadSessions(true);   // 左侧暂时还能全量，后面再优化
+            if (currentSession) {
+                await loadMessagesSince();
+            }
+        }, 1500);
+    } else {
+        btn.style.background = '';
+        btn.style.color = '';
+
+        if (autoRefreshTimer) {
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+    }
+}
+
+function refreshAll() {
+    loadSessions(false);
+    if (currentSession) {
+        lastRenderedMessageKeys = [];
+        loadMessageDates().then(() => loadMessages(false, false));
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+    setSendMode(sendMode);
+    await loadBots();
+    await loadSessions(false);
+    toggleAutoRefresh(true); // 默认开启自动刷新
+});
+</script>
+{% endblock %}

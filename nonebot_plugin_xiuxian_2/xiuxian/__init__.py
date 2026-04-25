@@ -8,7 +8,8 @@ from .adapter_compat import (
     Bot,
     GroupMessageEvent,
     PrivateMessageEvent,
-    get_group_id
+    get_group_id,
+    patch_context
 )
 from nonebot import get_driver
 from .xiuxian_config import XiuConfig
@@ -17,7 +18,7 @@ from pkgutil import iter_modules
 from nonebot.log import logger
 from nonebot import require, load_all_plugins, get_plugin_by_module_name
 from .xiuxian_utils.config import config as _config
-
+from .broadcast_manager import auto_patch_broadcast_for_event
 
 DRIVER = get_driver()
 
@@ -76,17 +77,27 @@ __plugin_meta__ = PluginMetadata(
 
 @event_preprocessor
 async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, event = patch_context(bot, event)
+
     global put_bot
+
     if not put_bot:
         pass
     else:
         if str(bot.self_id) in put_bot:
             # 私聊处理
             if isinstance(event, PrivateMessageEvent):
-                if shield_private:  # 如果屏蔽私聊
+                if shield_private:
                     raise IgnoredException("私聊功能已屏蔽,已忽略")
-                return  # 私聊不受群聊设置影响
-            
+
+                # 私聊没被屏蔽，允许补发
+                try:
+                    await auto_patch_broadcast_for_event(bot, event)
+                except Exception as e:
+                    logger.warning(f"[广播] 私聊补发失败: {e}")
+
+                return
+
             # 群聊处理
             if response_group:
                 if str(get_group_id(event)) in shield_group:
@@ -98,3 +109,9 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     raise IgnoredException("为屏蔽群消息,已忽略")
                 else:
                     pass
+
+            # 群聊没被屏蔽，允许补发
+            try:
+                await auto_patch_broadcast_for_event(bot, event)
+            except Exception as e:
+                logger.warning(f"[广播] 群聊补发失败: {e}")

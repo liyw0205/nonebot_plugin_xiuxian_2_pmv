@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import random
+import sqlite3
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-import hashlib
-import asyncio
-from dataclasses import dataclass, asdict
-from typing import Optional, Union, Any, Literal, Iterator
+from typing import Any, Iterator, Literal, Optional, Union
 from urllib.parse import urlparse
 
-from nonebot.permission import Permission
 from nonebot.adapters import Bot as BaseBot
 from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
+from nonebot.permission import Permission
 
 # =========================
 # 可选导入：onebot v11
@@ -49,8 +52,8 @@ try:
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
         GroupAtMessageCreateEvent as QQGroupMessageEvent,
-        AtMessageCreateEvent as QQAtChannelMessageEvent,      # 频道 @ 消息 -> 群语义
-        DirectMessageCreateEvent as QQChannelPrivateMessageEvent,  # 频道私信 -> 私聊语义
+        AtMessageCreateEvent as QQAtChannelMessageEvent,
+        DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
     )
     from nonebot.adapters.qq.models import MessageMarkdown, MessageKeyboard
 
@@ -85,6 +88,712 @@ class CompatSender:
 
     def __iter__(self) -> Iterator[tuple[str, Any]]:
         yield from asdict(self).items()
+
+
+# =========================
+# Web 消息记录数据库
+# =========================
+
+MESSAGE_DB = Path() / "message.db"
+_last_message_db_cleanup_ts = 0.0
+message_db_max_size_mb = 1000
+# 消息数据库最大大小 MB。达到或超过该值时，按最早日期清理聊天记录。
+# 最低 100，最高 10000。清理优先级高于保留天数。
+# 清理顺序：优先清理群聊/频道群聊，再清理私聊/频道私聊。
+
+message_group_keep_days = 0
+# 群聊消息最大保留天数，0 表示不启用。
+# 例如 3 表示超过 3 天的群聊/频道群聊消息会被清理。
+
+message_private_keep_days = 0
+# 私聊消息最大保留天数，0 表示不启用。
+# 例如 10 表示超过 10 天的私聊/频道私聊消息会被清理。
+
+def _now_str() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _init_message_db():
+    MESSAGE_DB.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(MESSAGE_DB)
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                adapter TEXT,
+                bot_id TEXT,
+
+                direction TEXT NOT NULL,
+                scene TEXT NOT NULL,
+
+                message_id TEXT,
+                source_message_id TEXT,
+
+                group_id TEXT,
+                group_name TEXT,
+
+                user_id TEXT,
+                username TEXT,
+                nickname TEXT,
+                avatar TEXT,
+
+                content TEXT,
+
+                reply_used_count INTEGER DEFAULT 0,
+
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_nicknames (
+                user_id TEXT PRIMARY KEY,
+
+                username TEXT NOT NULL,
+
+                adapter TEXT,
+                bot_id TEXT,
+
+                source_scene TEXT,
+                source_group_id TEXT,
+
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+                    )
+            """
+        )
+
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_user_nicknames_username ON user_nicknames(username)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_user_nicknames_source_group_id ON user_nicknames(source_group_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_scene ON messages(scene)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_source_message_id ON messages(source_message_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_id ON messages(group_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
+
+        conn.commit()
+    finally:
+        conn.close()
+
+def _get_message_cleanup_config() -> tuple[int, int, int]:
+    """
+    返回:
+    - max_size_mb: message.db 最大大小，最低100，最高10000
+    - group_keep_days: 群聊保留天数，0关闭
+    - private_keep_days: 私聊保留天数，0关闭
+    """
+
+    max_size_mb = max(100, min(10000, message_db_max_size_mb))
+    group_keep_days = max(0, message_group_keep_days)
+    private_keep_days = max(0, message_private_keep_days)
+
+    return max_size_mb, group_keep_days, private_keep_days
+
+
+def _message_db_size_mb() -> float:
+    try:
+        if not MESSAGE_DB.exists():
+            return 0.0
+        return MESSAGE_DB.stat().st_size / 1024 / 1024
+    except Exception:
+        return 0.0
+
+
+def _vacuum_message_db(conn: sqlite3.Connection):
+    try:
+        conn.execute("VACUUM")
+    except Exception as e:
+        logger.debug(f"[message.db] VACUUM失败: {e}")
+
+
+def _cleanup_message_db_by_size(conn: sqlite3.Connection, max_size_mb: int) -> int:
+    """
+    message.db 达到阈值时按最早日期清理。
+    优先级高于保留天数。
+    清理顺序：
+    1. 群聊 / 频道群聊
+    2. 私聊 / 频道私聊
+
+    每次按“最早一天”删除。
+    如果删除后仍超阈值，会继续删下一天。
+    """
+    deleted_total = 0
+
+    if max_size_mb <= 0:
+        return 0
+
+    cur = conn.cursor()
+
+    scene_groups = [
+        ("群聊", ("group", "channel_group")),
+        ("私聊", ("private", "channel_private")),
+    ]
+
+    # 防止极端情况下死循环
+    max_round = 500
+    round_count = 0
+
+    while _message_db_size_mb() >= max_size_mb and round_count < max_round:
+        round_count += 1
+        deleted_this_round = 0
+
+        for label, scenes in scene_groups:
+            placeholders = ",".join(["?"] * len(scenes))
+
+            cur.execute(
+                f"""
+                SELECT date(created_at) AS d
+                FROM messages
+                WHERE scene IN ({placeholders})
+                  AND created_at IS NOT NULL
+                  AND created_at != ''
+                GROUP BY date(created_at)
+                ORDER BY d ASC
+                LIMIT 1
+                """,
+                list(scenes),
+            )
+
+            row = cur.fetchone()
+            if not row or not row[0]:
+                continue
+
+            oldest_date = str(row[0])
+
+            cur.execute(
+                f"""
+                DELETE FROM messages
+                WHERE scene IN ({placeholders})
+                  AND date(created_at) = ?
+                """,
+                list(scenes) + [oldest_date],
+            )
+
+            deleted_count = cur.rowcount or 0
+            conn.commit()
+
+            deleted_total += deleted_count
+            deleted_this_round += deleted_count
+
+            logger.warning(
+                f"[message.db] 数据库大小超过 {max_size_mb}MB，"
+                f"已按大小清理{label}最早日期 {oldest_date} 的消息 {deleted_count} 条"
+            )
+
+            # 每次优先清一个群聊日期；如果群聊清了，就重新判断大小。
+            # 只有群聊没得清时才会进入私聊。
+            if deleted_count > 0:
+                break
+
+        if deleted_this_round <= 0:
+            break
+
+    if deleted_total > 0:
+        _vacuum_message_db(conn)
+
+    return deleted_total
+
+
+def _cleanup_message_db_by_keep_days(conn: sqlite3.Connection, group_keep_days: int, private_keep_days: int) -> int:
+    """
+    按保留天数清理。
+    注意：大小清理优先级更高，所以外部应先执行 _cleanup_message_db_by_size。
+    """
+    deleted_total = 0
+    cur = conn.cursor()
+
+    if group_keep_days > 0:
+        cutoff = (datetime.now() - timedelta(days=group_keep_days)).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE scene IN ('group', 'channel_group')
+              AND created_at < ?
+            """,
+            (cutoff,),
+        )
+        deleted = cur.rowcount or 0
+        deleted_total += deleted
+        if deleted > 0:
+            logger.info(f"[message.db] 已按群聊保留天数 {group_keep_days} 天清理消息 {deleted} 条")
+
+    if private_keep_days > 0:
+        cutoff = (datetime.now() - timedelta(days=private_keep_days)).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE scene IN ('private', 'channel_private')
+              AND created_at < ?
+            """,
+            (cutoff,),
+        )
+        deleted = cur.rowcount or 0
+        deleted_total += deleted
+        if deleted > 0:
+            logger.info(f"[message.db] 已按私聊保留天数 {private_keep_days} 天清理消息 {deleted} 条")
+
+    if deleted_total > 0:
+        conn.commit()
+        _vacuum_message_db(conn)
+
+    return deleted_total
+
+
+def _maybe_cleanup_message_db():
+    """
+    消息库清理入口。
+    为避免每条消息都扫描数据库，做简单节流。
+    """
+    global _last_message_db_cleanup_ts
+
+    now_ts = datetime.now().timestamp()
+
+    # 每 10 分钟最多检查一次
+    if now_ts - _last_message_db_cleanup_ts < 600:
+        return
+
+    _last_message_db_cleanup_ts = now_ts
+
+    try:
+        _init_message_db()
+
+        max_size_mb, group_keep_days, private_keep_days = _get_message_cleanup_config()
+
+        conn = sqlite3.connect(MESSAGE_DB)
+        try:
+            # 重要：大小清理优先于保留天数
+            _cleanup_message_db_by_size(conn, max_size_mb)
+            _cleanup_message_db_by_keep_days(conn, group_keep_days, private_keep_days)
+        finally:
+            conn.close()
+
+    except Exception as e:
+        logger.warning(f"[message.db] 自动清理失败: {e}")
+
+def _insert_message_record(
+    *,
+    adapter: str = "",
+    bot_id: str = "",
+    direction: str,
+    scene: str,
+    message_id: str = "",
+    source_message_id: str = "",
+    group_id: str = "",
+    group_name: str = "",
+    user_id: str = "",
+    username: str = "",
+    nickname: str = "",
+    avatar: str = "",
+    content: str = "",
+):
+    try:
+        _init_message_db()
+
+        conn = sqlite3.connect(MESSAGE_DB)
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO messages (
+                    adapter, bot_id,
+                    direction, scene,
+                    message_id, source_message_id,
+                    group_id, group_name,
+                    user_id, username, nickname, avatar,
+                    content,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(adapter or ""),
+                    str(bot_id or ""),
+                    str(direction or ""),
+                    str(scene or "unknown"),
+                    str(message_id or ""),
+                    str(source_message_id or ""),
+                    str(group_id or ""),
+                    str(group_name or ""),
+                    str(user_id or ""),
+                    str(username or ""),
+                    str(nickname or ""),
+                    str(avatar or ""),
+                    str(content or ""),
+                    _now_str(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        _maybe_cleanup_message_db()
+    except Exception as e:
+        logger.warning(f"[message.db] 写入消息记录失败: {e}")
+
+
+def _increase_recv_reply_used_count(
+    *,
+    source_message_id: str,
+    adapter: str = "",
+    bot_id: str = "",
+    scene: str = "",
+    group_id: str = "",
+    user_id: str = "",
+):
+    """
+    source_message_id 是 send 记录里保存的“被回复消息ID”
+    也就是 recv.message_id。
+
+    QQ 回复限制应统计 recv 消息被回复次数：
+    recv.reply_used_count += 1
+    """
+    if not source_message_id:
+        return
+
+    try:
+        _init_message_db()
+        conn = sqlite3.connect(MESSAGE_DB)
+
+        try:
+            cur = conn.cursor()
+
+            where = [
+                "direction = 'recv'",
+                "message_id = ?",
+            ]
+            params: list[Any] = [str(source_message_id)]
+
+            # 尽量加条件，避免不同适配器/不同 bot/message_id 撞号
+            if adapter:
+                where.append("adapter = ?")
+                params.append(str(adapter))
+
+            if bot_id:
+                where.append("bot_id = ?")
+                params.append(str(bot_id))
+
+            if scene:
+                where.append("scene = ?")
+                params.append(str(scene))
+
+            if group_id:
+                where.append("group_id = ?")
+                params.append(str(group_id))
+
+            if user_id:
+                where.append("user_id = ?")
+                params.append(str(user_id))
+
+            sql = f"""
+                UPDATE messages
+                SET reply_used_count = COALESCE(reply_used_count, 0) + 1
+                WHERE {' AND '.join(where)}
+            """
+
+            cur.execute(sql, params)
+
+            # 如果条件太严格没更新到，则退化为只按 adapter/bot/message_id 更新
+            if cur.rowcount == 0:
+                fallback_where = [
+                    "direction = 'recv'",
+                    "message_id = ?",
+                ]
+                fallback_params: list[Any] = [str(source_message_id)]
+
+                if adapter:
+                    fallback_where.append("adapter = ?")
+                    fallback_params.append(str(adapter))
+
+                if bot_id:
+                    fallback_where.append("bot_id = ?")
+                    fallback_params.append(str(bot_id))
+
+                fallback_sql = f"""
+                    UPDATE messages
+                    SET reply_used_count = COALESCE(reply_used_count, 0) + 1
+                    WHERE {' AND '.join(fallback_where)}
+                """
+                cur.execute(fallback_sql, fallback_params)
+
+            conn.commit()
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        logger.warning(f"[message.db] 更新 recv.reply_used_count 失败: {e}")
+
+
+def _extract_text_from_message_obj(message: Any) -> str:
+    try:
+        if message is None:
+            return ""
+        if isinstance(message, str):
+            return message
+        if hasattr(message, "extract_plain_text"):
+            text = message.extract_plain_text()
+            if text:
+                return str(text)
+        if hasattr(message, "extract_content"):
+            text = message.extract_content()
+            if text:
+                return str(text)
+        return str(message)
+    except Exception:
+        return ""
+
+
+def _get_adapter_name(bot: Any) -> str:
+    try:
+        return str(bot.adapter.get_name())
+    except Exception:
+        return ""
+
+
+def _get_bot_id(bot: Any) -> str:
+    try:
+        return str(bot.self_id)
+    except Exception:
+        return ""
+
+
+def _extract_result_message_id(result: Any) -> str:
+    try:
+        if result is None:
+            return ""
+
+        if isinstance(result, dict):
+            return str(
+                result.get("message_id")
+                or result.get("msg_id")
+                or result.get("id")
+                or ""
+            )
+
+        return str(
+            getattr(result, "message_id", "")
+            or getattr(result, "msg_id", "")
+            or getattr(result, "id", "")
+            or ""
+        )
+    except Exception:
+        return ""
+
+
+def _get_author_username_avatar(event: BaseEvent) -> tuple[str, str]:
+    username = ""
+    avatar = ""
+
+    try:
+        author = getattr(event, "author", None)
+        if author is not None:
+            username = str(getattr(author, "username", "") or "")
+            avatar = str(getattr(author, "avatar", "") or "")
+    except Exception:
+        pass
+
+    return username, avatar
+
+def _record_group_user_nickname(
+    *,
+    adapter: str = "",
+    bot_id: str = "",
+    scene: str = "",
+    group_id: str = "",
+    user_id: str = "",
+    username: str = "",
+):
+    """
+    记录群聊里见过的用户昵称。
+    规则：
+    - 只记录群聊 / 频道群聊
+    - username 不为空
+    - user_id 不为空
+    - 如果该 user_id 已记录，则不覆盖
+    """
+    try:
+        if scene not in ("group", "channel_group"):
+            return
+
+        user_id = str(user_id or "").strip()
+        username = str(username or "").strip()
+
+        if not user_id or not username:
+            return
+
+        _init_message_db()
+
+        conn = sqlite3.connect(MESSAGE_DB)
+        try:
+            cur = conn.cursor()
+            now = _now_str()
+
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO user_nicknames (
+                    user_id,
+                    username,
+                    adapter,
+                    bot_id,
+                    source_scene,
+                    source_group_id,
+                    first_seen_at,
+                    last_seen_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    username,
+                    str(adapter or ""),
+                    str(bot_id or ""),
+                    str(scene or ""),
+                    str(group_id or ""),
+                    now,
+                    now,
+                ),
+            )
+
+            conn.commit()
+        finally:
+            conn.close()
+
+    except Exception as e:
+        logger.warning(f"[message.db] 记录用户昵称失败: {e}")
+
+def _record_recv_message(bot: Any, event: BaseEvent):
+    """记录收到的消息"""
+    try:
+        if getattr(event, "__message_db_recv_recorded__", False):
+            return
+
+        if event.get_type() != "message":
+            return
+
+        scene = get_chat_scene(event)
+        adapter = _get_adapter_name(bot) if bot is not None else ""
+        bot_id = _get_bot_id(bot) if bot is not None else ""
+
+        message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "")
+        user_id = str(getattr(event, "user_id", "") or get_user_id(event) or "")
+        group_id = str(getattr(event, "group_id", "") or get_group_id(event) or "")
+
+        raw_message = str(
+            getattr(event, "raw_message", "")
+            or getattr(event, "content", "")
+            or ""
+        )
+
+        content = raw_message
+        try:
+            msg = event.get_message()
+            content = _extract_text_from_message_obj(msg) or raw_message
+        except Exception:
+            pass
+
+        sender = getattr(event, "sender", None)
+        nickname = ""
+        username = ""
+        avatar = ""
+
+        if sender is not None:
+            nickname = str(getattr(sender, "nickname", "") or "")
+            username = str(getattr(sender, "card", "") or nickname or "")
+
+        author_username, author_avatar = _get_author_username_avatar(event)
+        username = author_username or username
+        avatar = author_avatar or avatar
+
+        group_name = str(getattr(event, "group_name", "") or "")
+
+        _insert_message_record(
+            adapter=adapter,
+            bot_id=bot_id,
+            direction="recv",
+            scene=scene,
+            message_id=message_id,
+            group_id=group_id,
+            group_name=group_name,
+            user_id=user_id,
+            username=username,
+            nickname=nickname,
+            avatar=avatar,
+            content=content,
+        )
+        
+        _record_group_user_nickname(
+            adapter=adapter,
+            bot_id=bot_id,
+            scene=scene,
+            group_id=group_id,
+            user_id=user_id,
+            username=username,
+        )
+
+        setattr(event, "__message_db_recv_recorded__", True)
+    except Exception as e:
+        logger.warning(f"[message.db] 记录接收消息失败: {e}")
+
+
+def _record_send_message(
+    bot: Any,
+    *,
+    scene: str,
+    message: Any,
+    message_id: str = "",
+    source_message_id: str = "",
+    group_id: str = "",
+    user_id: str = "",
+    raw_result: Any = None,
+):
+    """
+    记录发送消息。
+
+    注意：
+    - message_id：本次发送出去的消息ID
+    - source_message_id：被回复的 recv.message_id
+    - 如果 source_message_id 存在，说明这次发送消耗了一次被回复消息的回复次数，
+      需要更新对应 recv 记录的 reply_used_count。
+    """
+    try:
+        adapter = _get_adapter_name(bot)
+        bot_id = _get_bot_id(bot)
+        content = _extract_text_from_message_obj(message)
+
+        _insert_message_record(
+            adapter=adapter,
+            bot_id=bot_id,
+            direction="send",
+            scene=scene,
+            message_id=str(message_id or ""),
+            source_message_id=str(source_message_id or ""),
+            group_id=str(group_id or ""),
+            user_id=str(user_id or ""),
+            username="Bot",
+            nickname="Bot",
+            content=content,
+        )
+
+        if source_message_id:
+            _increase_recv_reply_used_count(
+                source_message_id=str(source_message_id),
+                adapter=adapter,
+                bot_id=bot_id,
+                scene=scene,
+                group_id=str(group_id or ""),
+                user_id=str(user_id or ""),
+            )
+
+    except Exception as e:
+        logger.warning(f"[message.db] 记录发送消息失败: {e}")
 
 
 # =========================
@@ -286,7 +995,7 @@ class CompatMessageSegment:
     ) -> Optional[str]:
         """
         mode:
-        - "md5": 立即返回 md5 链接（默认）
+        - "md5": 立即返回 md5 链接
         - "link": 等待审核并回查真实附件链接后返回
         """
 
@@ -341,7 +1050,10 @@ class CompatMessageSegment:
                 event_name = str(getattr(audit_res, "__type__", ""))
                 message_id = getattr(audit_res, "message_id", None)
                 if "MESSAGE_AUDIT_PASS" not in event_name or not message_id:
-                    logger.warning(f"upload_image_and_get_url: 审核未通过或缺少message_id, event={event_name}, message_id={message_id}")
+                    logger.warning(
+                        f"upload_image_and_get_url: 审核未通过或缺少message_id, "
+                        f"event={event_name}, message_id={message_id}"
+                    )
                     return
                 real_url = await _resolve_real_url_from_message(str(message_id))
                 if real_url:
@@ -355,6 +1067,7 @@ class CompatMessageSegment:
                 content=" ",
                 file_image=image_bytes,
             )
+
             if mode == "link":
                 message_id = getattr(result, "id", None)
                 if message_id:
@@ -442,9 +1155,8 @@ def is_private_event(event: BaseEvent) -> bool:
 
 
 def is_channel_event(event: BaseEvent) -> bool:
-    """是否为频道来源事件（包括频道公域消息、频道私信）"""
     if HAS_QQ:
-        if get_chat_scene(event) == "channel_group" or get_chat_scene(event) == "channel_private":
+        if get_chat_scene(event) in ("channel_group", "channel_private"):
             return True
     return False
 
@@ -452,11 +1164,11 @@ def is_channel_event(event: BaseEvent) -> bool:
 def get_chat_scene(event: BaseEvent) -> str:
     """
     获取会话场景：
-    - group: 普通群
-    - private: 普通私聊
-    - channel_group: 频道内消息（@机器人消息，按群语义处理）
-    - channel_private: 频道私信（按私聊语义处理）
-    - unknown: 未识别
+    - group
+    - private
+    - channel_group
+    - channel_private
+    - unknown
     """
     if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
         return "channel_group"
@@ -525,6 +1237,7 @@ async def _send_with_retry(
     base_delay: float = 0.05,
 ):
     last_exc = None
+
     for i in range(max_retry + 1):
         try:
             kwargs = {}
@@ -537,7 +1250,7 @@ async def _send_with_retry(
                 raise
             delay = base_delay * (i + 1) + random.uniform(0.01, 0.08)
             logger.warning(
-                f"[QQ发送重试] 检测到msg_seq冲突，准备重试 {i+1}/{max_retry}，"
+                f"[QQ发送重试] 检测到msg_seq冲突，准备重试 {i + 1}/{max_retry}，"
                 f"等待 {delay:.3f}s，错误: {e}"
             )
             await asyncio.sleep(delay)
@@ -576,7 +1289,8 @@ def get_group_id(event: BaseEvent) -> Optional[str]:
 
 
 def _resolve_sender_name(
-    e: BaseEvent, fallback_user_id: Optional[str] = None
+    e: BaseEvent,
+    fallback_user_id: Optional[str] = None,
 ) -> str:
     author = getattr(e, "author", None)
     username = getattr(author, "username", None)
@@ -719,9 +1433,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
 
     if not hasattr(event, "sender"):
         sender_id = getattr(event, "user_id", None)
-        sender_name = _resolve_sender_name(
-            event, fallback_user_id=str(sender_id or "")
-        )
+        sender_name = _resolve_sender_name(event, fallback_user_id=str(sender_id or ""))
         setattr(
             event,
             "sender",
@@ -737,15 +1449,149 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
     return event
 
 
+def _patch_ob11_send_record(bot: BaseBot):
+    """给 OneBot V11 尝试添加发送记录包装"""
+    if not (HAS_OB11 and OB11Bot is not None and isinstance(bot, OB11Bot)):
+        return
+
+    if getattr(bot, "__message_db_ob11_send_patched__", False):
+        return
+
+    # 包装 send_group_msg
+    if hasattr(bot, "send_group_msg"):
+        try:
+            _origin_send_group_msg = bot.send_group_msg
+
+            async def send_group_msg(*args, **kwargs):
+                result = await _origin_send_group_msg(*args, **kwargs)
+
+                group_id = kwargs.get("group_id", "")
+                message = kwargs.get("message", "")
+
+                _record_send_message(
+                    bot,
+                    scene="group",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    group_id=str(group_id or ""),
+                    raw_result=result,
+                )
+                return result
+
+            setattr(bot, "send_group_msg", send_group_msg)
+        except Exception as e:
+            logger.debug(f"[message.db] OB11 send_group_msg 包装失败: {e}")
+
+    # 包装 send_private_msg
+    if hasattr(bot, "send_private_msg"):
+        try:
+            _origin_send_private_msg = bot.send_private_msg
+
+            async def send_private_msg(*args, **kwargs):
+                result = await _origin_send_private_msg(*args, **kwargs)
+
+                user_id = kwargs.get("user_id", "")
+                message = kwargs.get("message", "")
+
+                _record_send_message(
+                    bot,
+                    scene="private",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    user_id=str(user_id or ""),
+                    raw_result=result,
+                )
+                return result
+
+            setattr(bot, "send_private_msg", send_private_msg)
+        except Exception as e:
+            logger.debug(f"[message.db] OB11 send_private_msg 包装失败: {e}")
+
+    # 包装 send(event, message)
+    if hasattr(bot, "send"):
+        try:
+            _origin_send = bot.send
+
+            async def send(event, message, **kwargs):
+                result = await _origin_send(event=event, message=message, **kwargs)
+
+                try:
+                    patched_event = patch_event_inplace(event)
+                    scene = get_chat_scene(patched_event)
+
+                    _record_send_message(
+                        bot,
+                        scene=scene,
+                        message=message,
+                        message_id=_extract_result_message_id(result),
+                        source_message_id=str(getattr(patched_event, "message_id", "") or ""),
+                        group_id=str(getattr(patched_event, "group_id", "") or ""),
+                        user_id=str(getattr(patched_event, "user_id", "") or ""),
+                        raw_result=result,
+                    )
+                except Exception:
+                    pass
+
+                return result
+
+            setattr(bot, "send", send)
+        except Exception as e:
+            logger.debug(f"[message.db] OB11 send 包装失败: {e}")
+
+    # 包装 call_api 兜底
+    if hasattr(bot, "call_api"):
+        try:
+            _origin_call_api = bot.call_api
+
+            async def call_api(api: str, **data):
+                result = await _origin_call_api(api, **data)
+                api_lower = str(api).lower()
+
+                try:
+                    if api_lower in ("send_group_msg", "send_group_message"):
+                        _record_send_message(
+                            bot,
+                            scene="group",
+                            message=data.get("message", ""),
+                            message_id=_extract_result_message_id(result),
+                            group_id=str(data.get("group_id", "")),
+                            raw_result=result,
+                        )
+
+                    elif api_lower in ("send_private_msg", "send_private_message"):
+                        _record_send_message(
+                            bot,
+                            scene="private",
+                            message=data.get("message", ""),
+                            message_id=_extract_result_message_id(result),
+                            user_id=str(data.get("user_id", "")),
+                            raw_result=result,
+                        )
+                except Exception:
+                    pass
+
+                return result
+
+            setattr(bot, "call_api", call_api)
+        except Exception as e:
+            logger.debug(f"[message.db] OB11 call_api 包装失败: {e}")
+
+    setattr(bot, "__message_db_ob11_send_patched__", True)
+
+
 def patch_bot_inplace(bot: BaseBot) -> BaseBot:
     if getattr(bot, "__compat_patched__", False):
+        _patch_ob11_send_record(bot)
         return bot
+
+    # OB11 尝试包装发送记录
+    _patch_ob11_send_record(bot)
 
     if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
         _origin_send = bot.send
 
         async def send(event, message, **kwargs):
-            # ===== 普通群 =====
+            # ===== 普通 QQ 群 =====
             if HAS_QQ and isinstance(event, QQGroupMessageEvent):
                 group_openid = str(event.group_openid)
 
@@ -760,14 +1606,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
-                    return await _do_send(msg_seq)
-                return await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_group_seq(group_openid),
-                    max_retry=3,
-                )
+                    result = await _do_send(msg_seq)
+                else:
+                    result = await _send_with_retry(
+                        _do_send,
+                        get_new_seq=lambda: _next_group_seq(group_openid),
+                        max_retry=3,
+                    )
 
-            # ===== 私聊 C2C =====
+                _record_send_message(
+                    bot,
+                    scene="group",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    source_message_id=str(event.id),
+                    group_id=group_openid,
+                    raw_result=result,
+                )
+                return result
+
+            # ===== QQ 私聊 C2C =====
             if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
                 user_openid = str(event.author.user_openid)
 
@@ -782,14 +1640,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
-                    return await _do_send(msg_seq)
-                return await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_c2c_seq(user_openid),
-                    max_retry=3,
-                )
+                    result = await _do_send(msg_seq)
+                else:
+                    result = await _send_with_retry(
+                        _do_send,
+                        get_new_seq=lambda: _next_c2c_seq(user_openid),
+                        max_retry=3,
+                    )
 
-            # ===== 频道公域消息（群语义）=====
+                _record_send_message(
+                    bot,
+                    scene="private",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    source_message_id=str(event.id),
+                    user_id=user_openid,
+                    raw_result=result,
+                )
+                return result
+
+            # ===== QQ 频道公域消息 =====
             if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
                 channel_id = str(event.channel_id)
 
@@ -812,14 +1682,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
-                    return await _do_send(msg_seq)
-                return await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_group_seq(channel_id),
-                    max_retry=3,
-                )
+                    result = await _do_send(msg_seq)
+                else:
+                    result = await _send_with_retry(
+                        _do_send,
+                        get_new_seq=lambda: _next_group_seq(channel_id),
+                        max_retry=3,
+                    )
 
-            # ===== 频道私信 DMS（私聊语义）=====
+                _record_send_message(
+                    bot,
+                    scene="channel_group",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    source_message_id=str(event.id),
+                    group_id=channel_id,
+                    raw_result=result,
+                )
+                return result
+
+            # ===== QQ 频道私信 DMS =====
             if HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
                 guild_id = str(event.guild_id)
                 uid = str(getattr(getattr(event, "author", None), "id", "") or "")
@@ -844,14 +1726,40 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
-                    return await _do_send(msg_seq)
-                return await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_c2c_seq(seq_key),
-                    max_retry=3,
-                )
+                    result = await _do_send(msg_seq)
+                else:
+                    result = await _send_with_retry(
+                        _do_send,
+                        get_new_seq=lambda: _next_c2c_seq(seq_key),
+                        max_retry=3,
+                    )
 
-            return await _origin_send(event=event, message=message, **kwargs)
+                _record_send_message(
+                    bot,
+                    scene="channel_private",
+                    message=message,
+                    message_id=_extract_result_message_id(result),
+                    source_message_id=str(event.id),
+                    user_id=uid,
+                    group_id=guild_id,
+                    raw_result=result,
+                )
+                return result
+
+            # ===== 兜底 =====
+            result = await _origin_send(event=event, message=message, **kwargs)
+
+            _record_send_message(
+                bot,
+                scene=get_chat_scene(event),
+                message=message,
+                message_id=_extract_result_message_id(result),
+                source_message_id=str(getattr(event, "id", "") or getattr(event, "message_id", "") or ""),
+                group_id=str(get_group_id(event) or ""),
+                user_id=str(get_user_id(event) or ""),
+                raw_result=result,
+            )
+            return result
 
         async def send_private_msg(*, user_id, message, **kwargs):
             openid = str(user_id)
@@ -861,17 +1769,28 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     openid=openid,
                     message=message,
                     msg_seq=int(msg_seq),
-                    **kwargs
+                    **kwargs,
                 )
 
             if "msg_seq" in kwargs:
                 msg_seq = int(kwargs.pop("msg_seq"))
-                return await _do_send(msg_seq)
-            return await _send_with_retry(
-                _do_send,
-                get_new_seq=lambda: _next_c2c_seq(openid),
-                max_retry=3,
+                result = await _do_send(msg_seq)
+            else:
+                result = await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_c2c_seq(openid),
+                    max_retry=3,
+                )
+
+            _record_send_message(
+                bot,
+                scene="private",
+                message=message,
+                message_id=_extract_result_message_id(result),
+                user_id=openid,
+                raw_result=result,
             )
+            return result
 
         async def send_group_msg(*, group_id, message, **kwargs):
             group_openid = str(group_id)
@@ -887,22 +1806,37 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
             if "msg_seq" in kwargs:
                 msg_seq = int(kwargs.pop("msg_seq"))
-                return await _do_send(msg_seq)
-            return await _send_with_retry(
-                _do_send,
-                get_new_seq=lambda: _next_group_seq(group_openid),
-                max_retry=3,
+                result = await _do_send(msg_seq)
+            else:
+                result = await _send_with_retry(
+                    _do_send,
+                    get_new_seq=lambda: _next_group_seq(group_openid),
+                    max_retry=3,
+                )
+
+            _record_send_message(
+                bot,
+                scene="group",
+                message=message,
+                message_id=_extract_result_message_id(result),
+                group_id=group_openid,
+                raw_result=result,
             )
+            return result
 
         async def delete_msg(*, message_id, group_id=None, user_id=None):
             if group_id is not None:
                 return await bot.delete_group_message(
-                    group_openid=str(group_id), message_id=str(message_id)
+                    group_openid=str(group_id),
+                    message_id=str(message_id),
                 )
+
             if user_id is not None:
                 return await bot.delete_c2c_message(
-                    openid=str(user_id), message_id=str(message_id)
+                    openid=str(user_id),
+                    message_id=str(message_id),
                 )
+
             raise ValueError("QQ delete_msg 需要 group_id 或 user_id")
 
         setattr(bot, "send", send)
@@ -915,8 +1849,86 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
 
 def patch_context(bot: BaseBot, event: BaseEvent) -> tuple[BaseBot, BaseEvent]:
-    return patch_bot_inplace(bot), patch_event_inplace(event)
+    bot = patch_bot_inplace(bot)
+    event = patch_event_inplace(event)
 
+    # 收消息入库
+    _record_recv_message(bot, event)
+
+    return bot, event
+
+# =========================
+# 对 Web 管理面板开放的公共接口
+# =========================
+
+def init_message_db():
+    """初始化 message.db，供 Web 面板调用"""
+    return _init_message_db()
+
+
+def get_message_db_path() -> Path:
+    """获取消息数据库路径"""
+    return MESSAGE_DB
+
+
+def extract_result_message_id(result: Any) -> str:
+    """从不同适配器发送结果中提取 message_id"""
+    return _extract_result_message_id(result)
+
+
+def get_bot_id(bot: Any) -> str:
+    """安全获取 bot_id/self_id"""
+    return _get_bot_id(bot)
+
+
+def record_web_send_message(
+    bot: Any,
+    *,
+    scene: str,
+    message: Any,
+    message_id: str = "",
+    source_message_id: str = "",
+    group_id: str = "",
+    user_id: str = "",
+    raw_result: Any = None,
+):
+    """
+    Web 面板主动发送消息后记录发送消息。
+
+    会自动：
+    - 写入 messages 表 direction='send'
+    - 如果 source_message_id 存在，增加对应 recv.reply_used_count
+    """
+    return _record_send_message(
+        bot,
+        scene=scene,
+        message=message,
+        message_id=message_id,
+        source_message_id=source_message_id,
+        group_id=group_id,
+        user_id=user_id,
+        raw_result=raw_result,
+    )
+
+
+def increase_recv_reply_used_count(
+    *,
+    source_message_id: str,
+    adapter: str = "",
+    bot_id: str = "",
+    scene: str = "",
+    group_id: str = "",
+    user_id: str = "",
+):
+    """增加被回复 recv 消息的 reply_used_count"""
+    return _increase_recv_reply_used_count(
+        source_message_id=source_message_id,
+        adapter=adapter,
+        bot_id=bot_id,
+        scene=scene,
+        group_id=group_id,
+        user_id=user_id,
+    )
 
 __all__ = [
     "Bot",
@@ -936,4 +1948,12 @@ __all__ = [
     "patch_bot_inplace",
     "patch_event_inplace",
     "patch_context",
+
+    # Web 公共接口
+    "init_message_db",
+    "get_message_db_path",
+    "extract_result_message_id",
+    "get_bot_id",
+    "record_web_send_message",
+    "increase_recv_reply_used_count",
 ]

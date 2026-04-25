@@ -51,6 +51,7 @@
                 <li><a href="{{ url_for('terminal') }}" class="{% if is_active('terminal') %}active{% endif %}"><i class="fas fa-terminal"></i> 终端</a></li>
                 <li><a href="{{ url_for('backups') }}" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-archive"></i> <span>备份管理</span></a></li>
                 <li><a href="{{ url_for('logs') }}" {% if is_active('logs') %}class="active"{% endif %}><i class="fas fa-file-alt"></i> <span>日志查看</span></a></li>
+                <li><a href="{{ url_for('messages_page') }}" {% if is_active('messages_page') %}class="active"{% endif %}><i class="fas fa-comments"></i> <span>消息列表</span></a></li>
                 <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
             </ul>
             
