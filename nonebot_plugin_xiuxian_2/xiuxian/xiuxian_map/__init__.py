@@ -1368,7 +1368,7 @@ def _build_map_enemy(user_info: dict, node_type: str, node_name: str):
         factor = random.uniform(0.95, 1.20)
         names = ["瘴骨妖", "赤瞳凶魇", "裂甲魔猿", "险地邪修"]
 
-    exp_base = max(500, int(user_exp * factor * 200))
+    exp_base = max(500, int(user_exp * factor * 100))
     atk = max(200, int(exp_base / 10))
     hp = max(1000, int(exp_base / 2))
     mp = max(500, int(exp_base))

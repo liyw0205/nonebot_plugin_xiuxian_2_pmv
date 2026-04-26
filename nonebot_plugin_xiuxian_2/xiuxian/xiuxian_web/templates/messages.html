@@ -830,6 +830,20 @@
     cursor: pointer;
 }
 
+.msg-revoke-btn {
+    margin-left: 6px;
+    border: none;
+    background: transparent;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 0 4px;
+}
+
+.msg-revoke-btn:hover {
+    text-decoration: underline;
+}
+
 .upload-btn {
     margin: 0;
     border: 1px solid var(--border-color);
@@ -1222,9 +1236,222 @@ function looksLikeMarkdown(text) {
     return /(^#{1,6}\s)|(\*\*.+\*\*)|(```)|(^[-*]\s)|(\$\$.+\$\$)|(\|.+\|)/m.test(text);
 }
 
+function normalizeAttachmentRepr(text) {
+    text = String(text || '');
+
+    /**
+     * 兼容 Python / NoneBot repr：
+     * Attachment(type='image', data={'url': 'https://xxx'})
+     * Attachment(type="image", data={"url": "https://xxx"})
+     * Attachment(type='file', data={'url': 'https://xxx'})
+     *
+     * data 内如果有其他字段，也尽量只提取 url。
+     */
+    text = text.replace(
+        /Attachment\(type=['"]([^'"]+)['"],\s*data=\{([\s\S]*?)\}\)/g,
+        function(full, type, dataBody) {
+            const urlMatch = dataBody.match(/['"]url['"]\s*:\s*['"](https?:\/\/[^'"]+)['"]/);
+            if (!urlMatch) return full;
+
+            const url = urlMatch[1];
+            return `<attachment[${type}]:${url}>`;
+        }
+    );
+
+    return text;
+}
+
+function getAttachmentLabel(type) {
+    type = String(type || '').toLowerCase();
+
+    const labelMap = {
+        image: '图片消息',
+        file: '文件消息',
+        audio: '语音消息',
+        record: '语音消息',
+        voice: '语音消息',
+        video: '视频消息',
+        attachment: '附件消息'
+    };
+
+    return labelMap[type] || `${type}附件`;
+}
+
+function renderAttachmentHtml(type, url) {
+    type = String(type || '').toLowerCase();
+    url = String(url || '').trim();
+
+    if (!url) return '';
+
+    const safeUrl = escapeHtml(url);
+    const label = escapeHtml(getAttachmentLabel(type));
+
+    /**
+     * 图片：用 Markdown 图片语法渲染
+     */
+    if (type === 'image') {
+        return renderMarkdown(`![${getAttachmentLabel(type)}](${url})`);
+    }
+
+    /**
+     * 音频：直接播放器
+     */
+    if (type === 'audio' || type === 'record' || type === 'voice') {
+        return `
+            <div class="msg-media msg-audio">
+                <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 4px;">
+                    <i class="fas fa-microphone"></i> ${label}
+                </div>
+                <audio controls preload="none" style="max-width: 280px; width: 100%;">
+                    <source src="${safeUrl}">
+                    当前浏览器不支持音频播放
+                </audio>
+                <div style="margin-top: 4px;">
+                    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem;">
+                        打开音频链接
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 视频：直接播放器
+     */
+    if (type === 'video') {
+        return `
+            <div class="msg-media msg-video">
+                <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 4px;">
+                    <i class="fas fa-video"></i> ${label}
+                </div>
+                <video controls preload="metadata" style="max-width: min(320px, 100%); max-height: 360px; border-radius: 10px; display: block;">
+                    <source src="${safeUrl}">
+                    当前浏览器不支持视频播放
+                </video>
+                <div style="margin-top: 4px;">
+                    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem;">
+                        打开视频链接
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 文件：链接
+     */
+    if (type === 'file') {
+        return `
+            <div class="msg-media msg-file" style="margin-top: 6px;">
+                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer"
+                   class="btn btn-info btn-sm"
+                   style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-file-download"></i>
+                    ${label}
+                </a>
+            </div>
+        `;
+    }
+
+    /**
+     * 其他未知类型：附件链接
+     */
+    return `
+        <div class="msg-media msg-attachment" style="margin-top: 6px;">
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer"
+               class="btn btn-info btn-sm"
+               style="display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fas fa-paperclip"></i>
+                ${label}
+            </a>
+        </div>
+    `;
+}
+
+function renderPlainWithAttachments(text) {
+    text = normalizeAttachmentRepr(String(text || ''));
+
+    const re = /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g;
+
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = re.exec(text)) !== null) {
+        const before = text.slice(lastIndex, match.index);
+
+        /**
+         * 附件前的普通文字：
+         * 如果像 Markdown，就按 Markdown 渲染；
+         * 否则安全 escape 后保留换行。
+         */
+        if (before) {
+            if (looksLikeMarkdown(before)) {
+                html += renderMarkdown(before);
+            } else {
+                html += `<div class="msg-raw">${escapeHtml(before)}</div>`;
+            }
+        }
+
+        html += renderAttachmentHtml(match[1], match[2]);
+
+        lastIndex = re.lastIndex;
+    }
+
+    const rest = text.slice(lastIndex);
+    if (rest) {
+        if (looksLikeMarkdown(rest)) {
+            html += renderMarkdown(rest);
+        } else {
+            html += `<div class="msg-raw">${escapeHtml(rest)}</div>`;
+        }
+    }
+
+    return `<div class="msg-attachment-wrap">${html}</div>`;
+}
+
 function renderMessageContent(text) {
-    if (looksLikeMarkdown(text)) return renderMarkdown(text);
+    text = normalizeAttachmentRepr(String(text || ''));
+
+    /**
+     * 只要包含附件标记，就统一走附件渲染。
+     */
+    if (/<attachment\[[^\]]+\]:https?:\/\/[^>]+>/.test(text)) {
+        return renderPlainWithAttachments(text);
+    }
+
+    /**
+     * 兼容 Attachment(...) 还没被正常转成 attachment token 的情况。
+     */
+    if (/Attachment\(type=['"][^'"]+['"],\s*data=\{[\s\S]*?['"]url['"]\s*:\s*['"]https?:\/\/[^'"]+['"][\s\S]*?\}\)/.test(text)) {
+        return renderPlainWithAttachments(text);
+    }
+
+    /**
+     * 原有 Markdown 正常渲染。
+     */
+    if (looksLikeMarkdown(text)) {
+        return renderMarkdown(text);
+    }
+
+    /**
+     * 普通文本安全显示。
+     */
     return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+}
+
+/**
+ * 刷新当前会话，让旧消息立即用新渲染逻辑显示。
+ */
+function rerenderCurrentMessagesAfterAttachmentPatch() {
+    try {
+        if (typeof currentSession !== 'undefined' && currentSession) {
+            lastRenderedMessageKeys = [];
+            loadMessages(false, false);
+        }
+    } catch (e) {
+        console.warn('附件渲染补丁刷新失败:', e);
+    }
 }
 
 function renderAvatar(row, isSend = false) {
@@ -1651,6 +1878,21 @@ function appendMessages(rows) {
                         ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
                         ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
                         ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                        ${isSend && row.message_id ? `
+                            <button
+                                class="msg-revoke-btn"
+                                onclick="event.stopPropagation(); revokeMessage(this)"
+                                data-row-id="${escapeHtml(row.id || '')}"
+                                data-adapter="${escapeHtml(row.adapter || '')}"
+                                data-scene="${escapeHtml(row.scene || '')}"
+                                data-message-id="${escapeHtml(row.message_id || '')}"
+                                data-group-id="${escapeHtml(row.group_id || '')}"
+                                data-user-id="${escapeHtml(row.user_id || '')}"
+                                type="button"
+                            >
+                                撤回
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -1768,6 +2010,21 @@ async function loadMessages(forceBottom = false, silent = false) {
                             ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
                             ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
                             ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                            ${isSend && row.message_id ? `
+                                <button
+                                    class="msg-revoke-btn"
+                                    onclick="event.stopPropagation(); revokeMessage(this)"
+                                    data-row-id="${escapeHtml(row.id || '')}"
+                                    data-adapter="${escapeHtml(row.adapter || '')}"
+                                    data-scene="${escapeHtml(row.scene || '')}"
+                                    data-message-id="${escapeHtml(row.message_id || '')}"
+                                    data-group-id="${escapeHtml(row.group_id || '')}"
+                                    data-user-id="${escapeHtml(row.user_id || '')}"
+                                    type="button"
+                                >
+                                    撤回
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -2019,6 +2276,60 @@ async function sendMessage() {
     }
 }
 
+async function revokeMessage(btn) {
+    const rowId = btn.dataset.rowId || '';
+    const adapter = btn.dataset.adapter || '';
+    const scene = btn.dataset.scene || '';
+    const messageId = btn.dataset.messageId || '';
+    const groupId = btn.dataset.groupId || '';
+    const userId = btn.dataset.userId || '';
+
+    if (!messageId) {
+        alert('该消息没有 message_id，无法撤回');
+        return;
+    }
+
+    if (!confirm('确定要撤回这条 Bot 消息吗？')) return;
+
+    const oldText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = '撤回中...';
+
+    try {
+        const res = await fetch('/api/messages/revoke', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                row_id: rowId,
+                adapter,
+                scene,
+                message_id: messageId,
+                group_id: groupId,
+                user_id: userId
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            btn.innerText = '已撤回';
+            btn.disabled = true;
+
+            lastRenderedMessageKeys = [];
+            await loadMessages(false, false);
+            await loadSessions(true);
+        } else {
+            alert('撤回失败：' + (data.error || '未知错误'));
+            btn.innerText = oldText;
+            btn.disabled = false;
+        }
+    } catch (e) {
+        alert('撤回异常：' + e);
+        btn.innerText = oldText;
+        btn.disabled = false;
+    }
+}
+
 function toggleAutoRefresh(force = null) {
     autoRefresh = (force === null) ? !autoRefresh : !!force;
     const btn = document.getElementById('autoRefreshBtn');
@@ -2063,6 +2374,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadBots();
     await loadSessions(false);
     toggleAutoRefresh(true); // 默认开启自动刷新
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        rerenderCurrentMessagesAfterAttachmentPatch();
+    }, 300);
 });
 </script>
 {% endblock %}

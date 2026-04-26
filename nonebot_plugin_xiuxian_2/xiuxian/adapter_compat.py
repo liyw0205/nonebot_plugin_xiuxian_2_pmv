@@ -533,20 +533,103 @@ def _increase_recv_reply_used_count(
 
 
 def _extract_text_from_message_obj(message: Any) -> str:
+    """
+    提取消息展示内容：
+    - 文本正常保留
+    - QQ Attachment 转成统一标记：
+      <attachment[image]:url>
+      <attachment[audio]:url>
+      <attachment[video]:url>
+      <attachment[file]:url>
+    - 图文混合时保留文本 + 图片标记，避免 extract_plain_text 丢图
+    """
     try:
         if message is None:
             return ""
+
         if isinstance(message, str):
             return message
+
+        parts: list[str] = []
+
+        # nonebot Message 通常可迭代，每个 seg 有 type/data
+        try:
+            for seg in message:
+                seg_type = str(getattr(seg, "type", "") or "")
+                data = getattr(seg, "data", {}) or {}
+
+                # 兼容 data 不是 dict 的情况
+                if not isinstance(data, dict):
+                    try:
+                        data = dict(data)
+                    except Exception:
+                        data = {}
+
+                if seg_type == "text":
+                    text = data.get("text", "")
+                    if text:
+                        parts.append(str(text))
+
+                elif seg_type in ("image", "audio", "record", "voice", "video", "file", "attachment"):
+                    url = (
+                        data.get("url")
+                        or data.get("file")
+                        or data.get("path")
+                        or data.get("src")
+                        or ""
+                    )
+
+                    # QQ 官方适配器 Attachment 可能 type=attachment，data 里带 url
+                    media_type = seg_type
+                    if seg_type == "record" or seg_type == "voice":
+                        media_type = "audio"
+
+                    # 尝试从字符串里识别 attachment[image]
+                    seg_str = str(seg)
+                    m = None
+                    try:
+                        import re
+                        m = re.search(r"<attachment\[(?P<t>[^\]]+)\]:(?P<u>https?://[^>]+)>", seg_str)
+                    except Exception:
+                        m = None
+
+                    if m:
+                        media_type = m.group("t")
+                        url = m.group("u")
+
+                    if url:
+                        parts.append(f"<attachment[{media_type}]:{url}>")
+                    else:
+                        parts.append(seg_str)
+
+                else:
+                    # 兜底：保留非文本段字符串，避免信息丢失
+                    seg_str = str(seg)
+                    if seg_str:
+                        parts.append(seg_str)
+
+            if parts:
+                return "".join(parts)
+
+        except TypeError:
+            # 不可迭代，继续走下面兜底
+            pass
+        except Exception:
+            pass
+
+        # 兜底：如果能提取纯文本就用纯文本
         if hasattr(message, "extract_plain_text"):
             text = message.extract_plain_text()
             if text:
                 return str(text)
+
         if hasattr(message, "extract_content"):
             text = message.extract_content()
             if text:
                 return str(text)
+
         return str(message)
+
     except Exception:
         return ""
 
@@ -794,6 +877,139 @@ def _record_send_message(
 
     except Exception as e:
         logger.warning(f"[message.db] 记录发送消息失败: {e}")
+
+async def delete_message_compat(
+    bot: Any,
+    *,
+    scene: str,
+    message_id: str,
+    group_id: str = "",
+    user_id: str = "",
+):
+    """
+    跨适配器通用撤回接口。
+
+    scene:
+    - group
+    - private
+    - channel_group
+    - channel_private
+    """
+    if not message_id:
+        raise ValueError("message_id 不能为空")
+
+    adapter = _get_adapter_name(bot)
+
+    # =========================
+    # OneBot V11
+    # =========================
+    if HAS_OB11 and OB11Bot is not None and isinstance(bot, OB11Bot):
+        mid = int(message_id) if str(message_id).isdigit() else message_id
+
+        if hasattr(bot, "delete_msg"):
+            return await bot.delete_msg(message_id=mid)
+
+        return await bot.call_api("delete_msg", message_id=mid)
+
+    # =========================
+    # QQ 官方适配器
+    # =========================
+    if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
+        if scene == "group":
+            if not group_id:
+                raise ValueError("QQ 群聊撤回需要 group_id/group_openid")
+
+            return await bot.delete_group_message(
+                group_openid=str(group_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "private":
+            if not user_id:
+                raise ValueError("QQ 私聊撤回需要 user_id/openid")
+
+            return await bot.delete_c2c_message(
+                openid=str(user_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "channel_group":
+            if not group_id:
+                raise ValueError("QQ 频道群聊撤回需要 channel_id")
+
+            return await bot.delete_message(
+                channel_id=str(group_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "channel_private":
+            guild_id = group_id or user_id
+            if not guild_id:
+                raise ValueError("QQ 频道私信撤回需要 guild_id")
+
+            return await bot.delete_dms_message(
+                guild_id=str(guild_id),
+                message_id=str(message_id),
+            )
+
+    raise RuntimeError(f"当前适配器不支持通用撤回: {adapter}")
+
+
+def schedule_delete_message(
+    bot: Any,
+    *,
+    scene: str,
+    message_id: str,
+    group_id: str = "",
+    user_id: str = "",
+    revoke_time: int | float = 0,
+):
+    """
+    定时撤回消息。
+
+    revoke_time:
+    - <= 0 不撤回
+    - > 0 按秒延迟撤回
+    """
+    try:
+        revoke_time = float(revoke_time or 0)
+    except Exception:
+        revoke_time = 0
+
+    if revoke_time <= 0 or not message_id:
+        return
+
+    async def _job():
+        try:
+            await asyncio.sleep(revoke_time)
+
+            await delete_message_compat(
+                bot,
+                scene=scene,
+                message_id=message_id,
+                group_id=group_id,
+                user_id=user_id,
+            )
+
+            logger.info(
+                f"[自动撤回] 已撤回消息 scene={scene}, message_id={message_id}, "
+                f"group_id={group_id}, user_id={user_id}"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"[自动撤回] 撤回失败 scene={scene}, message_id={message_id}, "
+                f"group_id={group_id}, user_id={user_id}: {e}"
+            )
+
+    try:
+        asyncio.create_task(_job())
+    except RuntimeError:
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(_job())
+        except Exception as e:
+            logger.warning(f"[自动撤回] 创建撤回任务失败: {e}")
 
 
 # =========================
@@ -1450,7 +1666,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
 
 
 def _patch_ob11_send_record(bot: BaseBot):
-    """给 OneBot V11 尝试添加发送记录包装"""
+    """给 OneBot V11 尝试添加发送记录包装，并支持 revoke_time 自动撤回"""
     if not (HAS_OB11 and OB11Bot is not None and isinstance(bot, OB11Bot)):
         return
 
@@ -1463,22 +1679,35 @@ def _patch_ob11_send_record(bot: BaseBot):
             _origin_send_group_msg = bot.send_group_msg
 
             async def send_group_msg(*args, **kwargs):
+                revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
+
                 result = await _origin_send_group_msg(*args, **kwargs)
 
                 group_id = kwargs.get("group_id", "")
                 message = kwargs.get("message", "")
+                message_id = _extract_result_message_id(result)
 
                 _record_send_message(
                     bot,
                     scene="group",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     group_id=str(group_id or ""),
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="group",
+                    message_id=message_id,
+                    group_id=str(group_id or ""),
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             setattr(bot, "send_group_msg", send_group_msg)
+
         except Exception as e:
             logger.debug(f"[message.db] OB11 send_group_msg 包装失败: {e}")
 
@@ -1488,22 +1717,35 @@ def _patch_ob11_send_record(bot: BaseBot):
             _origin_send_private_msg = bot.send_private_msg
 
             async def send_private_msg(*args, **kwargs):
+                revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
+
                 result = await _origin_send_private_msg(*args, **kwargs)
 
                 user_id = kwargs.get("user_id", "")
                 message = kwargs.get("message", "")
+                message_id = _extract_result_message_id(result)
 
                 _record_send_message(
                     bot,
                     scene="private",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     user_id=str(user_id or ""),
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="private",
+                    message_id=message_id,
+                    user_id=str(user_id or ""),
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             setattr(bot, "send_private_msg", send_private_msg)
+
         except Exception as e:
             logger.debug(f"[message.db] OB11 send_private_msg 包装失败: {e}")
 
@@ -1513,28 +1755,48 @@ def _patch_ob11_send_record(bot: BaseBot):
             _origin_send = bot.send
 
             async def send(event, message, **kwargs):
+                revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
+
                 result = await _origin_send(event=event, message=message, **kwargs)
 
                 try:
                     patched_event = patch_event_inplace(event)
                     scene = get_chat_scene(patched_event)
 
+                    message_id = _extract_result_message_id(result)
+                    group_id = str(getattr(patched_event, "group_id", "") or "")
+                    user_id = str(getattr(patched_event, "user_id", "") or "")
+                    source_message_id = str(
+                        getattr(patched_event, "message_id", "") or ""
+                    )
+
                     _record_send_message(
                         bot,
                         scene=scene,
                         message=message,
-                        message_id=_extract_result_message_id(result),
-                        source_message_id=str(getattr(patched_event, "message_id", "") or ""),
-                        group_id=str(getattr(patched_event, "group_id", "") or ""),
-                        user_id=str(getattr(patched_event, "user_id", "") or ""),
+                        message_id=message_id,
+                        source_message_id=source_message_id,
+                        group_id=group_id,
+                        user_id=user_id,
                         raw_result=result,
                     )
+
+                    schedule_delete_message(
+                        bot,
+                        scene=scene,
+                        message_id=message_id,
+                        group_id=group_id,
+                        user_id=user_id,
+                        revoke_time=revoke_time,
+                    )
+
                 except Exception:
                     pass
 
                 return result
 
             setattr(bot, "send", send)
+
         except Exception as e:
             logger.debug(f"[message.db] OB11 send 包装失败: {e}")
 
@@ -1544,35 +1806,63 @@ def _patch_ob11_send_record(bot: BaseBot):
             _origin_call_api = bot.call_api
 
             async def call_api(api: str, **data):
+                revoke_time = data.pop("revoke_time", data.pop("revoke_after", 0))
+
                 result = await _origin_call_api(api, **data)
                 api_lower = str(api).lower()
 
                 try:
                     if api_lower in ("send_group_msg", "send_group_message"):
+                        group_id = str(data.get("group_id", "") or "")
+                        message = data.get("message", "")
+                        message_id = _extract_result_message_id(result)
+
                         _record_send_message(
                             bot,
                             scene="group",
-                            message=data.get("message", ""),
-                            message_id=_extract_result_message_id(result),
-                            group_id=str(data.get("group_id", "")),
+                            message=message,
+                            message_id=message_id,
+                            group_id=group_id,
                             raw_result=result,
                         )
 
+                        schedule_delete_message(
+                            bot,
+                            scene="group",
+                            message_id=message_id,
+                            group_id=group_id,
+                            revoke_time=revoke_time,
+                        )
+
                     elif api_lower in ("send_private_msg", "send_private_message"):
+                        user_id = str(data.get("user_id", "") or "")
+                        message = data.get("message", "")
+                        message_id = _extract_result_message_id(result)
+
                         _record_send_message(
                             bot,
                             scene="private",
-                            message=data.get("message", ""),
-                            message_id=_extract_result_message_id(result),
-                            user_id=str(data.get("user_id", "")),
+                            message=message,
+                            message_id=message_id,
+                            user_id=user_id,
                             raw_result=result,
                         )
+
+                        schedule_delete_message(
+                            bot,
+                            scene="private",
+                            message_id=message_id,
+                            user_id=user_id,
+                            revoke_time=revoke_time,
+                        )
+
                 except Exception:
                     pass
 
                 return result
 
             setattr(bot, "call_api", call_api)
+
         except Exception as e:
             logger.debug(f"[message.db] OB11 call_api 包装失败: {e}")
 
@@ -1584,13 +1874,15 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
         _patch_ob11_send_record(bot)
         return bot
 
-    # OB11 尝试包装发送记录
+    # OB11 尝试包装发送记录和自动撤回
     _patch_ob11_send_record(bot)
 
     if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
         _origin_send = bot.send
 
         async def send(event, message, **kwargs):
+            revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
+
             # ===== 普通 QQ 群 =====
             if HAS_QQ and isinstance(event, QQGroupMessageEvent):
                 group_openid = str(event.group_openid)
@@ -1614,15 +1906,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                         max_retry=3,
                     )
 
+                message_id = _extract_result_message_id(result)
+
                 _record_send_message(
                     bot,
                     scene="group",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     source_message_id=str(event.id),
                     group_id=group_openid,
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="group",
+                    message_id=message_id,
+                    group_id=group_openid,
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             # ===== QQ 私聊 C2C =====
@@ -1648,15 +1951,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                         max_retry=3,
                     )
 
+                message_id = _extract_result_message_id(result)
+
                 _record_send_message(
                     bot,
                     scene="private",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     source_message_id=str(event.id),
                     user_id=user_openid,
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="private",
+                    message_id=message_id,
+                    user_id=user_openid,
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             # ===== QQ 频道公域消息 =====
@@ -1690,15 +2004,26 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                         max_retry=3,
                     )
 
+                message_id = _extract_result_message_id(result)
+
                 _record_send_message(
                     bot,
                     scene="channel_group",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     source_message_id=str(event.id),
                     group_id=channel_id,
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="channel_group",
+                    message_id=message_id,
+                    group_id=channel_id,
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             # ===== QQ 频道私信 DMS =====
@@ -1734,34 +2059,65 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                         max_retry=3,
                     )
 
+                message_id = _extract_result_message_id(result)
+
                 _record_send_message(
                     bot,
                     scene="channel_private",
                     message=message,
-                    message_id=_extract_result_message_id(result),
+                    message_id=message_id,
                     source_message_id=str(event.id),
                     user_id=uid,
                     group_id=guild_id,
                     raw_result=result,
                 )
+
+                schedule_delete_message(
+                    bot,
+                    scene="channel_private",
+                    message_id=message_id,
+                    group_id=guild_id,
+                    user_id=uid,
+                    revoke_time=revoke_time,
+                )
+
                 return result
 
             # ===== 兜底 =====
             result = await _origin_send(event=event, message=message, **kwargs)
 
+            scene = get_chat_scene(event)
+            message_id = _extract_result_message_id(result)
+            group_id = str(get_group_id(event) or "")
+            user_id = str(get_user_id(event) or "")
+            source_message_id = str(
+                getattr(event, "id", "") or getattr(event, "message_id", "") or ""
+            )
+
             _record_send_message(
                 bot,
-                scene=get_chat_scene(event),
+                scene=scene,
                 message=message,
-                message_id=_extract_result_message_id(result),
-                source_message_id=str(getattr(event, "id", "") or getattr(event, "message_id", "") or ""),
-                group_id=str(get_group_id(event) or ""),
-                user_id=str(get_user_id(event) or ""),
+                message_id=message_id,
+                source_message_id=source_message_id,
+                group_id=group_id,
+                user_id=user_id,
                 raw_result=result,
             )
+
+            schedule_delete_message(
+                bot,
+                scene=scene,
+                message_id=message_id,
+                group_id=group_id,
+                user_id=user_id,
+                revoke_time=revoke_time,
+            )
+
             return result
 
         async def send_private_msg(*, user_id, message, **kwargs):
+            revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
             openid = str(user_id)
 
             async def _do_send(msg_seq: int):
@@ -1782,17 +2138,29 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     max_retry=3,
                 )
 
+            message_id = _extract_result_message_id(result)
+
             _record_send_message(
                 bot,
                 scene="private",
                 message=message,
-                message_id=_extract_result_message_id(result),
+                message_id=message_id,
                 user_id=openid,
                 raw_result=result,
             )
+
+            schedule_delete_message(
+                bot,
+                scene="private",
+                message_id=message_id,
+                user_id=openid,
+                revoke_time=revoke_time,
+            )
+
             return result
 
         async def send_group_msg(*, group_id, message, **kwargs):
+            revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
             group_openid = str(group_id)
 
             async def _do_send(msg_seq: int):
@@ -1814,30 +2182,51 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     max_retry=3,
                 )
 
+            message_id = _extract_result_message_id(result)
+
             _record_send_message(
                 bot,
                 scene="group",
                 message=message,
-                message_id=_extract_result_message_id(result),
+                message_id=message_id,
                 group_id=group_openid,
                 raw_result=result,
             )
+
+            schedule_delete_message(
+                bot,
+                scene="group",
+                message_id=message_id,
+                group_id=group_openid,
+                revoke_time=revoke_time,
+            )
+
             return result
 
-        async def delete_msg(*, message_id, group_id=None, user_id=None):
-            if group_id is not None:
-                return await bot.delete_group_message(
-                    group_openid=str(group_id),
-                    message_id=str(message_id),
-                )
+        async def delete_msg(*, message_id, group_id=None, user_id=None, scene: str = ""):
+            """
+            兼容 delete_msg。
 
-            if user_id is not None:
-                return await bot.delete_c2c_message(
-                    openid=str(user_id),
-                    message_id=str(message_id),
-                )
+            OB11:
+            - delete_msg(message_id=xxx)
 
-            raise ValueError("QQ delete_msg 需要 group_id 或 user_id")
+            QQ:
+            - 群聊需要 group_id
+            - 私聊需要 user_id
+            """
+            if not scene:
+                if group_id is not None:
+                    scene = "group"
+                elif user_id is not None:
+                    scene = "private"
+
+            return await delete_message_compat(
+                bot,
+                scene=scene,
+                message_id=str(message_id),
+                group_id=str(group_id or ""),
+                user_id=str(user_id or ""),
+            )
 
         setattr(bot, "send", send)
         setattr(bot, "send_private_msg", send_private_msg)
@@ -1956,4 +2345,8 @@ __all__ = [
     "get_bot_id",
     "record_web_send_message",
     "increase_recv_reply_used_count",
+
+    # 通用撤回
+    "delete_message_compat",
+    "schedule_delete_message",
 ]

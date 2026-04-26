@@ -45,6 +45,7 @@ from ..adapter_compat import (
     extract_result_message_id,
     get_bot_id,
     record_web_send_message,
+    delete_message_compat,
 )
 from typing import Any
 from ..xiuxian_utils.item_json import Items
@@ -4246,6 +4247,10 @@ def api_messages_list():
         
             r["display_content"] = display_content
             r["content_format"] = content_format
+            r["can_revoke"] = bool(
+                r.get("direction") == "send"
+                and r.get("message_id")
+            )
         
             # 前端不需要展示 msg_id，但需要用来点击回复
             r["can_reply"] = False
@@ -4556,6 +4561,10 @@ def api_messages_list_since():
 
             r["display_content"] = display_content
             r["content_format"] = content_format
+            r["can_revoke"] = bool(
+                r.get("direction") == "send"
+                and r.get("message_id")
+            )
 
             r["can_reply"] = False
             r["reply_expired"] = True
@@ -4685,7 +4694,7 @@ def api_messages_send():
                         source_message_id="",
                         group_id=target_id,
                         user_id="",
-                        content=content,
+                        message=content,
                     )
 
                     return jsonify({
@@ -4712,7 +4721,7 @@ def api_messages_send():
                         source_message_id="",
                         group_id="",
                         user_id=target_id,
-                        content=content,
+                        message=content,
                     )
 
                     return jsonify({
@@ -4948,6 +4957,89 @@ def api_messages_send():
         return jsonify({
             "success": False,
             "error": f"发送失败: {e}",
+        })
+
+@app.route('/api/messages/revoke', methods=['POST'])
+def api_messages_revoke():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json() or {}
+
+        adapter = str(data.get("adapter", "") or "").strip()
+        scene = str(data.get("scene", "") or "").strip()
+        message_id = str(data.get("message_id", "") or "").strip()
+        group_id = str(data.get("group_id", "") or "").strip()
+        user_id = str(data.get("user_id", "") or "").strip()
+        row_id = str(data.get("row_id", "") or "").strip()
+
+        if not adapter:
+            return jsonify({"success": False, "error": "缺少 adapter"})
+        if not scene:
+            return jsonify({"success": False, "error": "缺少 scene"})
+        if not message_id:
+            return jsonify({"success": False, "error": "缺少 message_id"})
+
+        bot = get_bot_by_adapter(adapter)
+        if not bot:
+            return jsonify({"success": False, "error": f"未找到在线 {adapter} Bot"})
+
+        run_async(
+            delete_message_compat(
+                bot,
+                scene=scene,
+                message_id=message_id,
+                group_id=group_id,
+                user_id=user_id,
+            )
+        )
+
+        # 撤回成功后，更新 message.db 展示内容
+        try:
+            conn = get_message_db_connection()
+            cur = conn.cursor()
+
+            if row_id:
+                cur.execute(
+                    """
+                    UPDATE messages
+                    SET content = ?
+                    WHERE id = ?
+                    """,
+                    ("[该消息已撤回]", row_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE messages
+                    SET content = ?
+                    WHERE adapter = ?
+                      AND scene = ?
+                      AND message_id = ?
+                    """,
+                    ("[该消息已撤回]", adapter, scene, message_id),
+                )
+
+            conn.commit()
+        except Exception as e:
+            logger.warning(f"更新撤回消息记录失败: {e}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        return jsonify({
+            "success": True,
+            "message": "撤回成功"
+        })
+
+    except Exception as e:
+        logger.error(f"Web 撤回消息失败: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"撤回失败: {e}"
         })
 
 @app.route('/api/messages/bots')
