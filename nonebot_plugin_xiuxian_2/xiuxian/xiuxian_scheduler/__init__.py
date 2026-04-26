@@ -21,7 +21,7 @@ from ..xiuxian_rift import scheduled_rift_generation
 from ..xiuxian_sect import resetusertask, auto_handle_inactive_sect_owners
 from ..xiuxian_tower import reset_tower_floors
 from ..xiuxian_work import resetrefreshnum
-from ..xiuxian_compensation import auto_clean_expired_items
+from ..xiuxian_compensation.common import clean_all_expired
 
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -276,7 +276,7 @@ async def daily_reset_impart_pk():
 )
 async def daily_clean_expired_items():
     """清理过期礼包/补偿/兑换码"""
-    await _run_job("清理过期礼包/补偿/兑换码", auto_clean_expired_items)
+    await _run_job("清理过期礼包/补偿/兑换码", clean_all_expired)
 
 
 # =========================
