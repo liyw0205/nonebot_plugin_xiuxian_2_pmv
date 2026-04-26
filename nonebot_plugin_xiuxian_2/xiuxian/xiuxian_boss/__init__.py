@@ -256,15 +256,17 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    global group_boss 
+
+    global group_boss
     group_boss = old_boss_info.read_boss_info()
+
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await battle.finish()
 
     user_id = user_info['user_id']
-    
+
     # 检查每日讨伐次数限制
     today_battle_count = boss_limit.get_battle_count(user_id)
     battle_count = 30
@@ -272,229 +274,427 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         msg = f"今日讨伐次数已达上限（{battle_count}次），请明日再来！"
         await handle_send(bot, event, msg)
         await battle.finish()
-    
-    is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
+
+    is_type, msg = check_user_type(user_id, 0)
     if not is_type:
-        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="世界BOSS帮助", v3="世界BOSS帮助")
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="0",
+            k2="修仙帮助",
+            v2="修仙帮助",
+            k3="世界BOSS帮助",
+            v3="世界BOSS帮助"
+        )
         await battle.finish()
-    
-    sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
+
+    sql_message.update_last_check_info_time(user_id)
+
     msg = args.extract_plain_text().strip()
     group_id = "000000"
-    boss_num = re.findall(r"\d+", msg)  # boss编号
-    
+    boss_num = re.findall(r"\d+", msg)
+
     if boss_num:
         boss_num = int(boss_num[0])
     else:
-        msg = f"请输入正确的世界Boss编号!"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="状态", v3="我的状态")
+        msg = "请输入正确的世界Boss编号!"
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="再次",
+            v1="讨伐世界BOSS",
+            k2="查询",
+            v2="查询世界BOSS",
+            k3="状态",
+            v3="我的状态"
+        )
         await battle.finish()
-    
-    bosss = None
+
     try:
         bosss = group_boss.get(group_id, [])
-    except:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        sql_message.update_user_stamina(user_id, 20, 1)
+    except Exception:
+        msg = "尚未生成世界Boss,请等待世界boss刷新!"
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(bot, event, msg)
         await battle.finish()
 
     if not bosss:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        sql_message.update_user_stamina(user_id, 20, 1)
+        msg = "尚未生成世界Boss,请等待世界boss刷新!"
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(bot, event, msg)
         await battle.finish()
 
     index = len(group_boss[group_id])
     if not (0 < boss_num <= index):
-        msg = f"请输入正确的世界Boss编号!"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="状态", v3="我的状态")
+        msg = "请输入正确的世界Boss编号!"
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="再次",
+            v1="讨伐世界BOSS",
+            k2="查询",
+            v2="查询世界BOSS",
+            k3="状态",
+            v3="我的状态"
+        )
         await battle.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
         sql_message.update_user_hp(user_id)
+        user_info = sql_message.get_user_info_with_id(user_id)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
-        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
-        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
+        msg = (
+            f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
+            f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        )
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="闭关",
+            v1="闭关",
+            k2="丹药",
+            v2="丹药背包",
+            k3="状态",
+            v3="我的状态"
+        )
         await battle.finish()
-    
+
     user1_sub_buff_data = UserBuffDate(user_info['user_id']).get_user_sub_buff_data()
     exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
+
     bossinfo = group_boss[group_id][boss_num - 1]
+
     if bossinfo['jj'] == '零':
-        boss_rank = convert_rank((bossinfo['jj']))[0]
+        boss_rank = convert_rank(bossinfo['jj'])[0]
     else:
-        boss_rank = convert_rank((bossinfo['jj'] + '中期'))[0]
+        boss_rank = convert_rank(bossinfo['jj'] + '中期')[0]
+
     user_rank = convert_rank(user_info['level'])[0]
     rank_name_list = convert_rank(user_info["level"])[1]
+
     if boss_rank - user_rank >= 5:
         msg = f"道友已是{user_info['level']}之人，妄图抢小辈的Boss，可耻！"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="讨伐", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="讨伐",
+            v1="讨伐世界BOSS",
+            k2="查询",
+            v2="查询世界BOSS",
+            k3="列表",
+            v3="世界BOSS列表"
+        )
         await battle.finish()
+
     if user_rank - boss_rank >= 7:
         required_rank_name = rank_name_list[len(rank_name_list) - (boss_rank + 4)]
-        msg = f"道友，您的实力尚需提升至{required_rank_name}，目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="讨伐", v1="讨伐世界BOSS", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
+        msg = (
+            f"道友，您的实力尚需提升至{required_rank_name}，"
+            f"目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
+        )
+        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="讨伐",
+            v1="讨伐世界BOSS",
+            k2="查询",
+            v2="查询世界BOSS",
+            k3="列表",
+            v3="世界BOSS列表"
+        )
         await battle.finish()
-    
-    more_msg = ''
+
     battle_flag[group_id] = True
-    boss_all_hp = bossinfo['总血量']
-    boss_old_hp = bossinfo['气血']
-    boss_max_stone = bossinfo['max_stone']  # 使用最大灵石计算奖励
-    
-    # 执行战斗并获取结果
-    result, victor, bossinfo_new = await Boss_fight(user_id, bossinfo, bot_id=bot.self_id)
-    
-    # 计算实际造成的伤害（不超过BOSS最大生命值的20%）
-    max_single_damage = boss_all_hp * 0.2  # 单次最大伤害限制
-    total_damage = boss_old_hp - bossinfo_new['气血']
-    actual_damage = min(boss_old_hp - bossinfo_new['气血'], max_single_damage)
-    
-    # 更新BOSS血量
+
+    boss_all_hp = int(bossinfo['总血量'])
+    boss_old_hp = int(bossinfo['气血'])
+    boss_max_stone = int(bossinfo.get('max_stone', bossinfo.get('stone', 0)))
+
+    # =========================
+    # 执行战斗
+    # =========================
+    result, victor, bossinfo_new, status_list = await Boss_fight(
+        user_id,
+        bossinfo,
+        bot_id=bot.self_id,
+        return_status=True
+    )
+
+    # =========================
+    # 使用战斗系统返回的 total_dmg 作为真实伤害
+    # 不再通过 boss_old_hp - bossinfo_new['气血'] 反推
+    # =========================
+    total_damage = 0
+    for item in status_list:
+        for _, stats in item.items():
+            if stats.get("team_id") == 0 and str(stats.get("user_id")) == str(user_id):
+                total_damage += max(0, int(stats.get("total_dmg", 0)))
+
+    # 单次最多削减世界BOSS最大血量20%
+    max_single_damage = int(boss_all_hp * 0.2)
+    actual_damage = min(total_damage, max_single_damage, boss_old_hp)
+
+    # 更新世界BOSS真实剩余血量
     boss_now_hp = max(boss_old_hp - actual_damage, 0)
     bossinfo_new['气血'] = boss_now_hp
-    
-    # 获取今日已获得的积分和灵石
+
+    # 奖励按实际扣除血量计算
+    damage_ratio = actual_damage / boss_all_hp if boss_all_hp > 0 else 0
+
     today_integral = int(boss_limit.get_integral(user_id))
     today_stone = int(boss_limit.get_stone(user_id))
-    
-    # 设置每日上限
+
     integral_limit = 12000
     stone_limit = 300000000
-    
-    # 初始化奖励变量
+
     boss_integral = 0
     get_stone = 0
-    
+    more_msg = ""
+
+    # =========================
+    # 境界压制衰减
+    # =========================
     rank_penalty = 1.0
-    
-    # 检查境界压制（用户境界高于BOSS）
+
     if user_rank < boss_rank:
-        # 境界差越大，衰减越严重
         rank_diff = boss_rank - user_rank
         if rank_diff == 1:
-            rank_penalty = 0.95  # 高1个小境界，衰减5%
+            rank_penalty = 0.95
         elif rank_diff == 2:
-            rank_penalty = 0.9  # 高2个小境界，衰减10%
+            rank_penalty = 0.9
         elif rank_diff == 3:
-            rank_penalty = 0.8  # 高3个小境界，衰减20%
+            rank_penalty = 0.8
         elif rank_diff == 4:
-            rank_penalty = 0.7  # 高4个小境界，衰减30%
-        else:  # rank_diff >= 4
-            rank_penalty = 0.5  # 高4个及以上小境界，衰减50%
-    
-    damage_ratio = min(total_damage / boss_all_hp, 0.20)
-    
-    # 境界加成（只有在没有境界压制时才应用）
-    if rank_penalty == 1.0:
-        boss_integral = int(boss_integral * (1 + (0.3 * (user_rank - boss_rank))))
-        points_bonus = int(30 * (user_rank - boss_rank))
-        more_msg = f"道友低boss境界{user_rank - boss_rank}层，获得{points_bonus}%积分加成！"
-    
-    # 应用灵石加成
-    stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
-    get_stone = int(get_stone * (1 + stone_buff))
+            rank_penalty = 0.7
+        else:
+            rank_penalty = 0.5
 
-    # 应用积分加成
-    integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
-    boss_integral = int(boss_integral * (1 + integral_buff))
-
-    # 计算积分奖励
+    # =========================
+    # 积分奖励
+    # =========================
     if today_integral >= integral_limit:
         boss_integral = 0
         integral_msg = "今日积分已达上限，无法获得更多积分！"
     else:
         boss_integral = max(int(damage_ratio * 3000), 1)
-        # 应用境界压制衰减
         boss_integral = int(boss_integral * rank_penalty)
+
+        if rank_penalty == 1.0 and user_rank > boss_rank:
+            rank_bonus = max(user_rank - boss_rank, 0)
+            bonus_rate = 1 + (0.3 * rank_bonus)
+            boss_integral = int(boss_integral * bonus_rate)
+            points_bonus = int(30 * rank_bonus)
+            if points_bonus > 0:
+                more_msg = f"道友低boss境界{rank_bonus}层，获得{points_bonus}%积分加成！"
+
+        integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
+        boss_integral = int(boss_integral * (1 + integral_buff))
+
         boss_integral = min(boss_integral, integral_limit - today_integral)
         if boss_integral <= 0:
             boss_integral = 1
+
         integral_msg = f"获得世界积分：{boss_integral}点"
 
-    # 计算灵石奖励
+    # =========================
+    # 灵石奖励
+    # =========================
     if today_stone >= stone_limit:
         get_stone = 0
         stone_msg = "今日灵石已达上限，无法获得更多灵石！"
     else:
         get_stone = int(boss_max_stone * damage_ratio)
-        # 应用境界压制衰减
         get_stone = int(get_stone * rank_penalty)
-        get_stone = min(get_stone, stone_limit - today_stone)        
+
+        stone_buff = user1_sub_buff_data['stone'] if user1_sub_buff_data is not None else 0
+        get_stone = int(get_stone * (1 + stone_buff))
+
+        get_stone = min(get_stone, stone_limit - today_stone)
         if get_stone <= 0:
             get_stone = 1
-        stone_msg = f"获得灵石{number_to(get_stone)}枚"        
 
+        stone_msg = f"获得灵石{number_to(get_stone)}枚"
+
+    # =========================
     # 修为奖励
+    # =========================
     exp_msg = ""
     if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
-        now_exp = int((user_info['exp']) * exp_buff / 10000 * min(0.1 * max(user_rank // 3, 1), 1))
-        sql_message.update_exp(user_id, now_exp)
-        exp_msg = f"，获得修为{number_to(now_exp)}点！"
-    
-    # 掉落物品
+        now_exp = int(
+            user_info['exp']
+            * exp_buff
+            / 10000
+            * min(0.1 * max(user_rank // 3, 1), 1)
+        )
+        if now_exp > 0:
+            sql_message.update_exp(user_id, now_exp)
+            exp_msg = f"，获得修为{number_to(now_exp)}点！"
+
+    # =========================
+    # 掉落
+    # =========================
     drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
-    drops_msg = ""
-    
-    # 更新数据
-    sql_message.update_ls(user_id, get_stone, 1)
-    boss_limit.update_stone(user_id, get_stone)
-    
-    user_boss_fight_info = get_user_boss_fight_info(user_id)
-    user_boss_fight_info['boss_integral'] += boss_integral
-    boss_limit.update_integral(user_id, boss_integral)
-    save_user_boss_fight_info(user_id, user_boss_fight_info)
-    
-    if victor == "群友赢了":
-        msg = f"恭喜道友击败{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
-        if boss_now_hp >= 0:
-            # 移除并生成新BOSS
+
+    # =========================
+    # 发放奖励
+    # =========================
+    if get_stone > 0:
+        sql_message.update_ls(user_id, get_stone, 1)
+        boss_limit.update_stone(user_id, get_stone)
+
+    if boss_integral > 0:
+        user_boss_fight_info = get_user_boss_fight_info(user_id)
+        user_boss_fight_info['boss_integral'] += boss_integral
+        boss_limit.update_integral(user_id, boss_integral)
+        save_user_boss_fight_info(user_id, user_boss_fight_info)
+
+    # =========================
+    # 判断BOSS是否真正死亡
+    # 这里按实际扣除后的世界BOSS血量判断，不再单纯看 victor
+    # =========================
+    if boss_now_hp <= 0:
+        msg = (
+            f"恭喜道友击败{bossinfo['name']}！\n"
+            f"本次战斗造成伤害：{number_to(total_damage)}\n"
+            f"实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+            f"{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
+        )
+
+        # 移除旧BOSS并生成同境界新BOSS
+        try:
             group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
-            new_boss = createboss_jj(bossinfo['jj'])
-        if new_boss:  
+        except Exception:
+            pass
+
+        new_boss = createboss_jj(bossinfo['jj'])
+        if new_boss:
             group_boss[group_id].insert(boss_num - 1, new_boss)
-        if drops_id and boss_rank < convert_rank('遁一境中期')[0]:           
+
+        if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]:
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
+
             if drops_info['type'] in ["特殊道具", "神物"]:
-                sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1, 1)            
+                sql_message.send_back(
+                    user_info['user_id'],
+                    drops_info['id'],
+                    drops_info['name'],
+                    drops_info['type'],
+                    1,
+                    1
+                )
             else:
-                sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
+                sql_message.send_back(
+                    user_info['user_id'],
+                    drops_info['id'],
+                    drops_info['name'],
+                    drops_info['type'],
+                    1
+                )
+
     else:
-        msg = f"道友不敌{bossinfo['name']}，共造成 {number_to(total_damage)} 伤害，重伤逃遁，临逃前{stone_msg}，{more_msg}{integral_msg}"
-        # 更新BOSS状态（不扣除灵石）
+        if victor == "群友赢了":
+            msg = (
+                f"道友战胜了{bossinfo['name']}的化身，但世界BOSS气机未绝！\n"
+                f"本次战斗造成伤害：{number_to(total_damage)}\n"
+                f"受天道限制，实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+                f"Boss剩余血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}\n"
+                f"{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
+            )
+        else:
+            msg = (
+                f"道友不敌{bossinfo['name']}，重伤逃遁。\n"
+                f"本次战斗造成伤害：{number_to(total_damage)}\n"
+                f"实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+                f"Boss剩余血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}\n"
+                f"临逃前{stone_msg}，{more_msg}{integral_msg}"
+            )
+
+        # 未击杀，保存扣血后的BOSS状态
         group_boss[group_id][boss_num - 1] = bossinfo_new
+
         roll = random.randint(1, 100)
-        if drops_id and boss_rank < convert_rank('遁一境中期')[0] and roll > 50:           
+        if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0] and roll > 50:
             drops_msg = f"路上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
+
             if drops_info['type'] in ["特殊道具", "神物"]:
-                sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1, 1)            
+                sql_message.send_back(
+                    user_info['user_id'],
+                    drops_info['id'],
+                    drops_info['name'],
+                    drops_info['type'],
+                    1,
+                    1
+                )
             else:
-                sql_message.send_back(user_info['user_id'], drops_info['id'], drops_info['name'], drops_info['type'], 1)
-    
+                sql_message.send_back(
+                    user_info['user_id'],
+                    drops_info['id'],
+                    drops_info['name'],
+                    drops_info['type'],
+                    1
+                )
+
     if user_info['root'] == "凡人" and boss_integral < 0:
-        msg += f"\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
-    
+        msg += "\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
+
     old_boss_info.save_boss(group_boss)
     battle_flag[group_id] = False
-    # 更新讨伐次数
+
     boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
-    await send_msg_handler(bot, event, result)
-    if drops_id:
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1=f"讨伐世界BOSS{boss_num}", k2="查询", v2=f"查询世界BOSS{boss_num}", k3="物品", v3=f"查看效果 {drops_info['name']}")
+
+    try:
+        await send_msg_handler(bot, event, result)
+    except Exception:
+        msg += "\n对战消息发送错误，可能被风控！"
+
+    if drops_id and drops_info:
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="再次",
+            v1=f"讨伐世界BOSS{boss_num}",
+            k2="查询",
+            v2=f"查询世界BOSS{boss_num}",
+            k3="物品",
+            v3=f"查看效果 {drops_info['name']}"
+        )
     else:
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1=f"讨伐世界BOSS{boss_num}", k2="查询", v2=f"查询世界BOSS{boss_num}", k3="状态", v3="我的状态")
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="世界BOSS",
+            k1="再次",
+            v1=f"讨伐世界BOSS{boss_num}",
+            k2="查询",
+            v2=f"查询世界BOSS{boss_num}",
+            k3="状态",
+            v3="我的状态"
+        )
+
     log_message(user_id, msg)
     await battle.finish()
 

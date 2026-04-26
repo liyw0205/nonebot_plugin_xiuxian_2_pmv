@@ -111,7 +111,7 @@ def Player_fight(user1, user2, type_in=1, bot_id=0):
     return play_list, suc
 
 
-async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
+async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0, return_status=False):
     player1_data = get_players_attributes(user1)
     boss_data = get_boss_attributes(boss, bot_id)
 
@@ -135,6 +135,9 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0):
 
     if type_in == 2:
         update_all_user_status(status_list, bot_id)
+
+    if return_status:
+        return play_list, suc, boss, status_list
 
     return play_list, suc, boss
 
