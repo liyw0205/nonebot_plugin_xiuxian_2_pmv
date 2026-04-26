@@ -8,10 +8,10 @@ import random
 import requests
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Tuple
 from nonebot.compat import model_dump
-import sqlite3
-import uuid
+from urllib.parse import quote, unquote
+from html import unescape
 from datetime import datetime, timedelta
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
@@ -41,6 +41,7 @@ from ..broadcast_manager import (
     start_broadcast,
     format_broadcast_status,
     cancel_broadcast,
+    clear_broadcast,
 )
 
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -98,8 +99,29 @@ group_broadcast_cmd = on_command("群聊广播", permission=SUPERUSER, priority=
 private_broadcast_cmd = on_command("私聊广播", permission=SUPERUSER, priority=5, block=True)
 global_broadcast_cmd = on_command("全局广播", permission=SUPERUSER, priority=5, block=True)
 
-view_broadcast_cmd = on_command("查看广播", aliases={"广播列表"}, permission=SUPERUSER, priority=5, block=True)
-cancel_broadcast_cmd = on_command("取消广播", permission=SUPERUSER, priority=5, block=True)
+view_broadcast_cmd = on_command(
+    "查看广播",
+    aliases={"广播列表"},
+    permission=SUPERUSER,
+    priority=5,
+    block=True
+)
+
+cancel_broadcast_cmd = on_command(
+    "取消广播",
+    permission=SUPERUSER,
+    priority=5,
+    block=True
+)
+
+clear_broadcast_cmd = on_command(
+    "清空广播",
+    aliases={"清除广播"},
+    permission=SUPERUSER,
+    priority=5,
+    block=True
+)
+
 broadcast_help_cmd = on_command(
     "广播帮助",
     aliases={"广播说明", "广播指令"},
@@ -1373,41 +1395,114 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 reason = f"\n{reason}\n错误码：{m_code.group(1)}"
         await handle_send(bot, event, f"Markdown模板发送失败：{reason}")
 
+def fix_mqqapi_inlinecmd_links(text: str) -> str:
+    """
+    修复 QQ Markdown 中的 mqqapi://aio/inlinecmd 链接。
+
+    修复内容：
+    1. mqqapi:/aio、mqqapi:///aio 统一为 mqqapi://aio
+    2. &amp; 还原为 &
+    3. command 参数避免重复编码
+    4. 去除重复 enter/reply 参数
+    5. 缺少 enter/reply 时自动补齐
+    """
+    if not text:
+        return text
+
+    # 统一 mqqapi 斜杠格式
+    text = re.sub(
+        r"mqqapi:/+aio/inlinecmd",
+        "mqqapi://aio/inlinecmd",
+        text
+    )
+
+    def repl(match):
+        raw_url = match.group(0)
+
+        # 关键：把 &amp; 还原成 &
+        raw_url = unescape(raw_url)
+
+        prefix = "mqqapi://aio/inlinecmd?"
+        if not raw_url.startswith(prefix):
+            return raw_url
+
+        query = raw_url[len(prefix):]
+
+        params = {}
+        for part in query.split("&"):
+            if not part:
+                continue
+
+            if "=" in part:
+                k, v = part.split("=", 1)
+            else:
+                k, v = part, ""
+
+            k = k.strip()
+            v = v.strip()
+
+            if not k:
+                continue
+
+            # 后出现的同名参数覆盖前面的，避免重复
+            params[k] = v
+
+        command = params.get("command", "")
+
+        if command:
+            # 先 unquote，再 quote，避免二次编码
+            command = unquote(command).strip()
+
+            # 如果你的命令中不需要空格，可以取消下一行注释
+            # command = command.replace(" ", "")
+
+            params["command"] = quote(command, safe="")
+
+        # 补默认参数，但不重复添加
+        params.setdefault("enter", "false")
+        params.setdefault("reply", "false")
+
+        # 建议固定输出顺序
+        ordered_keys = ["command", "enter", "reply"]
+        parts = []
+
+        for k in ordered_keys:
+            if k in params:
+                parts.append(f"{k}={params[k]}")
+
+        for k, v in params.items():
+            if k not in ordered_keys:
+                parts.append(f"{k}={v}")
+
+        return prefix + "&".join(parts)
+
+    return re.sub(
+        r"mqqapi://aio/inlinecmd\?[^)\r\n]+",
+        repl,
+        text
+    )
+
 @dm_command.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """
-    发送原生Markdown内容
-    用法：
-    dm # 你好
-    dm ## 标题\n- 列表1\n- 列表2
-    dm ![img](/root/xiu3/data/xiuxian/卡图/白玫瑰.webp)
-    """
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    # 关键：不要用 extract_plain_text()，否则 markdown 结构可能丢失
     text = str(args).strip()
+    logger.info(f"收到 {text}")
+
     if not text:
         await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
         return
 
-    # 兼容用户输入的转义字符，转换为QQ markdown常用格式
-    text = re.sub(r'mqqapi:/aio', 'mqqapi://aio', text)
-    text = (
-        text
-        .replace("\\r", "\r")
-        .replace('\\"', '"')
-        .replace(':/', '://')
-        .replace(':///', '://')
-        .replace("\\n", "\r")
-        .replace("\n", "\r")
-    )
+    # 只修 mqqapi inlinecmd，别再全局 replace(':/', '://')
+    text = fix_mqqapi_inlinecmd_links(text)
 
-    # 可选：调试日志，确认本地图片语法是否还在
-    logger.info(f"[dm] markdown raw text => {text}")
+    logger.info(f"处理 {text}")
 
     try:
         msg = MessageSegment.markdown(bot, text)
+        logger.info(f"转换 {msg}")
         await bot.send(event, msg)
+
     except Exception as e:
         err = str(e)
         logger.error(f"dm发送markdown失败: {err}")
@@ -1421,8 +1516,9 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             reason = m_msg.group(1).strip()
             if m_code:
                 reason = f"\n{reason}\n错误码：{m_code.group(1)}"
-        await handle_send(bot, event, f"Markdown发送失败：{reason}")
 
+        await handle_send(bot, event, f"Markdown发送失败：{reason}")
+        
 @impersonate_user_command.handle(parameterless=[Cooldown(cd_time=0.1)])
 async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
@@ -1644,8 +1740,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
         # 1.2 无模板ID -> 走原生MD
         elif not is_channel_event(event):
             try:
-                md_msg = " "
-                #await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+                md_msg = (
+                    f"## 提示\r"
+                    f"![img #1280px #720px]({image_url})\r"
+                    f"{text_msg}"
+                )
+                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
                 return
             except Exception as e:
                 logger.warning(f"默认回复原生Markdown发送失败，准备降级: {e}")
@@ -1664,12 +1764,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
         logger.warning(f"默认回复纯文字发送失败: {e}")
 
     await matcher.finish()
-
-from typing import Any, Dict, Tuple
-
-
-from typing import Any, Dict, Tuple
-
 
 @parse_event_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def parse_event_cmd_(
@@ -2083,6 +2177,97 @@ async def _send_event_info_by_config(
         await handle_send(bot, event, plain)
 
 
+def parse_broadcast_duration_and_content(raw: str) -> tuple[int, str]:
+    """
+    解析广播时间和内容。
+
+    支持格式：
+    - 群聊广播 1天 广播测试
+    - 群聊广播 1小时 广播测试
+    - 群聊广播 1分钟 广播测试
+    - 群聊广播 1天1小时10分钟 广播测试
+    - 群聊广播 广播测试
+
+    规则：
+    - 只解析开头第一个连续时间参数。
+    - 时间格式固定为：x天/x小时/x分钟。
+    - 可以顺序组合：1天10分钟、1天1小时10分钟。
+    - 没有时间参数默认 1 天，也就是 1440 分钟。
+    - 后面的广播内容允许有空格。
+    """
+    raw = str(raw or "").strip()
+
+    if not raw:
+        return 1440, ""
+
+    # 固定只匹配开头的连续时间表达式。
+    # 顺序固定：天 -> 小时 -> 分钟。
+    # 示例可匹配：
+    # 1天
+    # 1小时
+    # 1分钟
+    # 1天10分钟
+    # 1天1小时10分钟
+    pattern = r"^(?:(\d+)天)?(?:(\d+)小时)?(?:(\d+)分钟)?(?=\s|$)"
+
+    match = re.match(pattern, raw)
+
+    if not match:
+        return 1440, raw
+
+    day_str, hour_str, minute_str = match.groups()
+
+    # 三个都没有，说明开头不是时间参数
+    if not day_str and not hour_str and not minute_str:
+        return 1440, raw
+
+    days = int(day_str or 0)
+    hours = int(hour_str or 0)
+    minutes = int(minute_str or 0)
+
+    total_minutes = days * 1440 + hours * 60 + minutes
+
+    if total_minutes <= 0:
+        total_minutes = 1440
+
+    content = raw[match.end():].strip()
+
+    return total_minutes, content
+
+
+def parse_clear_broadcast_kind(raw: str) -> str | None:
+    """
+    解析清空广播类型。
+
+    支持：
+    - 清空广播
+    - 清空广播 全部
+    - 清空广播 all
+    - 清空广播 群聊
+    - 清空广播 私聊
+    - 清空广播 全局
+    """
+    raw = str(raw or "").strip().lower()
+
+    if raw in ("", "全部", "所有", "all"):
+        return None
+
+    kind_map = {
+        "群聊": "group",
+        "群": "group",
+        "group": "group",
+
+        "私聊": "private",
+        "私": "private",
+        "private": "private",
+
+        "全局": "global",
+        "global": "global",
+    }
+
+    return kind_map.get(raw, raw)
+
+
 @group_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def group_broadcast_cmd_(
     bot: Bot,
@@ -2091,12 +2276,29 @@ async def group_broadcast_cmd_(
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    content = str(args).strip()
+    raw = str(args).strip()
+    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+
     if not content:
-        await handle_send(bot, event, "用法：群聊广播 广播内容")
+        await handle_send(
+            bot,
+            event,
+            "用法：群聊广播 [时间] 广播内容\n"
+            "示例：\n"
+            "群聊广播 广播测试\n"
+            "群聊广播 1天 广播测试\n"
+            "群聊广播 1小时 广播测试\n"
+            "群聊广播 1分钟 广播测试\n"
+            "群聊广播 1天1小时10分钟 广播测试"
+        )
         return
 
-    msg = await start_broadcast(bot, "group", content)
+    msg = await start_broadcast(
+        bot,
+        "group",
+        fix_mqqapi_inlinecmd_links(content),
+        duration_minutes=duration_minutes,
+    )
     await handle_send(bot, event, msg)
 
 
@@ -2108,12 +2310,29 @@ async def private_broadcast_cmd_(
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    content = str(args).strip()
+    raw = str(args).strip()
+    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+
     if not content:
-        await handle_send(bot, event, "用法：私聊广播 广播内容")
+        await handle_send(
+            bot,
+            event,
+            "用法：私聊广播 [时间] 广播内容\n"
+            "示例：\n"
+            "私聊广播 广播测试\n"
+            "私聊广播 1天 广播测试\n"
+            "私聊广播 1小时 广播测试\n"
+            "私聊广播 1分钟 广播测试\n"
+            "私聊广播 1天1小时10分钟 广播测试"
+        )
         return
 
-    msg = await start_broadcast(bot, "private", content)
+    msg = await start_broadcast(
+        bot,
+        "private",
+        fix_mqqapi_inlinecmd_links(content),
+        duration_minutes=duration_minutes,
+    )
     await handle_send(bot, event, msg)
 
 
@@ -2125,12 +2344,29 @@ async def global_broadcast_cmd_(
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    content = str(args).strip()
+    raw = str(args).strip()
+    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+
     if not content:
-        await handle_send(bot, event, "用法：全局广播 广播内容")
+        await handle_send(
+            bot,
+            event,
+            "用法：全局广播 [时间] 广播内容\n"
+            "示例：\n"
+            "全局广播 广播测试\n"
+            "全局广播 1天 广播测试\n"
+            "全局广播 1小时 广播测试\n"
+            "全局广播 1分钟 广播测试\n"
+            "全局广播 1天1小时10分钟 广播测试"
+        )
         return
 
-    msg = await start_broadcast(bot, "global", content)
+    msg = await start_broadcast(
+        bot,
+        "global",
+        fix_mqqapi_inlinecmd_links(content),
+        duration_minutes=duration_minutes,
+    )
     await handle_send(bot, event, msg)
 
 
@@ -2154,6 +2390,21 @@ async def cancel_broadcast_cmd_(
     bid = args.extract_plain_text().strip()
     await handle_send(bot, event, cancel_broadcast(bid))
 
+
+@clear_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def clear_broadcast_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    raw = args.extract_plain_text().strip()
+    kind = parse_clear_broadcast_kind(raw)
+
+    await handle_send(bot, event, clear_broadcast(kind))
+
+
 @broadcast_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def broadcast_help_cmd_(
     bot: Bot,
@@ -2168,42 +2419,79 @@ async def broadcast_help_cmd_(
 
 1. 群聊广播
 指令：
-群聊广播 广播内容
+群聊广播 [时间] 广播内容
 
 说明：
 只向群聊/频道群聊发送广播。
 每个群只发送一次。
+到期后不再继续补发。
 
 示例：
 群聊广播 服务器将在今晚 23:00 维护，请提前下线。
+群聊广播 1天 服务器将在今晚 23:00 维护，请提前下线。
+群聊广播 1小时 临时通知：活动即将开启。
+群聊广播 1分钟 测试广播。
+群聊广播 1天1小时10分钟 长时间广播测试。
 
 
 2. 私聊广播
 指令：
-私聊广播 广播内容
+私聊广播 [时间] 广播内容
 
 说明：
 只向私聊/频道私信用户发送广播。
 每个用户只发送一次。
+到期后不再继续补发。
 
 示例：
 私聊广播 今日活动已开启，记得上线领取奖励。
+私聊广播 1小时 今日活动已开启，记得上线领取奖励。
 
 
 3. 全局广播
 指令：
-全局广播 广播内容
+全局广播 [时间] 广播内容
 
 说明：
 同时面向群聊和私聊广播。
 每个群/每个用户只发送一次。
+到期后不再继续补发。
 
 示例：
 全局广播 # 系统通知
 今日更新已完成，祝各位道友修仙愉快。
 
+全局广播 1天 # 系统通知
+今日更新已完成，祝各位道友修仙愉快。
 
-二、查看广播
+
+二、广播时间格式
+
+时间格式：
+x天/x小时/x分钟
+
+可以顺序组合：
+1天
+1小时
+1分钟
+1天10分钟
+1天1小时10分钟
+
+没有时间参数时：
+默认 1 天，也就是 1440 分钟。
+
+注意：
+时间参数只会解析广播内容最开头的连续时间格式。
+例如：
+群聊广播 1天 广播测试内容
+会解析为有效期 1 天，内容为“广播测试内容”。
+
+如果开头不是时间格式：
+群聊广播 广播测试 1天
+则不会解析时间，默认有效期 1 天，整段都是广播内容。
+
+
+三、查看广播
 
 指令：
 查看广播
@@ -2218,13 +2506,16 @@ async def broadcast_help_cmd_(
 - 广播类型
 - 适配器
 - 是否 Markdown
+- 有效时长
+- 过期时间
+- 剩余时间
 - 已发群数量
 - 已发用户数量
 - 错误数量
 - 内容预览
 
 
-三、取消广播
+四、取消广播
 
 指令：
 取消广播 广播ID
@@ -2237,15 +2528,31 @@ async def broadcast_help_cmd_(
 已发送过的群/用户不会撤回。
 
 
-四、广播ID
+五、清空广播
 
-每次创建广播时会自动生成广播ID，例如：
-BC12AB34CD
+指令：
+清空广播 [类型]
 
-请保存该ID，用于后续查看或取消广播。
+支持类型：
+- 群聊
+- 私聊
+- 全局
+- 全部
+- all
+
+示例：
+清空广播 群聊
+清空广播 私聊
+清空广播 全局
+清空广播 全部
+清空广播 all
+清空广播
+
+说明：
+不填写类型时，默认清空全部广播任务。
 
 
-五、发送机制说明
+六、发送机制说明
 
 【QQ适配器】
 QQ官方适配器无法完全主动发送广播。
@@ -2253,6 +2560,7 @@ QQ官方适配器无法完全主动发送广播。
 - 只会向最近1分钟内有消息的群/用户发送。
 - 后续如果某个未发送过的群/用户再次发消息，会自动补发。
 - 每个群/每个用户只发一次。
+- 广播过期后不再补发。
 
 【OneBot V11适配器】
 OB11支持主动发送。
@@ -2260,9 +2568,10 @@ OB11支持主动发送。
 - 会读取历史消息中出现过的群ID/用户ID并发送。
 - 后续如果出现新群/新用户，会自动补发。
 - 每个群/每个用户只发一次。
+- 广播过期后不再补发。
 
 
-六、Markdown说明
+七、Markdown说明
 
 如果配置中 markdown_status = True：
 - QQ适配器：使用原生Markdown发送。
@@ -2272,7 +2581,7 @@ OB11支持主动发送。
 - 使用普通文本消息发送。
 
 
-七、注意事项
+八、注意事项
 
 1. 广播任务只保存在内存中。
    机器人重启后，广播任务会自动丢失。
@@ -2287,6 +2596,9 @@ OB11支持主动发送。
 
 5. 如果需要停止后续补发，请使用：
    取消广播 广播ID
+
+6. 如果需要直接清空广播任务，请使用：
+   清空广播
 """.strip()
 
     await handle_send(bot, event, msg)

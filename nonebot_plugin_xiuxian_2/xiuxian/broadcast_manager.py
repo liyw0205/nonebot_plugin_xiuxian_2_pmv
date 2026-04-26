@@ -22,6 +22,81 @@ from .adapter_compat import (
 BROADCAST_TASKS: dict[str, dict] = {}
 
 
+def _now() -> datetime:
+    return datetime.now()
+
+
+def _parse_dt(text: str) -> datetime | None:
+    if not text:
+        return None
+
+    try:
+        return datetime.strptime(str(text), "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def _is_task_expired(task: dict) -> bool:
+    expire_at = _parse_dt(str(task.get("expire_at") or ""))
+
+    if not expire_at:
+        return False
+
+    return _now() >= expire_at
+
+
+def _cleanup_expired_tasks():
+    """
+    清理已过期广播任务。
+
+    广播任务只存在内存中，过期后直接移除。
+    """
+    expired_ids = [
+        bid for bid, task in BROADCAST_TASKS.items()
+        if _is_task_expired(task)
+    ]
+
+    for bid in expired_ids:
+        BROADCAST_TASKS.pop(bid, None)
+
+    if expired_ids:
+        logger.info(f"[广播] 已清理过期广播任务: {expired_ids}")
+
+
+def _format_remaining(task: dict) -> str:
+    expire_at = _parse_dt(str(task.get("expire_at") or ""))
+
+    if not expire_at:
+        return "未知"
+
+    delta = expire_at - _now()
+    total_seconds = int(delta.total_seconds())
+
+    if total_seconds <= 0:
+        return "已过期"
+
+    minutes = total_seconds // 60
+    days = minutes // 1440
+    hours = minutes % 1440 // 60
+    mins = minutes % 60
+
+    parts = []
+
+    if days:
+        parts.append(f"{days}天")
+
+    if hours:
+        parts.append(f"{hours}小时")
+
+    if mins:
+        parts.append(f"{mins}分钟")
+
+    if not parts:
+        parts.append("不足1分钟")
+
+    return "".join(parts)
+
+
 def _new_broadcast_id() -> str:
     return "BC" + uuid.uuid4().hex[:8].upper()
 
@@ -273,6 +348,12 @@ async def _send_broadcast_to_target(
     target_id: str,
     source_message_id: str = "",
 ):
+    if task.get("canceled"):
+        return False, "广播已取消"
+
+    if _is_task_expired(task):
+        return False, "广播已过期"
+
     if not target_id:
         return False, "target_id为空"
 
@@ -454,14 +535,27 @@ def _get_ob11_history_targets(adapter: str, kind: str) -> list[dict]:
     return targets
 
 
-async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
+async def start_broadcast(
+    bot: Bot,
+    kind: str,
+    content: str,
+    duration_minutes: int = 1440,
+) -> str:
     """
     创建广播任务并进行首轮发送。
+
     kind:
     - group
     - private
     - global
+
+    duration_minutes:
+    - 广播有效时长，单位分钟。
+    - 默认 1440 分钟，即 1 天。
+    - 到期后不再继续补发，并会被自动清理。
     """
+    _cleanup_expired_tasks()
+
     content = str(content or "").strip()
 
     if not content:
@@ -470,9 +564,19 @@ async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
     if kind not in ("group", "private", "global"):
         return f"广播类型错误：{kind}"
 
+    try:
+        duration_minutes = int(duration_minutes)
+    except Exception:
+        duration_minutes = 1440
+
+    if duration_minutes <= 0:
+        duration_minutes = 1440
+
     adapter = _get_adapter_name(bot)
     bot_id = _get_bot_self_id(bot)
     bid = _new_broadcast_id()
+
+    expire_at_dt = datetime.now() + timedelta(minutes=duration_minutes)
 
     task = {
         "id": bid,
@@ -482,6 +586,8 @@ async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
         "content": content,
         "markdown": bool(XiuConfig().markdown_status),
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "duration_minutes": duration_minutes,
+        "expire_at": expire_at_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "canceled": False,
 
         "sent_groups": set(),
@@ -507,6 +613,9 @@ async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
     success_count = 0
 
     for t in targets:
+        if _is_task_expired(task):
+            break
+
         ok, _ = await _send_broadcast_to_target(
             bot=bot,
             task=task,
@@ -533,6 +642,8 @@ async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
         f"类型：{kind}\n"
         f"适配器：{adapter}\n"
         f"Markdown：{'开启' if task['markdown'] else '关闭'}\n"
+        f"有效时长：{duration_minutes}分钟\n"
+        f"过期时间：{task['expire_at']}\n"
         f"本轮成功发送：{success_count}\n"
         f"已发群：{len(task['sent_groups'])}\n"
         f"已发用户：{len(task['sent_users'])}"
@@ -540,6 +651,8 @@ async def start_broadcast(bot: Bot, kind: str, content: str) -> str:
 
 
 def format_broadcast_status() -> str:
+    _cleanup_expired_tasks()
+
     if not BROADCAST_TASKS:
         return "当前没有广播。"
 
@@ -547,6 +660,9 @@ def format_broadcast_status() -> str:
 
     for bid, task in BROADCAST_TASKS.items():
         state = "已取消" if task.get("canceled") else "进行中"
+
+        if _is_task_expired(task):
+            state = "已过期"
 
         preview = str(task.get("content") or "").replace("\n", " ").replace("\r", " ")
 
@@ -559,6 +675,9 @@ def format_broadcast_status() -> str:
             f"类型：{task.get('kind')}\n"
             f"适配器：{task.get('adapter')}\n"
             f"创建时间：{task.get('created_at')}\n"
+            f"有效时长：{task.get('duration_minutes', '未知')}分钟\n"
+            f"过期时间：{task.get('expire_at', '未知')}\n"
+            f"剩余时间：{_format_remaining(task)}\n"
             f"Markdown：{'开启' if task.get('markdown') else '关闭'}\n"
             f"已发群：{len(task.get('sent_groups', set()))} / 已发现群：{len(task.get('known_groups', set()))}\n"
             f"已发用户：{len(task.get('sent_users', set()))} / 已发现用户：{len(task.get('known_users', set()))}\n"
@@ -570,6 +689,8 @@ def format_broadcast_status() -> str:
 
 
 def cancel_broadcast(bid: str) -> str:
+    _cleanup_expired_tasks()
+
     bid = str(bid or "").strip().upper()
 
     if not bid:
@@ -584,15 +705,64 @@ def cancel_broadcast(bid: str) -> str:
     return f"已取消广播：{bid}"
 
 
+def clear_broadcast(kind: str | None = None) -> str:
+    """
+    清空广播任务。
+
+    kind:
+    - group
+    - private
+    - global
+    - None/all/全部 表示全部
+    """
+    _cleanup_expired_tasks()
+
+    if kind is not None:
+        kind = str(kind or "").strip().lower()
+
+    if kind in ("", "all", "全部", "所有"):
+        kind = None
+
+    if kind is not None and kind not in ("group", "private", "global"):
+        return f"广播类型错误：{kind}"
+
+    if not BROADCAST_TASKS:
+        return "当前没有广播可清空。"
+
+    if kind is None:
+        count = len(BROADCAST_TASKS)
+        BROADCAST_TASKS.clear()
+        return f"已清空全部广播任务，共 {count} 个。"
+
+    to_delete = [
+        bid for bid, task in BROADCAST_TASKS.items()
+        if task.get("kind") == kind
+    ]
+
+    for bid in to_delete:
+        BROADCAST_TASKS.pop(bid, None)
+
+    kind_name = {
+        "group": "群聊",
+        "private": "私聊",
+        "global": "全局",
+    }.get(kind, kind)
+
+    return f"已清空{kind_name}广播任务，共 {len(to_delete)} 个。"
+
+
 async def auto_patch_broadcast_for_event(bot: Bot, event):
     """
     普通消息触发补发。
+
     QQ：
     - 使用当前消息 message_id/id 作为 msg_id 回复式发送。
 
     OB11：
     - 直接主动发送。
     """
+    _cleanup_expired_tasks()
+
     if not BROADCAST_TASKS:
         return
 
@@ -617,6 +787,9 @@ async def auto_patch_broadcast_for_event(bot: Bot, event):
 
     for task in list(BROADCAST_TASKS.values()):
         if task.get("canceled"):
+            continue
+
+        if _is_task_expired(task):
             continue
 
         if task.get("adapter") != adapter:
