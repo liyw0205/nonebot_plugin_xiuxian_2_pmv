@@ -433,37 +433,83 @@ async def my_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """处理更新日志命令"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+
     page_arg = args.extract_plain_text().strip()
     page = 1
-    if page_arg and page_arg.isdigit():
-        page = int(page_arg)
+
+    if page_arg:
+        if page_arg.isdigit():
+            page = int(page_arg)
+        else:
+            await handle_send(bot, event, "页码格式错误，请发送：更新日志 1")
+            await changelog.finish()
 
     if page <= 0:
         page = 1
 
-    msg = "正在获取更新日志，请稍候..."
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, "正在获取更新日志，请稍候...")
+
     try:
         commits = get_commits(page=page)
-        if commits:
-            image_path = create_changelog_image(commits, page)
-            
-            await handle_pic_send(bot, event, image_path)
-            
-            try:
-                if image_path.exists():
-                    image_path.unlink()
-            except Exception as e:
-                logger.error(f"删除更新日志图片失败: {e}")
-            
-        else:
-            msg = "无法获取更新日志，可能已到达最后一页或请求失败。"
-            await handle_send(bot, event, msg)
+
+        if not commits:
+            await handle_send(
+                bot,
+                event,
+                "无法获取更新日志，可能已到达最后一页，或 GitHub 请求失败。"
+            )
             await changelog.finish()
+
+        img_obj = create_changelog_image(commits, page)
+
+        img_buf = None
+        need_delete_path = None
+
+        if isinstance(img_obj, BytesIO):
+            img_obj.seek(0)
+            img_buf = img_obj
+
+        elif isinstance(img_obj, bytes):
+            img_buf = BytesIO(img_obj)
+            img_buf.seek(0)
+
+        elif isinstance(img_obj, Path):
+            need_delete_path = img_obj
+            with open(img_obj, "rb") as f:
+                img_buf = BytesIO(f.read())
+            img_buf.seek(0)
+
+        elif isinstance(img_obj, str):
+            img_path = Path(img_obj)
+            need_delete_path = img_path
+            with open(img_path, "rb") as f:
+                img_buf = BytesIO(f.read())
+            img_buf.seek(0)
+
+        else:
+            await handle_send(
+                bot,
+                event,
+                f"生成更新日志图片失败：不支持的图片类型 {type(img_obj)}"
+            )
+            await changelog.finish()
+
+        await handle_pic_send(bot, event, img_buf)
+
+        # 如果 create_changelog_image 仍然是旧版返回 Path，这里尝试清理缓存文件
+        if need_delete_path:
+            try:
+                if need_delete_path.exists():
+                    need_delete_path.unlink()
+            except Exception as e:
+                logger.warning(f"删除更新日志缓存图片失败: {e}")
+
     except Exception as e:
-        msg = f"生成更新日志图片时出错: {e}"
-        await handle_send(bot, event, msg)
-        await changelog.finish()
+        logger.exception("生成或发送更新日志图片时出错")
+        await handle_send(bot, event, f"生成更新日志图片时出错: {e}")
+
+    await changelog.finish()
 
 def _generate_unique_avatar_id() -> str:
     """生成不与现有修仙用户冲突的化身ID"""
