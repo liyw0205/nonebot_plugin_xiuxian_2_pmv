@@ -3885,9 +3885,8 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
             pass
 
     # 上限裁剪
-    crit_rate = max(0.0, min(1.0, crit_rate))
-    damage_reduction = min(0.95, damage_reduction)
-    crit_resist = max(0.0, min(0.95, crit_resist))
+    crit_rate = max(0.0, crit_rate)
+    crit_resist = max(0.0, crit_resist)
     crit_damage_reduction = max(0.0, crit_damage_reduction)
 
     # 比例缩放（例如PVE多队平衡）

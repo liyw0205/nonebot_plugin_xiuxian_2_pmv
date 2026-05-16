@@ -1046,7 +1046,7 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     if success:
         # 消耗解绑符
-        sql_message.update_back_j(user_id, item_id, num=num) # 消耗用户输入的解绑符数量
+        sql_message.update_back_j(user_id, item_id, num=actual_unbind_quantity) # 消耗用户输入的解绑符数量
         
         msg = f"成功使用解绑符，解除了 {target_item_name} 的 {actual_unbind_quantity} 个绑定状态！"
     else:

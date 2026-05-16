@@ -547,218 +547,391 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await two_exp_invite.finish()
 
 async def check_is_partner(user_id_1, user_id_2):
-    """检查两个用户是否是道侣关系"""
-    # 检查用户1的道侣信息中是否包含用户2
+    """检查两个用户是否互为道侣关系"""
+    user_id_1 = str(user_id_1)
+    user_id_2 = str(user_id_2)
+
     partner_data_1 = load_partner(user_id_1)
-    if partner_data_1 and partner_data_1.get('partner_id') == str(user_id_2):
-        return True
-    
-    # 检查用户2的道侣信息中是否包含用户1
     partner_data_2 = load_partner(user_id_2)
-    if partner_data_2 and partner_data_2.get('partner_id') == str(user_id_1):
-        return True
-    
-    return False
+
+    return (
+        partner_data_1
+        and partner_data_2
+        and str(partner_data_1.get("partner_id")) == user_id_2
+        and str(partner_data_2.get("partner_id")) == user_id_1
+    )
 
 async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partner=False):
     """
-    :param bot: Bot实例
-    :param event: 事件对象
-    :param user_id_1: 玩家1的QQ号
-    :param user_id_2: 玩家2的QQ号
-    :param exp_count: 双修次数，默认为1
+    直接进行双修。
+
+    修复点：
+    1. user_id 全部转 str，避免道侣判断失败。
+    2. 多次双修时，每一次都用临时累计修为重新计算上限。
+    3. 不再按开始时的修为一直算到最后。
+    4. 只有实际双修成功才消耗次数。
+    5. 道侣亲密度只在双方互相绑定时增加。
     """
-    
-    # 检查双方是否达到修为上限
+
+    user_id_1 = str(user_id_1)
+    user_id_2 = str(user_id_2)
+
+    try:
+        exp_count = int(exp_count)
+    except (ValueError, TypeError):
+        exp_count = 1
+    exp_count = max(1, exp_count)
+
     user_1 = sql_message.get_user_info_with_id(user_id_1)
     user_2 = sql_message.get_user_info_with_id(user_id_2)
-    
+
     if not user_1 or not user_2:
         msg = "无法获取玩家信息，无法进行双修。"
-        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+        await handle_send(
+            bot, event, msg,
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为"
+        )
         return
-    
-    level_1 = user_1['level']
-    level_2 = user_2['level']
-    
-    max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
-    max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
-    
-    # 检查次数限制
+
+    # 检查双方双修次数
     limt_1 = two_exp_cd.find_user(user_id_1)
     limt_2 = two_exp_cd.find_user(user_id_2)
-    
+
     impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_id_1)
     impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_id_2)
-    impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 else 0
-    impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 else 0
-    
+
+    impart_two_exp_1 = impart_data_1["impart_two_exp"] if impart_data_1 else 0
+    impart_two_exp_2 = impart_data_2["impart_two_exp"] if impart_data_2 else 0
+
     main_two_data_1 = UserBuffDate(user_id_1).get_user_main_buff_data()
     main_two_data_2 = UserBuffDate(user_id_2).get_user_main_buff_data()
-    main_two_1 = main_two_data_1['two_buff'] if main_two_data_1 else 0
-    main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 else 0
-    
+
+    main_two_1 = main_two_data_1["two_buff"] if main_two_data_1 else 0
+    main_two_2 = main_two_data_2["two_buff"] if main_two_data_2 else 0
+
     max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
     max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
-    
+
     if max_count_1 <= 0:
         msg = "你的双修次数不足，无法进行双修！"
-        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+        await handle_send(
+            bot, event, msg,
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为"
+        )
         return
 
     if max_count_2 <= 0:
         msg = "对方的双修次数不足，无法进行双修！"
-        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+        await handle_send(
+            bot, event, msg,
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为"
+        )
         return
 
-    # 取最小可用次数
     actual_count = min(exp_count, max_count_1, max_count_2)
-    
+
     if actual_count <= 0:
         msg = "没有足够的双修次数进行双修！"
-        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+        await handle_send(
+            bot, event, msg,
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为"
+        )
         return
-    
-    # 进行双修
+
     total_exp_1 = 0
     total_exp_2 = 0
     event_descriptions = []
-    actual_used_count = 0  # 实际消耗的双修次数
-    
-    for i in range(actual_count):
-        exp_1, exp_2, event_desc = await process_two_exp(user_id_1, user_id_2, is_partner=is_partner)
-        
+    actual_used_count = 0
+
+    # 关键：临时修为，用于多次双修逐次重新计算上限
+    temp_exp_1 = int(user_1["exp"])
+    temp_exp_2 = int(user_2["exp"])
+
+    for _ in range(actual_count):
+        exp_1, exp_2, event_desc = await process_two_exp(
+            user_id_1,
+            user_id_2,
+            is_partner=is_partner,
+            current_exp_1=temp_exp_1,
+            current_exp_2=temp_exp_2
+        )
+
+        # 双方都无法获得修为时停止
         if exp_1 == 0 and exp_2 == 0:
             break
-            
+
         total_exp_1 += exp_1
         total_exp_2 += exp_2
-        event_descriptions.append(event_desc)
+
+        # 更新临时修为，下一次按新修为重新算上限
+        temp_exp_1 += exp_1
+        temp_exp_2 += exp_2
+
+        if event_desc:
+            event_descriptions.append(event_desc)
+
         actual_used_count += 1
-        
+
         # 只有实际进行了双修才消耗次数
         two_exp_cd.add_user(user_id_1)
         two_exp_cd.add_user(user_id_2)
-    
-    user_1_info = sql_message.get_user_real_info(user_id_1)
-    user_2_info = sql_message.get_user_real_info(user_id_2)
-    
+
     if actual_used_count == 0:
         msg = "双修过程中修为已达上限，无法进行双修！"
-    else:
-        msg = f"{random.choice(event_descriptions)}\n\n"
-        msg += f"{user_1_info['user_name']}获得修为：{number_to(total_exp_1)}\n"
-        msg += f"{user_2_info['user_name']}获得修为：{number_to(total_exp_2)}"
+        await handle_send(
+            bot, event, msg,
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为"
+        )
+        return
 
-    # 记录实际双修次数
+    # 统一写入最终获得修为
     sql_message.update_exp(user_id_1, total_exp_1)
-    sql_message.update_power2(user_id_1)  # 更新战力
-    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id_1, int(user_1_info['exp'] / 10), int(user_1_info['exp'] / 20))
-    sql_message.update_user_attribute(user_id_1, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
+    sql_message.update_power2(user_id_1)
+
+    user_1_info_before_recover = sql_message.get_user_real_info(user_id_1)
+    result_msg_1, result_hp_mp_1 = OtherSet().send_hp_mp(
+        user_id_1,
+        int(user_1_info_before_recover["exp"] / 10),
+        int(user_1_info_before_recover["exp"] / 20)
+    )
+    sql_message.update_user_attribute(
+        user_id_1,
+        result_hp_mp_1[0],
+        result_hp_mp_1[1],
+        int(result_hp_mp_1[2] / 10)
+    )
+
     sql_message.update_exp(user_id_2, total_exp_2)
-    sql_message.update_power2(user_id_2)  # 更新战力
-    result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id_2, int(user_2_info['exp'] / 10), int(user_2_info['exp'] / 20))
-    sql_message.update_user_attribute(user_id_2, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
+    sql_message.update_power2(user_id_2)
+
+    user_2_info_before_recover = sql_message.get_user_real_info(user_id_2)
+    result_msg_2, result_hp_mp_2 = OtherSet().send_hp_mp(
+        user_id_2,
+        int(user_2_info_before_recover["exp"] / 10),
+        int(user_2_info_before_recover["exp"] / 20)
+    )
+    sql_message.update_user_attribute(
+        user_id_2,
+        result_hp_mp_2[0],
+        result_hp_mp_2[1],
+        int(result_hp_mp_2[2] / 10)
+    )
+
+    user_1_info = sql_message.get_user_real_info(user_id_1)
+    user_2_info = sql_message.get_user_real_info(user_id_2)
+
     update_statistics_value(user_id_1, "双修次数", increment=actual_used_count)
     update_statistics_value(user_id_2, "双修次数", increment=actual_used_count)
-    log_message(user_id_1, f"与{user_2_info['user_name']}进行{'道侣' if is_partner else ''}双修，获得修为{number_to(total_exp_1)}，共{actual_used_count}次")
-    log_message(user_id_2, f"与{user_1_info['user_name']}进行{'道侣' if is_partner else ''}双修，获得修为{number_to(total_exp_2)}，共{actual_used_count}次")
+
+    log_message(
+        user_id_1,
+        f"与{user_2_info['user_name']}进行{'道侣' if is_partner else ''}双修，"
+        f"获得修为{number_to(total_exp_1)}，共{actual_used_count}次"
+    )
+    log_message(
+        user_id_2,
+        f"与{user_1_info['user_name']}进行{'道侣' if is_partner else ''}双修，"
+        f"获得修为{number_to(total_exp_2)}，共{actual_used_count}次"
+    )
+
+    affection_msg = ""
     if is_partner:
         partner_data_1 = load_partner(user_id_1)
         partner_data_2 = load_partner(user_id_2)
-    
-        if partner_data_1 and partner_data_1.get('partner_id') == user_id_2:
-            current_affection_1 = partner_data_1.get('affection', 0)
-            current_affection_2 = partner_data_2.get('affection', 0)
-        
-            # 更新亲密度
-            partner_data_1['affection'] = current_affection_1 + (20 * actual_used_count)
-            partner_data_2['affection'] = current_affection_2 + (10 * actual_used_count)
-        
-            # 保存更新后的道侣数据
+
+        if (
+            partner_data_1
+            and partner_data_2
+            and str(partner_data_1.get("partner_id")) == str(user_id_2)
+            and str(partner_data_2.get("partner_id")) == str(user_id_1)
+        ):
+            current_affection_1 = safe_int(partner_data_1.get("affection"), 0)
+            current_affection_2 = safe_int(partner_data_2.get("affection"), 0)
+
+            add_affection_1 = 20 * actual_used_count
+            add_affection_2 = 10 * actual_used_count
+
+            partner_data_1["affection"] = current_affection_1 + add_affection_1
+            partner_data_2["affection"] = current_affection_2 + add_affection_2
+
             save_partner(user_id_1, partner_data_1)
             save_partner(user_id_2, partner_data_2)
-    
-    await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
 
-async def process_two_exp(user_id_1, user_id_2, is_partner=False):
+            affection_msg = (
+                f"\n\n💕道侣双修亲密度增加："
+                f"\n{user_1_info['user_name']} +{add_affection_1}"
+                f"\n{user_2_info['user_name']} +{add_affection_2}"
+            )
+        else:
+            affection_msg = "\n\n⚠️检测到道侣关系数据异常，本次未增加亲密度。"
+
+    if event_descriptions:
+        msg = f"{random.choice(event_descriptions)}\n\n"
+    else:
+        msg = "两位道友气机交融，功法互补，修为有所精进。\n\n"
+
+    msg += f"{user_1_info['user_name']}获得修为：{number_to(total_exp_1)}\n"
+    msg += f"{user_2_info['user_name']}获得修为：{number_to(total_exp_2)}"
+    msg += affection_msg
+
+    await handle_send(
+        bot, event, msg,
+        md_type="buff",
+        k1="双修", v1="双修",
+        k2="次数", v2="我的双修次数",
+        k3="修为", v3="我的修为"
+    )
+
+async def process_two_exp(
+    user_id_1,
+    user_id_2,
+    is_partner=False,
+    current_exp_1=None,
+    current_exp_2=None
+):
+    """
+    处理单次双修收益。
+    """
+
+    user_id_1 = str(user_id_1)
+    user_id_2 = str(user_id_2)
+
     user_1 = sql_message.get_user_real_info(user_id_1)
     user_2 = sql_message.get_user_real_info(user_id_2)
+
     if not user_1 or not user_2:
         return 0, 0, "无法获取玩家信息，无法进行双修。"
 
     user_mes_1 = sql_message.get_user_info_with_id(user_id_1)
     user_mes_2 = sql_message.get_user_info_with_id(user_id_2)
-    level_1 = user_mes_1['level']
-    level_2 = user_mes_2['level']
+
+    if not user_mes_1 or not user_mes_2:
+        return 0, 0, "无法获取玩家信息，无法进行双修。"
+
+    level_1 = user_mes_1["level"]
+    level_2 = user_mes_2["level"]
+
+    # 多次双修时使用临时修为重新计算
+    calc_exp_1 = int(current_exp_1) if current_exp_1 is not None else int(user_mes_1["exp"])
+    calc_exp_2 = int(current_exp_2) if current_exp_2 is not None else int(user_mes_2["exp"])
 
     max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
     max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit
 
-    # 剩余可获取修为
-    remaining_exp_1 = max_exp_1_limit - user_mes_1['exp']
-    remaining_exp_2 = max_exp_2_limit - user_mes_2['exp']
+    remaining_exp_1 = max_exp_1_limit - calc_exp_1
+    remaining_exp_2 = max_exp_2_limit - calc_exp_2
+
+    # 非道侣：任意一方到上限就停止
+    if not is_partner and (remaining_exp_1 <= 0 or remaining_exp_2 <= 0):
+        return 0, 0, "修为已达上限，无法继续双修。"
 
     user_buff_data_1 = UserBuffDate(user_id_1)
     user_buff_data_2 = UserBuffDate(user_id_2)
+
     mainbuffdata_1 = user_buff_data_1.get_user_main_buff_data()
     mainbuffdata_2 = user_buff_data_2.get_user_main_buff_data()
 
-    mainbuffratebuff_1 = mainbuffdata_1['ratebuff'] if mainbuffdata_1 else 0
-    mainbuffcloexp_1 = mainbuffdata_1['clo_exp'] if mainbuffdata_1 else 0
-    mainbuffratebuff_2 = mainbuffdata_2['ratebuff'] if mainbuffdata_2 else 0
-    mainbuffcloexp_2 = mainbuffdata_2['clo_exp'] if mainbuffdata_2 else 0
+    mainbuffratebuff_1 = mainbuffdata_1["ratebuff"] if mainbuffdata_1 else 0
+    mainbuffcloexp_1 = mainbuffdata_1["clo_exp"] if mainbuffdata_1 else 0
 
-    user_blessed_spot_data_1 = user_buff_data_1.BuffInfo['blessed_spot'] * 0.5 if user_buff_data_1.BuffInfo else 0
-    user_blessed_spot_data_2 = user_buff_data_2.BuffInfo['blessed_spot'] * 0.5 if user_buff_data_2.BuffInfo else 0
+    mainbuffratebuff_2 = mainbuffdata_2["ratebuff"] if mainbuffdata_2 else 0
+    mainbuffcloexp_2 = mainbuffdata_2["clo_exp"] if mainbuffdata_2 else 0
 
-    # 基础修为计算
-    exp_base = int((user_mes_1['exp'] + user_mes_2['exp']) * 0.005)
+    user_blessed_spot_data_1 = (
+        user_buff_data_1.BuffInfo["blessed_spot"] * 0.5
+        if user_buff_data_1.BuffInfo else 0
+    )
+    user_blessed_spot_data_2 = (
+        user_buff_data_2.BuffInfo["blessed_spot"] * 0.5
+        if user_buff_data_2.BuffInfo else 0
+    )
 
-    # 获取各种倍率
-    exp_limit_1 = int(exp_base * (1 + mainbuffratebuff_1) * (1 + mainbuffcloexp_1) * (1 + user_blessed_spot_data_1))
-    exp_limit_2 = int(exp_base * (1 + mainbuffratebuff_2) * (1 + mainbuffcloexp_2) * (1 + user_blessed_spot_data_2))
+    # 基础修为计算使用当前临时修为
+    exp_base = int((calc_exp_1 + calc_exp_2) * 0.005)
 
-    user1_rank = max(convert_rank(user_mes_1['level'])[0] // 3, 1)
-    user2_rank = max(convert_rank(user_mes_2['level'])[0] // 3, 1)
-    max_exp_1 = int((user_mes_1['exp'] * 0.001) * min(0.1 * user1_rank, 1))# 最大获得修为为当前修为的0.1%同时境界越高获得比例越少
-    max_exp_2 = int((user_mes_2['exp'] * 0.001) * min(0.1 * user2_rank, 1))
+    exp_limit_1 = int(
+        exp_base
+        * (1 + mainbuffratebuff_1)
+        * (1 + mainbuffcloexp_1)
+        * (1 + user_blessed_spot_data_1)
+    )
+    exp_limit_2 = int(
+        exp_base
+        * (1 + mainbuffratebuff_2)
+        * (1 + mainbuffcloexp_2)
+        * (1 + user_blessed_spot_data_2)
+    )
+
+    user1_rank = max(convert_rank(level_1)[0] // 3, 1)
+    user2_rank = max(convert_rank(level_2)[0] // 3, 1)
+
+    max_exp_1 = int((calc_exp_1 * 0.001) * min(0.1 * user1_rank, 1))
+    max_exp_2 = int((calc_exp_2 * 0.001) * min(0.1 * user2_rank, 1))
+
     max_two_exp = 10_0000_0000
-    
-    # 计算实际可获得的修为
-    exp_limit_1 = min(exp_limit_1, max_exp_1, remaining_exp_1) if max_exp_1 >= max_two_exp else min(exp_limit_1, remaining_exp_1, max_exp_1_limit * 0.1)
-    exp_limit_2 = min(exp_limit_2, max_exp_2, remaining_exp_2) if max_exp_2 >= max_two_exp else min(exp_limit_2, min(remaining_exp_2, max_exp_2_limit * 0.1))
-    
-    if is_partner:
-        # 如果某方已达到当前境界修为上限，则只给1点
-        if remaining_exp_1 <= 0:
-            exp_limit_1 = 1  # 强制给1点
-        if remaining_exp_2 <= 0:
-            exp_limit_2 = 1  # 强制给1点
-        exp_limit_1 = int(exp_limit_1 * 1.2)
-        exp_limit_2 = int(exp_limit_2 * 1.2)
+
+    if max_exp_1 >= max_two_exp:
+        exp_limit_1 = min(exp_limit_1, max_exp_1, max(0, remaining_exp_1))
     else:
-        if remaining_exp_1 <= 0 or remaining_exp_2 <= 0:
-            return 0, 0, "修为已达上限，无法继续双修。"
+        exp_limit_1 = min(exp_limit_1, max_exp_1_limit * 0.1, max(0, remaining_exp_1))
+
+    if max_exp_2 >= max_two_exp:
+        exp_limit_2 = min(exp_limit_2, max_exp_2, max(0, remaining_exp_2))
+    else:
+        exp_limit_2 = min(exp_limit_2, max_exp_2_limit * 0.1, max(0, remaining_exp_2))
+
+    exp_limit_1 = int(max(0, exp_limit_1))
+    exp_limit_2 = int(max(0, exp_limit_2))
+
+    # 道侣倍率
+    if is_partner:
+        if remaining_exp_1 <= 0:
+            exp_limit_1 = 1
+        else:
+            exp_limit_1 = int(exp_limit_1 * 1.2)
+
+        if remaining_exp_2 <= 0:
+            exp_limit_2 = 1
+        else:
+            exp_limit_2 = int(exp_limit_2 * 1.2)
 
     # 特殊事件概率
     is_special = random.randint(1, 100) <= 6
     event_desc = ""
+
     if is_special:
         special_events = [
-            f"突然天降异象，七彩祥云笼罩两人，修为大增！",
-            f"意外发现一处灵脉，两人共同吸收，修为精进！",
-            f"功法意外产生共鸣，引发天地灵气倒灌！",
-            f"两人心意相通，功法运转达到完美契合！",
-            f"顿悟时刻来临，两人同时进入玄妙境界！"
+            "突然天降异象，七彩祥云笼罩两人，修为大增！",
+            "意外发现一处灵脉，两人共同吸收，修为精进！",
+            "功法意外产生共鸣，引发天地灵气倒灌！",
+            "两人心意相通，功法运转达到完美契合！",
+            "顿悟时刻来临，两人同时进入玄妙境界！"
         ]
         event_desc = random.choice(special_events)
+
         exp_limit_1 = int(exp_limit_1 * 1.5)
         exp_limit_2 = int(exp_limit_2 * 1.5)
-        sql_message.update_levelrate(user_id_1, user_mes_1['level_up_rate'] + 2)
-        sql_message.update_levelrate(user_id_2, user_mes_2['level_up_rate'] + 2)
-        event_desc += f"\n💫道侣同心，天降异象！"
-        event_desc += f"\n💝离开时双方互相赠送道侣信物，双方各增加突破概率2%。"
+
+        sql_message.update_levelrate(user_id_1, user_mes_1["level_up_rate"] + 2)
+        sql_message.update_levelrate(user_id_2, user_mes_2["level_up_rate"] + 2)
+
+        event_desc += "\n💫道友同心，天降异象！"
+        event_desc += "\n💝离开时双方互相赠送信物，双方各增加突破概率2%。"
     else:
         event_descriptions = [
             f"月明星稀之夜，{user_1['user_name']}与{user_2['user_name']}在灵山之巅相对而坐，双手相抵，周身灵气环绕如雾。",
@@ -768,6 +941,27 @@ async def process_two_exp(user_id_1, user_id_2, is_partner=False):
             f"云端之上，{user_1['user_name']}与{user_2['user_name']}脚踏飞剑，剑气交织间功法互补，修为大涨。",
         ]
         event_desc = random.choice(event_descriptions)
+
+    # 最终再次裁剪，防止道侣倍率 / 特殊事件倍率后超过上限
+    if is_partner:
+        if remaining_exp_1 > 0:
+            exp_limit_1 = min(exp_limit_1, remaining_exp_1)
+        else:
+            exp_limit_1 = 1
+
+        if remaining_exp_2 > 0:
+            exp_limit_2 = min(exp_limit_2, remaining_exp_2)
+        else:
+            exp_limit_2 = 1
+    else:
+        exp_limit_1 = min(exp_limit_1, max(0, remaining_exp_1))
+        exp_limit_2 = min(exp_limit_2, max(0, remaining_exp_2))
+
+    exp_limit_1 = int(max(0, exp_limit_1))
+    exp_limit_2 = int(max(0, exp_limit_2))
+
+    if not is_partner and exp_limit_1 <= 0 and exp_limit_2 <= 0:
+        return 0, 0, "修为已达上限，无法继续双修。"
 
     return exp_limit_1, exp_limit_2, event_desc
 
@@ -2007,37 +2201,99 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await my_partner.finish()
 
 # 加载和保存道侣数据的函数
-def load_partner(user_id):
-    """加载用户道侣数据"""
-    partner_data = {}
-    partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")
-    if partner_id:
-        partner_info = player_data_manager.get_fields(str(partner_id), "partner")
-        if partner_info:
-            partner_data['partner_id'] = partner_info.get('user_id')
-            partner_data['bind_time'] = partner_info.get('bind_time')
-            partner_data['affection'] = partner_info.get('affection')
-        else:
-            partner_data['partner_id'] = None
-            partner_data['bind_time'] = None
-            partner_data['affection'] = None
-    else:
-        partner_data['partner_id'] = None
-        partner_data['bind_time'] = None
-        partner_data['affection'] = None
-    return partner_data
+def _is_none_like(value):
+    """
+    兼容历史脏数据：
+    None / "" / "None" / "null" / "NULL" 都视为无值。
+    """
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip().lower() in ["", "none", "null"]:
+        return True
+    return False
 
-def save_partner(user_id, data):
-    """保存用户道侣数据"""    
-    player_data_manager.update_or_write_data(str(user_id), "partner", "partner_id", data.get("partner_id", None))
-    player_data_manager.update_or_write_data(str(user_id), "partner", "bind_time", data.get("bind_time", None))
-    player_data_manager.update_or_write_data(str(user_id), "partner", "affection", data.get("affection", None))
 
-def safe_int(value):
+def safe_int(value, default=0):
     try:
+        if _is_none_like(value):
+            return default
         return int(value)
     except (ValueError, TypeError):
-        return 0
+        return default
+
+def load_partner(user_id):
+    """
+    加载用户自己的道侣数据。
+
+    修复点：
+    1. 不再读取对方的 partner 表，避免亲密度、绑定时间读错。
+    2. 兼容历史 "None" / "null" / "" 脏数据。
+    """
+    info = player_data_manager.get_fields(str(user_id), "partner")
+
+    if not info:
+        return {
+            "partner_id": None,
+            "bind_time": None,
+            "affection": 0
+        }
+
+    partner_id = info.get("partner_id")
+    bind_time = info.get("bind_time")
+    affection = info.get("affection")
+
+    if _is_none_like(partner_id):
+        partner_id = None
+    else:
+        partner_id = str(partner_id)
+
+    if _is_none_like(bind_time):
+        bind_time = None
+    else:
+        bind_time = str(bind_time)
+
+    affection = safe_int(affection, 0)
+
+    return {
+        "partner_id": partner_id,
+        "bind_time": bind_time,
+        "affection": affection
+    }
+
+
+def save_partner(user_id, data):
+    """
+    保存用户道侣数据。
+
+    注意：
+    如果你已经修复 PlayerDataManager.update_or_write_data，使 None 写入 SQL NULL，
+    这里可以直接传 None。
+    """
+    partner_id = data.get("partner_id")
+    bind_time = data.get("bind_time")
+    affection = data.get("affection")
+
+    if _is_none_like(partner_id):
+        partner_id = None
+    else:
+        partner_id = str(partner_id)
+
+    if _is_none_like(bind_time):
+        bind_time = None
+    else:
+        bind_time = str(bind_time)
+
+    affection = safe_int(affection, 0)
+
+    player_data_manager.update_or_write_data(
+        str(user_id), "partner", "partner_id", partner_id, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "partner", "bind_time", bind_time, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "partner", "affection", affection, data_type="INTEGER"
+    )
 
 @partner_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

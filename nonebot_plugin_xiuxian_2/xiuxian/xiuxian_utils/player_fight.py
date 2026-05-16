@@ -1001,8 +1001,17 @@ class Entity:
 
     @property
     def crit_rate(self):
-        val = self.base_crit + self._get_effect_value(BuffType.CRIT_RATE_UP, DebuffType.CRIT_RATE_DOWN)
-        return max(0, val)
+        """
+        最终会心率：
+        - base_crit 可以超过100%
+        - 战斗中的会心提升/降低在这里统一结算
+        - 最终参与判定时限制在 0%~100%
+        """
+        val = self.base_crit + self._get_effect_value(
+            BuffType.CRIT_RATE_UP,
+            DebuffType.CRIT_RATE_DOWN
+        )
+        return max(0.0, min(1.0, val))
 
     @property
     def crit_dmg_rate(self):
@@ -1011,8 +1020,19 @@ class Entity:
 
     @property
     def damage_reduction_rate(self):
-        val = self.base_damage_reduction + self._get_effect_value(BuffType.DAMAGE_REDUCTION_UP)
-        return min(0.95, val)
+        """
+        原始减伤率，不在这里做95%上限截断。
+    
+        原因：
+        - 减伤可能通过功法/装备/饰品/套装堆到 100% 以上。
+        - 穿甲/破甲需要先从原始减伤中扣除。
+        - 最终参与伤害计算时，再限制到最高95%。
+        """
+        val = self.base_damage_reduction + self._get_effect_value(
+            BuffType.DAMAGE_REDUCTION_UP,
+            DebuffType.DEFENSE_DOWN
+        )
+        return val
 
     @property
     def armor_pen_rate(self):
@@ -1178,10 +1198,19 @@ class BattleSystem:
             return [e for e in self.team_b if valid_target(e)]
         return [e for e in self.team_a if valid_target(e)]
 
+    def _is_real_alive(self, e):
+        return (
+            e.is_alive
+            and not e.natal_runtime.get("is_soul_form", False)
+            and not e.natal_runtime.get("is_nirvana_waiting", False)
+        )
+
     def _get_all_allies(self, entity):
-        if entity.team_id == 0:
-            return [e for e in self.team_a if e.is_alive and e.id != entity.id]
-        return [e for e in self.team_b if e.is_alive and e.id != entity.id]
+        team = self.team_a if entity.team_id == 0 else self.team_b
+        return [
+            e for e in team
+            if e.id != entity.id and self._is_real_alive(e)
+        ]
 
     def _get_alive_allies_include_self_team(self, entity):
         if entity.team_id == 0:
@@ -1284,13 +1313,20 @@ class BattleSystem:
             crit_resist_mul = max(0.0, min(0.95, crit_resist_mul))
             crit_mult = max(1.0, (crit_mult - crit_dmg_reduce) * (1 - crit_resist_mul))
 
-        if defender.damage_reduction_rate < 0:
-            dr_eff = defender.damage_reduction_rate
-        elif penetration:
+        raw_dr = defender.damage_reduction_rate
+        
+        if penetration:
+            # 无视防御/减伤类技能
             dr_eff = 0
         else:
-            dr_eff = max(0, defender.damage_reduction_rate - attacker.armor_pen_rate)
-
+            # 先用原始减伤 - 攻击者穿甲
+            dr_eff = raw_dr - attacker.armor_pen_rate
+        
+            # 最终参与伤害计算时再限制
+            # 上限95%，防止完全免伤
+            # 下限允许为负，表示负减伤/易伤
+            dr_eff = max(-0.95, min(0.95, dr_eff))
+        
         damage = attacker.atk_rate * multiplier * crit_mult * (1 - dr_eff)
 
         if defender.is_boss:
@@ -1303,52 +1339,70 @@ class BattleSystem:
         return int(max(1, damage)), is_crit, status
 
     def _apply_damage_with_layers(self, attacker, target, dmg, damage_type="normal", shield_penetration=0.0):
+        """
+        伤害结算：
+        - true/dot：不吃护盾，吃目标减伤。
+        - normal：先正常打护盾，护盾不够再扣血。
+        - shield_penetration：破盾穿透比例，不再拆分原伤害。
+          例如 10% 破盾：
+            原伤害仍然完整打护盾/血量；
+            若目标当前有护盾，则额外造成 dmg * 10% 的穿盾直伤。
+        """
         if dmg <= 0:
             return 0, 0, False
-
+    
         if target.natal_runtime.get("invincible_active", 0) > 0:
             target.natal_runtime["invincible_active"] -= 1
             return 0, 0, True
-
+    
         remain = int(dmg)
         absorbed = 0
         hp_loss = 0
-
+    
+        # 真伤 / DOT 不走护盾
         if damage_type in ("true", "dot"):
             dr_eff = max(0, min(0.95, target.damage_reduction_rate))
             hp_loss = int(max(1, remain * (1 - dr_eff)))
             if hp_loss > 0:
                 target.update_stat("hp", 2, hp_loss)
             return hp_loss, 0, False
-
+    
+        # 记录本次攻击前是否有护盾
+        shields = target.get_buffs("type", BuffType.SHIELD)
+        had_shield = any(sh.value > 0 for sh in shields)
+    
+        # 1. 原伤害完整走正常护盾层
+        left = remain
+        if shields:
+            for sh in shields[:]:
+                if left <= 0:
+                    break
+                if sh.value <= 0:
+                    continue
+    
+                take = min(left, int(sh.value))
+                sh.value -= take
+                left -= take
+                absorbed += take
+    
+            for sh in shields[:]:
+                if sh.value <= 0 and sh in target.buffs:
+                    target.buffs.remove(sh)
+    
+        # 护盾不够的部分扣血
+        if left > 0:
+            hp_loss += left
+    
+        # 2. 破盾穿透额外直伤
         pen = max(0.0, min(1.0, float(shield_penetration)))
-        direct_hp = int(remain * pen)
-        shield_part = remain - direct_hp
-
-        if shield_part > 0:
-            shields = target.get_buffs("type", BuffType.SHIELD)
-            if shields:
-                left = shield_part
-                for sh in shields[:]:
-                    if left <= 0:
-                        break
-                    if sh.value <= 0:
-                        continue
-                    take = min(left, int(sh.value))
-                    sh.value -= take
-                    left -= take
-                    absorbed += take
-
-                for sh in shields[:]:
-                    if sh.value <= 0 and sh in target.buffs:
-                        target.buffs.remove(sh)
-
-                shield_part = left
-
-        hp_loss = max(0, direct_hp + shield_part)
+        if pen > 0 and had_shield:
+            pierce_damage = int(remain * pen)
+            if pierce_damage > 0:
+                hp_loss += pierce_damage
+    
         if hp_loss > 0:
             target.update_stat("hp", 2, hp_loss)
-
+    
         return hp_loss, absorbed, False
 
     def _apply_round_one_skills(self, caster, targets, skills_dict):
@@ -2085,15 +2139,20 @@ class BattleSystem:
 
         if accuracy == "Hit":
             shield_pen = 0.0
-
-            if caster.has_natal_effect(NatalEffectType.SHIELD_BREAK):
-                if target.get_buffs("type", BuffType.SHIELD):
-                    shield_pen = caster.get_natal_effect_value(NatalEffectType.SHIELD_BREAK)
-
+            target_has_shield = bool(target.get_buffs("type", BuffType.SHIELD))
+        
+            # 本命法宝破盾
+            if caster.has_natal_effect(NatalEffectType.SHIELD_BREAK) and target_has_shield:
+                shield_pen = caster.get_natal_effect_value(NatalEffectType.SHIELD_BREAK)
+        
+                # 破盾额外伤害加成
+                dmg = int(dmg * (1 + SHIELD_BREAK_BONUS_DAMAGE))
+        
+            # 饰品/套装破盾
             set_shield_break = self._get_set_bonus_total(caster, "shield_break")
-            if set_shield_break > 0 and target.get_buffs("type", BuffType.SHIELD):
+            if set_shield_break > 0 and target_has_shield:
                 shield_pen = max(shield_pen, set_shield_break)
-
+        
             hp_loss, absorbed, blocked = self._apply_damage_with_layers(
                 caster, target, dmg, damage_type="normal", shield_penetration=shield_pen
             )
@@ -2113,7 +2172,7 @@ class BattleSystem:
                 skill_msg += f"{caster.name}发起攻击，但伤害被{target.name}的护盾吸收{number_to(int(absorbed))}！"
 
             if shield_pen > 0:
-                skill_msg += f"（破盾生效：{round(shield_pen * 100, 2)}%伤害穿透护盾）"
+                skill_msg += f"（破盾生效：额外造成{round(shield_pen * 100, 2)}%伤害）"
 
             extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
             extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
