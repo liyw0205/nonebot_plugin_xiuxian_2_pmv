@@ -28,6 +28,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 
 # 导入本命法宝数据管理类
 from ..xiuxian_natal_treasure.natal_data import NatalTreasure # 新增：导入 NatalTreasure
@@ -211,34 +212,135 @@ async def get_user_xiuxian_info(user_id):
 @xiuxian_message.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """普通文本版修仙信息"""
+    from urllib.parse import quote
+
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
 
-    _, text_msg = await get_user_xiuxian_info(user_info['user_id'])
+    detail_map, text_msg = await get_user_xiuxian_info(user_info["user_id"])
 
     if XiuConfig().user_info_image:
         await xiuxian_message_img_(bot, event)
         await xiuxian_message.finish()
 
+    config = XiuConfig()
+    is_channel = is_channel_event(event)
+
+    def _md_cmd_link(text: str, command: str) -> str:
+        """
+        生成 QQ 原生 Markdown 蓝色点击命令。
+        """
+        text = str(text) if text is not None else " "
+        command = str(command) if command is not None else " "
+
+        # 防止显示文本破坏 Markdown 结构
+        text = text.replace("[", "").replace("]", "")
+        text = text.replace("\r", " ").replace("\n", " ")
+
+        # 中文、空格等需要编码
+        command = quote(command, safe="")
+
+        return f"[{text}](mqqapi://aio/inlinecmd?command={command}&enter=false&reply=false)"
+
+    def _get_effect_name(value: str) -> str:
+        """
+        从装备/功法显示名中提取用于“查看效果”的名称。
+        """
+        value = str(value) if value is not None else "无"
+
+        if not value or value == "无":
+            return ""
+
+        # 去掉括号内等级
+        effect_name = value.split("(")[0].strip()
+        return effect_name
+
+    def _effect_link(value: str, command: str = "查看效果 {name}") -> str:
+        value = str(value) if value is not None else "无"
+    
+        if not value or value == "无":
+            return "无"
+    
+        effect_name = _get_effect_name(value)
+        if not effect_name:
+            return value
+    
+        click_command = command.format(name=effect_name)
+    
+        return _md_cmd_link(value, click_command)
+
+    def _build_native_md_info(title_url: str = "") -> str:
+        """
+        构造“我的修仙信息”原生 Markdown。
+        """
+        user_name = detail_map.get("道号", "无名氏")
+        title_name = detail_map.get("称号", "无")
+
+        md_lines = []
+
+        if title_url:
+            md_lines.append(f"![img #256px #64px]({title_url})")
+
+        md_lines.extend([
+            f"道号: {_md_cmd_link(user_name, '修仙改名')}",
+        ])
+
+        if title_name and title_name != "无":
+            md_lines.append(f"称号: {title_name}")
+
+        md_lines.extend([
+            f"境界: {detail_map.get('境界', '无')}",
+            f"修为: {_effect_link(detail_map.get('修为', '0'), '我的修为')}",
+            f"灵石: {detail_map.get('灵石', '0')}",
+            f"战力: {detail_map.get('战力', '0')}",
+            f"灵根: {detail_map.get('灵根', '无')}",
+            f"突破状态: {detail_map.get('突破状态', '无')}",
+            f"突破状态: {_effect_link(detail_map.get('突破状态', '无'), '突破')}",
+            f"攻击力: {detail_map.get('攻击力', '0')}",
+            f"修炼等级: {detail_map.get('修炼等级', '无')}",
+            f"所在宗门: {_effect_link(detail_map.get('所在宗门', '无宗门'), '我的宗门')}",
+            f"宗门职位: {detail_map.get('宗门职位', '无')}",
+            f"主修功法: {_effect_link(detail_map.get('主修功法', '无'))}",
+            f"辅修功法: {_effect_link(detail_map.get('辅修功法', '无'))}",
+            f"副修神通: {_effect_link(detail_map.get('副修神通', '无'))}",
+            f"法器: {_effect_link(detail_map.get('法器', '无'))}",
+            f"防具: {_effect_link(detail_map.get('防具', '无'))}",
+            f"道侣: {_effect_link(detail_map.get('道侣', '无'), '我的道侣')}",
+            f"本命法宝: {_effect_link(detail_map.get('本命法宝', '无'), '我的本命法宝')}",
+            f"注册位数: {detail_map.get('注册位数', '无')}",
+            f"修为排行: {detail_map.get('修为排行', '无')}",
+            f"灵石排行: {detail_map.get('灵石排行', '无')}",
+            "",
+            "---",
+            f"{_md_cmd_link('图片版', '我的修仙信息图片版')} | "
+            f"{_md_cmd_link('我的修为', '我的修为')} | "
+            f"{_md_cmd_link('我的状态', '我的状态')}"
+        ])
+
+        return "\r".join(md_lines)
+
     # 获取称号信息
-    title_id = get_user_equipped_title(user_info['user_id'])
+    title_id = get_user_equipped_title(user_info["user_id"])
     title_url = ""
     title_name = ""
+
     if title_id:
         title_data = get_title_by_id(title_id)
         if title_data:
             title_url = title_data.get("url", "")
-            title_name = title_data['name']
+            title_name = title_data.get("name", "")
 
-    config = XiuConfig()
-    is_channel = is_channel_event(event)
-
-    # ===== 有称号图片时 =====
+    # ==================================================
+    # 有称号图片
+    # ==================================================
     if title_url:
-        # ---- 模板MD ----
+        # ------------------------------
+        # 1. 开启 Markdown 且设置了模板 ID：走原模板逻辑
+        # ------------------------------
         if config.markdown_status and config.markdown_id and not is_channel:
             try:
                 optimized_msg = optimize_md(text_msg)
@@ -254,50 +356,61 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     ]
                 }
                 await handle_send_md(
-                    bot, event, " ",
+                    bot,
+                    event,
+                    " ",
                     markdown_id=config.markdown_id,
                     msg_param=msg_param,
                     at_msg=None
                 )
             except Exception as e:
-                logger.warning(f"存档称号模板MD发送失败")
-            await xiuxian_message.finish()
-        # ---- 原生MD ----
-        if config.markdown_status and not is_channel:
-            try:
-                optimized_msg = optimize_md(text_msg)
-                md_msg = (
-                    f"![img #256px #64px]({title_url})\r"
-                    f"{optimized_msg}\r\r"
-                    f"---\r\r"
-                    f"[图片版](mqqapi://aio/inlinecmd?command=我的修仙信息图片版&enter=false&reply=false) | "
-                    f"[我的修为](mqqapi://aio/inlinecmd?command=我的修为&enter=false&reply=false) | "
-                    f"[我的状态](mqqapi://aio/inlinecmd?command=我的状态&enter=false&reply=false)"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-            except Exception as e:
-                logger.warning(f"存档称号原生MD发送失败")
+                logger.warning(f"存档称号模板MD发送失败，降级处理: {e}")
             await xiuxian_message.finish()
 
-        # ---- 普通图文模式 ----
+        # ------------------------------
+        # 2. 开启 Markdown 但没有模板 ID：走原生 Markdown 蓝字
+        # ------------------------------
+        if config.markdown_status and not config.markdown_id and not config.markdown_id2 and not is_channel:
+            try:
+                md_msg = _build_native_md_info(title_url=title_url)
+                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+                await xiuxian_message.finish()
+            except Exception as e:
+                logger.warning(f"存档称号原生MD蓝字发送失败，降级普通图文: {e}")
+
+        # ------------------------------
+        # 3. 未开启 Markdown：普通图文模式
+        # ------------------------------
         if not config.markdown_status:
             try:
                 pic_text = f"🏅 称号：{title_name}\n{text_msg}"
                 await handle_pic_msg_send(bot, event, title_url, pic_text)
             except Exception as e:
-                logger.warning(f"存档称号图文发送失败")
+                logger.warning(f"存档称号图文发送失败，降级普通文本: {e}")
             await xiuxian_message.finish()
 
-    # ===== 无称号图片 =====
-    await handle_send(
-        bot, event, text_msg,
-        md_type="修仙信息",
-        k1="图片版", v1="我的修仙信息图片版",
-        k2="修为", v2="我的修为",
-        k3="状态", v3="我的状态"
-    )
-    await xiuxian_message.finish()
+    if config.markdown_status and not config.markdown_id and not config.markdown_id2 and not is_channel:
+        try:
+            md_msg = _build_native_md_info()
+            await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+        except Exception as e:
+            logger.warning(f"我的修仙信息原生MD蓝字发送失败，降级普通文本: {e}")
+        await xiuxian_message.finish()
 
+    await handle_send(
+        bot,
+        event,
+        text_msg,
+        md_type="修仙信息",
+        k1="图片版",
+        v1="我的修仙信息图片版",
+        k2="修为",
+        v2="我的修为",
+        k3="状态",
+        v3="我的状态"
+    )
+
+    await xiuxian_message.finish()
 
 @xiuxian_message_img.handle(parameterless=[Cooldown(cd_time=30)])
 async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
