@@ -17,7 +17,7 @@ from ..adapter_compat import (
 )
 
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet, PlayerDataManager
-from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users
+from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users, send_help_message
 from ..xiuxian_utils.player_fight import pve_fight
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
@@ -168,7 +168,7 @@ __team_help__ = f"""
 async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __team_help__
-    await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
+    await send_help_message(bot, event, msg, k1="创建队伍", v1="创建队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
     await help_team_cmd.finish()
 
 
@@ -176,7 +176,7 @@ async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __dungeon_help__
-    await handle_send(bot, event, msg, md_type="副本", k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
+    await send_help_message(bot, event, msg, k1="副本信息", v1="副本信息", k2="探索副本", v2="探索副本", k3="副本状态", v3="我的副本状态")
     await help_dungeon_cmd.finish()
 
 

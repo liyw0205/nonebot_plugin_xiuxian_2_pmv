@@ -16,7 +16,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
     check_user, check_user_type, 
     get_msg_pic, log_message, handle_send, 
-    number_to, send_msg_handler
+    number_to, send_msg_handler, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
 from ..xiuxian_utils.item_json import Items
@@ -102,7 +102,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "输入对应命令开始你的通天塔之旅吧！"
     )
     
-    await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
+    await send_help_message(bot, event, msg, k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
     await tower_help.finish()
 
 @tower_challenge.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["单层爬塔"])])

@@ -19,7 +19,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from datetime import datetime
 from .bankconfig import get_config
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
 from ..xiuxian_config import XiuConfig
 
 config = get_config()
@@ -66,7 +66,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     num = args[1]  # 数值
     if mode is None:
         msg = __bank_help__
-        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+        await send_help_message(bot, event, msg, k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     if mode == '存灵石' or mode == '取灵石':

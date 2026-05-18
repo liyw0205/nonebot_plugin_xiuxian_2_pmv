@@ -35,7 +35,8 @@ items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
-    send_msg_handler, log_message, handle_send, update_statistics_value
+    send_msg_handler, log_message, handle_send, update_statistics_value,
+    send_help_message
 )
 from .boss_limit import boss_limit, player_data_manager
 from .. import DRIVER
@@ -174,14 +175,19 @@ async def set_boss_limits_reset():
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__ 
-    await handle_send(bot, event, msg, md_type="世界BOSS", k1="查询", v1="查询世界BOSS", k2="信息", v2="世界BOSS信息", k3="商店", v3="世界BOSS商店")
+    await send_help_message(bot, event, msg, k1="查询", v1="查询世界BOSS", k2="信息", v2="世界BOSS信息", k3="商店", v3="世界BOSS商店")
     await boss_help.finish()
 
 @boss_admin.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def boss_admin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __boss_help__2 
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="生成", v1="世界BOSS生成",
+        k2="全部生成", v2="世界BOSS全部生成",
+        k3="列表", v3="世界BOSS列表"
+    )
     await boss_admin.finish()
     
 @boss_delete.handle(parameterless=[Cooldown(cd_time=1.4)])

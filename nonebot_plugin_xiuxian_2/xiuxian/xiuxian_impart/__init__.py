@@ -22,7 +22,8 @@ from ..xiuxian_utils.utils import (
     handle_send,
     send_msg_handler,
     handle_pic_send,
-    update_statistics_value
+    update_statistics_value,
+    send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -113,7 +114,7 @@ async def impart_help_(
     """传承帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __impart_help__
-    await handle_send(bot, event, msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="信息", v2="传承信息", k3="背包", v3="传承背包")
+    await send_help_message(bot, event, msg, k1="祈愿", v1="传承祈愿", k2="信息", v2="传承信息", k3="背包", v3="传承背包")
     await impart_help.finish()
 
 @impart_pk_help.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -123,7 +124,7 @@ async def impart_pk_help_(
     """虚神界帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __impart_pk_help__
-    await handle_send(bot, event, msg, md_type="传承", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="探索", v3="虚神界探索")
+    await send_help_message(bot, event, msg, k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="探索", v3="虚神界探索")
     await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(cd_time=1.4)])

@@ -12,7 +12,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_msg_handler
+from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_msg_handler, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
@@ -130,6 +130,7 @@ ACTION_ITEM_POOLS = {
 
     # 额外资源
     "wash_stone_low": [20023],
+    "arena_ticket_low": [20024],
     "token_common": [20001, 20012, 20014],
     "token_rare": [20005, 20007, 20013, 20018],
 
@@ -156,6 +157,8 @@ MAP_EXTRA_DROP_RATE = {
     "explore_normal": 0.08,
     "explore_rare": 0.22,
 }
+
+ARENA_TICKET_DROP_RATIO = 0.30
 
 # =========================================
 # 交互采集玩法
@@ -514,6 +517,11 @@ def _nodes(map_data, realm: str, heaven_name: str):
     return map_data[realm]["heavens"].get(heaven_name, [])
 
 
+def _resolve_heaven_alias(map_data, realm: str, heaven_name: str):
+    aliases = map_data.get("meta", {}).get("legacy_heaven_aliases", {})
+    return aliases.get(realm, {}).get(heaven_name, heaven_name)
+
+
 def _find_node_by_id(map_data, realm: str, heaven_name: str, node_id: str):
     for n in _nodes(map_data, realm, heaven_name):
         if n["id"] == node_id:
@@ -541,6 +549,29 @@ def _get_realm_heaven_order(map_data, realm: str):
 def _get_player_map_status(user_id: str, map_data: dict):
     data = player_data_manager.get_fields(str(user_id), MAP_TABLE)
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
+        if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
+            data["heaven"] = "九重天"
+            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", "九重天")
+        realm = data.get("realm")
+        if realm not in _all_realms(map_data):
+            return _init_player_map_status(user_id, map_data)
+
+        heaven = _resolve_heaven_alias(map_data, realm, data.get("heaven"))
+        if heaven != data.get("heaven"):
+            data["heaven"] = heaven
+            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+
+        if heaven not in map_data[realm]["heavens"]:
+            order = _get_realm_heaven_order(map_data, realm)
+            heaven = order[0]
+            data["heaven"] = heaven
+            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+
+        if not _find_node_by_id(map_data, realm, heaven, data.get("node_id")):
+            node = _nodes(map_data, realm, heaven)[0]
+            data["node_id"] = node["id"]
+            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "node_id", node["id"])
+
         return data
     return _init_player_map_status(user_id, map_data)
 
@@ -583,6 +614,10 @@ def _parse_map_query(map_data, text: str):
         heavens = _heaven_names(map_data, realm)
         if q in heavens:
             return "heaven", (realm, q)
+    aliases = map_data.get("meta", {}).get("legacy_heaven_aliases", {})
+    for realm, realm_aliases in aliases.items():
+        if q in realm_aliases:
+            return "heaven", (realm, realm_aliases[q])
     return None, None
 
 
@@ -614,12 +649,57 @@ def get_current_node_name(user_id: str) -> str | None:
     node = get_player_current_node(user_id)
     return node["name"] if node else None
 
+
+def get_player_current_position(user_id: str) -> dict | None:
+    """获取玩家当前完整地图位置。"""
+    map_data = _load_map_data()
+    status = _get_player_map_status(str(user_id), map_data)
+    node = _find_node_by_id(map_data, status["realm"], status["heaven"], status["node_id"])
+    if not node:
+        return None
+    return {
+        "realm": status["realm"],
+        "heaven": status["heaven"],
+        "node_id": node["id"],
+        "node_name": node["name"],
+        "node_type": node.get("type", ""),
+    }
+
+
+def get_random_trial_node() -> dict | None:
+    """从地图所有试炼节点中随机获取一个。"""
+    map_data = _load_map_data()
+    trial_nodes = []
+    for realm in _all_realms(map_data):
+        for heaven in _heaven_names(map_data, realm):
+            for node in _nodes(map_data, realm, heaven):
+                if node.get("type") == "试炼":
+                    trial_nodes.append({
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node["id"],
+                        "node_name": node["name"],
+                        "node_type": node.get("type", ""),
+                    })
+    return random.choice(trial_nodes) if trial_nodes else None
+
 # =========================================
 # 奖励工具
 # =========================================
+def _expand_reward_plan(reward_plan):
+    expanded = []
+    for pool_key, cmin, cmax, chance in reward_plan:
+        if pool_key == "arena_ticket_low":
+            continue
+        expanded.append((pool_key, cmin, cmax, chance))
+        if pool_key == "wash_stone_low":
+            expanded.append(("arena_ticket_low", 1, 1, round(float(chance) * ARENA_TICKET_DROP_RATIO, 4)))
+    return expanded
+
+
 def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
     rewards = []
-    for pool_key, cmin, cmax, chance in reward_plan:
+    for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
         if random.random() > chance:
             continue
         pool_ids = ACTION_ITEM_POOLS.get(pool_key, [])
@@ -791,7 +871,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "9. 地图委托：地图委托 / 接取委托 / 委托完成\n"
         "注：地图收益存在日内衰减机制"
     )
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="地图", v1="地图",
+        k2="位置", v2="我的位置",
+        k3="洞府", v3="洞府帮助"
+    )
 
 
 @map_info.handle(parameterless=[Cooldown(cd_time=1.4)])

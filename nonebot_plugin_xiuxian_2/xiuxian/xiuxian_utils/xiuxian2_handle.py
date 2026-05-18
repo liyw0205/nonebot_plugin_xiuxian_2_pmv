@@ -542,7 +542,9 @@ class XiuxianDateManage:
                 user_info = sql_message.get_user_info_with_id(user_id)
                 root_level = user_info['root_level']
                 type_speeds2 = data['永恒道果']['type_speeds']
-                type_speeds3 = (type_speeds2 + (root_level * type_speeds))
+                decay_steps = int(root_level) // 5
+                level_bonus = max(0.5, type_speeds - decay_steps * 0.3)
+                type_speeds3 = (type_speeds2 + (root_level * level_bonus))
                 return type_speeds3
             else:
                 return data[name]['type_speeds']
@@ -661,6 +663,16 @@ class XiuxianDateManage:
                 self.conn.commit()
 
             return root_name
+
+    def update_root_name(self, user_id, root_name):
+        """自定义灵根名称，不改变灵根类型和倍率。"""
+        with self.lock:
+            sql = "UPDATE user_xiuxian SET root=? WHERE user_id=?"
+            cur = self.conn.cursor()
+            cur.execute(sql, (root_name, user_id))
+            self.conn.commit()
+            self.update_power2(user_id)
+            return f"灵根已改名为：{root_name}"
 
     def update_ls_all(self, price):
         """所有用户增加灵石"""
@@ -1357,7 +1369,7 @@ class XiuxianDateManage:
             return results
 
     def check_and_adjust_goods_quantity(self):
-        """检查并调整背包表中的物品数量"""
+        """检查并调整背包表中的物品数量和物品名称"""
         with self.lock:
             cur = self.conn.cursor()
             sql = "SELECT user_id, goods_id, goods_num, bind_num, goods_name FROM back"
@@ -1365,6 +1377,7 @@ class XiuxianDateManage:
             results = cur.fetchall()
 
             processed_goods = ""
+            items = Items()
             for row in results:
                 user_id, goods_id, goods_num, bind_num, goods_name = row
                 if goods_num > XiuConfig().max_goods_num:
@@ -1378,6 +1391,23 @@ class XiuxianDateManage:
                     new_bind_num = XiuConfig().max_goods_num
                     sql_update = f"UPDATE back SET bind_num=? WHERE user_id=? AND goods_id=?"
                     cur.execute(sql_update, (new_bind_num, user_id, goods_id))
+                    logger.opt(colors=True).info(f"<green>用户 {user_id} 的物品 {goods_name} 的绑定数量已调整为 {new_bind_num}</green>")
+                    processed_goods += f"{user_id} 的 {goods_name} 绑定数量异常{bind_num}\n"
+
+                try:
+                    item_info = items.get_data_by_item_id(int(goods_id))
+                except Exception:
+                    item_info = None
+
+                if item_info:
+                    current_name = item_info.get("name")
+                    if current_name and goods_name != current_name:
+                        sql_update = "UPDATE back SET goods_name=? WHERE user_id=? AND goods_id=?"
+                        cur.execute(sql_update, (current_name, user_id, goods_id))
+                        logger.opt(colors=True).info(
+                            f"<green>用户 {user_id} 的物品ID {goods_id} 名称已由 {goods_name} 修正为 {current_name}</green>"
+                        )
+                        processed_goods += f"{user_id} 的物品ID {goods_id} 名称异常：{goods_name} -> {current_name}\n"
 
             self.conn.commit()
             if not processed_goods:
@@ -3970,9 +4000,10 @@ def get_weapon_info_msg(weapon_id, weapon_info=None):
     def_buff_msg = f"{'提升' if weapon_info['def_buff'] > 0 else '降低'}{int(abs(weapon_info['def_buff']) * 100)}%减伤率！" if weapon_info['def_buff'] != 0 else ''
     zw_buff_msg = f"装备专属武器时提升伤害！！" if weapon_info['zw'] != 0 else ''
     mp_buff_msg = f"降低真元消耗{int(weapon_info['mp_buff'] * 100)}%！" if weapon_info['mp_buff'] != 0 else ''
+    crit_damage_reduction_msg = f"降低敌方会心伤害{int(weapon_info.get('crit_damage_reduction', 0) * 100)}%！" if weapon_info.get('crit_damage_reduction', 0) != 0 else ''
     msg += f"名字：{weapon_info['name']}\n"
     msg += f"品阶：{weapon_info['level']}\n"
-    msg += f"效果：{weapon_info['desc']}，{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{mp_buff_msg}{zw_buff_msg}"
+    msg += f"效果：{weapon_info['desc']}，{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{mp_buff_msg}{crit_damage_reduction_msg}{zw_buff_msg}"
     return msg
 
 

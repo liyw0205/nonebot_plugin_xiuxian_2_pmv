@@ -309,7 +309,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @guess_number_help_cmd.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(
+    await send_help_message(
         bot, event,
         "猜数字帮助：\n"
         "1）开始猜数字\n"
@@ -318,7 +318,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "4）结束猜数字\n\n"
         f"规则：系统随机一个 {GUESS_MIN}~{GUESS_MAX} 的整数，"
         "你根据“猜大了/猜小了”提示逐步逼近答案。",
-        md_type="娱乐",
         k1="开始猜数字", v1="开始猜数字",
         k2="示例猜测", v2="猜 50",
         k3="小游戏帮助", v3="小游戏帮助"

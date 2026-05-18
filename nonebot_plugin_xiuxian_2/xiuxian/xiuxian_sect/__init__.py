@@ -25,7 +25,7 @@ from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekl
 from ..xiuxian_utils.utils import (
     check_user, number_to,
     get_msg_pic, send_msg_handler, handle_send,
-    Txt2Img, update_statistics_value
+    Txt2Img, update_statistics_value, send_help_message
 )
 from ..xiuxian_utils.item_json import Items
 from urllib.parse import quote
@@ -34,6 +34,8 @@ from ..adapter_compat import is_channel_event
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 config = get_config()
+SECT_RENAME_CARD_ID = 20026
+SECT_RENAME_CARD_NAME = "宗门易名符"
 LEVLECOST = config["LEVLECOST"]
 added_rank = added_ranks()
 cache_help = {}
@@ -105,7 +107,7 @@ __sect_help__ = f"""
 
 👑 宗主专属：
   • 宗门职位变更 [道号] [1-15] - 调整成员职位
-  • 宗门改名 [新名称] - 修改宗门名称
+  • 宗门改名 [新名称] - 消耗宗门易名符修改宗门名称
   • 宗主传位 [道号] - 禅让宗主之位
   • 踢出宗门 [道号] - 移除宗门成员
   • 开放宗门加入 - 允许其他修士加入宗门
@@ -317,7 +319,7 @@ async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     title = ""
     font_size = 32
     img = Txt2Img(font_size)
-    await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
+    await send_help_message(bot, event, msg, k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
     await sect_help.finish()
 
 @sect_position_help.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -340,7 +342,7 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg += "• 宗门职位变更 道号 职位名称\n"
     msg += "• 注意：只有长老职位及以上才能变更"
     
-    await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+    await send_help_message(bot, event, msg, k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_position_help.finish()
 
 @sect_elixir_room_make.handle(parameterless=[Cooldown(stamina_cost=2)])
@@ -1550,12 +1552,20 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
+        elif (
+            not (rename_card := sql_message.get_item_by_good_id_and_user_id(user_info['user_id'], SECT_RENAME_CARD_ID))
+            or int(rename_card.get('goods_num', 0)) < 1
+        ):
+            msg = f"宗门改名需要消耗1个{SECT_RENAME_CARD_NAME}！"
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_rename.finish()
+
         elif sql_message.update_sect_name(sect_id, update_sect_name) is False:
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
         else:
-            sql_message.update_sect_name(sect_id, update_sect_name)
+            sql_message.update_back_j(user_info['user_id'], SECT_RENAME_CARD_ID, use_key=1)
             sql_message.update_sect_used_stone(sect_id, XiuConfig().sect_rename_cost, 2)
             msg = f"""
 传宗门——{sect_info['sect_name']}

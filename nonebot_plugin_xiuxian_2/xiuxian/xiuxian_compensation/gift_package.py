@@ -4,7 +4,7 @@ from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import handle_send
+from ..xiuxian_utils.utils import handle_send, send_help_message
 
 from .common import (
     DATA_CONFIG,
@@ -89,13 +89,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @help_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, GIFT_HELP)
+    await send_help_message(
+        bot, event, GIFT_HELP,
+        k1="领取", v1="领取礼包",
+        k2="列表", v2="礼包列表",
+        k3="补偿", v3="补偿帮助"
+    )
 
 
 @admin_help_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, GIFT_ADMIN_HELP)
+    await send_help_message(
+        bot, event, GIFT_ADMIN_HELP,
+        k1="新增", v1="新增礼包",
+        k2="删除", v2="删除礼包",
+        k3="清空", v3="清空礼包"
+    )
 
 
 GIFT_HELP = """

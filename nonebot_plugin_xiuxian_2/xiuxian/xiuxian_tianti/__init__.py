@@ -1,11 +1,13 @@
 import random
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from nonebot import on_command
 from nonebot.params import CommandArg
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to
+from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
 from .tianti_data import (
     TiantiDataManager,
@@ -19,6 +21,7 @@ from .tianti_data import (
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
+items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
 tianti_settle = on_command("炼体结算", priority=10, block=True)
@@ -28,6 +31,43 @@ tianti_info = on_command("我的炼体", priority=10, block=True)
 tianti_chongqiao = on_command("冲窍", priority=10, block=True)
 tiqiao_info = on_command("我的体窍", priority=10, block=True)
 tianti_level_help = on_command("炼体境界", priority=10, block=True)
+tianti_medicine_bath = on_command("炼体药浴", aliases={"药浴"}, priority=10, block=True)
+
+MEDICINE_BATH_DURATION_MINUTES = 360
+MEDICINE_BATH_UNIT_EFFECT = 1 / 30
+MEDICINE_BATH_FULL_EFFECT_UNITS = 15
+MEDICINE_BATH_MAX_UNITS = 30
+MEDICINE_BATH_MAX_EFFECT = 2.0
+MEDICINE_BATH_TIME_CONFIG = [
+    {
+        "name": "子卯阴息",
+        "start": 23,
+        "end": 5,
+        "range": (1.85, 2.00),
+        "herbs": {"夜交藤", "鬼臼草", "腐骨灵花", "渊血冥花", "阴阳黄泉花", "厉魂血珀", "炼魂珠", "绝魂草", "冥胎骨", "鬼面花"},
+    },
+    {
+        "name": "卯午生机",
+        "start": 5,
+        "end": 11,
+        "range": (1.65, 1.85),
+        "herbs": {"恒心草", "天青花", "九叶芝", "玉髓芝", "天蝉灵叶", "三叶青芝", "木灵三针花", "檀芒九叶花", "森檀木", "太清玄灵草"},
+    },
+    {
+        "name": "午酉血火",
+        "start": 11,
+        "end": 17,
+        "range": (1.75, 1.95),
+        "herbs": {"血莲精", "鸡冠草", "地心火芝", "冰灵焰草", "地心淬灵乳", "离火梧桐芝", "火精枣", "血菩提", "重元换血草", "凤血果"},
+    },
+    {
+        "name": "酉子玄凝",
+        "start": 17,
+        "end": 23,
+        "range": (1.70, 1.90),
+        "herbs": {"银精芝", "雪玉骨参", "八角玄冰草", "坎水玄冰果", "浩淼水藤", "玄冰花", "冰灵果", "冰精芝", "月灵花", "太乙碧莹花"},
+    },
+]
 
 
 def _get_tianti_cap(data: dict) -> int:
@@ -58,6 +98,135 @@ def _calc_qiaoxue_bonus(data: dict):
     return base_ratio, gain_pct
 
 
+def _parse_tianti_time(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            return datetime.strptime(str(value), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _clear_medicine_bath(data: dict):
+    data["medicine_last_time"] = None
+    data["medicine_end_time"] = None
+    data["medicine_effect"] = 0.0
+    data["medicine_name"] = ""
+
+
+def _get_active_medicine_bath(data: dict, now_t: datetime):
+    end_t = _parse_tianti_time(data.get("medicine_end_time"))
+    if not end_t or now_t > end_t:
+        return None
+    try:
+        effect = float(data.get("medicine_effect", 0) or 0)
+    except Exception:
+        effect = 0.0
+    if effect <= 1:
+        return None
+    return {
+        "name": data.get("medicine_name") or "未知药材",
+        "effect": effect,
+        "end_time": end_t,
+    }
+
+
+def _medicine_bath_slot(hour: int):
+    for conf in MEDICINE_BATH_TIME_CONFIG:
+        start = conf["start"]
+        end = conf["end"]
+        if start <= end:
+            if start <= hour < end:
+                return conf
+        else:
+            if hour >= start or hour < end:
+                return conf
+    return MEDICINE_BATH_TIME_CONFIG[0]
+
+
+def _parse_medicine_bath_items(text: str):
+    tokens = [token for token in re.split(r"[\s,，、;；]+", text.strip()) if token]
+    result = []
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        amount = 1
+        match = re.match(r"^(.+?)[xX*×](\d+)$", token)
+        if match:
+            herb_name = match.group(1).strip()
+            amount = int(match.group(2))
+        else:
+            herb_name = token.strip()
+            if idx + 1 < len(tokens) and tokens[idx + 1].isdigit():
+                amount = int(tokens[idx + 1])
+                idx += 1
+
+        if herb_name and amount > 0:
+            result.append((herb_name, amount))
+        idx += 1
+    return result
+
+
+def _medicine_bath_effect(units: int):
+    valid_units = max(0, min(int(units), MEDICINE_BATH_MAX_UNITS))
+    return round(min(MEDICINE_BATH_MAX_EFFECT, 1 + valid_units * MEDICINE_BATH_UNIT_EFFECT), 4)
+
+
+def _format_medicine_bath_plan(plan, limit: int = 6):
+    names = [f"{item['name']}x{item['amount']}" for item in plan]
+    if len(names) > limit:
+        return "、".join(names[:limit]) + f"等{len(names)}种"
+    return "、".join(names)
+
+
+def _format_medicine_bath_percent(effect: float):
+    return f"{effect * 100:.2f}".rstrip("0").rstrip(".")
+
+
+def _settle_tianti_gain(data: dict, now_t: datetime):
+    last_t = _parse_tianti_time(data.get("last_settle_time"))
+    if not last_t:
+        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
+        return {"status": "init"}
+
+    mins = max(0, int((now_t - last_t).total_seconds() // 60))
+    if mins <= 0:
+        return {"status": "empty", "mins": mins}
+
+    lvl_data = get_tianti_level_data(data["tianti_level"])
+    base_per_min = int(lvl_data["hp_gain_per_min"])
+    base_ratio, gain_pct = _calc_qiaoxue_bonus(data)
+    real_per_min = int(base_per_min * (1 + base_ratio))
+
+    bath = _get_active_medicine_bath(data, now_t)
+    bath_effect = bath["effect"] if bath else 1.0
+    bath_expired = False
+    if not bath and data.get("medicine_end_time"):
+        _clear_medicine_bath(data)
+        bath_expired = True
+
+    gain = int(mins * real_per_min * (1 + gain_pct) * bath_effect)
+    cap = _get_tianti_cap(data)
+    old_hp = int(data["tianti_hp"])
+    new_hp = min(cap, old_hp + gain)
+    real_gain = max(0, new_hp - old_hp)
+
+    data["tianti_hp"] = new_hp
+    data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
+    return {
+        "status": "ok",
+        "mins": mins,
+        "real_gain": real_gain,
+        "new_hp": new_hp,
+        "bath": bath,
+        "bath_expired": bath_expired,
+    }
+
+
 def _get_qiaoxue_unlock_limit(data: dict) -> int:
     """
     冲窍额度规则：
@@ -76,11 +245,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 3）炼体突破：满足修仙境界+炼体气血后突破
 4）冲窍：消耗当前10%炼体气血，随机冲击一个未开的窍穴
    ※ 每提升1个炼体小境界，累计解锁1个可开窍数量
-5）我的体窍 [窍穴名/天罡/地煞]：查看体窍总览/分组/单个窍穴
-6）我的炼体：查看当前炼体状态
-7）炼体境界：查看炼体境界表
+5）炼体药浴 药材x数量 药材x数量：按当前时段消耗多份药材获得360分钟炼体结算加成
+6）我的体窍 [窍穴名/天罡/地煞]：查看体窍总览/分组/单个窍穴
+7）我的炼体：查看当前炼体状态
+8）炼体境界：查看炼体境界表
 """
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="结算", v1="炼体结算",
+        k2="突破", v2="炼体突破",
+        k3="状态", v3="我的炼体"
+    )
 
 
 @tianti_settle.handle(parameterless=[Cooldown(cd_time=1.2)])
@@ -95,52 +270,31 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data = tianti_manager.get_user_tianti_info(user_id)
     now_t = datetime.now()
 
-    # 兼容 None / "None" / "null" / "0" / 空字符串
-    last_settle_str = data.get("last_settle_time")
-    if (not last_settle_str) or str(last_settle_str).strip().lower() in ("none", "null", "0", ""):
-        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-        tianti_manager.save_user_tianti_info(user_id, data)
+    result = _settle_tianti_gain(data, now_t)
+    tianti_manager.save_user_tianti_info(user_id, data)
+    if result["status"] == "init":
         await handle_send(bot, event, "已初始化炼体计时，请稍后再来结算。")
         return
-
-    # 兼容旧格式异常数据
-    try:
-        last_t = datetime.strptime(str(last_settle_str), "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-        tianti_manager.save_user_tianti_info(user_id, data)
-        await handle_send(bot, event, "检测到旧计时数据异常，已自动重置，请稍后再来结算。")
-        return
-
-    mins = max(0, int((now_t - last_t).total_seconds() // 60))
-    if mins <= 0:
+    if result["status"] == "empty":
         await handle_send(bot, event, "时间太短，暂无可结算炼体收益。")
         return
 
-    lvl_data = get_tianti_level_data(data["tianti_level"])
-    base_per_min = int(lvl_data["hp_gain_per_min"])
-
-    # 窍穴加成
-    base_ratio, gain_pct = _calc_qiaoxue_bonus(data)
-
-    real_per_min = int(base_per_min * (1 + base_ratio))
-    gain = int(mins * real_per_min * (1 + gain_pct))
-
-    # 当前境界上限
-    cap = _get_tianti_cap(data)
-    old_hp = int(data["tianti_hp"])
-    new_hp = min(cap, old_hp + gain)
-    real_gain = max(0, new_hp - old_hp)
-
-    data["tianti_hp"] = new_hp
-    data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-    tianti_manager.save_user_tianti_info(user_id, data)
+    bath_msg = ""
+    if result.get("bath"):
+        bath = result["bath"]
+        bath_msg = (
+            f"\n药浴加成：{bath['name']}，本次按{_format_medicine_bath_percent(bath['effect'])}%结算"
+            f"（有效至{bath['end_time'].strftime('%H:%M')}）"
+        )
+    elif result.get("bath_expired"):
+        bath_msg = "\n药浴已超过360分钟，本次未获得药浴加成。"
 
     await handle_send(
         bot, event,
-        f"炼体结算完成，间隔{mins}分钟。\n"
-        f"本次获得炼体气血：{number_to(real_gain)}\n"
-        f"当前炼体气血：{number_to(new_hp)}"
+        f"炼体结算完成，间隔{result['mins']}分钟。\n"
+        f"本次获得炼体气血：{number_to(result['real_gain'])}\n"
+        f"当前炼体气血：{number_to(result['new_hp'])}"
+        f"{bath_msg}"
     )
 
 
@@ -186,6 +340,167 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(
         bot, event,
         f"灵石炼体完成：消耗灵石{number_to(real_stone_cost)}，获得炼体气血{number_to(real_gain)}。"
+    )
+
+
+@tianti_medicine_bath.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = str(user_info["user_id"])
+    now_t = datetime.now()
+    raw_text = args.extract_plain_text().strip()
+    slot = _medicine_bath_slot(now_t.hour)
+
+    if not raw_text:
+        herbs = "、".join(sorted(slot["herbs"])[:10])
+        await handle_send(
+            bot,
+            event,
+            f"【炼体药浴】\n"
+            f"当前时段：{slot['name']}\n"
+            f"本时段有效药材：{herbs}\n"
+            f"药材效果：每1份有效药材+{MEDICINE_BATH_UNIT_EFFECT * 100:.2f}%结算效果，"
+            f"{MEDICINE_BATH_FULL_EFFECT_UNITS}份达到150%，{MEDICINE_BATH_MAX_UNITS}份达到200%封顶\n"
+            f"其他时段药材：无效果，不消耗\n"
+            f"持续时间：{MEDICINE_BATH_DURATION_MINUTES}分钟\n"
+            f"用法：炼体药浴 恒心草x20 天青花x20"
+        )
+        return
+
+    requested_items = _parse_medicine_bath_items(raw_text)
+    if not requested_items:
+        await handle_send(bot, event, "用法：炼体药浴 恒心草x20 天青花x20")
+        return
+
+    invalid_items = []
+    no_effect_items = []
+    valid_requests = []
+    valid_requested_amount = 0
+    for herb_name, amount in requested_items:
+        item_id, item_info = items.get_data_by_item_name(herb_name)
+        if not item_id or not item_info or item_info.get("item_type") != "药材":
+            invalid_items.append(f"{herb_name}x{amount}")
+            continue
+        item_name = item_info["name"]
+        if item_name not in slot["herbs"]:
+            no_effect_items.append(f"{item_name}x{amount}")
+            continue
+        valid_requests.append({
+            "item_id": item_id,
+            "name": item_name,
+            "amount": amount,
+        })
+        valid_requested_amount += amount
+
+    if invalid_items:
+        await handle_send(
+            bot,
+            event,
+            f"药浴只能使用药材，以下物品不存在或不是药材：{'、'.join(invalid_items)}"
+        )
+        return
+
+    if not valid_requests:
+        herbs = "、".join(sorted(slot["herbs"])[:10])
+        msg = (
+            f"当前时段【{slot['name']}】只有这些药材有效：{herbs}\n"
+            f"你放入的药材当前时段无效，未消耗。"
+        )
+        if no_effect_items:
+            msg += f"\n无效药材：{'、'.join(no_effect_items)}"
+        await handle_send(bot, event, msg)
+        return
+
+    data = tianti_manager.get_user_tianti_info(user_id)
+    active_bath = _get_active_medicine_bath(data, now_t)
+    if active_bath:
+        remain = int((active_bath["end_time"] - now_t).total_seconds() // 60)
+        await handle_send(
+            bot,
+            event,
+            f"当前药浴仍在生效：{active_bath['name']}，剩余约{remain}分钟。\n"
+            f"药浴结束后再使用新的药材。"
+        )
+        return
+
+    consume_plan = []
+    plan_by_id = {}
+    remaining_units = MEDICINE_BATH_MAX_UNITS
+    for request in valid_requests:
+        if remaining_units <= 0:
+            break
+        amount = min(request["amount"], remaining_units)
+        if amount <= 0:
+            continue
+        item_id = request["item_id"]
+        if item_id not in plan_by_id:
+            plan_by_id[item_id] = {
+                "item_id": item_id,
+                "name": request["name"],
+                "amount": 0,
+            }
+            consume_plan.append(plan_by_id[item_id])
+        plan_by_id[item_id]["amount"] += amount
+        remaining_units -= amount
+
+    consume_units = sum(item["amount"] for item in consume_plan)
+    if consume_units <= 0:
+        await handle_send(bot, event, "有效药材数量不足，无法开启药浴。")
+        return
+
+    not_enough = []
+    for item in consume_plan:
+        have = sql_message.goods_num(user_id, item["item_id"])
+        if have < item["amount"]:
+            not_enough.append(f"{item['name']}需要{item['amount']}份，现有{have}份")
+    if not_enough:
+        await handle_send(bot, event, "药材不足：\n" + "\n".join(not_enough))
+        return
+
+    pre_result = _settle_tianti_gain(data, now_t)
+    if pre_result["status"] == "empty":
+        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
+
+    effect = _medicine_bath_effect(consume_units)
+    end_t = now_t + timedelta(minutes=MEDICINE_BATH_DURATION_MINUTES)
+    bath_name = f"{slot['name']}药浴（{_format_medicine_bath_plan(consume_plan)}）"
+    data["medicine_last_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
+    data["medicine_end_time"] = end_t.strftime("%Y-%m-%d %H:%M:%S")
+    data["medicine_effect"] = effect
+    data["medicine_name"] = bath_name
+
+    for item in consume_plan:
+        sql_message.update_back_j(user_id, item["item_id"], item["amount"])
+    tianti_manager.save_user_tianti_info(user_id, data)
+
+    pre_msg = ""
+    if pre_result["status"] == "ok" and pre_result.get("real_gain", 0) > 0:
+        pre_msg = f"\n药浴前已自动结算炼体气血：{number_to(pre_result['real_gain'])}"
+
+    ignored_msgs = []
+    ignored_amount = max(0, valid_requested_amount - consume_units)
+    if ignored_amount:
+        ignored_msgs.append(f"超过上限的有效药材未消耗：{ignored_amount}份")
+    if no_effect_items:
+        ignored_msgs.append(f"当前时段无效未消耗：{'、'.join(no_effect_items)}")
+    ignored_msg = "\n" + "\n".join(ignored_msgs) if ignored_msgs else ""
+
+    await handle_send(
+        bot,
+        event,
+        f"药浴开启成功！\n"
+        f"时段：{slot['name']}\n"
+        f"消耗有效药材：{_format_medicine_bath_plan(consume_plan)}，共{consume_units}份\n"
+        f"炼体结算效果：{_format_medicine_bath_percent(effect)}%\n"
+        f"持续时间：{MEDICINE_BATH_DURATION_MINUTES}分钟\n"
+        f"有效至：{end_t.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"{ignored_msg}"
+        f"{pre_msg}"
     )
 
 
@@ -273,6 +588,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         brk = "已达炼体最高境界"
 
+    bath = _get_active_medicine_bath(data, datetime.now())
+    if bath:
+        bath_msg = (
+            f"\n药浴：{bath['name']}，结算效果{_format_medicine_bath_percent(bath['effect'])}%"
+            f"（有效至{bath['end_time'].strftime('%H:%M')}）"
+        )
+    else:
+        bath_msg = "\n药浴：无"
+
     await handle_send(
         bot, event,
         f"【我的炼体】\n"
@@ -281,6 +605,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"已开窍：{opened}/108\n"
         f"当前可开上限：{unlock_limit}/108\n"
         f"{brk}"
+        f"{bath_msg}"
     )
 
 

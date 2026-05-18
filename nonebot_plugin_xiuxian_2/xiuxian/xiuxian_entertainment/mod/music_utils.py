@@ -1,6 +1,5 @@
 import json
 import time
-from pathlib import Path
 from typing import Any, Optional
 
 import requests
@@ -13,12 +12,6 @@ from ...xiuxian_config import XiuConfig
 # =========================
 # 配置
 # =========================
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-CONFIG_PATH = DATA_DIR / "music_config.json"
-
 DEFAULT_CONFIG = {
     "default_platform": "netease",     # 默认平台
     "song_limit": 30,                  # 搜索返回数量
@@ -27,36 +20,20 @@ DEFAULT_CONFIG = {
     "page_size": 10,                    # 每页显示数量（翻页用）
 }
 
+_MUSIC_CONFIG = DEFAULT_CONFIG.copy()
+
 
 def load_music_config() -> dict:
-    """加载配置，不存在则自动创建默认配置"""
-    if not CONFIG_PATH.exists():
-        save_music_config(DEFAULT_CONFIG.copy())
-        return DEFAULT_CONFIG.copy()
-
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        changed = False
-        for k, v in DEFAULT_CONFIG.items():
-            if k not in data:
-                data[k] = v
-                changed = True
-
-        if changed:
-            save_music_config(data)
-
-        return data
-    except Exception as e:
-        logger.warning(f"点歌配置读取失败，已重置默认配置: {e}")
-        save_music_config(DEFAULT_CONFIG.copy())
-        return DEFAULT_CONFIG.copy()
+    """读取内置点歌配置，不再自动创建 music_config.json"""
+    return _MUSIC_CONFIG.copy()
 
 
 def save_music_config(cfg: dict):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=4)
+    """更新本次运行中的点歌配置，不落盘。"""
+    global _MUSIC_CONFIG
+    merged = DEFAULT_CONFIG.copy()
+    merged.update({k: v for k, v in cfg.items() if k in DEFAULT_CONFIG})
+    _MUSIC_CONFIG = merged
 
 
 def set_music_config(key: str, value: str) -> tuple[bool, str]:
@@ -75,7 +52,7 @@ def set_music_config(key: str, value: str) -> tuple[bool, str]:
 
         cfg[key] = value
         save_music_config(cfg)
-        return True, f"配置已更新：{key} = {value}"
+        return True, f"配置已更新（本次运行生效）：{key} = {value}"
     except Exception as e:
         return False, f"配置更新失败：{e}"
 

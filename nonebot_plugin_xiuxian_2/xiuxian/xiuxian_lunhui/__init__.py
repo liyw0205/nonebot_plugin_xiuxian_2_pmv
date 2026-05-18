@@ -19,7 +19,8 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
-    handle_send
+    handle_send,
+    send_help_message
 )
 from ..xiuxian_impart.impart_uitls import (
     impart_check,
@@ -31,6 +32,8 @@ player_data_manager = PlayerDataManager()
 items = Items()
 added_ranks = added_ranks()
 confirm_lunhui_cache = {}
+ROOT_RENAME_CARD_ID = 20025
+ROOT_RENAME_CARD_NAME = "灵根改名卡"
 
 __warring_help__ = f"""
 【轮回重修系统】♾️
@@ -52,6 +55,7 @@ __warring_help__ = f"""
    
 ♾️ 进入无限轮回 - 获得【命运灵根】
    • 最低境界要求：{XiuConfig().Infinite_reincarnation_min_level}
+   • 命运道果每5次轮回降低单次加成30%，最低50%
 
 💀 自废修为 - 仅感气境可用
   • 完全重置修为（慎用！）
@@ -70,6 +74,7 @@ __warring_help__ = f"""
 
 📌 注意事项：
 • 轮回后将更新灵根资质
+• 每次轮回赠送【灵根改名卡】x1
 • 所有装备、物品不会丢失
 
 """.strip()
@@ -90,7 +95,7 @@ async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     """轮回重修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __warring_help__
-    await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
+    await send_help_message(bot, event, msg, k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
     await warring_help.finish()
         
 @resetting.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -335,7 +340,8 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         sql_message.update_root(user_id, root_level)  # 更换灵根
     if root_level == 0 or root_level == 9:
         sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
-    msg = f"{original_msg}！"
+    sql_message.send_back(user_id, ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME, "特殊道具", 1, 1)
+    msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"
     await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
 
     # 删除确认缓存

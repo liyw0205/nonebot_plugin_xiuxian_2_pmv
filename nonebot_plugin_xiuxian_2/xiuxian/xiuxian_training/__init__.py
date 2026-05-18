@@ -8,7 +8,7 @@ from nonebot.params import CommandArg, RegexGroup
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
 from ..xiuxian_utils.item_json import Items
 from .training_data import training_data
@@ -52,7 +52,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "输入对应命令开始你的历练之旅吧！"
     )
     
-    await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
+    await send_help_message(bot, event, msg, k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     await training_help.finish()
 
 @training_start.handle(parameterless=[Cooldown(cd_time=1.4)])

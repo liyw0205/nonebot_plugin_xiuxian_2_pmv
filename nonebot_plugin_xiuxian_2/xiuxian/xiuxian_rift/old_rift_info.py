@@ -38,7 +38,11 @@ class OLD_RIFT_INFO(object):
             rift_data = {str(x): {"name": group_rift[x].name,
                                   "rank": group_rift[x].rank,
                                   "l_user_id": group_rift[x].l_user_id,
-                                  "time": group_rift[x].time
+                                  "time": group_rift[x].time,
+                                  "target_realm": getattr(group_rift[x], "target_realm", ""),
+                                  "target_heaven": getattr(group_rift[x], "target_heaven", ""),
+                                  "target_node_id": getattr(group_rift[x], "target_node_id", ""),
+                                  "target_node_name": getattr(group_rift[x], "target_node_name", "")
                                   }
                          }
             self.data.update(rift_data)
@@ -56,6 +60,10 @@ class OLD_RIFT_INFO(object):
             rift.rank = self.data[x]["rank"]
             rift.l_user_id = self.data[x]["l_user_id"]
             rift.time = self.data[x]["time"]
+            rift.target_realm = self.data[x].get("target_realm", "")
+            rift.target_heaven = self.data[x].get("target_heaven", "")
+            rift.target_node_id = self.data[x].get("target_node_id", "")
+            rift.target_node_name = self.data[x].get("target_node_name", "")
             group_rift[x] = rift
         self.data = {}
         return group_rift

@@ -13,6 +13,7 @@ class ArenaLimit:
         self.lose_points = 10       # 失败扣除积分（对手）
         self.no_match_points = 10   # 无匹配获得积分
         self.daily_challenges = 10  # 每日挑战次数
+        self.daily_buy_limit = 3    # 每日可购买挑战次数
         
         # 段位荣誉值奖励配置
         self.rank_honor_rewards = {
@@ -37,27 +38,54 @@ class ArenaLimit:
         """获取用户竞技场信息，如果不存在则自动创建"""
         user_id = str(user_id)
         user_info = player_data_manager.get_fields(user_id, self.table_name)
-        
+
+        default_data = {
+            "score": self.initial_score,           # 当前积分
+            "total_wins": 0,                       # 总胜利次数
+            "total_losses": 0,                     # 总失败次数
+            "daily_challenges_used": 0,            # 今日已用挑战次数
+            "daily_extra_challenges": 0,           # 今日额外挑战次数
+            "daily_challenge_buys": 0,             # 今日购买次数
+            "last_reset_date": datetime.now().strftime("%Y-%m-%d"),  # 最后重置日期
+            "last_buy_date": datetime.now().strftime("%Y-%m-%d"),
+            "win_streak": 0,                       # 连胜次数
+            "max_win_streak": 0,                   # 最大连胜
+            "rank": "青铜",                        # 当前段位
+            "honor_points": 0,                    # 荣誉值
+            "total_honor_earned": 0               # 累计获得荣誉值
+        }
+
         if not user_info:
-            # 初始化用户竞技场数据
-            default_data = {
-                "score": self.initial_score,           # 当前积分
-                "total_wins": 0,                       # 总胜利次数
-                "total_losses": 0,                     # 总失败次数
-                "daily_challenges_used": 0,            # 今日已用挑战次数
-                "last_reset_date": datetime.now().strftime("%Y-%m-%d"),  # 最后重置日期
-                "win_streak": 0,                       # 连胜次数
-                "max_win_streak": 0,                   # 最大连胜
-                "rank": "青铜",                        # 当前段位
-                "honor_points": 0,                    # 荣誉值
-                "total_honor_earned": 0               # 累计获得荣誉值
-            }
-            # 保存初始数据
             for key, value in default_data.items():
                 player_data_manager.update_or_write_data(user_id, self.table_name, key, value)
             return default_data
-        
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        changed = False
+        for key, value in default_data.items():
+            if key not in user_info or user_info.get(key) is None:
+                user_info[key] = value
+                player_data_manager.update_or_write_data(user_id, self.table_name, key, value)
+                changed = True
+
+        if user_info.get("last_buy_date") != today:
+            user_info["daily_challenge_buys"] = 0
+            user_info["daily_extra_challenges"] = 0
+            user_info["last_buy_date"] = today
+            player_data_manager.update_or_write_data(user_id, self.table_name, "daily_challenge_buys", 0)
+            player_data_manager.update_or_write_data(user_id, self.table_name, "daily_extra_challenges", 0)
+            player_data_manager.update_or_write_data(user_id, self.table_name, "last_buy_date", today)
+            changed = True
+
+        if changed:
+            user_info = player_data_manager.get_fields(user_id, self.table_name) or user_info
+
         return user_info
+
+    def get_daily_challenge_cap(self, user_id):
+        """获取今日总挑战次数上限。"""
+        arena_info = self.get_user_arena_info(user_id)
+        return self.daily_challenges + int(arena_info.get("daily_extra_challenges", 0))
 
     def calculate_daily_honor(self, user_id):
         """计算用户每日应获得的荣誉值"""
@@ -114,13 +142,39 @@ class ArenaLimit:
     def can_challenge_today(self, user_id):
         """检查今日是否还有挑战次数"""
         arena_info = self.get_user_arena_info(user_id)
-        return arena_info["daily_challenges_used"] < self.daily_challenges
+        return int(arena_info["daily_challenges_used"]) < self.get_daily_challenge_cap(user_id)
 
     def use_challenge(self, user_id):
         """使用一次挑战次数"""
         arena_info = self.get_user_arena_info(user_id)
         arena_info["daily_challenges_used"] += 1
         self.update_arena_data(user_id, {"daily_challenges_used": arena_info["daily_challenges_used"]})
+
+    def add_challenge_count(self, user_id, amount=1):
+        """增加今日剩余挑战次数，实际表现为扣减已用次数"""
+        arena_info = self.get_user_arena_info(user_id)
+        used = max(0, int(arena_info.get("daily_challenges_used", 0)) - int(amount))
+        self.update_arena_data(user_id, {"daily_challenges_used": used})
+        return self.get_daily_challenge_cap(user_id) - used
+
+    def buy_challenge_count(self, user_id, amount=1):
+        """购买今日额外挑战次数。"""
+        arena_info = self.get_user_arena_info(user_id)
+        bought = int(arena_info.get("daily_challenge_buys", 0))
+        amount = max(1, int(amount))
+        can_buy = max(0, self.daily_buy_limit - bought)
+        real_amount = min(amount, can_buy)
+        if real_amount <= 0:
+            return 0, bought, self.get_daily_challenge_cap(user_id)
+
+        extra = int(arena_info.get("daily_extra_challenges", 0)) + real_amount
+        bought += real_amount
+        self.update_arena_data(user_id, {
+            "daily_extra_challenges": extra,
+            "daily_challenge_buys": bought,
+            "last_buy_date": datetime.now().strftime("%Y-%m-%d")
+        })
+        return real_amount, bought, self.daily_challenges + extra
 
     def update_after_battle(self, user_id, is_win, is_opponent=False, opponent_id=None):
         """更新战斗结果
@@ -190,7 +244,10 @@ class ArenaLimit:
         all_users = player_data_manager.get_all_field_data(self.table_name, "score")
         for user_id, _ in all_users:
             player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_challenges_used", 0)
+            player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_extra_challenges", 0)
+            player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_challenge_buys", 0)
             player_data_manager.update_or_write_data(str(user_id), self.table_name, "last_reset_date", datetime.now().strftime("%Y-%m-%d"))
+            player_data_manager.update_or_write_data(str(user_id), self.table_name, "last_buy_date", datetime.now().strftime("%Y-%m-%d"))
 
     def get_arena_ranking(self, limit=50):
         """获取竞技场排行榜"""

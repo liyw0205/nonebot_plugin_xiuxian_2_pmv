@@ -459,3 +459,7 @@ class Rift:
         self.rank = 0
         self.l_user_id = []
         self.time = 0
+        self.target_realm = ''
+        self.target_heaven = ''
+        self.target_node_id = ''
+        self.target_node_name = ''

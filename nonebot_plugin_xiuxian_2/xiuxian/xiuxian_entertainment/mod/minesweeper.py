@@ -161,14 +161,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @ms_help.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(
+    await send_help_message(
         bot, event,
         "扫雷帮助：\n"
         "开始扫雷 [初级|中级|高级|自定义 宽 高 雷数]\n"
         "翻开 A1\n"
         "标记 B2\n"
         "扫雷信息\n"
-        "结束扫雷"
+        "结束扫雷",
+        k1="开始", v1="开始扫雷",
+        k2="信息", v2="扫雷信息",
+        k3="游戏", v3="小游戏帮助"
     )
 
 # =========================

@@ -7,7 +7,7 @@ from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, send_msg_handler, handle_send, number_to
+from ..xiuxian_utils.utils import check_user, send_msg_handler, handle_send, number_to, send_help_message
 
 from .common import (
     DATA_PATH,
@@ -381,13 +381,23 @@ async def _(bot: Bot, event: MessageEvent):
 @invitation_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, INVITATION_HELP)
+    await send_help_message(
+        bot, event, INVITATION_HELP,
+        k1="我的邀请", v1="我的邀请",
+        k2="奖励列表", v2="邀请奖励列表",
+        k3="领取", v3="邀请奖励领取"
+    )
 
 
 @invitation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, INVITATION_ADMIN_HELP)
+    await send_help_message(
+        bot, event, INVITATION_ADMIN_HELP,
+        k1="设置", v1="邀请奖励设置",
+        k2="列表", v2="邀请奖励列表",
+        k3="帮助", v3="邀请帮助"
+    )
 
 
 INVITATION_HELP = """

@@ -17,11 +17,13 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    send_msg_handler, get_msg_pic, log_message, handle_send, update_statistics_value
+    send_msg_handler, get_msg_pic, log_message, handle_send, update_statistics_value,
+    build_md_command_link
 )
-from .riftconfig import get_rift_config, savef_rift
+from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_map import get_player_current_position, get_random_trial_node
 from .riftmake import (
     Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
     get_dxsj_info, get_boss_battle_info, get_treasure_info
@@ -56,6 +58,28 @@ __rift_help__ = f"""
   1. 秘境奖励随探索时间增加
   2. 使用道具可提升收益
   3. 终止探索会损失奖励
+""".strip()
+
+__rift_help_md__ = f"""
+【秘境探索系统】🗝️
+
+🔍 探索指令：
+  • {build_md_command_link("探索秘境")} - 进入秘境获取随机奖励
+  • {build_md_command_link("秘境结算")} - 领取秘境奖励
+  • {build_md_command_link("秘境终止")} - 放弃当前秘境
+  • {build_md_command_link("秘境次数")} - 获取秘境保底奖励次数
+
+⏰ 秘境刷新：
+  • 每日自动生成时间：0点 & 12点
+  • 秘境等级随机生成
+
+💡 小贴士：
+  1. 秘境奖励随探索时间增加
+  2. 使用道具可提升收益
+  3. 终止探索会损失奖励
+
+---
+{build_md_command_link("探索", "探索秘境")} | {build_md_command_link("结算", "秘境结算")} | {build_md_command_link("存档", "我的修仙信息")}
 """.strip()
 
 
@@ -96,8 +120,9 @@ async def generate_rift_for_group():
     rift.name = get_rift_type()
     rift.rank = config['rift'][rift.name]['rank']
     rift.time = config['rift'][rift.name]['time']
+    assign_rift_trial_node(rift)
     group_rift[group_id] = rift
-    msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
+    msg = build_rift_appear_msg(rift)
     logger.info(msg)
     old_rift_info.save_rift(group_rift)
     for notify_group_id in groups:
@@ -105,6 +130,60 @@ async def generate_rift_for_group():
             continue
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
+
+
+def assign_rift_trial_node(rift: Rift):
+    """给秘境绑定一个地图试炼节点。"""
+    node_info = get_random_trial_node()
+    if not node_info:
+        return rift
+    rift.target_realm = node_info["realm"]
+    rift.target_heaven = node_info["heaven"]
+    rift.target_node_id = node_info["node_id"]
+    rift.target_node_name = node_info["node_name"]
+    return rift
+
+
+def build_rift_appear_msg(rift: Rift) -> str:
+    if getattr(rift, "target_node_name", ""):
+        return (
+            f"野生的{rift.name}出现在"
+            f"{rift.target_realm}·{rift.target_heaven}·{rift.target_node_name}！"
+            f"请诸位道友前往目标节点后发送 探索秘境 来加入吧！"
+        )
+    return f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
+
+
+def build_rift_data(rift: Rift) -> dict:
+    return {
+        "name": rift.name,
+        "time": rift.time,
+        "rank": rift.rank,
+        "target_realm": getattr(rift, "target_realm", ""),
+        "target_heaven": getattr(rift, "target_heaven", ""),
+        "target_node_id": getattr(rift, "target_node_id", ""),
+        "target_node_name": getattr(rift, "target_node_name", ""),
+    }
+
+
+def check_rift_target_position(user_id: int, rift: Rift) -> tuple[bool, str]:
+    """普通探索需要玩家位于秘境绑定的试炼节点。"""
+    target_node_id = getattr(rift, "target_node_id", "")
+    if not target_node_id:
+        assign_rift_trial_node(rift)
+        target_node_id = getattr(rift, "target_node_id", "")
+        if not target_node_id:
+            return True, ""
+
+    current = get_player_current_position(str(user_id))
+    if current and current.get("node_id") == target_node_id:
+        return True, ""
+
+    target_msg = f"{rift.target_realm}·{rift.target_heaven}·{rift.target_node_name}"
+    if current:
+        current_msg = f"{current['realm']}·{current['heaven']}·{current['node_name']}"
+        return False, f"本次秘境位于【{target_msg}】，道友当前在【{current_msg}】，请先前往目标节点再探索。"
+    return False, f"本次秘境位于【{target_msg}】，请先前往目标节点再探索。"
 
 def update_rift_explore_count(user_id: int, do_give: bool = True) -> str:
     """
@@ -201,8 +280,14 @@ async def show_rift_progress(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = __rift_help__
-    await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
+    await handle_send(
+        bot,
+        event,
+        __rift_help_md__,
+        native_markdown=True,
+        fallback_msg=__rift_help__,
+        button_id=XiuConfig().button_id2,
+    )
     await rift_help.finish()
 
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -218,8 +303,9 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     rift.name = get_rift_type()
     rift.rank = config['rift'][rift.name]['rank']
     rift.time = config['rift'][rift.name]['time']
+    assign_rift_trial_node(rift)
     group_rift[group_id] = rift
-    msg = f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
+    msg = build_rift_appear_msg(rift)
     old_rift_info.save_rift(group_rift)
     await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
     return
@@ -262,13 +348,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await explore_rift.finish()
 
+        can_reach_rift, position_msg = check_rift_target_position(user_id, group_rift[group_id])
+        if not can_reach_rift:
+            old_rift_info.save_rift(group_rift)
+            await handle_send(bot, event, position_msg)
+            await explore_rift.finish()
+
         group_rift[group_id].l_user_id.append(user_id)
-        msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！"
-        rift_data = {
-            "name": group_rift[group_id].name,
-            "time": group_rift[group_id].time,
-            "rank": group_rift[group_id].rank
-        }
+        rift_data = build_rift_data(group_rift[group_id])
+        target_msg = ""
+        if rift_data.get("target_node_name"):
+            target_msg = f"\n秘境位置：{rift_data['target_realm']}·{rift_data['target_heaven']}·{rift_data['target_node_name']}"
+        msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！{target_msg}"
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
@@ -314,12 +405,11 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         current_rift = check_msg_or_rift # 此时 check_msg_or_rift 是 Rift 对象
 
         group_rift["000000"].l_user_id.append(user_id) # 添加用户到秘境参与者列表
-        msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！"
-        rift_data = {
-            "name": current_rift.name,
-            "time": current_rift.time,
-            "rank": current_rift.rank
-        }
+        rift_data = build_rift_data(current_rift)
+        target_msg = ""
+        if rift_data.get("target_node_name"):
+            target_msg = f"\n秘藏令已绕过位置要求。\n秘境位置：{rift_data['target_realm']}·{rift_data['target_heaven']}·{rift_data['target_node_name']}"
+        msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])

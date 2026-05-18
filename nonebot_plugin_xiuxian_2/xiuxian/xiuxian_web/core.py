@@ -1,0 +1,937 @@
+import sqlite3
+import os
+import asyncio
+import json
+import re
+import ast
+import platform
+import time
+import signal
+import subprocess
+import select
+import struct
+import threading
+import random
+import uuid
+from werkzeug.utils import secure_filename
+from io import BytesIO
+from PIL import Image
+import requests
+
+IS_WINDOWS = platform.system() == "Windows"
+
+if not IS_WINDOWS:
+    import pty
+    import fcntl
+    import termios
+else:
+    pty = None
+    fcntl = None
+    termios = None
+from pathlib import Path
+from datetime import datetime, timedelta
+
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, abort, Response
+
+from nonebot.log import logger
+from nonebot import get_driver, get_bots, __version__ as nb_version
+# --- 消息统计核心导入 ---
+from nonebot.message import event_preprocessor
+from nonebot.adapters import Bot as BaseBot, Event
+from ..adapter_compat import (
+    MessageSegment,
+    init_message_db,
+    get_message_db_path,
+    extract_result_message_id,
+    get_bot_id,
+    record_web_send_message,
+    delete_message_compat,
+)
+from typing import Any
+from ..xiuxian_utils.item_json import Items
+from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
+from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.download_xiuxian_data import UpdateManager
+from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
+
+# --- 辅助函数 ---
+def format_time(seconds: float) -> str:
+    if seconds <= 0: return "未知"
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+
+def execute_sql(db_path, sql, params=None):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        if params: cursor.execute(sql, params)
+        else: cursor.execute(sql)
+        if sql.strip().lower().startswith('select'):
+            return [dict(row) for row in cursor.fetchall()]
+        conn.commit()
+        return {"affected_rows": cursor.rowcount}
+    except Exception as e: return {"error": str(e)}
+    finally: conn.close()
+
+# --- Psutil 处理 ---
+psutil_available = False
+try:
+    import psutil
+    psutil_available = True
+except ImportError:
+    class Dummy: pass
+    psutil = Dummy()
+
+items = Items()
+update_manager = UpdateManager()
+app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'  # 用于会话加密
+
+# 配置
+XIUXIANDATA = Path() / "data"
+DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
+IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
+PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db"
+TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db"
+MESSAGE_DB = get_message_db_path()
+ADMIN_IDS = get_driver().config.superusers
+PORT = XiuConfig().web_port
+HOST = XiuConfig().web_host
+
+WEB_UPLOAD_CACHE = Path() / "data" / "xiuxian" / "cache" / "web_uploads"
+WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
+
+
+def get_image_size_from_input(media_input):
+    try:
+        if isinstance(media_input, (str,)):
+            if media_input.startswith("http://") or media_input.startswith("https://"):
+                resp = requests.get(media_input, timeout=10)
+                resp.raise_for_status()
+                img = Image.open(BytesIO(resp.content))
+                return img.size
+            else:
+                img = Image.open(media_input)
+                return img.size
+
+        elif isinstance(media_input, Path):
+            img = Image.open(media_input)
+            return img.size
+
+    except Exception:
+        pass
+
+    return (1280, 720)
+
+def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
+                              media_type: str = "", media_input=None):
+    """
+    构造 Web 发送消息：
+    - send_mode=plain: 普通文本
+    - send_mode=markdown: 原生 Markdown
+    - media_type=image/video/audio/file
+    - media_input: URL / Path / BytesIO / bytes
+    """
+    send_mode = send_mode or "plain"
+    media_type = media_type or ""
+
+    # 原生 Markdown：只发文本 Markdown，不混媒体
+    if send_mode == "markdown":
+        return MessageSegment.markdown(bot, content or " ")
+
+    msg = None
+
+    if content:
+        msg = MessageSegment.text(bot, content)
+
+    if media_type and media_input is not None:
+        if media_type == "image":
+            seg = MessageSegment.image(bot, media_input)
+        elif media_type == "video":
+            seg = MessageSegment.video(bot, media_input)
+        elif media_type == "audio":
+            seg = MessageSegment.audio(bot, media_input)
+        else:
+            seg = MessageSegment.file(bot, media_input)
+
+        msg = seg if msg is None else msg + seg
+
+    if msg is None:
+        msg = MessageSegment.text(bot, " ")
+
+    return msg
+
+
+def save_uploaded_media(file_storage):
+    """
+    保存上传文件到临时目录，返回 Path。
+    """
+    filename = secure_filename(file_storage.filename or "upload.bin")
+    suffix = Path(filename).suffix
+    save_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{suffix}"
+    save_path = WEB_UPLOAD_CACHE / save_name
+    file_storage.save(save_path)
+    return save_path
+
+
+def run_async(coro):
+    """在同步环境执行协程，兼容已有事件循环/无事件循环两种情况"""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result = {}
+
+    def _runner():
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            result["value"] = new_loop.run_until_complete(coro)
+        finally:
+            new_loop.close()
+
+    t = threading.Thread(target=_runner)
+    t.start()
+    t.join()
+    return result.get("value")
+
+# 境界和灵根预设
+LEVELS = convert_rank('江湖好手')[1]
+
+ROOTS = {
+    "1": "混沌灵根",
+    "2": "融合灵根",
+    "3": "超灵根",
+    "4": "龙灵根",
+    "5": "天灵根",
+    "6": "轮回道果",
+    "7": "真·轮回道果",
+    "8": "永恒道果",
+    "9": "命运道果"
+}
+
+# 管理员指令
+ADMIN_COMMANDS = {
+    "gm_command": {
+        "name": "神秘力量",
+        "description": "修改灵石数量",
+        "params": [
+            {"name": "目标", "type": "select", "options": ["指定用户", "全服"], "key": "target"},
+            {"name": "道号", "type": "text", "required": False, "key": "username", "show_if": {"target": "指定用户"}},
+            {"name": "数量", "type": "number", "required": True, "key": "amount"}
+        ]
+    },
+    "adjust_exp_command": {
+        "name": "修为调整",
+        "description": "修改修为数量",
+        "params": [
+            {"name": "目标", "type": "select", "options": ["指定用户", "全服"], "key": "target"},
+            {"name": "道号", "type": "text", "required": False, "key": "username", "show_if": {"target": "指定用户"}},
+            {"name": "数量", "type": "number", "required": True, "key": "amount"}
+        ]
+    },
+    "gmm_command": {
+        "name": "轮回力量",
+        "description": "修改灵根",
+        "params": [
+            {"name": "道号", "type": "text", "required": True, "key": "username"},
+            {"name": "灵根类型", "type": "select", "options": ROOTS, "key": "root_type"}
+        ]
+    },
+    "zaohua_xiuxian": {
+        "name": "造化力量",
+        "description": "修改境界",
+        "params": [
+            {"name": "道号", "type": "text", "required": True, "key": "username"},
+            {"name": "境界", "type": "select", "options": LEVELS, "key": "level"}
+        ]
+    },
+    "cz": {
+        "name": "创造力量",
+        "description": "发放物品",
+        "params": [
+            {"name": "目标", "type": "select", "options": ["指定用户", "全服"], "key": "target"},
+            {"name": "道号", "type": "text", "required": False, "key": "username", "show_if": {"target": "指定用户"}},
+            {"name": "物品", "type": "text", "required": True, "key": "item", "placeholder": "物品名称或ID"},
+            {"name": "数量", "type": "number", "required": True, "key": "amount"}
+        ]
+    },
+    "hmll": {
+        "name": "毁灭力量",
+        "description": "扣除物品",
+        "params": [
+            {"name": "目标", "type": "select", "options": ["指定用户", "全服"], "key": "target"},
+            {"name": "道号", "type": "text", "required": False, "key": "username", "show_if": {"target": "指定用户"}},
+            {"name": "物品", "type": "text", "required": True, "key": "item", "placeholder": "物品名称或ID"},
+            {"name": "数量", "type": "number", "required": True, "key": "amount"}
+        ]
+    },
+    "ccll_command": {
+        "name": "传承力量",
+        "description": "修改思恋结晶数量",
+        "params": [
+            {"name": "目标", "type": "select", "options": ["指定用户", "全服"], "key": "target"},
+            {"name": "道号", "type": "text", "required": False, "key": "username", "show_if": {"target": "指定用户"}},
+            {"name": "数量", "type": "number", "required": True, "key": "amount"}
+        ]
+    }
+}
+
+# 从配置类获取表结构信息
+def get_config_tables():
+    """获取所有数据库的表结构，按数据库分组"""
+    tables = {
+        "主数据库": {
+            "path": DATABASE,
+            "tables": get_config_table_structure(XiuConfig())
+        },
+        "虚神界数据库": {
+            "path": IMPART_DB,
+            "tables": get_impart_table_structure(config_impart)
+        },
+        "游戏数据库": {
+            "path": PLAYER_DB, # 使用新增的常量
+            "tables": get_dynamic_player_tables()
+        },
+        "交易数据库": { # 新增：交易数据库
+            "path": TRADE_DB, # 使用新增的常量
+            "tables": get_dynamic_trade_tables()
+        }
+    }
+    return tables
+
+def get_dynamic_player_tables():
+    """动态获取 player.db 中所有存在的表及其字段信息"""
+    # 路径使用常量
+    player_db_path = PLAYER_DB
+    if not player_db_path.exists():
+        return {}
+
+    conn = None
+    try:
+        conn = sqlite3.connect(player_db_path)
+        cursor = conn.cursor()
+
+        # 获取所有表名
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        result = {}
+        for table_name in table_names:
+            # 获取字段列表
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            fields_info = cursor.fetchall()
+            fields = [row[1] for row in fields_info]
+
+            # 尝试找出主键
+            primary_key = "user_id" if "user_id" in fields else None
+            if not primary_key:
+                # 如果没有 user_id，找第一个 INTEGER PRIMARY KEY
+                for row in fields_info:
+                    if row[5] == 1:  # pk=1 表示主键
+                        primary_key = row[1]
+                        break
+
+            result[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key,
+                "is_dynamic": True    
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"获取 player.db 表结构失败: {e}")
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+def get_dynamic_trade_tables():
+    """动态获取 trade.db 中所有存在的表及其字段信息"""
+    # 路径使用常量
+    trade_db_path = TRADE_DB
+    if not trade_db_path.exists():
+        return {}
+
+    conn = None
+    try:
+        conn = sqlite3.connect(trade_db_path)
+        cursor = conn.cursor()
+
+        # 获取所有表名
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        result = {}
+        for table_name in table_names:
+            # 获取字段列表
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            fields_info = cursor.fetchall()
+            fields = [row[1] for row in fields_info]
+
+            # 尝试找出主键
+            primary_key = None
+            for row in fields_info:
+                if row[5] == 1: # pk=1 表示主键
+                    primary_key = row[1]
+                    break
+            # 特殊处理，如果表有id字段且没有其他明确的主键，且id是Text类型，作为主键
+            if not primary_key and 'id' in fields:
+                for row in fields_info:
+                    if row[1] == 'id' and row[2].upper() == 'TEXT':
+                        primary_key = 'id'
+                        break
+
+            result[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key,
+                "is_dynamic": True    
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"获取 trade.db 表结构失败: {e}")
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+def get_config_table_structure(config):
+    """从XiuConfig获取表结构"""
+    tables = {}
+    
+    # 主用户表
+    tables["user_xiuxian"] = {
+        "name": "用户修仙信息",
+        "fields": config.sql_user_xiuxian,
+        "primary_key": "id"
+    }
+    
+    # CD表
+    tables["user_cd"] = {
+        "name": "用户CD信息",
+        "fields": config.sql_user_cd,
+        "primary_key": "user_id"
+    }
+    
+    # 宗门表
+    tables["sects"] = {
+        "name": "宗门信息",
+        "fields": config.sql_sects,
+        "primary_key": "sect_id"
+    }
+    
+    # 背包表 - 特殊处理复合主键
+    tables["back"] = {
+        "name": "用户背包",
+        "fields": config.sql_back,
+        "primary_key": ["user_id", "goods_id"],  # 改为复合主键
+        "composite_key": True  # 添加标识
+    }
+    
+    # Buff信息表
+    tables["BuffInfo"] = {
+        "name": "Buff信息",
+        "fields": config.sql_buff,
+        "primary_key": "id"
+    }
+    
+    return tables
+
+def get_impart_table_structure(config):
+    """从IMPART_BUFF_CONFIG获取表结构"""
+    tables = {}
+    
+    # 虚神界表
+    tables["xiuxian_impart"] = {
+        "name": "虚神界信息",
+        "fields": config.sql_table_impart_buff,
+        "primary_key": "id"
+    }
+
+    # 传承信息表
+    tables["impart_cards"] = {
+        "name": "传承信息",
+        "fields": ["user_id", "card_name", "quantity"],
+        "primary_key": ["user_id", "card_name"],  # 复合主键
+        "composite_key": True  # 添加复合主键标识
+    }
+    
+    return tables
+
+def get_tables():
+    """获取所有数据库的表结构，按数据库分组（使用预设配置）"""
+    return get_config_tables()
+
+def get_database_tables(db_path):
+    """动态获取数据库中的所有表及其字段信息，包括主键（备用函数）"""
+    tables = {}
+    if not Path(db_path).exists(): # 添加文件存在性检查
+        return {}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row # 使用行工厂，使结果可按列名访问
+    cursor = conn.cursor()
+    
+    # 获取所有用户表
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    table_names = [row[0] for row in cursor.fetchall()]
+    
+    for table_name in table_names:
+        # 获取表的字段信息
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        fields_info = cursor.fetchall()
+        fields = [row[1] for row in fields_info]
+        
+        # 查找主键字段
+        primary_key = None
+        for row in fields_info:
+            if row[5] == 1:
+                primary_key = row[1]
+                break
+        
+        tables[table_name] = {
+            "name": table_name,
+            "fields": fields,
+            "primary_key": primary_key
+        }
+    
+    conn.close()
+    return tables
+
+def get_db_connection(db_path):
+    """获取数据库连接"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def execute_sql(db_path, sql, params=None):
+    """执行SQL语句"""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        if params:
+            cursor.execute(sql, params)
+        else:
+            cursor.execute(sql)
+        
+        # 判断是否是查询语句
+        if sql.strip().lower().startswith('select'):
+            result = cursor.fetchall()
+            return [dict(row) for row in result]
+        else:
+            conn.commit()
+            return {"affected_rows": cursor.rowcount}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if conn:
+            conn.close()
+
+def get_message_db_connection():
+    """获取 message.db 连接"""
+    init_message_db()
+    conn = sqlite3.connect(MESSAGE_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def get_cached_username_by_user_id(user_id: str) -> str:
+    """
+    从 user_nicknames 表读取缓存昵称。
+    """
+    if not user_id:
+        return ""
+
+    conn = get_message_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT username
+            FROM user_nicknames
+            WHERE user_id = ?
+            LIMIT 1
+            """,
+            (str(user_id),),
+        )
+        row = cur.fetchone()
+        if row and row["username"]:
+            return str(row["username"])
+        return ""
+    finally:
+        conn.close()
+
+def get_message_stats_from_db():
+    """首页统计：从 message.db 读取收发消息数量"""
+    try:
+        conn = get_message_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) AS c FROM messages WHERE direction = 'recv'")
+        recv = cur.fetchone()["c"]
+
+        cur.execute("SELECT COUNT(*) AS c FROM messages WHERE direction = 'send'")
+        sent = cur.fetchone()["c"]
+
+        return recv, sent
+
+    except Exception:
+        return 0, 0
+
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def get_bot_by_adapter(adapter_name: str):
+    """
+    根据适配器名获取在线 Bot。
+    adapter_name 示例：
+    - QQ
+    - OneBot V11
+    - OB11
+    """
+    adapter_name = str(adapter_name or "").strip()
+    adapter_lower = adapter_name.lower()
+
+    bots = get_bots()
+
+    for bot in bots.values():
+        try:
+            name = bot.adapter.get_name()
+            name_lower = str(name).lower()
+
+            if adapter_name == name:
+                return bot
+
+            if adapter_lower in ("ob11", "onebot", "onebot v11") and (
+                "onebot" in name_lower or "v11" in name_lower
+            ):
+                return bot
+
+            if adapter_lower == "qq" and name == "QQ":
+                return bot
+
+        except Exception:
+            continue
+
+    return None
+
+
+def is_ob11_adapter_name(adapter: str) -> bool:
+    adapter_lower = str(adapter or "").lower()
+    return adapter_lower in ("ob11", "onebot", "onebot v11") or "onebot" in adapter_lower
+
+def get_latest_reply_candidates_for_qq(scene: str, target_id: str, limit: int = 3):
+    """
+    QQ Web 发送时，自动找可回复的 recv 消息。
+
+    自动规则：
+    - 群聊：4 分钟内
+    - 私聊：1 小时内
+    - 回复次数 < 5
+    """
+    conn = get_message_db_connection()
+    try:
+        cur = conn.cursor()
+
+        seconds = get_qq_auto_reply_seconds(scene)
+        if seconds <= 0:
+            return []
+
+        since = (datetime.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
+
+        if scene in ("group", "channel_group"):
+            cur.execute("""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = ?
+                  AND group_id = ?
+                  AND message_id IS NOT NULL
+                  AND message_id != ''
+                  AND created_at >= ?
+                  AND COALESCE(reply_used_count, 0) < 5
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+            """, (scene, str(target_id), since, limit))
+
+        elif scene in ("private", "channel_private"):
+            cur.execute("""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = ?
+                  AND user_id = ?
+                  AND message_id IS NOT NULL
+                  AND message_id != ''
+                  AND created_at >= ?
+                  AND COALESCE(reply_used_count, 0) < 5
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+            """, (scene, str(target_id), since, limit))
+
+        else:
+            return []
+
+        return [dict(r) for r in cur.fetchall()]
+
+    finally:
+        conn.close()
+
+def get_specific_reply_candidate_for_qq(
+    *,
+    scene: str,
+    target_id: str,
+    message_id: str,
+):
+    """
+    Web 点击某条消息后，指定使用这条消息作为 QQ 回复目标。
+
+    注意：
+    - 这不是引用回复，只是使用该消息 ID 作为 msg_id。
+    - 群聊有效期 5 分钟。
+    - 私聊有效期 1 小时。
+    - reply_used_count < 5。
+    """
+    if not message_id:
+        return None
+
+    conn = get_message_db_connection()
+    try:
+        cur = conn.cursor()
+
+        if scene in ("group", "channel_group"):
+            cur.execute("""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = ?
+                  AND group_id = ?
+                  AND message_id = ?
+                  AND COALESCE(reply_used_count, 0) < 5
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            """, (scene, str(target_id), str(message_id)))
+
+        elif scene in ("private", "channel_private"):
+            cur.execute("""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = ?
+                  AND user_id = ?
+                  AND message_id = ?
+                  AND COALESCE(reply_used_count, 0) < 5
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            """, (scene, str(target_id), str(message_id)))
+
+        else:
+            return None
+
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        row = dict(row)
+
+        seconds = get_qq_reply_valid_seconds(scene)
+        if not is_message_within_seconds(row.get("created_at", ""), seconds):
+            return None
+
+        return row
+
+    finally:
+        conn.close()
+
+def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
+    """获取表数据（分页和搜索）"""
+    offset = (page - 1) * per_page
+
+    # 获取表信息以确定主键和字段
+    tables = get_database_tables(db_path)
+    table_info = tables.get(table_name, {})
+    if not table_info:
+        return {"error": "表不存在", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+
+    primary_key = table_info.get('primary_key', 'id')
+    fields = table_info.get('fields', [])
+    if not fields:
+        return {"error": "表中没有字段", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+
+    # 构建基础 SELECT 语句，包含所有字段和 COUNT(*) OVER() 作为总数
+    select_fields = ', '.join(fields)
+    sql = f"SELECT *, COUNT(*) OVER() AS total_count FROM {table_name}"
+
+    params = []
+
+    # 构建 WHERE 条件
+    where_clauses = []
+    if search_field and search_value:
+        if search_condition == '=':
+            # 处理多关键词搜索
+            values = search_value.split()
+            if len(values) > 1:
+                placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                where_clauses.append(f"({placeholders})")
+                params.extend([f"%{value}%" for value in values])
+            else:
+                where_clauses.append(f"{search_field} LIKE ?")
+                params.append(f"%{search_value}%")
+        elif search_condition in ('>', '<'):
+            # 数值大于或小于搜索
+            values = search_value.split()
+            if len(values) > 2:
+                return {"error": "搜索值过多", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+            if len(values) == 1:
+                # 单个值，保持原样的匹配
+                if not search_value.replace('.', '', 1).isdigit():
+                    return {"error": "搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                where_clauses.append(f"{search_field} {search_condition} ?")
+                params.append(float(values[0]))
+            else:
+                # 两个值，第一个用于比较，第二个用于全字段搜索
+                if not values[0].replace('.', '', 1).isdigit():
+                    return {"error": "第一个搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                if not values[1]:
+                    return {"error": "第二个搜索值不能为空", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+                where_clauses.append(f"{search_field} {search_condition} ?")
+                where_clauses.append(f"({' OR '.join([f'{field} LIKE ?' for field in fields if field != primary_key])})")
+                params.extend([float(values[0])] + [f"%{values[1]}%" for field in fields if field != primary_key])
+        else:
+            return {"error": "无效的搜索条件", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+    elif search_value and not search_field:
+        # 全字段搜索逻辑
+        # 排除主键字段
+        searchable_fields = [field for field in fields if field != primary_key]
+        if searchable_fields:
+            conditions = []
+            for field in searchable_fields:
+                conditions.append(f"{field} LIKE ?")
+                params.append(f"%{search_value}%")
+            if conditions:
+                where_clauses.append(f"({' OR '.join(conditions)})")
+        else:
+            # 如果没有可搜索的字段，返回空结果
+            where_clauses.append("1=0")  # 确保不返回任何结果
+
+    # 组合 WHERE 条件
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+
+    # 添加分页
+    sql += f" LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    # 执行查询
+    try:
+        conn = get_db_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return {
+                "data": [],
+                "total": 0,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": 0
+            }
+
+        # 提取总数（来自第一行的 total_count）
+        total = rows[0]['total_count']
+
+        # 计算总页数
+        total_pages = (total + per_page - 1) // per_page
+
+        # 提取实际数据（排除 total_count 列）
+        data = [dict(row) for row in rows]
+
+        return {
+            "data": data,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "data": [],
+            "total": 0,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": 0
+        }
+
+def get_user_by_name(username):
+    """根据道号获取用户信息（使用execute_sql）"""
+    sql = "SELECT * FROM user_xiuxian WHERE user_name = ?"
+    result = execute_sql(DATABASE, sql, (username,))
+    if result and len(result) > 0:
+        return result[0]
+    return None
+
+def get_user_by_id(user_id):
+    """根据ID获取用户信息（使用execute_sql）"""
+    sql = "SELECT * FROM user_xiuxian WHERE user_id = ?"
+    result = execute_sql(DATABASE, sql, (user_id,))
+    if result and len(result) > 0:
+        return result[0]
+    return None
+
+
+def get_qq_reply_valid_seconds(scene: str) -> int:
+    """
+    QQ 消息可回复有效期：
+    - 群聊 / 频道群：5分钟
+    - 私聊 / 频道私信：1小时
+    """
+    if scene in ("group", "channel_group"):
+        return 5 * 60
+    if scene in ("private", "channel_private"):
+        return 60 * 60
+    return 0
+
+
+def get_qq_auto_reply_seconds(scene: str) -> int:
+    """
+    自动挑选回复目标时使用更保守窗口：
+    - 群聊自动取 4 分钟内
+    - 私聊自动取 1 小时内
+    """
+    if scene in ("group", "channel_group"):
+        return 4 * 60
+    if scene in ("private", "channel_private"):
+        return 60 * 60
+    return 0
+
+
+def is_message_within_seconds(created_at: str, seconds: int) -> bool:
+    if not created_at or seconds <= 0:
+        return False
+
+    try:
+        msg_time = datetime.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S")
+        return datetime.now() - msg_time <= timedelta(seconds=seconds)
+    except Exception:
+        return False

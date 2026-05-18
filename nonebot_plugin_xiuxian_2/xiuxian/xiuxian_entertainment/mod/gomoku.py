@@ -749,7 +749,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @gomoku_help.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(
+    await send_help_message(
         bot, event,
         "五子棋帮助：\n"
         "开始五子棋 [房间号]\n"
@@ -759,5 +759,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "认输\n"
         "棋局信息 [房间号]\n"
         "退出五子棋\n"
-        f"规则：{BOARD_SIZE}x{BOARD_SIZE}，黑先，五连胜；房间超时{ROOM_TIMEOUT}s，落子超时{MOVE_TIMEOUT}s。"
+        f"规则：{BOARD_SIZE}x{BOARD_SIZE}，黑先，五连胜；房间超时{ROOM_TIMEOUT}s，落子超时{MOVE_TIMEOUT}s。",
+        k1="开始", v1="开始五子棋",
+        k2="单人", v2="开始单人五子棋",
+        k3="游戏", v3="小游戏帮助"
     )

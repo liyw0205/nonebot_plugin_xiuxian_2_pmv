@@ -19,7 +19,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
-    check_user, handle_send
+    check_user, handle_send, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .title_data import (
@@ -328,5 +328,10 @@ __title_help__ = """
 async def title_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """称号帮助"""
     bot, _ = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __title_help__)
+    await send_help_message(
+        bot, event, __title_help__,
+        k1="我的称号", v1="我的称号",
+        k2="检查称号", v2="检查称号",
+        k3="存档", v3="我的修仙信息"
+    )
     await title_help_cmd.finish()

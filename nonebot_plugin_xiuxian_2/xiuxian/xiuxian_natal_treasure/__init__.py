@@ -19,7 +19,8 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
     check_user,
     handle_send,
-    number_to
+    number_to,
+    send_help_message
 )
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_config import XiuConfig
@@ -489,8 +490,12 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     > 查看你的法宝当前状态
 
 """
-    await handle_send(bot, event, msg,
-                      md_type="法宝", k1="操作帮助", v1="本命法宝操作帮助", k2="道纹帮助", v2="本命法宝道纹帮助", k3="战斗帮助", v3="本命法宝战斗帮助")
+    await send_help_message(
+        bot, event, msg,
+        k1="操作帮助", v1="本命法宝操作帮助",
+        k2="道纹帮助", v2="本命法宝道纹帮助",
+        k3="战斗帮助", v3="本命法宝战斗帮助"
+    )
 
 
 natal_operation_help = on_command("本命法宝操作帮助", aliases={"法宝操作帮助"}, priority=25, block=True)
@@ -534,8 +539,12 @@ async def natal_operation_help_handler(bot: Bot, event: GroupMessageEvent | Priv
     >   所有道纹等级上限统一为{MAX_EFFECT_LEVEL_ALL_EFFECTS}级。
 
 """
-    await handle_send(bot, event, msg,
-                      md_type="法宝", k1="觉醒", v1="觉醒本命法宝", k2="重塑", v2="重塑本命法宝", k3="养成", v3="养成本命法宝")
+    await send_help_message(
+        bot, event, msg,
+        k1="觉醒", v1="觉醒本命法宝",
+        k2="重塑", v2="重塑本命法宝",
+        k3="养成", v3="养成本命法宝"
+    )
 
 
 # ==== 本命法宝道纹帮助命令 ====
@@ -619,8 +628,12 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
 • **{EFFECT_NAME_MAP[NatalEffectType.ENLIGHTENMENT]}**：攻击时有{round(enlightenment_chance_base, 2)}%概率让已死亡的队友回复{round(enlightenment_revive_hp, 2)}%生命值复活，仅队友战斗触发，每个队友仅可触发{ENLIGHTENMENT_LIMIT}次。
 
 """
-    await handle_send(bot, event, msg,
-                      md_type="法宝", k1="主帮助", v1="本命法宝帮助", k2="遗忘", v2="遗忘道纹", k3="查看", v3="我的本命法宝")
+    await send_help_message(
+        bot, event, msg,
+        k1="主帮助", v1="本命法宝帮助",
+        k2="遗忘", v2="遗忘道纹",
+        k3="查看", v3="我的本命法宝"
+    )
 
 
 natal_battle_help = on_command("本命法宝战斗帮助", aliases={"法宝战斗帮助", "战斗帮助"}, priority=25, block=True)
@@ -655,5 +668,9 @@ async def natal_battle_help_handler(bot: Bot, event: GroupMessageEvent | Private
     >   某些效果可能存在内部冷却或每场战斗触发次数上限。具体请参阅【本命法宝道纹帮助】中各个道纹的详细描述。
 
 """
-    await handle_send(bot, event, msg,
-                      md_type="法宝", k1="道纹帮助", v1="本命法宝道纹帮助", k2="操作帮助", v2="本命法宝操作帮助", k3="主帮助", v3="本命法宝帮助")
+    await send_help_message(
+        bot, event, msg,
+        k1="道纹帮助", v1="本命法宝道纹帮助",
+        k2="操作帮助", v2="本命法宝操作帮助",
+        k3="主帮助", v3="本命法宝帮助"
+    )

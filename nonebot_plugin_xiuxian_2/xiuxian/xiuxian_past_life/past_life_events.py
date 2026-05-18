@@ -1,6 +1,7 @@
 """
 前尘往事 - 故事引擎
 """
+import copy
 import random
 from .past_life_data import (
     STAGES, ENDINGS, POSITIVE_TALENTS, MIXED_TALENTS, NEGATIVE_TALENTS,
@@ -28,6 +29,46 @@ TALENT_TYPE_LABELS = {
 
 class PastLifeEngine:
     """前世今生·剧本杀引擎"""
+
+    def _get_stage_event(self, state: dict, stage_idx: int):
+        """优先使用本轮开始时保存的事件快照，兼容旧存档回退到索引。"""
+        snapshots = state.get("event_snapshots", [])
+        if (
+            isinstance(snapshots, list)
+            and stage_idx < len(snapshots)
+            and isinstance(snapshots[stage_idx], dict)
+        ):
+            return snapshots[stage_idx]
+
+        event_indices = state.get("event_indices", [])
+        if isinstance(event_indices, list) and stage_idx < len(event_indices):
+            event_idx = event_indices[stage_idx]
+        else:
+            event_idx = 0
+        return STAGES[stage_idx]["events"][event_idx]
+
+    def _resolve_choice_effect(self, choice: dict, accumulated: dict):
+        """同一选择按当前资质高低产生轻量浮动。"""
+        effects = copy.deepcopy(choice.get("effects", {}))
+        positive_attrs = [
+            (attr, value) for attr, value in effects.items()
+            if attr in ATTR_NAMES and value > 0
+        ]
+        if not positive_attrs:
+            return effects, 0, ""
+
+        main_attr, _ = max(positive_attrs, key=lambda x: x[1])
+        attr_value = int(accumulated.get(main_attr, 0))
+        if attr_value >= 16:
+            effects[main_attr] = effects.get(main_attr, 0) + 2
+            return effects, 1, f"\n{main_attr}深厚，此选择额外激发潜力：{main_attr}+2，评分+1。"
+        if attr_value >= 12:
+            effects[main_attr] = effects.get(main_attr, 0) + 1
+            return effects, 0, f"\n{main_attr}出众，此选择额外收益：{main_attr}+1。"
+        if attr_value <= 2:
+            effects[main_attr] = max(effects.get(main_attr, 0) - 1, 0)
+            return effects, -1, f"\n{main_attr}薄弱，此选择收益受限：{main_attr}-1，评分-1。"
+        return effects, 0, ""
 
     def _roll_talent(self, alloc: dict):
         """
@@ -66,8 +107,11 @@ class PastLifeEngine:
 
         # 随机为每幕选定一个事件
         event_indices = []
+        event_snapshots = []
         for stage in STAGES:
-            event_indices.append(random.randint(0, len(stage["events"]) - 1))
+            event_idx = random.randint(0, len(stage["events"]) - 1)
+            event_indices.append(event_idx)
+            event_snapshots.append(copy.deepcopy(stage["events"][event_idx]))
 
         state = past_life_limit.get_user_state(user_id)
         state.update({
@@ -78,6 +122,7 @@ class PastLifeEngine:
             "talent": talent_info["name"],
             "total_score": 0,
             "event_indices": event_indices,
+            "event_snapshots": event_snapshots,
             "history": [],
         })
         past_life_limit.save_user_state(user_id, state)
@@ -91,7 +136,7 @@ class PastLifeEngine:
 
         # 返回第一幕信息
         stage_0 = STAGES[0]
-        event = stage_0["events"][event_indices[0]]
+        event = self._get_stage_event(state, 0)
 
         attrs_str = "  ".join(f"{k}:{accumulated[k]}" for k in ATTR_NAMES)
         label = TALENT_TYPE_LABELS.get(talent_type, "")
@@ -138,8 +183,7 @@ class PastLifeEngine:
             return {"message": "你当前没有进行中的前尘往事。", "is_end": False, "ending": None}
 
         current_stage = state["stage"]
-        event_idx = state["event_indices"][current_stage]
-        event = STAGES[current_stage]["events"][event_idx]
+        event = self._get_stage_event(state, current_stage)
 
         # 校验选项
         if choice_idx < 1 or choice_idx > len(event["choices"]):
@@ -151,11 +195,12 @@ class PastLifeEngine:
         accumulated = state["accumulated"]
         if not isinstance(accumulated, dict):
             accumulated = {k: 0 for k in ATTR_NAMES}
-        for k, v in choice.get("effects", {}).items():
+        resolved_effects, score_delta, attr_result_msg = self._resolve_choice_effect(choice, accumulated)
+        for k, v in resolved_effects.items():
             accumulated[k] = max(accumulated.get(k, 0) + v, 0)
 
         # 更新分数
-        state["total_score"] = state.get("total_score", 0) + choice.get("score", 0)
+        state["total_score"] = state.get("total_score", 0) + choice.get("score", 0) + score_delta
         state["accumulated"] = accumulated
 
         # 记录历史
@@ -165,11 +210,11 @@ class PastLifeEngine:
             "stage_name": STAGES[current_stage]["name"],
             "event_text": event["text"][:20] + "...",
             "choice_text": choice["text"],
-            "result": choice["result"],
+            "result": f"{choice['result']}{attr_result_msg}",
         })
         state["history"] = history
 
-        result_msg = f"你选择了【{choice['text']}】\n{choice['result']}\n"
+        result_msg = f"你选择了【{choice['text']}】\n{choice['result']}{attr_result_msg}\n"
 
         # 显示当前属性
         effects_str = "  ".join(
@@ -205,8 +250,7 @@ class PastLifeEngine:
             state["stage"] = next_stage
             past_life_limit.save_user_state(user_id, state)
 
-            next_event_idx = state["event_indices"][next_stage]
-            next_event = STAGES[next_stage]["events"][next_event_idx]
+            next_event = self._get_stage_event(state, next_stage)
             stage_info = STAGES[next_stage]
 
             next_msg = (
@@ -343,8 +387,7 @@ class PastLifeEngine:
             if current_stage >= len(STAGES):
                 return {"message": "前世已结束，请查看回忆。", "state": 0}
 
-            event_idx = state["event_indices"][current_stage]
-            event = STAGES[current_stage]["events"][event_idx]
+            event = self._get_stage_event(state, current_stage)
             stage_info = STAGES[current_stage]
 
             accumulated = state.get("accumulated", {})

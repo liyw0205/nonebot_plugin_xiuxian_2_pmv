@@ -71,13 +71,12 @@ async def music_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "   点歌配置 设置 default_platform netease\n"
         "   点歌配置 设置 page_size 5"
     )
-    await handle_send(
+    await send_help_message(
         bot, event,
         msg,
-        md_type="娱乐",
-        k1="点歌示例", v1=quote("点歌 稻香", safe=""),
-        k2="下一页", v2=quote("点歌下一页", safe=""),
-        k3="娱乐帮助", v3=quote("娱乐帮助", safe="")
+        k1="点歌示例", v1="点歌 稻香",
+        k2="下一页", v2="点歌下一页",
+        k3="娱乐帮助", v3="娱乐帮助"
     )
     await music_help_cmd.finish()
 

@@ -14,7 +14,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment,
 )
-from ..xiuxian_utils.utils import handle_send, number_to
+from ..xiuxian_utils.utils import handle_send, number_to, send_help_message
 from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
@@ -341,7 +341,12 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """bot信息命令"""
     msg = await get_bot_info(bot, event)
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="查询", v1="版本查询",
+        k2="更新", v2="检测更新",
+        k3="信息", v3="bot信息"
+    )
 
 @sys_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

@@ -21,6 +21,7 @@ from ..xiuxian_utils.utils import (
     handle_pic_send,
     handle_pic_msg_send,
     generate_command,
+    send_help_message,
 )
 
 from ..xiuxian_config import XiuConfig

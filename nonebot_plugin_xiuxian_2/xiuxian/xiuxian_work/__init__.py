@@ -17,8 +17,9 @@ from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from .work_handle import workhandle
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value, send_help_message
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA, readf, savef, delete_work_file, has_unaccepted_work
 from ..xiuxian_utils.item_json import Items
@@ -29,6 +30,51 @@ sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
 WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
+
+def format_reward_item(item_id: int) -> str:
+    """格式化额外奖励物品，支持点击查看效果。"""
+    if item_id == 0:
+        return "无"
+    item_info = items.get_data_by_item_id(item_id)
+    if not item_info:
+        return "未知物品"
+    item_name = item_info["name"]
+    item_level = item_info.get("level", item_info.get("type", "未知品阶"))
+    view_cmd = quote(f"查看效果 {item_name}", safe="")
+    return f"{item_level}:[{item_name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
+
+
+def strip_inline_links(msg: str) -> str:
+    """原生 Markdown 不可用时降级为纯文本物品名。"""
+    import re
+    return re.sub(r"\[([^\]]+)\]\(mqqapi://aio/inlinecmd\?[^)]+\)", r"\1", msg)
+
+
+def append_native_buttons(msg: str, **kwargs) -> str:
+    buttons = []
+    for i in range(1, 5):
+        show = kwargs.get(f"k{i}")
+        command = kwargs.get(f"v{i}")
+        if show and command:
+            command = quote(str(command), safe="")
+            buttons.append(f"[{show}](mqqapi://aio/inlinecmd?command={command}&enter=false&reply=false)")
+    if not buttons:
+        return msg
+    return f"{msg}\n\n---\n" + " | ".join(buttons)
+
+
+async def send_work_message(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, msg: str, **kwargs):
+    """发送悬赏消息，保留额外奖励物品点击查看效果。"""
+    if "mqqapi://aio/inlinecmd" in msg:
+        await handle_send(
+            bot,
+            event,
+            append_native_buttons(msg, **kwargs),
+            native_markdown=True,
+            fallback_msg=strip_inline_links(msg),
+        )
+        return
+    await handle_send(bot, event, msg, **kwargs)
 
 # 用户提醒状态和任务字典
 user_reminder_status: Dict[str, Dict] = {}  # 格式: {user_id: {"pending": bool, "reminded": bool, "refresh_time": datetime}}
@@ -147,10 +193,7 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         work_msg_f = f"\n══  道友的悬赏令   ═══\n剩余时间：{remaining_minutes}分钟\n════════════\n"
         tasks = list(work_data["tasks"].items())
         for n, (task_name, task_data) in enumerate(tasks, 1):
-            item_msg = "无"
-            if task_data["item_id"] != 0:
-                item_info = items.get_data_by_item_id(task_data["item_id"])
-                item_msg = f"{item_info['level']}:{item_info['name']}"
+            item_msg = format_reward_item(task_data["item_id"])
             work_list.append([task_name, task_data["time"]])
             work_msg_f += (
                 f"悬赏编号：{n}\n"
@@ -255,11 +298,7 @@ def generate_work_message(work_list: list, freenum: int) -> str:
     return work_msg_f
 
 def get_work_msg(work_):
-    if work_[4] == 0:
-        item_msg = "无"
-    else:
-        item_info = items.get_data_by_item_id(work_[4])
-        item_msg = f"{item_info['level']}:{item_info['name']}"
+    item_msg = format_reward_item(work_[4])
     return (
         f"悬赏名称：{work_[0]}\n"
         f"完成概率：{work_[1]}%\n"
@@ -343,7 +382,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     if mode == "查看":            
         status, work_data = get_user_work_status(user_id)
         msg = await get_work_status_message(user_id, work_data)
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="终止", v3="悬赏令终止")
+        await send_work_message(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="终止", v3="悬赏令终止")
         await do_work.finish()
 
     elif mode == "刷新":
@@ -356,7 +395,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         
         if status == 1 or status == 2:  # 进行中或可结算的悬赏
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看 ", k2="结算", v2="悬赏令确认结算", k3="终止", v3="悬赏令终止")
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看 ", k2="结算", v2="悬赏令确认结算", k3="终止", v3="悬赏令终止")
             await do_work.finish()
             
         usernums = sql_message.get_work_num(user_id)
@@ -415,7 +454,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             task = asyncio.create_task(delayed_reminder(bot, event, user_id))
             user_reminder_tasks[user_id] = task
             
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
             await do_work.finish()
 
     elif mode == "确认刷新":
@@ -451,7 +490,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         task = asyncio.create_task(delayed_reminder(bot, event, user_id))
         user_reminder_tasks[user_id] = task
         
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+        await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
         await do_work.finish()
 
     elif mode == "结算":
@@ -464,7 +503,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         
         if status == 1:  # 进行中的悬赏
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
         elif status != 2:  # 没有可结算的悬赏
             msg = "没有查到您的可结算悬赏令信息！"
@@ -508,7 +547,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         # 如果已有进行中或可结算的悬赏，显示当前悬赏状态
         if status == 1 or status == 2:
             msg = await get_work_status_message(user_id, work_data)
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
             
         if status != 3:  # 未过期的悬赏令
@@ -541,7 +580,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             f"悬赏名称：{task_name}\n"
             f"请努力完成悬赏！"
         )
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+        await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
         await do_work.finish()
 
     elif mode == "重置":
@@ -554,10 +593,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
     elif mode == "帮助":
         msg = f"\n{__work_help__}"
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
+        await send_help_message(bot, event, msg, k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
 
 async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
-    """使用悬赏令刷新悬赏"""
+    """使用悬赏令立即结算当前悬赏"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -566,20 +605,21 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     user_id = user_info['user_id']
     
-    # 检查当前状态
-    is_type, msg = check_user_type(user_id, 0)
-    if not is_type:
-        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
+    status, work_data = get_user_work_status(user_id)
+    if status in (1, 2):
+        sql_message.update_back_j(user_id, item_id, 1)
+        await handle_send(bot, event, "悬赏令燃起灵光，当前悬赏立即进入结算。")
+        await settle_work(bot, event, user_id, work_data)
         return
-    
-    # 生成新悬赏令
-    work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
-    msg = generate_work_message(work_msg, sql_message.get_work_num(user_id))
-    
-    # 消耗道具
-    sql_message.update_back_j(user_id, item_id)
-    
-    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+
+    if status == 3:
+        msg = "当前悬赏尚未接取，请先发送【悬赏令接取+编号】，再使用悬赏令立即结算。"
+    elif status == 4:
+        msg = "当前悬赏令已过期，无法立即结算。请重新刷新并接取悬赏。"
+    else:
+        msg = "当前没有已接取的悬赏，无法使用悬赏令立即结算。"
+
+    await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="接取", v2="悬赏令接取", k3="帮助", v3="悬赏令帮助")
     return
 
 async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -636,5 +676,5 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     # 消耗道具
     sql_message.update_back_j(user_id, item_id)
     await handle_send(bot, event, msg2)
-    await handle_send(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+    await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
     return

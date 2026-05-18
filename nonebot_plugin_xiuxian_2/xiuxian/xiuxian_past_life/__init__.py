@@ -10,7 +10,7 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from nonebot.params import CommandArg
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
-    check_user, handle_send, send_msg_handler, log_message, update_statistics_value, number_to
+    check_user, handle_send, send_msg_handler, log_message, update_statistics_value, number_to, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .past_life_limit import past_life_limit
@@ -51,7 +51,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "═════════════\n"
         "十九种结局等你解锁！"
     )
-    await handle_send(bot, event, msg, md_type="前尘", k1="开始", v1="前尘往事", k2="回忆", v2="前尘回忆", k3="排行", v3="前尘排行")
+    await send_help_message(bot, event, msg, k1="开始", v1="前尘往事", k2="回忆", v2="前尘回忆", k3="排行", v3="前尘排行")
     await past_help_cmd.finish()
 
 

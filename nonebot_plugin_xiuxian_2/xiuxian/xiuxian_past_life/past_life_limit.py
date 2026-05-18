@@ -15,6 +15,7 @@ FIELDS = [
     "talent",           # 天赋名
     "total_score",      # 总分
     "event_indices",    # 每幕选中的事件索引
+    "event_snapshots",  # 每幕选中的事件快照
     "history",          # 选择历史
     "last_run_time",    # 上次运行时间
     "total_runs",       # 总运行次数
@@ -37,6 +38,7 @@ class PastLifeLimit:
             "talent": "",
             "total_score": 0,
             "event_indices": [],
+            "event_snapshots": [],
             "history": [],
             "last_run_time": None,
             "total_runs": 0,
@@ -144,6 +146,7 @@ class PastLifeLimit:
         state["talent"] = ""
         state["total_score"] = 0
         state["event_indices"] = []
+        state["event_snapshots"] = []
         state["history"] = []
         state["last_run_time"] = None  # 清冷却
 

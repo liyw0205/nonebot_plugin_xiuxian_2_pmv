@@ -24,7 +24,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     send_msg_handler,
-    Txt2Img, number_to, handle_send
+    Txt2Img, number_to, handle_send, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, TradeDataManager, get_weapon_info_msg, get_armor_info_msg,
@@ -98,8 +98,8 @@ trade_help = on_command("交易帮助", aliases={"仙肆帮助", "鬼市帮助",
 
 def get_auction_status() -> Dict[str, Any]:
     """获取拍卖状态（是否活跃，开始/结束时间）"""
-    # 从配置文件中读取 auction_status 字段
-    status_dict = auction_config.get_auction_status_from_config_file()
+    # 从内存配置中读取 auction_status 字段
+    status_dict = auction_config.get_auction_status_config()
     
     # 辅助函数：将 YYYYMMDDhhmmss 格式字符串转换为 datetime 对象
     def parse_time_str(time_str: str) -> Optional[datetime]:
@@ -148,7 +148,7 @@ def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
         return False
     
     player_auctions = trade_manager.get_player_auction_items() # 从数据库获取玩家上架物品
-    system_items_config = auction_config.get_system_items() # 从配置文件获取系统物品
+    system_items_config = auction_config.get_system_items() # 从内置配置获取系统物品
     
     schedule_config = auction_config.get_auction_schedule()
     
@@ -509,7 +509,7 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg += "仙肆帮助 | 拍卖帮助 | 交易帮助\n"
             msg += "或输入'交易帮助全部'查看完整帮助"
     
-    await handle_send(bot, event, msg, md_type="交易", k1="仙肆", v1="仙肆帮助", k2="鬼市", v2="鬼市帮助", k3="拍卖", v3="拍卖帮助")
+    await send_help_message(bot, event, msg, k1="仙肆", v1="仙肆帮助", k2="鬼市", v2="鬼市帮助", k3="拍卖", v3="拍卖帮助")
     await trade_help.finish()
 
 # 获取仙肆物品的最低价格

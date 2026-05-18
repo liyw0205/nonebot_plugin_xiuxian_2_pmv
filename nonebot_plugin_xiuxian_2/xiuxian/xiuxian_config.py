@@ -14,23 +14,23 @@ class XiuConfig:
     def __init__(self):
         self.qqq = 144795954 
         # 官群设置
-        self.put_bot = []  
+        self.put_bot = []
         # ["123456"]
         # 接收消息qq,主qq，框架将只处理此qq的消息
         # 设置这个屏蔽群聊/私聊才能生效
-        self.shield_group = []  
+        self.shield_group = []
         # ["123456"]
         # 屏蔽的群聊
-        self.response_group = False  
+        self.response_group = False
         # 反转屏蔽的群聊，仅响应这些群的消息
-        self.shield_private = False  
+        self.shield_private = False
         # 屏蔽私聊
-        self.main_bo = []  
+        self.main_bo = []
         # 负责发送消息的qq
         self.layout_bot_dict = {}
         # QQ所负责的群聊 #{群 ：bot}   其中 bot类型 []或str }
         # "123456":"123456",
-        self.admin_debug = False 
+        self.admin_debug = False
         # 管理员调试模式，开启后只响应超管指令
         self.at_response = False
         # 艾特响应命令（官机可能需要关闭）
@@ -54,16 +54,16 @@ class XiuConfig:
         # gsk地址获取真实ID用于md模板艾特
         self.web_link = ""
         # 修仙管理面板地址用于获取修仙信息图片
-        self.update_image_web = "http://127.0.0.1:5888/upload_image"
+        self.update_image_web = ""
         # 修仙管理面板地址用于频道图床上传接口
         self.channel_id = ""
         # 频道图床ID 
 
         self.web_status = True
         # 修仙管理面板是否开启
-        self.web_port = 5888 
+        self.web_port = 5888
         # 修仙管理面板端口
-        self.web_host = "0.0.0.0" 
+        self.web_host = "0.0.0.0"
         # 修仙管理面板IP
 
         self.cloud_backup_enabled = False
@@ -72,7 +72,7 @@ class XiuConfig:
         # 例如: http://127.0.0.1:5244/dav
         self.webdav_user = ""
         self.webdav_pass = ""
-        self.webdav_target_subdir = "/"
+        self.webdav_target_subdir = ""
         # WebDAV根下的目标目录
         self.webdav_backup_folder = "backups"
         # 在 target_subdir 下再套一层子目录
@@ -85,101 +85,101 @@ class XiuConfig:
         # 2是合并转发发送
         # 3是合并转发的内容转换成长图发送
         # 4是合并转发的内容转换长文本再以合并转发的方式发送
-        self.message_optimization = True  
+        self.message_optimization = True
         # 是否开启信息优化
         # 所有消息：先删去第一行的换行
         # 群聊消息：如果开头没有换行且开启了消息艾特则添加一个换行
         # 私聊消息：如果开头有换行则删除一个换行
         # 所有消息：如果结尾有换行则删除一个换行
-        self.img_compression_limit = 90 
+        self.img_compression_limit = 90
         # 图片压缩率，0为不压缩，最高100，jpeg请调低压缩率
-        self.img_type = "webp" 
+        self.img_type = "webp"
         # 图片类型，webp或者jpeg，如果机器人的图片消息不显示请使用jpeg
-        self.img_send_type = "io" 
+        self.img_send_type = "io"
         # 图片发送类型io或者base64，官方bot建议base64
 
-        self.img = False 
+        self.img = False
         # 是否使用图片发送消息
-        self.user_info_image = False 
+        self.user_info_image = False
         # 是否使用图片发送个人信息
-        self.xiuxian_info_img = False 
+        self.xiuxian_info_img = False
         # 开启则使用网络背景图
-        self.use_network_avatar = False 
+        self.use_network_avatar = False
         # 开启则使用网络头像（官机请勿打开）
         self.impart_image = False
         # 是否使用图片发送传承卡图
 
         self.level = convert_rank('江湖好手')[1] 
         # 境界列表，别动
-        self.level_up_cd = 0  
+        self.level_up_cd = 0
         # 突破CD(分钟)
-        self.closing_exp = 100  
+        self.closing_exp = 100
         # 闭关每分钟获取的修为
-        self.closing_exp_upper_limit = 1.5  
+        self.closing_exp_upper_limit = 1.5
         # 闭关获取修为上限（例如：1.5 下个境界的修为数*1.5）
-        self.level_punishment_floor = 10  
+        self.level_punishment_floor = 10
         # 突破失败扣除修为，惩罚下限（百分比）
-        self.level_punishment_limit = 20  
+        self.level_punishment_limit = 20
         # 突破失败扣除修为，惩罚上限(百分比)
-        self.level_up_probability = 0.2  
+        self.level_up_probability = 0.2
         # 突破失败增加当前境界突破概率的比例
-        self.tribulation_min_level = "祭道境圆满"  
+        self.tribulation_min_level = "祭道境圆满"
         # 最低渡劫境界
-        self.tribulation_base_rate = 30  
+        self.tribulation_base_rate = 30
         # 基础渡劫概率30%
-        self.tribulation_max_rate = 90  
+        self.tribulation_max_rate = 90
         # 最大渡劫概率90%
-        self.tribulation_cd = 360  
+        self.tribulation_cd = 360
         # 6小时渡劫冷却(分钟)
 
-        self.lunhui_min_level = "至尊境初期" 
+        self.lunhui_min_level = "至尊境初期"
         # 千世轮回最低境界
-        self.twolun_min_level = "星芒境初期" 
+        self.twolun_min_level = "星芒境初期"
         # 万世轮回最低境界
-        self.threelun_min_level = "祭道境初期" 
+        self.threelun_min_level = "祭道境初期"
         # 永恒轮回最低境界
-        self.Infinite_reincarnation_min_level = "破虚境初期" 
+        self.Infinite_reincarnation_min_level = "破虚境初期"
         # 永恒轮回最低境界
 
-        self.sect_min_level = "结丹境圆满" 
+        self.sect_min_level = "结丹境圆满"
         # 创建宗门最低境界
-        self.sect_create_cost = 5000000 
+        self.sect_create_cost = 5000000
         # 创建宗门消耗
-        self.sect_rename_cost = 50000000 
+        self.sect_rename_cost = 50000000
         # 宗门改名消耗
-        self.sect_rename_cd = 1 
+        self.sect_rename_cd = 1
         # 宗门改名cd/天
         self.auto_change_sect_owner_cd = 30
         # 自动换长时间不玩宗主cd/天
 
         self.max_goods_num = 1000
         # 背包单样物品最高上限
-        self.sign_in_lingshi_lower_limit = 100000  
+        self.sign_in_lingshi_lower_limit = 100000
         # 每日签到灵石下限
-        self.sign_in_lingshi_upper_limit = 500000  
+        self.sign_in_lingshi_upper_limit = 500000
         # 每日签到灵石上限
-        self.beg_max_level = "结丹境圆满" 
+        self.beg_max_level = "结丹境圆满"
         # 仙途奇缘能领灵石最高境界
-        self.beg_max_days = 7 
+        self.beg_max_days = 7
         # 仙途奇缘能领灵石最多天数
-        self.beg_lingshi_lower_limit = 2000000  
+        self.beg_lingshi_lower_limit = 2000000
         # 仙途奇缘灵石下限
-        self.beg_lingshi_upper_limit = 5000000  
+        self.beg_lingshi_upper_limit = 5000000
         # 仙途奇缘灵石上限
-        self.tou = 100000  
+        self.tou = 100000
         # 偷灵石惩罚
-        self.tou_lower_limit = 0.01  
+        self.tou_lower_limit = 0.01
         # 偷灵石下限(百分比)
-        self.tou_upper_limit = 0.50
+        self.tou_upper_limit = 0.5
         # 偷灵石上限(百分比)
         self.banned_unseal_ids = ["779151826"]  
         # 鉴石禁止群
 
-        self.remake = 100000  
+        self.remake = 100000
         # 重入仙途的消费
-        self.remaname = 10000000  
+        self.remaname = 10000000
         # 修仙改名的消费
-        self.max_stamina = 500 
+        self.max_stamina = 500
         # 体力上限
         self.stamina_recovery_points = 5
         # 体力恢复点数/分钟

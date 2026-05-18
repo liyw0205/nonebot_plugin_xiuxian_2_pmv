@@ -6,7 +6,7 @@ from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler
+from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
 
 from .common import (
     DATA_CONFIG,
@@ -151,13 +151,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, REDEEM_HELP)
+    await send_help_message(
+        bot, event, REDEEM_HELP,
+        k1="兑换", v1="兑换",
+        k2="礼包", v2="礼包帮助",
+        k3="补偿", v3="补偿帮助"
+    )
 
 
 @admin_help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, REDEEM_ADMIN_HELP)
+    await send_help_message(
+        bot, event, REDEEM_ADMIN_HELP,
+        k1="新增", v1="新增兑换码",
+        k2="列表", v2="兑换码列表",
+        k3="清空", v3="清空兑换码"
+    )
 
 
 async def send_redeem_code_list(bot: Bot, event: MessageEvent):

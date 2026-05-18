@@ -1,11 +1,3 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-import os
-from pathlib import Path
-
-configkey = ["open", "rift"]
 CONFIG = {
     "open": [
         "000000",
@@ -74,33 +66,7 @@ CONFIG = {
     }
 }
 
-CONFIGJSONPATH = Path(__file__).parent
-FILEPATH = CONFIGJSONPATH / 'config.json'
-
 
 def get_rift_config():
-    try:
-        config = readf()
-        for key in configkey:
-            if key not in list(config.keys()):
-                config[key] = CONFIG[key]
-        savef_rift(config)
-    except:
-        config = CONFIG
-        savef_rift(config)
-    return config
-
-
-def readf():
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = f.read()
-    return json.loads(data)
-
-
-def savef_rift(data):
-    data = json.dumps(data, ensure_ascii=False, indent=3)
-    savemode = "w" if os.path.exists(FILEPATH) else "x"
-    with open(FILEPATH, mode=savemode, encoding="UTF-8") as f:
-        f.write(data)
-        f.close()
-    return True
+    """直接返回内置配置，不再读取/写入 config.json"""
+    return CONFIG

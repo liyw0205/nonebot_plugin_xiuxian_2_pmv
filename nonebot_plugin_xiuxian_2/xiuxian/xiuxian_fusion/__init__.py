@@ -15,7 +15,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
 from ..xiuxian_back.back_util import get_item_msg
 from ..xiuxian_utils.utils import (
-    check_user, get_msg_pic, number_to, handle_send
+    check_user, get_msg_pic, number_to, handle_send, send_help_message
 )
 from ..xiuxian_back.back_util import check_equipment_use_msg
 import random
@@ -47,7 +47,7 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         
     msg = fusion_help_text
 
-    await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
+    await send_help_message(bot, event, msg, k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_help.finish()
 
 @fusion_item.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -404,4 +404,3 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     await handle_send(bot, event, "\n".join(msg_parts), md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await available_fusion.finish()
-

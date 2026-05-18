@@ -121,6 +121,9 @@ class TiantiDataManager:
             "tianti_hp": 0,
             "last_settle_time": None,
             "medicine_last_time": None,
+            "medicine_end_time": None,
+            "medicine_effect": 0.0,
+            "medicine_name": "",
             "opened_qiaoxue": [],
             "opened_qiaoxue_detail": [],
             "qiaoxue_stage_opened": {}
@@ -288,6 +291,14 @@ class TiantiDataManager:
             data["last_settle_time"] = None
         if data.get("medicine_last_time") in ("", "null", "None", "none", 0):
             data["medicine_last_time"] = None
+        if data.get("medicine_end_time") in ("", "null", "None", "none", 0):
+            data["medicine_end_time"] = None
+        if data.get("medicine_name") in (None, "null", "None", "none", 0):
+            data["medicine_name"] = ""
+        try:
+            data["medicine_effect"] = float(data.get("medicine_effect", 0) or 0)
+        except Exception:
+            data["medicine_effect"] = 0.0
 
         # 窍穴字段清洗
         opened = self._normalize_opened_qiaoxue(data.get("opened_qiaoxue"))

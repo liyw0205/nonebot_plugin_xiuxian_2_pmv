@@ -19,7 +19,8 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,
-    handle_send
+    handle_send,
+    send_help_message
 )
 
 items = Items()
@@ -65,7 +66,12 @@ novice = on_command("新手礼包", priority=7, block=True)
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __beg_help__
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="奇缘", v1="仙途奇缘",
+        k2="礼包", v2="新手礼包",
+        k3="存档", v3="我的修仙信息"
+    )
     await beg_help.finish()
 
 @beg_stone.handle(parameterless=[Cooldown(cd_time=1.4)])

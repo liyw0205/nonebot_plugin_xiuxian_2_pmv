@@ -1,9 +1,5 @@
-# xiuxian_trade/auction_config.py
-import json
-from pathlib import Path
+from copy import deepcopy
 from typing import Dict, Any, Optional
-
-CONFIG_PATH = Path(__file__).parent / "auction_config.json"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "schedule": {
@@ -28,6 +24,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "items_count": 0
     }
 }
+
+_AUCTION_CONFIG: Dict[str, Any] = deepcopy(DEFAULT_CONFIG)
 
 SYSTEM_ITEMS: Dict[str, Dict[str, int]] = {
         "安神灵液": {"id": 1412, "start_price": 550000},
@@ -88,38 +86,18 @@ SYSTEM_ITEMS: Dict[str, Dict[str, int]] = {
 
 def _deep_merge(user_cfg: Dict[str, Any], default_cfg: Dict[str, Any]) -> Dict[str, Any]:
     """递归补齐缺失键，不覆盖已有值"""
-    out = dict(user_cfg)
+    out = deepcopy(user_cfg)
     for k, v in default_cfg.items():
         if k not in out:
-            out[k] = v
+            out[k] = deepcopy(v)
         elif isinstance(v, dict) and isinstance(out[k], dict):
             out[k] = _deep_merge(out[k], v)
     return out
 
 
-def save_config(config: Dict[str, Any]) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=4)
-
-
-def get_auction_config() -> Dict[str, Any]:
-    """读取配置（自动补全+纠偏）"""
-    if not CONFIG_PATH.exists():
-        save_config(DEFAULT_CONFIG)
-        return dict(DEFAULT_CONFIG)
-
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        if not isinstance(cfg, dict):
-            raise ValueError("config root must be object")
-    except Exception:
-        cfg = dict(DEFAULT_CONFIG)
-        save_config(cfg)
-        return cfg
-
-    merged = _deep_merge(cfg, DEFAULT_CONFIG)
+def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """补齐并纠偏配置结构。"""
+    merged = _deep_merge(config if isinstance(config, dict) else {}, DEFAULT_CONFIG)
 
     # ===== 字段纠偏 =====
     sch = merged["schedule"]
@@ -143,11 +121,20 @@ def get_auction_config() -> Dict[str, Any]:
     st["last_display_refresh_time"] = str(st.get("last_display_refresh_time", ""))
     st["items_count"] = max(int(st.get("items_count", 0)), 0)
 
-    # 若有变更则写回
-    if merged != cfg:
-        save_config(merged)
-
     return merged
+
+
+def save_config(config: Dict[str, Any]) -> None:
+    """更新本次运行中的拍卖配置，不再写入 auction_config.json。"""
+    global _AUCTION_CONFIG
+    _AUCTION_CONFIG = _normalize_config(config)
+
+
+def get_auction_config() -> Dict[str, Any]:
+    """读取内置拍卖配置，不再自动创建 auction_config.json。"""
+    global _AUCTION_CONFIG
+    _AUCTION_CONFIG = _normalize_config(_AUCTION_CONFIG)
+    return deepcopy(_AUCTION_CONFIG)
 
 
 def get_system_items() -> Dict[str, Any]:
@@ -162,8 +149,12 @@ def get_auction_rules() -> Dict[str, Any]:
     return get_auction_config()["rules"]
 
 
-def get_auction_status_from_config_file() -> Dict[str, Any]:
+def get_auction_status_config() -> Dict[str, Any]:
     return get_auction_config()["auction_status"]
+
+
+def get_auction_status_from_config_file() -> Dict[str, Any]:
+    return get_auction_status_config()
 
 
 def set_auction_config_value(key: str, value: Any, sub_key: Optional[str] = None) -> None:
@@ -201,5 +192,5 @@ def update_schedule(new_schedule: Dict[str, Any]) -> None:
     save_config(cfg)
 
 
-# 初始化时确保配置文件存在
+# 初始化内存配置
 get_auction_config()

@@ -19,7 +19,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler,
-    get_msg_pic, handle_send, log_message, update_statistics_value
+    get_msg_pic, handle_send, log_message, update_statistics_value,
+    send_help_message
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict, get_elixir_recipe_msg
@@ -232,7 +233,7 @@ async def elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """炼丹帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __elixir_help__
-    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="配方", v2="配方", k3="配方帮助", v3="炼丹配方帮助")
+    await send_help_message(bot, event, msg, k1="炼丹", v1="炼丹", k2="配方", v2="配方", k3="配方帮助", v3="炼丹配方帮助")
     await elixir_help.finish()
 
 
@@ -241,7 +242,7 @@ async def mix_elixir_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     """炼丹配方帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __mix_elixir_help__
-    await bot.send_group_msg(group_id=int(send_group_id), message=msg)
+    await send_help_message(bot, event, msg, k1="炼丹", v1="炼丹", k2="配方", v2="配方", k3="炼丹帮助", v3="炼丹帮助")
     await mix_elixir_help.finish()
 
 
@@ -268,6 +269,10 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await mix_elixir.finish()
     user_id = user_info['user_id']
     user_back = sql_message.get_back_msg(user_id)
+    if user_back is None:
+        msg = "道友的背包空空如也，无法炼丹"
+        await handle_send(bot, event, msg)
+        await mix_elixir.finish()
 
     yaocai_dict = {}
     user_ldl_flag[user_id] = False  # 初始化炼丹炉标志
@@ -280,11 +285,6 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 user_ldl_dict[user_id] = {}
             user_ldl_dict[user_id][back['goods_id']] = back['goods_name']
             user_ldl_flag[user_id] = True
-
-    if user_back is None:
-        msg = "道友的背包空空如也，无法炼丹"
-        await handle_send(bot, event, msg)
-        await mix_elixir.finish()
 
     if yaocai_dict == {}:
         msg = "道友的背包内没有药材，无法炼丹！"
@@ -305,14 +305,19 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         # ====== 解析 丹药名 + 可变数量 的品级数字 ======
         parts = input_str.split()
         dan_name = parts[0]  # 丹药名
-        remove_level_nums = set(map(int, parts[1:]))  # 如 {7,8}
-        target_elixir_id, target_elixir = Items().get_data_by_item_name(dan_name)
-        if "elixir_config" not in target_elixir:
-            msg = f"{dan_name}不支持炼丹！"
+        try:
+            remove_level_nums = set(map(int, parts[1:]))  # 如 {7,8}
+        except ValueError:
+            msg = "请输入正确的药材品级数字！\n例如：炼丹 灭神古丸 7 8"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
             await mix_elixir.finish()
-        if not target_elixir_id:
+        target_elixir_id, target_elixir = Items().get_data_by_item_name(dan_name)
+        if not target_elixir_id or target_elixir is None:
             msg = "请输入有效丹药名称！"
+            await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+            await mix_elixir.finish()
+        if "elixir_config" not in target_elixir:
+            msg = f"{dan_name}不支持炼丹！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
             await mix_elixir.finish()
         yaocai_dict = remove_herbs_by_levels(yaocai_dict, remove_level_nums)  # 删除指定品质药材
@@ -353,13 +358,13 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 # 配方
 @mix_make.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
+async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
     """配方,用来炼制丹药"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
-        await mix_elixir.finish()
+        await mix_make.finish()
     user_id = user_info['user_id']
     pattern = r"主药([\u4e00-\u9fa5]+)(\d+)药引([\u4e00-\u9fa5]+)(\d+)辅药([\u4e00-\u9fa5]+)(\d+)丹炉([\u4e00-\u9fa5]+)+"
     matched = re.search(pattern, mode)
@@ -487,7 +492,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
     flag = False
     goods_id = 0
-    user_back = sql_message.get_back_msg(user_id)
+    user_back = sql_message.get_back_msg(user_id) or []
     for back in user_back:
         if back['goods_type'] == '药材':
             if Items().get_data_by_item_id(back['goods_id'])['name'] == yaocai_name:
@@ -505,7 +510,7 @@ async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
 async def check_ldl_name_in_back(user_id, ldl_name):
     flag = False
     goods_info = {}
-    user_back = sql_message.get_back_msg(user_id)
+    user_back = sql_message.get_back_msg(user_id) or []
     for back in user_back:
         if back['goods_type'] == '炼丹炉':
             if back['goods_name'] == ldl_name:

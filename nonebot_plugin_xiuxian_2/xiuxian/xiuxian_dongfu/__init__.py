@@ -10,7 +10,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, number_to
+from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 
@@ -43,7 +43,7 @@ dongfu_plant = on_command("洞府种植", priority=8, block=True)
 visit_friend = on_command("拜访道友", priority=8, block=True)
 dongfu_array = on_command("洞府布阵", priority=8, block=True)
 dongfu_help = on_command("洞府帮助", priority=8, block=True)
-infiltrate_dongfu = on_command("潜入洞府", priority=8, block=True)
+infiltrate_dongfu = on_command("潜入洞府", aliases={"随机潜入洞府", "随机潜入"}, priority=8, block=True)
 
 
 def _now():
@@ -192,6 +192,27 @@ def _can_intrude(target_uid: str):
     return int(d.get("intrude_count", 0)) < INFILTRATE_DAILY_LIMIT, d
 
 
+def _get_random_dongfu_target(my_uid: str):
+    all_user_ids = sql_message.get_all_user_id() or []
+    candidates = []
+    for uid in all_user_ids:
+        uid = str(uid)
+        if uid == str(my_uid):
+            continue
+        d = player_data_manager.get_fields(uid, DONGFU_TABLE) or {}
+        if int(d.get("built", 0)) != 1 or int(d.get("planting", 0)) != 1:
+            continue
+        if int(d.get("plant_seed_id", 0)) not in SEED_CONFIG:
+            continue
+        can_intrude, _ = _can_intrude(uid)
+        if not can_intrude:
+            continue
+        ui = sql_message.get_user_info_with_id(uid)
+        if ui:
+            candidates.append(ui)
+    return random.choice(candidates) if candidates else None
+
+
 @dongfu_help.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -201,13 +222,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "2. 洞府种植 [种子名]\n"
         "3. 拜访道友 道号\n"
         "4. 洞府布阵\n"
-        "5. 潜入洞府 道号\n"
+        "5. 潜入洞府 道号 / 随机潜入洞府\n"
         "注：\n"
         "- 洞府种植再次输入可收获\n"
         "- 潜入只能对附近已建设洞府的道友使用\n"
         f"- 每个洞府每日最多被潜入{INFILTRATE_DAILY_LIMIT}次"
     )
-    await handle_send(bot, event, msg)
+    await send_help_message(
+        bot, event, msg,
+        k1="洞府", v1="我的洞府",
+        k2="种植", v2="洞府种植",
+        k3="地图", v3="地图帮助"
+    )
 
 
 @my_dongfu.handle(parameterless=[Cooldown(cd_time=1.4)])
@@ -415,14 +441,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_uid = str(user_info["user_id"])
     tname = args.extract_plain_text().strip()
     if not tname:
-        await handle_send(bot, event, "请使用：潜入洞府 道号")
-        return
-
-    nearby_users = _get_same_node_users(my_uid)
-    target = next((u for u in nearby_users if u["user_name"] == tname), None)
-    if not target:
-        await handle_send(bot, event, f"附近未找到道友【{tname}】。潜入只能针对同一地点附近的洞府。")
-        return
+        target = _get_random_dongfu_target(my_uid)
+        if not target:
+            await handle_send(bot, event, "暂未找到可随机潜入的洞府。")
+            return
+        tname = target["user_name"]
+    else:
+        nearby_users = _get_same_node_users(my_uid)
+        target = next((u for u in nearby_users if u["user_name"] == tname), None)
+        if not target:
+            await handle_send(bot, event, f"附近未找到道友【{tname}】。指定潜入只能针对同一地点附近的洞府。")
+            return
 
     target_uid = str(target["user_id"])
     if target_uid == my_uid:

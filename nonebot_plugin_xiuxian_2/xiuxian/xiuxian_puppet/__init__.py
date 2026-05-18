@@ -7,7 +7,7 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import assign_bot
-from ..xiuxian_utils.utils import check_user, log_message, handle_send
+from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import (get_player_info, save_player_info,
                                              UserBuffDate, XiuxianDateManage, XIUXIAN_IMPART_BUFF)
 
@@ -62,7 +62,7 @@ async def puppet_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """傀儡帮助"""
     bot, _ = await assign_bot(bot=bot, event=event)
     msg = __puppet_help__
-    await handle_send(bot, event, msg)
+    await send_help_message(bot, event, msg, k1="购买", v1="购买灵田傀儡", k2="开启", v2="灵田傀儡开启", k3="灵田", v3="我的灵田")
     await puppet_help.finish()
 
 

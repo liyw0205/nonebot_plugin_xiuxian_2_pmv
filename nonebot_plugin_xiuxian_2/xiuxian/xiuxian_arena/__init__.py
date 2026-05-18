@@ -7,7 +7,7 @@ from nonebot import on_command
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_msg_handler, update_statistics_value
+from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_msg_handler, update_statistics_value, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.item_json import Items
@@ -27,6 +27,9 @@ arena_help = on_command("竞技场帮助", priority=10, block=True)
 arena_shop = on_command("竞技场商店", priority=10, block=True)
 arena_buy = on_command("竞技场兑换", priority=10, block=True)
 arena_honor = on_command("我的荣誉", priority=10, block=True)
+arena_buy_challenge = on_command("竞技场购买次数", aliases={"购买竞技场次数", "竞技场买次数"}, priority=10, block=True)
+
+ARENA_CHALLENGE_BUY_COST = 2000000
 
 __arena_help__ = """
 ⚔️ 【竞技场玩法】⚔️
@@ -34,6 +37,7 @@ __arena_help__ = """
 • 竞技场挑战 - 进行竞技场挑战
 • 竞技场商店 - 查看竞技场商店
 • 竞技场兑换 - 兑换商店物品
+• 竞技场购买次数 [次数] - 花费灵石购买今日挑战次数
 • 我的荣誉 - 查看荣誉信息
 • 竞技场排行榜 - 查看排行榜
 • 我的竞技场 - 查看个人战绩
@@ -43,6 +47,7 @@ __arena_help__ = """
 
 > • 初始积分：1000分
 • 每日挑战次数：10次
+• 每日购买次数：每次2000000灵石，最多3次
 • 胜利：+20积分
 • 失败：积分不变
 • 无匹配：+10积分
@@ -79,7 +84,12 @@ ARENA_CACHE_EXPIRE_SECONDS = 180
 async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, __arena_help__)
+    await send_help_message(
+        bot, event, __arena_help__,
+        k1="挑战", v1="竞技场挑战",
+        k2="商店", v2="竞技场商店",
+        k3="排行", v3="竞技场排行榜"
+    )
     await arena_help.finish()
 
 @arena_challenge.handle(parameterless=[Cooldown(cd_time=30)])
@@ -317,6 +327,10 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     user_id = user_info['user_id']
     arena_data = arena_limit.get_user_arena_info(user_id)
+    challenge_cap = arena_limit.get_daily_challenge_cap(user_id)
+    challenge_used = int(arena_data.get("daily_challenges_used", 0))
+    challenge_remaining = max(0, challenge_cap - challenge_used)
+    daily_buys = int(arena_data.get("daily_challenge_buys", 0))
     
     # 计算胜率
     total_battles = arena_data['total_wins'] + arena_data['total_losses']
@@ -328,7 +342,8 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 道号：{user_info['user_name']}
 当前积分：{arena_data['score']}
 当前段位：{arena_data['rank']}
-今日挑战：{arena_limit.daily_challenges - arena_data['daily_challenges_used']}/{arena_limit.daily_challenges}次
+今日挑战：{challenge_remaining}/{challenge_cap}次
+今日购买：{daily_buys}/{arena_limit.daily_buy_limit}次（{number_to(ARENA_CHALLENGE_BUY_COST)}灵石/次）
 
 战斗统计：
 总战斗：{total_battles}次
@@ -497,6 +512,63 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await arena_honor.finish()
 
+@arena_buy_challenge.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """花费灵石购买今日竞技场挑战次数"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await arena_buy_challenge.finish()
+
+    user_id = str(user_info["user_id"])
+    msg_text = args.extract_plain_text().strip()
+    buy_amount = 1
+    if msg_text:
+        match = re.search(r"\d+", msg_text)
+        if not match:
+            await handle_send(bot, event, "请输入正确的购买次数，例如：竞技场购买次数 1")
+            await arena_buy_challenge.finish()
+        buy_amount = max(1, int(match.group()))
+
+    arena_info = arena_limit.get_user_arena_info(user_id)
+    bought = int(arena_info.get("daily_challenge_buys", 0))
+    can_buy = max(0, arena_limit.daily_buy_limit - bought)
+    if can_buy <= 0:
+        await handle_send(bot, event, f"今日竞技场购买次数已用完（{arena_limit.daily_buy_limit}/{arena_limit.daily_buy_limit}）。")
+        await arena_buy_challenge.finish()
+
+    buy_amount = min(buy_amount, can_buy)
+    total_cost = ARENA_CHALLENGE_BUY_COST * buy_amount
+    if int(user_info.get("stone", 0)) < total_cost:
+        await handle_send(
+            bot,
+            event,
+            f"灵石不足，购买{buy_amount}次需要{number_to(total_cost)}灵石。\n"
+            f"当前灵石：{number_to(int(user_info.get('stone', 0)))}"
+        )
+        await arena_buy_challenge.finish()
+
+    sql_message.update_ls(user_id, total_cost, 2)
+    real_amount, new_bought, total_cap = arena_limit.buy_challenge_count(user_id, buy_amount)
+    arena_info = arena_limit.get_user_arena_info(user_id)
+    remaining = max(0, int(total_cap) - int(arena_info.get("daily_challenges_used", 0)))
+
+    await handle_send(
+        bot,
+        event,
+        f"竞技场挑战次数购买成功！\n"
+        f"本次购买：{real_amount}次\n"
+        f"消耗灵石：{number_to(total_cost)}\n"
+        f"今日购买：{new_bought}/{arena_limit.daily_buy_limit}\n"
+        f"今日剩余挑战：{remaining}/{total_cap}",
+        md_type="竞技场",
+        k1="挑战", v1="竞技场挑战",
+        k2="查看", v2="竞技场查看",
+        k3="我的", v3="我的竞技场"
+    )
+    await arena_buy_challenge.finish()
+
 def check_rank_requirement(current_rank, required_rank):
     """检查段位要求"""
     rank_order = ["青铜", "白银", "黄金", "铂金", "钻石", "王者"]
@@ -588,7 +660,10 @@ async def reset_arena_daily_challenges():
         
         # 重置挑战次数
         player_data_manager.update_or_write_data(user_id, "arena", "daily_challenges_used", 0)
+        player_data_manager.update_or_write_data(user_id, "arena", "daily_extra_challenges", 0)
+        player_data_manager.update_or_write_data(user_id, "arena", "daily_challenge_buys", 0)
         player_data_manager.update_or_write_data(user_id, "arena", "last_reset_date", datetime.now().strftime("%Y-%m-%d"))
+        player_data_manager.update_or_write_data(user_id, "arena", "last_buy_date", datetime.now().strftime("%Y-%m-%d"))
         
         # 计算并发放荣誉值
         total_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
@@ -610,4 +685,38 @@ async def reduce_arena_rank(reduce_steps=2):
     logger.opt(colors=True).info(
         f"<green>竞技场降段完成！共处理{result['total_users']}名玩家，"
         f"实际降段{result['changed_users']}名玩家，降段数：{result['reduce_steps']}</green>"
+    )
+
+async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
+    """使用竞技场挑战券增加今日竞技场挑战次数"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info["user_id"]
+    arena_info = arena_limit.get_user_arena_info(user_id)
+    used_count = int(arena_info.get("daily_challenges_used", 0))
+    use_count = min(int(quantity), used_count)
+    if use_count <= 0:
+        await handle_send(
+            bot, event,
+            "今日竞技场挑战次数未消耗，无需使用挑战券。",
+            md_type="竞技场",
+            k1="挑战", v1="竞技场挑战",
+            k2="查看", v2="竞技场查看",
+            k3="我的", v3="我的竞技场"
+        )
+        return
+
+    remaining = arena_limit.add_challenge_count(user_id, use_count)
+    sql_message.update_back_j(user_id, item_id, use_count)
+    await handle_send(
+        bot, event,
+        f"使用竞技场挑战券 {use_count} 张，今日剩余竞技场挑战次数：{remaining}/{arena_limit.get_daily_challenge_cap(user_id)}",
+        md_type="竞技场",
+        k1="挑战", v1="竞技场挑战",
+        k2="查看", v2="竞技场查看",
+        k3="我的", v3="我的竞技场"
     )

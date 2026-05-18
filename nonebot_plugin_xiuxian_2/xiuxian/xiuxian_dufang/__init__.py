@@ -15,7 +15,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
-from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message
+from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message, send_help_message
 from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
 
@@ -159,7 +159,7 @@ async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 ◆ 可传入灵石作为额外消耗(最多当前灵石的10%)
 ◆ 共享开启后，你的鉴石结果可能会影响其他共享开启的道友
 ◆ 共享事件可能带来连锁反应，福祸难料"""
-    await handle_send(bot, event, help_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+    await send_help_message(bot, event, help_msg, k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 # 共享开启
 @unseal_share_on.handle(parameterless=[Cooldown(cd_time=1.4)])
