@@ -39,6 +39,7 @@ class OLD_RIFT_INFO(object):
                                   "rank": group_rift[x].rank,
                                   "l_user_id": group_rift[x].l_user_id,
                                   "time": group_rift[x].time,
+                                  "target_nodes": getattr(group_rift[x], "target_nodes", []),
                                   "target_realm": getattr(group_rift[x], "target_realm", ""),
                                   "target_heaven": getattr(group_rift[x], "target_heaven", ""),
                                   "target_node_id": getattr(group_rift[x], "target_node_id", ""),
@@ -60,10 +61,19 @@ class OLD_RIFT_INFO(object):
             rift.rank = self.data[x]["rank"]
             rift.l_user_id = self.data[x]["l_user_id"]
             rift.time = self.data[x]["time"]
+            rift.target_nodes = self.data[x].get("target_nodes", [])
             rift.target_realm = self.data[x].get("target_realm", "")
             rift.target_heaven = self.data[x].get("target_heaven", "")
             rift.target_node_id = self.data[x].get("target_node_id", "")
             rift.target_node_name = self.data[x].get("target_node_name", "")
+            if not rift.target_nodes and rift.target_node_id:
+                rift.target_nodes = [{
+                    "realm": rift.target_realm,
+                    "heaven": rift.target_heaven,
+                    "node_id": rift.target_node_id,
+                    "node_name": rift.target_node_name,
+                    "node_type": "试炼",
+                }]
             group_rift[x] = rift
         self.data = {}
         return group_rift

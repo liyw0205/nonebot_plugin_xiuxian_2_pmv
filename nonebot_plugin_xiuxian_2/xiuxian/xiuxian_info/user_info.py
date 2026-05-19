@@ -160,6 +160,8 @@ async def get_user_xiuxian_info(user_id):
         "主修功法": main_buff_name,
         "辅修功法": sub_buff_name,
         "副修神通": sec_buff_name,
+        "身法": effect1_buff_buff_name,
+        "瞳术": effect2_buff_buff_name,
         "法器": weapon_name,
         "防具": armor_name,
         "道侣": partner_info,
@@ -297,6 +299,8 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             f"主修功法: {_effect_link(detail_map.get('主修功法', '无'))}",
             f"辅修功法: {_effect_link(detail_map.get('辅修功法', '无'))}",
             f"副修神通: {_effect_link(detail_map.get('副修神通', '无'))}",
+            f"身法: {_effect_link(detail_map.get('身法', '无'))}",
+            f"瞳术: {_effect_link(detail_map.get('瞳术', '无'))}",
             f"法器: {_effect_link(detail_map.get('法器', '无'))}",
             f"防具: {_effect_link(detail_map.get('防具', '无'))}",
             f"道侣: {_effect_link(detail_map.get('道侣', '无'), '我的道侣')}",
@@ -425,12 +429,15 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
     
-    detail_map, _, equipped_title_name, equipped_title_id = await get_user_xiuxian_info(user_info['user_id'])
+    detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])
+    equipped_title_name = detail_map.get("称号", "")
+    if equipped_title_name == "无":
+        equipped_title_name = ""
     
     if XiuConfig().xiuxian_info_img:
-        img_res = await draw_user_info_img(user_info['user_id'], detail_map, equipped_title_name)
+        img_res = await draw_user_info_img(user_info['user_id'], detail_map)
     else:
-        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map, equipped_title_name)
+        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
     
     if XiuConfig().markdown_status:
         if XiuConfig().markdown_id and XiuConfig().web_link:
@@ -440,7 +447,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 "key": "t1",
                 "values": [
                     f"](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r",
-                    f"![img #1100px #2450px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",
+                    f"![img #1100px #2680px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",
                     f"{title_display}道号：[{user_info['user_name']}"
                 ]
             }
@@ -452,7 +459,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 if link:
                     # 原生MD - 称号显示在标题中
                     title_display = f"#### {equipped_title_name}\r" if equipped_title_name else ""
-                    img_data = f"{title_display}![img #1100px #2450px]({link})"
+                    img_data = f"{title_display}![img #1100px #2680px]({link})"
                     await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
                     await xiuxian_message_img.finish()
     

@@ -463,3 +463,4 @@ class Rift:
         self.target_heaven = ''
         self.target_node_id = ''
         self.target_node_name = ''
+        self.target_nodes = []

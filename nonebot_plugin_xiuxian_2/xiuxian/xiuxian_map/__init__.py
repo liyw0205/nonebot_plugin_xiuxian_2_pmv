@@ -12,7 +12,14 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_msg_handler, send_help_message
+from ..xiuxian_utils.utils import (
+    build_md_command_link,
+    check_user,
+    handle_send,
+    number_to,
+    send_msg_handler,
+    send_help_message,
+)
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
@@ -683,6 +690,38 @@ def get_random_trial_node() -> dict | None:
                     })
     return random.choice(trial_nodes) if trial_nodes else None
 
+
+def get_random_trial_nodes_by_realm() -> list[dict]:
+    """每一界随机获取一个试炼节点。"""
+    map_data = _load_map_data()
+    realms = map_data.get("meta", {}).get("realms") or _all_realms(map_data)
+    result = []
+
+    for realm in realms:
+        if realm not in map_data:
+            continue
+
+        trial_nodes = []
+        for heaven in _heaven_names(map_data, realm):
+            for node in _nodes(map_data, realm, heaven):
+                if node.get("type") == "试炼":
+                    trial_nodes.append({
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node["id"],
+                        "node_name": node["name"],
+                        "node_type": node.get("type", ""),
+                    })
+
+        if trial_nodes:
+            result.append(random.choice(trial_nodes))
+
+    return result
+
+
+def _build_go_link(name: str) -> str:
+    return build_md_command_link(name, f"前往 {name}")
+
 # =========================================
 # 奖励工具
 # =========================================
@@ -899,10 +938,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"当前位置：{st['realm']}·{st['heaven']}·{cur_node['name']}（{cur_node['type']}）" if cur_node else f"当前位置：{st['realm']}·{st['heaven']}",
             "—— 当前天可前往节点 ——"
         ]
+        md_lines = [
+            "【地图信息】",
+            f"当前位置：{st['realm']}·{st['heaven']}·{_build_go_link(cur_node['name'])}（{cur_node['type']}）" if cur_node else f"当前位置：{st['realm']}·{st['heaven']}",
+            "—— 当前天可前往节点 ——"
+        ]
         for n in _nodes(map_data, st["realm"], st["heaven"]):
             mark = "📍" if n["id"] == st["node_id"] else "▫"
             lines.append(f"{mark} {n['name']}（{n['type']}）")
-        await handle_send(bot, event, "\n".join(lines))
+            md_lines.append(f"{mark} {_build_go_link(n['name'])}（{n['type']}）")
+        await handle_send(
+            bot,
+            event,
+            "\n".join(md_lines),
+            native_markdown=True,
+            fallback_msg="\n".join(lines),
+        )
         return
 
     kind, parsed = _parse_map_query(map_data, query)
@@ -913,19 +964,35 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if kind == "realm":
         heavens = _get_realm_heaven_order(map_data, parsed)
         lines = [f"【地图 - {parsed}】", "—— 天层列表 ——"]
+        md_lines = [f"【地图 - {parsed}】", "—— 天层列表 ——"]
         for h in heavens:
             mark = "📍" if st["heaven"] == h else "▫"
             lines.append(f"{mark} {h}")
-        await handle_send(bot, event, "\n".join(lines))
+            md_lines.append(f"{mark} {_build_go_link(h)}")
+        await handle_send(
+            bot,
+            event,
+            "\n".join(md_lines),
+            native_markdown=True,
+            fallback_msg="\n".join(lines),
+        )
         return
 
     if kind == "heaven":
         r, h = parsed
         lines = [f"【地图 - {r}·{h}】", "—— 节点列表 ——"]
+        md_lines = [f"【地图 - {r}·{h}】", "—— 节点列表 ——"]
         for n in _nodes(map_data, r, h):
             mark = "📍" if st["realm"] == r and st["heaven"] == h and st["node_id"] == n["id"] else "▫"
             lines.append(f"{mark} {n['name']}（{n['type']}）")
-        await handle_send(bot, event, "\n".join(lines))
+            md_lines.append(f"{mark} {_build_go_link(n['name'])}（{n['type']}）")
+        await handle_send(
+            bot,
+            event,
+            "\n".join(md_lines),
+            native_markdown=True,
+            fallback_msg="\n".join(lines),
+        )
         return
 
 

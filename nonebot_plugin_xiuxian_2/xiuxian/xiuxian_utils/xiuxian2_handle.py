@@ -538,14 +538,33 @@ class XiuxianDateManage:
         with self.lock:
             data = jsondata.root_data()
             if name == '命运道果':
-                type_speeds = data[name]['type_speeds']
-                user_info = sql_message.get_user_info_with_id(user_id)
-                root_level = user_info['root_level']
-                type_speeds2 = data['永恒道果']['type_speeds']
-                decay_steps = int(root_level) // 5
-                level_bonus = max(0.5, type_speeds - decay_steps * 0.3)
-                type_speeds3 = (type_speeds2 + (root_level * level_bonus))
-                return type_speeds3
+                # 基础加成（永恒道果的7.0）
+                base_rate = data['永恒道果']['type_speeds']
+                # 命运道果的基础增量系数（2.0）
+                current_step_bonus = data[name]['type_speeds']
+                
+                user_info = self.get_user_info_with_id(user_id)
+                root_level = int(user_info.get('root_level', 0))
+                
+                total_bonus = 0.0
+                remaining_levels = root_level
+                
+                # 阶梯式计算循环
+                while remaining_levels > 0:
+                    # 每个阶段计算5级
+                    levels_in_this_step = min(remaining_levels, 5)
+                    total_bonus += levels_in_this_step * current_step_bonus
+                    remaining_levels -= levels_in_this_step
+                    
+                    # 进入下一阶段，系数减少0.3，最低0.5
+                    current_step_bonus = round(max(0.5, current_step_bonus - 0.3), 2)
+                    
+                    # 如果系数已经到0.5了，剩下的等级可以直接批量计算，跳出循环
+                    if current_step_bonus <= 0.5:
+                        total_bonus += remaining_levels * 0.5
+                        break
+                
+                return base_rate + total_bonus
             else:
                 return data[name]['type_speeds']
 

@@ -23,7 +23,11 @@ from ..xiuxian_utils.utils import (
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from ..xiuxian_config import XiuConfig, convert_rank
-from ..xiuxian_map import get_player_current_position, get_random_trial_node
+from ..xiuxian_map import (
+    get_player_current_position,
+    get_random_trial_node,
+    get_random_trial_nodes_by_realm,
+)
 from .riftmake import (
     Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
     get_dxsj_info, get_boss_battle_info, get_treasure_info
@@ -132,58 +136,114 @@ async def generate_rift_for_group():
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
 
+def _normalise_rift_target_node(node_info: dict) -> dict:
+    return {
+        "realm": node_info.get("realm", ""),
+        "heaven": node_info.get("heaven", ""),
+        "node_id": node_info.get("node_id", ""),
+        "node_name": node_info.get("node_name", ""),
+        "node_type": node_info.get("node_type", ""),
+    }
+
+
+def get_rift_target_nodes(rift: Rift) -> list[dict]:
+    target_nodes = [
+        _normalise_rift_target_node(node)
+        for node in getattr(rift, "target_nodes", [])
+        if isinstance(node, dict) and node.get("node_id")
+    ]
+    if target_nodes:
+        return target_nodes
+
+    if getattr(rift, "target_node_id", ""):
+        return [{
+            "realm": getattr(rift, "target_realm", ""),
+            "heaven": getattr(rift, "target_heaven", ""),
+            "node_id": getattr(rift, "target_node_id", ""),
+            "node_name": getattr(rift, "target_node_name", ""),
+            "node_type": "试炼",
+        }]
+
+    return []
+
+
+def format_rift_target_nodes(rift: Rift) -> str:
+    target_nodes = get_rift_target_nodes(rift)
+    return "\n".join(
+        f"{index}. {node['realm']}·{node['heaven']}·{node['node_name']}"
+        for index, node in enumerate(target_nodes, 1)
+    )
+
+
 def assign_rift_trial_node(rift: Rift):
-    """给秘境绑定一个地图试炼节点。"""
-    node_info = get_random_trial_node()
-    if not node_info:
+    """给秘境在每一界各绑定一个地图试炼节点。"""
+    node_infos = get_random_trial_nodes_by_realm()
+    if not node_infos:
+        node_info = get_random_trial_node()
+        node_infos = [node_info] if node_info else []
+    if not node_infos:
         return rift
-    rift.target_realm = node_info["realm"]
-    rift.target_heaven = node_info["heaven"]
-    rift.target_node_id = node_info["node_id"]
-    rift.target_node_name = node_info["node_name"]
+    rift.target_nodes = [_normalise_rift_target_node(node_info) for node_info in node_infos]
+    first_node = rift.target_nodes[0]
+    rift.target_realm = first_node["realm"]
+    rift.target_heaven = first_node["heaven"]
+    rift.target_node_id = first_node["node_id"]
+    rift.target_node_name = first_node["node_name"]
     return rift
 
 
 def build_rift_appear_msg(rift: Rift) -> str:
-    if getattr(rift, "target_node_name", ""):
+    target_msg = format_rift_target_nodes(rift)
+    if target_msg:
         return (
-            f"野生的{rift.name}出现在"
-            f"{rift.target_realm}·{rift.target_heaven}·{rift.target_node_name}！"
-            f"请诸位道友前往目标节点后发送 探索秘境 来加入吧！"
+            f"野生的{rift.name}出现在以下地点：\n"
+            f"{target_msg}\n"
+            f"请诸位道友前往任一目标节点后发送 探索秘境 来加入吧！"
         )
     return f"野生的{rift.name}出现了！请诸位道友发送 探索秘境 来加入吧！"
 
 
 def build_rift_data(rift: Rift) -> dict:
+    target_nodes = get_rift_target_nodes(rift)
+    first_node = target_nodes[0] if target_nodes else {}
     return {
         "name": rift.name,
         "time": rift.time,
         "rank": rift.rank,
-        "target_realm": getattr(rift, "target_realm", ""),
-        "target_heaven": getattr(rift, "target_heaven", ""),
-        "target_node_id": getattr(rift, "target_node_id", ""),
-        "target_node_name": getattr(rift, "target_node_name", ""),
+        "target_nodes": target_nodes,
+        "target_realm": first_node.get("realm", getattr(rift, "target_realm", "")),
+        "target_heaven": first_node.get("heaven", getattr(rift, "target_heaven", "")),
+        "target_node_id": first_node.get("node_id", getattr(rift, "target_node_id", "")),
+        "target_node_name": first_node.get("node_name", getattr(rift, "target_node_name", "")),
     }
 
 
 def check_rift_target_position(user_id: int, rift: Rift) -> tuple[bool, str]:
-    """普通探索需要玩家位于秘境绑定的试炼节点。"""
-    target_node_id = getattr(rift, "target_node_id", "")
-    if not target_node_id:
+    """普通探索需要玩家位于秘境绑定的任一试炼节点。"""
+    target_nodes = get_rift_target_nodes(rift)
+    if not target_nodes:
         assign_rift_trial_node(rift)
-        target_node_id = getattr(rift, "target_node_id", "")
-        if not target_node_id:
+        target_nodes = get_rift_target_nodes(rift)
+        if not target_nodes:
             return True, ""
 
     current = get_player_current_position(str(user_id))
-    if current and current.get("node_id") == target_node_id:
+    target_positions = {
+        (node["realm"], node["heaven"], node["node_id"])
+        for node in target_nodes
+    }
+    if current and (
+        current.get("realm"),
+        current.get("heaven"),
+        current.get("node_id"),
+    ) in target_positions:
         return True, ""
 
-    target_msg = f"{rift.target_realm}·{rift.target_heaven}·{rift.target_node_name}"
+    target_msg = format_rift_target_nodes(rift)
     if current:
         current_msg = f"{current['realm']}·{current['heaven']}·{current['node_name']}"
-        return False, f"本次秘境位于【{target_msg}】，道友当前在【{current_msg}】，请先前往目标节点再探索。"
-    return False, f"本次秘境位于【{target_msg}】，请先前往目标节点再探索。"
+        return False, f"本次秘境可在以下地点探索：\n{target_msg}\n道友当前在【{current_msg}】，请先前往任一目标节点再探索。"
+    return False, f"本次秘境可在以下地点探索：\n{target_msg}\n请先前往任一目标节点再探索。"
 
 def update_rift_explore_count(user_id: int, do_give: bool = True) -> str:
     """
@@ -357,8 +417,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         group_rift[group_id].l_user_id.append(user_id)
         rift_data = build_rift_data(group_rift[group_id])
         target_msg = ""
-        if rift_data.get("target_node_name"):
-            target_msg = f"\n秘境位置：{rift_data['target_realm']}·{rift_data['target_heaven']}·{rift_data['target_node_name']}"
+        target_nodes_msg = format_rift_target_nodes(group_rift[group_id])
+        if target_nodes_msg:
+            target_msg = f"\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！{target_msg}"
 
         save_rift_data(user_id, rift_data)
@@ -407,8 +468,9 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         group_rift["000000"].l_user_id.append(user_id) # 添加用户到秘境参与者列表
         rift_data = build_rift_data(current_rift)
         target_msg = ""
-        if rift_data.get("target_node_name"):
-            target_msg = f"\n秘藏令已绕过位置要求。\n秘境位置：{rift_data['target_realm']}·{rift_data['target_heaven']}·{rift_data['target_node_name']}"
+        target_nodes_msg = format_rift_target_nodes(current_rift)
+        if target_nodes_msg:
+            target_msg = f"\n秘藏令已绕过位置要求。\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
 
         save_rift_data(user_id, rift_data)

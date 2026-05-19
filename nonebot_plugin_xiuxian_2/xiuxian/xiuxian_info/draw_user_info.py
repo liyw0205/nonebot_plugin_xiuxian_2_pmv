@@ -30,7 +30,7 @@ font_24 = font_origin(24)
 
 async def draw_user_info_img(user_id, DETAIL_MAP):
     based_w = 1100
-    based_h = 2450
+    based_h = 2680
     # 获取背景图
     try:
         img = Image.open(BytesIO(await async_request(await get_anime_pic()))).convert("RGBA")
@@ -60,7 +60,7 @@ async def draw_user_info_img(user_id, DETAIL_MAP):
 
 async def draw_user_info_img_with_default_bg(user_id, DETAIL_MAP):
     based_w = 1100
-    based_h = 2450
+    based_h = 2680
     # 使用默认背景图
     img = Image.open(TEXT_PATH / 'back.png').resize((based_w, based_h)).convert("RGBA")
     
@@ -91,6 +91,8 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
         '主修功法': DETAIL_MAP['主修功法'],
         '辅修功法': DETAIL_MAP['辅修功法'],
         '副修神通': DETAIL_MAP['副修神通'],
+        "身法": DETAIL_MAP["身法"],
+        "瞳术": DETAIL_MAP["瞳术"],
         "修炼等级": DETAIL_MAP["修炼等级"],
         "攻击力": DETAIL_MAP["攻击力"],
         "法器": DETAIL_MAP["法器"],
@@ -117,43 +119,49 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
     baseinfo_draw.text((w, h), baseword, first_color, font_40, 'lm')
     img.paste(baseinfo, (100, 600), baseinfo)
 
+    base_line_start_y = 703
+    line_step_y = 103
     tasks2 = []
     for key, value in DETAIL_baseinfo.items():
-        tasks2.append(_draw_base_info_line(img, key, value, DETAIL_baseinfo))
+        tasks2.append(_draw_base_info_line(img, key, value, DETAIL_baseinfo, base_line_start_y))
     await asyncio.gather(*tasks2)
 
+    sect_title_y = base_line_start_y + len(DETAIL_baseinfo) * line_step_y + 12
     sectinfo = Image.open(TEXT_PATH / 'line2.png').resize((900, 100)).convert("RGBA")
     sectword = '【宗门信息】'
     w, h = await linewh(sectinfo, sectword)
     sectinfo_draw = ImageDraw.Draw(sectinfo)
     sectinfo_draw.text((w, h), sectword, first_color, font_40, 'lm')
-    img.paste(sectinfo, (100, 1642), sectinfo)
+    img.paste(sectinfo, (100, sect_title_y), sectinfo)
 
     DETAIL_sectinfo = {
         '所在宗门': DETAIL_MAP['所在宗门'],
         '宗门职位': DETAIL_MAP['宗门职位']
     }
+    sect_line_start_y = sect_title_y + 105
     tasks3 = []
     for key, value in DETAIL_sectinfo.items():
-        tasks3.append(_draw_sect_info_line(img, key, value, DETAIL_sectinfo))
+        tasks3.append(_draw_sect_info_line(img, key, value, DETAIL_sectinfo, sect_line_start_y))
     await asyncio.gather(*tasks3)
     img.convert("RGB")
     
+    paihang_title_y = sect_line_start_y + len(DETAIL_sectinfo) * line_step_y + 20
     paihang = Image.open(TEXT_PATH / 'line2.png').resize((900, 100)).convert("RGBA")
     paihangword = '【排行信息】'
     w, h = await linewh(paihang, paihangword)
     paihang_draw = ImageDraw.Draw(paihang)
     paihang_draw.text((w, h), paihangword, first_color, font_40, 'lm')
-    img.paste(paihang, (100, 1973), paihang)
+    img.paste(paihang, (100, paihang_title_y), paihang)
 
     DETAIL_paihang = {}
     DETAIL_paihang['注册位数'] = DETAIL_MAP['注册位数']
     DETAIL_paihang['修为排行'] = DETAIL_MAP['修为排行']
     DETAIL_paihang['灵石排行'] = DETAIL_MAP['灵石排行']
 
+    paihang_line_start_y = paihang_title_y + 105
     tasks4 = []
     for key, value in DETAIL_paihang.items():
-        tasks4.append(_draw_ph_info_line(img, key, value, DETAIL_paihang))
+        tasks4.append(_draw_ph_info_line(img, key, value, DETAIL_paihang, paihang_line_start_y))
     await asyncio.gather(*tasks4)
     output_dir = Path() / "data" / "xiuxian" / "cache"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -172,27 +180,27 @@ async def _draw_line(img: Image.Image, key, value, DETAIL_MAP):
     img.paste(line, (550, 100 + list(DETAIL_MAP.keys()).index(key) * 103), line)
 
 
-async def _draw_base_info_line(img: Image.Image, key, value, DETAIL_MAP):
+async def _draw_base_info_line(img: Image.Image, key, value, DETAIL_MAP, start_y=703):
     line = Image.open(TEXT_PATH / 'line4.png').resize((900, 100))
     line_draw = ImageDraw.Draw(line)
     word = f"{key}:{value}"
     w, h = await linewh(line, word)
 
     line_draw.text((100, h), word, first_color, font_36, 'lm')
-    img.paste(line, (100, 703 + list(DETAIL_MAP.keys()).index(key) * 103), line)
+    img.paste(line, (100, start_y + list(DETAIL_MAP.keys()).index(key) * 103), line)
 
 
-async def _draw_sect_info_line(img: Image.Image, key, value, DETAIL_MAP):
+async def _draw_sect_info_line(img: Image.Image, key, value, DETAIL_MAP, start_y=1747):
     line = Image.open(TEXT_PATH / 'line4.png').resize((900, 100))
     line_draw = ImageDraw.Draw(line)
     word = f"{key}:{value}"
     w, h = await linewh(line, word)
 
     line_draw.text((100, h), word, first_color, font_36, 'lm')
-    img.paste(line, (100, 1747 + list(DETAIL_MAP.keys()).index(key) * 103), line)
+    img.paste(line, (100, start_y + list(DETAIL_MAP.keys()).index(key) * 103), line)
 
 
-async def _draw_ph_info_line(img: Image.Image, key, value, DETAIL_MAP):
+async def _draw_ph_info_line(img: Image.Image, key, value, DETAIL_MAP, start_y=2078):
 
     line = Image.open(TEXT_PATH / 'line4.png').resize((900, 100))
     line_draw = ImageDraw.Draw(line)
@@ -200,7 +208,7 @@ async def _draw_ph_info_line(img: Image.Image, key, value, DETAIL_MAP):
     w, h = await linewh(line, word)
 
     line_draw.text((100, h), word, first_color, font_36, 'lm')
-    img.paste(line, (100, 2078 + list(DETAIL_MAP.keys()).index(key) * 103), line)
+    img.paste(line, (100, start_y + list(DETAIL_MAP.keys()).index(key) * 103), line)
 
 
 async def img_author(img, bg):
