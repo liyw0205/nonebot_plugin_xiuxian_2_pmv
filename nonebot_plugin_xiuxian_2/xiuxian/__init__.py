@@ -107,6 +107,16 @@ def _get_bot_self_ids(bot):
             ids.add(_safe_str(value))
 
     try:
+        config = XiuConfig()
+    except Exception:
+        config = None
+
+    for attr in ("bot_uin", "bot_uid"):
+        value = getattr(config, attr, None)
+        if value:
+            ids.add(_safe_str(value))
+
+    try:
         self_info = getattr(bot, "self_info", None)
     except Exception:
         self_info = None
@@ -158,9 +168,50 @@ def _is_self_mention_segment(segment, bot, event, *, allow_qq_group_fallback=Fal
     if getattr(event, "to_me", False) and _is_qq_group_message_create(event):
         return True
 
-    # QQ 官方全量群消息里，@ 机器人有时只保留 mention_user openid，
-    # 既不等于 bot.self_id，也没有 mentions[*].is_you 可用。
-    return bool(allow_qq_group_fallback and _is_qq_group_message_create(event))
+    return False
+
+
+def _is_other_bot_mention(segment):
+    if getattr(segment, "type", "") != "group_mention_user":
+        return False
+
+    data = getattr(segment, "data", {}) or {}
+    return bool(data.get("bot")) and not bool(data.get("is_you"))
+
+
+def _has_self_mention(bot, event, message):
+    for segment in message:
+        if _is_self_mention_segment(segment, bot, event):
+            return True
+    return False
+
+
+def _is_other_bot_at_message(bot, event):
+    if not _is_qq_group_message_create(event):
+        return False
+
+    try:
+        message = event.get_message()
+    except Exception:
+        return False
+
+    if _has_self_mention(bot, event, message):
+        return False
+
+    if any(_is_other_bot_mention(segment) for segment in message):
+        return True
+
+    for mention in getattr(event, "mentions", None) or []:
+        if isinstance(mention, dict):
+            is_bot = mention.get("bot", False)
+            is_you = mention.get("is_you", False)
+        else:
+            is_bot = getattr(mention, "bot", False)
+            is_you = getattr(mention, "is_you", False)
+        if is_bot and not is_you:
+            return True
+
+    return False
 
 
 def _strip_left_blank_text(message):
@@ -242,8 +293,15 @@ def _normalize_qq_group_at_message(bot, event):
 
 @event_preprocessor
 async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    if _is_other_bot_at_message(bot, event):
+        raise IgnoredException("消息艾特了其他机器人,已忽略")
+
     qq_group_at_removed = _normalize_qq_group_at_message(bot, event)
     bot, event = patch_context(bot, event)
+
+    if _is_other_bot_at_message(bot, event):
+        raise IgnoredException("消息艾特了其他机器人,已忽略")
+
     qq_group_at_removed = _normalize_qq_group_at_message(bot, event) or qq_group_at_removed
     if qq_group_at_removed:
         try:
