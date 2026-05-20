@@ -14,7 +14,7 @@
    统一构造 text/image/audio/video/file/markdown 等消息段。
 
 2. **事件语义兼容**  
-   将 QQ 的频道消息并入“群语义”，频道私信并入“私聊语义”，并提供统一判断函数。
+   将 QQ 普通群消息与频道消息并入“群语义”，频道私信并入“私聊语义”，并提供统一判断函数。
 
 3. **Bot/Event 补丁（patch）**  
    通过 `patch_bot_inplace` 与 `patch_event_inplace`，补齐常用字段与发送接口，降低上层插件分支判断复杂度。
@@ -29,6 +29,8 @@
 - `nonebot.adapters.qq`（QQ）
 
 根据安装情况动态启用。
+
+QQ 官方适配器会同时识别新版 `GroupMessageCreateEvent` 与 `GroupAtMessageCreateEvent`：新版环境可接收无需 @ 机器人的普通群消息，也兼容单独上报的 at 群消息；旧版环境会自动回退到可用的群 at 事件。
 
 对外导出：
 
@@ -90,6 +92,21 @@ seg = MessageSegment.markdown_template(bot, "tpl_id", params, button_id="kb_id")
 # 或
 seg2 = MessageSegment.markdown(bot, "# Hello", button_id="")
 ```
+
+### 3.5 QQ 自定义键盘
+
+QQ 官方适配器的自定义键盘需要和 Markdown 消息一起发送。兼容层提供：
+
+```python
+msg = MessageSegment.markdown_keyboard(
+    bot,
+    " ",  # 只发键盘时，用空格 Markdown 占位
+    [[("按钮文字", "触发指令")]],
+)
+await bot.send(event=event, message=msg)
+```
+
+`触发指令` 也可以传 `https://` / `http://` 链接，兼容层会自动生成跳转链接按钮。底层会构造 `MessageKeyboard(content=InlineKeyboard(...))`，并与 `MessageMarkdown(content=" ")` 同时放进同一条消息。
 
 ---
 
@@ -180,6 +197,7 @@ QQ 常见错误：`40054005`（消息被去重 / msg_seq 冲突）
 - `group_id`（频道消息映射 `channel_id -> group_id`）
 - `message_id`
 - `raw_message` / `message` / `plaintext`
+- `to_me`（QQ 普通群消息会从 `mentions[*].is_you`、`group_mention_user.is_you`、`mention_user.user_id` 兜底判断，并在命中当前 bot 时移除首尾 @ 段）
 - `sender`（`user_id/nickname/card/role`）
 
 并打标记：`__compat_patched__ = True`，避免重复 patch。
@@ -206,7 +224,35 @@ QQ 常见错误：`40054005`（消息被去重 / msg_seq 冲突）
 
 ---
 
-## 9. patch_context（推荐入口）
+## 9. Web 消息发送与广播
+
+`xiuxian_web/messages.py` 的 Web 消息列表会复用本兼容层的会话识别与发送能力。
+
+### 9.1 单条消息发送
+
+`POST /api/messages/send` 支持普通文本、Markdown、媒体消息，并通过 `active_send` 区分发送方式：
+
+- `active_send=0`（默认）：沿用消息列表当前会话最近消息的上下文，QQ 侧按补发/回复语义发送。
+- `active_send=1`：Web 端显式选择“主动”发送。
+  - QQ：按会话类型调用 `send_to_group` / `send_to_c2c` / `send_to_channel` / `send_to_dms`，不传入原消息 `msg_id`，需要 QQ 平台主动消息授权。
+  - OB11：保持普通主动发送逻辑。
+
+如果 QQ 主动消息未授权，接口会返回发送失败，前端直接展示失败原因。
+
+### 9.2 广播
+
+`POST /api/messages/broadcast` 创建广播任务，支持 `private` / `group` / `global` 三类范围；`GET /api/messages/broadcast/status` 返回 `format_broadcast_status()` 的当前广播状态。
+
+广播的适配器行为：
+
+- QQ：不依赖平台主动消息授权，走 `start_broadcast` 记录广播内容；后续命中会话事件时由补发逻辑发送。
+- OB11：保持适配器正常主动发送能力，从已记录的会话列表中投递。
+
+广播状态为内存态，进程重启后不会保留。
+
+---
+
+## 10. patch_context（推荐入口）
 
 ```python
 bot, event = patch_context(bot, event)
@@ -221,7 +267,7 @@ bot, event = patch_context(bot, event)
 
 ---
 
-## 10. 常用工具函数
+## 11. 常用工具函数
 
 ```python
 uid = get_user_id(event)
@@ -232,7 +278,7 @@ gid = get_group_id(event)
 
 ---
 
-## 11. 推荐使用范式
+## 12. 推荐使用范式
 
 ```python
 from .adapter_compat import patch_context, MessageSegment, get_chat_scene
@@ -250,16 +296,17 @@ async def _(bot, event):
 
 ---
 
-## 12. 注意事项
+## 13. 注意事项
 
 1. **QQ 的 at 段**与 OB11 不同，`MessageSegment.at` 在 QQ 下返回空文本，避免误行为。  
 2. **OB11 的 file 语义**当前实现回退到 image，请按业务评估。  
 3. `patch_bot_inplace` 会替换 QQBot 的 `send` 行为；若你已有自定义 send，请注意调用顺序。  
 4. 上传图片真实链接（`mode="link"`）依赖审核与回查接口，时延更高。  
+5. QQ 主动消息与 QQ 广播是两套路径：主动消息需要平台授权；广播默认通过后续会话事件补发。
 
 ---
 
-## 13. 导出清单（`__all__`）
+## 14. 导出清单（`__all__`）
 
 - `Bot`
 - `GROUP`

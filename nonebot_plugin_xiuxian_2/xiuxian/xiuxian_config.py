@@ -11,7 +11,12 @@ Xiu_Plugin = Path(__file__).parent.parent
 
 
 class XiuConfig:
-    def __init__(self):
+    def __init__(self):        
+        self.bot_uin = 
+        # 官方 Bot，对应的 UIN
+        self.bot_uid = ""
+        # 官方 Bot，对应的 UID
+
         self.qqq = 144795954 
         # 官群设置
         self.put_bot = []

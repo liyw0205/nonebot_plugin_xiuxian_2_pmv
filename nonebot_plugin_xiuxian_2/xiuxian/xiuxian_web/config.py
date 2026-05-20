@@ -1,6 +1,18 @@
 from .core import *  # noqa: F401,F403
 
 CONFIG_EDITABLE_FIELDS = {
+    "bot_uin": {
+        "name": "QQ官方机器人UIN",
+        "description": "QQ官方机器人UIN",
+        "type": "int",
+        "category": "基础设置"
+    },
+    "bot_uid": {
+        "name": "QQ官方机器人UID",
+        "description": "QQ官方机器人UID",
+        "type": "str",
+        "category": "基础设置"
+    },
     "put_bot": {
         "name": "接收消息QQ",
         "description": "负责接收消息的QQ号列表，设置这个屏蔽群聊/私聊才能生效",

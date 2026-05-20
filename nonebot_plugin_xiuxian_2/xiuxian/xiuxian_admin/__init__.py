@@ -91,6 +91,7 @@ unblackhouse = on_command("解除小黑屋", aliases={"放出小黑屋", "解禁
 view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, permission=SUPERUSER, priority=10, block=True)
 impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
 dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
+keyboard_test_cmd = on_command("按钮测试", permission=SUPERUSER, priority=5, block=True)
 migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
 update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
 swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
@@ -98,6 +99,7 @@ parse_event_cmd = on_command("消息信息", permission=SUPERUSER, priority=100,
 group_broadcast_cmd = on_command("群聊广播", permission=SUPERUSER, priority=5, block=True)
 private_broadcast_cmd = on_command("私聊广播", permission=SUPERUSER, priority=5, block=True)
 global_broadcast_cmd = on_command("全局广播", permission=SUPERUSER, priority=5, block=True)
+all_apply_cmd = on_command("全量申请", priority=5, block=True)
 
 view_broadcast_cmd = on_command(
     "查看广播",
@@ -1282,6 +1284,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 → 消息信息 - 查看当前事件信息
 → dm [Markdown内容] - 直接发送原生Markdown
 → md模板 [模板参数] - 测试自定义Markdown模板
+→ 按钮测试 [按钮] - 测试原生Markdown + 自定义键盘
 → 点歌配置 [操作] - 管理点歌配置
 
 ⚡ 广播管理：
@@ -1510,6 +1513,82 @@ def fix_mqqapi_inlinecmd_links(text: str) -> str:
         repl,
         text
     )
+
+
+def _extract_keyboard_command(command: str) -> str:
+    command = unescape(str(command or "").strip())
+    if not command.startswith("mqqapi://aio/inlinecmd?"):
+        return command
+
+    match = re.search(r"(?:^|[?&])command=([^&\s]+)", command)
+    if match:
+        return unquote(match.group(1)).strip()
+    return command
+
+
+def _parse_keyboard_test_rows(raw: str) -> list[list[tuple[str, str]]]:
+    text = str(raw or "").strip()
+    if not text:
+        text = "[1](2) 3"
+
+    text = (
+        text.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
+
+    rows: list[list[tuple[str, str]]] = []
+    token_pattern = re.compile(r"\[([^\]\n]+)\]\(([^\)\n]+)\)|(\S+)")
+
+    for line in text.split("\n"):
+        row: list[tuple[str, str]] = []
+        for match in token_pattern.finditer(line):
+            if match.group(1) is not None:
+                label = match.group(1).strip()
+                command = _extract_keyboard_command(match.group(2))
+            else:
+                label = match.group(3).strip()
+                command = label
+
+            if label and command:
+                row.append((label, command))
+
+        if row:
+            rows.append(row)
+
+    return rows or [[("1", "2"), ("3", "3")]]
+
+
+@keyboard_test_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def keyboard_test_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+
+    raw = args.extract_plain_text() if hasattr(args, "extract_plain_text") else str(args)
+    rows = _parse_keyboard_test_rows(raw)
+
+    try:
+        msg = MessageSegment.markdown_keyboard(bot, " ", rows)
+        await bot.send(event=event, message=msg)
+    except Exception as e:
+        err = str(e)
+        logger.error(f"按钮测试发送失败: {err}")
+
+        reason = "按钮测试发送失败，请确认当前为 QQ 官方适配器且平台支持自定义键盘。"
+        m_msg = re.search(r"message=([^,>]+)", err)
+        m_code = re.search(r"code=(\d+)", err)
+        if m_msg:
+            reason = m_msg.group(1).strip()
+            if m_code:
+                reason = f"\n{reason}\n错误码：{m_code.group(1)}"
+
+        await handle_send(bot, event, reason)
+
 
 @dm_command.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -2636,3 +2715,81 @@ OB11支持主动发送。
         k2="取消", v2="取消广播",
         k3="清空", v3="清空广播"
     )
+
+@all_apply_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+async def all_apply_cmd_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    
+    # 提取输入的群号
+    group_id_str = args.extract_plain_text().strip()
+    if not group_id_str or not group_id_str.isdigit():
+        await handle_send(bot, event, f"用法：全量申请 [目标群号]\n示例：全量申请 {XiuConfig().qqq}")
+        return
+
+    config = XiuConfig()
+    
+    # 获取配置中的 UIN 和 UID
+    bot_uin = getattr(config, "bot_uin", 0)
+    bot_uid = getattr(config, "bot_uid", "")
+    
+    if not bot_uin or not bot_uid:
+        await handle_send(bot, event, "错误：请先在 xiu 配置中设置 bot_uin 和 bot_uid！")
+        return
+
+    # 构建并编码 JSON 参数
+    info_dict = {
+        "page_name": "ai_group_service_agreement_pop_page",
+        "groupCode": int(group_id_str),
+        "botUin": int(bot_uin),
+        "botUid": str(bot_uid),
+        "screen": 1
+    }
+    
+    # 转换为 JSON 字符串并进行 URL 编码
+    info_json = json.dumps(info_dict, separators=(',', ':'))
+    encoded_info = quote(info_json)
+    
+    # 生成完整的授权跳转 URL
+    target_url = f"https://club.vip.qq.com/transfer?open_kuikly_info={encoded_info}"
+
+    # 拼接 Markdown 文本
+    md_text = (
+        "请群主点击下方按钮授权\n"
+        "**需要更新QQ到最新版(9.2.90及以上)**\n"
+        "![图片#1080px#888px](https://qqbot.ugcimg.cn/102133698/ab2eae432c06686d06a2cffda2b5ca51d4ad2e4f/c7f24f5aeadfb1908561622d43de3169)"
+    )
+
+    # 准备 QQ 官方适配器的自定义按钮行
+    rows = [
+        [("群主大大请点击这里同意申请", target_url)]
+    ]
+
+    try:
+        # 1. 尝试使用 Markdown + 底部自定义键盘按钮发送（最适合官方 bot 场景）
+        msg = MessageSegment.markdown_keyboard(
+            bot,
+            md_text,
+            rows,
+            permission_type=3,
+            specify_role_ids=["4"],
+        )
+        await bot.send(event=event, message=msg)
+    except Exception as e:
+        logger.warning(f"全量申请：自定义键盘发送失败，尝试降级原生 MD: {e}")
+        try:
+            # 2. 降级：仅发送原生 Markdown
+            msg = MessageSegment.markdown(bot, md_text)
+            await bot.send(event=event, message=msg)
+        except Exception as e2:
+            logger.error(f"全量申请：Markdown 发送失败，降级纯文本: {e2}")
+            # 3. 极速降级：发送纯文本及纯链接
+            fallback_msg = (
+                "请群主进行授权：\n"
+                "需要更新QQ到最新版(9.2.90及以上)\n"
+                f"授权链接：{target_url}"
+            )
+            await handle_send(bot, event, fallback_msg)

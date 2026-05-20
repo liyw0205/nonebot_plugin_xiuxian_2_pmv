@@ -38,6 +38,35 @@
                 >
             </div>
 
+            <div class="broadcast-toggle-row">
+                <button id="broadcastToggleBtn" class="btn btn-warning btn-sm" onclick="toggleBroadcastPanel()" type="button">
+                    <i class="fas fa-bullhorn"></i> 发送广播
+                </button>
+                <button id="broadcastStatusBtn" class="btn btn-info btn-sm" onclick="viewBroadcastStatus()" type="button">
+                    <i class="fas fa-list"></i> 查看广播
+                </button>
+            </div>
+
+            <div id="broadcastStatusBox" class="broadcast-result broadcast-status-box hidden"></div>
+
+            <div id="broadcastPanel" class="broadcast-box hidden">
+                <div class="broadcast-row">
+                    <select id="broadcastKind">
+                        <option value="group">群聊广播</option>
+                        <option value="private">私聊广播</option>
+                        <option value="global">全局广播</option>
+                    </select>
+                    <input id="broadcastDuration" type="number" min="1" value="1440" title="有效分钟">
+                </div>
+                <textarea id="broadcastContent" rows="3" placeholder="广播内容"></textarea>
+                <div class="broadcast-actions">
+                    <button id="broadcastBtn" class="btn btn-warning btn-sm" onclick="sendBroadcast()" type="button">
+                        <i class="fas fa-paper-plane"></i> 创建广播
+                    </button>
+                </div>
+                <div id="broadcastResult" class="broadcast-result hidden"></div>
+            </div>
+
             <div id="sessionList" class="qq-session-list">
                 <div class="loading">正在加载会话...</div>
             </div>
@@ -112,10 +141,17 @@
 
                 <div class="composer-expanded hidden" id="composerExpanded">
                     <div class="composer-toolbar">
-                        <button id="sendModeToggleBtn" class="mode-toggle-card" onclick="toggleSendMode()" type="button">
-                            <i id="sendModeIcon" class="fas fa-comment-dots"></i>
-                            <span id="sendModeText">普通消息</span>
-                        </button>
+                        <div class="composer-mode-row">
+                            <button id="sendModeToggleBtn" class="mode-toggle-card" onclick="toggleSendMode()" type="button">
+                                <i id="sendModeIcon" class="fas fa-comment-dots"></i>
+                                <span id="sendModeText">普通消息</span>
+                            </button>
+
+                            <button id="activeSendToggleBtn" class="mode-toggle-card active-send-toggle" onclick="toggleActiveSend()" type="button">
+                                <i class="fas fa-bolt"></i>
+                                <span>主动</span>
+                            </button>
+                        </div>
                     
                         <button id="mdPreviewBtn" class="preview-btn" onclick="toggleMarkdownPreview()" type="button">
                             <i class="fas fa-eye"></i> 预览
@@ -287,6 +323,81 @@
 
 .qq-search input:focus {
     box-shadow: none;
+}
+
+.broadcast-toggle-row {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.broadcast-box {
+    padding: 8px 12px 10px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.broadcast-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 82px;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+
+.broadcast-row select,
+.broadcast-row input,
+.broadcast-box textarea {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.84rem;
+}
+
+.broadcast-row select,
+.broadcast-row input {
+    height: 34px;
+    padding: 0 8px;
+}
+
+.broadcast-box textarea {
+    resize: vertical;
+    min-height: 62px;
+    max-height: 130px;
+    padding: 8px;
+    font-family: inherit;
+}
+
+.broadcast-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 7px;
+}
+
+.broadcast-result {
+    margin-top: 7px;
+    padding: 8px;
+    border-radius: 6px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.broadcast-status-box {
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
 }
 
 .qq-session-list {
@@ -702,7 +813,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     margin-bottom: 6px;
+}
+
+.composer-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .mode-toggle-card {
@@ -733,6 +853,17 @@
 }
 
 .mode-toggle-card.markdown:hover {
+    color: #fff;
+    filter: brightness(0.96);
+}
+
+.mode-toggle-card.active-send-toggle.enabled {
+    background: var(--warning-color);
+    color: #fff;
+    border-color: var(--warning-color);
+}
+
+.mode-toggle-card.active-send-toggle.enabled:hover {
     color: #fff;
     filter: brightness(0.96);
 }
@@ -1011,6 +1142,7 @@ let autoRefresh = true; // 默认开启
 let autoRefreshTimer = null;
 let isLoadingMessages = false;
 let sendMode = localStorage.getItem('webMessageSendMode') || 'plain';
+let activeSend = localStorage.getItem('webMessageActiveSend') === '1';
 let mdPreviewing = false;
 let currentJumpIndex = -1;
 
@@ -1473,6 +1605,27 @@ function toggleSendMode() {
     setSendMode(sendMode === 'markdown' ? 'plain' : 'markdown');
 }
 
+function toggleActiveSend() {
+    setActiveSend(!activeSend);
+}
+
+function setActiveSend(enabled) {
+    activeSend = !!enabled;
+    localStorage.setItem('webMessageActiveSend', activeSend ? '1' : '0');
+
+    const btn = document.getElementById('activeSendToggleBtn');
+    if (btn) {
+        btn.classList.toggle('enabled', activeSend);
+        btn.title = activeSend ? 'QQ 主动发送已开启' : 'QQ 主动发送未开启';
+    }
+
+    if (activeSend && selectedReplyMessageId) {
+        clearReplyTarget();
+    }
+
+    updateSendHint();
+}
+
 function setSendMode(mode) {
     sendMode = mode === 'markdown' ? 'markdown' : 'plain';
     localStorage.setItem('webMessageSendMode', sendMode);
@@ -1710,8 +1863,7 @@ function selectSession(index) {
 
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('sendMediaBtn').disabled = false;
-    document.getElementById('sendHint').innerText =
-        `发送到：${currentSession.title}（${currentSession.adapter || '自动'}）`;
+    updateSendHint();
 
     document.querySelector('.qq-shell').classList.add('mobile-chat-open');
 
@@ -2173,7 +2325,7 @@ function resetChatPanel() {
     document.getElementById('chatSubTitle').innerText = '左侧选择群聊或私聊后查看消息';
     document.getElementById('sendBtn').disabled = true;
     document.getElementById('sendMediaBtn').disabled = true;
-    document.getElementById('sendHint').innerText = '未选择会话';
+    updateSendHint();
 
     const dateSelect = document.getElementById('dateSelect');
     dateSelect.disabled = true;
@@ -2191,6 +2343,144 @@ function clearInput() {
     document.getElementById('messageInput').value = '';
     clearMedia();
     if (mdPreviewing) toggleMarkdownPreview(true);
+}
+
+function toggleBroadcastPanel(force = null) {
+    const panel = document.getElementById('broadcastPanel');
+    const btn = document.getElementById('broadcastToggleBtn');
+    if (!panel || !btn) return;
+
+    const show = force === null ? panel.classList.contains('hidden') : !!force;
+    if (show) {
+        closeBroadcastStatus();
+    }
+
+    panel.classList.toggle('hidden', !show);
+    btn.innerHTML = show
+        ? '<i class="fas fa-times"></i> 收起广播'
+        : '<i class="fas fa-bullhorn"></i> 发送广播';
+
+    if (show) {
+        setTimeout(() => document.getElementById('broadcastContent')?.focus(), 30);
+    }
+}
+
+function closeBroadcastStatus() {
+    const box = document.getElementById('broadcastStatusBox');
+    const btn = document.getElementById('broadcastStatusBtn');
+    if (box) {
+        box.classList.add('hidden');
+    }
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-list"></i> 查看广播';
+    }
+}
+
+async function sendBroadcast() {
+    const adapter = document.getElementById('adapterSelect').value || (currentSession ? currentSession.adapter : '');
+    const kind = document.getElementById('broadcastKind').value;
+    const duration = document.getElementById('broadcastDuration').value || '1440';
+    const contentEl = document.getElementById('broadcastContent');
+    const content = contentEl.value.trim();
+    const btn = document.getElementById('broadcastBtn');
+    const resultBox = document.getElementById('broadcastResult');
+
+    if (!adapter) {
+        alert('请选择适配器');
+        return;
+    }
+
+    if (!content) {
+        alert('广播内容不能为空');
+        return;
+    }
+
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
+    resultBox.classList.add('hidden');
+
+    try {
+        const res = await fetch('/api/messages/broadcast', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                adapter,
+                kind,
+                duration_minutes: duration,
+                content
+            })
+        });
+
+        const data = await res.json();
+
+        resultBox.classList.remove('hidden');
+        resultBox.innerText = data.success
+            ? (data.message || '广播已创建')
+            : ('创建失败：' + (data.error || '未知错误'));
+
+        if (data.success) {
+            contentEl.value = '';
+            await loadSessions(true);
+        }
+    } catch (e) {
+        resultBox.classList.remove('hidden');
+        resultBox.innerText = '请求异常：' + e;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+    }
+}
+
+async function viewBroadcastStatus() {
+    const btn = document.getElementById('broadcastStatusBtn');
+    const box = document.getElementById('broadcastStatusBox');
+    const oldText = btn.innerHTML;
+
+    if (!box.classList.contains('hidden')) {
+        box.classList.add('hidden');
+        btn.innerHTML = '<i class="fas fa-list"></i> 查看广播';
+        return;
+    }
+
+    toggleBroadcastPanel(false);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 查看中...';
+
+    try {
+        const res = await fetch('/api/messages/broadcast/status');
+        const data = await res.json();
+
+        box.classList.remove('hidden');
+        box.innerText = data.success
+            ? (data.message || '当前没有广播。')
+            : ('查看失败：' + (data.error || '未知错误'));
+        btn.innerHTML = '<i class="fas fa-times"></i> 收起列表';
+    } catch (e) {
+        box.classList.remove('hidden');
+        box.innerText = '请求异常：' + e;
+        btn.innerHTML = '<i class="fas fa-times"></i> 收起列表';
+    } finally {
+        btn.disabled = false;
+        if (btn.innerHTML.includes('查看中')) {
+            btn.innerHTML = oldText;
+        }
+    }
+}
+
+function updateSendHint() {
+    const hint = document.getElementById('sendHint');
+    if (!hint) return;
+
+    if (!currentSession) {
+        hint.innerText = '未选择会话';
+        return;
+    }
+
+    const adapter = currentSession.adapter || '自动';
+    const activeText = activeSend && currentSession.adapter === 'QQ' ? ' ｜ 主动' : '';
+    hint.innerText = `发送到：${currentSession.title}（${adapter}${activeText}）`;
 }
 
 async function sendMessage() {
@@ -2233,6 +2523,7 @@ async function sendMessage() {
         fd.append('target_id', currentSession.target_id);
         fd.append('content', content);
         fd.append('send_mode', sendMode);
+        fd.append('active_send', activeSend ? '1' : '0');
         fd.append('media_type', mediaType);
         fd.append('media_url', mediaUrl);
         fd.append('reply_message_id', selectedReplyMessageId || '');
@@ -2371,6 +2662,7 @@ window.addEventListener('beforeunload', () => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     setSendMode(sendMode);
+    setActiveSend(activeSend);
     await loadBots();
     await loadSessions(false);
     toggleAutoRefresh(true); // 默认开启自动刷新

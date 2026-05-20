@@ -1,4 +1,5 @@
 from .core import *  # noqa: F401,F403
+from ..broadcast_manager import format_broadcast_status, start_broadcast
 
 @app.route('/messages')
 def messages_page():
@@ -466,6 +467,7 @@ def api_messages_send():
         media_type = str(data.get("media_type", "") or "").strip()
         media_url = str(data.get("media_url", "") or "").strip()
         reply_message_id = str(data.get("reply_message_id", "") or "").strip()
+        active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
         if send_mode not in ("plain", "markdown"):
             send_mode = "plain"
@@ -673,9 +675,91 @@ def api_messages_send():
         )
 
         # =========================================================
-        # QQ：回复式发送
+        # QQ：主动发送 / 回复式发送
         # =========================================================
         if adapter == "QQ":
+            if active_send:
+                try:
+                    if scene == "group":
+                        result = run_async(
+                            bot.send_to_group(
+                                group_openid=target_id,
+                                message=message_obj,
+                                msg_seq=random.randint(1, 900000),
+                            )
+                        )
+
+                        group_id = target_id
+                        user_id = ""
+
+                    elif scene == "private":
+                        result = run_async(
+                            bot.send_to_c2c(
+                                openid=target_id,
+                                message=message_obj,
+                                msg_seq=random.randint(1, 900000),
+                            )
+                        )
+
+                        group_id = ""
+                        user_id = target_id
+
+                    elif scene == "channel_group":
+                        result = run_async(
+                            bot.send_to_channel(
+                                channel_id=target_id,
+                                message=message_obj,
+                            )
+                        )
+
+                        group_id = target_id
+                        user_id = ""
+
+                    elif scene == "channel_private":
+                        result = run_async(
+                            bot.send_to_dms(
+                                guild_id=target_id,
+                                message=message_obj,
+                            )
+                        )
+
+                        group_id = ""
+                        user_id = target_id
+
+                    else:
+                        return jsonify({
+                            "success": False,
+                            "error": "无效 QQ scene",
+                        })
+
+                    message_id = extract_result_message_id(result)
+
+                    record_web_send_message(
+                        bot,
+                        scene=scene,
+                        message_id=message_id,
+                        source_message_id="",
+                        group_id=group_id,
+                        user_id=user_id,
+                        message=content or f"[{media_type}]",
+                    )
+
+                    return jsonify({
+                        "success": True,
+                        "message": "QQ 主动发送成功",
+                        "message_id": message_id,
+                    })
+
+                except Exception as e:
+                    logger.warning(
+                        f"QQ Web 主动发送失败: scene={scene}, "
+                        f"target_id={target_id}, error={e}"
+                    )
+                    return jsonify({
+                        "success": False,
+                        "error": f"QQ 主动发送失败：{e}",
+                    })
+
             if reply_message_id:
                 candidate = get_specific_reply_candidate_for_qq(
                     scene=scene,
@@ -811,6 +895,79 @@ def api_messages_send():
         return jsonify({
             "success": False,
             "error": f"发送失败: {e}",
+        })
+
+@app.route('/api/messages/broadcast', methods=['POST'])
+def api_messages_broadcast():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json() or {}
+
+        adapter = str(data.get("adapter", "") or "").strip()
+        kind = str(data.get("kind", "") or "").strip()
+        content = str(data.get("content", "") or "").strip()
+        duration_minutes = str(data.get("duration_minutes", "1440") or "1440").strip()
+
+        if not adapter:
+            return jsonify({"success": False, "error": "请选择适配器"})
+
+        if kind not in ("group", "private", "global"):
+            return jsonify({"success": False, "error": "无效广播类型"})
+
+        if not content:
+            return jsonify({"success": False, "error": "广播内容不能为空"})
+
+        try:
+            duration_minutes_int = int(duration_minutes)
+        except Exception:
+            duration_minutes_int = 1440
+
+        if duration_minutes_int <= 0:
+            duration_minutes_int = 1440
+
+        bot = get_bot_by_adapter(adapter)
+        if not bot:
+            return jsonify({"success": False, "error": f"未找到在线 {adapter} Bot"})
+
+        message = run_async(
+            start_broadcast(
+                bot=bot,
+                kind=kind,
+                content=content,
+                duration_minutes=duration_minutes_int,
+            )
+        )
+
+        return jsonify({
+            "success": True,
+            "message": message,
+        })
+
+    except Exception as e:
+        logger.error(f"Web 创建广播失败: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"创建广播失败: {e}",
+        })
+
+@app.route('/api/messages/broadcast/status')
+def api_messages_broadcast_status():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        return jsonify({
+            "success": True,
+            "message": format_broadcast_status(),
+        })
+
+    except Exception as e:
+        logger.error(f"Web 查看广播失败: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"查看广播失败: {e}",
         })
 
 @app.route('/api/messages/revoke', methods=['POST'])

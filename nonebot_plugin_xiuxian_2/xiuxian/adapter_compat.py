@@ -51,11 +51,41 @@ try:
     )
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
-        GroupAtMessageCreateEvent as QQGroupMessageEvent,
         AtMessageCreateEvent as QQAtChannelMessageEvent,
         DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
     )
-    from nonebot.adapters.qq.models import MessageMarkdown, MessageKeyboard
+    try:
+        from nonebot.adapters.qq.event import (
+            GroupMessageCreateEvent as QQGroupMessageCreateEvent,
+        )
+    except Exception:
+        QQGroupMessageCreateEvent = None  # type: ignore
+
+    try:
+        from nonebot.adapters.qq.event import (
+            GroupAtMessageCreateEvent as QQGroupAtMessageEvent,
+        )
+    except Exception:
+        QQGroupAtMessageEvent = None  # type: ignore
+
+    if QQGroupMessageCreateEvent is None and QQGroupAtMessageEvent is None:
+        raise ImportError("QQ adapter has no group message event class")
+    if QQGroupMessageCreateEvent is None:
+        QQGroupMessageCreateEvent = QQGroupAtMessageEvent  # type: ignore
+    if QQGroupAtMessageEvent is None:
+        QQGroupAtMessageEvent = QQGroupMessageCreateEvent  # type: ignore
+
+    QQGroupMessageEvent = QQGroupMessageCreateEvent
+    from nonebot.adapters.qq.models import (
+        Action as QQKeyboardAction,
+        Button as QQKeyboardButton,
+        InlineKeyboard as QQInlineKeyboard,
+        InlineKeyboardRow as QQInlineKeyboardRow,
+        MessageMarkdown,
+        MessageKeyboard,
+        Permission as QQKeyboardPermission,
+        RenderData as QQKeyboardRenderData,
+    )
 
     HAS_QQ = True
 except Exception:
@@ -64,11 +94,19 @@ except Exception:
     QQMessage = str  # type: ignore
     QQMessageSegment = None  # type: ignore
     QQPrivateMessageEvent = tuple()  # type: ignore
+    QQGroupMessageCreateEvent = tuple()  # type: ignore
+    QQGroupAtMessageEvent = tuple()  # type: ignore
     QQGroupMessageEvent = tuple()  # type: ignore
     QQAtChannelMessageEvent = tuple()  # type: ignore
     QQChannelPrivateMessageEvent = tuple()  # type: ignore
+    QQKeyboardAction = None  # type: ignore
+    QQKeyboardButton = None  # type: ignore
+    QQInlineKeyboard = None  # type: ignore
+    QQInlineKeyboardRow = None  # type: ignore
     MessageMarkdown = None  # type: ignore
     MessageKeyboard = None  # type: ignore
+    QQKeyboardPermission = None  # type: ignore
+    QQKeyboardRenderData = None  # type: ignore
 
 
 @dataclass
@@ -1097,6 +1135,148 @@ class CompatMessageSegment:
         raise RuntimeError("无法根据 bot 判断适配器类型，markdown 构造失败")
 
     @staticmethod
+    def qq_inline_command_button(
+        label: str,
+        command: Optional[str] = None,
+        *,
+        button_id: Optional[str] = None,
+        action_type: Optional[int] = None,
+        style: int = 1,
+        enter: bool = False,
+        reply: bool = False,
+        permission_type: int = 2,
+        specify_role_ids: Optional[list[str]] = None,
+        specify_user_ids: Optional[list[str]] = None,
+    ):
+        if not (
+            HAS_QQ
+            and QQKeyboardButton is not None
+            and QQKeyboardRenderData is not None
+            and QQKeyboardAction is not None
+            and QQKeyboardPermission is not None
+        ):
+            raise RuntimeError("当前环境未安装可用 QQ 适配器，无法构造 keyboard 按钮")
+
+        label_text = str(label or " ").replace("\r", " ").replace("\n", " ").strip() or " "
+        command_text = str(command if command is not None else label).replace("\r", " ").replace("\n", " ").strip()
+        if not command_text:
+            command_text = label_text
+
+        if action_type is None:
+            parsed = urlparse(command_text)
+            if parsed.scheme in {"http", "https"}:
+                action_type = 0
+            elif parsed.scheme == "mqqapi":
+                action_type = 3
+            else:
+                action_type = 2
+
+        if not button_id:
+            digest = hashlib.md5(f"{label_text}:{command_text}".encode("utf-8")).hexdigest()[:12]
+            button_id = f"btn_{digest}"
+
+        return QQKeyboardButton(  # type: ignore[misc]
+            id=str(button_id),
+            render_data=QQKeyboardRenderData(  # type: ignore[misc]
+                label=label_text,
+                visited_label=label_text,
+                style=style,
+            ),
+            action=QQKeyboardAction(  # type: ignore[misc]
+                type=action_type,
+                permission=QQKeyboardPermission(  # type: ignore[misc]
+                    type=permission_type,
+                    specify_role_ids=specify_role_ids,
+                    specify_user_ids=specify_user_ids,
+                ),
+                data=command_text,
+                enter=enter,
+                reply=reply,
+            ),
+        )
+
+    @staticmethod
+    def qq_inline_keyboard(
+        rows: list[list[tuple[str, str] | Any]],
+        *,
+        action_type: Optional[int] = None,
+        style: int = 1,
+        enter: bool = False,
+        reply: bool = False,
+        permission_type: int = 2,
+        specify_role_ids: Optional[list[str]] = None,
+        specify_user_ids: Optional[list[str]] = None,
+    ):
+        if not (
+            HAS_QQ
+            and QQInlineKeyboard is not None
+            and QQInlineKeyboardRow is not None
+            and MessageKeyboard is not None
+        ):
+            raise RuntimeError("当前环境未安装可用 QQ 适配器，无法构造 keyboard")
+
+        keyboard_rows = []
+        for row in rows:
+            buttons = []
+            for index, item in enumerate(row):
+                if HAS_QQ and QQKeyboardButton is not None and isinstance(item, QQKeyboardButton):
+                    buttons.append(item)
+                    continue
+
+                label, command = item
+                buttons.append(
+                    CompatMessageSegment.qq_inline_command_button(
+                        str(label),
+                        str(command),
+                        button_id=f"btn_{len(keyboard_rows)}_{index}",
+                        action_type=action_type,
+                        style=style,
+                        enter=enter,
+                        reply=reply,
+                        permission_type=permission_type,
+                        specify_role_ids=specify_role_ids,
+                        specify_user_ids=specify_user_ids,
+                    )
+                )
+
+            if buttons:
+                keyboard_rows.append(QQInlineKeyboardRow(buttons=buttons))  # type: ignore[misc]
+
+        return MessageKeyboard(content=QQInlineKeyboard(rows=keyboard_rows))  # type: ignore[misc]
+
+    @staticmethod
+    def markdown_keyboard(
+        bot: Any,
+        msg: str,
+        rows: list[list[tuple[str, str] | Any]],
+        *,
+        action_type: Optional[int] = None,
+        style: int = 1,
+        enter: bool = False,
+        reply: bool = False,
+        permission_type: int = 2,
+        specify_role_ids: Optional[list[str]] = None,
+        specify_user_ids: Optional[list[str]] = None,
+    ):
+        if not CompatMessageSegment._is_qq_bot(bot):
+            raise RuntimeError("自定义 keyboard 仅支持 QQ 官方适配器")
+
+        md_seg = QQMessageSegment.markdown(MessageMarkdown(content=msg or " "))  # type: ignore[union-attr,misc]
+        kb_seg = QQMessageSegment.keyboard(  # type: ignore[union-attr]
+            CompatMessageSegment.qq_inline_keyboard(
+                rows,
+                action_type=action_type,
+                style=style,
+                enter=enter,
+                reply=reply,
+                permission_type=permission_type,
+                specify_role_ids=specify_role_ids,
+                specify_user_ids=specify_user_ids,
+            )
+        )
+        return QQMessage(md_seg) + kb_seg  # type: ignore[call-arg]
+
+    @staticmethod
     def text(bot_or_text: Any, text: Optional[str] = None):
         if text is None:
             pure_text = str(bot_or_text)
@@ -1329,10 +1509,25 @@ Bot = BaseBot
 Message = Union[OB11Message, QQMessage, str]
 MessageSegment = CompatMessageSegment
 
+
+def _unique_event_types(*event_types: Any) -> tuple[type, ...]:
+    types: list[type] = []
+    for event_type in event_types:
+        if isinstance(event_type, type) and event_type not in types:
+            types.append(event_type)
+    return tuple(types)
+
+
+_QQ_GROUP_MESSAGE_EVENT_TYPES = _unique_event_types(
+    QQGroupMessageCreateEvent,
+    QQGroupAtMessageEvent,
+)
+
 if HAS_QQ:
     GroupMessageEvent = Union[
         OB11GroupMessageEvent,
-        QQGroupMessageEvent,
+        QQGroupMessageCreateEvent,
+        QQGroupAtMessageEvent,
         QQAtChannelMessageEvent,
     ]
 else:
@@ -1355,7 +1550,7 @@ def is_group_event(event: BaseEvent) -> bool:
     if HAS_OB11:
         types.append(OB11GroupMessageEvent)  # type: ignore[arg-type]
     if HAS_QQ:
-        types.append(QQGroupMessageEvent)  # type: ignore[arg-type]
+        types.extend(_QQ_GROUP_MESSAGE_EVENT_TYPES)
         types.append(QQAtChannelMessageEvent)  # type: ignore[arg-type]
     return isinstance(event, tuple(types)) if types else False
 
@@ -1524,6 +1719,158 @@ def _resolve_sender_name(
     return str(uid) if uid is not None else ""
 
 
+def _collect_bot_self_ids(bot: Optional[BaseBot]) -> set[str]:
+    ids: set[str] = set()
+    if bot is None:
+        return ids
+
+    def add(value: Any):
+        if value is not None:
+            ids.add(str(value))
+
+    try:
+        add(getattr(bot, "self_id", None))
+    except Exception:
+        pass
+
+    try:
+        bot_info = getattr(bot, "bot_info", None)
+        for attr in ("id", "app_id"):
+            add(getattr(bot_info, attr, None))
+    except Exception:
+        pass
+
+    self_info = None
+    try:
+        self_info = getattr(bot, "_self_info", None)
+    except Exception:
+        pass
+    if self_info is None:
+        try:
+            self_info = getattr(bot, "self_info", None)
+        except Exception:
+            self_info = None
+
+    for attr in ("id", "user_id", "openid", "user_openid", "union_openid"):
+        try:
+            add(getattr(self_info, attr, None))
+        except Exception:
+            pass
+
+    return ids
+
+
+def _mention_data_is_bot(data: Any, bot_ids: set[str]) -> bool:
+    if not isinstance(data, dict):
+        return False
+
+    if bool(data.get("is_you", False)):
+        return True
+
+    if not bot_ids:
+        return False
+
+    for key in ("user_id", "id", "member_openid", "openid"):
+        value = data.get(key)
+        if value is not None and str(value) in bot_ids:
+            return True
+
+    return False
+
+
+def _mention_user_is_bot(user: Any, bot_ids: set[str]) -> bool:
+    if isinstance(user, dict):
+        return _mention_data_is_bot(user, bot_ids)
+
+    if bool(getattr(user, "is_you", False)):
+        return True
+
+    if not bot_ids:
+        return False
+
+    for attr in ("id", "user_id", "member_openid", "openid"):
+        value = getattr(user, attr, None)
+        if value is not None and str(value) in bot_ids:
+            return True
+
+    return False
+
+
+def _strip_qq_group_at_me(event: BaseEvent, bot: Optional[BaseBot] = None) -> None:
+    bot_ids = _collect_bot_self_ids(bot)
+
+    def is_at_me_seg(seg: Any) -> bool:
+        if getattr(seg, "type", "") not in ("group_mention_user", "mention_user"):
+            return False
+        data = getattr(seg, "data", {}) or {}
+        return _mention_data_is_bot(data, bot_ids)
+
+    try:
+        message = event.get_message()
+    except Exception:
+        return
+
+    if not message:
+        return
+
+    if is_at_me_seg(message[0]):
+        message.pop(0)
+        setattr(event, "to_me", True)
+        if message and getattr(message[0], "type", "") == "text":
+            data = getattr(message[0], "data", {}) or {}
+            if isinstance(data, dict):
+                data["text"] = str(data.get("text", "")).lstrip("\xa0").lstrip()
+                if not data["text"]:
+                    del message[0]
+        return
+
+    index = -1
+    last_seg = message[index]
+    last_data = getattr(last_seg, "data", {}) or {}
+    if (
+        getattr(last_seg, "type", "") == "text"
+        and isinstance(last_data, dict)
+        and not str(last_data.get("text", "")).strip()
+        and len(message) >= 2
+    ):
+        index -= 1
+        last_seg = message[index]
+
+    if is_at_me_seg(last_seg):
+        setattr(event, "to_me", True)
+        del message[index:]
+
+
+def _is_qq_group_message_to_me(
+    event: BaseEvent,
+    bot: Optional[BaseBot] = None,
+) -> bool:
+    if bool(getattr(event, "to_me", False)):
+        return True
+
+    bot_ids = _collect_bot_self_ids(bot)
+
+    try:
+        mentions = getattr(event, "mentions", None) or []
+        if any(_mention_user_is_bot(user, bot_ids) for user in mentions):
+            return True
+    except Exception:
+        pass
+
+    try:
+        for seg in event.get_message():
+            if getattr(seg, "type", "") not in ("group_mention_user", "mention_user"):
+                continue
+
+            data = getattr(seg, "data", {}) or {}
+            if _mention_data_is_bot(data, bot_ids):
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
 def _build_compat_sender(
     *,
     user_id: Optional[str],
@@ -1539,8 +1886,19 @@ def _build_compat_sender(
     )
 
 
-def patch_event_inplace(event: BaseEvent) -> BaseEvent:
+def patch_event_inplace(
+    event: BaseEvent,
+    bot: Optional[BaseBot] = None,
+) -> BaseEvent:
     if getattr(event, "__compat_patched__", False):
+        if (
+            bot is not None
+            and HAS_QQ
+            and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES)
+            and _is_qq_group_message_to_me(event, bot)
+        ):
+            setattr(event, "to_me", True)
+            _strip_qq_group_at_me(event, bot)
         return event
 
     if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
@@ -1590,7 +1948,7 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
             ),
         )
 
-    elif HAS_QQ and isinstance(event, QQGroupMessageEvent):
+    elif HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
         raw = event.content or ""
         sender_id = str(event.author.member_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
@@ -1602,6 +1960,9 @@ def patch_event_inplace(event: BaseEvent) -> BaseEvent:
         setattr(event, "raw_message", raw)
         setattr(event, "message", raw)
         setattr(event, "plaintext", raw)
+        setattr(event, "to_me", _is_qq_group_message_to_me(event, bot))
+        if bool(getattr(event, "to_me", False)):
+            _strip_qq_group_at_me(event, bot)
         setattr(
             event,
             "sender",
@@ -1760,7 +2121,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                 result = await _origin_send(event=event, message=message, **kwargs)
 
                 try:
-                    patched_event = patch_event_inplace(event)
+                    patched_event = patch_event_inplace(event, bot)
                     scene = get_chat_scene(patched_event)
 
                     message_id = _extract_result_message_id(result)
@@ -1884,7 +2245,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
 
             # ===== 普通 QQ 群 =====
-            if HAS_QQ and isinstance(event, QQGroupMessageEvent):
+            if HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
                 group_openid = str(event.group_openid)
 
                 async def _do_send(msg_seq: int):
@@ -2239,7 +2600,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
 def patch_context(bot: BaseBot, event: BaseEvent) -> tuple[BaseBot, BaseEvent]:
     bot = patch_bot_inplace(bot)
-    event = patch_event_inplace(event)
+    event = patch_event_inplace(event, bot)
 
     # 收消息入库
     _record_recv_message(bot, event)
