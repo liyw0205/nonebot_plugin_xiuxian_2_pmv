@@ -337,7 +337,7 @@ async def show_rift_progress(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, progress_msg)
     await my_rift_count.finish()
 
-@rift_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@rift_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -526,7 +526,7 @@ async def _perform_rift_settlement(user_id, user_info, rift_info, bot, event):
     log_message(user_id, final_msg)
     return
 
-@complete_rift.handle(parameterless=[Cooldown(cd_time=1.4)])
+@complete_rift.handle(parameterless=[Cooldown(cd_time=0)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """秘境结算"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -569,7 +569,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await complete_rift.finish()
 
 
-@break_rift.handle(parameterless=[Cooldown(cd_time=1.4)])
+@break_rift.handle(parameterless=[Cooldown(cd_time=0)])
 async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """终止探索秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -194,7 +194,7 @@ def parse_xiangyuan_content(content_str: str, user_id: int):
 
     return stone_amount, items_list, error_msg
 
-@give_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
+@give_xiangyuan.handle(parameterless=[Cooldown(cd_time=0)])
 async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """送仙缘"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -300,7 +300,7 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
     await handle_send(bot, event, msg, md_type="修仙", k1="抢仙缘", v1="抢仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
     await give_xiangyuan.finish()
 
-@get_xiangyuan.handle(parameterless=[Cooldown(cd_time=1.4)])
+@get_xiangyuan.handle(parameterless=[Cooldown(cd_time=0)])
 async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     """抢仙缘"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -415,7 +415,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg, md_type="修仙", k1="送仙缘", v1="送仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
     await get_xiangyuan.finish()
 
-@xiangyuan_list.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xiangyuan_list.handle(parameterless=[Cooldown(cd_time=0)])
 async def xiangyuan_list_(bot: Bot, event: GroupMessageEvent):
     """仙缘列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -500,7 +500,7 @@ __xiangyuan_notes__ = f"""
 3. 珍惜仙缘，广结善缘
 """.strip()
 
-@xiangyuan_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xiangyuan_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """仙缘帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

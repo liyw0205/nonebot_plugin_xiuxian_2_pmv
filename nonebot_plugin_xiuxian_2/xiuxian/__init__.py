@@ -83,29 +83,47 @@ def _safe_str(value):
     return "" if value is None else str(value)
 
 
+_RATE_LIMIT_CONFIG = XiuConfig()
+_CONFIG_MISSING = object()
+
+
+def _get_config_raw(name: str, default):
+    try:
+        value = getattr(DRIVER.config, name, _CONFIG_MISSING)
+        if value is not _CONFIG_MISSING and value is not None:
+            return value
+    except Exception:
+        pass
+
+    try:
+        return getattr(_RATE_LIMIT_CONFIG, name, default)
+    except Exception:
+        return default
+
+
 def _get_config_float(name: str, default: float) -> float:
     try:
-        return float(getattr(DRIVER.config, name, default))
+        return float(_get_config_raw(name, default))
     except Exception:
         return default
 
 
 def _get_config_int(name: str, default: int) -> int:
     try:
-        return int(getattr(DRIVER.config, name, default))
+        return int(_get_config_raw(name, default))
     except Exception:
         return default
 
 
 def _get_config_str(name: str, default: str) -> str:
     try:
-        return str(getattr(DRIVER.config, name, default))
+        return str(_get_config_raw(name, default))
     except Exception:
         return default
 
 
 USER_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_user_command_rate_window", 60.0)
-USER_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_user_command_rate_limit", 100)
+USER_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_user_command_rate_limit", 1000)
 USER_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_log_interval", 10.0)
 USER_COMMAND_RATE_CACHE_CLEAN_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_cache_clean_interval", 60.0)
 GLOBAL_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_global_command_rate_window", 1.0)

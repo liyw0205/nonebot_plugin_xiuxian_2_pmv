@@ -73,6 +73,72 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "消息设置"
     },
+    "xiuxian_user_command_rate_window": {
+        "name": "单用户限流窗口",
+        "description": "单用户命令限流统计窗口（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_user_command_rate_limit": {
+        "name": "单用户限流条数",
+        "description": "单用户在限流窗口内允许的命令条数",
+        "type": "int",
+        "category": "限流设置"
+    },
+    "xiuxian_user_command_rate_log_interval": {
+        "name": "单用户限流日志间隔",
+        "description": "同一用户触发限流后的日志输出间隔（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_user_command_rate_cache_clean_interval": {
+        "name": "单用户限流缓存清理间隔",
+        "description": "单用户限流缓存清理间隔（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_rate_window": {
+        "name": "全局限流窗口",
+        "description": "全局命令入口限流统计窗口（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_rate_limit": {
+        "name": "全局限流条数",
+        "description": "全局命令入口在限流窗口内允许的命令条数",
+        "type": "int",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_rate_log_interval": {
+        "name": "全局限流日志间隔",
+        "description": "全局命令入口触发限流后的日志输出间隔（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_overload_notice": {
+        "name": "全局过载提示",
+        "description": "全局命令入口过载提示，留空则不提示",
+        "type": "str",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_overload_notice_interval": {
+        "name": "过载提示间隔",
+        "description": "同一群/用户过载提示间隔（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_overload_notice_rate_window": {
+        "name": "过载提示频率窗口",
+        "description": "过载提示全局发送频率统计窗口（秒）",
+        "type": "float",
+        "category": "限流设置"
+    },
+    "xiuxian_global_command_overload_notice_rate_limit": {
+        "name": "过载提示频率上限",
+        "description": "过载提示在频率窗口内的全局发送上限",
+        "type": "int",
+        "category": "限流设置"
+    },
     "img": {
         "name": "图片发送",
         "description": "是否使用图片发送消息",
@@ -720,6 +786,7 @@ def get_config_category_icon(category):
         "灵根设置": "fas fa-seedling",
         "体力设置": "fas fa-heart",
         "轮回设置": "fas fa-infinity",
+        "限流设置": "fas fa-tachometer-alt",
         "云备份设置": "fas fa-cloud-upload-alt"
     }
     return icon_map.get(category, "fas fa-cog")

@@ -120,7 +120,7 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await title_list_cmd.finish()
 
 
-@title_equip_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@title_equip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """装备称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -142,7 +142,7 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await title_equip_cmd.finish()
 
 
-@title_unequip_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@title_unequip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """卸下称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -182,7 +182,7 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await title_check_cmd.finish()
 
 
-@title_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@title_info_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看称号详情"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -213,7 +213,7 @@ async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await title_info_cmd.finish()
 
 
-@title_grant_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@title_grant_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     赠送称号
@@ -324,7 +324,7 @@ __title_help__ = """
 """.strip()
 
 
-@title_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@title_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """称号帮助"""
     bot, _ = await assign_bot(bot=bot, event=event)

@@ -602,7 +602,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         k3="升阶示例", v3="饰品升阶 项链 UID1 UID2"
     )
 
-@my_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -699,7 +699,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         k3="饰品帮助", v3="饰品帮助"
     )
 
-@accessory_bag.handle(parameterless=[Cooldown(cd_time=1.4)])
+@accessory_bag.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -873,7 +873,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         k3="饰品帮助", v3="饰品帮助"
     )
 
-@equip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@equip_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -929,7 +929,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await handle_send(bot, event, result["msg"])
 
-@unequip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unequip_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -966,7 +966,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await handle_send(bot, event, result["msg"])
 
-@wash_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@wash_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1176,7 +1176,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
-@upgrade_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@upgrade_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1270,7 +1270,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         k3="查看饰品", v3=f"查看饰品 {main_acc.get('uid', '')}"
     )
 
-@accessory_preset.handle(parameterless=[Cooldown(cd_time=1.4)])
+@accessory_preset.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1329,7 +1329,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         k3="我的饰品", v3="我的饰品"
     )
 
-@quick_equip_accessory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@quick_equip_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:

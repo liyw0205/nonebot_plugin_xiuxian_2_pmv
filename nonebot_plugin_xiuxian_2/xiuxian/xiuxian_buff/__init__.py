@@ -92,7 +92,7 @@ __buff_help__ = f"""
   2. 灵田每23小时可收获
 """.strip()
 
-@buff_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@buff_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """功法帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -100,7 +100,7 @@ async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(bot, event, msg, k1="功法", v1="我的功法", k2="道侣", v2="道侣帮助", k3="福地", v3="洞天福地")
     await buff_help.finish()
 
-@blessed_spot_creat.handle(parameterless=[Cooldown(cd_time=1.4)])
+@blessed_spot_creat.handle(parameterless=[Cooldown(cd_time=0)])
 async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """洞天福地购买"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -130,7 +130,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await blessed_spot_creat.finish()
 
 
-@blessed_spot_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@blessed_spot_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """洞天福地信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -158,7 +158,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await blessed_spot_info.finish()
 
 
-@ling_tian_up.handle(parameterless=[Cooldown(cd_time=1.4)])
+@ling_tian_up.handle(parameterless=[Cooldown(cd_time=0)])
 async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """洞天福地灵田升级"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -217,7 +217,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await ling_tian_up.finish()
 
 
-@blessed_spot_rename.handle(parameterless=[Cooldown(cd_time=1.4)])
+@blessed_spot_rename.handle(parameterless=[Cooldown(cd_time=0)])
 async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """洞天福地改名"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -415,7 +415,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await up_exp.finish()
 
  
-@stone_exp.handle(parameterless=[Cooldown(cd_time=1.4)])
+@stone_exp.handle(parameterless=[Cooldown(cd_time=0)])
 async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """灵石修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -472,7 +472,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await stone_exp.finish()
 
 
-@in_closing.handle(parameterless=[Cooldown(cd_time=1.4)])
+@in_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -497,7 +497,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await in_closing.finish()
 
 
-@out_closing.handle(parameterless=[Cooldown(cd_time=1.4)])
+@out_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """出关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -604,7 +604,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                 await out_closing.finish()
 
-@mind_state.handle(parameterless=[Cooldown(cd_time=1.4)])
+@mind_state.handle(parameterless=[Cooldown(cd_time=0)])
 async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的状态信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -811,7 +811,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent):
     await handle_send(bot, event, msg, md_type="buff", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
     await my_exp.finish()
 
-@buffinfo.handle(parameterless=[Cooldown(cd_time=1.4)])
+@buffinfo.handle(parameterless=[Cooldown(cd_time=0)])
 async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的功法"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -868,7 +868,7 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await buffinfo.finish()
 
 
-@del_exp_decimal.handle(parameterless=[Cooldown(cd_time=1.4)])
+@del_exp_decimal.handle(parameterless=[Cooldown(cd_time=0)])
 async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清除修为浮点数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -884,7 +884,7 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await del_exp_decimal.finish()
 
 
-@daily_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@daily_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """日常信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1168,7 +1168,7 @@ def load_player_user3(user_id, file_name):
         return {}
 
 migrate_data = on_command("player数据同步", permission=SUPERUSER, priority=25, block=True)
-@migrate_data.handle(parameterless=[Cooldown(cd_time=1.4)])
+@migrate_data.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
     user_num = 0
@@ -1203,7 +1203,7 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
 migrate_data2 = on_command("player数据同步2", permission=SUPERUSER, priority=25, block=True)
-@migrate_data2.handle(parameterless=[Cooldown(cd_time=1.4)])
+@migrate_data2.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
     user_num = 0
@@ -1223,7 +1223,7 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
 migrate_data3 = on_command("player数据同步3", permission=SUPERUSER, priority=25, block=True)
-@migrate_data3.handle(parameterless=[Cooldown(cd_time=1.4)])
+@migrate_data3.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
     user_num = 0
@@ -1241,7 +1241,7 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
 migrate_data4 = on_command("player数据同步4", permission=SUPERUSER, priority=25, block=True)
-@migrate_data4.handle(parameterless=[Cooldown(cd_time=1.4)])
+@migrate_data4.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_ids = get_all_user_ids()
     user_num = 0
@@ -1256,7 +1256,7 @@ async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
 migrate_bank_data = on_command("同步灵庄", permission=SUPERUSER, priority=25, block=True)
-@migrate_bank_data.handle(parameterless=[Cooldown(cd_time=1.4)])
+@migrate_bank_data.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_bank_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 

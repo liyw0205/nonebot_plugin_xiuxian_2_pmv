@@ -84,7 +84,7 @@ def clear_user_tribulation_info(user_id):
     if file_path.exists():
         file_path.unlink()
 
-@tribulation_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tribulation_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看渡劫信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -155,7 +155,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
     await tribulation_info.finish()
 
-@fusion_destiny_pill.handle(parameterless=[Cooldown(cd_time=1.4)])
+@fusion_destiny_pill.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """融合天命丹"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -217,7 +217,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await fusion_destiny_pill.finish()
 
-@fusion_destiny_tribulation_pill.handle(parameterless=[Cooldown(cd_time=1.4)])
+@fusion_destiny_tribulation_pill.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """融合天命渡劫丹"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -278,7 +278,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     await handle_send(bot, event, msg)
 
-@start_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
+@start_tribulation.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """开始渡劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -397,7 +397,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
     await start_tribulation.finish()
 
-@destiny_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
+@destiny_tribulation.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """天命渡劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -497,7 +497,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await destiny_tribulation.finish()
 
-@heart_devil_tribulation.handle(parameterless=[Cooldown(cd_time=1.4)])
+@heart_devil_tribulation.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """渡心魔劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -784,7 +784,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
 
-@level_up_zj.handle(parameterless=[Cooldown(cd_time=1.4)])
+@level_up_zj.handle(parameterless=[Cooldown(cd_time=0)])
 async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """直接突破"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1419,7 +1419,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     await handle_send(bot, event, result_msg)
     await level_up_drjd_lx.finish()
 
-@user_leveluprate.handle(parameterless=[Cooldown(cd_time=1.4)])
+@user_leveluprate.handle(parameterless=[Cooldown(cd_time=0)])
 async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的突破概率"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -144,7 +144,7 @@ invitation_set_reward_cmd = on_command("邀请奖励设置", permission=SUPERUSE
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
 
 
-@invitation_use_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_use_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -188,7 +188,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
 
 
-@invitation_check_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_check_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
 
@@ -217,7 +217,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@invitation_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_info_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
 
@@ -247,7 +247,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(msg))
 
 
-@invitation_claim_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -309,7 +309,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, "成功领取以下奖励：\n" + "\n".join(claimed_msgs))
 
 
-@invitation_set_reward_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_set_reward_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -345,7 +345,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     )
 
 
-@invitation_reward_list_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_reward_list_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
@@ -378,7 +378,7 @@ async def _(bot: Bot, event: MessageEvent):
     )
 
 
-@invitation_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(
@@ -389,7 +389,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@invitation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invitation_admin_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(

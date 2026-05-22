@@ -338,7 +338,7 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     return msg
 
-@bot_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@bot_info_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """bot信息命令"""
     msg = await get_bot_info(bot, event)
@@ -349,19 +349,19 @@ async def handle_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         k3="信息", v3="bot信息"
     )
 
-@sys_info_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@sys_info_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_sys_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """系统信息命令"""
     sys_msg = await get_system_info(bot, event)
     await handle_send(bot, event, sys_msg)
 
-@ping_test_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@ping_test_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """ping测试命令"""
     ping_msg = await get_ping_test(bot, event)
     await handle_send(bot, event, ping_msg)
 
-@status_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@status_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
 更新日志 - 获取版本日志
@@ -390,7 +390,7 @@ def utc_time(published_at):
     formatted_beijing_time = beijing_time.strftime('%Y-%m-%d %H:%M:%S')
     return formatted_beijing_time
 
-@version_query_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@version_query_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """版本查询命令"""
     recent_releases = await asyncio.to_thread(update_manager.get_latest_releases, 5)  # 获取最近的5个发布
@@ -406,7 +406,7 @@ async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessa
     msg += "通过【更新日志】查看详情"
     await handle_send(bot, event, msg)
 
-@check_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@check_update_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """检测更新命令"""
     latest_release, message = await asyncio.to_thread(update_manager.check_update)
@@ -416,7 +416,7 @@ async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessag
     else:
         await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
 
-@version_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@version_update_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """版本更新命令"""
     args = args.extract_plain_text().split()

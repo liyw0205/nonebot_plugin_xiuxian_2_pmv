@@ -30,7 +30,7 @@ training_help = on_command("历练帮助", priority=5, block=True)
 training_rank = on_command("历练排行榜", priority=5, block=True)
 training_integral_rank = on_command("历练积分排行榜", priority=5, block=True)
 
-@training_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """历练帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -55,7 +55,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(bot, event, msg, k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     await training_help.finish()
 
-@training_start.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_start.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """开始历练"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -97,7 +97,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     update_statistics_value(user_id, "历练次数")
     await training_start.finish()
 
-@training_status.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_status.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看历练状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -144,7 +144,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="排行榜", v2="历练排行榜", k3="商店", v3="历练商店")
     await training_status.finish()
 
-@training_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看历练商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -205,7 +205,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title, page=page)
     await training_shop.finish()
 
-@training_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_buy.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换历练商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -271,7 +271,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
     await training_buy.finish()
 
-@training_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """历练排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -296,7 +296,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, rank_msg)
     await training_rank.finish()
 
-@training_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+@training_integral_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """历练积分排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

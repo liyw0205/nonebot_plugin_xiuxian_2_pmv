@@ -70,7 +70,7 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_project.finish()
 
-@impart_top.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_top.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -103,7 +103,7 @@ async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await impart_top.finish()
         
-@impart_pk_list.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_list.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -372,7 +372,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
     await impart_pk_now.finish()
 
-@impart_pk_exp.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_exp.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -458,7 +458,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_exp.finish()
 
-@impart_pk_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -523,7 +523,7 @@ def get_rates_by_floor(floor):
 
     return rates
 
-@impart_pk_go.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_go.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -653,7 +653,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_go.finish()
 
-@impart_pk_in_closing.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_in_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -677,7 +677,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
         
-@impart_pk_out_closing.handle(parameterless=[Cooldown(cd_time=1.4)])
+@impart_pk_out_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界出关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -30,7 +30,7 @@ reset_past_life_cmd = on_command("重置前尘", permission=SUPERUSER, priority=
 
 
 # ═══ 前尘帮助 ═══
-@past_help_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@past_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = (
@@ -56,7 +56,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 # ═══ 前尘往事（主入口） ═══
-@past_life_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@past_life_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -78,7 +78,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 # ═══ 投胎（属性分配） ═══
-@reincarnate_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@reincarnate_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -143,7 +143,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 # ═══ 前尘选择 ═══
-@past_choice_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@past_choice_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -180,7 +180,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 # ═══ 前尘回忆 ═══
-@past_memory_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@past_memory_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -217,7 +217,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 # ═══ 前尘排行 ═══
-@past_rank_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@past_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -255,7 +255,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, rank_msg)
     await past_rank_cmd.finish()
 
-@reset_past_life_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@reset_past_life_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     text = args.extract_plain_text().strip()

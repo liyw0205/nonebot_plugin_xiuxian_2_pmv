@@ -36,7 +36,7 @@ async def reset_illusion_data():
     IllusionData.reset_player_data_only()
     logger.opt(colors=True).info("<green>幻境寻心玩家数据已重置</green>")
 
-@illusion_start.handle(parameterless=[Cooldown(cd_time=1.4)])
+@illusion_start.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """幻境寻心 - 生成幻境或查看结果"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -85,7 +85,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="幻境寻心", k1="试炼壹", v1="心境试炼 1", k2="试炼贰", v2="心境试炼 2", k3="试炼叁", v3="心境试炼 3")
     await illusion_start.finish()
 
-@illusion_choice.handle(parameterless=[Cooldown(cd_time=1.4)])
+@illusion_choice.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """心境试炼 - 选择幻境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -208,7 +208,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg)
     await illusion_choice.finish()
 
-@illusion_reset.handle(parameterless=[Cooldown(cd_time=1.4)])
+@illusion_reset.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置幻境数据(管理员) - 重置玩家数据和问题统计数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -219,7 +219,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await illusion_reset.finish()
 
-@illusion_clear.handle(parameterless=[Cooldown(cd_time=1.4)])
+@illusion_clear.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空幻境数据(管理员) - 仅清空玩家数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

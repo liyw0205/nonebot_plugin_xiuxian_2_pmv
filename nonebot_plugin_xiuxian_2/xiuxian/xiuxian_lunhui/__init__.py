@@ -90,7 +90,7 @@ view_memory = on_command("轮回印记", priority=15, block=True)
 resetting = on_command('自废修为', priority=15,  block=True)
 confirm_lunhui = on_command('确认轮回', priority=15,  block=True)
 
-@warring_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@warring_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """轮回重修帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -98,7 +98,7 @@ async def warring_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_help_message(bot, event, msg, k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
     await warring_help.finish()
         
-@resetting.handle(parameterless=[Cooldown(cd_time=1.4)])
+@resetting.handle(parameterless=[Cooldown(cd_time=0)])
 async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -126,7 +126,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await resetting.finish()
         
-@lunhui.handle(parameterless=[Cooldown(cd_time=1.4)])
+@lunhui.handle(parameterless=[Cooldown(cd_time=0)])
 async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -176,7 +176,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await lunhui.finish()
 
-@Infinite_reincarnation.handle(parameterless=[Cooldown(cd_time=1.4)])
+@Infinite_reincarnation.handle(parameterless=[Cooldown(cd_time=0)])
 async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -208,7 +208,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await Infinite_reincarnation.finish()
 
-@retrieve_memory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@retrieve_memory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -238,7 +238,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
-@view_memory.handle(parameterless=[Cooldown(cd_time=1.4)])
+@view_memory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -276,7 +276,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     await handle_send(bot, event, "\n".join(lines), md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
-@confirm_lunhui.handle(parameterless=[Cooldown(cd_time=1.4)])
+@confirm_lunhui.handle(parameterless=[Cooldown(cd_time=0)])
 async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理确认轮回"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

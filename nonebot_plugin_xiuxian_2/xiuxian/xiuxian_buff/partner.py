@@ -85,7 +85,7 @@ __double_cultivation_help__ = f"""
 """
 
 
-@double_cultivation_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@double_cultivation_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def double_cultivation_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     await send_help_message(
@@ -699,7 +699,7 @@ async def process_two_exp(
 
     return exp_limit_1, exp_limit_2, event_desc
 
-@two_exp_accept.handle(parameterless=[Cooldown(cd_time=1.4)])
+@two_exp_accept.handle(parameterless=[Cooldown(cd_time=0)])
 async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """同意双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -737,7 +737,7 @@ async def expire_invite(user_id, invite_id, bot, event):
         # 删除过期的邀请
         del invite_cache[str(user_id)]
 
-@two_exp_reject.handle(parameterless=[Cooldown(cd_time=1.4)])
+@two_exp_reject.handle(parameterless=[Cooldown(cd_time=0)])
 async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """拒绝双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -765,7 +765,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
     await two_exp_reject.finish()
 
-@two_exp_protect.handle(parameterless=[Cooldown(cd_time=1.4)])
+@two_exp_protect.handle(parameterless=[Cooldown(cd_time=0)])
 async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """双修保护设置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -809,7 +809,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()
 
-@my_exp_num.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_exp_num.handle(parameterless=[Cooldown(cd_time=0)])
 async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的双修次数"""
     global two_exp_limit
@@ -864,7 +864,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
-@bind_partner.handle(parameterless=[Cooldown(cd_time=1.4)])
+@bind_partner.handle(parameterless=[Cooldown(cd_time=0)])
 async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """绑定道侣"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -960,7 +960,7 @@ async def expire_partner_invite(user_id, invite_id, bot, event):
         # 删除过期的邀请
         del partner_invite_cache[str(user_id)]
 
-@agree_bind.handle(parameterless=[Cooldown(cd_time=1.4)])
+@agree_bind.handle(parameterless=[Cooldown(cd_time=0)])
 async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """同意道侣绑定"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1011,7 +1011,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)    
     await agree_bind.finish()
 
-@unbind_partner.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unbind_partner.handle(parameterless=[Cooldown(cd_time=0)])
 async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """解除道侣关系"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1080,7 +1080,7 @@ def get_affection_level(affection):
         affection_level = "💓 缘分伊始"
     return affection_level
 
-@my_partner.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_partner.handle(parameterless=[Cooldown(cd_time=0)])
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1211,7 +1211,7 @@ def save_partner(user_id, data):
         str(user_id), "partner", "affection", affection, data_type="INTEGER"
     )
 
-@partner_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+@partner_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """道侣排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

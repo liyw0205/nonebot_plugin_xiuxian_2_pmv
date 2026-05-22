@@ -185,7 +185,7 @@ def get_recover(goods_id, num):
     price = min(max(price, MIN_PRICE), 5500000) * num
     return price
 
-@check_item_effect.handle(parameterless=[Cooldown(cd_time=1.4)])
+@check_item_effect.handle(parameterless=[Cooldown(cd_time=0)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看物品效果，支持物品名或ID"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -217,7 +217,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
     await check_item_effect.finish()
     
-@back_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@back_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """背包帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -247,7 +247,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await back_help.finish()
 
-@xiuxian_sone.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xiuxian_sone.handle(parameterless=[Cooldown(cd_time=0)])
 async def xiuxian_sone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的灵石信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -263,7 +263,7 @@ def get_item_type_by_id(goods_id):
     """根据物品ID获取类型"""
     return items.get_data_by_item_id(goods_id)['type']
 
-@goods_re_root.handle(parameterless=[Cooldown(cd_time=1.4)])
+@goods_re_root.handle(parameterless=[Cooldown(cd_time=0)])
 async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """炼金"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -325,7 +325,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
     await goods_re_root.finish()
 
-@fast_alchemy.handle(parameterless=[Cooldown(cd_time=1.4)])
+@fast_alchemy.handle(parameterless=[Cooldown(cd_time=0)])
 async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """快速炼金（支持装备/药材/全部类型 + 全部品阶，以及回血丹）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -516,7 +516,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await send_msg_handler(bot, event, '快速炼金', bot.self_id, msg)
     await fast_alchemy.finish()
 
-@no_use_zb.handle(parameterless=[Cooldown(cd_time=1.4)])
+@no_use_zb.handle(parameterless=[Cooldown(cd_time=0)])
 async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """卸载物品（只支持装备）
     ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time",
@@ -570,7 +570,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await no_use_zb.finish()
 
-@use.handle(parameterless=[Cooldown(cd_time=1.4)])
+@use.handle(parameterless=[Cooldown(cd_time=0)])
 async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """使用物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -801,7 +801,7 @@ async def expire_confirm_use_invite(user_id, invite_id, bot, event):
     if str(user_id) in confirm_use_cache and confirm_use_cache[str(user_id)]['invite_id'] == invite_id:
         del confirm_use_cache[str(user_id)]
 
-@confirm_use.handle(parameterless=[Cooldown(cd_time=1.4)])
+@confirm_use.handle(parameterless=[Cooldown(cd_time=0)])
 async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理确认使用"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -827,7 +827,7 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     del confirm_use_cache[str(user_id)]
     await confirm_use.finish()
 
-@use_item.handle(parameterless=[Cooldown(cd_time=1.4)])
+@use_item.handle(parameterless=[Cooldown(cd_time=0)])
 async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """道具使用 - 用于使用特殊道具"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1235,7 +1235,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     await handle_send(bot, event, "\n".join(msg_lines))
 
 
-@chakan_wupin.handle(parameterless=[Cooldown(cd_time=1.4)])
+@chakan_wupin.handle(parameterless=[Cooldown(cd_time=0)])
 async def chakan_wupin_(
     bot: Bot, 
     event: GroupMessageEvent | PrivateMessageEvent, 
@@ -1898,7 +1898,7 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg, title=title_display, page=page)
     await yaocai_detail_back.finish()
 
-@check_user_back.handle(parameterless=[Cooldown(cd_time=1.4)])
+@check_user_back.handle(parameterless=[Cooldown(cd_time=0)])
 async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """背包检测 - 管理员命令"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -42,7 +42,7 @@ async def reset_tower_floors():
     tower_limit.reset_all_floors()
     logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
 
-@tower_boss_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_boss_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看当前要挑战层数的BOSS属性"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -74,7 +74,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="帮助", v3="通天塔帮助")
     await tower_boss_info.finish()
 
-@tower_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """通天塔帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -178,7 +178,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     log_message(user_id, msg)
     await tower_continuous.finish()
 
-@tower_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看通天塔信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -203,7 +203,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     await tower_info.finish()
 
-@tower_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看通天塔商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -259,7 +259,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title, page=page)
     await tower_shop.finish()
 
-@tower_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_buy.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换通天塔商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -332,7 +332,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
     await tower_buy.finish()
 
-@tower_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """通天塔排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -357,7 +357,7 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, rank_msg)
     await tower_rank.finish()
 
-@tower_integral_rank.handle(parameterless=[Cooldown(cd_time=1.4)])
+@tower_integral_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """通天塔积分排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

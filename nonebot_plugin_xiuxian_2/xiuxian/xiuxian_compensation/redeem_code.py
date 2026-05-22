@@ -36,7 +36,7 @@ redeem_cmd = on_command("兑换", priority=10, block=True)
 help_redeem_cmd = on_command("兑换码帮助", priority=7, block=True)
 
 
-@add_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@add_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -52,7 +52,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, f"新增兑换码失败：{e}")
 
 
-@delete_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@delete_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -66,7 +66,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await handle_send(bot, event, f"已删除兑换码 {code} 及其使用记录")
 
 
-@clear_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@clear_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
@@ -74,7 +74,7 @@ async def _(bot: Bot, event: MessageEvent):
     await handle_send(bot, event, "已清空所有兑换码及使用记录")
 
 
-@list_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@list_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     """
     兑换码列表仅管理员可见。
@@ -83,7 +83,7 @@ async def _(bot: Bot, event: MessageEvent):
     await send_redeem_code_list(bot, event)
 
 
-@redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     普通用户只能通过：兑换 [兑换码]
@@ -148,7 +148,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
 
 
-@help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(
@@ -159,7 +159,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@admin_help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@admin_help_redeem_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(

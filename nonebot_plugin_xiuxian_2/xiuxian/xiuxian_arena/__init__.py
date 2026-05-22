@@ -80,7 +80,7 @@ __arena_help__ = """
 arena_opponent_cache = {}
 ARENA_CACHE_EXPIRE_SECONDS = 180
 
-@arena_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -296,7 +296,7 @@ async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await arena_view.finish()
 
-@arena_ranking.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_ranking.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -316,7 +316,7 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await arena_ranking.finish()
 
-@arena_myinfo.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_myinfo.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的竞技场信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -358,7 +358,7 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, msg)
     await arena_myinfo.finish()
 
-@arena_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看竞技场商店"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -414,7 +414,7 @@ async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await send_msg_handler(bot, event, "竞技场商店", bot.self_id, msg_list, title=title)
     await arena_shop.finish()
 
-@arena_buy.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_buy.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """竞技场商店兑换"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -479,7 +479,7 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await handle_send(bot, event, msg)
     await arena_buy.finish()
 
-@arena_honor.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_honor.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的荣誉信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -512,7 +512,7 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(bot, event, msg)
     await arena_honor.finish()
 
-@arena_buy_challenge.handle(parameterless=[Cooldown(cd_time=1.4)])
+@arena_buy_challenge.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """花费灵石购买今日竞技场挑战次数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -213,7 +213,7 @@ def _get_random_dongfu_target(my_uid: str):
     return random.choice(candidates) if candidates else None
 
 
-@dongfu_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@dongfu_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     msg = (
@@ -236,7 +236,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@my_dongfu.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -275,7 +275,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
 
-@dongfu_plant.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=2)])
+@dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -365,7 +365,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, f"已播种【{seed_name}】，预计{real_minutes}分钟后可收获。")
 
 
-@visit_friend.handle(parameterless=[Cooldown(cd_time=1.4, stamina_cost=VISIT_STAMINA)])
+@visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -399,7 +399,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(gain)}。")
 
 
-@dongfu_array.handle(parameterless=[Cooldown(cd_time=1.4)])
+@dongfu_array.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)

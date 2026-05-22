@@ -147,7 +147,7 @@ unseal_help = on_command("鉴石帮助", priority=10, block=True)
 unseal_message = on_command("鉴石信息", priority=10, block=True)
 
 # 鉴石帮助
-@unseal_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unseal_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     help_msg = """※※ 鉴石系统帮助 ※※
 【鉴石】- 消耗灵石解封尘封之物
@@ -162,7 +162,7 @@ async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await send_help_message(bot, event, help_msg, k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 # 共享开启
-@unseal_share_on.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unseal_share_on.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -180,7 +180,7 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="关闭", v3="鉴石共享关闭")
 
 # 共享关闭
-@unseal_share_off.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unseal_share_off.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -295,7 +295,7 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     return "\n".join(msg), amount
 
 # 鉴石信息
-@unseal_message.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unseal_message.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -696,7 +696,7 @@ SHARING_EVENTS = [
 
 unseal_migrate = on_command("同步鉴石", permission=SUPERUSER, priority=25, block=True)
 
-@unseal_migrate.handle(parameterless=[Cooldown(cd_time=1.4)])
+@unseal_migrate.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 

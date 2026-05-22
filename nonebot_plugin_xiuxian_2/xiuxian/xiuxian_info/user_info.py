@@ -202,7 +202,7 @@ async def get_user_xiuxian_info(user_id):
 
     return DETAIL_MAP, text_msg
 
-@xiuxian_message.handle(parameterless=[Cooldown(cd_time=1.4)])
+@xiuxian_message.handle(parameterless=[Cooldown(cd_time=0)])
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """普通文本版修仙信息"""
     from urllib.parse import quote

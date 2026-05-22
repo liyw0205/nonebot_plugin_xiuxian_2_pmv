@@ -813,7 +813,7 @@ def _merge_reward_text(rewards: list[str]) -> str:
 # =========================================
 # 洞府
 # =========================================
-@build_dongfu.handle(parameterless=[Cooldown(cd_time=1.4)])
+@build_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -869,7 +869,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, f"洞府建设成功！\n位置：{realm}·{heaven}·{node['name']}\n消耗灵石：{number_to(DONGFU_COST)}")
 
 
-@go_home.handle(parameterless=[Cooldown(cd_time=1.4)])
+@go_home.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -894,7 +894,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 # =========================================
 # 地图基础
 # =========================================
-@map_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@map_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     msg = (
@@ -918,7 +918,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@map_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@map_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -996,7 +996,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
 
-@my_pos.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_pos.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1012,7 +1012,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, m)
 
 
-@map_go.handle(parameterless=[Cooldown(cd_time=1.4)])
+@map_go.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1136,7 +1136,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 # =========================================
 # 社交
 # =========================================
-@nearby_users_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@nearby_users_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1219,7 +1219,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}")
 
 
-@dao_view.handle(parameterless=[Cooldown(cd_time=1.4)])
+@dao_view.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1254,7 +1254,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 # =========================================
 # 种子商店
 # =========================================
-@seed_shop.handle(parameterless=[Cooldown(cd_time=1.4)])
+@seed_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1281,7 +1281,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(lines))
 
 
-@buy_seed.handle(parameterless=[Cooldown(cd_time=1.4)])
+@buy_seed.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)

@@ -165,7 +165,7 @@ __team_help__ = f"""
 # =========================
 # 帮助
 # =========================
-@help_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@help_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __team_help__
@@ -173,7 +173,7 @@ async def help_team_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await help_team_cmd.finish()
 
 
-@help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@help_dungeon_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __dungeon_help__
@@ -184,7 +184,7 @@ async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 # =========================
 # 组队逻辑
 # =========================
-@create_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@create_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -223,7 +223,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await create_team_cmd.finish()
 
 
-@invite_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@invite_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -326,7 +326,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await invite_team_cmd.finish()
 
 
-@agree_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@agree_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -396,7 +396,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     await agree_team_cmd.finish()
 
 
-@reject_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@reject_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -426,7 +426,7 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     await reject_team_cmd.finish()
 
 
-@leave_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@leave_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -466,7 +466,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     await leave_team_cmd.finish()
 
 
-@kick_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@kick_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -532,7 +532,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     await kick_team_cmd.finish()
 
 
-@disband_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@disband_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -571,7 +571,7 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
     await disband_team_cmd.finish()
 
 
-@view_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@view_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -618,7 +618,7 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     await view_team_cmd.finish()
 
 
-@transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -869,7 +869,7 @@ async def daily_dungeon_reset():
 # =========================
 # 手动重置
 # =========================
-@reset_command.handle(parameterless=[Cooldown(cd_time=1.4)])
+@reset_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     try:
@@ -892,7 +892,7 @@ async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessag
 # =========================
 # 副本信息
 # =========================
-@dungeon_info.handle(parameterless=[Cooldown(cd_time=1.4)])
+@dungeon_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
@@ -916,7 +916,7 @@ async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessag
 # =========================
 # 探索副本
 # =========================
-@explore_dungeon.handle(parameterless=[Cooldown(cd_time=1.4)])
+@explore_dungeon.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
@@ -1047,7 +1047,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 # =========================
 # 我的副本状态
 # =========================
-@dungeon_status.handle(parameterless=[Cooldown(cd_time=1.4)])
+@dungeon_status.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 

@@ -28,7 +28,7 @@ help_gift_cmd = on_command("礼包帮助", priority=7, block=True)
 admin_help_gift_cmd = on_command("礼包管理", permission=SUPERUSER, priority=5, block=True)
 
 
-@add_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@add_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -44,7 +44,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, f"新增礼包失败：{e}")
 
 
-@delete_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@delete_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -58,7 +58,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await handle_send(bot, event, f"已删除礼包 {gift_id} 及其领取记录")
 
 
-@clear_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@clear_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
@@ -66,14 +66,14 @@ async def _(bot: Bot, event: MessageEvent):
     await handle_send(bot, event, "已清空所有礼包及领取记录")
 
 
-@list_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@list_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
     await list_normal_rewards(bot, event, config)
 
 
-@claim_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@claim_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
 
@@ -86,7 +86,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await claim_normal_reward(bot, event, config, gift_id)
 
 
-@help_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@help_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(
@@ -97,7 +97,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@admin_help_gift_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@admin_help_gift_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
     await send_help_message(

@@ -220,6 +220,8 @@ def Cooldown(
                     await handle_send(bot, event, msg)
                     await matcher.finish()
                 sql_message.update_user_stamina(user_id, stamina_cost, 2)  # 减少体力
+        if cd_time <= 0:
+            return
         if running[key] <= 0:
             if cd_time >= 1.5:
                 time = int(cd_time - (loop.time() - time_sy[key]))

@@ -62,7 +62,7 @@ beg_stone = on_command("仙途奇缘", priority=7, block=True)
 beg_help = on_command("仙途奇缘帮助", priority=7, block=True)
 novice = on_command("新手礼包", priority=7, block=True)
     
-@beg_help.handle(parameterless=[Cooldown(cd_time=1.4)])
+@beg_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __beg_help__
@@ -74,7 +74,7 @@ async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await beg_help.finish()
 
-@beg_stone.handle(parameterless=[Cooldown(cd_time=1.4)])
+@beg_stone.handle(parameterless=[Cooldown(cd_time=0)])
 async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, _ = check_user(event)
@@ -140,7 +140,7 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await beg_help.finish()
 
     
-@novice.handle(parameterless=[Cooldown(cd_time=1.4)])
+@novice.handle(parameterless=[Cooldown(cd_time=0)])
 async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)

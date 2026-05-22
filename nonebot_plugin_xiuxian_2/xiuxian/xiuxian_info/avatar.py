@@ -17,7 +17,7 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 
 
-@avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     身外化身命令
@@ -64,7 +64,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await avatar_switch_cmd.finish()
 
 
-@my_id_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
+@my_id_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def my_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查询当前ID信息（含伪装/化身状态）"""
     bot, _ = await assign_bot(bot=bot, event=event)
