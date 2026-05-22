@@ -1,7 +1,8 @@
+import asyncio
 from io import BytesIO
 from pathlib import Path
 
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
@@ -35,7 +36,7 @@ async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await handle_send(bot, event, "正在获取更新日志，请稍候...")
 
     try:
-        commits = get_commits(page=page)
+        commits = await asyncio.to_thread(get_commits, page)
 
         if not commits:
             await handle_send(
@@ -45,7 +46,7 @@ async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             )
             await changelog.finish()
 
-        img_obj = create_changelog_image(commits, page)
+        img_obj = await asyncio.to_thread(create_changelog_image, commits, page)
 
         img_buf = None
         need_delete_path = None

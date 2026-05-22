@@ -8,7 +8,8 @@ from datetime import datetime
 import random
 import os
 from nonebot.rule import Rule
-from nonebot import get_bots, get_bot, on_command, require
+from nonebot import get_bots, get_bot, require
+from ..on_compat import on_command
 from nonebot.params import CommandArg
 from ..adapter_compat import (
     Bot,

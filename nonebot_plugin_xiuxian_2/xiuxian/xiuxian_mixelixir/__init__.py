@@ -2,7 +2,7 @@ import random
 import asyncio
 import re
 import json
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.params import EventPlainText, CommandArg
 from ..adapter_compat import (
     Bot,

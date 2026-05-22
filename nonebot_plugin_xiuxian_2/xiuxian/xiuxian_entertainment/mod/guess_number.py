@@ -2,7 +2,7 @@ import random
 import asyncio
 from datetime import datetime
 
-from nonebot import on_command
+from ...on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..command import *

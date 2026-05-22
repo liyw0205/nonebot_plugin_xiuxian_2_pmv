@@ -9,7 +9,7 @@ async def history_today_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     api_url = "https://api.pearktrue.cn/api/lsjt?type=json"
 
     try:
-        result = get_json_api(api_url, timeout=15)
+        result = await get_json_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 from datetime import datetime
 
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 

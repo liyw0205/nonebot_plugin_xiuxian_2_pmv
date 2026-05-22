@@ -5,7 +5,7 @@ import json
 from nonebot.log import logger
 from datetime import datetime, timedelta
 from pathlib import Path
-from nonebot import on_command
+from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
     GROUP,

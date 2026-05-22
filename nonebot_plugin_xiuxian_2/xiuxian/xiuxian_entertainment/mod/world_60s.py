@@ -14,7 +14,7 @@ async def world_60s_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     api_url = "https://api.pearktrue.cn/api/60s/"
 
     try:
-        result = get_json_api(api_url, timeout=15)
+        result = await get_json_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

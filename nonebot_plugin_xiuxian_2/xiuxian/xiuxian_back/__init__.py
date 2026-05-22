@@ -8,7 +8,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 from urllib.parse import quote
-from nonebot import on_command, require
+from nonebot import require
+from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
     GROUP,

@@ -1,6 +1,6 @@
 import os
 import random
-from nonebot import on_command
+from ..on_compat import on_command
 from ..adapter_compat import (
     GROUP,
     Bot,

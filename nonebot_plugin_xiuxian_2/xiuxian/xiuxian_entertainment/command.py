@@ -1,9 +1,10 @@
 import json
+import asyncio
 import requests
 import random
 from urllib.parse import quote
 from nonebot.log import logger
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import (
@@ -28,7 +29,7 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown
 
 
-def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
+def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
     """
     通用 JSON 接口请求
     - 优先 resp.json()
@@ -47,7 +48,11 @@ def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) ->
     return result
 
 
-def get_text_api(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
+async def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
+    return await asyncio.to_thread(_get_json_api_sync, api_url, params, timeout)
+
+
+def _get_text_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
     """
     通用文本接口请求
     """
@@ -56,7 +61,11 @@ def get_text_api(api_url: str, params: dict | None = None, timeout: int = 15) ->
     return resp.text.strip()
 
 
-def get_media_url_api(api_url: str, params: dict | None = None, timeout: int = 20) -> str:
+async def get_text_api(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
+    return await asyncio.to_thread(_get_text_api_sync, api_url, params, timeout)
+
+
+def _get_media_url_api_sync(api_url: str, params: dict | None = None, timeout: int = 20) -> str:
     """
     通用媒体接口请求
     - 如果返回 JSON，则尝试从常见字段里找 URL
@@ -85,6 +94,10 @@ def get_media_url_api(api_url: str, params: dict | None = None, timeout: int = 2
         raise ValueError("接口未返回媒体地址")
 
     return str(resp.url)
+
+
+async def get_media_url_api(api_url: str, params: dict | None = None, timeout: int = 20) -> str:
+    return await asyncio.to_thread(_get_media_url_api_sync, api_url, params, timeout)
 
 
 async def handle_audio_send(bot: Bot, event, audio_url: str):

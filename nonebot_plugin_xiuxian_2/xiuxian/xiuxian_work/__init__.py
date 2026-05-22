@@ -3,7 +3,8 @@ import random
 import asyncio
 import json
 from typing import Tuple, Any, Dict
-from nonebot import on_regex, require, on_command
+from nonebot import require
+from ..on_compat import on_regex, on_command
 from nonebot.params import RegexGroup
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..adapter_compat import (

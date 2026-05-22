@@ -9,7 +9,7 @@ async def hitokoto_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     api_url = "https://api.pearktrue.cn/api/hitokoto/"
 
     try:
-        text = get_text_api(api_url, timeout=15)
+        text = await get_text_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

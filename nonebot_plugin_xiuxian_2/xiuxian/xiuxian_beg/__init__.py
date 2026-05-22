@@ -1,7 +1,7 @@
 import random
 from datetime import datetime
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from nonebot import on_command
+from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
     GROUP,

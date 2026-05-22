@@ -8,6 +8,7 @@ import requests
 import os
 import random
 import re
+import time
 import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
@@ -42,6 +43,9 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+_REAL_ID_CACHE_TTL = 600
+_REAL_ID_NEGATIVE_CACHE_TTL = 30
+_real_id_cache: dict[str, tuple[float, str | None]] = {}
 
 
 def _is_onebot_v11_bot(bot: Any) -> bool:
@@ -1561,7 +1565,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")  # 仅普通群可@
 
-    open_id = get_real_id(event.get_user_id())
+    open_id = await get_real_id_async(event.get_user_id())
     if not open_id:
         open_id = event.get_user_id()
 
@@ -1623,7 +1627,7 @@ async def handle_send_markdown(
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
 
-    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
+    open_id = await get_real_id_async(event.get_user_id()) or event.get_user_id()
     original_user_id = event.get_user_id()
 
     if not title:
@@ -1730,7 +1734,7 @@ async def handle_send_native_markdown(
 
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
-    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
+    open_id = await get_real_id_async(event.get_user_id()) or event.get_user_id()
     original_user_id = event.get_user_id()
 
     if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
@@ -1862,7 +1866,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
 
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
-    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
+    open_id = await get_real_id_async(event.get_user_id()) or event.get_user_id()
 
     original_user_id = event.get_user_id()
     if open_id and is_normal_group and XiuConfig().at_sender:
@@ -1938,7 +1942,7 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
 
     scene = get_chat_scene(event)
     is_normal_group = (scene == "group")
-    open_id = get_real_id(event.get_user_id()) or event.get_user_id()
+    open_id = await get_real_id_async(event.get_user_id()) or event.get_user_id()
     original_user_id = event.get_user_id()
 
     if open_id and is_normal_group and XiuConfig().at_sender:
@@ -2374,7 +2378,7 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
 
-def get_real_id(id_str):
+def get_real_id(id_str, timeout: float = 1.5):
     """
     调用API接口获取真实ID
 
@@ -2382,14 +2386,35 @@ def get_real_id(id_str):
     :return: 真实ID (str) 或 None
     """
 
-    url = f"{XiuConfig().gsk_link}/getid?type=2&id={id_str}"
+    base_url = str(getattr(XiuConfig(), "gsk_link", "") or "").strip().rstrip("/")
+    if not base_url or not id_str:
+        return None
+
+    cache_key = f"{base_url}:{id_str}"
+    now = time.monotonic()
+    cached = _real_id_cache.get(cache_key)
+    if cached:
+        expires_at, cached_id = cached
+        if now < expires_at:
+            return cached_id
+
+    url = f"{base_url}/getid"
     try:
-        response = requests.get(url)
+        response = requests.get(url, params={"type": 2, "id": id_str}, timeout=timeout)
         response.raise_for_status()
         data = response.json()
-        return data.get('id')
+        real_id = data.get("id")
+        real_id = str(real_id) if real_id else None
+        ttl = _REAL_ID_CACHE_TTL if real_id else _REAL_ID_NEGATIVE_CACHE_TTL
+        _real_id_cache[cache_key] = (now + ttl, real_id)
+        return real_id
     except Exception:
+        _real_id_cache[cache_key] = (now + _REAL_ID_NEGATIVE_CACHE_TTL, None)
         return None
+
+
+async def get_real_id_async(id_str, timeout: float = 1.5):
+    return await asyncio.to_thread(get_real_id, id_str, timeout)
 
 def call_upload_api(image_data):
     """
@@ -2441,3 +2466,7 @@ def call_upload_api(image_data):
         # 确保打开的文件被关闭
         if file_obj:
             file_obj.close()
+
+
+async def call_upload_api_async(image_data):
+    return await asyncio.to_thread(call_upload_api, image_data)

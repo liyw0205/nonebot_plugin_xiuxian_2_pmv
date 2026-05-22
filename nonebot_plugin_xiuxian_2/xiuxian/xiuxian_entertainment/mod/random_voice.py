@@ -22,7 +22,7 @@ async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         api_url = "https://api.pearktrue.cn/api/duiren/"
 
     try:
-        result = get_json_api(api_url, params={"type": "mp3"}, timeout=15)
+        result = await get_json_api(api_url, params={"type": "mp3"}, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

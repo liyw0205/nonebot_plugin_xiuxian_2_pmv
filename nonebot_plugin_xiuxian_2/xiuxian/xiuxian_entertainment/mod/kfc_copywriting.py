@@ -9,7 +9,7 @@ async def kfc_copywriting_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     api_url = "https://api.pearktrue.cn/api/kfc"
 
     try:
-        result = get_json_api(api_url, params={"type": "json"}, timeout=15)
+        result = await get_json_api(api_url, params={"type": "json"}, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

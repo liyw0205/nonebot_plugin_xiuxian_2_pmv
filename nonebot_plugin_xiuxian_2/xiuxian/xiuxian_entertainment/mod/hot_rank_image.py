@@ -23,7 +23,7 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         title = "🖼️ 微博热榜图片"
 
     try:
-        image_url = get_media_url_api(api_url, params={"type": rank_type}, timeout=20)
+        image_url = await get_media_url_api(api_url, params={"type": rank_type}, timeout=20)
     except Exception as e:
         await handle_send(
             bot, event,

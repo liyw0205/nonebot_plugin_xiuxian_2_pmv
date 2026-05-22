@@ -3,7 +3,8 @@ import random
 from datetime import datetime, timedelta
 from typing import Union, Any
 
-from nonebot import on_command, require
+from nonebot import require
+from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger

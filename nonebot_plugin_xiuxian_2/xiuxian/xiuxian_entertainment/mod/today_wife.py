@@ -17,9 +17,7 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     api_url = "https://api.pearktrue.cn/api/today_wife"
 
     try:
-        resp = requests.get(api_url, timeout=15)
-        resp.raise_for_status()
-        result = resp.json()
+        result = await get_json_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

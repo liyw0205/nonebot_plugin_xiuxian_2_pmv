@@ -15,7 +15,7 @@ async def random_girl_video_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMes
     api_url = "https://api.yujn.cn/api/xjj.php?type=json"
 
     try:
-        result = get_json_api(api_url, timeout=20)
+        result = await get_json_api(api_url, timeout=20)
     except Exception as e:
         await handle_send(
             bot, event,

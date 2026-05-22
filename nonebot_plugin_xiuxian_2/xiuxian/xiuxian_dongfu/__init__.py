@@ -5,7 +5,7 @@ except ImportError:
 
 import random
 from datetime import datetime, timedelta
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent

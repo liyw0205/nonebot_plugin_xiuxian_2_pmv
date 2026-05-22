@@ -17,7 +17,8 @@ from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from nonebot.params import CommandArg, EventPlainText
-from nonebot import require, on_command, on_message, get_bot
+from nonebot import require, get_bot
+from ..on_compat import on_command, on_message
 from nonebot.rule import Rule
 from nonebot.matcher import Matcher
 from nonebot.adapters import Event as BaseEvent
@@ -1729,7 +1730,7 @@ async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "当前gsk地址为空，请先修改配置gsk_link")
         await migrate_qqid_cmd.finish()
 
-    ok, msg = migrate_user_id_to_openid()
+    ok, msg = await asyncio.to_thread(migrate_user_id_to_openid)
     await handle_send(bot, event, msg)
     await migrate_qqid_cmd.finish()
 
@@ -1753,7 +1754,7 @@ async def update_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     await handle_send(bot, event, f"开始执行手动ID更新：{old_id} -> {new_id}\n正在备份并校验，请稍候...")
 
-    ok, msg = migrate_single_user_id(old_id, new_id)
+    ok, msg = await asyncio.to_thread(migrate_single_user_id, old_id, new_id)
     await handle_send(bot, event, msg)
     await update_id_cmd.finish()
 
@@ -1774,7 +1775,7 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     id1, id2 = arg_list[0], arg_list[1]
     await handle_send(bot, event, f"开始执行ID交换：{id1} - {id2}\n正在备份并校验，请稍候...")
 
-    ok, msg = swap_two_user_ids(id1, id2)
+    ok, msg = await asyncio.to_thread(swap_two_user_ids, id1, id2)
     await handle_send(bot, event, msg)
     await swap_id_cmd.finish()
 
@@ -1815,6 +1816,10 @@ def get_random_acg_pic_url(timeout: int = 5) -> str | None:
         logger.warning(f"获取默认回复随机图片失败: {e}")
         return None
 
+
+async def get_random_acg_pic_url_async(timeout: int = 3) -> str | None:
+    return await asyncio.to_thread(get_random_acg_pic_url, timeout)
+
 def _fallback_rule() -> Rule:
     async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
         if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
@@ -1831,7 +1836,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
     text_msg = config.empty_msg
 
     # 先尝试获取随机图片
-    image_url = get_random_acg_pic_url(timeout=5)
+    image_url = await get_random_acg_pic_url_async(timeout=3)
 
     # 1. 开启 Markdown
     if config.markdown_status and image_url:

@@ -1,4 +1,4 @@
-from nonebot import on_command
+from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -12,7 +12,7 @@ from ..adapter_compat import (
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, handle_send, number_to,
     handle_pic_send, handle_pic_msg_send, handle_send_md,
-    call_upload_api,
+    call_upload_api_async,
     optimize_md
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -455,7 +455,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             await xiuxian_message_img.finish()
         else:
             if not is_channel_event(event):
-                link = call_upload_api(img_res)
+                link = await call_upload_api_async(img_res)
                 if link:
                     # 原生MD - 称号显示在标题中
                     title_display = f"#### {equipped_title_name}\r" if equipped_title_name else ""

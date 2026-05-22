@@ -4,7 +4,7 @@
 """
 import re
 import random
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.params import CommandArg

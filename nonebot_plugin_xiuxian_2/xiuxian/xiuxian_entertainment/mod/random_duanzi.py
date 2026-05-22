@@ -9,7 +9,7 @@ async def random_duanzi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     api_url = "https://api.pearktrue.cn/api/random/duanzi/"
 
     try:
-        result = get_json_api(api_url, params={"type": "json"}, timeout=15)
+        result = await get_json_api(api_url, params={"type": "json"}, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

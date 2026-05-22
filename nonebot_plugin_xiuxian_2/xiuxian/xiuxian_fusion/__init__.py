@@ -1,6 +1,6 @@
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot.params import CommandArg
-from nonebot import on_command
+from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..adapter_compat import (

@@ -5,7 +5,7 @@ except ImportError:
 import os
 from pathlib import Path
 from typing import Any, Tuple
-from nonebot import on_regex
+from ..on_compat import on_regex
 from nonebot.log import logger
 from nonebot.params import RegexGroup
 from ..adapter_compat import (

@@ -9,7 +9,7 @@ async def tiangou_diary_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     api_url = "https://api.pearktrue.cn/api/jdyl/tiangou.php"
 
     try:
-        text = get_text_api(api_url, timeout=15)
+        text = await get_text_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

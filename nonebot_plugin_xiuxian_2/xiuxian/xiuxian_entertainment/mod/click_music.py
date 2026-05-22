@@ -9,9 +9,7 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     api_url = "https://api.pearktrue.cn/api/click_music"
 
     try:
-        resp = requests.get(api_url, timeout=15)
-        resp.raise_for_status()
-        result = resp.json()
+        result = await get_json_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,

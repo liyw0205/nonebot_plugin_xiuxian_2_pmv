@@ -279,9 +279,30 @@ def base_rank(user_level, rank, up=0):
     return zx_rank
 
 class JsonConfig:
+    _cache_data = None
+    _cache_mtime_ns = None
+
     def __init__(self):
         self.config_jsonpath = DATABASE / "config.json"
         self.create_default_config()
+
+    @staticmethod
+    def _normalize_data(data):
+        if "group" not in data:
+            data["group"] = []
+        if "private" not in data:
+            data["private"] = True
+        if "root_selection" not in data:
+            data["root_selection"] = True
+        if "sect_name" not in data:
+            data["sect_name"] = True
+        return data
+
+    @staticmethod
+    def _clone_data(data):
+        cloned = dict(data)
+        cloned["group"] = list(data.get("group", []))
+        return cloned
     
     def create_default_config(self):
         """创建默认配置文件"""
@@ -297,17 +318,15 @@ class JsonConfig:
 
     def read_data(self):
         """读取配置数据"""
+        mtime_ns = self.config_jsonpath.stat().st_mtime_ns
+        if self._cache_data is not None and self._cache_mtime_ns == mtime_ns:
+            return self._clone_data(self._cache_data)
+
         with open(self.config_jsonpath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if "group" not in data:
-                data["group"] = []
-            if "private" not in data:
-                data["private"] = True
-            if "root_selection" not in data:
-                data["root_selection"] = True
-            if "sect_name" not in data:
-                data["sect_name"] = True
-            return data
+            data = self._normalize_data(json.load(f))
+            self.__class__._cache_data = self._clone_data(data)
+            self.__class__._cache_mtime_ns = mtime_ns
+            return self._clone_data(data)
 
     def write_data(self, key, id=None):
         """
@@ -342,6 +361,8 @@ class JsonConfig:
 
         with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=4)
+        self.__class__._cache_data = self._clone_data(json_data)
+        self.__class__._cache_mtime_ns = self.config_jsonpath.stat().st_mtime_ns
         return True
 
     def is_private_enabled(self):

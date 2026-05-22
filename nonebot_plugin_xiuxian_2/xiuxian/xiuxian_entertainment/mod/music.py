@@ -1,3 +1,5 @@
+import asyncio
+
 from ..command import *
 from .music_utils import (
     load_music_config,
@@ -107,7 +109,7 @@ async def music_search_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     platform_name = get_platform_display_name(platform)
 
     try:
-        songs = search_music(keyword, platform=platform, limit=cfg["song_limit"])
+        songs = await asyncio.to_thread(search_music, keyword, platform, cfg["song_limit"])
     except Exception as e:
         logger.warning(f"点歌搜索失败: {e}")
         await handle_send(

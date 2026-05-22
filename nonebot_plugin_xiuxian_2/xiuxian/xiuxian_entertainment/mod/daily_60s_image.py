@@ -15,7 +15,7 @@ async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     api_url = "https://api.pearktrue.cn/api/60s/image/"
 
     try:
-        image_url = get_media_url_api(api_url, timeout=20)
+        image_url = await get_media_url_api(api_url, timeout=20)
     except Exception as e:
         await handle_send(
             bot, event,

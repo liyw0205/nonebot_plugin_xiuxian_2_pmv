@@ -3,7 +3,8 @@ import asyncio
 import os
 import time
 from datetime import datetime, timezone, timedelta
-from nonebot import on_command, __version__ as nb_version
+from nonebot import __version__ as nb_version
+from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 from nonebot.params import CommandArg
 from ..adapter_compat import (
@@ -392,7 +393,7 @@ def utc_time(published_at):
 @version_query_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """版本查询命令"""
-    recent_releases = update_manager.get_latest_releases(5)  # 获取最近的5个发布
+    recent_releases = await asyncio.to_thread(update_manager.get_latest_releases, 5)  # 获取最近的5个发布
     if not recent_releases:
         await handle_send(bot, event, "无法获取版本信息。")
         return
@@ -408,7 +409,7 @@ async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessa
 @check_update_cmd.handle(parameterless=[Cooldown(cd_time=1.4)])
 async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """检测更新命令"""
-    latest_release, message = update_manager.check_update()
+    latest_release, message = await asyncio.to_thread(update_manager.check_update)
     if latest_release:
         release_tag = latest_release['tag_name']
         await handle_send(bot, event, f"发现新版本 {release_tag}\n当前版本 {update_manager.get_current_version()}\n建议【查看日志】后更新")
@@ -427,7 +428,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
 
     if action in ["latest", "update", "最新"]:
         # 检查是否有更新
-        latest_release, message = update_manager.check_update()
+        latest_release, message = await asyncio.to_thread(update_manager.check_update)
         if not latest_release:
             await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
             return
@@ -435,7 +436,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
     else:
         # 指定版本号
         release_tag = action
-        recent_releases = update_manager.get_latest_releases(5)
+        recent_releases = await asyncio.to_thread(update_manager.get_latest_releases, 5)
         if not recent_releases:
             await handle_send(bot, event, "无法获取网络版本信息。")
             return
@@ -446,7 +447,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
 
     await handle_send(bot, event, f"更新版本 {release_tag}，开始更新...")
     # 执行更新流程
-    success, result = update_manager.perform_update_with_backup(release_tag)
+    success, result = await asyncio.to_thread(update_manager.perform_update_with_backup, release_tag)
     if success:
         await handle_send(bot, event, f"版本更新成功！当前版本：{update_manager.get_current_version()}")
     else:

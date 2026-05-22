@@ -6,7 +6,7 @@
 - 自动检查成就解锁
 - 超管赠送称号
 """
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER

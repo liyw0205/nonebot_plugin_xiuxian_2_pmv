@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 

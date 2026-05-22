@@ -2,7 +2,7 @@ import re
 import asyncio
 import json
 from datetime import datetime
-from nonebot import on_command, on_regex
+from ..on_compat import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
 from nonebot.log import logger
 from ..adapter_compat import (

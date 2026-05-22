@@ -6,7 +6,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, BuffJsonDate,
     get_main_info_msg, UserBuffDate, get_sec_msg
 )
-from nonebot import on_command, on_command, require
+from nonebot import require
+from ..on_compat import on_command
 from nonebot.log import logger
 from ..adapter_compat import (
     Bot,

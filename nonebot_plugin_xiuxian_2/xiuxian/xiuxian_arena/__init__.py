@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from nonebot.log import logger
 from nonebot.params import CommandArg
-from nonebot import on_command
+from ..on_compat import on_command
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown

@@ -197,6 +197,8 @@ class XiuxianDateManage:
                 """,
                 (now_time,)
             )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_id ON user_xiuxian(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_name ON user_xiuxian(user_name)")
 
             self.conn.commit()
 
@@ -2710,6 +2712,8 @@ class PlayerDataManager:
             # 持久连接
             self.conn = sqlite3.connect(self.database_path, check_same_thread=False)
             self.lock = threading.RLock()
+            self._ensured_tables = set()
+            self._ensured_fields = set()
             logger.opt(colors=True).info(f"<green>player数据库已连接！</green>")
 
     def _ensure_database_exists(self):
@@ -2722,7 +2726,11 @@ class PlayerDataManager:
         return self.conn.cursor()
 
     def _ensure_table_exists(self, table_name):
+        if table_name in self._ensured_tables:
+            return
         with self.lock:
+            if table_name in self._ensured_tables:
+                return
             cursor = self._get_cursor()
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -2732,9 +2740,15 @@ class PlayerDataManager:
                 cursor.execute(f"CREATE TABLE {table_name} (user_id TEXT PRIMARY KEY)")
                 logger.opt(colors=True).info(f"<green>表 {table_name} 已创建！</green>")
             self.conn.commit()
+            self._ensured_tables.add(table_name)
 
     def _ensure_field_exists(self, table_name, field, data_type='TEXT'):
+        cache_key = (table_name, field)
+        if cache_key in self._ensured_fields:
+            return
         with self.lock:
+            if cache_key in self._ensured_fields:
+                return
             cursor = self._get_cursor()
             cursor.execute(f"PRAGMA table_info({table_name})")
             fields = [col[1] for col in cursor.fetchall()]
@@ -2746,6 +2760,7 @@ class PlayerDataManager:
                     f"<green>字段 {field} 已添加到表 {table_name}，类型为 {data_type}！</green>"
                 )
             self.conn.commit()
+            self._ensured_fields.add(cache_key)
 
     def update_or_write_data(self, user_id, table_name, field, value, data_type='TEXT'):
         dt = str(data_type).upper().strip() if data_type is not None else "TEXT"

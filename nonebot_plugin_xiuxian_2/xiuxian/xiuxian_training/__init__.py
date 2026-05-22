@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime, timedelta
-from nonebot import on_command, on_regex
+from ..on_compat import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER

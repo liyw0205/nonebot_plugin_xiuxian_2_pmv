@@ -7,7 +7,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
-from nonebot import on_command
+from ..on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent

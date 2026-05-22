@@ -15,7 +15,7 @@ async def hajimi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     try:
         # 直接获取音频URL（文本形式）
-        audio_url = get_text_api(api_url, timeout=15)
+        audio_url = await get_text_api(api_url, timeout=15)
         if not audio_url or not audio_url.startswith(("http://", "https://")):
             raise ValueError("获取到的音频链接无效")
     except Exception as e:

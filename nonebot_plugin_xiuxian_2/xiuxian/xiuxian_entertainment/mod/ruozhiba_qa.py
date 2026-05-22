@@ -9,7 +9,7 @@ async def ruozhiba_qa_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     api_url = "https://api.pearktrue.cn/api/ruozhiba/"
 
     try:
-        result = get_json_api(api_url, timeout=15)
+        result = await get_json_api(api_url, timeout=15)
     except Exception as e:
         await handle_send(
             bot, event,
