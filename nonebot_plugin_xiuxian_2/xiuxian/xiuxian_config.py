@@ -12,7 +12,7 @@ Xiu_Plugin = Path(__file__).parent.parent
 
 class XiuConfig:
     def __init__(self):        
-        self.bot_uin = 
+        self.bot_uin = 0
         # 官方 Bot，对应的 UIN
         self.bot_uid = ""
         # 官方 Bot，对应的 UID
@@ -55,6 +55,8 @@ class XiuConfig:
         self.button_id = ""
         self.button_id2 = ""
         # 按钮ID
+        self.markdown_button_status = False
+        # 是否将原生Markdown蓝字命令转换为自定义键盘按钮
         self.gsk_link = ""
         # gsk地址获取真实ID用于md模板艾特
         self.web_link = ""

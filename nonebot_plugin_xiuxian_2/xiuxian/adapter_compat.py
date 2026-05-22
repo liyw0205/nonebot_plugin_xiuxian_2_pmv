@@ -671,6 +671,43 @@ def _extract_text_from_message_obj(message: Any) -> str:
     except Exception:
         return ""
 
+def _get_event_plaintext(event: BaseEvent, fallback: str = "") -> str:
+    try:
+        msg = event.get_message()
+        text = _extract_text_from_message_obj(msg)
+        if text:
+            return text
+    except Exception:
+        pass
+    return str(fallback or "")
+
+def _set_event_text_cache(event: BaseEvent, raw: str) -> None:
+    """
+    更新本插件兼容字段，但不覆盖 adapter-qq 1.7.1 起使用的 event.message 缓存。
+
+    新版 adapter-qq 的 get_message() 会读写 event.message；如果这里把它设成 str，
+    后续命令解析会拿不到真正的 Message 对象。
+    """
+    raw = str(raw or "")
+    setattr(event, "raw_message", raw)
+    setattr(event, "plaintext", raw)
+
+    try:
+        msg = event.get_message()
+    except Exception:
+        msg = None
+
+    if msg is not None:
+        try:
+            setattr(event, "message", msg)
+        except Exception:
+            pass
+    elif not (HAS_QQ and isinstance(event, (QQPrivateMessageEvent, QQChannelPrivateMessageEvent) + _QQ_GROUP_MESSAGE_EVENT_TYPES)):
+        try:
+            setattr(event, "message", raw)
+        except Exception:
+            pass
+
 
 def _get_adapter_name(bot: Any) -> str:
     try:
@@ -1795,6 +1832,51 @@ def _mention_user_is_bot(user: Any, bot_ids: set[str]) -> bool:
 
     return False
 
+def _qq_reply_is_to_bot(event: BaseEvent, bot: Optional[BaseBot] = None) -> bool:
+    if not (HAS_QQ and isinstance(event, (QQPrivateMessageEvent,) + _QQ_GROUP_MESSAGE_EVENT_TYPES)):
+        return False
+
+    bot_names: set[str] = set()
+    if bot is not None:
+        for obj in (
+            getattr(bot, "self_info", None),
+            getattr(bot, "_self_info", None),
+            getattr(bot, "bot_info", None),
+        ):
+            if obj is None:
+                continue
+            for attr in ("username", "name", "nickname"):
+                value = getattr(obj, attr, None)
+                if value:
+                    bot_names.add(str(value))
+
+    replies = []
+    direct_reply = getattr(event, "reply", None)
+    if direct_reply is not None:
+        replies.append(direct_reply)
+
+    msg_elements = getattr(event, "msg_elements", None) or []
+    if msg_elements:
+        replies.extend(msg_elements)
+
+    for reply in replies:
+        author = getattr(reply, "author", None)
+        if author is None:
+            continue
+
+        if not bool(getattr(author, "bot", False)):
+            continue
+
+        username = getattr(author, "username", None)
+        if username and str(username) in bot_names:
+            try:
+                setattr(event, "reply", reply)
+            except Exception:
+                pass
+            return True
+
+    return False
+
 
 def _strip_qq_group_at_me(event: BaseEvent, bot: Optional[BaseBot] = None) -> None:
     bot_ids = _collect_bot_self_ids(bot)
@@ -1846,6 +1928,9 @@ def _is_qq_group_message_to_me(
     bot: Optional[BaseBot] = None,
 ) -> bool:
     if bool(getattr(event, "to_me", False)):
+        return True
+
+    if _qq_reply_is_to_bot(event, bot):
         return True
 
     bot_ids = _collect_bot_self_ids(bot)
@@ -1902,7 +1987,7 @@ def patch_event_inplace(
         return event
 
     if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
-        raw = event.content or ""
+        raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
         sender_id = str(event.author.user_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
 
@@ -1910,9 +1995,7 @@ def patch_event_inplace(
         setattr(event, "user_id", sender_id)
         setattr(event, "group_id", None)
         setattr(event, "message_id", str(event.id))
-        setattr(event, "raw_message", raw)
-        setattr(event, "message", raw)
-        setattr(event, "plaintext", raw)
+        _set_event_text_cache(event, raw)
         setattr(
             event,
             "sender",
@@ -1925,7 +2008,7 @@ def patch_event_inplace(
         )
 
     elif HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
-        raw = event.content or ""
+        raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
         uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
         uid = str(uid)
         sender_name = _resolve_sender_name(event, fallback_user_id=uid)
@@ -1934,9 +2017,7 @@ def patch_event_inplace(
         setattr(event, "user_id", uid)
         setattr(event, "group_id", None)
         setattr(event, "message_id", str(event.id))
-        setattr(event, "raw_message", raw)
-        setattr(event, "message", raw)
-        setattr(event, "plaintext", raw)
+        _set_event_text_cache(event, raw)
         setattr(
             event,
             "sender",
@@ -1949,7 +2030,7 @@ def patch_event_inplace(
         )
 
     elif HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
-        raw = event.content or ""
+        raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
         sender_id = str(event.author.member_openid)
         sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
 
@@ -1957,9 +2038,7 @@ def patch_event_inplace(
         setattr(event, "user_id", sender_id)
         setattr(event, "group_id", str(event.group_openid))
         setattr(event, "message_id", str(event.id))
-        setattr(event, "raw_message", raw)
-        setattr(event, "message", raw)
-        setattr(event, "plaintext", raw)
+        _set_event_text_cache(event, raw)
         setattr(event, "to_me", _is_qq_group_message_to_me(event, bot))
         if bool(getattr(event, "to_me", False)):
             _strip_qq_group_at_me(event, bot)
@@ -1975,7 +2054,7 @@ def patch_event_inplace(
         )
 
     elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
-        raw = event.content or ""
+        raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
         uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
         uid = str(uid)
         sender_name = _resolve_sender_name(event, fallback_user_id=uid)
@@ -1984,9 +2063,7 @@ def patch_event_inplace(
         setattr(event, "user_id", uid)
         setattr(event, "group_id", str(event.channel_id))
         setattr(event, "message_id", str(event.id))
-        setattr(event, "raw_message", raw)
-        setattr(event, "message", raw)
-        setattr(event, "plaintext", raw)
+        _set_event_text_cache(event, raw)
         setattr(
             event,
             "sender",

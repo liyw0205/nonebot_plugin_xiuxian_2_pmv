@@ -22,7 +22,7 @@ from ..xiuxian_utils.utils import (
 )
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
-from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_config import convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
     get_random_trial_node,
@@ -346,7 +346,6 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         __rift_help_md__,
         native_markdown=True,
         fallback_msg=__rift_help__,
-        button_id=XiuConfig().button_id2,
     )
     await rift_help.finish()
 

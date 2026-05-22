@@ -55,7 +55,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, number_to, get_msg_pic, handle_send, send_msg_handler,
-    generate_command, _impersonating_users, handle_pic_msg_send, handle_send_md, send_help_message
+    generate_command, _impersonating_users, handle_pic_msg_send, handle_send_md, send_help_message,
+    parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import add_accessory_to_bag
@@ -1165,7 +1166,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
 @super_help.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修仙管理帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
@@ -1311,12 +1312,23 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 ※ GitHub 项目：liyw0205/nonebot_plugin_xiuxian_2_pmv
     """.strip()
 
+    page = parse_page_arg(args.extract_plain_text())
+    help_msg, page, total_pages = paginate_text_blocks(help_msg, page, per_page=4)
+    help_msg = f"{help_msg}\n\n发送“修仙手册 页码”可跳转页面。"
+    button_kwargs = build_pagination_buttons(
+        "修仙手册",
+        page,
+        total_pages,
+        extras=[
+            ("广播", "广播帮助"),
+            ("补偿", "补偿管理"),
+            ("插件", "插件帮助"),
+            ("查看", "查看广播"),
+        ],
+    )
     await send_help_message(
         bot, event, help_msg,
-        k1="广播", v1="广播帮助",
-        k2="状态", v2="查看广播",
-        k3="补偿", v3="补偿管理",
-        k4="插件", v4="插件帮助"
+        **button_kwargs
     )
     await super_help.finish()
 

@@ -28,7 +28,6 @@ from ..adapter_compat import (
     get_chat_scene,
     MessageSegment
 )
-from nonebot.adapters.onebot.v11 import Bot as OB11Bot
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
 from wcwidth import wcwidth
@@ -37,12 +36,25 @@ from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
 from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+
+
+def _is_onebot_v11_bot(bot: Any) -> bool:
+    """按适配器名称判断 OneBot V11，避免硬导入适配器类。"""
+    try:
+        adapter = getattr(bot, "adapter", None)
+        get_name = getattr(adapter, "get_name", None)
+        if callable(get_name):
+            name = str(get_name()).strip().lower()
+            return name in {"onebot v11", "ob11"}
+    except Exception:
+        pass
+    return False
 
 # 全局字典，存储管理员正在伪装的用户信息
 # 键为管理员的实际 user_id (str)，值为被伪装的 user_id (str)
@@ -957,7 +969,11 @@ def _link_help_command_part(text: str, known_commands: set[str] | frozenset[str]
     return "".join(linked_parts)
 
 
-def build_help_native_markdown(msg: str, buttons: list[tuple[str, str]] | None = None) -> str:
+def build_help_native_markdown(
+    msg: str,
+    buttons: list[tuple[str, str]] | None = None,
+    append_buttons: bool = True,
+) -> str:
     """将普通帮助文本转换为带蓝字命令的原生 Markdown 文本。"""
     text = str(msg or " ")
     known_commands = set(_get_known_help_commands())
@@ -997,12 +1013,13 @@ def build_help_native_markdown(msg: str, buttons: list[tuple[str, str]] | None =
                 lines.append(line)
         md_text = "\n".join(lines)
 
-    button_links = []
-    for label, command in buttons or []:
-        if label and command:
-            button_links.append(build_md_command_link(label, command))
-    if button_links:
-        md_text = f"{md_text.rstrip()}\n\n---\n" + " | ".join(button_links)
+    if append_buttons:
+        button_links = []
+        for label, command in buttons or []:
+            if label and command:
+                button_links.append(build_md_command_link(label, command))
+        if button_links:
+            md_text = f"{md_text.rstrip()}\n\n---\n" + " | ".join(button_links)
     return md_text
 
 
@@ -1022,7 +1039,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     MAX_LEN = 3800
 
     # OneBot 不走 markdown
-    if isinstance(bot, OB11Bot):
+    if _is_onebot_v11_bot(bot):
         markdown_status = False
     else:
         markdown_status = XiuConfig().markdown_status
@@ -1184,6 +1201,83 @@ def _allow_native_markdown(event) -> bool:
     scene = get_chat_scene(event)
     return scene in ("group", "private")
 
+def _markdown_buttons_enabled() -> bool:
+    return bool(getattr(XiuConfig(), "markdown_button_status", False))
+
+def _has_button_id(button_id) -> bool:
+    return bool(str(button_id or "").strip())
+
+def parse_page_arg(text, default: int = 1) -> int:
+    match = re.search(r"\d+", str(text or ""))
+    if not match:
+        return default
+    return max(int(match.group()), 1)
+
+def _normalize_button_pair(label, command) -> tuple[str, str] | None:
+    label_text = str(label or "").replace("\r", " ").replace("\n", " ").strip()
+    command_text = str(command or "").replace("\r", " ").replace("\n", " ").strip()
+    if not label_text or label_text == " " or not command_text or command_text == " ":
+        return None
+    return label_text, command_text
+
+def _build_keyboard_rows(buttons: list[tuple[str, str]], row_size: int = 3) -> list[list[tuple[str, str]]]:
+    rows = []
+    current = []
+    for label, command in buttons:
+        pair = _normalize_button_pair(label, command)
+        if not pair:
+            continue
+        current.append(pair)
+        if len(current) >= row_size:
+            rows.append(current)
+            current = []
+    if current:
+        rows.append(current)
+    return rows
+
+def paginate_text_blocks(msg: str, current_page: int = 1, per_page: int = 4) -> tuple[str, int, int]:
+    text = str(msg or "").strip()
+    if not text:
+        return " ", 1, 1
+
+    lines = text.splitlines()
+    title = lines[0].strip() if lines else ""
+    body = "\n".join(lines[1:]).strip()
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", body) if block.strip()]
+    if not blocks:
+        return text, 1, 1
+
+    total_pages = max(math.ceil(len(blocks) / max(per_page, 1)), 1)
+    current_page = min(max(current_page, 1), total_pages)
+    start = (current_page - 1) * per_page
+    page_blocks = blocks[start:start + per_page]
+    page_text = f"{title}（第{current_page}/{total_pages}页）\n\n" + "\n\n".join(page_blocks)
+    return page_text, current_page, total_pages
+
+def build_pagination_buttons(
+    command: str,
+    current_page: int,
+    total_pages: int,
+    extras: list[tuple[str, str]] | None = None,
+    max_buttons: int = 4,
+) -> dict[str, str]:
+    buttons: list[tuple[str, str]] = []
+    if current_page > 1:
+        buttons.append(("上一页", f"{command} {current_page - 1}"))
+    if current_page < total_pages:
+        buttons.append(("下一页", f"{command} {current_page + 1}"))
+
+    for label, value in extras or []:
+        pair = _normalize_button_pair(label, value)
+        if pair:
+            buttons.append(pair)
+
+    result = {}
+    for index, (label, value) in enumerate(buttons[:max_buttons], 1):
+        result[f"k{index}"] = label
+        result[f"v{index}"] = value
+    return result
+
 async def handle_send(
     bot,
     event,
@@ -1201,6 +1295,7 @@ async def handle_send(
     button_id=None,
     native_markdown: bool = False,
     fallback_msg: str = None,
+    keyboard_rows: list[list[tuple[str, str]]] | None = None,
     at_msg: bool = True,
 ):
     """统一消息入口：
@@ -1208,7 +1303,7 @@ async def handle_send(
     2) MD失败自动降级普通消息
     3) 频道只走MD模板，不走原生MD
     """
-    if isinstance(bot, OB11Bot):
+    if _is_onebot_v11_bot(bot):
         markdown_status = False
     else:
         markdown_status = XiuConfig().markdown_status
@@ -1222,6 +1317,7 @@ async def handle_send(
                 msg,
                 button_id=button_id,
                 fallback_msg=fallback_msg,
+                keyboard_rows=keyboard_rows,
                 at_msg=at_msg,
             )
             return
@@ -1233,6 +1329,12 @@ async def handle_send(
         try:
             # 有 md_type 走 type 风格
             if md_type:
+                if _markdown_buttons_enabled() and _allow_native_markdown(event) and not _has_button_id(button_id):
+                    await handle_send_markdown_type(
+                        bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id
+                    )
+                    return
+
                 # 优先模板（频道也支持）
                 if XiuConfig().markdown_id2:
                     await handle_send_md_type(bot, event, msg, md_type, k1, v1, k2, v2, k3, v3, k4, v4, button_id=button_id)
@@ -1357,6 +1459,91 @@ def build_native_page_text(page_list: list[str]) -> str:
         text += f"\r{page_tail}"
     return text
 
+def build_native_page_rows(page_list: list[str]) -> tuple[list[list[tuple[str, str]]], str]:
+    page_tail = ""
+    if not page_list:
+        return [], page_tail
+
+    n = len(page_list)
+    if n % 2 == 1:
+        page_tail = str(page_list[-1])
+        n -= 1
+
+    buttons = [
+        (str(page_list[i]), str(page_list[i + 1]))
+        for i in range(0, min(n, 18), 2)
+    ]
+    return _build_keyboard_rows(buttons), page_tail
+
+def _extract_markdown_keyboard_buttons(md_text: str) -> tuple[str, list[list[tuple[str, str]]]]:
+    """
+    将 Markdown 中的 QQ inlinecmd 蓝字链接抽取为 keyboard rows。
+
+    只抽取常见的整行按钮区，避免把正文中的说明性链接误移到键盘。
+    """
+    rows = []
+    content_lines = []
+    link_re = re.compile(
+        r"\[([^\]\r\n]+)\]\(mqqapi://aio/inlinecmd\?command=([^)&\r\n]+)"
+        r"(?:&enter=(?:true|false))?(?:&reply=(?:true|false))?\)"
+    )
+
+    for line in str(md_text or " ").split("\r"):
+        matches = list(link_re.finditer(line))
+        if not matches:
+            content_lines.append(line)
+            continue
+
+        leftover = link_re.sub("", line)
+        leftover = leftover.replace("|", "").replace("---", "").strip()
+        if leftover:
+            content_lines.append(line)
+            continue
+
+        row = []
+        for match in matches:
+            label = match.group(1)
+            command = unquote(match.group(2))
+            pair = _normalize_button_pair(label, command)
+            if pair:
+                row.append(pair)
+        if row:
+            rows.append(row)
+
+    if rows:
+        while content_lines and not content_lines[-1].strip():
+            content_lines.pop()
+        while content_lines and content_lines[-1].strip() == "---":
+            content_lines.pop()
+            while content_lines and not content_lines[-1].strip():
+                content_lines.pop()
+
+    content = "\r".join(content_lines).strip("\r") or " "
+    return content, rows
+
+async def _send_markdown_or_keyboard(
+    bot,
+    event,
+    md_text: str,
+    *,
+    button_id=None,
+    rows: list[list[tuple[str, str]]] | None = None,
+    fallback_md_text: str | None = None,
+    log_prefix: str = "Markdown按钮",
+):
+    rows = [] if _has_button_id(button_id) else (rows or [])
+    if rows:
+        try:
+            md_seg = MessageSegment.markdown_keyboard(bot, md_text or " ", rows)
+            await bot.send(event=event, message=md_seg)
+            return
+        except Exception as e:
+            logger.warning(f"{log_prefix}发送失败，降级原生Markdown: {e}")
+            md_text = fallback_md_text if fallback_md_text is not None else md_text
+
+    md_seg = MessageSegment.markdown(bot, md_text or " ", button_id)
+    await bot.send(event=event, message=md_seg)
+
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息（频道可用），失败降级普通消息"""
     if not markdown_id:
@@ -1421,7 +1608,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
 async def handle_send_markdown(
     bot, event, msg: str,
     shell=None, title=None, page=None, page_param=None,
-    title_param=None, msg_param=None, button_id=None, at_msg=True
+    title_param=None, msg_param=None, button_id=None, keyboard_rows=None, at_msg=True
 ):
     """发送原生md消息（仅普通群/私聊），失败降级普通消息"""
     if not _allow_native_markdown(event):
@@ -1451,12 +1638,18 @@ async def handle_send_markdown(
         else:
             title = f"<@{open_id}>\r{title}"
 
+    page_rows = []
+    page_text = " "
+    fallback_page_text = None
     if page:
-        page_text = build_native_page_text(page)
+        if _markdown_buttons_enabled():
+            page_rows, page_text = build_native_page_rows(page)
+            page_text = page_text or " "
+            fallback_page_text = build_native_page_text(page)
+        else:
+            page_text = build_native_page_text(page)
     elif page_param:
         page_text = page_param
-    else:
-        page_text = " "
 
     blocks = []
     if title_param is not None:
@@ -1481,8 +1674,32 @@ async def handle_send_markdown(
     if XiuConfig().message_optimization:
         md_text = optimize_message(md_text, False)
     try:
-        md_seg = MessageSegment.markdown(bot, md_text, button_id)
-        await bot.send(event=event, message=md_seg)
+        rows = keyboard_rows or page_rows
+        fallback_md_text = md_text
+        if fallback_page_text:
+            fallback_blocks = blocks.copy()
+            if page_text.strip():
+                fallback_blocks[-1] = fallback_page_text
+            else:
+                fallback_blocks.append(fallback_page_text)
+            fallback_md_text = "\r\r".join(fallback_blocks).rstrip()
+            if XiuConfig().message_optimization:
+                fallback_md_text = optimize_message(fallback_md_text, False)
+        if _markdown_buttons_enabled():
+            extracted_text, extracted_rows = _extract_markdown_keyboard_buttons(md_text)
+            md_text = extracted_text
+            if extracted_rows and not rows:
+                rows = extracted_rows
+
+        await _send_markdown_or_keyboard(
+            bot,
+            event,
+            md_text,
+            button_id=button_id,
+            rows=rows,
+            fallback_md_text=fallback_md_text,
+            log_prefix="原生md按钮",
+        )
     except Exception as e:
         logger.warning(f"原生md发送失败，降级普通消息: {e}")
         await handle_send2(bot, event, raw_plain)
@@ -1494,6 +1711,7 @@ async def handle_send_native_markdown(
     msg: str,
     button_id=None,
     fallback_msg: str = None,
+    keyboard_rows: list[list[tuple[str, str]]] | None = None,
     at_msg: bool = True,
 ):
     """
@@ -1528,8 +1746,23 @@ async def handle_send_native_markdown(
         md_text = optimize_message(md_text, False)
 
     try:
-        md_seg = MessageSegment.markdown(bot, md_text, button_id)
-        await bot.send(event=event, message=md_seg)
+        rows = keyboard_rows or []
+        fallback_md_text = md_text
+        if _markdown_buttons_enabled():
+            extracted_text, extracted_rows = _extract_markdown_keyboard_buttons(md_text)
+            md_text = extracted_text
+            if extracted_rows and not rows:
+                rows = extracted_rows
+
+        await _send_markdown_or_keyboard(
+            bot,
+            event,
+            md_text,
+            button_id=button_id,
+            rows=rows,
+            fallback_md_text=fallback_md_text,
+            log_prefix="原生Markdown按钮",
+        )
     except Exception as e:
         logger.warning(f"原生 Markdown 发送失败，降级普通消息: {e}")
         await handle_send2(bot, event, raw_plain)
@@ -1553,7 +1786,9 @@ async def send_help_message(
 ):
     """发送帮助文本：Markdown 开启时自动生成蓝字命令，关闭时保持纯文本。"""
     buttons = [(k1, v1), (k2, v2), (k3, v3), (k4, v4)]
-    md_msg = build_help_native_markdown(msg, buttons)
+    has_button_id = _has_button_id(button_id)
+    md_msg = build_help_native_markdown(msg, buttons, append_buttons=not has_button_id)
+    rows = _build_keyboard_rows(buttons) if _markdown_buttons_enabled() and not has_button_id else None
     await handle_send(
         bot,
         event,
@@ -1561,6 +1796,7 @@ async def send_help_message(
         native_markdown=True,
         fallback_msg=strip_md_command_links(msg),
         button_id=button_id,
+        keyboard_rows=rows,
         at_msg=at_msg,
     )
 
@@ -1722,10 +1958,26 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
     md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false)"
     if k4 and v4:
         md_text = f"{msg}\r\r---\r\r[{k1}](mqqapi://aio/inlinecmd?command={v1}&enter=false&reply=false) | [{k2}](mqqapi://aio/inlinecmd?command={v2}&enter=false&reply=false) | [{k3}](mqqapi://aio/inlinecmd?command={v3}&enter=false&reply=false) | [{k4}](mqqapi://aio/inlinecmd?command={v4}&enter=false&reply=false)"
+    if _has_button_id(button_id):
+        md_text = msg
 
     try:
-        md_seg = MessageSegment.markdown(bot, md_text, button_id)
-        await bot.send(event=event, message=md_seg)
+        rows = []
+        fallback_md_text = md_text
+        if _markdown_buttons_enabled():
+            extracted_text, extracted_rows = _extract_markdown_keyboard_buttons(md_text)
+            md_text = extracted_text
+            rows = extracted_rows
+
+        await _send_markdown_or_keyboard(
+            bot,
+            event,
+            md_text,
+            button_id=button_id,
+            rows=rows,
+            fallback_md_text=fallback_md_text,
+            log_prefix="原生md(type)按钮",
+        )
     except Exception as e:
         logger.warning(f"原生md(type)发送失败，降级普通消息: {e}")
         await handle_send2(bot, event, raw_plain)

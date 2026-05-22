@@ -32,7 +32,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value,
-    send_help_message
+    send_help_message, parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_trade import BANNED_ITEM_IDS
@@ -431,7 +431,7 @@ def save_lottery_data(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 @help_in.handle(parameterless=[Cooldown(cd_time=1.4)])
-async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
@@ -508,18 +508,25 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 发送“XX帮助”可查看对应玩法详细说明。
 """.strip()
 
+    page = parse_page_arg(args.extract_plain_text())
+    msg, page, total_pages = paginate_text_blocks(msg, page, per_page=4)
+    msg = f"{msg}\n\n发送“修仙帮助 页码”可跳转页面。"
+    button_kwargs = build_pagination_buttons(
+        "修仙帮助",
+        page,
+        total_pages,
+        extras=[
+            ("存档", "我的修仙信息"),
+            ("背包", "背包帮助"),
+            ("地图", "地图帮助"),
+            ("秘境", "秘境帮助"),
+        ],
+    )
     await send_help_message(
         bot,
         event,
         msg,
-        k1="存档",
-        v1="我的修仙信息",
-        k2="背包",
-        v2="背包帮助",
-        k3="地图",
-        v3="地图帮助",
-        k4="秘境",
-        v4="秘境帮助",
+        **button_kwargs,
         button_id=XiuConfig().button_id2,
     )
     await help_in.finish()

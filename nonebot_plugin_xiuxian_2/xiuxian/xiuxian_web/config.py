@@ -350,6 +350,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "MD设置"
     },
+    "markdown_button_status": {
+        "name": "Markdown按钮",
+        "description": "开启后将原生Markdown蓝字命令转为QQ自定义键盘按钮",
+        "type": "bool",
+        "category": "MD设置"
+    },
     "gsk_link": {
         "name": "gsk地址",
         "description": "用于发送md模板艾特",

@@ -1,5 +1,8 @@
 #!usr/bin/env python3
 # -*- coding: utf-8 -*-
+import time
+from collections import deque
+
 from .xiuxian_utils.download_xiuxian_data import download_xiuxian_data
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
@@ -9,6 +12,7 @@ from .adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     get_group_id,
+    patch_bot_inplace,
     patch_context
 )
 from nonebot import get_driver
@@ -77,6 +81,248 @@ __plugin_meta__ = PluginMetadata(
 
 def _safe_str(value):
     return "" if value is None else str(value)
+
+
+def _get_config_float(name: str, default: float) -> float:
+    try:
+        return float(getattr(DRIVER.config, name, default))
+    except Exception:
+        return default
+
+
+def _get_config_int(name: str, default: int) -> int:
+    try:
+        return int(getattr(DRIVER.config, name, default))
+    except Exception:
+        return default
+
+
+def _get_config_str(name: str, default: str) -> str:
+    try:
+        return str(getattr(DRIVER.config, name, default))
+    except Exception:
+        return default
+
+
+USER_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_user_command_rate_window", 60.0)
+USER_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_user_command_rate_limit", 100)
+USER_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_log_interval", 10.0)
+USER_COMMAND_RATE_CACHE_CLEAN_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_cache_clean_interval", 60.0)
+GLOBAL_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_global_command_rate_window", 1.0)
+GLOBAL_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_global_command_rate_limit", 120)
+GLOBAL_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_float("xiuxian_global_command_rate_log_interval", 5.0)
+GLOBAL_COMMAND_OVERLOAD_NOTICE = _get_config_str("xiuxian_global_command_overload_notice", "当前命令较多，已进入繁忙保护，请稍后再试。")
+GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS = _get_config_float("xiuxian_global_command_overload_notice_interval", 30.0)
+GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_global_command_overload_notice_rate_window", 1.0)
+GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_LIMIT = _get_config_int("xiuxian_global_command_overload_notice_rate_limit", 5)
+_user_command_rate_hits: dict[str, deque[float]] = {}
+_user_command_rate_last_log: dict[str, float] = {}
+_user_command_rate_last_cleanup = 0.0
+_global_command_rate_hits: deque[float] = deque()
+_global_command_rate_last_log = 0.0
+_global_overload_notice_hits: deque[float] = deque()
+_global_overload_notice_last_sent: dict[str, float] = {}
+
+
+def _get_rate_limit_user_id(event):
+    try:
+        return _safe_str(event.get_user_id())
+    except Exception:
+        pass
+
+    for attr in ("user_id", "operator_id"):
+        value = getattr(event, attr, None)
+        if value:
+            return _safe_str(value)
+
+    author = getattr(event, "author", None)
+    if author is not None:
+        for attr in ("user_openid", "member_openid", "id"):
+            value = getattr(author, attr, None)
+            if value:
+                return _safe_str(value)
+
+    return ""
+
+
+def _get_rate_limit_plain_text(event) -> str:
+    for attr in ("raw_message", "plaintext", "content"):
+        value = getattr(event, attr, None)
+        if value:
+            return _safe_str(value).strip()
+
+    try:
+        message = event.get_message()
+        if hasattr(message, "extract_plain_text"):
+            return _safe_str(message.extract_plain_text()).strip()
+        return _safe_str(message).strip()
+    except Exception:
+        pass
+
+    return ""
+
+
+def _is_command_attempt_text(text: str) -> bool:
+    text = _safe_str(text).strip()
+    if not text:
+        return False
+
+    command_start = getattr(DRIVER.config, "command_start", None)
+    if command_start is None:
+        command_start = {""}
+
+    if isinstance(command_start, str):
+        starts = {command_start}
+    else:
+        starts = {_safe_str(item) for item in command_start}
+    if "" in starts:
+        # 本项目默认 COMMAND_START = [""]，任意文本都可能进入 on_command 匹配。
+        return True
+
+    return any(text.startswith(prefix) for prefix in starts if prefix)
+
+
+def _cleanup_user_command_rate_cache(now: float):
+    global _user_command_rate_last_cleanup
+
+    if now - _user_command_rate_last_cleanup < USER_COMMAND_RATE_CACHE_CLEAN_INTERVAL_SECONDS:
+        return
+
+    cutoff = now - USER_COMMAND_RATE_WINDOW_SECONDS
+    for user_id, hits in list(_user_command_rate_hits.items()):
+        while hits and hits[0] <= cutoff:
+            hits.popleft()
+
+        if not hits:
+            _user_command_rate_hits.pop(user_id, None)
+            _user_command_rate_last_log.pop(user_id, None)
+
+    _user_command_rate_last_cleanup = now
+
+
+def _cleanup_global_overload_notice_cache(now: float):
+    cutoff = now - GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_WINDOW_SECONDS
+    while _global_overload_notice_hits and _global_overload_notice_hits[0] <= cutoff:
+        _global_overload_notice_hits.popleft()
+
+    expire_before = now - GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS
+    for key, last_sent in list(_global_overload_notice_last_sent.items()):
+        if last_sent <= expire_before:
+            _global_overload_notice_last_sent.pop(key, None)
+
+
+def _check_user_command_rate_limit(user_id: str, now: float):
+    if not user_id:
+        return
+
+    _cleanup_user_command_rate_cache(now)
+
+    cutoff = now - USER_COMMAND_RATE_WINDOW_SECONDS
+    hits = _user_command_rate_hits.setdefault(user_id, deque())
+
+    while hits and hits[0] <= cutoff:
+        hits.popleft()
+
+    if len(hits) >= USER_COMMAND_RATE_LIMIT:
+        last_log = _user_command_rate_last_log.get(user_id, 0.0)
+        if now - last_log >= USER_COMMAND_RATE_LOG_INTERVAL_SECONDS:
+            logger.warning(
+                f"[用户命令限流] user_id={user_id} 在 "
+                f"{int(USER_COMMAND_RATE_WINDOW_SECONDS)}s 内超过 "
+                f"{USER_COMMAND_RATE_LIMIT} 条命令，已忽略后续命令"
+            )
+            _user_command_rate_last_log[user_id] = now
+        raise IgnoredException("用户命令触发限流")
+
+
+def _record_user_command_rate_hit(user_id: str, now: float):
+    if user_id:
+        _user_command_rate_hits.setdefault(user_id, deque()).append(now)
+
+
+def _is_global_command_rate_limited(now: float):
+    global _global_command_rate_last_log
+
+    cutoff = now - GLOBAL_COMMAND_RATE_WINDOW_SECONDS
+    while _global_command_rate_hits and _global_command_rate_hits[0] <= cutoff:
+        _global_command_rate_hits.popleft()
+
+    if len(_global_command_rate_hits) >= GLOBAL_COMMAND_RATE_LIMIT:
+        if now - _global_command_rate_last_log >= GLOBAL_COMMAND_RATE_LOG_INTERVAL_SECONDS:
+            logger.warning(
+                f"[全局命令入口限流] 最近 "
+                f"{GLOBAL_COMMAND_RATE_WINDOW_SECONDS:g}s 内超过 "
+                f"{GLOBAL_COMMAND_RATE_LIMIT} 条命令，已在 matcher 前忽略超量事件"
+            )
+            _global_command_rate_last_log = now
+        return True
+
+    _global_command_rate_hits.append(now)
+    return False
+
+
+def _get_global_overload_notice_key(event, user_id: str) -> str:
+    try:
+        group_id = _safe_str(get_group_id(event))
+    except Exception:
+        group_id = _safe_str(getattr(event, "group_id", ""))
+
+    if group_id:
+        return f"group:{group_id}"
+
+    if user_id:
+        return f"user:{user_id}"
+
+    try:
+        return f"session:{event.get_session_id()}"
+    except Exception:
+        return ""
+
+
+def _can_send_global_overload_notice(event, user_id: str, now: float) -> bool:
+    if not GLOBAL_COMMAND_OVERLOAD_NOTICE or GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_LIMIT <= 0:
+        return False
+
+    _cleanup_global_overload_notice_cache(now)
+    if len(_global_overload_notice_hits) >= GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_LIMIT:
+        return False
+
+    key = _get_global_overload_notice_key(event, user_id)
+    if key:
+        last_sent = _global_overload_notice_last_sent.get(key, 0.0)
+        if now - last_sent < GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS:
+            return False
+        _global_overload_notice_last_sent[key] = now
+
+    _global_overload_notice_hits.append(now)
+    return True
+
+
+async def _send_global_overload_notice(bot: Bot, event, user_id: str, now: float):
+    if not _can_send_global_overload_notice(event, user_id, now):
+        return
+
+    try:
+        bot = patch_bot_inplace(bot)
+        await bot.send(event=event, message=GLOBAL_COMMAND_OVERLOAD_NOTICE)
+    except Exception as e:
+        logger.debug(f"[全局命令入口限流] 繁忙提示发送失败: {e}")
+
+
+async def _check_command_ingress_rate_limit(bot: Bot, event):
+    plain_text = _get_rate_limit_plain_text(event)
+    if not _is_command_attempt_text(plain_text):
+        return
+
+    user_id = _get_rate_limit_user_id(event)
+    now = time.monotonic()
+
+    _check_user_command_rate_limit(user_id, now)
+    if _is_global_command_rate_limited(now):
+        await _send_global_overload_notice(bot, event, user_id, now)
+        raise IgnoredException("全局命令入口过载")
+
+    _record_user_command_rate_hit(user_id, now)
 
 
 def _get_event_name(event):
@@ -297,6 +543,8 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         raise IgnoredException("消息艾特了其他机器人,已忽略")
 
     qq_group_at_removed = _normalize_qq_group_at_message(bot, event)
+    await _check_command_ingress_rate_limit(bot, event)
+
     bot, event = patch_context(bot, event)
 
     if _is_other_bot_at_message(bot, event):
