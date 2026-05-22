@@ -76,7 +76,7 @@ CONFIG_EDITABLE_FIELDS = {
     "xiuxian_user_command_rate_window": {
         "name": "单用户限流窗口",
         "description": "单用户命令限流统计窗口（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_user_command_rate_limit": {
@@ -88,19 +88,19 @@ CONFIG_EDITABLE_FIELDS = {
     "xiuxian_user_command_rate_log_interval": {
         "name": "单用户限流日志间隔",
         "description": "同一用户触发限流后的日志输出间隔（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_user_command_rate_cache_clean_interval": {
         "name": "单用户限流缓存清理间隔",
         "description": "单用户限流缓存清理间隔（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_global_command_rate_window": {
         "name": "全局限流窗口",
         "description": "全局命令入口限流统计窗口（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_global_command_rate_limit": {
@@ -112,7 +112,7 @@ CONFIG_EDITABLE_FIELDS = {
     "xiuxian_global_command_rate_log_interval": {
         "name": "全局限流日志间隔",
         "description": "全局命令入口触发限流后的日志输出间隔（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_global_command_overload_notice": {
@@ -124,13 +124,13 @@ CONFIG_EDITABLE_FIELDS = {
     "xiuxian_global_command_overload_notice_interval": {
         "name": "过载提示间隔",
         "description": "同一群/用户过载提示间隔（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_global_command_overload_notice_rate_window": {
         "name": "过载提示频率窗口",
         "description": "过载提示全局发送频率统计窗口（秒）",
-        "type": "float",
+        "type": "int",
         "category": "限流设置"
     },
     "xiuxian_global_command_overload_notice_rate_limit": {
@@ -590,7 +590,7 @@ def save_config_values(new_values):
                 # --- 4. 数字类型转换 ---
                 elif field_type == "int":
                     try:
-                        formatted_value = str(int(new_value))
+                        formatted_value = str(int(float(new_value)))
                     except (ValueError, TypeError):
                         formatted_value = "0"
                 

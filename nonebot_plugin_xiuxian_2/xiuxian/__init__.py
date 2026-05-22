@@ -101,16 +101,9 @@ def _get_config_raw(name: str, default):
         return default
 
 
-def _get_config_float(name: str, default: float) -> float:
-    try:
-        return float(_get_config_raw(name, default))
-    except Exception:
-        return default
-
-
 def _get_config_int(name: str, default: int) -> int:
     try:
-        return int(_get_config_raw(name, default))
+        return int(float(_get_config_raw(name, default)))
     except Exception:
         return default
 
@@ -122,16 +115,16 @@ def _get_config_str(name: str, default: str) -> str:
         return default
 
 
-USER_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_user_command_rate_window", 60.0)
+USER_COMMAND_RATE_WINDOW_SECONDS = _get_config_int("xiuxian_user_command_rate_window", 60)
 USER_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_user_command_rate_limit", 1000)
-USER_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_log_interval", 10.0)
-USER_COMMAND_RATE_CACHE_CLEAN_INTERVAL_SECONDS = _get_config_float("xiuxian_user_command_rate_cache_clean_interval", 60.0)
-GLOBAL_COMMAND_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_global_command_rate_window", 1.0)
+USER_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_int("xiuxian_user_command_rate_log_interval", 10)
+USER_COMMAND_RATE_CACHE_CLEAN_INTERVAL_SECONDS = _get_config_int("xiuxian_user_command_rate_cache_clean_interval", 60)
+GLOBAL_COMMAND_RATE_WINDOW_SECONDS = _get_config_int("xiuxian_global_command_rate_window", 1)
 GLOBAL_COMMAND_RATE_LIMIT = _get_config_int("xiuxian_global_command_rate_limit", 1000)
-GLOBAL_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_float("xiuxian_global_command_rate_log_interval", 5.0)
+GLOBAL_COMMAND_RATE_LOG_INTERVAL_SECONDS = _get_config_int("xiuxian_global_command_rate_log_interval", 5)
 GLOBAL_COMMAND_OVERLOAD_NOTICE = _get_config_str("xiuxian_global_command_overload_notice", "当前命令较多，已进入繁忙保护，请稍后再试。")
-GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS = _get_config_float("xiuxian_global_command_overload_notice_interval", 30.0)
-GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_WINDOW_SECONDS = _get_config_float("xiuxian_global_command_overload_notice_rate_window", 1.0)
+GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS = _get_config_int("xiuxian_global_command_overload_notice_interval", 30)
+GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_WINDOW_SECONDS = _get_config_int("xiuxian_global_command_overload_notice_rate_window", 1)
 GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_LIMIT = _get_config_int("xiuxian_global_command_overload_notice_rate_limit", 5)
 _user_command_rate_hits: dict[str, deque[float]] = {}
 _user_command_rate_last_log: dict[str, float] = {}

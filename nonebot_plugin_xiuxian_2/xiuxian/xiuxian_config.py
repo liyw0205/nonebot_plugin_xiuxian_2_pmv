@@ -46,25 +46,25 @@ class XiuConfig:
         self.empty_msg = "> 未识别到指令，可发送【修仙帮助】查看可用功能。"
         # 默认回复内容
 
-        self.xiuxian_user_command_rate_window = 60.0
+        self.xiuxian_user_command_rate_window = 60
         # 单用户命令限流统计窗口（秒）
         self.xiuxian_user_command_rate_limit = 100
         # 单用户在统计窗口内允许的命令条数
-        self.xiuxian_user_command_rate_log_interval = 10.0
+        self.xiuxian_user_command_rate_log_interval = 10
         # 单用户限流日志输出间隔（秒）
-        self.xiuxian_user_command_rate_cache_clean_interval = 60.0
+        self.xiuxian_user_command_rate_cache_clean_interval = 60
         # 单用户限流缓存清理间隔（秒）
-        self.xiuxian_global_command_rate_window = 1.0
+        self.xiuxian_global_command_rate_window = 1
         # 全局命令入口限流统计窗口（秒）
         self.xiuxian_global_command_rate_limit = 1000
         # 全局命令入口在统计窗口内允许的命令条数
-        self.xiuxian_global_command_rate_log_interval = 5.0
+        self.xiuxian_global_command_rate_log_interval = 5
         # 全局命令入口限流日志输出间隔（秒）
         self.xiuxian_global_command_overload_notice = "当前命令较多，已进入繁忙保护，请稍后再试。"
         # 全局命令入口过载提示，留空则不提示
-        self.xiuxian_global_command_overload_notice_interval = 30.0
+        self.xiuxian_global_command_overload_notice_interval = 30
         # 同一群/用户过载提示间隔（秒）
-        self.xiuxian_global_command_overload_notice_rate_window = 1.0
+        self.xiuxian_global_command_overload_notice_rate_window = 1
         # 过载提示全局发送频率统计窗口（秒）
         self.xiuxian_global_command_overload_notice_rate_limit = 5
         # 过载提示全局发送频率上限
