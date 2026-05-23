@@ -194,9 +194,10 @@ class DungeonManager:
                 return
             self.__class__._has_init = True
 
-            self.data_path = Path(__file__).parent.absolute()
-            self.dungeon_data_path = self.data_path / "data"
+            self.plugin_path = Path(__file__).parent.absolute()
+            self.dungeon_data_path = Path() / "data" / "xiuxian" / "副本"
             self.config_file = self.dungeon_data_path / "副本.json"
+            self.legacy_config_file = self.plugin_path / "data" / "副本.json"
 
             self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
 
@@ -236,9 +237,16 @@ class DungeonManager:
 
     def _load_dungeon_templates(self) -> List[DungeonTemplate]:
         templates = []
-        if self.config_file.exists():
+        config_file = self.config_file
+        if not config_file.exists() and self.legacy_config_file.exists():
+            config_file = self.legacy_config_file
+            logger.warning(
+                f"副本配置文件已迁移到 {self.config_file}，当前仍从旧路径读取: {self.legacy_config_file}"
+            )
+
+        if config_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 for template_data in config_data:
                     templates.append(DungeonTemplate(template_data))

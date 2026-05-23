@@ -14,6 +14,7 @@ from nonebot.log import logger
 from nonebot.matcher import matchers
 from nonebot.plugin.on import (
     on as _nb_on,
+    on_command as _nb_on_command,
     on_endswith as _nb_on_endswith,
     on_fullmatch as _nb_on_fullmatch,
     on_keyword as _nb_on_keyword,
@@ -21,7 +22,6 @@ from nonebot.plugin.on import (
     on_regex as _nb_on_regex,
     on_shell_command as _nb_on_shell_command,
     on_startswith as _nb_on_startswith,
-    on_command as _nb_on_command,
 )
 from nonebot.rule import TrieRule
 
@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from nonebot.adapters import Event
     from nonebot.matcher import Matcher
 
+
+CommandValue = str | tuple[str, ...]
+CommandInput = CommandValue | list[CommandValue] | set[CommandValue]
+TextValue = str | tuple[str, ...]
 
 _CURRENT_EVENT: ContextVar[object | None] = ContextVar(
     "xiuxian_on_compat_event",
@@ -85,8 +89,10 @@ def _is_xiuxian_module(module_name: str | None) -> bool:
     if not module_name:
         return False
     return (
-        module_name.startswith("xiuxian.")
-        or module_name == "xiuxian"
+        module_name == "xiuxian"
+        or module_name.startswith("xiuxian.")
+        or module_name == "nonebot_plugin_xiuxian_2.xiuxian"
+        or module_name.startswith("nonebot_plugin_xiuxian_2.xiuxian.")
         or ".xiuxian." in module_name
         or module_name.endswith(".xiuxian")
     )
@@ -96,16 +102,16 @@ def _should_route_matcher(matcher: type["Matcher"]) -> bool:
     return _is_xiuxian_module(getattr(matcher, "module_name", None))
 
 
-def _command_tuple(command: str | tuple[str, ...]) -> tuple[str, ...]:
+def _command_tuple(command: CommandValue) -> tuple[str, ...]:
     if isinstance(command, str):
         return (command,)
     return tuple(command)
 
 
 def _split_commands(
-    cmd: str | tuple[str, ...] | list[str | tuple[str, ...]] | set[str | tuple[str, ...]],
-    aliases: set[str | tuple[str, ...]] | None,
-) -> tuple[str | tuple[str, ...], set[str | tuple[str, ...]] | None, set[tuple[str, ...]]]:
+    cmd: CommandInput,
+    aliases: set[CommandValue] | None,
+) -> tuple[CommandValue, set[CommandValue] | None, set[tuple[str, ...]]]:
     if isinstance(cmd, (list, set)):
         raw_commands = list(cmd)
         if not raw_commands:
@@ -122,6 +128,10 @@ def _split_commands(
     commands = {_command_tuple(primary)}
     commands.update(_command_tuple(alias) for alias in alias_values)
     return primary, alias_values or None, commands
+
+
+def _normal_text_values(msg: TextValue) -> set[str]:
+    return {msg} if isinstance(msg, str) else set(map(str, msg))
 
 
 def _literal_regex_prefix(pattern: str) -> str:
@@ -155,14 +165,14 @@ def _register_route(matcher: type["Matcher"], meta: _RouteMeta) -> type["Matcher
 
 def _get_plain_text(event: "Event") -> str:
     try:
-        return str(event.get_plaintext()).strip()
+        return str(event.get_plaintext())
     except Exception:
         pass
 
     for attr in ("raw_message", "plaintext", "content"):
         value = getattr(event, attr, None)
         if value:
-            return str(value).strip()
+            return str(value)
     return ""
 
 
@@ -400,6 +410,7 @@ def _patch_handle_event() -> None:
     for module_name in (
         "nonebot.adapters.onebot.v11.bot",
         "nonebot.adapters.onebot.v12.bot",
+        "nonebot.adapters.qq.bot",
     ):
         try:
             module = importlib.import_module(module_name)
@@ -441,9 +452,9 @@ def on_message(*args, _depth: int = 0, **kwargs):
 
 
 def on_command(
-    cmd: str | tuple[str, ...] | list[str | tuple[str, ...]] | set[str | tuple[str, ...]],
+    cmd: CommandInput,
     rule=None,
-    aliases: set[str | tuple[str, ...]] | None = None,
+    aliases: set[CommandValue] | None = None,
     force_whitespace: str | bool | None = None,
     _depth: int = 0,
     **kwargs,
@@ -462,9 +473,9 @@ def on_command(
 
 
 def on_shell_command(
-    cmd: str | tuple[str, ...] | list[str | tuple[str, ...]] | set[str | tuple[str, ...]],
+    cmd: CommandInput,
     rule=None,
-    aliases: set[str | tuple[str, ...]] | None = None,
+    aliases: set[CommandValue] | None = None,
     parser=None,
     _depth: int = 0,
     **kwargs,
@@ -482,32 +493,82 @@ def on_shell_command(
     return _register_route(matcher, _RouteMeta(commands=commands))
 
 
-def on_regex(pattern: str, flags: int | re.RegexFlag = 0, rule=None, _depth: int = 0, **kwargs):
+def on_regex(
+    pattern: str,
+    flags: int | re.RegexFlag = 0,
+    rule=None,
+    _depth: int = 0,
+    **kwargs,
+):
     install_on_compat()
     matcher = _nb_on_regex(pattern, flags=flags, rule=rule, _depth=_depth + 1, **kwargs)
+    regex_flags = re.RegexFlag(flags)
+    if regex_flags & re.IGNORECASE:
+        return _register_route(matcher, _RouteMeta(generic=True))
+
     prefix = _literal_regex_prefix(pattern)
     if prefix:
         return _register_route(matcher, _RouteMeta(prefixes={prefix}))
     return _register_route(matcher, _RouteMeta(generic=True))
 
 
-def on_startswith(msg: str | tuple[str, ...], *args, _depth: int = 0, **kwargs):
+def on_startswith(
+    msg: TextValue,
+    rule=None,
+    ignorecase: bool = False,
+    _depth: int = 0,
+    **kwargs,
+):
     install_on_compat()
-    matcher = _nb_on_startswith(msg, *args, _depth=_depth + 1, **kwargs)
-    prefixes = {msg} if isinstance(msg, str) else set(msg)
-    return _register_route(matcher, _RouteMeta(prefixes=set(map(str, prefixes))))
+    matcher = _nb_on_startswith(
+        msg,
+        rule=rule,
+        ignorecase=ignorecase,
+        _depth=_depth + 1,
+        **kwargs,
+    )
+    if ignorecase:
+        return _register_route(matcher, _RouteMeta(generic=True))
+
+    return _register_route(matcher, _RouteMeta(prefixes=_normal_text_values(msg)))
 
 
-def on_fullmatch(msg: str | tuple[str, ...], *args, _depth: int = 0, **kwargs):
+def on_fullmatch(
+    msg: TextValue,
+    rule=None,
+    ignorecase: bool = False,
+    _depth: int = 0,
+    **kwargs,
+):
     install_on_compat()
-    matcher = _nb_on_fullmatch(msg, *args, _depth=_depth + 1, **kwargs)
-    values = {msg} if isinstance(msg, str) else set(msg)
-    return _register_route(matcher, _RouteMeta(fullmatches=set(map(str, values))))
+    matcher = _nb_on_fullmatch(
+        msg,
+        rule=rule,
+        ignorecase=ignorecase,
+        _depth=_depth + 1,
+        **kwargs,
+    )
+    if ignorecase:
+        return _register_route(matcher, _RouteMeta(generic=True))
+
+    return _register_route(matcher, _RouteMeta(fullmatches=_normal_text_values(msg)))
 
 
-def on_endswith(msg: str | tuple[str, ...], *args, _depth: int = 0, **kwargs):
+def on_endswith(
+    msg: TextValue,
+    rule=None,
+    ignorecase: bool = False,
+    _depth: int = 0,
+    **kwargs,
+):
     install_on_compat()
-    matcher = _nb_on_endswith(msg, *args, _depth=_depth + 1, **kwargs)
+    matcher = _nb_on_endswith(
+        msg,
+        rule=rule,
+        ignorecase=ignorecase,
+        _depth=_depth + 1,
+        **kwargs,
+    )
     return _register_route(matcher, _RouteMeta(generic=True))
 
 
@@ -515,3 +576,19 @@ def on_keyword(keywords: set[str], *args, _depth: int = 0, **kwargs):
     install_on_compat()
     matcher = _nb_on_keyword(keywords, *args, _depth=_depth + 1, **kwargs)
     return _register_route(matcher, _RouteMeta(generic=True))
+
+
+__all__ = [
+    "XiuxianOnCompatProvider",
+    "install_on_compat",
+    "rebuild_on_compat_index",
+    "on",
+    "on_message",
+    "on_command",
+    "on_shell_command",
+    "on_regex",
+    "on_startswith",
+    "on_fullmatch",
+    "on_endswith",
+    "on_keyword",
+]

@@ -681,6 +681,57 @@ def _get_event_plaintext(event: BaseEvent, fallback: str = "") -> str:
         pass
     return str(fallback or "")
 
+
+def _to_nonempty_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        text = str(value)
+    except Exception:
+        return None
+    return text if text != "" else None
+
+
+def _copy_message_obj(message: Any) -> Any:
+    if message is None:
+        return None
+
+    try:
+        return message.__class__(message)
+    except Exception:
+        pass
+
+    try:
+        return message.copy()
+    except Exception:
+        return message
+
+
+def _timestamp_to_epoch(value: Any) -> int:
+    try:
+        if isinstance(value, datetime):
+            return int(value.timestamp())
+
+        if isinstance(value, (int, float)):
+            return int(value)
+
+        text = str(value or "").strip()
+        if text:
+            try:
+                return int(float(text))
+            except Exception:
+                pass
+
+            try:
+                return int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return int(datetime.now().timestamp())
+
+
 def _set_event_text_cache(event: BaseEvent, raw: str) -> None:
     """
     更新本插件兼容字段，但不覆盖 adapter-qq 1.7.1 起使用的 event.message 缓存。
@@ -698,15 +749,68 @@ def _set_event_text_cache(event: BaseEvent, raw: str) -> None:
         msg = None
 
     if msg is not None:
+        if not hasattr(event, "original_message"):
+            try:
+                setattr(event, "original_message", _copy_message_obj(msg))
+            except Exception:
+                pass
+
         try:
             setattr(event, "message", msg)
         except Exception:
             pass
-    elif not (HAS_QQ and isinstance(event, (QQPrivateMessageEvent, QQChannelPrivateMessageEvent) + _QQ_GROUP_MESSAGE_EVENT_TYPES)):
+    elif not (
+        HAS_QQ
+        and isinstance(
+            event,
+            (QQPrivateMessageEvent, QQChannelPrivateMessageEvent)
+            + _QQ_GROUP_MESSAGE_EVENT_TYPES,
+        )
+    ):
         try:
             setattr(event, "message", raw)
         except Exception:
             pass
+
+
+def _ensure_message_common_fields(
+    event: BaseEvent,
+    *,
+    message_type: str,
+    user_id: Any,
+    group_id: Any = None,
+    message_id: Any = None,
+    sub_type: str = "normal",
+    set_group_id: bool = True,
+) -> None:
+    setattr(event, "post_type", "message")
+    setattr(event, "message_type", message_type)
+    setattr(event, "sub_type", sub_type)
+    setattr(event, "user_id", str(user_id or ""))
+    if set_group_id:
+        setattr(event, "group_id", str(group_id) if group_id is not None else None)
+    setattr(event, "message_id", str(message_id or getattr(event, "id", "") or ""))
+
+    if not hasattr(event, "time"):
+        setattr(event, "time", _timestamp_to_epoch(getattr(event, "timestamp", None)))
+    if not hasattr(event, "font"):
+        setattr(event, "font", 0)
+    if message_type == "group" and not hasattr(event, "anonymous"):
+        setattr(event, "anonymous", None)
+
+
+def _get_qq_message_ref_id(event: BaseEvent) -> Optional[str]:
+    try:
+        message_scene = getattr(event, "message_scene", None)
+        for ext in getattr(message_scene, "ext", None) or []:
+            ext_text = str(ext)
+            if ext_text.startswith("msg_idx="):
+                value = ext_text.partition("=")[-1]
+                return value or None
+    except Exception:
+        pass
+
+    return _to_nonempty_str(getattr(event, "msg_idx", None))
 
 
 def _get_adapter_name(bot: Any) -> str:
@@ -1555,51 +1659,46 @@ def _unique_event_types(*event_types: Any) -> tuple[type, ...]:
     return tuple(types)
 
 
+def _event_type_union(event_types: tuple[type, ...]) -> Any:
+    if not event_types:
+        return BaseEvent
+    if len(event_types) == 1:
+        return event_types[0]
+    return Union[event_types]  # type: ignore[index]
+
+
 _QQ_GROUP_MESSAGE_EVENT_TYPES = _unique_event_types(
     QQGroupMessageCreateEvent,
     QQGroupAtMessageEvent,
 )
 
-if HAS_QQ:
-    GroupMessageEvent = Union[
-        OB11GroupMessageEvent,
-        QQGroupMessageCreateEvent,
-        QQGroupAtMessageEvent,
-        QQAtChannelMessageEvent,
-    ]
-else:
-    GroupMessageEvent = Union[OB11GroupMessageEvent]
+_GROUP_MESSAGE_EVENT_TYPES = _unique_event_types(
+    OB11GroupMessageEvent,
+    QQGroupMessageCreateEvent,
+    QQGroupAtMessageEvent,
+    QQAtChannelMessageEvent,
+)
+_PRIVATE_MESSAGE_EVENT_TYPES = _unique_event_types(
+    OB11PrivateMessageEvent,
+    QQPrivateMessageEvent,
+    QQChannelPrivateMessageEvent,
+)
+_MESSAGE_EVENT_TYPES = _unique_event_types(
+    *_GROUP_MESSAGE_EVENT_TYPES,
+    *_PRIVATE_MESSAGE_EVENT_TYPES,
+)
 
-if HAS_QQ:
-    PrivateMessageEvent = Union[
-        OB11PrivateMessageEvent,
-        QQPrivateMessageEvent,
-        QQChannelPrivateMessageEvent,
-    ]
-else:
-    PrivateMessageEvent = Union[OB11PrivateMessageEvent]
-
-MessageEvent = Union[GroupMessageEvent, PrivateMessageEvent]
+GroupMessageEvent = _event_type_union(_GROUP_MESSAGE_EVENT_TYPES)
+PrivateMessageEvent = _event_type_union(_PRIVATE_MESSAGE_EVENT_TYPES)
+MessageEvent = _event_type_union(_MESSAGE_EVENT_TYPES)
 
 
 def is_group_event(event: BaseEvent) -> bool:
-    types: list[type] = []
-    if HAS_OB11:
-        types.append(OB11GroupMessageEvent)  # type: ignore[arg-type]
-    if HAS_QQ:
-        types.extend(_QQ_GROUP_MESSAGE_EVENT_TYPES)
-        types.append(QQAtChannelMessageEvent)  # type: ignore[arg-type]
-    return isinstance(event, tuple(types)) if types else False
+    return isinstance(event, _GROUP_MESSAGE_EVENT_TYPES) if _GROUP_MESSAGE_EVENT_TYPES else False
 
 
 def is_private_event(event: BaseEvent) -> bool:
-    types: list[type] = []
-    if HAS_OB11:
-        types.append(OB11PrivateMessageEvent)  # type: ignore[arg-type]
-    if HAS_QQ:
-        types.append(QQPrivateMessageEvent)  # type: ignore[arg-type]
-        types.append(QQChannelPrivateMessageEvent)  # type: ignore[arg-type]
-    return isinstance(event, tuple(types)) if types else False
+    return isinstance(event, _PRIVATE_MESSAGE_EVENT_TYPES) if _PRIVATE_MESSAGE_EVENT_TYPES else False
 
 
 def is_channel_event(event: BaseEvent) -> bool:
@@ -1714,25 +1813,43 @@ GROUP: Permission = Permission(_group_checker)
 
 
 def get_user_id(event: BaseEvent) -> Optional[str]:
-    if hasattr(event, "user_id"):
-        uid = getattr(event, "user_id")
-        return str(uid) if uid is not None else None
+    uid = _to_nonempty_str(getattr(event, "user_id", None))
+    if uid is not None:
+        return uid
+
     try:
-        return str(event.get_user_id())
+        uid = _to_nonempty_str(event.get_user_id())
+        if uid is not None:
+            return uid
     except Exception:
-        return None
+        pass
+
+    author = getattr(event, "author", None)
+    for attr in ("user_openid", "member_openid", "id"):
+        uid = _to_nonempty_str(getattr(author, attr, None))
+        if uid is not None:
+            return uid
+
+    return None
 
 
 def get_group_id(event: BaseEvent) -> Optional[str]:
-    if hasattr(event, "group_id"):
-        gid = getattr(event, "group_id")
-        return str(gid) if gid is not None else None
-    if hasattr(event, "group_openid"):
-        gid = getattr(event, "group_openid")
-        return str(gid) if gid is not None else None
-    if hasattr(event, "channel_id"):
-        gid = getattr(event, "channel_id")
-        return str(gid) if gid is not None else None
+    if HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
+        for attr in ("group_openid", "group_id"):
+            gid = _to_nonempty_str(getattr(event, attr, None))
+            if gid is not None:
+                return gid
+
+    if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
+        gid = _to_nonempty_str(getattr(event, "channel_id", None))
+        if gid is not None:
+            return gid
+
+    for attr in ("group_id", "group_openid", "channel_id"):
+        gid = _to_nonempty_str(getattr(event, attr, None))
+        if gid is not None:
+            return gid
+
     return None
 
 
@@ -1788,7 +1905,7 @@ def _collect_bot_self_ids(bot: Optional[BaseBot]) -> set[str]:
         except Exception:
             self_info = None
 
-    for attr in ("id", "user_id", "openid", "user_openid", "union_openid"):
+    for attr in ("id", "user_id", "openid", "user_openid", "member_openid", "union_openid", "union_user_account"):
         try:
             add(getattr(self_info, attr, None))
         except Exception:
@@ -1803,11 +1920,13 @@ def _mention_data_is_bot(data: Any, bot_ids: set[str]) -> bool:
 
     if bool(data.get("is_you", False)):
         return True
+    if bool(data.get("is_bot", False)):
+        return True
 
     if not bot_ids:
         return False
 
-    for key in ("user_id", "id", "member_openid", "openid"):
+    for key in ("user_id", "id", "member_openid", "openid", "user_openid"):
         value = data.get(key)
         if value is not None and str(value) in bot_ids:
             return True
@@ -1825,7 +1944,7 @@ def _mention_user_is_bot(user: Any, bot_ids: set[str]) -> bool:
     if not bot_ids:
         return False
 
-    for attr in ("id", "user_id", "member_openid", "openid"):
+    for attr in ("id", "user_id", "member_openid", "openid", "user_openid"):
         value = getattr(user, attr, None)
         if value is not None and str(value) in bot_ids:
             return True
@@ -1988,13 +2107,25 @@ def patch_event_inplace(
 
     if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
-        sender_id = str(event.author.user_openid)
+        author = getattr(event, "author", None)
+        sender_id = (
+            _to_nonempty_str(getattr(author, "user_openid", None))
+            or _to_nonempty_str(getattr(author, "id", None))
+            or ""
+        )
+        openid = _to_nonempty_str(getattr(author, "id", None)) or sender_id
         sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
 
-        setattr(event, "message_type", "private")
-        setattr(event, "user_id", sender_id)
-        setattr(event, "group_id", None)
-        setattr(event, "message_id", str(event.id))
+        _ensure_message_common_fields(
+            event,
+            message_type="private",
+            user_id=sender_id,
+            group_id=None,
+            message_id=getattr(event, "id", ""),
+            sub_type="friend",
+        )
+        setattr(event, "user_openid", sender_id)
+        setattr(event, "openid", openid)
         _set_event_text_cache(event, raw)
         setattr(
             event,
@@ -2009,14 +2140,18 @@ def patch_event_inplace(
 
     elif HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
-        uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
-        uid = str(uid)
+        author = getattr(event, "author", None)
+        uid = _to_nonempty_str(getattr(author, "id", None)) or get_user_id(event) or ""
         sender_name = _resolve_sender_name(event, fallback_user_id=uid)
 
-        setattr(event, "message_type", "private")
-        setattr(event, "user_id", uid)
-        setattr(event, "group_id", None)
-        setattr(event, "message_id", str(event.id))
+        _ensure_message_common_fields(
+            event,
+            message_type="private",
+            user_id=uid,
+            group_id=None,
+            message_id=getattr(event, "id", ""),
+            sub_type="guild",
+        )
         _set_event_text_cache(event, raw)
         setattr(
             event,
@@ -2031,13 +2166,31 @@ def patch_event_inplace(
 
     elif HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
-        sender_id = str(event.author.member_openid)
+        author = getattr(event, "author", None)
+        sender_id = (
+            _to_nonempty_str(getattr(author, "member_openid", None))
+            or get_user_id(event)
+            or ""
+        )
+        original_group_id = _to_nonempty_str(getattr(event, "group_id", None))
+        group_openid = (
+            _to_nonempty_str(getattr(event, "group_openid", None))
+            or original_group_id
+            or ""
+        )
         sender_name = _resolve_sender_name(event, fallback_user_id=sender_id)
 
-        setattr(event, "message_type", "group")
-        setattr(event, "user_id", sender_id)
-        setattr(event, "group_id", str(event.group_openid))
-        setattr(event, "message_id", str(event.id))
+        if original_group_id and original_group_id != group_openid:
+            setattr(event, "qq_group_id", original_group_id)
+        setattr(event, "group_openid", group_openid)
+        _ensure_message_common_fields(
+            event,
+            message_type="group",
+            user_id=sender_id,
+            group_id=group_openid,
+            message_id=getattr(event, "id", ""),
+            sub_type="normal",
+        )
         _set_event_text_cache(event, raw)
         setattr(event, "to_me", _is_qq_group_message_to_me(event, bot))
         if bool(getattr(event, "to_me", False)):
@@ -2055,14 +2208,20 @@ def patch_event_inplace(
 
     elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
-        uid = getattr(getattr(event, "author", None), "id", None) or get_user_id(event) or ""
-        uid = str(uid)
+        author = getattr(event, "author", None)
+        uid = _to_nonempty_str(getattr(author, "id", None)) or get_user_id(event) or ""
+        channel_id = _to_nonempty_str(getattr(event, "channel_id", None)) or ""
         sender_name = _resolve_sender_name(event, fallback_user_id=uid)
 
-        setattr(event, "message_type", "group")
-        setattr(event, "user_id", uid)
-        setattr(event, "group_id", str(event.channel_id))
-        setattr(event, "message_id", str(event.id))
+        _ensure_message_common_fields(
+            event,
+            message_type="group",
+            user_id=uid,
+            group_id=channel_id,
+            message_id=getattr(event, "id", ""),
+            sub_type="channel",
+        )
+        setattr(event, "to_me", True)
         _set_event_text_cache(event, raw)
         setattr(
             event,
@@ -2323,16 +2482,28 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
             # ===== 普通 QQ 群 =====
             if HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
-                group_openid = str(event.group_openid)
+                group_openid = str(get_group_id(event) or getattr(event, "group_openid", "") or "")
+                event_id = kwargs.pop("event_id", None)
+                msg_ref_id = _get_qq_message_ref_id(event)
 
                 async def _do_send(msg_seq: int):
-                    return await bot.send_to_group(
-                        group_openid=group_openid,
-                        message=message,
-                        msg_id=str(event.id),
-                        msg_seq=int(msg_seq),
-                        event_id=kwargs.pop("event_id", None),
-                    )
+                    try:
+                        return await bot.send_to_group(
+                            group_openid=group_openid,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=event_id,
+                            msg_ref_id=msg_ref_id,
+                        )
+                    except TypeError:
+                        return await bot.send_to_group(
+                            group_openid=group_openid,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=event_id,
+                        )
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
@@ -2368,16 +2539,38 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
             # ===== QQ 私聊 C2C =====
             if HAS_QQ and isinstance(event, QQPrivateMessageEvent):
-                user_openid = str(event.author.user_openid)
+                author = getattr(event, "author", None)
+                user_id = (
+                    _to_nonempty_str(getattr(author, "user_openid", None))
+                    or get_user_id(event)
+                    or ""
+                )
+                openid = (
+                    _to_nonempty_str(getattr(author, "id", None))
+                    or _to_nonempty_str(getattr(event, "openid", None))
+                    or user_id
+                )
+                event_id = kwargs.pop("event_id", None)
+                msg_ref_id = _get_qq_message_ref_id(event)
 
                 async def _do_send(msg_seq: int):
-                    return await bot.send_to_c2c(
-                        openid=user_openid,
-                        message=message,
-                        msg_id=str(event.id),
-                        msg_seq=int(msg_seq),
-                        event_id=kwargs.pop("event_id", None),
-                    )
+                    try:
+                        return await bot.send_to_c2c(
+                            openid=openid,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=event_id,
+                            msg_ref_id=msg_ref_id,
+                        )
+                    except TypeError:
+                        return await bot.send_to_c2c(
+                            openid=openid,
+                            message=message,
+                            msg_id=str(event.id),
+                            msg_seq=int(msg_seq),
+                            event_id=event_id,
+                        )
 
                 if "msg_seq" in kwargs:
                     msg_seq = int(kwargs.pop("msg_seq"))
@@ -2385,7 +2578,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                 else:
                     result = await _send_with_retry(
                         _do_send,
-                        get_new_seq=lambda: _next_c2c_seq(user_openid),
+                        get_new_seq=lambda: _next_c2c_seq(openid),
                         max_retry=3,
                     )
 
@@ -2397,7 +2590,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     message=message,
                     message_id=message_id,
                     source_message_id=str(event.id),
-                    user_id=user_openid,
+                    user_id=user_id,
                     raw_result=result,
                 )
 
@@ -2405,7 +2598,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     bot,
                     scene="private",
                     message_id=message_id,
-                    user_id=user_openid,
+                    user_id=openid,
                     revoke_time=revoke_time,
                 )
 
@@ -2414,6 +2607,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             # ===== QQ 频道公域消息 =====
             if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
                 channel_id = str(event.channel_id)
+                event_id = kwargs.pop("event_id", None)
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -2422,14 +2616,14 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                             message=message,
                             msg_id=str(event.id),
                             msg_seq=int(msg_seq),
-                            event_id=kwargs.pop("event_id", None),
+                            event_id=event_id,
                         )
                     except TypeError:
                         return await bot.send_to_channel(
                             channel_id=channel_id,
                             message=message,
                             msg_id=str(event.id),
-                            event_id=kwargs.pop("event_id", None),
+                            event_id=event_id,
                         )
 
                 if "msg_seq" in kwargs:
@@ -2469,6 +2663,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                 guild_id = str(event.guild_id)
                 uid = str(getattr(getattr(event, "author", None), "id", "") or "")
                 seq_key = f"{guild_id}:{uid}" if uid else guild_id
+                event_id = kwargs.pop("event_id", None)
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -2477,14 +2672,14 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                             message=message,
                             msg_id=str(event.id),
                             msg_seq=int(msg_seq),
-                            event_id=kwargs.pop("event_id", None),
+                            event_id=event_id,
                         )
                     except TypeError:
                         return await bot.send_to_dms(
                             guild_id=guild_id,
                             message=message,
                             msg_id=str(event.id),
-                            event_id=kwargs.pop("event_id", None),
+                            event_id=event_id,
                         )
 
                 if "msg_seq" in kwargs:
@@ -2600,14 +2795,16 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
         async def send_group_msg(*, group_id, message, **kwargs):
             revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
             group_openid = str(group_id)
+            msg_id = kwargs.pop("msg_id", None)
+            event_id = kwargs.pop("event_id", None)
 
             async def _do_send(msg_seq: int):
                 return await bot.send_to_group(
                     group_openid=group_openid,
                     message=message,
-                    msg_id=kwargs.pop("msg_id", None),
+                    msg_id=msg_id,
                     msg_seq=int(msg_seq),
-                    event_id=kwargs.pop("event_id", None),
+                    event_id=event_id,
                 )
 
             if "msg_seq" in kwargs:

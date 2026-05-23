@@ -1,0 +1,537 @@
+[
+  {
+    "id": "dungeon_001",
+    "name": "幽冥古墓",
+    "type": "explore",
+    "description": "一座被幽冥之气笼罩的上古墓穴，危机与机缘并存。",
+    "total_layers": 5,
+    "events": [
+      {
+        "event_id": "trap",
+        "description": "你不慎触发了古墓机关！",
+        "damage": [0.10, 0.18]
+      },
+      {
+        "event_id": "monster",
+        "description": "遭遇了墓穴中的守卫",
+        "battle": {
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.20
+        }
+      },
+      {
+        "event_id": "treasure",
+        "description": "你发现了一处密室，里面放着一些物品",
+        "reward": {
+          "drop_items": {
+            "功法": 45,
+            "神通": 15,
+            "药材": 25,
+            "辅修功法": 5,
+            "法器": 5,
+            "防具": 5
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "description": "你在角落发现了一小堆灵石",
+        "reward": {
+          "spirit_stone": [1.0, 2.0]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "description": "这一层只有阴风与脚步回响，什么也没有发生"
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["幽冥", "阴煞", "腐魂"],
+        "base_names": ["游魂", "尸傀", "怨鬼"],
+        "hp_range": [55, 65],
+        "mp_range": [1, 2],
+        "attack_range": [0.10, 0.16],
+        "skill_pool": [14003, 14004],
+        "reward": {
+          "spirit_stone": [0.12, 0.30],
+          "experience": 0.0012,
+          "drop_chance": 0.015,
+          "drop_items": {
+            "功法": 45,
+            "神通": 15,
+            "药材": 35,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["古墓守卫", "冥府"],
+        "base_names": ["幽冥战尸", "怨魂统领"],
+        "hp_range": [75, 88],
+        "mp_range": [1, 3],
+        "attack_range": [0.15, 0.22],
+        "skill_pool": [14003, 14004, 14005],
+        "reward": {
+          "spirit_stone": [0.30, 0.70],
+          "experience": 0.0035,
+          "drop_chance": 0.05,
+          "drop_items": {
+            "功法": 45,
+            "神通": 15,
+            "药材": 30,
+            "辅修功法": 10
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "幽冥墓主",
+      "hp_range": [87.5, 97.5],
+      "mp_range": [2, 4],
+      "attack_range": [0.24, 0.32],
+      "skills": [14006, 14007, 14008],
+      "reward": {
+        "spirit_stone": [0.80, 1.80],
+        "experience": 0.010,
+        "drop_chance": 0.90,
+        "drop_items": {
+          "功法": 50,
+          "神通": 15,
+          "药材": 20,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "dungeon_002",
+    "name": "雷殛天渊",
+    "type": "explore",
+    "description": "终年雷暴不息的深渊，雷灵盘踞，凶险异常。",
+    "total_layers": 6,
+    "events": [
+      {
+        "event_id": "trap",
+        "description": "天雷劈落，电弧四散！",
+        "damage": [0.12, 0.22]
+      },
+      {
+        "event_id": "monster",
+        "description": "雷灵化形，携天地之威袭来",
+        "battle": {
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.24
+        }
+      },
+      {
+        "event_id": "treasure",
+        "description": "雷击木中藏着上古雷修遗物",
+        "reward": {
+          "drop_items": {
+            "功法": 45,
+            "神通": 20,
+            "药材": 20,
+            "辅修功法": 5,
+            "法器": 5,
+            "防具": 5
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "description": "你采集到蕴含雷霆之力的灵石",
+        "reward": {
+          "spirit_stone": [1.1, 2.2]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "description": "雷声渐歇，暂时平静"
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["雷霆", "闪雷", "狂电"],
+        "base_names": ["雷蛇", "电隼", "雷精"],
+        "hp_range": [52, 62],
+        "mp_range": [1, 2],
+        "attack_range": [0.14, 0.20],
+        "skill_pool": [14009, 14010],
+        "reward": {
+          "spirit_stone": [0.15, 0.35],
+          "experience": 0.0015,
+          "drop_chance": 0.02,
+          "drop_items": {
+            "功法": 45,
+            "神通": 20,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["天雷", "雷劫"],
+        "base_names": ["雷暴巨灵", "电蛟"],
+        "hp_range": [72, 85],
+        "mp_range": [1, 3],
+        "attack_range": [0.20, 0.28],
+        "skill_pool": [14009, 14010, 14011],
+        "reward": {
+          "spirit_stone": [0.40, 0.95],
+          "experience": 0.0045,
+          "drop_chance": 0.06,
+          "drop_items": {
+            "功法": 45,
+            "神通": 20,
+            "药材": 30,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "雷殛尊者残念",
+      "hp_range": [85, 95],
+      "mp_range": [2, 4],
+      "attack_range": [0.32, 0.40],
+      "skills": [14012, 14013, 14014],
+      "reward": {
+        "spirit_stone": [0.90, 2.00],
+        "experience": 0.011,
+        "drop_chance": 0.92,
+        "drop_items": {
+          "功法": 50,
+          "神通": 20,
+          "药材": 15,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "dungeon_003",
+    "name": "冰封雪原",
+    "type": "explore",
+    "description": "极北苦寒之地，风雪掩埋着古老遗迹与寒魄妖兽。",
+    "total_layers": 5,
+    "events": [
+      {
+        "event_id": "trap",
+        "description": "寒风夹杂冰刺骤然袭来！",
+        "damage": [0.10, 0.18]
+      },
+      {
+        "event_id": "monster",
+        "description": "雪原妖兽被你的气息惊醒",
+        "battle": {
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.20
+        }
+      },
+      {
+        "event_id": "treasure",
+        "description": "你在冰窟深处发现先人遗物",
+        "reward": {
+          "drop_items": {
+            "功法": 45,
+            "神通": 18,
+            "药材": 22,
+            "辅修功法": 5,
+            "法器": 5,
+            "防具": 5
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "description": "你挖掘到一小片冰晶矿脉",
+        "reward": {
+          "spirit_stone": [1.2, 2.3]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "description": "只有风雪呼啸，你继续前行"
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["雪原", "冰霜", "寒魄"],
+        "base_names": ["雪狼", "冰熊", "雪精"],
+        "hp_range": [53, 63],
+        "mp_range": [1, 2],
+        "attack_range": [0.12, 0.18],
+        "skill_pool": [14015, 14016],
+        "reward": {
+          "spirit_stone": [0.12, 0.36],
+          "experience": 0.0014,
+          "drop_chance": 0.018,
+          "drop_items": {
+            "功法": 45,
+            "神通": 18,
+            "药材": 32,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["霜巨人", "冰晶"],
+        "base_names": ["寒冰领主", "雪崩兽"],
+        "hp_range": [74, 88],
+        "mp_range": [1, 2],
+        "attack_range": [0.18, 0.25],
+        "skill_pool": [14015, 14016, 14017],
+        "reward": {
+          "spirit_stone": [0.35, 0.90],
+          "experience": 0.0048,
+          "drop_chance": 0.058,
+          "drop_items": {
+            "功法": 45,
+            "神通": 18,
+            "药材": 32,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "冰魄龙魂",
+      "hp_range": [87.5, 100],
+      "mp_range": [2, 4],
+      "attack_range": [0.28, 0.35],
+      "skills": [14018, 14019, 14020],
+      "reward": {
+        "spirit_stone": [0.90, 2.10],
+        "experience": 0.0115,
+        "drop_chance": 0.93,
+        "drop_items": {
+          "功法": 52,
+          "神通": 18,
+          "药材": 15,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "dungeon_004",
+    "name": "熔岩魔窟",
+    "type": "challenge",
+    "description": "地心熔岩沸腾，魔物群居，是极高风险的挑战副本。",
+    "total_layers": 7,
+    "events": [
+      {
+        "event_id": "trap",
+        "description": "地火喷发，毒烟弥漫！",
+        "damage": [0.16, 0.25]
+      },
+      {
+        "event_id": "monster",
+        "description": "熔岩中涌出狂暴魔物",
+        "battle": {
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.30
+        }
+      },
+      {
+        "event_id": "treasure",
+        "description": "你在焚毁营帐中发现宝箱",
+        "reward": {
+          "drop_items": {
+            "功法": 45,
+            "神通": 22,
+            "药材": 10,
+            "辅修功法": 5,
+            "法器": 10,
+            "防具": 8
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "description": "你采集到高纯度炎晶石",
+        "reward": {
+          "spirit_stone": [1.5, 2.8]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "description": "你在熔岩间隙短暂喘息"
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["熔火", "地炎", "硫磺"],
+        "base_names": ["小鬼", "火蜥蜴", "炎魔"],
+        "hp_range": [50, 58],
+        "mp_range": [1, 2],
+        "attack_range": [0.18, 0.24],
+        "skill_pool": [14021, 14022],
+        "reward": {
+          "spirit_stone": [0.18, 0.45],
+          "experience": 0.0022,
+          "drop_chance": 0.022,
+          "drop_items": {
+            "功法": 45,
+            "神通": 22,
+            "药材": 23,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["熔核", "狱火"],
+        "base_names": ["巨像", "恶魔守卫"],
+        "hp_range": [70, 85],
+        "mp_range": [1, 3],
+        "attack_range": [0.24, 0.32],
+        "skill_pool": [14021, 14022, 14023],
+        "reward": {
+          "spirit_stone": [0.45, 1.05],
+          "experience": 0.0068,
+          "drop_chance": 0.075,
+          "drop_items": {
+            "功法": 45,
+            "神通": 22,
+            "药材": 23,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "熔岩巨魔",
+      "hp_range": [95, 110],
+      "mp_range": [2, 5],
+      "attack_range": [0.38, 0.48],
+      "skills": [14024, 14025, 14026],
+      "reward": {
+        "spirit_stone": [1.0, 2.5],
+        "experience": 0.014,
+        "drop_chance": 0.96,
+        "drop_items": {
+          "功法": 55,
+          "神通": 22,
+          "药材": 10,
+          "辅修功法": 5,
+          "法器": 5,
+          "防具": 3
+        }
+      }
+    }
+  },
+  {
+    "id": "dungeon_005",
+    "name": "幻雾迷林",
+    "type": "puzzle",
+    "description": "迷雾与幻术交织的诡域，稍有不慎便会迷失心神。",
+    "total_layers": 4,
+    "events": [
+      {
+        "event_id": "trap",
+        "description": "幻雾翻涌，心神遭受冲击！",
+        "damage": [0.12, 0.20]
+      },
+      {
+        "event_id": "monster",
+        "description": "迷雾中显现出狡黠精怪",
+        "battle": {
+          "monster_templates": ["common", "elite"],
+          "elite_chance": 0.20
+        }
+      },
+      {
+        "event_id": "treasure",
+        "description": "穿过雾墙后，你在林间空地发现古朴馈赠",
+        "reward": {
+          "drop_items": {
+            "功法": 42,
+            "神通": 22,
+            "药材": 23,
+            "辅修功法": 5,
+            "法器": 4,
+            "防具": 4
+          }
+        }
+      },
+      {
+        "event_id": "spirit_stone",
+        "description": "你在灵脉节点处收获灵石",
+        "reward": {
+          "spirit_stone": [1.4, 2.4]
+        }
+      },
+      {
+        "event_id": "nothing",
+        "description": "雾气短暂散去，你得以辨别方向"
+      }
+    ],
+    "monster_templates": {
+      "common": {
+        "name_prefix": ["迷雾", "幻影", "窃语"],
+        "base_names": ["树妖", "花精", "林妖"],
+        "hp_range": [46, 55],
+        "mp_range": [1, 3],
+        "attack_range": [0.10, 0.15],
+        "skill_pool": [14027, 14028],
+        "reward": {
+          "spirit_stone": [0.18, 0.45],
+          "experience": 0.0018,
+          "drop_chance": 0.022,
+          "drop_items": {
+            "功法": 42,
+            "神通": 22,
+            "药材": 31,
+            "辅修功法": 5
+          }
+        }
+      },
+      "elite": {
+        "name_prefix": ["摄魂", "梦魇"],
+        "base_names": ["藤蔓女王", "幻瞳妖狐"],
+        "hp_range": [62, 78],
+        "mp_range": [2, 4],
+        "attack_range": [0.15, 0.22],
+        "skill_pool": [14027, 14028, 14029],
+        "reward": {
+          "spirit_stone": [0.55, 1.20],
+          "experience": 0.0055,
+          "drop_chance": 0.085,
+          "drop_items": {
+            "功法": 42,
+            "神通": 22,
+            "药材": 31,
+            "辅修功法": 5
+          }
+        }
+      }
+    },
+    "boss": {
+      "name": "雾妖主母",
+      "hp_range": [82, 97],
+      "mp_range": [2, 5],
+      "attack_range": [0.24, 0.31],
+      "skills": [14030, 14031, 14032],
+      "reward": {
+        "spirit_stone": [0.95, 2.2],
+        "experience": 0.012,
+        "drop_chance": 0.90,
+        "drop_items": {
+          "功法": 48,
+          "神通": 25,
+          "药材": 20,
+          "辅修功法": 5,
+          "法器": 1,
+          "防具": 1
+        }
+      }
+    }
+  }
+]
