@@ -158,11 +158,69 @@ curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/ref
 **xiu2 命令：**
 
 ```
-用法: xiu2 [start|stop|format [log_file]]
+用法: xiu2 [start|stop|status|update-deps|format [log_file]]
   start              - 启动 xiu2（默认，无需参数）
   status             - 查看 xiu2 状态
   stop               - 停止 xiu2
+  update-deps        - 更新 Python 依赖
   format [log_file]  - 格式化日志文件（默认: /root/xiu2.log）
+```
+
+</details>
+
+<details>
+<summary>📱 Termux 一键安装</summary>
+
+`install_termux.sh` 面向安卓 Termux 原生环境，不使用 `/root`、`/bin`、`/etc`，默认安装到 `$HOME/xiu2`，虚拟环境为 `$HOME/myenv`，管理命令写入 `$PREFIX/bin/xiu2`。
+
+**安装：**
+
+```bash
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash
+```
+
+**自定义目录：**
+
+```bash
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- install "$HOME/xiuxian"
+```
+
+**更新：**
+
+```bash
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- update
+```
+
+**单独更新依赖：**
+
+```bash
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- update-deps
+```
+
+**xiu2 命令：**
+
+```
+用法: xiu2 [start|stop|status|update|update-deps|format [log_file]]
+  start              - 后台启动 xiu2（默认，无需参数）
+  status             - 进入 screen 查看运行日志
+  stop               - 停止 xiu2
+  update             - 更新项目文件
+  update-deps        - 更新 Python 依赖
+  format [log_file]  - 格式化日志文件
+```
+
+安装完成后建议执行一次：
+
+```bash
+termux-wake-lock
+```
+
+如果 `termux-wake-lock` 执行失败，可安装 Termux:API 应用后重试；不使用也不影响安装，只影响后台保活。
+
+NapCat 如果也运行在原生 Termux，请在 NapCat WebUI 中把 WebSocket 客户端 URL 填为：
+
+```
+ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
 </details>
@@ -359,7 +417,25 @@ nb run --reload
 - [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
 - [Termux](https://github.com/termux/termux-app/releases)
 
-**2. 安装 NapCat：**
+### 原生 Termux 一键安装
+
+如果你不使用 proot 容器，直接在 Termux 原生环境安装修仙2，执行：
+
+```bash
+curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash
+```
+
+安装完成后使用：
+
+```bash
+xiu2 start
+xiu2 status
+xiu2 stop
+```
+
+### proot 容器安装
+
+如果你使用 NapCat Termux 安装脚本创建的容器，先安装 NapCat：
 
 ```bash
 curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
@@ -373,7 +449,7 @@ proot-distro login napcat
 
 > ⚠️ 之后每次启动都要先执行 `proot-distro login napcat` 进入容器。
 
-**4. 剩余步骤**同 Linux 手动安装 / 一键安装（不需要再安装 NapCat）。
+进入容器后使用 Linux 一键安装 / 手动安装步骤，不要使用 `install_termux.sh`。`install_termux.sh` 只用于 Termux 原生环境。
 
 📺 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
 
@@ -430,13 +506,21 @@ ws://127.0.0.1:8080/onebot/v11/ws
 <details>
 <summary>🎮 修仙2</summary>
 
-**Termux 先进入容器：**
+**原生 Termux：**
+
+```bash
+xiu2 start   # 后台启动
+xiu2 status  # 进入 screen 查看日志
+xiu2 stop    # 停止
+```
+
+**proot 容器先进入容器：**
 
 ```bash
 proot-distro login napcat
 ```
 
-**启动 / 进入 / 退出 / 关闭：**
+容器内启动 / 进入 / 退出 / 关闭：
 
 ```bash
 # 后台启动
