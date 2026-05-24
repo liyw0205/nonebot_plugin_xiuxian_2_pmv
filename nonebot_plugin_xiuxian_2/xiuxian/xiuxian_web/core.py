@@ -129,7 +129,8 @@ def get_image_size_from_input(media_input):
     return (1280, 720)
 
 def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
-                              media_type: str = "", media_input=None):
+                              media_type: str = "", media_input=None,
+                              quote_message_id: str = ""):
     """
     构造 Web 发送消息：
     - send_mode=plain: 普通文本
@@ -142,7 +143,12 @@ def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
 
     # 原生 Markdown：只发文本 Markdown，不混媒体
     if send_mode == "markdown":
-        return MessageSegment.markdown(bot, content or " ")
+        msg = MessageSegment.markdown(bot, content or " ")
+        if quote_message_id and is_qq_bot_for_web_message(bot):
+            ref = MessageSegment.reference(bot, quote_message_id)
+            if ref:
+                msg = ref + msg
+        return msg
 
     msg = None
 
@@ -164,7 +170,19 @@ def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
     if msg is None:
         msg = MessageSegment.text(bot, " ")
 
+    if quote_message_id and is_qq_bot_for_web_message(bot):
+        ref = MessageSegment.reference(bot, quote_message_id)
+        if ref:
+            msg = ref + msg
+
     return msg
+
+
+def is_qq_bot_for_web_message(bot) -> bool:
+    try:
+        return str(bot.adapter.get_name()) == "QQ"
+    except Exception:
+        return False
 
 
 def save_uploaded_media(file_storage):

@@ -134,8 +134,9 @@
                 <div class="composer-collapsed" id="composerCollapsed" onclick="expandComposer()">
                     <i class="fas fa-comment-dots"></i>
                     <span>输入消息...</span>
-                    <button type="button" onclick="event.stopPropagation(); toggleMediaPanel()" title="发送媒体">
+                    <button id="mediaToggleBtn" class="media-toggle-btn" type="button" onclick="event.stopPropagation(); toggleMediaPanel()" title="发送媒体">
                         <i class="fas fa-plus"></i>
+                        <span id="mediaCountBadge" class="media-count-badge hidden">0</span>
                     </button>
                 </div>
 
@@ -150,6 +151,12 @@
                             <button id="activeSendToggleBtn" class="mode-toggle-card active-send-toggle" onclick="toggleActiveSend()" type="button">
                                 <i class="fas fa-bolt"></i>
                                 <span>主动</span>
+                            </button>
+
+                            <button id="mediaSummaryChip" class="media-summary-chip hidden" onclick="toggleMediaPanel()" type="button" title="查看已选媒体">
+                                <i class="fas fa-paperclip"></i>
+                                <span>媒体</span>
+                                <strong id="mediaSummaryCount">0</strong>
                             </button>
                         </div>
                     
@@ -206,7 +213,7 @@
                             <button onclick="clearMedia()" type="button">清除</button>
                         </div>
 
-                        <input id="mediaUrl" type="text" placeholder="媒体链接，可留空">
+                        <input id="mediaUrl" type="text" placeholder="媒体链接，可留空" oninput="updateMediaBadge()">
 
                         <label class="upload-btn">
                             <i class="fas fa-paperclip"></i>
@@ -435,6 +442,20 @@
     justify-content: center;
     font-weight: 700;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.session-avatar img,
+.qq-chat-avatar img,
+.msg-avatar img,
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: inherit;
 }
 
 .session-info {
@@ -512,6 +533,7 @@
     justify-content: center;
     font-weight: 700;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .qq-chat-title-wrap {
@@ -584,6 +606,12 @@
 .msg-avatar {
     width: 34px;
     height: 34px;
+    min-width: 34px;
+    max-width: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    flex: 0 0 34px;
+    aspect-ratio: 1 / 1;
     border-radius: 50%;
     background: var(--info-color);
     color: white;
@@ -593,6 +621,18 @@
     font-size: 0.8rem;
     flex-shrink: 0;
     overflow: hidden;
+}
+
+.msg-avatar > img {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 100%;
+    min-height: 100%;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: cover;
+    border-radius: 50%;
+    flex: 0 0 100%;
 }
 
 .msg-main {
@@ -643,6 +683,53 @@
 
 .msg-row.can-reply .msg-bubble:hover {
     border-color: var(--accent-color);
+}
+
+.message-action-menu {
+    position: fixed;
+    z-index: 2000;
+    min-width: 132px;
+    padding: 6px;
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 24px var(--shadow-color);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.message-action-menu button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.86rem;
+}
+
+.message-action-menu button:hover {
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+    color: var(--accent-color);
+}
+
+.message-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 92px;
+    z-index: 2100;
+    transform: translateX(-50%);
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .76);
+    color: #fff;
+    font-size: 0.78rem;
+    pointer-events: none;
 }
 
 .msg-row.reply-selected .msg-bubble {
@@ -789,7 +876,7 @@
     cursor: text;
 }
 
-.composer-collapsed span {
+.composer-collapsed > span {
     flex: 1;
     color: var(--text-secondary);
     font-size: 0.9rem;
@@ -803,6 +890,32 @@
     background: var(--accent-color);
     color: white;
     cursor: pointer;
+}
+
+.media-toggle-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.media-count-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--danger-color);
+    color: #fff;
+    border: 2px solid var(--bg-primary);
+    font-size: 0.62rem;
+    line-height: 13px;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: 0 1px 4px var(--shadow-color);
 }
 
 .composer-expanded {
@@ -866,6 +979,34 @@
 .mode-toggle-card.active-send-toggle.enabled:hover {
     color: #fff;
     filter: brightness(0.96);
+}
+
+.media-summary-chip {
+    border: 1px solid color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+    color: var(--accent-color);
+    border-radius: 999px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.media-summary-chip strong {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent-color);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    line-height: 1;
 }
 
 .preview-btn {
@@ -1018,7 +1159,7 @@
 /* 手机端：QQ 手机版逻辑 */
 @media (max-width: 768px) {
     .qq-page {
-        height: calc(100vh - 90px);
+        height: calc(100dvh - 88px);
         min-height: 0;
     }
 
@@ -1051,38 +1192,201 @@
     }
 
     .qq-chat-header {
-        min-height: 66px;
-        padding: 8px 10px;
+        min-height: 54px;
+        padding: 5px 8px;
+        gap: 8px;
     }
 
     .qq-chat-avatar {
-        width: 38px;
-        height: 38px;
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
+
+    .mobile-back {
+        font-size: 1rem;
+        width: 26px;
+        height: 30px;
+        flex-shrink: 0;
+    }
+
+    .qq-chat-title {
+        font-size: 0.9rem;
+    }
+
+    .qq-chat-subtitle {
+        font-size: 0.66rem;
+    }
+
+    .chat-date-row {
+        margin-top: 2px;
+        gap: 5px;
+    }
+
+    .chat-date-row select {
+        min-width: 92px;
+        max-width: 150px;
+        padding: 2px 7px;
+        font-size: 0.66rem;
     }
 
     .msg-main {
-        max-width: 82%;
+        max-width: 84%;
     }
 
     .qq-message-list {
-        padding: 12px 10px;
+        padding: 8px 7px 6px;
+    }
+
+    .msg-date-divider {
+        margin: 7px 0;
+    }
+
+    .msg-date-divider span {
+        padding: 2px 8px;
+        font-size: 0.65rem;
+    }
+
+    .msg-row {
+        gap: 7px;
+        margin-bottom: 8px;
+    }
+
+    .msg-avatar {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        max-width: 28px;
+        min-height: 28px;
+        max-height: 28px;
+        flex-basis: 28px;
+        font-size: 0.68rem;
+    }
+
+    .msg-meta {
+        gap: 4px;
+        margin-bottom: 2px;
+        font-size: 0.62rem;
+        line-height: 1.2;
+    }
+
+    .msg-bubble {
+        padding: 6px 9px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        line-height: 1.42;
+    }
+
+    .msg-md {
+        line-height: 1.42;
+    }
+
+    .msg-md p {
+        margin: 0.12rem 0;
     }
 
     @media (max-width: 768px) {
         .qq-header-tools button {
-            width: 28px;
-            height: 28px;
-            font-size: 0.75rem;
+            width: 24px;
+            height: 24px;
+            font-size: 0.66rem;
         }
     }
 
     .qq-composer {
-        padding: 8px;
+        padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
+    }
+
+    .reply-bar {
+        margin-bottom: 4px;
+        padding: 5px 7px;
+        border-radius: 7px;
+        font-size: 0.74rem;
+    }
+
+    .composer-collapsed {
+        min-height: 36px;
+        gap: 6px;
+        padding: 0 8px;
+    }
+
+    .composer-collapsed > span {
+        font-size: 0.82rem;
+    }
+
+    .composer-collapsed button {
+        width: 28px;
+        height: 28px;
+    }
+
+    .media-count-badge {
+        top: -5px;
+        right: -5px;
+        min-width: 16px;
+        height: 16px;
+        font-size: 0.58rem;
+        line-height: 12px;
+    }
+
+    .composer-toolbar {
+        gap: 5px;
+        margin-bottom: 4px;
+    }
+
+    .composer-mode-row {
+        gap: 5px;
+    }
+
+    .mode-toggle-card,
+    .media-summary-chip,
+    .preview-btn {
+        padding: 5px 9px;
+        font-size: 0.74rem;
+        gap: 5px;
     }
 
     .composer-expanded textarea {
-        min-height: 52px !important;
-        max-height: 110px;
+        min-height: 42px !important;
+        max-height: 90px;
+        padding: 0.55rem;
+        font-size: 0.85rem;
+    }
+
+    .media-panel {
+        margin-top: 5px;
+        padding: 7px;
+        border-radius: 8px;
+    }
+
+    .media-type-row {
+        gap: 5px;
+    }
+
+    .media-type-row button {
+        padding: 7px 4px;
+        gap: 3px;
+        font-size: 0.74rem;
+    }
+
+    .media-input-box {
+        margin-top: 7px;
+        gap: 6px;
+    }
+
+    .media-current {
+        font-size: 0.74rem;
+    }
+
+    .upload-btn {
+        height: 34px;
+        min-width: 0;
+        padding: 0 10px;
+        font-size: 0.8rem;
+    }
+
+    #mediaUrl {
+        padding: 0.55rem;
+        font-size: 0.82rem;
     }
 
     .media-input-box {
@@ -1092,19 +1396,28 @@
     .composer-actions {
         flex-direction: row;
         align-items: center;
+        margin-top: 6px;
     }
 
     .composer-actions > div {
         display: flex;
-        gap: 8px;
+        gap: 6px;
     }
 
     .composer-actions .btn {
         flex: 1;
+        padding: 0.42rem 0.7rem;
+        font-size: 0.78rem;
+    }
+
+    #sendHint {
+        display: none;
     }
 
     .msg-extra {
-        font-size: 0.62rem;
+        margin-top: 2px;
+        font-size: 0.58rem;
+        line-height: 1.25;
     }
 }
 
@@ -1124,6 +1437,20 @@
     .msg-row.send .msg-bubble img,
     .msg-row.send .msg-md img {
         margin-left: auto;
+    }
+
+    .msg-image-fallback {
+        display: none;
+        margin-top: 6px;
+        font-size: 0.75rem;
+    }
+
+    .msg-image.load-failed img {
+        display: none;
+    }
+
+    .msg-image.load-failed .msg-image-fallback {
+        display: inline-flex;
     }
     
     @media (max-width: 768px) {
@@ -1153,6 +1480,10 @@ let composerExpanded = false;
 let mediaPanelOpen = false;
 let mediaSendType = '';
 let currentLastRowId = 0;
+let messagePressTimer = null;
+let messagePressTarget = null;
+let messagePressStart = null;
+let messageActionTarget = null;
 
 let lastRenderedMessageKeys = [];
 let lastRenderedSessionKeys = [];
@@ -1191,6 +1522,25 @@ function shortTime(s) {
 function getInitial(text, fallback = '?') {
     text = String(text || '').trim();
     return text ? text.slice(0, 1).toUpperCase() : fallback;
+}
+
+function isHttpUrl(url) {
+    return /^https?:\/\//i.test(String(url || '').trim());
+}
+
+function renderAvatarImage(url) {
+    return `<img class="avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy">`;
+}
+
+function setChatAvatar(text, avatar) {
+    const box = document.getElementById('chatAvatar');
+    if (!box) return;
+
+    if (isHttpUrl(avatar)) {
+        box.innerHTML = renderAvatarImage(avatar);
+    } else {
+        box.innerText = text || '?';
+    }
 }
 
 function sceneTargetKey(scene) {
@@ -1235,6 +1585,47 @@ function preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight) {
     const newScrollHeight = box.scrollHeight;
     const delta = newScrollHeight - oldScrollHeight;
     box.scrollTop = oldScrollTop + delta;
+}
+
+function getSelectedMediaCount() {
+    const type = document.getElementById('mediaType')?.value || mediaSendType;
+    const url = document.getElementById('mediaUrl')?.value.trim() || '';
+    const file = document.getElementById('mediaFile')?.files?.[0];
+
+    return type && (url || file) ? 1 : 0;
+}
+
+function updateMediaBadge() {
+    const count = getSelectedMediaCount();
+    const badge = document.getElementById('mediaCountBadge');
+    const chip = document.getElementById('mediaSummaryChip');
+    const summaryCount = document.getElementById('mediaSummaryCount');
+    const toggleBtn = document.getElementById('mediaToggleBtn');
+
+    if (badge) {
+        badge.innerText = String(count);
+        badge.classList.toggle('hidden', count < 1);
+    }
+
+    if (chip) {
+        chip.classList.toggle('hidden', count < 1);
+    }
+
+    if (summaryCount) {
+        summaryCount.innerText = String(count);
+    }
+
+    if (toggleBtn) {
+        toggleBtn.title = count > 0 ? `已选 ${count} 个媒体` : '发送媒体';
+    }
+}
+
+function setMediaPanelOpen(open) {
+    mediaPanelOpen = !!open;
+    const panel = document.getElementById('mediaPanel');
+    if (panel) {
+        panel.classList.toggle('hidden', !mediaPanelOpen);
+    }
 }
 
 function showUnreadHint() {
@@ -1295,6 +1686,7 @@ function buildSessionPreview(s) {
     // 后端如果已经给了 last_preview，直接使用，避免 “昵称：昵称：内容”
     if (s.last_preview) {
         let preview = extractMarkdownPreviewText(s.last_preview);
+        preview = stripQQFaceMarkup(preview);
         preview = String(preview).replace(/\r/g, ' ').replace(/\n/g, ' ').trim();
         if (!preview) preview = '[空消息]';
         if (preview.length > 60) preview = preview.slice(0, 60) + '...';
@@ -1303,6 +1695,7 @@ function buildSessionPreview(s) {
 
     let raw = s.last_content || s.raw_message || '';
     raw = extractMarkdownPreviewText(raw);
+    raw = stripQQFaceMarkup(raw);
     raw = String(raw).replace(/\r/g, ' ').replace(/\n/g, ' ').trim();
 
     if (!raw) raw = '[空消息]';
@@ -1370,6 +1763,14 @@ function looksLikeMarkdown(text) {
 
 function normalizeAttachmentRepr(text) {
     text = String(text || '');
+    const hadMessageSegmentRepr = /\b(?:Text|Attachment)\(/.test(text);
+
+    text = text.replace(
+        /Text\(type=['"]text['"],\s*data=\{([\s\S]*?)\}\)/g,
+        function(full, dataBody) {
+            return extractReprField(dataBody, 'text');
+        }
+    );
 
     /**
      * 兼容 Python / NoneBot repr：
@@ -1382,15 +1783,127 @@ function normalizeAttachmentRepr(text) {
     text = text.replace(
         /Attachment\(type=['"]([^'"]+)['"],\s*data=\{([\s\S]*?)\}\)/g,
         function(full, type, dataBody) {
-            const urlMatch = dataBody.match(/['"]url['"]\s*:\s*['"](https?:\/\/[^'"]+)['"]/);
-            if (!urlMatch) return full;
+            const url = extractAttachmentUrlFromData(dataBody);
+            if (!url) return '';
 
-            const url = urlMatch[1];
             return `<attachment[${type}]:${url}>`;
         }
     );
 
+    text = text.replace(
+        /\[(图片消息|语音消息|视频消息|文件消息|附件消息)\]\s*(https?:\/\/[^\s<>"']+)/g,
+        function(full, label, url) {
+            const typeMap = {
+                '图片消息': 'image',
+                '语音消息': 'audio',
+                '视频消息': 'video',
+                '文件消息': 'file',
+                '附件消息': 'attachment'
+            };
+            return `<attachment[${typeMap[label] || 'attachment'}]:${normalizeLoggedHttpUrl(url)}>`;
+        }
+    );
+
+    text = text.replace(
+        /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g,
+        function(full, type, url) {
+            return `<attachment[${type}]:${normalizeLoggedHttpUrl(url)}>`;
+        }
+    );
+
+    if (hadMessageSegmentRepr) {
+        text = cleanupMessageSegmentRepr(text);
+    }
+
     return text;
+}
+
+function normalizeLoggedHttpUrl(url) {
+    return String(url || '').replace(/\s+/g, '').trim();
+}
+
+function decodeReprString(value) {
+    return String(value || '')
+        .replace(/\\r/g, '\r')
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+}
+
+function extractReprField(dataBody, field) {
+    dataBody = String(dataBody || '');
+    const escapedField = String(field).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const singleRe = new RegExp(`['"]${escapedField}['"]\\s*:\\s*'((?:\\\\.|[^'])*)'`);
+    const doubleRe = new RegExp(`['"]${escapedField}['"]\\s*:\\s*"((?:\\\\.|[^"])*)"`);
+    const match = dataBody.match(singleRe) || dataBody.match(doubleRe);
+    return match ? decodeReprString(match[1]) : '';
+}
+
+function extractAttachmentUrlFromData(dataBody) {
+    for (const field of ['url', 'file', 'path', 'src']) {
+        const value = extractReprField(dataBody, field);
+        if (/^https?:\/\//i.test(value)) {
+            return normalizeLoggedHttpUrl(value);
+        }
+    }
+    return '';
+}
+
+function cleanupMessageSegmentRepr(text) {
+    let value = String(text || '').trim();
+
+    if (value.startsWith('[') && value.endsWith(']')) {
+        value = value.slice(1, -1).trim();
+    }
+
+    value = value.replace(/^\s*,\s*/, '');
+    value = value.replace(/\s*,\s*$/, '');
+    value = value.replace(/\s*,\s*(?=<attachment\[)/g, '\n');
+    value = value.replace(/(<attachment\[[^\]]+\]:https?:\/\/[^>]+>)\s*,\s*/g, '$1\n');
+    value = value.replace(/\n{3,}/g, '\n\n');
+
+    return value.trim();
+}
+
+function decodeQQFaceExtText(ext) {
+    try {
+        let value = String(ext || '').replace(/\s+/g, '');
+        value += '='.repeat((4 - value.length % 4) % 4);
+        const binary = atob(value);
+        const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+        const raw = new TextDecoder('utf-8').decode(bytes);
+        const data = JSON.parse(raw);
+        return String(data.text || '').trim();
+    } catch (e) {
+        return '';
+    }
+}
+
+function stripQQFaceMarkup(text) {
+    text = String(text || '');
+
+    text = text.replace(
+        /<faceType=\d+,\s*faceId=(?:"[^"]*"|'[^']*'|[^,>]+),\s*ext=(?:"([^"]*)"|'([^']*)'|([^>]+))>\s*/g,
+        function(full, ext1, ext2, ext3) {
+            const label = decodeQQFaceExtText(ext1 || ext2 || ext3 || '');
+            return label ? `[表情:${label}]` : '';
+        }
+    );
+
+    return text.replace(/\uFFFC/g, '').trim();
+}
+
+function buildMessageCopyText(text) {
+    let value = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
+    value = value.replace(
+        /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g,
+        function(full, type, url) {
+            return `[${getAttachmentLabel(type)}] ${url}`;
+        }
+    );
+    return value.trim();
 }
 
 function getAttachmentLabel(type) {
@@ -1409,6 +1922,22 @@ function getAttachmentLabel(type) {
     return labelMap[type] || `${type}附件`;
 }
 
+function shouldProxyImageUrl(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        const host = parsed.hostname.toLowerCase();
+        return host === 'multimedia.nt.qq.com.cn' || host.endsWith('.qpic.cn');
+    } catch (e) {
+        return false;
+    }
+}
+
+function getImageRenderUrl(url) {
+    url = String(url || '').trim();
+    if (!shouldProxyImageUrl(url)) return url;
+    return `/api/messages/media_proxy?url=${encodeURIComponent(url)}`;
+}
+
 function renderAttachmentHtml(type, url) {
     type = String(type || '').toLowerCase();
     url = String(url || '').trim();
@@ -1416,13 +1945,19 @@ function renderAttachmentHtml(type, url) {
     if (!url) return '';
 
     const safeUrl = escapeHtml(url);
+    const safeImageUrl = escapeHtml(getImageRenderUrl(url));
     const label = escapeHtml(getAttachmentLabel(type));
 
     /**
      * 图片：用 Markdown 图片语法渲染
      */
     if (type === 'image') {
-        return renderMarkdown(`![${getAttachmentLabel(type)}](${url})`);
+        return `
+            <div class="msg-media msg-image">
+                <img src="${safeImageUrl}" alt="${label}" loading="lazy" onerror="this.closest('.msg-image')?.classList.add('load-failed')">
+                <a class="msg-image-fallback" href="${safeUrl}" target="_blank" rel="noopener noreferrer">打开图片链接</a>
+            </div>
+        `;
     }
 
     /**
@@ -1501,7 +2036,7 @@ function renderAttachmentHtml(type, url) {
 }
 
 function renderPlainWithAttachments(text) {
-    text = normalizeAttachmentRepr(String(text || ''));
+    text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
 
     const re = /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g;
 
@@ -1543,7 +2078,7 @@ function renderPlainWithAttachments(text) {
 }
 
 function renderMessageContent(text) {
-    text = normalizeAttachmentRepr(String(text || ''));
+    text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
 
     /**
      * 只要包含附件标记，就统一走附件渲染。
@@ -1572,6 +2107,11 @@ function renderMessageContent(text) {
     return `<div class="msg-raw">${escapeHtml(text)}</div>`;
 }
 
+function hasRenderableAttachment(text) {
+    text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
+    return /<attachment\[[^\]]+\]:https?:\/\/[^>]+>/.test(text);
+}
+
 /**
  * 刷新当前会话，让旧消息立即用新渲染逻辑显示。
  */
@@ -1587,15 +2127,15 @@ function rerenderCurrentMessagesAfterAttachmentPatch() {
 }
 
 function renderAvatar(row, isSend = false) {
-    if (isSend) {
-        return `<div class="msg-avatar" style="background:var(--success-color);"><i class="fas fa-robot"></i></div>`;
+    const avatar = row.avatar || '';
+    const name = row.username || row.nickname || row.user_id || (isSend ? 'Bot' : '人');
+
+    if (avatar && isHttpUrl(avatar)) {
+        return `<div class="msg-avatar">${renderAvatarImage(avatar)}</div>`;
     }
 
-    const avatar = row.avatar || '';
-    const name = row.username || row.nickname || row.user_id || '人';
-
-    if (avatar && /^https?:\/\//i.test(avatar)) {
-        return `<div class="msg-avatar"><img src="${escapeHtml(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>`;
+    if (isSend) {
+        return `<div class="msg-avatar" style="background:var(--success-color);">${escapeHtml(getInitial(name, '机'))}</div>`;
     }
 
     return `<div class="msg-avatar">${escapeHtml(getInitial(name, '人'))}</div>`;
@@ -1683,6 +2223,8 @@ function toggleMarkdownPreview(forceOff = false) {
 
 function expandComposer() {
     composerExpanded = true;
+    setMediaPanelOpen(false);
+    updateMediaBadge();
     document.getElementById('composerCollapsed').classList.add('hidden');
     document.getElementById('composerExpanded').classList.remove('hidden');
 
@@ -1700,8 +2242,20 @@ function collapseComposer() {
 }
 
 function toggleMediaPanel() {
-    mediaPanelOpen = !mediaPanelOpen;
-    document.getElementById('mediaPanel').classList.toggle('hidden', !mediaPanelOpen);
+    const shouldOpen = !mediaPanelOpen;
+    if (shouldOpen && composerExpanded) {
+        collapseComposer();
+    }
+
+    setMediaPanelOpen(shouldOpen);
+    updateMediaBadge();
+
+    if (shouldOpen) {
+        setTimeout(() => {
+            const mediaUrl = document.getElementById('mediaUrl');
+            if (mediaSendType && mediaUrl) mediaUrl.focus();
+        }, 30);
+    }
 }
 
 function chooseMediaType(type) {
@@ -1717,20 +2271,26 @@ function chooseMediaType(type) {
 
     document.getElementById('mediaCurrentText').innerText = textMap[type] || type;
     document.getElementById('mediaInputBox').classList.remove('hidden');
+    updateMediaBadge();
 }
 
-function clearMedia() {
+function clearMedia(closePanel = false) {
     mediaSendType = '';
     document.getElementById('mediaType').value = '';
     document.getElementById('mediaUrl').value = '';
     document.getElementById('mediaFile').value = '';
     document.getElementById('fileNameText').innerText = '选择文件';
     document.getElementById('mediaInputBox').classList.add('hidden');
+    if (closePanel) {
+        setMediaPanelOpen(false);
+    }
+    updateMediaBadge();
 }
 
 function onFileChosen() {
     const f = document.getElementById('mediaFile').files[0];
     document.getElementById('fileNameText').innerText = f ? f.name.slice(0, 12) : '选择文件';
+    updateMediaBadge();
 }
 
 async function loadBots() {
@@ -1812,10 +2372,13 @@ async function loadSessions(silent = false) {
                 currentSession.adapter === s.adapter;
 
             const title = s.title || s.target_id || '未知会话';
+            const sessionAvatar = isHttpUrl(s.avatar)
+                ? renderAvatarImage(s.avatar)
+                : escapeHtml(s.avatar_text || getInitial(title));
 
             return `
                 <div class="session-item ${active ? 'active' : ''}" onclick="selectSession(${idx})">
-                    <div class="session-avatar">${escapeHtml(s.avatar_text || getInitial(title))}</div>
+                    <div class="session-avatar">${sessionAvatar}</div>
                     <div class="session-info">
                         <div class="session-title-row">
                             <div class="session-title">${escapeHtml(title)}</div>
@@ -1850,13 +2413,14 @@ function selectSession(index) {
         scene: s.scene,
         target_id: s.target_id,
         title: s.title || s.target_id,
-        avatar_text: s.avatar_text || getInitial(s.title || s.target_id)
+        avatar_text: s.avatar_text || getInitial(s.title || s.target_id),
+        avatar: s.avatar || ''
     };
 
     selectedReplyMessageId = '';
     selectedReplyRowId = '';
 
-    document.getElementById('chatAvatar').innerText = currentSession.avatar_text || '?';
+    setChatAvatar(currentSession.avatar_text || '?', currentSession.avatar);
     document.getElementById('chatTitle').innerText = currentSession.title || '未知会话';
     document.getElementById('chatSubTitle').innerText =
         `${currentSession.adapter || '全部适配器'} ｜ ${SCENE_LABELS[currentSession.scene] || currentSession.scene} ｜ ${currentSession.target_id}`;
@@ -1987,14 +2551,18 @@ function appendMessages(rows) {
 
     rows.forEach((row) => {
         const isSend = row.direction === 'send';
-        const name = isSend ? 'Bot' : (row.username || row.nickname || row.user_id || '未知用户');
+        const name = isSend
+            ? (row.username || row.nickname || 'Bot')
+            : (row.username || row.nickname || row.user_id || '未知用户');
         const content = row.display_content || row.content || row.raw_message || '';
+        const copyText = buildMessageCopyText(content);
+        const previewText = copyText || String(content || '').slice(0, 60);
         const messageId = row.message_id || '';
         const replyUsed = Number(row.reply_used_count || 0);
         const canReply = !!row.can_reply;
         const replyExpired = !!row.reply_expired;
 
-        const contentHtml = row.content_format === 'markdown'
+        const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
             ? renderMarkdown(content)
             : renderMessageContent(content);
 
@@ -2013,8 +2581,14 @@ function appendMessages(rows) {
                 data-is-send="${isSend ? '1' : '0'}"
                 data-can-reply="${canReply ? '1' : '0'}"
                 data-name="${escapeHtml(name)}"
-                data-preview="${escapeHtml(String(content || '').slice(0, 60))}"
-                onclick="onMessageClick(this)"
+                data-preview="${escapeHtml(previewText.slice(0, 60))}"
+                data-copy-text="${escapeHtml(copyText)}"
+                oncontextmenu="openMessageActionMenu(event, this); return false;"
+                onpointerdown="startMessagePress(event, this)"
+                onpointermove="moveMessagePress(event)"
+                onpointerup="cancelMessagePress()"
+                onpointercancel="cancelMessagePress()"
+                onpointerleave="cancelMessagePress()"
             >
                 ${renderAvatar(row, isSend)}
                 <div class="msg-main">
@@ -2029,7 +2603,7 @@ function appendMessages(rows) {
                     <div class="msg-extra">
                         ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
                         ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
-                        ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                        ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
                         ${isSend && row.message_id ? `
                             <button
                                 class="msg-revoke-btn"
@@ -2118,14 +2692,18 @@ async function loadMessages(forceBottom = false, silent = false) {
             }
 
             const isSend = row.direction === 'send';
-            const name = isSend ? 'Bot' : (row.username || row.nickname || row.user_id || '未知用户');
+            const name = isSend
+                ? (row.username || row.nickname || 'Bot')
+                : (row.username || row.nickname || row.user_id || '未知用户');
             const content = row.display_content || row.content || row.raw_message || '';
+            const copyText = buildMessageCopyText(content);
+            const previewText = copyText || String(content || '').slice(0, 60);
             const messageId = row.message_id || '';
             const replyUsed = Number(row.reply_used_count || 0);
             const canReply = !!row.can_reply;
             const replyExpired = !!row.reply_expired;
 
-            const contentHtml = row.content_format === 'markdown'
+            const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
                 ? renderMarkdown(content)
                 : renderMessageContent(content);
 
@@ -2145,8 +2723,14 @@ async function loadMessages(forceBottom = false, silent = false) {
                     data-is-send="${isSend ? '1' : '0'}"
                     data-can-reply="${canReply ? '1' : '0'}"
                     data-name="${escapeHtml(name)}"
-                    data-preview="${escapeHtml(String(content || '').slice(0, 60))}"
-                    onclick="onMessageClick(this)"
+                    data-preview="${escapeHtml(previewText.slice(0, 60))}"
+                    data-copy-text="${escapeHtml(copyText)}"
+                    oncontextmenu="openMessageActionMenu(event, this); return false;"
+                    onpointerdown="startMessagePress(event, this)"
+                    onpointermove="moveMessagePress(event)"
+                    onpointerup="cancelMessagePress()"
+                    onpointercancel="cancelMessagePress()"
+                    onpointerleave="cancelMessagePress()"
                 >
                     ${renderAvatar(row, isSend)}
                     <div class="msg-main">
@@ -2161,7 +2745,7 @@ async function loadMessages(forceBottom = false, silent = false) {
                         <div class="msg-extra">
                             ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
                             ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
-                            ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 点击可作为回复目标` : ''}
+                            ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
                             ${isSend && row.message_id ? `
                                 <button
                                     class="msg-revoke-btn"
@@ -2214,7 +2798,144 @@ async function loadMessages(forceBottom = false, silent = false) {
     }
 }
 
-function onMessageClick(el) {
+function startMessagePress(event, el) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    cancelMessagePress();
+    messagePressTarget = el;
+    messagePressStart = {
+        x: event.clientX,
+        y: event.clientY
+    };
+
+    messagePressTimer = setTimeout(() => {
+        openMessageActionMenu(event, el);
+        messagePressTimer = null;
+    }, 560);
+}
+
+function moveMessagePress(event) {
+    if (!messagePressTimer || !messagePressStart) return;
+
+    const dx = Math.abs(event.clientX - messagePressStart.x);
+    const dy = Math.abs(event.clientY - messagePressStart.y);
+
+    if (dx > 12 || dy > 12) {
+        cancelMessagePress();
+    }
+}
+
+function cancelMessagePress() {
+    if (messagePressTimer) {
+        clearTimeout(messagePressTimer);
+        messagePressTimer = null;
+    }
+    messagePressTarget = null;
+    messagePressStart = null;
+}
+
+function openMessageActionMenu(event, el) {
+    if (!currentSession || !el) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelMessagePress();
+
+    messageActionTarget = el;
+    closeMessageActionMenu();
+
+    const canReply = el.dataset.canReply === '1';
+    const isSend = el.dataset.isSend === '1';
+    const msgId = el.dataset.messageId || '';
+    const canQuote = !isSend && canReply && !!msgId;
+
+    const menu = document.createElement('div');
+    menu.id = 'messageActionMenu';
+    menu.className = 'message-action-menu';
+    menu.innerHTML = `
+        <button type="button" onclick="copyActionMenuMessage()">
+            <i class="fas fa-copy"></i>
+            <span>复制</span>
+        </button>
+        ${canQuote ? `
+            <button type="button" onclick="quoteActionMenuMessage()">
+                <i class="fas fa-reply"></i>
+                <span>引用</span>
+            </button>
+        ` : ''}
+    `;
+
+    document.body.appendChild(menu);
+
+    const margin = 8;
+    const rect = menu.getBoundingClientRect();
+    const x = Math.min(event.clientX || 0, window.innerWidth - rect.width - margin);
+    const y = Math.min(event.clientY || 0, window.innerHeight - rect.height - margin);
+
+    menu.style.left = `${Math.max(margin, x)}px`;
+    menu.style.top = `${Math.max(margin, y)}px`;
+}
+
+function closeMessageActionMenu() {
+    const menu = document.getElementById('messageActionMenu');
+    if (menu) menu.remove();
+}
+
+async function copyActionMenuMessage() {
+    if (!messageActionTarget) return;
+
+    const text = messageActionTarget.dataset.copyText || messageActionTarget.dataset.preview || '';
+    closeMessageActionMenu();
+
+    if (!text) {
+        showMessageToast('没有可复制内容');
+        return;
+    }
+
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+        }
+        showMessageToast('已复制');
+    } catch (e) {
+        showMessageToast('复制失败');
+    }
+}
+
+function quoteActionMenuMessage() {
+    if (!messageActionTarget) return;
+
+    selectReplyTarget(messageActionTarget);
+    closeMessageActionMenu();
+}
+
+function showMessageToast(text) {
+    let toast = document.getElementById('messageToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'messageToast';
+        toast.className = 'message-toast';
+        document.body.appendChild(toast);
+    }
+
+    toast.innerText = text;
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.remove();
+    }, 1200);
+}
+
+function selectReplyTarget(el) {
     if (!currentSession) return;
 
     const isSend = el.dataset.isSend === '1';
@@ -2242,7 +2963,7 @@ function onMessageClick(el) {
     const name = el.dataset.name || '对方';
     const preview = el.dataset.preview || '[消息]';
 
-    document.getElementById('replyText').innerText = `回复 ${name}: ${preview}`;
+    document.getElementById('replyText').innerText = `引用 ${name}: ${preview}`;
     document.getElementById('replyBar').classList.remove('hidden');
 }
 
@@ -2320,7 +3041,7 @@ function onAdapterChange() {
 }
 
 function resetChatPanel() {
-    document.getElementById('chatAvatar').innerText = '?';
+    setChatAvatar('?', '');
     document.getElementById('chatTitle').innerText = '请选择一个会话';
     document.getElementById('chatSubTitle').innerText = '左侧选择群聊或私聊后查看消息';
     document.getElementById('sendBtn').disabled = true;
@@ -2341,7 +3062,7 @@ function resetChatPanel() {
 
 function clearInput() {
     document.getElementById('messageInput').value = '';
-    clearMedia();
+    clearMedia(true);
     if (mdPreviewing) toggleMarkdownPreview(true);
 }
 
@@ -2527,6 +3248,7 @@ async function sendMessage() {
         fd.append('media_type', mediaType);
         fd.append('media_url', mediaUrl);
         fd.append('reply_message_id', selectedReplyMessageId || '');
+        fd.append('quote_message_id', selectedReplyMessageId || '');
 
         if (mediaFile) {
             fd.append('file', mediaFile);
@@ -2663,6 +3385,17 @@ window.addEventListener('beforeunload', () => {
 document.addEventListener('DOMContentLoaded', async () => {
     setSendMode(sendMode);
     setActiveSend(activeSend);
+    updateMediaBadge();
+    document.getElementById('messageInput')?.addEventListener('focus', () => {
+        setMediaPanelOpen(false);
+        updateMediaBadge();
+    });
+    document.addEventListener('click', (event) => {
+        const menu = document.getElementById('messageActionMenu');
+        if (menu && !menu.contains(event.target)) {
+            closeMessageActionMenu();
+        }
+    });
     await loadBots();
     await loadSessions(false);
     toggleAutoRefresh(true); // 默认开启自动刷新

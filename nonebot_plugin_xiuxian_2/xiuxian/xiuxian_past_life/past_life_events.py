@@ -109,6 +109,7 @@ class PastLifeEngine:
             "total_score": 0,
             "event_indices": event_indices,
             "event_snapshots": event_snapshots,
+            "early_death_rolls": {},
             "history": [],
         })
         past_life_limit.save_user_state(user_id, state)
@@ -190,7 +191,17 @@ class PastLifeEngine:
         # 更新分数
         state["total_score"] = state.get("total_score", 0) + branch_score
         state["accumulated"] = accumulated
-        early_death = check_early_death(current_stage, raw_accumulated, accumulated, event)
+        early_death_rolls = state.get("early_death_rolls", {})
+        if not isinstance(early_death_rolls, dict):
+            early_death_rolls = {}
+        early_death = check_early_death(
+            current_stage,
+            raw_accumulated,
+            accumulated,
+            event,
+            early_death_rolls,
+        )
+        state["early_death_rolls"] = early_death_rolls
 
         # 记录历史
         history = state.get("history", [])

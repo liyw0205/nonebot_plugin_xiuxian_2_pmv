@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import random
+import re
 import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -570,6 +571,48 @@ def _increase_recv_reply_used_count(
         logger.warning(f"[message.db] 更新 recv.reply_used_count 失败: {e}")
 
 
+def _normalize_logged_http_url(url: str) -> str:
+    return re.sub(r"\s+", "", str(url or "").strip())
+
+
+def _extract_attachment_url_from_repr_data(data_body: str) -> str:
+    data_body = str(data_body or "")
+
+    try:
+        data = json.loads(data_body.replace("'", '"'))
+        if isinstance(data, dict):
+            for key in ("url", "file", "path", "src"):
+                value = data.get(key)
+                if isinstance(value, str) and value.startswith(("http://", "https://")):
+                    return _normalize_logged_http_url(value)
+    except Exception:
+        pass
+
+    m = re.search(
+        r"['\"](?:url|file|path|src)['\"]\s*:\s*(['\"])(?P<url>https?://[\s\S]*?)\1",
+        data_body,
+        re.S,
+    )
+    return _normalize_logged_http_url(m.group("url")) if m else ""
+
+
+def _normalize_attachment_repr_text(text: str) -> str:
+    def replace_attachment(match):
+        media_type = str(match.group("type") or "attachment").strip().lower()
+        if media_type in ("record", "voice"):
+            media_type = "audio"
+
+        url = _extract_attachment_url_from_repr_data(match.group("data"))
+        return f"<attachment[{media_type}]:{url}>" if url else match.group(0)
+
+    return re.sub(
+        r"Attachment\(\s*type=['\"](?P<type>[^'\"]+)['\"]\s*,\s*data=(?P<data>\{[\s\S]*?\})\s*\)",
+        replace_attachment,
+        str(text or ""),
+        flags=re.S,
+    )
+
+
 def _extract_text_from_message_obj(message: Any) -> str:
     """
     提取消息展示内容：
@@ -636,13 +679,13 @@ def _extract_text_from_message_obj(message: Any) -> str:
                         url = m.group("u")
 
                     if url:
-                        parts.append(f"<attachment[{media_type}]:{url}>")
+                        parts.append(f"<attachment[{media_type}]:{_normalize_logged_http_url(url)}>")
                     else:
-                        parts.append(seg_str)
+                        parts.append(_normalize_attachment_repr_text(seg_str))
 
                 else:
                     # 兜底：保留非文本段字符串，避免信息丢失
-                    seg_str = str(seg)
+                    seg_str = _normalize_attachment_repr_text(str(seg))
                     if seg_str:
                         parts.append(seg_str)
 
@@ -666,7 +709,7 @@ def _extract_text_from_message_obj(message: Any) -> str:
             if text:
                 return str(text)
 
-        return str(message)
+        return _normalize_attachment_repr_text(str(message))
 
     except Exception:
         return ""
@@ -1433,6 +1476,23 @@ class CompatMessageSegment:
         if CompatMessageSegment._is_qq_bot(bot):
             return QQMessageSegment.text(text)
         return text
+
+    @staticmethod
+    def reference(bot: Any, message_id: str, ignore_error: bool = True):
+        if CompatMessageSegment._is_qq_bot(bot):
+            if hasattr(QQMessageSegment, "reference"):
+                try:
+                    return QQMessageSegment.reference(  # type: ignore[union-attr]
+                        str(message_id),
+                        ignore_get_message_error=bool(ignore_error),
+                    )
+                except TypeError:
+                    try:
+                        return QQMessageSegment.reference(str(message_id), bool(ignore_error))  # type: ignore[union-attr]
+                    except TypeError:
+                        return QQMessageSegment.reference(str(message_id))  # type: ignore[union-attr]
+
+        return ""
 
     @staticmethod
     def image(bot: Any, file: Any):

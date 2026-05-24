@@ -1,3 +1,6 @@
+import base64
+from urllib.parse import quote, urlparse
+
 from .core import *  # noqa: F401,F403
 from ..broadcast_manager import format_broadcast_status, start_broadcast
 
@@ -95,10 +98,12 @@ def api_messages_list():
 
         rows = [dict(r) for r in cur.fetchall()]
         rows = fill_private_username_from_group(rows)
+        rows = fill_message_display_profiles(rows)
         
         for r in rows:
             raw_content = r.get("content") or ""
             display_content, content_format = extract_markdown_content_from_repr(raw_content)
+            display_content = normalize_message_display_content(display_content)
         
             r["display_content"] = display_content
             r["content_format"] = content_format
@@ -258,11 +263,13 @@ def api_messages_sessions():
                     l.scene,
                     l.target_id,
                     COALESCE(NULLIF(m.group_name, ''), l.target_id) AS title,
+                    m.bot_id AS bot_id,
                     m.created_at AS last_time,
                     m.content AS last_content,
                     m.direction AS direction,
                     m.username AS username,
                     m.nickname AS nickname,
+                    m.avatar AS avatar,
                     m.user_id AS user_id,
                     (
                         SELECT COUNT(*)
@@ -297,11 +304,13 @@ def api_messages_sessions():
                     l.scene,
                     l.target_id,
                     COALESCE(NULLIF(m.username, ''), NULLIF(m.nickname, ''), l.target_id) AS title,
+                    m.bot_id AS bot_id,
                     m.created_at AS last_time,
                     m.content AS last_content,
                     m.direction AS direction,
                     m.username AS username,
                     m.nickname AS nickname,
+                    m.avatar AS avatar,
                     m.user_id AS user_id,
                     (
                         SELECT COUNT(*)
@@ -320,6 +329,7 @@ def api_messages_sessions():
             return jsonify({"success": False, "error": "无效 scene"})
 
         rows = [dict(r) for r in cur.fetchall()]
+        rows = fill_session_display_profiles(rows)
 
         for r in rows:
             # 修复私聊标题显示成 Bot 的问题
@@ -409,10 +419,12 @@ def api_messages_list_since():
 
         rows = [dict(r) for r in cur.fetchall()]
         rows = fill_private_username_from_group(rows)
+        rows = fill_message_display_profiles(rows)
 
         for r in rows:
             raw_content = r.get("content") or ""
             display_content, content_format = extract_markdown_content_from_repr(raw_content)
+            display_content = normalize_message_display_content(display_content)
 
             r["display_content"] = display_content
             r["content_format"] = content_format
@@ -467,7 +479,11 @@ def api_messages_send():
         media_type = str(data.get("media_type", "") or "").strip()
         media_url = str(data.get("media_url", "") or "").strip()
         reply_message_id = str(data.get("reply_message_id", "") or "").strip()
+        quote_message_id = str(data.get("quote_message_id", "") or "").strip()
         active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
+
+        if quote_message_id and not reply_message_id:
+            reply_message_id = quote_message_id
 
         if send_mode not in ("plain", "markdown"):
             send_mode = "plain"
@@ -672,6 +688,7 @@ def api_messages_send():
             send_mode=send_mode,
             media_type=media_type,
             media_input=media_input,
+            quote_message_id=quote_message_id if adapter == "QQ" else "",
         )
 
         # =========================================================
@@ -1067,9 +1084,13 @@ def api_messages_bots():
             except Exception:
                 adapter = "未知"
 
+            display_bot_id = get_bot_id(bot) or str(bot_id)
+
             bots.append({
                 "bot_id": str(bot_id),
-                "adapter": adapter
+                "adapter": adapter,
+                "nickname": get_web_bot_nickname(),
+                "avatar": build_bot_avatar_url(adapter, display_bot_id, bot),
             })
 
         return jsonify({
@@ -1082,6 +1103,465 @@ def api_messages_bots():
             "success": False,
             "error": str(e)
         })
+
+
+def is_allowed_media_proxy_url(url: str) -> bool:
+    try:
+        parsed = urlparse(str(url or "").strip())
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+
+        exact_hosts = {
+            "multimedia.nt.qq.com.cn",
+            "q.qlogo.cn",
+            "q1.qlogo.cn",
+        }
+        if host in exact_hosts:
+            return True
+
+        return host.endswith(".qpic.cn")
+    except Exception:
+        return False
+
+
+def guess_image_mimetype(data: bytes, fallback: str = "") -> str:
+    fallback = str(fallback or "").split(";", 1)[0].strip().lower()
+    if fallback.startswith("image/"):
+        return fallback
+
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+
+    return "application/octet-stream"
+
+
+@app.route('/api/messages/media_proxy')
+def api_messages_media_proxy():
+    if 'admin_id' not in session:
+        abort(403)
+
+    url = str(request.args.get("url", "") or "").strip()
+    if not is_allowed_media_proxy_url(url):
+        abort(400)
+
+    try:
+        resp = requests.get(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0 Safari/537.36"
+                ),
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                "Referer": "https://im.qq.com/",
+            },
+            timeout=15,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        logger.warning(f"[web.message] 代理下载媒体失败: {url} {e}")
+        abort(502)
+
+    data = resp.content
+    if len(data) > 30 * 1024 * 1024:
+        abort(413)
+
+    content_type = guess_image_mimetype(data, resp.headers.get("Content-Type", ""))
+    proxy_resp = Response(data, mimetype=content_type)
+    proxy_resp.headers["Cache-Control"] = "private, max-age=300"
+    return proxy_resp
+
+
+def get_web_bot_nickname() -> str:
+    try:
+        nicknames = getattr(get_driver().config, "nickname", None)
+
+        if isinstance(nicknames, str):
+            nickname = nicknames.strip()
+            if nickname:
+                return nickname
+
+        for nickname in nicknames or []:
+            nickname = str(nickname or "").strip()
+            if nickname:
+                return nickname
+    except Exception:
+        pass
+
+    return "Bot"
+
+
+def strip_qq_face_markup(text: str) -> str:
+    text = str(text or "")
+
+    def replace_face(match):
+        ext = str(match.group("ext1") or match.group("ext2") or match.group("ext3") or "").strip()
+        label = ""
+
+        if ext:
+            try:
+                padded = ext + ("=" * (-len(ext) % 4))
+                raw = base64.b64decode(padded).decode("utf-8", errors="ignore")
+                data = json.loads(raw)
+                label = str(data.get("text") or "").strip() if isinstance(data, dict) else ""
+            except Exception:
+                label = ""
+
+        return f"[表情:{label}]" if label else ""
+
+    text = re.sub(
+        r"<faceType=\d+,\s*faceId=(?:\"[^\"]*\"|'[^']*'|[^,>]+),\s*ext=(?:\"(?P<ext1>[^\"]*)\"|'(?P<ext2>[^']*)'|(?P<ext3>[^>]+))>\s*",
+        replace_face,
+        text,
+    )
+    return text.replace("\ufffc", "").strip()
+
+
+def normalize_logged_http_url(url: str) -> str:
+    return re.sub(r"\s+", "", str(url or "").strip())
+
+
+def normalize_attachment_type(media_type: str) -> str:
+    media_type = str(media_type or "").strip().lower()
+    if media_type in ("record", "voice"):
+        return "audio"
+    return media_type or "attachment"
+
+
+def get_attachment_label(media_type: str) -> str:
+    media_type = normalize_attachment_type(media_type)
+    label_map = {
+        "image": "图片消息",
+        "file": "文件消息",
+        "audio": "语音消息",
+        "video": "视频消息",
+        "attachment": "附件消息",
+    }
+    return label_map.get(media_type, f"{media_type}附件")
+
+
+def extract_http_url_from_repr_data(data_body: str) -> str:
+    data_body = str(data_body or "")
+
+    try:
+        data_obj = ast.literal_eval(data_body)
+        if isinstance(data_obj, dict):
+            for key in ("url", "file", "path", "src"):
+                value = data_obj.get(key)
+                if isinstance(value, str) and value.startswith(("http://", "https://")):
+                    return normalize_logged_http_url(value)
+    except Exception:
+        pass
+
+    m = re.search(
+        r"['\"](?:url|file|path|src)['\"]\s*:\s*(['\"])(?P<url>https?://[\s\S]*?)\1",
+        data_body,
+        re.S,
+    )
+    if m:
+        return normalize_logged_http_url(m.group("url"))
+
+    return ""
+
+
+def normalize_text_segment_repr(text: str) -> str:
+    def replace_text_segment(match):
+        data_body = match.group("data")
+        try:
+            data_obj = ast.literal_eval(data_body)
+            if isinstance(data_obj, dict):
+                return str(data_obj.get("text") or "")
+        except Exception:
+            pass
+
+        m = re.search(
+            r"['\"]text['\"]\s*:\s*(['\"])(?P<text>[\s\S]*?)\1",
+            data_body,
+            re.S,
+        )
+        return m.group("text") if m else ""
+
+    return re.sub(
+        r"Text\(\s*type=['\"]text['\"]\s*,\s*data=(?P<data>\{[\s\S]*?\})\s*\)",
+        replace_text_segment,
+        str(text or ""),
+        flags=re.S,
+    )
+
+
+def normalize_attachment_repr(text: str) -> str:
+    def replace_attachment(match):
+        media_type = normalize_attachment_type(match.group("type"))
+        url = extract_http_url_from_repr_data(match.group("data"))
+        if not url:
+            return ""
+        return f"<attachment[{media_type}]:{url}>"
+
+    s = re.sub(
+        r"Attachment\(\s*type=['\"](?P<type>[^'\"]+)['\"]\s*,\s*data=(?P<data>\{[\s\S]*?\})\s*\)",
+        replace_attachment,
+        str(text or ""),
+        flags=re.S,
+    )
+
+    def replace_labeled_attachment(match):
+        label = match.group("label")
+        url = normalize_logged_http_url(match.group("url"))
+        type_map = {
+            "图片消息": "image",
+            "语音消息": "audio",
+            "视频消息": "video",
+            "文件消息": "file",
+            "附件消息": "attachment",
+        }
+        return f"<attachment[{type_map.get(label, 'attachment')}]:{url}>"
+
+    return re.sub(
+        r"\[(?P<label>图片消息|语音消息|视频消息|文件消息|附件消息)\]\s*(?P<url>https?://[^\s<>'\"]+)",
+        replace_labeled_attachment,
+        s,
+    )
+
+
+def cleanup_message_segment_repr(text: str) -> str:
+    s = str(text or "").strip()
+
+    if s.startswith("[") and s.endswith("]"):
+        s = s[1:-1].strip()
+
+    s = re.sub(r"^\s*,\s*", "", s)
+    s = re.sub(r"\s*,\s*$", "", s)
+    s = re.sub(r"\s*,\s*(?=<attachment\[)", "\n", s)
+    s = re.sub(r"(<attachment\[[^\]]+\]:https?://[^>]+>)\s*,\s*", r"\1\n", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
+
+
+def normalize_message_display_content(text: str) -> str:
+    raw = str(text or "")
+    had_segment_repr = bool(re.search(r"\b(?:Text|Attachment)\(", raw))
+
+    display = normalize_text_segment_repr(raw)
+    display = normalize_attachment_repr(display)
+    display = strip_qq_face_markup(display)
+
+    if had_segment_repr:
+        display = cleanup_message_segment_repr(display)
+
+    return display
+
+
+def attachment_tokens_to_preview(text: str) -> str:
+    return re.sub(
+        r"<attachment\[([^\]]+)\]:https?://[^>]+>",
+        lambda m: f"[{get_attachment_label(m.group(1))}]",
+        str(text or ""),
+    )
+
+
+def is_qq_adapter_name(adapter: str) -> bool:
+    return str(adapter or "").strip().lower() == "qq"
+
+
+def q_number_avatar_url(qq: str) -> str:
+    qq = str(qq or "").strip()
+    if not qq:
+        return ""
+
+    return f"https://q1.qlogo.cn/g?b=qq&nk={quote(qq, safe='')}&s=640"
+
+
+def qq_openid_avatar_url(appid: str, openid: str) -> str:
+    appid = str(appid or "").strip()
+    openid = str(openid or "").strip()
+    if not appid or not openid:
+        return ""
+
+    return f"https://q.qlogo.cn/qqapp/{quote(appid, safe='')}/{quote(openid, safe='')}/0"
+
+
+def is_http_url(value: str) -> bool:
+    value = str(value or "").strip()
+    return value.startswith("http://") or value.startswith("https://")
+
+
+def get_bot_for_message_row(row: dict):
+    row_bot_id = str(row.get("bot_id") or "").strip()
+
+    if row_bot_id:
+        for key, bot in get_bots().items():
+            try:
+                if str(key) == row_bot_id or str(get_bot_id(bot) or "") == row_bot_id:
+                    return bot
+            except Exception:
+                continue
+
+    return get_bot_by_adapter(str(row.get("adapter") or ""))
+
+
+def get_configured_qq_appid() -> str:
+    try:
+        qq_bots = getattr(get_driver().config, "qq_bots", None)
+
+        if isinstance(qq_bots, str):
+            try:
+                qq_bots = json.loads(qq_bots)
+            except Exception:
+                qq_bots = []
+
+        if isinstance(qq_bots, dict):
+            qq_bots = [qq_bots]
+
+        for item in qq_bots or []:
+            if isinstance(item, dict):
+                value = item.get("id") or item.get("appid") or item.get("app_id")
+            else:
+                value = getattr(item, "id", None) or getattr(item, "appid", None) or getattr(item, "app_id", None)
+
+            if value:
+                return str(value)
+    except Exception:
+        pass
+
+    return ""
+
+
+def get_qq_appid(row: dict, bot=None) -> str:
+    for value in (
+        row.get("bot_id"),
+        get_bot_id(bot) if bot is not None else "",
+        get_configured_qq_appid(),
+    ):
+        value = str(value or "").strip()
+        if value:
+            return value
+
+    return ""
+
+
+def get_qq_bot_uin(bot=None) -> str:
+    candidates = []
+
+    for obj in (
+        bot,
+        getattr(bot, "self", None) if bot is not None else None,
+        getattr(bot, "bot_info", None) if bot is not None else None,
+        getattr(bot, "self_info", None) if bot is not None else None,
+    ):
+        if obj is None:
+            continue
+
+        for attr in ("bot_uin", "uin", "qq", "qq_number"):
+            candidates.append(getattr(obj, attr, None))
+
+    try:
+        candidates.append(getattr(XiuConfig(), "bot_uin", None))
+    except Exception:
+        pass
+
+    try:
+        candidates.append(getattr(get_driver().config, "bot_uin", None))
+    except Exception:
+        pass
+
+    for value in candidates:
+        value = str(value or "").strip()
+        if value and value != "0":
+            return value
+
+    return ""
+
+
+def build_user_avatar_url(adapter: str, bot_id: str, user_id: str, existing: str = "", bot=None) -> str:
+    existing = str(existing or "").strip()
+    if is_http_url(existing):
+        return existing
+
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        return ""
+
+    if is_qq_adapter_name(adapter):
+        appid = get_qq_appid({"bot_id": bot_id}, bot)
+        return qq_openid_avatar_url(appid, user_id)
+
+    if is_ob11_adapter_name(adapter):
+        return q_number_avatar_url(user_id)
+
+    return ""
+
+
+def build_bot_avatar_url(adapter: str, bot_id: str = "", bot=None) -> str:
+    if is_qq_adapter_name(adapter):
+        bot_uin = get_qq_bot_uin(bot)
+        return q_number_avatar_url(bot_uin)
+
+    if is_ob11_adapter_name(adapter):
+        return q_number_avatar_url(bot_id or (get_bot_id(bot) if bot is not None else ""))
+
+    return ""
+
+
+def fill_message_display_profiles(rows: list[dict]) -> list[dict]:
+    if not rows:
+        return rows
+
+    bot_nickname = get_web_bot_nickname()
+
+    for r in rows:
+        adapter = str(r.get("adapter") or "")
+        bot_id = str(r.get("bot_id") or "")
+
+        if r.get("direction") == "send":
+            bot = get_bot_for_message_row(r)
+            display_name = bot_nickname or r.get("username") or r.get("nickname") or "Bot"
+            r["username"] = display_name
+            r["nickname"] = display_name
+            r["avatar"] = build_bot_avatar_url(adapter, bot_id, bot) or str(r.get("avatar") or "")
+        else:
+            r["avatar"] = build_user_avatar_url(
+                adapter,
+                bot_id,
+                str(r.get("user_id") or ""),
+                str(r.get("avatar") or ""),
+            )
+
+    return rows
+
+
+def fill_session_display_profiles(rows: list[dict]) -> list[dict]:
+    if not rows:
+        return rows
+
+    for r in rows:
+        scene = str(r.get("scene") or "")
+        if scene not in ("private", "channel_private"):
+            continue
+
+        adapter = str(r.get("adapter") or "")
+        bot_id = str(r.get("bot_id") or "")
+        target_id = str(r.get("target_id") or "")
+
+        r["avatar"] = build_user_avatar_url(
+            adapter,
+            bot_id,
+            target_id,
+            str(r.get("avatar") or ""),
+        )
+
+    return rows
 
 @app.route('/api/messages/markdown_preview', methods=['POST'])
 def api_messages_markdown_preview():
@@ -1387,7 +1867,8 @@ def build_session_preview(row: dict) -> str:
     raw = row.get("content") or ""
     display_content, _ = extract_markdown_content_from_repr(raw)
 
-    text = str(display_content or "").replace("\r", " ").replace("\n", " ").strip()
+    text = normalize_message_display_content(display_content)
+    text = attachment_tokens_to_preview(text).replace("\r", " ").replace("\n", " ").strip()
     if not text:
         text = "[空消息]"
     if len(text) > 60:

@@ -2,6 +2,7 @@
 前尘往事 - 剧本数据
 10幕人生 × 若干事件 × 36种天赋 × 19种结局
 """
+import random
 
 # ════════════════════════════════════════════════════════
 #  天赋系统：正面(20) + 混合(8) + 负面(8) = 36种天赋
@@ -320,6 +321,7 @@ BRANCH_HIGH_THRESHOLD = 14
 BRANCH_LOW_THRESHOLD = 3
 EARLY_DEATH_STAGE_LIMIT = 3
 EARLY_DEATH_ATTR_THRESHOLD = 1
+EARLY_DEATH_NEGATIVE_RATE = 5
 
 EARLY_DEATH_ENDING = {
     "name": "夭折",
@@ -454,25 +456,52 @@ EARLY_DEATH_RESULTS = {
 }
 
 
-def check_early_death(stage_idx: int, raw_attrs: dict, current_attrs: dict, event=None):
-    """前三幕资质过低或原始结算为负时触发夭折。"""
+def _negative_early_death_chance(value: int):
+    return min(abs(int(value)) * EARLY_DEATH_NEGATIVE_RATE, 100)
+
+
+def check_early_death(
+    stage_idx: int,
+    raw_attrs: dict,
+    current_attrs: dict,
+    event=None,
+    negative_rolls=None,
+):
+    """前三幕资质过低，或原始结算为负时按负值概率触发夭折。"""
     if stage_idx >= EARLY_DEATH_STAGE_LIMIT:
         return None
+
+    if negative_rolls is None or not isinstance(negative_rolls, dict):
+        negative_rolls = {}
 
     triggered = []
     for attr in PAST_LIFE_ATTRS:
         raw_value = int(raw_attrs.get(attr, current_attrs.get(attr, 0)))
         current_value = int(current_attrs.get(attr, raw_value))
         if raw_value < 0:
-            triggered.append((attr, raw_value, "负值"))
-        elif current_value <= EARLY_DEATH_ATTR_THRESHOLD:
-            triggered.append((attr, current_value, "过低"))
+            checked_value = negative_rolls.get(attr)
+            try:
+                checked_value = int(checked_value)
+            except (TypeError, ValueError):
+                checked_value = None
+            if checked_value is not None and raw_value >= checked_value:
+                continue
+
+            chance = _negative_early_death_chance(raw_value)
+            negative_rolls[attr] = raw_value
+            if random.randint(1, 100) <= chance:
+                triggered.append((attr, raw_value, "负值", chance))
+            continue
+
+        if current_value <= EARLY_DEATH_ATTR_THRESHOLD:
+            triggered.append((attr, current_value, "过低", None))
 
     if not triggered:
         return None
 
-    attr, value, reason = min(triggered, key=lambda item: item[1])
+    attr, value, reason, chance = min(triggered, key=lambda item: item[1])
     event_hint = _short_context((event or {}).get("text", ""), "幼年劫数")
+    chance_text = f"，夭折概率{chance}%" if chance is not None else ""
     return {
         "attr": attr,
         "value": value,
@@ -480,7 +509,8 @@ def check_early_death(stage_idx: int, raw_attrs: dict, current_attrs: dict, even
         "ending": EARLY_DEATH_ENDING,
         "message": (
             f"幼年劫数：{event_hint}\n"
-            f"{attr}资质{reason}（{attr}:{value}），{EARLY_DEATH_RESULTS.get(attr, EARLY_DEATH_ENDING['desc'])}"
+            f"{attr}资质{reason}（{attr}:{value}{chance_text}），"
+            f"{EARLY_DEATH_RESULTS.get(attr, EARLY_DEATH_ENDING['desc'])}"
         ),
     }
 
