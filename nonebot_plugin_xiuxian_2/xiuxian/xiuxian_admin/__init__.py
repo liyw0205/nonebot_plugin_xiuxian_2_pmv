@@ -1269,7 +1269,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 重置通天塔 - 重置玩家通天塔层数
 → 重置历练 - 重置当前历练状态
 → 重置副本 / 手动重置 - 重置副本状态
-→ 重置前尘 - 重置前尘系统
+→ 重置前尘 / 重置前尘 all - 重置所有前尘状态
 → 重置幻境 - 重置当前幻境数据
 → 清空幻境 - 仅清空幻境玩家数据
 → 重置新手礼包 - 重置新手礼包领取状态

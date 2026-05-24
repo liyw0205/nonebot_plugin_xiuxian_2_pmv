@@ -16,7 +16,7 @@ FIELDS = [
     "total_score",      # 总分
     "event_indices",    # 每幕选中的事件索引
     "event_snapshots",  # 每幕选中的事件快照
-    "early_death_rolls",  # 已判定过的负值夭折风险
+    "early_death_rolls",  # 已判定过的提前终局风险
     "history",          # 选择历史
     "last_run_time",    # 上次运行时间
     "total_runs",       # 总运行次数
@@ -190,6 +190,18 @@ class PastLifeLimit:
             state["endings_log"] = []
 
         self.save_user_state(user_id, state)
+
+    def reset_all_user_state(self, clear_history=False):
+        """重置所有已有前尘记录的用户状态。"""
+        records = player_data_manager.get_all_records(self.table_name)
+        count = 0
+        for record in records:
+            user_id = record.get("user_id")
+            if not user_id:
+                continue
+            self.reset_user_state(user_id, clear_history=clear_history)
+            count += 1
+        return count
 
 
 past_life_limit = PastLifeLimit()

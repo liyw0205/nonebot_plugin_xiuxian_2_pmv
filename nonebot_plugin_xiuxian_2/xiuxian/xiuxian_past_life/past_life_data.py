@@ -320,14 +320,30 @@ PAST_LIFE_ATTRS = ["悟性", "机缘", "根骨", "气运", "心性"]
 BRANCH_HIGH_THRESHOLD = 14
 BRANCH_LOW_THRESHOLD = 3
 EARLY_DEATH_STAGE_LIMIT = 3
-EARLY_DEATH_ATTR_THRESHOLD = 1
-EARLY_DEATH_NEGATIVE_RATE = 5
+EARLY_DEATH_ATTR_THRESHOLD = 3
+EARLY_DEATH_RISK_RATE = 5
 
 EARLY_DEATH_ENDING = {
     "name": "夭折",
     "desc": "先天有缺，幼年气数难续。这一世尚未真正踏上仙途，便已匆匆归入轮回。",
     "tier": 5,
     "early": True,
+}
+
+ACCIDENT_ENDING = {
+    "name": "意外身陨",
+    "desc": "修行路上并非每一道劫数都来自天命。一次失手、一场暗算、一念之差，都足以让未竟之路戛然而止。",
+    "tier": 5,
+    "premature": True,
+    "partial_reward": True,
+}
+
+HEAVENLY_PUNISHMENT_ENDING = {
+    "name": "天谴陨落",
+    "desc": "你触碰了超出自身承载的因果与天机，终被天道反噬。此世未能圆满，却仍留下了几分可继承的道痕。",
+    "tier": 5,
+    "premature": True,
+    "partial_reward": True,
 }
 
 GOOD_BRANCH_SUFFIX = {
@@ -455,9 +471,54 @@ EARLY_DEATH_RESULTS = {
     "心性": "心神早衰，梦魇与惊惧日夜侵蚀，稚嫩道心先一步崩散。",
 }
 
+ACCIDENT_RESULTS = {
+    "悟性": "灵台失守，关键时刻误判了局势，一步踏错便再无回头余地。",
+    "机缘": "机缘断续，旁人能避开的变数偏偏落在你身上，终成一场无妄之灾。",
+    "根骨": "根基不稳，旧伤与反噬一并爆发，肉身未能撑过这场劫数。",
+    "气运": "气运衰微，连环变故层层压下，最终把此世推向断途。",
+    "心性": "道心动摇，心魔与执念乘虚而入，让你在最不该失守时失守。",
+}
 
-def _negative_early_death_chance(value: int):
-    return min(abs(int(value)) * EARLY_DEATH_NEGATIVE_RATE, 100)
+HEAVENLY_PUNISHMENT_RESULTS = {
+    "悟性": "你窥见了不该窥见的天机，灵台被大道反噬，神魂几近崩散。",
+    "机缘": "逆天机缘反成劫源，所得越多，因果越重，终被天道清算。",
+    "根骨": "天威压身，肉身根基难承大道重负，在劫光中寸寸崩解。",
+    "气运": "气运耗尽后，天道再无庇护，一道劫数便截断了此世前路。",
+    "心性": "道心裂痕引来天道拷问，心劫化为天罚，将未稳的本心彻底击碎。",
+}
+
+HEAVENLY_PUNISHMENT_KEYWORDS = (
+    "天劫", "天道", "天命", "心魔", "因果", "轮回", "飞升", "上界", "大道", "化道", "渡劫",
+)
+
+
+def _early_death_chance(value: int):
+    if int(value) > EARLY_DEATH_ATTR_THRESHOLD:
+        return 0
+    risk_level = EARLY_DEATH_ATTR_THRESHOLD - int(value) + 1
+    return min(max(risk_level, 1) * EARLY_DEATH_RISK_RATE, 100)
+
+
+def _should_roll_early_death_risk(rolls: dict, phase: str, attr: str, value: int):
+    key = f"{phase}:{attr}"
+    checked_value = rolls.get(key)
+    try:
+        checked_value = int(checked_value)
+    except (TypeError, ValueError):
+        checked_value = None
+
+    if checked_value is not None and value >= checked_value:
+        return False
+
+    rolls[key] = value
+    return True
+
+
+def _is_heavenly_punishment(stage_idx: int, attr: str, event=None):
+    text = str((event or {}).get("text", ""))
+    if attr in ("气运", "心性") and stage_idx >= 5:
+        return True
+    return any(keyword in text for keyword in HEAVENLY_PUNISHMENT_KEYWORDS)
 
 
 def check_early_death(
@@ -465,52 +526,66 @@ def check_early_death(
     raw_attrs: dict,
     current_attrs: dict,
     event=None,
-    negative_rolls=None,
+    early_death_rolls=None,
 ):
-    """前三幕资质过低，或原始结算为负时按负值概率触发夭折。"""
-    if stage_idx >= EARLY_DEATH_STAGE_LIMIT:
+    """前三幕触发夭折；之后触发提前终局并结算部分奖励。"""
+    is_childhood = stage_idx < EARLY_DEATH_STAGE_LIMIT
+    if not is_childhood and stage_idx >= len(STAGES) - 1:
         return None
 
-    if negative_rolls is None or not isinstance(negative_rolls, dict):
-        negative_rolls = {}
+    if early_death_rolls is None or not isinstance(early_death_rolls, dict):
+        early_death_rolls = {}
 
+    phase = "early" if is_childhood else "premature"
     triggered = []
     for attr in PAST_LIFE_ATTRS:
         raw_value = int(raw_attrs.get(attr, current_attrs.get(attr, 0)))
         current_value = int(current_attrs.get(attr, raw_value))
-        if raw_value < 0:
-            checked_value = negative_rolls.get(attr)
-            try:
-                checked_value = int(checked_value)
-            except (TypeError, ValueError):
-                checked_value = None
-            if checked_value is not None and raw_value >= checked_value:
-                continue
-
-            chance = _negative_early_death_chance(raw_value)
-            negative_rolls[attr] = raw_value
-            if random.randint(1, 100) <= chance:
-                triggered.append((attr, raw_value, "负值", chance))
+        risk_value = min(raw_value, current_value)
+        if risk_value > EARLY_DEATH_ATTR_THRESHOLD:
             continue
 
-        if current_value <= EARLY_DEATH_ATTR_THRESHOLD:
-            triggered.append((attr, current_value, "过低", None))
+        if not _should_roll_early_death_risk(early_death_rolls, phase, attr, risk_value):
+            continue
+
+        reason = "负值" if risk_value < 0 else "过低"
+        chance = _early_death_chance(risk_value)
+        if random.randint(1, 100) <= chance:
+            triggered.append((attr, risk_value, reason, chance))
 
     if not triggered:
         return None
 
     attr, value, reason, chance = min(triggered, key=lambda item: item[1])
-    event_hint = _short_context((event or {}).get("text", ""), "幼年劫数")
     chance_text = f"，夭折概率{chance}%" if chance is not None else ""
+    event_hint = _short_context((event or {}).get("text", ""), "幼年劫数")
+    if is_childhood:
+        return {
+            "attr": attr,
+            "value": value,
+            "reason": reason,
+            "ending": EARLY_DEATH_ENDING,
+            "message": (
+                f"幼年劫数：{event_hint}\n"
+                f"{attr}资质{reason}（{attr}:{value}{chance_text}），"
+                f"{EARLY_DEATH_RESULTS.get(attr, EARLY_DEATH_ENDING['desc'])}"
+            ),
+        }
+
+    heavenly_punishment = _is_heavenly_punishment(stage_idx, attr, event)
+    ending = HEAVENLY_PUNISHMENT_ENDING if heavenly_punishment else ACCIDENT_ENDING
+    results = HEAVENLY_PUNISHMENT_RESULTS if heavenly_punishment else ACCIDENT_RESULTS
+    risk_name = "天道劫数" if heavenly_punishment else "中途劫数"
+    chance_text = f"，提前终局概率{chance}%" if chance is not None else ""
     return {
         "attr": attr,
         "value": value,
         "reason": reason,
-        "ending": EARLY_DEATH_ENDING,
+        "ending": ending,
         "message": (
-            f"幼年劫数：{event_hint}\n"
+            f"{risk_name}：{event_hint}\n"
             f"{attr}资质{reason}（{attr}:{value}{chance_text}），"
-            f"{EARLY_DEATH_RESULTS.get(attr, EARLY_DEATH_ENDING['desc'])}"
+            f"{results.get(attr, ending['desc'])}"
         ),
     }
 

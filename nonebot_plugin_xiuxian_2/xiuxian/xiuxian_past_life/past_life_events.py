@@ -125,7 +125,8 @@ class PastLifeEngine:
         stage_0 = STAGES[0]
         event = self._get_stage_event(state, 0)
 
-        attrs_str = "  ".join(f"{k}:{accumulated[k]}" for k in ATTR_NAMES)
+        base_attrs_str = "  ".join(f"{k}:{alloc.get(k, 0)}" for k in ATTR_NAMES)
+        current_attrs_str = "  ".join(f"{k}:{accumulated[k]}" for k in ATTR_NAMES)
         label = TALENT_TYPE_LABELS.get(talent_type, "")
 
         # 构建天赋效果描述
@@ -149,7 +150,8 @@ class PastLifeEngine:
             f"{talent_prefix}天赋觉醒：【{talent_info['name']}】\n"
             f"{talent_info['desc']}\n"
             f"天赋效果：{effects_str}\n"
-            f"先天资质：{attrs_str}\n"
+            f"先天资质：{base_attrs_str}\n"
+            f"当前属性：{current_attrs_str}\n"
             f"═════════════\n"
             f"【第一幕·{stage_0['name']}】({stage_0['age']})\n"
             f"{birth_desc}\n\n"
@@ -225,6 +227,20 @@ class PastLifeEngine:
             state["stage"] = current_stage + 1
             past_life_limit.save_user_state(user_id, state)
             ending = early_death["ending"]
+            if ending.get("partial_reward"):
+                reward_rate = self._calculate_partial_reward_rate(state)
+                rewards = self._calculate_rewards(
+                    user_id,
+                    ending,
+                    state,
+                    reward_rate=reward_rate,
+                    include_item=False,
+                )
+                reward_msg = rewards["msg"]
+            else:
+                rewards = {"msg": "无"}
+                reward_msg = "本世过早夭折，未能留下可继承的前世馈赠。\n═════════════"
+
             ending_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
@@ -234,11 +250,10 @@ class PastLifeEngine:
                 f"🏆 结局：【{ending['name']}】\n"
                 f"{ending['desc']}\n\n"
                 f"═══  前世奖励  ═════\n"
-                f"本世过早夭折，未能留下可继承的前世馈赠。\n"
-                f"═════════════"
+                f"{reward_msg}"
             )
             past_life_limit.save_run_result(user_id, ending["name"], state["total_score"])
-            return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": {"msg": "无"}}
+            return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": rewards}
 
         # 推进到下一幕
         next_stage = current_stage + 1
@@ -303,7 +318,13 @@ class PastLifeEngine:
         return ENDINGS[-1]
 
     # ── 计算奖励 ────────────────────────────────────
-    def _calculate_rewards(self, user_id, ending, state):
+    def _calculate_partial_reward_rate(self, state):
+        completed_stages = int(state.get("stage", 0))
+        rate = completed_stages / len(STAGES)
+        return max(0.1, min(rate, 0.9))
+
+    def _calculate_rewards(self, user_id, ending, state, reward_rate=1.0, include_item=True):
+        reward_rate = max(0.0, min(float(reward_rate), 1.0))
         tier = ending["tier"]
         reward = REWARD_TABLE.get(tier, REWARD_TABLE[5])
 
@@ -313,33 +334,45 @@ class PastLifeEngine:
 
         # 修为奖励
         user_rank = max(convert_rank(user_info["level"])[0] // 3, 1)
-        exp_amount = int(user_info["exp"] * reward["exp_rate"] * min(0.1 * user_rank, 1))
-        exp_amount = max(exp_amount, 10000)
+        exp_base = int(user_info["exp"] * reward["exp_rate"] * min(0.1 * user_rank, 1))
+        exp_amount = int(exp_base * reward_rate)
+        if reward_rate >= 1:
+            exp_amount = max(exp_amount, 10000)
+        elif reward_rate > 0:
+            exp_amount = max(exp_amount, max(1000, int(10000 * reward_rate)))
         sql_message.update_exp(user_id, exp_amount)
 
         # 灵石奖励
-        stone_amount = reward["stone"]
+        stone_amount = int(reward["stone"] * reward_rate)
         sql_message.update_ls(user_id, stone_amount, 1)
 
         # 物品奖励
         item_msg = ""
-        user_rank_val = convert_rank(user_info["level"])[0]
-        min_rank = max(user_rank_val - 16 - reward["item_rank_offset"], 5)
-        item_rank = random.randint(min_rank, min_rank + 20)
-        item_types = ["功法", "神通", "药材"]
-        item_type = random.choice(item_types)
-        item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+        if include_item:
+            user_rank_val = convert_rank(user_info["level"])[0]
+            min_rank = max(user_rank_val - 16 - reward["item_rank_offset"], 5)
+            item_rank = random.randint(min_rank, min_rank + 20)
+            item_types = ["功法", "神通", "药材"]
+            item_type = random.choice(item_types)
+            item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
 
-        if item_id_list:
-            item_id = random.choice(item_id_list)
-            item_info = items.get_data_by_item_id(item_id)
-            sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
-            item_msg = f"\n物品：{item_info['level']}·{item_info['name']}"
+            if item_id_list:
+                item_id = random.choice(item_id_list)
+                item_info = items.get_data_by_item_id(item_id)
+                sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
+                item_msg = f"\n物品：{item_info['level']}·{item_info['name']}"
 
         # 成就点
-        points = reward["points"]
+        points = int(reward["points"] * reward_rate)
+        if reward_rate > 0:
+            points = max(points, 1)
+
+        partial_msg = ""
+        if reward_rate < 1:
+            partial_msg = f"提前终局，仅结算{int(reward_rate * 100)}%前世奖励\n"
 
         msg = (
+            f"{partial_msg}"
             f"修为 +{number_to(exp_amount)}\n"
             f"灵石 +{number_to(stone_amount)}\n"
             f"前世成就点 +{points}"
@@ -354,6 +387,7 @@ class PastLifeEngine:
                 "stone": stone_amount,
                 "points": points,
                 "tier": tier,
+                "reward_rate": reward_rate,
             }
         }
 
@@ -383,7 +417,7 @@ class PastLifeEngine:
                         f"═════════════\n"
                         f"发送【投胎】开始\n"
                         f"投胎后先天资质即刻定下\n"
-                        f"资质总和20，单项不低于0，也可能偏科极高"
+                        f"初始资质总和15~20随机，单项不低于3，也可能偏科极高"
                     ),
                     "state": 0,
                 }
@@ -393,7 +427,7 @@ class PastLifeEngine:
                 "message": (
                     f"发送【投胎】开始前尘往事。\n"
                     f"投胎后先天资质即刻定下。\n"
-                    f"资质总和20，单项不低于0，也可能偏科极高。"
+                    f"初始资质总和15~20随机，单项不低于3，也可能偏科极高。"
                 ),
                 "state": 1,
             }

@@ -18,9 +18,13 @@ from .past_life_events import past_life_engine, ATTR_NAMES
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 
-INITIAL_APTITUDE_TOTAL = 20
-INITIAL_APTITUDE_MIN = 0
+INITIAL_APTITUDE_MIN = 3
 INITIAL_APTITUDE_MAX = 15
+INITIAL_APTITUDE_TOTAL_MIN = INITIAL_APTITUDE_MIN * len(ATTR_NAMES)
+INITIAL_APTITUDE_TOTAL_MAX = 20
+PAST_LIFE_RESET_ALL_TOKENS = {"all", "全部", "全体", "所有"}
+PAST_LIFE_RESET_CLEAR_TOKENS = {"全清", "清空", "清空历史"}
+PAST_LIFE_RESET_HELP_TOKENS = {"help", "帮助", "用法", "?"}
 
 # ═══ 命令定义 ═══
 past_life_cmd = on_command("前尘往事", aliases={"前世今生"}, priority=5, block=True)
@@ -46,7 +50,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "═════════════\n"
         "规则说明：\n"
         "1. 投胎后五项先天资质即刻定下，本轮不可重抽\n"
-        "   资质总和20，单项不低于0，也可能偏科极高\n"
+        "   初始资质总和15~20随机，单项不低于3，也可能偏科极高\n"
         "2. 经历十幕人生，每幕做出抉择\n"
         "3. 选择会根据当前资质产生更佳、受挫或平稳结果\n"
         "4. 不同结局获得不同奖励\n"
@@ -248,10 +252,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     text = args.extract_plain_text().strip()
 
-    if not text:
+    if _is_reset_help(text):
         await handle_send(
             bot, event,
             "用法：\n"
+            "重置前尘（重置所有用户，保留历史）\n"
+            "重置前尘 all\n"
+            "重置前尘 all 全清（清空所有历史）\n"
             "重置前尘 道号\n"
             "重置前尘 @某人\n"
             "重置前尘 道号 全清（清空历史）"
@@ -259,7 +266,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     # 是否全清
-    clear_history = ("全清" in text)
+    clear_history = _has_clear_history_token(text)
+
+    if _is_reset_all(text):
+        count = past_life_limit.reset_all_user_state(clear_history=clear_history)
+        mode = "（已清空历史）" if clear_history else "（保留历史）"
+        await handle_send(bot, event, f"已重置所有用户的前尘状态，共{count}条记录 {mode}")
+        return
 
     # 先尝试@目标
     target_user = None
@@ -272,9 +285,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 没@就按道号
     if not target_user:
-        parts = text.split()
-        target_name = parts[0]
-        target_user = sql_message.get_user_info_with_name(target_name)
+        target_name = _get_reset_target_name(text)
+        if target_name:
+            target_user = sql_message.get_user_info_with_name(target_name)
 
     if not target_user:
         await handle_send(bot, event, "未找到目标用户（请@或输入正确道号）")
@@ -287,9 +300,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 # ═══ 工具函数 ═══
 def _generate_initial_aptitude():
-    """定下本轮先天资质：总和20，单项不低于0。"""
+    """定下本轮先天资质：总和15~20随机，单项不低于3。"""
     shuffled_attrs = random.sample(ATTR_NAMES, len(ATTR_NAMES))
-    remaining = INITIAL_APTITUDE_TOTAL
+    remaining = random.randint(INITIAL_APTITUDE_TOTAL_MIN, INITIAL_APTITUDE_TOTAL_MAX)
     values = {}
 
     for idx, attr in enumerate(shuffled_attrs):
@@ -301,3 +314,40 @@ def _generate_initial_aptitude():
         remaining -= value
 
     return {attr: values[attr] for attr in ATTR_NAMES}
+
+
+def _split_reset_tokens(text: str):
+    return [part.strip() for part in text.split() if part.strip()]
+
+
+def _is_reset_help(text: str):
+    parts = _split_reset_tokens(text)
+    return bool(parts) and all(part.lower() in PAST_LIFE_RESET_HELP_TOKENS for part in parts)
+
+
+def _has_clear_history_token(text: str):
+    parts = _split_reset_tokens(text)
+    return any(part in PAST_LIFE_RESET_CLEAR_TOKENS for part in parts) or "全清" in text
+
+
+def _get_reset_target_name(text: str):
+    for part in _split_reset_tokens(text):
+        if part in PAST_LIFE_RESET_CLEAR_TOKENS:
+            continue
+        return part.lstrip("@＠")
+    return ""
+
+
+def _is_reset_all(text: str):
+    parts = _split_reset_tokens(text)
+    if not parts:
+        return True
+
+    meaningful_parts = [
+        part for part in parts
+        if part not in PAST_LIFE_RESET_CLEAR_TOKENS
+    ]
+    if not meaningful_parts:
+        return True
+
+    return any(part.lower() in PAST_LIFE_RESET_ALL_TOKENS for part in meaningful_parts)
