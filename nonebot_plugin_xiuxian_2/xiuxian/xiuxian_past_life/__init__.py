@@ -2,7 +2,6 @@
 前尘往事 - 命令入口
 修仙版人生重开 · 剧本杀
 """
-import re
 import random
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
@@ -18,6 +17,10 @@ from .past_life_events import past_life_engine, ATTR_NAMES
 
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
+
+INITIAL_APTITUDE_TOTAL = 20
+INITIAL_APTITUDE_MIN = -5
+INITIAL_APTITUDE_MAX = 15
 
 # ═══ 命令定义 ═══
 past_life_cmd = on_command("前尘往事", aliases={"前世今生"}, priority=5, block=True)
@@ -36,18 +39,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = (
         "\n═══  前尘往事  ═════\n"
         "【前尘往事】- 查看/开启前世回忆\n"
-        "【投胎 悟性X 机缘X 根骨X 气运X 心性X】- 分配资质开始\n"
-        "【投胎 随机】- 随机分配资质\n"
+        "【投胎】- 生成并锁定本轮先天资质\n"
         "【前尘选择 1/2/3】- 在剧情中做出选择\n"
         "【前尘回忆】- 查看过往前世记录\n"
         "【前尘排行】- 查看前世评分排行\n"
         "═════════════\n"
         "规则说明：\n"
-        "1. 分配20点到五项先天资质（或随机分配）\n"
+        "1. 投胎后自动生成五项先天资质，本轮不可重抽\n"
+        "   资质总和20，单项可能为负，也可能偏科极高\n"
         "2. 经历十幕人生，每幕做出抉择\n"
-        "3. 你的选择将决定前世结局\n"
+        "3. 选择会根据当前资质产生更佳、受挫或平稳结果\n"
         "4. 不同结局获得不同奖励\n"
-        "5. 每天可重开一次\n"
+        "5. 每次完成后需沉淀12小时\n"
         "═════════════\n"
         "十九种结局等你解锁！"
     )
@@ -69,6 +72,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     if result["state"] == 0:
         await handle_send(bot, event, result["message"], md_type="前尘", k1="投胎", v1="投胎", k2="回忆", v2="前尘回忆", k3="排行", v3="前尘排行")
+    elif result["state"] == 1:
+        await handle_send(bot, event, result["message"], md_type="前尘", k1="投胎", v1="投胎", k2="回忆", v2="前尘回忆", k3="排行", v3="前尘排行")
     elif result["state"] == 2:
         await handle_send(bot, event, result["message"], md_type="前尘", k1="选择1", v1="前尘选择 1", k2="选择2", v2="前尘选择 2", k3="选择3", v3="前尘选择 3")
     else:
@@ -77,7 +82,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await past_life_cmd.finish()
 
 
-# ═══ 投胎（属性分配） ═══
+# ═══ 投胎（自动生成资质） ═══
 @reincarnate_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -88,50 +93,33 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = user_info["user_id"]
 
+    state = past_life_limit.get_user_state(user_id)
+    if state.get("state") == 2:
+        result = past_life_engine.get_current_display(user_id)
+        result["message"] = "本轮前尘已开始，资质与事件已锁定。\n" + result["message"]
+        if result["state"] == 2:
+            await handle_send(bot, event, result["message"], md_type="前尘",
+                              k1="选择1", v1="前尘选择 1",
+                              k2="选择2", v2="前尘选择 2",
+                              k3="选择3", v3="前尘选择 3")
+        else:
+            await handle_send(bot, event, result["message"], md_type="前尘",
+                              k1="往事", v1="前尘往事",
+                              k2="回忆", v2="前尘回忆",
+                              k3="帮助", v3="前尘帮助")
+        await reincarnate_cmd.finish()
+
     # 检查冷却
     if not past_life_limit.check_cooldown(user_id):
-        remaining = past_life_limit.get_cooldown_remaining(user_id)
-        hours = remaining // 60
-        mins = remaining % 60
-        msg = f"今日已游历前世，请等待{hours}小时{mins}分钟（至明日0点）后再来。"
+        msg = f"前尘往事仍在沉淀，{past_life_limit.get_cooldown_text(user_id)}"
         await handle_send(bot, event, msg, md_type="前尘", k1="回忆", v1="前尘回忆", k2="帮助", v2="前尘帮助", k3="排行", v3="前尘排行")
         await reincarnate_cmd.finish()
 
-    # 解析属性分配
-    text = args.extract_plain_text().strip()
-
-    # 支持随机分配
-    if not text or text in ("随机", "随机分配", "随机投胎"):
-        alloc = _random_allocation()
-    else:
-        alloc = _parse_allocation(text)
-
-    if alloc is None:
-        msg = (
-            "格式错误！请按以下格式输入：\n"
-            "投胎 悟性5 机缘4 根骨3 气运4 心性4\n"
-            "或发送【投胎 随机】随机分配\n"
-            "（五项之和必须等于20，每项0~10）"
-        )
-        await handle_send(bot, event, msg, md_type="前尘", k1="帮助", v1="前尘帮助", k2="往事", v2="前尘往事", k3="排行", v3="前尘排行")
-        await reincarnate_cmd.finish()
-
-    # 校验总和
-    total = sum(alloc.values())
-    if total != 20:
-        msg = f"属性总和为{total}，必须等于20！请重新分配。"
-        await handle_send(bot, event, msg, md_type="前尘", k1="帮助", v1="前尘帮助", k2="往事", v2="前尘往事", k3="排行", v3="前尘排行")
-        await reincarnate_cmd.finish()
-
-    # 校验范围
-    for k, v in alloc.items():
-        if v < 0 or v > 10:
-            msg = f"属性{k}的值{v}超出范围(0~10)！请重新分配。"
-            await handle_send(bot, event, msg)
-            await reincarnate_cmd.finish()
-
-    # 启动新人生
+    legacy_text = args.extract_plain_text().strip()
+    alloc = _generate_initial_aptitude()
     result = past_life_engine.start_new_life(user_id, alloc)
+    if legacy_text:
+        result["message"] = "投胎已改为自动生成资质，输入的分配不会生效。\n" + result["message"]
     log_message(user_id, f"[前尘往事] 开始新人生 - {alloc}")
     update_statistics_value(user_id, "前尘往事次数")
 
@@ -196,7 +184,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         endings_log = []
 
     if not endings_log:
-        msg = "道友尚未经历任何前世，发送【投胎】或【投胎 随机】开始你的第一段前尘往事吧！"
+        msg = "道友尚未经历任何前世，发送【投胎】开始你的第一段前尘往事吧！"
         await handle_send(bot, event, msg, md_type="前尘", k1="投胎", v1="投胎", k2="往事", v2="前尘往事", k3="帮助", v3="前尘帮助")
         await past_memory_cmd.finish()
 
@@ -295,33 +283,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     past_life_limit.reset_user_state(target_user["user_id"], clear_history=clear_history)
     mode = "（已清空历史）" if clear_history else "（保留历史）"
     await handle_send(bot, event, f"已重置 {target_user['user_name']} 的前尘状态 {mode}")
-    
+
 
 # ═══ 工具函数 ═══
-def _parse_allocation(text: str):
-    """
-    解析属性分配字符串
-    支持: "悟性5 机缘4 根骨3 气运4 心性4" 或 "悟性:5 机缘:4 ..."
-    """
-    alloc = {}
-    for attr in ATTR_NAMES:
-        pattern = rf"{attr}[：:=\s]*(\d+)"
-        match = re.search(pattern, text)
-        if match:
-            alloc[attr] = int(match.group(1))
-        else:
-            return None  # 缺少属性
-    return alloc
+def _generate_initial_aptitude():
+    """自动生成本轮先天资质：总和20，单项允许负值换取其他项更高。"""
+    shuffled_attrs = random.sample(ATTR_NAMES, len(ATTR_NAMES))
+    remaining = INITIAL_APTITUDE_TOTAL
+    values = {}
 
+    for idx, attr in enumerate(shuffled_attrs):
+        slots_left = len(shuffled_attrs) - idx - 1
+        low = max(INITIAL_APTITUDE_MIN, remaining - INITIAL_APTITUDE_MAX * slots_left)
+        high = min(INITIAL_APTITUDE_MAX, remaining - INITIAL_APTITUDE_MIN * slots_left)
+        value = random.randint(low, high)
+        values[attr] = value
+        remaining -= value
 
-def _random_allocation():
-    """随机分配20点到五项属性（每项0~10）"""
-    alloc = {k: 0 for k in ATTR_NAMES}
-    remaining = 20
-    for _ in range(remaining):
-        available = [k for k in ATTR_NAMES if alloc[k] < 10]
-        if not available:
-            break
-        attr = random.choice(available)
-        alloc[attr] += 1
-    return alloc
+    return {attr: values[attr] for attr in ATTR_NAMES}

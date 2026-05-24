@@ -315,6 +315,246 @@ BIRTH_SCENARIOS = {
 }
 
 
+PAST_LIFE_ATTRS = ["悟性", "机缘", "根骨", "气运", "心性"]
+BRANCH_HIGH_THRESHOLD = 14
+BRANCH_LOW_THRESHOLD = 3
+EARLY_DEATH_STAGE_LIMIT = 3
+EARLY_DEATH_ATTR_THRESHOLD = 1
+
+EARLY_DEATH_ENDING = {
+    "name": "夭折",
+    "desc": "先天有缺，幼年气数难续。这一世尚未真正踏上仙途，便已匆匆归入轮回。",
+    "tier": 5,
+    "early": True,
+}
+
+GOOD_BRANCH_SUFFIX = {
+    "悟性": "你顺势参透了更深一层的道理，所得远超预期。",
+    "机缘": "这一步正合天时地利，额外牵出一桩隐藏机缘。",
+    "根骨": "你的体魄撑住了最艰难的一关，反而激发出更深潜力。",
+    "气运": "变数最终都倒向了你这一边，好运将结果推得更高。",
+    "心性": "你守住本心，顺势化解杂念，让这次选择更进一步。",
+}
+
+def _main_positive_attr(effects: dict):
+    positive_attrs = [
+        (attr, value) for attr, value in effects.items()
+        if attr in PAST_LIFE_ATTRS and value > 0
+    ]
+    if not positive_attrs:
+        return None
+    return max(positive_attrs, key=lambda x: x[1])[0]
+
+
+def _format_branch_effects(effects: dict):
+    parts = []
+    for attr in PAST_LIFE_ATTRS:
+        value = effects.get(attr)
+        if not value:
+            continue
+        sign = "+" if value > 0 else ""
+        parts.append(f"{attr}{sign}{value}")
+    return " ".join(parts) if parts else "无属性变化"
+
+
+def _format_branch_score(score: int):
+    return f"评分+{score}" if score > 0 else "评分不增加"
+
+
+def _branch_judge(main_attr: str, branch_name: str, effects: dict, score: int):
+    return (
+        f"资质判定：{main_attr}{branch_name}，"
+        f"结算：{_format_branch_effects(effects)}，{_format_branch_score(score)}。"
+    )
+
+
+def _short_context(text: str, fallback: str = "眼前局面"):
+    text = str(text or "").replace("\n", "")
+    split_points = []
+    for sep in ("。", "；", "，", "：", "——"):
+        idx = text.find(sep)
+        if idx >= 0:
+            split_points.append(idx)
+    if split_points:
+        first_split = min(split_points)
+        first_part = text[:first_split]
+        rest = text[first_split + 1:]
+        if len(first_part) <= 4 and rest:
+            rest_points = []
+            for sep in ("。", "；", "，", "：", "——"):
+                idx = rest.find(sep)
+                if idx >= 0:
+                    rest_points.append(idx)
+            second_part = rest[:min(rest_points)] if rest_points else rest
+            text = f"{first_part}，{second_part}"
+        else:
+            text = first_part
+    if text.startswith("你"):
+        text = text[1:]
+    if text.startswith("在"):
+        text = text[1:]
+    return text[:24] or fallback
+
+
+def _match_any(text: str, keywords: tuple[str, ...]):
+    return any(keyword in text for keyword in keywords)
+
+
+def _build_good_result(choice: dict, main_attr: str):
+    if choice.get("good_result"):
+        return choice["good_result"]
+    return f"{choice.get('result', '')}{GOOD_BRANCH_SUFFIX.get(main_attr, '')}"
+
+
+def _build_bad_result(choice: dict, event=None, stage=None):
+    if choice.get("bad_result"):
+        return choice["bad_result"]
+
+    text = choice.get("text", "")
+    result = choice.get("result", "")
+    event_text = (event or {}).get("text", "")
+    stage_name = (stage or {}).get("name", "")
+    choice_context = f"{text}{result}"
+    context = f"{event_text}{choice_context}"
+    event_hint = _short_context(event_text, stage_name or "眼前局面")
+
+    if _match_any(choice_context, ("躲", "离开", "放弃", "拒绝", "保持距离", "认输", "闭关", "不出门", "旁观", "不为所动", "多一事不如少一事", "装作")):
+        return f"面对{event_hint}，你选择退让，短暂保全了自己，却也错失转机，心中留下难以消解的阴影。"
+
+    if _match_any(choice_context, ("接受", "响应", "飞升", "铭记", "忘却", "因果", "轮回", "天道", "选择", "道路")):
+        return f"面对{event_hint}带来的考验，你做出了抉择，却没能承受随之而来的重量，道心因此蒙尘。"
+
+    if _match_any(choice_context, ("救", "帮助", "照顾", "守护", "保护", "续命", "渡化", "化解", "和平", "善举", "功德", "采药")):
+        return f"你想在{event_hint}中护住他人，却力有未逮，善念没有开花，反倒被因果拖累。"
+
+    if _match_any(choice_context, ("告诉", "拿去给", "求证", "请教", "质问", "告知", "交给", "忠告", "条件")):
+        return f"你本想围绕{event_hint}打开局面，却说错了关键一句，反而引来猜忌与误判。"
+
+    if _match_any(choice_context, ("战", "应战", "迎接", "迎敌", "决斗", "全力", "冲击", "吞噬", "斩", "蛮力", "力量", "破墙", "渡劫")):
+        return f"你试图强行破开{event_hint}，却没能压住反噬，气血翻涌间根基受损。"
+
+    if _match_any(choice_context, ("交易", "买", "商贩", "戒指", "古玉", "碎片", "秘法", "外物", "传承", "遗迹", "裂缝", "推销")):
+        return f"你以为抓住了{event_hint}里的契机，没想到其中暗藏陷阱，所得转瞬成了负担。"
+
+    if _match_any(choice_context, ("深入", "进入", "探索", "闯", "追查", "调查", "研究", "解开", "开启", "触碰", "捡起", "藏入", "参悟", "阅读", "回忆", "记住", "钻研")):
+        return f"你低估了{event_hint}背后的凶险，越是深究越觉灵台混乱，最终只带回一身反噬。"
+
+    if _match_any(context, ("瘟疫", "病倒", "亲友", "至亲", "众生")):
+        return f"你卷入{event_hint}的因果，却没能稳住局面，牵挂越深，反噬越重。"
+
+    return f"{event_hint}的走向与你预想不同，你没能把握关键，最终只留下受挫的余波。"
+
+
+EARLY_DEATH_RESULTS = {
+    "悟性": "神魂混沌，灵台难明，幼年数次惊厥后再未醒来。",
+    "机缘": "福缘浅薄，微小变故接连化作劫数，终究没能熬过这一关。",
+    "根骨": "根骨衰败，血气难续，一场病劫便耗尽了尚未长成的生机。",
+    "气运": "气数过薄，灾厄来得又急又重，还未等旁人反应便已无力回天。",
+    "心性": "心神早衰，梦魇与惊惧日夜侵蚀，稚嫩道心先一步崩散。",
+}
+
+
+def check_early_death(stage_idx: int, raw_attrs: dict, current_attrs: dict, event=None):
+    """前三幕资质过低或原始结算为负时触发夭折。"""
+    if stage_idx >= EARLY_DEATH_STAGE_LIMIT:
+        return None
+
+    triggered = []
+    for attr in PAST_LIFE_ATTRS:
+        raw_value = int(raw_attrs.get(attr, current_attrs.get(attr, 0)))
+        current_value = int(current_attrs.get(attr, raw_value))
+        if raw_value < 0:
+            triggered.append((attr, raw_value, "负值"))
+        elif current_value <= EARLY_DEATH_ATTR_THRESHOLD:
+            triggered.append((attr, current_value, "过低"))
+
+    if not triggered:
+        return None
+
+    attr, value, reason = min(triggered, key=lambda item: item[1])
+    event_hint = _short_context((event or {}).get("text", ""), "幼年劫数")
+    return {
+        "attr": attr,
+        "value": value,
+        "reason": reason,
+        "ending": EARLY_DEATH_ENDING,
+        "message": (
+            f"幼年劫数：{event_hint}\n"
+            f"{attr}资质{reason}（{attr}:{value}），{EARLY_DEATH_RESULTS.get(attr, EARLY_DEATH_ENDING['desc'])}"
+        ),
+    }
+
+
+def build_choice_branches(choice: dict, event=None, stage=None):
+    """按选择数据生成好/不变/坏分支，分支内同时定义文案和结算。"""
+    if choice.get("branches"):
+        return choice["branches"]
+
+    effects = dict(choice.get("effects", {}))
+    score = int(choice.get("score", 0))
+    result = choice.get("result", "")
+    main_attr = _main_positive_attr(effects)
+
+    normal_branch = {
+        "result": result,
+        "effects": effects,
+        "score": score,
+    }
+    if not main_attr:
+        return {"normal": normal_branch}
+
+    good_effects = dict(effects)
+    good_effects[main_attr] = good_effects.get(main_attr, 0) + 2
+
+    bad_effects = {
+        attr: value for attr, value in effects.items()
+        if not (attr in PAST_LIFE_ATTRS and value > 0)
+    }
+    bad_effects[main_attr] = min(bad_effects.get(main_attr, 0), -1)
+
+    return {
+        "attr": main_attr,
+        "good": {
+            "result": _build_good_result(choice, main_attr),
+            "effects": good_effects,
+            "score": score + 1,
+            "judge": _branch_judge(main_attr, "深厚，结果更佳", good_effects, score + 1),
+        },
+        "normal": {
+            **normal_branch,
+            "judge": _branch_judge(main_attr, "平稳，结果不变", effects, score),
+        },
+        "bad": {
+            "result": _build_bad_result(choice, event, stage),
+            "effects": bad_effects,
+            "score": 0,
+            "judge": _branch_judge(main_attr, "不足，结果受挫", bad_effects, 0),
+        },
+    }
+
+
+def get_choice_branch(choice: dict, accumulated: dict):
+    """根据当前资质，从选择分支中取出本次实际结果。"""
+    branches = choice.get("branches") or build_choice_branches(choice)
+    main_attr = branches.get("attr")
+    if not main_attr:
+        return "normal", branches["normal"], None
+
+    attr_value = int(accumulated.get(main_attr, 0))
+    if attr_value >= BRANCH_HIGH_THRESHOLD and "good" in branches:
+        return "good", branches["good"], main_attr
+    if attr_value <= BRANCH_LOW_THRESHOLD and "bad" in branches:
+        return "bad", branches["bad"], main_attr
+    return "normal", branches["normal"], main_attr
+
+
+def _attach_choice_branches(stages: list):
+    for stage in stages:
+        for event in stage.get("events", []):
+            for choice in event.get("choices", []):
+                choice["branches"] = build_choice_branches(choice, event, stage)
+
+
 # ════════════════════════════════════════════════════════
 #  十幕人生事件池
 # ════════════════════════════════════════════════════════
@@ -744,6 +984,8 @@ STAGES = [
         ]
     },
 ]
+
+_attach_choice_branches(STAGES)
 
 # ════════════════════════════════════════════════════════
 #  结局表（19种结局，5个等级）

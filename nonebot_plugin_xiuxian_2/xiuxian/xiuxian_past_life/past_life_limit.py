@@ -24,6 +24,8 @@ FIELDS = [
     "endings_log",      # 结局记录
 ]
 
+COOLDOWN_HOURS = 12
+
 
 class PastLifeLimit:
     def __init__(self):
@@ -74,37 +76,65 @@ class PastLifeLimit:
                 user_id, self.table_name, f, v, data_type="TEXT"
             )
 
-    def check_cooldown(self, user_id):
-        """检查冷却（12小时一次）"""
+    def _parse_run_time(self, value):
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
+
+    def get_next_available_time(self, user_id):
         state = self.get_user_state(user_id)
-        last = state.get("last_run_time")
+        last = self._parse_run_time(state.get("last_run_time"))
+        if not last:
+            return None
+        return last + timedelta(hours=COOLDOWN_HOURS)
+
+    def check_cooldown(self, user_id):
+        """检查冷却（完成一次前尘后12小时）"""
+        state = self.get_user_state(user_id)
+        last = self._parse_run_time(state.get("last_run_time"))
         if not last:
             return True
-        if isinstance(last, str):
-            try:
-                last = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                return True
-        if isinstance(last, datetime):
-            return datetime.now() >= (last + timedelta(hours=12))
-        return True
+        return datetime.now() >= (last + timedelta(hours=COOLDOWN_HOURS))
 
     def get_cooldown_remaining(self, user_id):
-        """返回剩余冷却分钟（12小时）"""
-        state = self.get_user_state(user_id)
-        last = state.get("last_run_time")
-        if not last:
+        """返回剩余冷却分钟（完成一次前尘后12小时）"""
+        next_time = self.get_next_available_time(user_id)
+        if not next_time:
             return 0
-        if isinstance(last, str):
-            try:
-                last = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                return 0
-        if isinstance(last, datetime):
-            end_time = last + timedelta(hours=12)
-            remaining = end_time - datetime.now()
-            return max(0, int(remaining.total_seconds() // 60))
-        return 0
+        remaining = next_time - datetime.now()
+        seconds = int(remaining.total_seconds())
+        if seconds <= 0:
+            return 0
+        return max(1, (seconds + 59) // 60)
+
+    def get_cooldown_text(self, user_id):
+        """返回冷却剩余时间和准确开启时间文案。"""
+        remaining = self.get_cooldown_remaining(user_id)
+        if remaining <= 0:
+            return "现在可以再次开启前尘往事。"
+
+        hours = remaining // 60
+        mins = remaining % 60
+        time_parts = []
+        if hours:
+            time_parts.append(f"{hours}小时")
+        if mins:
+            time_parts.append(f"{mins}分钟")
+        if not time_parts:
+            time_parts.append("不到1分钟")
+
+        next_time = self.get_next_available_time(user_id)
+        if next_time:
+            available_at = next_time.strftime("%Y-%m-%d %H:%M")
+            return f"距离下次投胎还需{''.join(time_parts)}，可于{available_at}后再次开启。"
+        return f"距离下次投胎还需{''.join(time_parts)}。"
 
     def save_run_result(self, user_id, ending_name, score):
         """记录一次完成的前世"""

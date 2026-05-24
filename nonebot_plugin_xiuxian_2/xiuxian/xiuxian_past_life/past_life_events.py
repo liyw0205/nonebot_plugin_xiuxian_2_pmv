@@ -5,7 +5,7 @@ import copy
 import random
 from .past_life_data import (
     STAGES, ENDINGS, POSITIVE_TALENTS, MIXED_TALENTS, NEGATIVE_TALENTS,
-    BIRTH_SCENARIOS, REWARD_TABLE
+    BIRTH_SCENARIOS, REWARD_TABLE, get_choice_branch, check_early_death
 )
 from .past_life_limit import past_life_limit
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
@@ -48,27 +48,13 @@ class PastLifeEngine:
         return STAGES[stage_idx]["events"][event_idx]
 
     def _resolve_choice_effect(self, choice: dict, accumulated: dict):
-        """同一选择按当前资质高低产生轻量浮动。"""
-        effects = copy.deepcopy(choice.get("effects", {}))
-        positive_attrs = [
-            (attr, value) for attr, value in effects.items()
-            if attr in ATTR_NAMES and value > 0
-        ]
-        if not positive_attrs:
-            return effects, 0, ""
-
-        main_attr, _ = max(positive_attrs, key=lambda x: x[1])
-        attr_value = int(accumulated.get(main_attr, 0))
-        if attr_value >= 16:
-            effects[main_attr] = effects.get(main_attr, 0) + 2
-            return effects, 1, f"\n{main_attr}深厚，此选择额外激发潜力：{main_attr}+2，评分+1。"
-        if attr_value >= 12:
-            effects[main_attr] = effects.get(main_attr, 0) + 1
-            return effects, 0, f"\n{main_attr}出众，此选择额外收益：{main_attr}+1。"
-        if attr_value <= 2:
-            effects[main_attr] = max(effects.get(main_attr, 0) - 1, 0)
-            return effects, -1, f"\n{main_attr}薄弱，此选择收益受限：{main_attr}-1，评分-1。"
-        return effects, 0, ""
+        """从数据层选择当前资质对应的分支。"""
+        _, branch, _ = get_choice_branch(choice, accumulated)
+        effects = copy.deepcopy(branch.get("effects", {}))
+        score = int(branch.get("score", 0))
+        result_text = branch.get("result", choice.get("result", ""))
+        judge_msg = branch.get("judge", "")
+        return effects, score, result_text, f"\n{judge_msg}" if judge_msg else ""
 
     def _roll_talent(self, alloc: dict):
         """
@@ -195,13 +181,16 @@ class PastLifeEngine:
         accumulated = state["accumulated"]
         if not isinstance(accumulated, dict):
             accumulated = {k: 0 for k in ATTR_NAMES}
-        resolved_effects, score_delta, attr_result_msg = self._resolve_choice_effect(choice, accumulated)
+        resolved_effects, branch_score, resolved_result, attr_result_msg = self._resolve_choice_effect(choice, accumulated)
+        raw_accumulated = {k: int(accumulated.get(k, 0)) for k in ATTR_NAMES}
         for k, v in resolved_effects.items():
-            accumulated[k] = max(accumulated.get(k, 0) + v, 0)
+            raw_accumulated[k] = int(accumulated.get(k, 0)) + int(v)
+            accumulated[k] = max(raw_accumulated[k], 0)
 
         # 更新分数
-        state["total_score"] = state.get("total_score", 0) + choice.get("score", 0) + score_delta
+        state["total_score"] = state.get("total_score", 0) + branch_score
         state["accumulated"] = accumulated
+        early_death = check_early_death(current_stage, raw_accumulated, accumulated, event)
 
         # 记录历史
         history = state.get("history", [])
@@ -210,16 +199,35 @@ class PastLifeEngine:
             "stage_name": STAGES[current_stage]["name"],
             "event_text": event["text"][:20] + "...",
             "choice_text": choice["text"],
-            "result": f"{choice['result']}{attr_result_msg}",
+            "result": f"{resolved_result}{attr_result_msg}",
         })
         state["history"] = history
 
-        result_msg = f"你选择了【{choice['text']}】\n{choice['result']}{attr_result_msg}\n"
+        result_msg = f"你选择了【{choice['text']}】\n{resolved_result}{attr_result_msg}\n"
 
         # 显示当前属性
         effects_str = "  ".join(
             f"{k}:{accumulated[k]}" for k in ATTR_NAMES
         )
+
+        if early_death:
+            state["stage"] = current_stage + 1
+            past_life_limit.save_user_state(user_id, state)
+            ending = early_death["ending"]
+            ending_msg = (
+                f"{result_msg}\n"
+                f"当前属性：{effects_str}\n"
+                f"═════════════\n"
+                f"{early_death['message']}\n\n"
+                f"📜 前世评分：{state['total_score']}分\n\n"
+                f"🏆 结局：【{ending['name']}】\n"
+                f"{ending['desc']}\n\n"
+                f"═══  前世奖励  ═════\n"
+                f"本世过早夭折，未能留下可继承的前世馈赠。\n"
+                f"═════════════"
+            )
+            past_life_limit.save_run_result(user_id, ending["name"], state["total_score"])
+            return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": {"msg": "无"}}
 
         # 推进到下一幕
         next_stage = current_stage + 1
@@ -347,10 +355,8 @@ class PastLifeEngine:
         if s == 0:
             cd = past_life_limit.get_cooldown_remaining(user_id)
             if cd > 0:
-                hours = cd // 60
-                mins = cd % 60
                 return {
-                    "message": f"前尘往事冷却中，今日已游历前世，明日再来。剩余{hours}小时{mins}分钟。",
+                    "message": f"前尘往事仍在沉淀，{past_life_limit.get_cooldown_text(user_id)}",
                     "state": 0,
                 }
             else:
@@ -364,9 +370,9 @@ class PastLifeEngine:
                         f"累计前世：{runs}次\n"
                         f"最佳结局：{best}（{best_score}分）\n"
                         f"═════════════\n"
-                        f"发送【投胎 悟性X 机缘X 根骨X 气运X 心性X】开始\n"
-                        f"或发送【投胎 随机】随机分配\n"
-                        f"（五项属性之和须等于20，每项0~10）"
+                        f"发送【投胎】开始\n"
+                        f"系统会自动生成并锁定本轮先天资质\n"
+                        f"资质总和20，单项可能为负，也可能偏科极高"
                     ),
                     "state": 0,
                 }
@@ -374,10 +380,9 @@ class PastLifeEngine:
         elif s == 1:
             return {
                 "message": (
-                    f"请分配先天资质（共20点）：\n"
-                    f"发送【投胎 悟性X 机缘X 根骨X 气运X 心性X】\n"
-                    f"或发送【投胎 随机】随机分配\n"
-                    f"（五项之和=20，每项0~10）"
+                    f"发送【投胎】开始前尘往事。\n"
+                    f"系统会自动生成并锁定本轮先天资质。\n"
+                    f"资质总和20，单项可能为负，也可能偏科极高。"
                 ),
                 "state": 1,
             }
