@@ -19,7 +19,7 @@ player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 
 INITIAL_APTITUDE_TOTAL = 20
-INITIAL_APTITUDE_MIN = -5
+INITIAL_APTITUDE_MIN = 0
 INITIAL_APTITUDE_MAX = 15
 
 # ═══ 命令定义 ═══
@@ -39,14 +39,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = (
         "\n═══  前尘往事  ═════\n"
         "【前尘往事】- 查看/开启前世回忆\n"
-        "【投胎】- 生成并锁定本轮先天资质\n"
+        "【投胎】- 定下并锁定本轮先天资质\n"
         "【前尘选择 1/2/3】- 在剧情中做出选择\n"
         "【前尘回忆】- 查看过往前世记录\n"
         "【前尘排行】- 查看前世评分排行\n"
         "═════════════\n"
         "规则说明：\n"
-        "1. 投胎后自动生成五项先天资质，本轮不可重抽\n"
-        "   资质总和20，单项可能为负，也可能偏科极高\n"
+        "1. 投胎后五项先天资质即刻定下，本轮不可重抽\n"
+        "   资质总和20，单项不低于0，也可能偏科极高\n"
         "2. 经历十幕人生，每幕做出抉择\n"
         "3. 选择会根据当前资质产生更佳、受挫或平稳结果\n"
         "4. 不同结局获得不同奖励\n"
@@ -82,7 +82,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await past_life_cmd.finish()
 
 
-# ═══ 投胎（自动生成资质） ═══
+# ═══ 投胎（定下资质） ═══
 @reincarnate_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -119,7 +119,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     alloc = _generate_initial_aptitude()
     result = past_life_engine.start_new_life(user_id, alloc)
     if legacy_text:
-        result["message"] = "投胎已改为自动生成资质，输入的分配不会生效。\n" + result["message"]
+        result["message"] = "投胎时资质已由命数定下，输入的分配不会生效。\n" + result["message"]
     log_message(user_id, f"[前尘往事] 开始新人生 - {alloc}")
     update_statistics_value(user_id, "前尘往事次数")
 
@@ -287,7 +287,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 # ═══ 工具函数 ═══
 def _generate_initial_aptitude():
-    """自动生成本轮先天资质：总和20，单项允许负值换取其他项更高。"""
+    """定下本轮先天资质：总和20，单项不低于0。"""
     shuffled_attrs = random.sample(ATTR_NAMES, len(ATTR_NAMES))
     remaining = INITIAL_APTITUDE_TOTAL
     values = {}
