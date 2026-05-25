@@ -52,7 +52,7 @@
         "hp_range": [55, 65],
         "mp_range": [1, 2],
         "attack_range": [0.10, 0.16],
-        "skill_pool": [14003, 14004],
+        "skill_pool": [14503, 14504],
         "reward": {
           "spirit_stone": [0.12, 0.30],
           "experience": 0.0012,
@@ -71,7 +71,7 @@
         "hp_range": [75, 88],
         "mp_range": [1, 3],
         "attack_range": [0.15, 0.22],
-        "skill_pool": [14003, 14004, 14005],
+        "skill_pool": [14503, 14504, 14505],
         "reward": {
           "spirit_stone": [0.30, 0.70],
           "experience": 0.0035,
@@ -90,7 +90,7 @@
       "hp_range": [87.5, 97.5],
       "mp_range": [2, 4],
       "attack_range": [0.24, 0.32],
-      "skills": [14006, 14007, 14008],
+      "skills": [14506, 14507, 14508],
       "reward": {
         "spirit_stone": [0.80, 1.80],
         "experience": 0.010,
@@ -159,7 +159,7 @@
         "hp_range": [52, 62],
         "mp_range": [1, 2],
         "attack_range": [0.14, 0.20],
-        "skill_pool": [14009, 14010],
+        "skill_pool": [14509, 14510],
         "reward": {
           "spirit_stone": [0.15, 0.35],
           "experience": 0.0015,
@@ -178,7 +178,7 @@
         "hp_range": [72, 85],
         "mp_range": [1, 3],
         "attack_range": [0.20, 0.28],
-        "skill_pool": [14009, 14010, 14011],
+        "skill_pool": [14509, 14510, 14511],
         "reward": {
           "spirit_stone": [0.40, 0.95],
           "experience": 0.0045,
@@ -197,7 +197,7 @@
       "hp_range": [85, 95],
       "mp_range": [2, 4],
       "attack_range": [0.32, 0.40],
-      "skills": [14012, 14013, 14014],
+      "skills": [14512, 14513, 14514],
       "reward": {
         "spirit_stone": [0.90, 2.00],
         "experience": 0.011,
@@ -266,7 +266,7 @@
         "hp_range": [53, 63],
         "mp_range": [1, 2],
         "attack_range": [0.12, 0.18],
-        "skill_pool": [14015, 14016],
+        "skill_pool": [14515, 14516],
         "reward": {
           "spirit_stone": [0.12, 0.36],
           "experience": 0.0014,
@@ -285,7 +285,7 @@
         "hp_range": [74, 88],
         "mp_range": [1, 2],
         "attack_range": [0.18, 0.25],
-        "skill_pool": [14015, 14016, 14017],
+        "skill_pool": [14515, 14516, 14517],
         "reward": {
           "spirit_stone": [0.35, 0.90],
           "experience": 0.0048,
@@ -304,7 +304,7 @@
       "hp_range": [87.5, 100],
       "mp_range": [2, 4],
       "attack_range": [0.28, 0.35],
-      "skills": [14018, 14019, 14020],
+      "skills": [14518, 14519, 14520],
       "reward": {
         "spirit_stone": [0.90, 2.10],
         "experience": 0.0115,
@@ -373,7 +373,7 @@
         "hp_range": [50, 58],
         "mp_range": [1, 2],
         "attack_range": [0.18, 0.24],
-        "skill_pool": [14021, 14022],
+        "skill_pool": [14521, 14522],
         "reward": {
           "spirit_stone": [0.18, 0.45],
           "experience": 0.0022,
@@ -392,7 +392,7 @@
         "hp_range": [70, 85],
         "mp_range": [1, 3],
         "attack_range": [0.24, 0.32],
-        "skill_pool": [14021, 14022, 14023],
+        "skill_pool": [14521, 14522, 14523],
         "reward": {
           "spirit_stone": [0.45, 1.05],
           "experience": 0.0068,
@@ -411,7 +411,7 @@
       "hp_range": [95, 110],
       "mp_range": [2, 5],
       "attack_range": [0.38, 0.48],
-      "skills": [14024, 14025, 14026],
+      "skills": [14524, 14525, 14526],
       "reward": {
         "spirit_stone": [1.0, 2.5],
         "experience": 0.014,
@@ -480,7 +480,7 @@
         "hp_range": [46, 55],
         "mp_range": [1, 3],
         "attack_range": [0.10, 0.15],
-        "skill_pool": [14027, 14028],
+        "skill_pool": [14527, 14528],
         "reward": {
           "spirit_stone": [0.18, 0.45],
           "experience": 0.0018,
@@ -499,7 +499,7 @@
         "hp_range": [62, 78],
         "mp_range": [2, 4],
         "attack_range": [0.15, 0.22],
-        "skill_pool": [14027, 14028, 14029],
+        "skill_pool": [14527, 14528, 14529],
         "reward": {
           "spirit_stone": [0.55, 1.20],
           "experience": 0.0055,
@@ -518,7 +518,7 @@
       "hp_range": [82, 97],
       "mp_range": [2, 5],
       "attack_range": [0.24, 0.31],
-      "skills": [14030, 14031, 14032],
+      "skills": [14530, 14531, 14532],
       "reward": {
         "spirit_stone": [0.95, 2.2],
         "experience": 0.012,

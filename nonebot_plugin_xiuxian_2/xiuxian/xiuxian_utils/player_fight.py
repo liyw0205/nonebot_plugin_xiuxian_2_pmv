@@ -130,7 +130,7 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0, return_status=False
     boss1.start_skills.extend(generate_boss_buff(boss))
 
     if boss['name'] != "稻草人":
-        generate_boss_skill(boss1, [14001, 14002])
+        generate_boss_skill(boss1, [14501, 14502])
 
     battle = BattleSystem([player1], [boss1], bot_id)
     play_list, winner, status_list = battle.run_battle()
