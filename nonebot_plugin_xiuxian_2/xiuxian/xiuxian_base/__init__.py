@@ -871,7 +871,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         if give_message:
             steal_qq = give_message['user_id']
         else:
-            steal_qq = "000000"
+            steal_qq = None
     
     if steal_qq:
         if steal_qq == user_id:
@@ -956,10 +956,15 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         if give_message:
             give_qq = give_message['user_id']
         else:
-            give_qq = "000000"
+            give_qq = None
     
     player1 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
     player2 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
+    if not give_qq:
+        msg = f"对方未踏入修仙界，不可抢劫！"
+        await handle_send(bot, event, msg)
+        await rob_stone.finish()
+
     user_2 = sql_message.get_user_info_with_id(give_qq)
     
     if user_mes and user_2:

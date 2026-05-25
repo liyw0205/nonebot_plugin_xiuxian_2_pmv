@@ -6,6 +6,9 @@ from pathlib import Path
 import os
 
 
+GLOBAL_BOSS_KEY = "global"
+
+
 class OLD_BOSS_INFO(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent

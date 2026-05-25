@@ -5,6 +5,9 @@ import datetime
 from .riftmake import Rift
 
 
+GLOBAL_RIFT_KEY = "global"
+
+
 class OLD_RIFT_INFO(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent
@@ -35,16 +38,17 @@ class OLD_RIFT_INFO(object):
         """
         self.data = {}
         for x in group_rift:
-            rift_data = {str(x): {"name": group_rift[x].name,
-                                  "rank": group_rift[x].rank,
-                                  "l_user_id": group_rift[x].l_user_id,
-                                  "time": group_rift[x].time,
-                                  "target_nodes": getattr(group_rift[x], "target_nodes", []),
-                                  "target_realm": getattr(group_rift[x], "target_realm", ""),
-                                  "target_heaven": getattr(group_rift[x], "target_heaven", ""),
-                                  "target_node_id": getattr(group_rift[x], "target_node_id", ""),
-                                  "target_node_name": getattr(group_rift[x], "target_node_name", "")
-                                  }
+            key = str(x)
+            rift_data = {key: {"name": group_rift[x].name,
+                               "rank": group_rift[x].rank,
+                               "l_user_id": group_rift[x].l_user_id,
+                               "time": group_rift[x].time,
+                               "target_nodes": getattr(group_rift[x], "target_nodes", []),
+                               "target_realm": getattr(group_rift[x], "target_realm", ""),
+                               "target_heaven": getattr(group_rift[x], "target_heaven", ""),
+                               "target_node_id": getattr(group_rift[x], "target_node_id", ""),
+                               "target_node_name": getattr(group_rift[x], "target_node_name", "")
+                               }
                          }
             self.data.update(rift_data)
         self.__save()

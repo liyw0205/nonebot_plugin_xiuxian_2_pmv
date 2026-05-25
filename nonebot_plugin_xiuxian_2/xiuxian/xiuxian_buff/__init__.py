@@ -39,7 +39,7 @@ from ..xiuxian_impart_pk.impart_pk import impart_pk
 from ..xiuxian_boss.boss_limit import boss_limit
 from ..xiuxian_sect import isUserTask, userstask
 from ..xiuxian_sect.sectconfig import get_config
-from ..xiuxian_rift import group_rift
+from ..xiuxian_rift import GLOBAL_RIFT_KEY, group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
 from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
@@ -1005,11 +1005,10 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 10. 获取秘境状态信息
     rift_status = "无秘境"
-    group_id = "000000"
     
     # 检查当前是否有秘境
     try:
-        group_rift_data = group_rift[group_id]
+        group_rift_data = group_rift[GLOBAL_RIFT_KEY]
         rift_exists = True
     except KeyError:
         rift_exists = False

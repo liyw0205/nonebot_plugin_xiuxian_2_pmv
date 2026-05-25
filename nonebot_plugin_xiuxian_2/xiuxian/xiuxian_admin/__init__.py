@@ -389,7 +389,7 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         if give_message:
             give_qq = give_message['user_id']
         else:
-            give_qq = "000000"
+            give_qq = None
     
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
@@ -410,6 +410,10 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             msg = f"对方未踏入修仙界，不可操作！"
             await handle_send(bot, event, msg)
             await adjust_exp_command.finish()    
+    else:
+        msg = f"对方未踏入修仙界，不可操作！"
+        await handle_send(bot, event, msg)
+        await adjust_exp_command.finish()
     await adjust_exp_command.finish()
 
 @zaohua_xiuxian.handle(parameterless=[Cooldown(cd_time=0)])
@@ -871,7 +875,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if give_message:
             give_qq = give_message['user_id']
         else:
-            give_qq = "000000"
+            give_qq = None
     if give_qq:
         sql_message.restate(give_qq)
         sql_message.update_user_stamina(give_qq, XiuConfig().max_stamina, 1)  # 增加体力

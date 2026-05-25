@@ -29,7 +29,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
 from .bossconfig import get_boss_config
-from .old_boss_info import old_boss_info
+from .old_boss_info import GLOBAL_BOSS_KEY, old_boss_info
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
 items = Items()
@@ -145,11 +145,10 @@ async def set_boss_generation():
 
 async def generate_all_bosses_task():
     global group_boss
-    group_id = "000000"  # 全局BOSS存储键
     
     # 生成全部BOSS
     bosses = create_all_bosses()
-    group_boss[group_id] = bosses
+    group_boss[GLOBAL_BOSS_KEY] = bosses
     old_boss_info.save_boss(group_boss)
     
     # 发送通知
@@ -157,8 +156,6 @@ async def generate_all_bosses_task():
     
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
-        if notify_group_id == "000000":
-            continue
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
@@ -197,7 +194,6 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
     global group_boss
-    group_id = "000000"
     boss_num = re.findall(r"\d+", msg)  # boss编号    
 
     if boss_num:
@@ -208,7 +204,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await boss_delete.finish()
     bosss = None
     try:
-        bosss = group_boss.get(group_id, [])
+        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -219,14 +215,14 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg)
         await boss_delete.finish()
 
-    index = len(group_boss[group_id])
+    index = len(group_boss[GLOBAL_BOSS_KEY])
 
     if not (0 < boss_num <= index):
         msg = f"请输入正确的世界Boss编号!"
         await handle_send(bot, event, msg)
         await boss_delete.finish()
 
-    group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
+    group_boss[GLOBAL_BOSS_KEY].remove(group_boss[GLOBAL_BOSS_KEY][boss_num - 1])
     old_boss_info.save_boss(group_boss)
     msg = f"该世界Boss被突然从天而降的神雷劈中,烟消云散了"
     await handle_send(bot, event, msg)
@@ -239,10 +235,9 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
     global group_boss
-    group_id = "000000"        
     bosss = None
     try:
-        bosss = group_boss.get(group_id, [])
+        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -253,7 +248,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         await boss_delete_all.finish()
 
-    group_boss[group_id] = []    
+    group_boss[GLOBAL_BOSS_KEY] = []    
     old_boss_info.save_boss(group_boss)
     msg = f"所有的世界Boss都烟消云散了~~"
     await handle_send(bot, event, msg)
@@ -299,7 +294,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     sql_message.update_last_check_info_time(user_id)
 
     msg = args.extract_plain_text().strip()
-    group_id = "000000"
     boss_num = re.findall(r"\d+", msg)
 
     if boss_num:
@@ -322,7 +316,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     try:
-        bosss = group_boss.get(group_id, [])
+        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except Exception:
         msg = "尚未生成世界Boss,请等待世界boss刷新!"
         sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
@@ -335,7 +329,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, msg)
         await battle.finish()
 
-    index = len(group_boss[group_id])
+    index = len(group_boss[GLOBAL_BOSS_KEY])
     if not (0 < boss_num <= index):
         msg = "请输入正确的世界Boss编号!"
         sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
@@ -381,7 +375,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     user1_sub_buff_data = UserBuffDate(user_info['user_id']).get_user_sub_buff_data()
     exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
 
-    bossinfo = group_boss[group_id][boss_num - 1]
+    bossinfo = group_boss[GLOBAL_BOSS_KEY][boss_num - 1]
 
     if bossinfo['jj'] == '零':
         boss_rank = convert_rank(bossinfo['jj'])[0]
@@ -429,7 +423,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         )
         await battle.finish()
 
-    battle_flag[group_id] = True
+    battle_flag[GLOBAL_BOSS_KEY] = True
 
     boss_all_hp = int(bossinfo['总血量'])
     boss_old_hp = int(bossinfo['气血'])
@@ -587,13 +581,13 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
         # 移除旧BOSS并生成同境界新BOSS
         try:
-            group_boss[group_id].remove(group_boss[group_id][boss_num - 1])
+            group_boss[GLOBAL_BOSS_KEY].remove(group_boss[GLOBAL_BOSS_KEY][boss_num - 1])
         except Exception:
             pass
 
         new_boss = createboss_jj(bossinfo['jj'])
         if new_boss:
-            group_boss[group_id].insert(boss_num - 1, new_boss)
+            group_boss[GLOBAL_BOSS_KEY].insert(boss_num - 1, new_boss)
 
         if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]:
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
@@ -636,7 +630,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             )
 
         # 未击杀，保存扣血后的BOSS状态
-        group_boss[group_id][boss_num - 1] = bossinfo_new
+        group_boss[GLOBAL_BOSS_KEY][boss_num - 1] = bossinfo_new
 
         roll = random.randint(1, 100)
         if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0] and roll > 50:
@@ -665,7 +659,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         msg += "\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
 
     old_boss_info.save_boss(group_boss)
-    battle_flag[group_id] = False
+    battle_flag[GLOBAL_BOSS_KEY] = False
 
     boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
@@ -709,7 +703,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """挑战稻草人"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
     isUser, user_info, msg = check_user(event)
     sql_message = XiuxianDateManage()
 
@@ -745,7 +738,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         }
 
     # 战斗逻辑
-    battle_flag[group_id] = True
+    battle_flag[GLOBAL_BOSS_KEY] = True
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
@@ -760,7 +753,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         msg = f"道友挑战稻草人，奋力攻击后共造成 {number_to(total_damage)} 伤害，稻草人岿然不动，继续等待挑战者！"
 
-    battle_flag[group_id] = False
+    battle_flag[GLOBAL_BOSS_KEY] = False
 
     await send_msg_handler(bot, event, result)
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战稻草人", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
@@ -771,7 +764,6 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """挑战训练傀儡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
     isUser, user_info, msg = check_user(event)
     sql_message = XiuxianDateManage()
 
@@ -830,7 +822,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     }
 
     # 战斗逻辑
-    battle_flag[group_id] = True
+    battle_flag[GLOBAL_BOSS_KEY] = True
     boss_all_hp = scarecrow_info['总血量']
     # 打之前的血量
     boss_old_hp = scarecrow_info['气血']
@@ -846,7 +838,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     elif victor == "Boss赢了":
         msg = f"道友挑战训练傀儡，奋力攻击后共造成 {number_to(total_damage)} 伤害，训练傀儡岿然不动，继续等待挑战者！"
 
-    battle_flag[group_id] = False
+    battle_flag[GLOBAL_BOSS_KEY] = False
     await send_msg_handler(bot, event, result)
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="再次", v1="挑战训练傀儡", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
     await challenge_training_puppet.finish()
@@ -856,12 +848,11 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
 async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查询世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
     global group_boss 
     group_boss = old_boss_info.read_boss_info()    
     bosss = None
     try:
-        bosss = group_boss.get(group_id, [])
+        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -878,7 +869,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     Flag = False  # True查对应Boss
     if boss_num:
         boss_num = int(boss_num[0])
-        index = len(group_boss[group_id])
+        index = len(group_boss[GLOBAL_BOSS_KEY])
         if not (0 < boss_num <= index):
             msg = f"请输入正确的世界Boss编号!"
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="查询", v1="查询世界BOSS", k2="列表", v2="世界BOSS列表", k3="状态", v3="我的状态")
@@ -888,7 +879,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
     bossmsgs = ""
     if Flag:  # 查单个Boss信息
-        boss = group_boss[group_id][boss_num - 1]
+        boss = group_boss[GLOBAL_BOSS_KEY][boss_num - 1]
         bossmsgs = f'''
 世界Boss:{boss['name']}
 境界：{boss['jj']}
@@ -919,12 +910,11 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查询世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
     global group_boss 
     group_boss = old_boss_info.read_boss_info()    
     bosss = None
     try:
-        bosss = group_boss.get(group_id, [])
+        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
@@ -965,7 +955,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 @generate_all.handle(parameterless=[Cooldown(cd_time=0)])
 async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bosses = create_all_bosses()  # 自动计算最高境界
-    group_boss["000000"] = bosses  # 替换当前 BOSS 列表
+    group_boss[GLOBAL_BOSS_KEY] = bosses  # 替换当前 BOSS 列表
     old_boss_info.save_boss(group_boss)
     await bot.send(event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
 
@@ -974,22 +964,21 @@ async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessag
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"    
 
     try:
-        group_boss[group_id]
+        group_boss[GLOBAL_BOSS_KEY]
     except:
-        group_boss[group_id] = []
+        group_boss[GLOBAL_BOSS_KEY] = []
 
     boss_jj = createboss()
-    for boss in group_boss[group_id][:]:
+    for boss in group_boss[GLOBAL_BOSS_KEY][:]:
         if boss['jj'] == boss_jj:
-            group_boss[group_id].remove(boss)
+            group_boss[GLOBAL_BOSS_KEY].remove(boss)
             break
     
     bossinfo = createboss_jj(boss_jj)
     
-    group_boss[group_id].append(bossinfo)
+    group_boss[GLOBAL_BOSS_KEY].append(bossinfo)
     old_boss_info.save_boss(group_boss)
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
     await handle_send(bot, event, msg)
@@ -999,12 +988,11 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"    
 
     try:
-        group_boss[group_id]
+        group_boss[GLOBAL_BOSS_KEY]
     except:
-        group_boss[group_id] = []
+        group_boss[GLOBAL_BOSS_KEY] = []
 
     # 解析参数
     arg_list = args.extract_plain_text().split()
@@ -1017,9 +1005,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     boss_name = arg_list[1] if len(arg_list) > 1 else None  # 用户指定的Boss名称
 
     # 检查是否已有同境界BOSS，有则删除
-    for boss in group_boss[group_id][:]:
+    for boss in group_boss[GLOBAL_BOSS_KEY][:]:
         if boss['jj'] == boss_jj:
-            group_boss[group_id].remove(boss)
+            group_boss[GLOBAL_BOSS_KEY].remove(boss)
             break
 
     # 生成指定BOSS
@@ -1029,7 +1017,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await create_appoint.finish()
 
-    group_boss[group_id].append(bossinfo)
+    group_boss[GLOBAL_BOSS_KEY].append(bossinfo)
     old_boss_info.save_boss(group_boss)
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
     await handle_send(bot, event, msg)

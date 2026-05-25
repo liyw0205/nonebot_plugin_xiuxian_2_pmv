@@ -1,7 +1,5 @@
 CONFIG = {
-    "open": [
-        "000000",
-    ],
+    "open": [],
     "rift": {
         "东玄域": {
             "type_rate": 30,

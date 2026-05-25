@@ -11,7 +11,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
-from .old_rift_info import old_rift_info
+from .old_rift_info import GLOBAL_RIFT_KEY, old_rift_info
 from .. import DRIVER
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
 from nonebot.log import logger
@@ -109,10 +109,6 @@ async def scheduled_rift_generation():
     定时任务：每天0,12点触发秘境生成
     """
     global group_rift
-    if not groups:
-        logger.warning("秘境未开启，定时任务终止")
-        return
-    
     await generate_rift_for_group()   
     
     logger.info("秘境定时生成完成")
@@ -120,19 +116,16 @@ async def scheduled_rift_generation():
       
 async def generate_rift_for_group():
     """为群组生成新的秘境"""
-    group_id = "000000"
     rift = Rift()
     rift.name = get_rift_type()
     rift.rank = config['rift'][rift.name]['rank']
     rift.time = config['rift'][rift.name]['time']
     assign_rift_trial_node(rift)
-    group_rift[group_id] = rift
+    group_rift[GLOBAL_RIFT_KEY] = rift
     msg = build_rift_appear_msg(rift)
     logger.info(msg)
     old_rift_info.save_rift(group_rift)
     for notify_group_id in groups:
-        if notify_group_id == "000000":
-            continue
         bot = get_bot()
         await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
 
@@ -353,18 +346,12 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境（手动触发，通常由管理员使用）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    group_id = "000000"
-    if group_id not in groups:
-        msg = '尚未开启秘境，请联系管理员开启秘境'
-        await handle_send(bot, event, msg)
-        return
-
     rift = Rift()
     rift.name = get_rift_type()
     rift.rank = config['rift'][rift.name]['rank']
     rift.time = config['rift'][rift.name]['time']
     assign_rift_trial_node(rift)
-    group_rift[group_id] = rift
+    group_rift[GLOBAL_RIFT_KEY] = rift
     msg = build_rift_appear_msg(rift)
     old_rift_info.save_rift(group_rift)
     await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
@@ -386,41 +373,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
         await explore_rift.finish()
     else:
-        group_id = "000000"        
         try:
-            group_rift[group_id]
+            current_rift = group_rift[GLOBAL_RIFT_KEY]
         except:
             msg = '野外秘境尚未生成，请道友耐心等待!'
             await handle_send(bot, event, msg)
             await explore_rift.finish()
-        if user_id in group_rift[group_id].l_user_id:
+        if user_id in current_rift.l_user_id:
             msg = '道友已经参加过本次秘境啦，请把机会留给更多的道友！'
             await handle_send(bot, event, msg)
             await explore_rift.finish()
         
         user_rank = convert_rank(user_info["level"])[0]
-        required_rank_for_check = convert_rank("感气境中期")[0] - group_rift[group_id].rank
+        required_rank_for_check = convert_rank("感气境中期")[0] - current_rift.rank
          
         if user_rank > required_rank_for_check:
             rank_name_list = convert_rank(user_info["level"])[1] # 获取用户境界的文字描述列表
             
-            msg = f"秘境凶险万分，道友的境界不足，无法进入秘境：{group_rift[group_id].name}，请道友提升境界后再来！"
+            msg = f"秘境凶险万分，道友的境界不足，无法进入秘境：{current_rift.name}，请道友提升境界后再来！"
             await handle_send(bot, event, msg)
             await explore_rift.finish()
 
-        can_reach_rift, position_msg = check_rift_target_position(user_id, group_rift[group_id])
+        can_reach_rift, position_msg = check_rift_target_position(user_id, current_rift)
         if not can_reach_rift:
             old_rift_info.save_rift(group_rift)
             await handle_send(bot, event, position_msg)
             await explore_rift.finish()
 
-        group_rift[group_id].l_user_id.append(user_id)
-        rift_data = build_rift_data(group_rift[group_id])
+        current_rift.l_user_id.append(user_id)
+        rift_data = build_rift_data(current_rift)
         target_msg = ""
-        target_nodes_msg = format_rift_target_nodes(group_rift[group_id])
+        target_nodes_msg = format_rift_target_nodes(current_rift)
         if target_nodes_msg:
             target_msg = f"\n秘境可探索地点：\n{target_nodes_msg}"
-        msg = f"进入秘境：{group_rift[group_id].name}，探索需要花费时间：{group_rift[group_id].time}分钟！{target_msg}"
+        msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
 
         save_rift_data(user_id, rift_data)
         sql_message.do_work(user_id, 3, rift_data["time"])
@@ -432,9 +418,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘藏令"""
     async def _check_and_enter_rift(user_id, user_info, bot, event):
-        group_id = "000000"        
         try:
-            current_rift = group_rift[group_id]
+            current_rift = group_rift[GLOBAL_RIFT_KEY]
         except KeyError:
             return False, '野外秘境尚未生成，请道友耐心等待!'
                 
@@ -465,7 +450,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
         current_rift = check_msg_or_rift # 此时 check_msg_or_rift 是 Rift 对象
 
-        group_rift["000000"].l_user_id.append(user_id) # 添加用户到秘境参与者列表
+        current_rift.l_user_id.append(user_id) # 添加用户到秘境参与者列表
         rift_data = build_rift_data(current_rift)
         target_msg = ""
         target_nodes_msg = format_rift_target_nodes(current_rift)
@@ -536,7 +521,6 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await complete_rift.finish()
 
     user_id = user_info['user_id']
-    group_id = "000000"   
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -578,7 +562,6 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await break_rift.finish()
     user_id = user_info['user_id']
-    group_id = "000000"        
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -609,7 +592,6 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     user_id = user_info['user_id']
-    group_id = "000000"    
 
     # 检查是否在秘境中
     is_type, msg = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
@@ -644,7 +626,6 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         return
 
     user_id = user_info['user_id']
-    group_id = "000000"    
 
     # 检查是否在秘境中
     is_type, msg = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
