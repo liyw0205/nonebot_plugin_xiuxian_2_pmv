@@ -175,6 +175,12 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
+    user_2_info = sql_message.get_user_real_info(two_qq)
+    if not user_2_info:
+        msg = "未找到指定道友，对方可能尚未踏入修仙界。"
+        await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+        await two_exp_invite.finish()
+
     # 检查对方是否已经作为邀请者发出过邀请
     target_existing_invite = None
     for target_id, invite_data in invite_cache.items():
@@ -220,7 +226,6 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await two_exp_invite.finish()
 
     # 检查对方修为是否比自己高
-    user_2_info = sql_message.get_user_real_info(two_qq)
     if user_2_info['exp'] > user_1['exp']:
         msg = "修仙大能看了看你，不屑一顾，扬长而去！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
@@ -267,7 +272,6 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         # 设置60秒过期
         asyncio.create_task(expire_invite(two_qq, invite_id, bot, event))
 
-        user_2_info = sql_message.get_user_real_info(two_qq)
         msg = f"已向{user_2_info['user_name']}发送双修邀请（{min(exp_count, max_count_2)}次），等待对方回应..."
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
