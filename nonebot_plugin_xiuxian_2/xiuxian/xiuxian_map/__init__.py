@@ -150,6 +150,21 @@ ACTION_ITEM_POOLS = {
         18135, 18136, 18159, 18160,
         18163, 18164
     ],
+
+    # 宠物资源池：跟随饰品礼包同概率掉落
+    "pet_resource_low": [
+        20033, 20033, 20033, 20033, 20033, 20033,
+        20034, 20034, 20034, 20034, 20034,
+        20035, 20035, 20035,
+        20036, 20036,
+        20037,
+        20027, 20027, 20027, 20027, 20027, 20027,
+        20028, 20028, 20028, 20028,
+        20029, 20029,
+        20030,
+        20031,
+        20032
+    ],
 }
 
 # =========================================
@@ -733,6 +748,8 @@ def _expand_reward_plan(reward_plan):
         expanded.append((pool_key, cmin, cmax, chance))
         if pool_key == "wash_stone_low":
             expanded.append(("arena_ticket_low", 1, 1, round(float(chance) * ARENA_TICKET_DROP_RATIO, 4)))
+        if pool_key == "acc_pack_low":
+            expanded.append(("pet_resource_low", cmin, cmax, chance))
     return expanded
 
 

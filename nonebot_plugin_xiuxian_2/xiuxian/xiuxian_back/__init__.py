@@ -39,6 +39,7 @@ from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
+from ..xiuxian_utils.pet_system import PET_EGG_IDS, PET_EGG_RARITY_KEY, grant_pet_by_rarity
 from .back_util import *
 from .accessory import AFFIX_KEY_MAP, SET_BONUS, add_accessory_to_bag, quality_to_cn  # noqa: F401
 
@@ -902,7 +903,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         20020: use_spirit_stone_bag, # 灵石福袋
         20021: use_tianji_stone_trigger, # 天机灵石引
         20022: use_three_cultivation_pill, # 三转玄丹
-        20024: use_arena_challenge_ticket # 竞技场挑战券
+        20024: use_arena_challenge_ticket, # 竞技场挑战券
+        **{egg_id: use_pet_egg_item for egg_id in PET_EGG_IDS},
     }
     
     handler_func = ITEM_HANDLERS.get(goods_id, None)
@@ -914,6 +916,56 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         
     await use_item.finish()
+
+async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+    """使用宠物蛋，按道具配置孵化指定稀有度宠物。"""
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = str(user_info["user_id"])
+    item_info = items.get_data_by_item_id(item_id)
+    if not item_info:
+        await handle_send(bot, event, "宠物蛋配置不存在，无法孵化。")
+        return
+
+    rarity = item_info.get(PET_EGG_RARITY_KEY) or PET_EGG_IDS.get(int(item_id))
+    if rarity not in ["常见", "普通", "卓越", "传说", "神话"]:
+        await handle_send(bot, event, "宠物蛋稀有度配置异常，无法孵化。")
+        return
+
+    have = sql_message.goods_num(user_id, item_id)
+    use_num = min(max(1, int(num)), int(have))
+    if use_num <= 0:
+        await handle_send(bot, event, f"背包中没有{item_info.get('name', '宠物蛋')}。")
+        return
+
+    lines = []
+    success_count = 0
+    for _ in range(use_num):
+        try:
+            pet, location = grant_pet_by_rarity(user_id, rarity)
+        except Exception as e:
+            lines.append(f"孵化失败：{e}")
+            break
+
+        success_count += 1
+        loc_msg = "已自动出战" if location == "active" else "已放入宠物背包"
+        lines.append(
+            f"{pet.get('form_name', pet.get('name', '未知宠物'))}"
+            f"（{pet.get('rarity', rarity)}·{pet.get('race', '凡兽')}·{pet.get('type', '攻击')}，UID:{pet.get('uid')}，{loc_msg}）"
+        )
+
+    if success_count > 0:
+        sql_message.update_back_j(user_id, item_id, num=success_count)
+
+    msg = f"道友使用{item_info.get('name', '宠物蛋')} x{success_count}，孵化结果：\n" + "\n".join(lines[:30])
+    if len(lines) > 30:
+        msg += f"\n...其余{len(lines) - 30}条已省略"
+
+    await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包")
+    return
 
 async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
     """使用灵签宝箓"""

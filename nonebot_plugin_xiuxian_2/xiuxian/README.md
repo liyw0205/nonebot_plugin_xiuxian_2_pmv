@@ -29,6 +29,7 @@
 - xiuxian_mixelixir ：炼丹
 - xiuxian_natal_treasure ：本命法宝
 - xiuxian_past_life ：前尘往事
+- xiuxian_pet ：宠物系统
 - xiuxian_puppet ：灵田傀儡
 - xiuxian_rift ：秘境
 - xiuxian_sect ：宗门

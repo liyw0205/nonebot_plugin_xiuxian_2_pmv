@@ -8,6 +8,12 @@ from .xiuxian2_handle import (
     XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,
     get_final_attributes
 )
+from .pet_system import (
+    PET_SKILL_ATTACK,
+    PET_SKILL_BUFF,
+    PET_SKILL_PROTECT,
+    get_user_pet_for_battle,
+)
 from ..xiuxian_config import convert_rank
 from .utils import number_to
 from .item_json import Items
@@ -218,8 +224,10 @@ def get_players_attributes(user_id, level_ratios=None):
     natal_data = natal_treasure.get_data() if natal_treasure.exists() else None
 
     buffs["本命法宝"] = natal_data
+    buffs["宠物"] = get_user_pet_for_battle(user_id)
     buffs["属性"] = attributes
     buffs["其他"] = buff_data_info
+    attributes["pet"] = buffs["宠物"]
 
     return buffs
 
@@ -685,6 +693,37 @@ DEBUFF_DESC_TEMPLATES = {
     DebuffType.HEALING_BLOCK: "陷入禁疗，无法恢复生命",
 }
 
+PET_BUFF_TYPE_MAP = {
+    "attack": BuffType.ATTACK_UP,
+    "crit_rate": BuffType.CRIT_RATE_UP,
+    "crit_damage": BuffType.CRIT_DAMAGE_UP,
+    "damage_reduction": BuffType.DAMAGE_REDUCTION_UP,
+    "armor_penetration": BuffType.ARMOR_PENETRATION_UP,
+    "accuracy": BuffType.ACCURACY_UP,
+    "evasion": BuffType.EVASION_UP,
+    "lifesteal": BuffType.LIFESTEAL_UP,
+    "mana_steal": BuffType.MANA_STEAL_UP,
+    "debuff_immunity": BuffType.DEBUFF_IMMUNITY,
+    "hp_regen": BuffType.HP_REGEN_PERCENT,
+    "mp_regen": BuffType.MP_REGEN_PERCENT,
+    "reflect": BuffType.REFLECT_DAMAGE,
+    "shield": BuffType.SHIELD,
+}
+
+PET_CONTROL_TYPE_MAP = {
+    "fatigue": DebuffType.FATIGUE,
+    "stun": DebuffType.STUN,
+    "freeze": DebuffType.FREEZE,
+    "petrify": DebuffType.PETRIFY,
+    "sleep": DebuffType.SLEEP,
+    "root": DebuffType.ROOT,
+    "fear": DebuffType.FEAR,
+    "seal": DebuffType.SEAL,
+    "paralysis": DebuffType.PARALYSIS,
+    "silence": DebuffType.SILENCE,
+    "healing_block": DebuffType.HEALING_BLOCK,
+}
+
 VALID_FIELDS = {"name", "type", "value", "coefficient", "is_debuff", "duration", "skill_type"}
 
 
@@ -774,6 +813,7 @@ class Entity:
         self.debuffs = []
         self.start_skills = data.get("start_skills", [])
         self.skills = data.get("skills", [])
+        self.pet = data.get("pet")
         self.total_dmg = 0
 
         self.natal_data = data.get("natal_data")
@@ -1252,6 +1292,11 @@ class BattleSystem:
         if defender.has_natal_effect(NatalEffectType.REFLECT_DAMAGE):
             reflect_rate += defender.get_natal_effect_value(NatalEffectType.REFLECT_DAMAGE)
         reflect_rate += self._get_set_bonus_total(defender, "reflect")
+        reflect_rate += sum(
+            max(0, buff.value)
+            for buff in defender.buffs
+            if buff.type == BuffType.REFLECT_DAMAGE
+        )
         return max(0.0, reflect_rate)
 
     def _try_apply_reflect(self, attacker, defender, damage_for_reflect):
@@ -1612,6 +1657,275 @@ class BattleSystem:
                     append_msgs.append(f"套装附加真伤{number_to(hp_loss)}")
 
         return extra_true_damage, append_msgs
+
+    def _get_pet_skill_targets(self, owner, skill, preferred_target=None):
+        if preferred_target is not None:
+            if preferred_target.is_alive and preferred_target.team_id != owner.team_id:
+                return [preferred_target]
+            return []
+
+        enemies = self._get_all_enemies(owner)
+        if not enemies:
+            return []
+
+        scope = str(skill.get("target_scope", "single"))
+        if scope in ("aoe", "all"):
+            return enemies
+
+        if scope in ("multi", "random_multi"):
+            count = max(1, int(skill.get("target_count", 2)))
+            count = min(count, len(enemies))
+            if scope == "random_multi":
+                return random.sample(enemies, k=count)
+            return sorted(enemies, key=lambda x: x.hp)[:count]
+
+        return [min(enemies, key=lambda x: x.hp)]
+
+    def _apply_pet_damage_once(self, owner, target, skill_name, dmg, damage_type="normal", shield_penetration=0.0):
+        hp_loss, absorbed, blocked = self._apply_damage_with_layers(
+            owner,
+            target,
+            int(dmg),
+            damage_type=damage_type,
+            shield_penetration=shield_penetration,
+        )
+
+        if blocked:
+            return f"{target.name}的无敌抵挡了{skill_name}", 0
+
+        if hp_loss > 0:
+            msg = f"对{target.name}造成{number_to(int(hp_loss))}伤害"
+        elif absorbed > 0:
+            msg = f"伤害被{target.name}的护盾吸收{number_to(int(absorbed))}"
+        else:
+            msg = f"未对{target.name}造成有效伤害"
+
+        if target.hp <= 0:
+            revived = self._try_handle_natal_revive(target, owner)
+            if not revived:
+                msg += f"，{target.name}💀倒下了"
+
+        return msg, max(0, hp_loss)
+
+    def _apply_pet_attack_skill(self, owner, skill, skill_name, power, preferred_target=None):
+        targets = self._get_pet_skill_targets(owner, skill, preferred_target=preferred_target)
+        if not targets:
+            return "", 0
+
+        effect = str(skill.get("effect", "damage"))
+        duration = max(1, int(skill.get("duration", 1)))
+        total_dmg = 0
+        parts = []
+
+        for target in targets:
+            if not target.is_alive:
+                continue
+
+            if effect == "dot":
+                direct_dmg = int(owner.atk_rate * power * 0.35)
+                if direct_dmg > 0:
+                    msg, dmg = self._apply_pet_damage_once(owner, target, skill_name, direct_dmg)
+                    parts.append(msg)
+                    total_dmg += dmg
+
+                dot_power = float(skill.get("dot_power", 0)) or max(0.03, power * 0.2)
+                dot_effect = StatusEffect(skill_name, DebuffType.SKILL_DOT, dot_power, owner.name, True, duration, SkillType.DOT)
+                target.add_status(dot_effect)
+                parts.append(f"{target.name}被附加持续{duration}回合伤害")
+                continue
+
+            if effect == "control":
+                direct_dmg = int(owner.atk_rate * power * 0.55)
+                if direct_dmg > 0:
+                    msg, dmg = self._apply_pet_damage_once(owner, target, skill_name, direct_dmg)
+                    parts.append(msg)
+                    total_dmg += dmg
+
+                control_type = PET_CONTROL_TYPE_MAP.get(str(skill.get("control_type", "seal")), DebuffType.SEAL)
+                success = float(skill.get("success", 100.0))
+                if target.is_alive and random.uniform(0, 100) <= success:
+                    target.add_status(StatusEffect(skill_name, control_type, 0, 1, True, duration, SkillType.CC))
+                    parts.append(f"{target.name}受到控制，持续{duration}回合")
+                elif target.is_alive:
+                    parts.append(f"{target.name}抵抗了控制")
+                continue
+
+            hit_count = max(1, int(skill.get("hit_count", 1)))
+            if effect == "multi_hit":
+                hit_count = max(2, hit_count)
+
+            target_total = 0
+            target_msgs = []
+            for _ in range(hit_count):
+                if not target.is_alive:
+                    break
+
+                hit_power = power
+                if effect == "multi_hit":
+                    hit_power = power * 0.82 / hit_count
+                elif effect == "random_hit":
+                    hit_power = power * random.uniform(
+                        float(skill.get("min_power", 0.85)),
+                        float(skill.get("max_power", 1.25)),
+                    )
+
+                dmg = int(owner.atk_rate * hit_power)
+                if effect == "percent_hp":
+                    dmg += int(target.max_hp * max(0, float(skill.get("hp_percent", 0))))
+
+                damage_type = "true" if effect in ("true_damage", "def_ignore") else "normal"
+                shield_penetration = float(skill.get("shield_penetration", 0.0))
+                msg, hit_dmg = self._apply_pet_damage_once(
+                    owner,
+                    target,
+                    skill_name,
+                    dmg,
+                    damage_type=damage_type,
+                    shield_penetration=shield_penetration,
+                )
+                target_msgs.append(msg)
+                target_total += hit_dmg
+
+            total_dmg += target_total
+            if effect == "multi_hit" and target_total > 0:
+                parts.append(f"连击{target.name}{hit_count}次，共造成{number_to(int(target_total))}伤害")
+            else:
+                parts.extend(target_msgs[:2])
+
+        if not parts:
+            return "", 0
+
+        return f"【宠物】{skill_name}发动，" + "；".join(parts) + "！", total_dmg
+
+    def _remove_same_pet_buff(self, owner, skill_name, buff_type):
+        owner.buffs = [
+            buff for buff in owner.buffs
+            if not (buff.name == skill_name and buff.type == buff_type)
+        ]
+
+    def _apply_pet_owner_buff(self, owner, skill_name, buff_type, value, duration, text):
+        self._remove_same_pet_buff(owner, skill_name, buff_type)
+        owner.add_status(StatusEffect(skill_name, buff_type, value, 1, False, duration=duration, skill_type=0))
+        return f"【宠物】{skill_name}发动，为{owner.name}{text}！", 0
+
+    def _apply_pet_support_skill(self, owner, skill, skill_name, power):
+        effect = str(skill.get("effect", "attack_buff"))
+        duration = max(1, int(skill.get("duration", 1)))
+        scale = max(0.0, float(skill.get("buff_scale", 1.0)))
+
+        if effect in ("cleanse", "purify"):
+            count = max(1, int(skill.get("target_count", 2)))
+            removed = owner.debuffs[:count]
+            owner.debuffs = owner.debuffs[count:]
+            if removed:
+                return f"【宠物】{skill_name}发动，为{owner.name}驱散{len(removed)}个负面状态！", 0
+            return f"【宠物】{skill_name}发动，但{owner.name}没有可驱散的负面状态。", 0
+
+        if effect in ("debuff_immunity", "immunity"):
+            return self._apply_pet_owner_buff(
+                owner,
+                skill_name,
+                BuffType.DEBUFF_IMMUNITY,
+                0,
+                duration,
+                f"获得免疫减益，持续{duration}回合",
+            )
+
+        if effect in ("regen", "hp_regen"):
+            value = min(0.5, power * 0.08 * scale)
+            return self._apply_pet_owner_buff(
+                owner,
+                skill_name,
+                BuffType.HP_REGEN_PERCENT,
+                value,
+                duration,
+                f"获得每回合{round(value * 100, 2)}%气血回复，持续{duration}回合",
+            )
+
+        buff_type = PET_BUFF_TYPE_MAP.get(str(skill.get("buff_type", "")))
+        if not buff_type:
+            if effect == "crit_rate_buff":
+                buff_type = BuffType.CRIT_RATE_UP
+            elif effect == "crit_damage_buff":
+                buff_type = BuffType.CRIT_DAMAGE_UP
+            elif effect == "lifesteal_buff":
+                buff_type = BuffType.LIFESTEAL_UP
+            elif effect == "armor_pen_buff":
+                buff_type = BuffType.ARMOR_PENETRATION_UP
+            elif effect == "damage_reduction":
+                buff_type = BuffType.DAMAGE_REDUCTION_UP
+            elif effect in ("evasion_buff", "dodge"):
+                buff_type = BuffType.EVASION_UP
+            elif effect == "reflect":
+                buff_type = BuffType.REFLECT_DAMAGE
+            else:
+                buff_type = BuffType.ATTACK_UP
+
+        value = power * 0.22 * scale
+        if buff_type == BuffType.CRIT_RATE_UP:
+            value = min(0.75, power * 0.10 * scale)
+        elif buff_type == BuffType.CRIT_DAMAGE_UP:
+            value = min(1.2, power * 0.16 * scale)
+        elif buff_type in (BuffType.LIFESTEAL_UP, BuffType.MANA_STEAL_UP):
+            value = min(0.65, power * 0.10 * scale)
+        elif buff_type == BuffType.ARMOR_PENETRATION_UP:
+            value = min(1.0, power * 0.12 * scale)
+        elif buff_type == BuffType.DAMAGE_REDUCTION_UP:
+            value = min(0.85, power * 0.16 * scale)
+        elif buff_type == BuffType.EVASION_UP:
+            value = min(90, power * 8 * scale)
+        elif buff_type == BuffType.REFLECT_DAMAGE:
+            value = min(0.9, power * 0.08 * max(0.0, float(skill.get("reflect_scale", 1.0))))
+        else:
+            value = min(1.25, value)
+
+        text_map = {
+            BuffType.ATTACK_UP: f"提升{round(value * 100, 2)}%攻击，持续{duration}回合",
+            BuffType.CRIT_RATE_UP: f"提升{round(value * 100, 2)}%会心率，持续{duration}回合",
+            BuffType.CRIT_DAMAGE_UP: f"提升{round(value * 100, 2)}%会心伤害，持续{duration}回合",
+            BuffType.LIFESTEAL_UP: f"提升{round(value * 100, 2)}%吸血，持续{duration}回合",
+            BuffType.ARMOR_PENETRATION_UP: f"提升{round(value * 100, 2)}%穿透，持续{duration}回合",
+            BuffType.DAMAGE_REDUCTION_UP: f"提升{round(value * 100, 2)}%伤害减免，持续{duration}回合",
+            BuffType.EVASION_UP: f"提升{round(value, 2)}点闪避，持续{duration}回合",
+            BuffType.REFLECT_DAMAGE: f"获得{round(value * 100, 2)}%反伤，持续{duration}回合",
+        }
+        return self._apply_pet_owner_buff(owner, skill_name, buff_type, value, duration, text_map.get(buff_type, f"获得增益，持续{duration}回合"))
+
+    def _apply_pet_protect_skill(self, owner, skill, skill_name, power):
+        effect = str(skill.get("effect", "shield"))
+        duration = max(1, int(skill.get("duration", 1)))
+
+        if effect == "shield":
+            shield_amount = int(owner.max_hp * power * 0.35 * max(0.0, float(skill.get("shield_scale", 1.0))))
+            if shield_amount <= 0:
+                return "", 0
+            owner.add_status(StatusEffect(skill_name, BuffType.SHIELD, shield_amount, 1, False, duration=duration, skill_type=0))
+            return f"【宠物】{skill_name}发动，为{owner.name}施加{number_to(shield_amount)}点护盾！", 0
+
+        return self._apply_pet_support_skill(owner, skill, skill_name, power)
+
+    def _apply_pet_action(self, owner, preferred_target=None):
+        pet = getattr(owner, "pet", None)
+        if not pet or not owner.is_alive:
+            return "", 0
+        if owner.type in ("minion", "summon"):
+            return "", 0
+
+        skill = pet.get("skill") or {}
+        skill_type = skill.get("type")
+        skill_name = skill.get("name") or f"{pet.get('form_name', pet.get('name', '宠物'))}的神通"
+        power = max(0.0, float(skill.get("power", 0)))
+        if power <= 0:
+            return "", 0
+
+        if skill_type == PET_SKILL_ATTACK:
+            return self._apply_pet_attack_skill(owner, skill, skill_name, power, preferred_target=preferred_target)
+        if skill_type == PET_SKILL_BUFF:
+            return self._apply_pet_support_skill(owner, skill, skill_name, power)
+        if skill_type == PET_SKILL_PROTECT:
+            return self._apply_pet_protect_skill(owner, skill, skill_name, power)
+
+        return "", 0
 
     def _try_handle_natal_revive(self, unit, killer=None):
         if unit.hp > 0:
@@ -2424,6 +2738,17 @@ class BattleSystem:
                     self.add_message(unit, "\n".join(hp_msgs))
                 else:
                     self.add_message(unit, targets.show_bar("hp"))
+
+        for unit in units:
+            if not unit.is_alive or not getattr(unit, "pet", None):
+                continue
+            if not self._get_all_enemies(unit):
+                break
+
+            pet_msg, pet_dmg = self._apply_pet_action(unit)
+            if pet_msg:
+                self.add_message(unit, pet_msg)
+                unit.total_dmg += pet_dmg
 
     def get_final_status_list(self):
         status = []
