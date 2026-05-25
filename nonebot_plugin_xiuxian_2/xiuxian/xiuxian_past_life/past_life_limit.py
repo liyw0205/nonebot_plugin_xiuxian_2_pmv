@@ -14,6 +14,7 @@ FIELDS = [
     "accumulated",      # 累计属性 {"悟性":x,...}
     "talent",           # 天赋名
     "total_score",      # 总分
+    "score_breakdown",  # 终局评分拆分
     "event_indices",    # 每幕选中的事件索引
     "event_snapshots",  # 每幕选中的事件快照
     "early_death_rolls",  # 已判定过的提前终局风险
@@ -25,7 +26,7 @@ FIELDS = [
     "endings_log",      # 结局记录
 ]
 
-COOLDOWN_HOURS = 12
+REFRESH_INTERVAL_HOURS = 12
 
 
 class PastLifeLimit:
@@ -40,6 +41,7 @@ class PastLifeLimit:
             "accumulated": {"悟性": 0, "机缘": 0, "根骨": 0, "气运": 0, "心性": 0},
             "talent": "",
             "total_score": 0,
+            "score_breakdown": {},
             "event_indices": [],
             "event_snapshots": [],
             "early_death_rolls": {},
@@ -90,23 +92,36 @@ class PastLifeLimit:
                 return None
         return None
 
+    def _get_refresh_slot_start(self, now=None):
+        """前尘刷新段：每日 00:00 与 12:00。"""
+        now = now or datetime.now()
+        refresh_hour = 12 if now.hour >= 12 else 0
+        return now.replace(hour=refresh_hour, minute=0, second=0, microsecond=0)
+
+    def _get_next_refresh_time(self, now=None):
+        now = now or datetime.now()
+        return self._get_refresh_slot_start(now) + timedelta(hours=REFRESH_INTERVAL_HOURS)
+
     def get_next_available_time(self, user_id):
         state = self.get_user_state(user_id)
         last = self._parse_run_time(state.get("last_run_time"))
         if not last:
             return None
-        return last + timedelta(hours=COOLDOWN_HOURS)
+        now = datetime.now()
+        if last < self._get_refresh_slot_start(now):
+            return None
+        return self._get_next_refresh_time(now)
 
     def check_cooldown(self, user_id):
-        """检查冷却（完成一次前尘后12小时）"""
+        """检查刷新段：每日 00:00 / 12:00 刷新，每段可完成一次。"""
         state = self.get_user_state(user_id)
         last = self._parse_run_time(state.get("last_run_time"))
         if not last:
             return True
-        return datetime.now() >= (last + timedelta(hours=COOLDOWN_HOURS))
+        return last < self._get_refresh_slot_start()
 
     def get_cooldown_remaining(self, user_id):
-        """返回剩余冷却分钟（完成一次前尘后12小时）"""
+        """返回距离下次前尘刷新剩余分钟。"""
         next_time = self.get_next_available_time(user_id)
         if not next_time:
             return 0
@@ -135,8 +150,8 @@ class PastLifeLimit:
         next_time = self.get_next_available_time(user_id)
         if next_time:
             available_at = next_time.strftime("%Y-%m-%d %H:%M")
-            return f"距离下次投胎还需{''.join(time_parts)}，可于{available_at}后再次开启。"
-        return f"距离下次投胎还需{''.join(time_parts)}。"
+            return f"距离下次前尘刷新还需{''.join(time_parts)}，可于{available_at}后再次开启。"
+        return f"距离下次前尘刷新还需{''.join(time_parts)}。"
 
     def save_run_result(self, user_id, ending_name, score):
         """记录一次完成的前世"""
@@ -177,6 +192,7 @@ class PastLifeLimit:
         state["accumulated"] = default["accumulated"]
         state["talent"] = ""
         state["total_score"] = 0
+        state["score_breakdown"] = {}
         state["event_indices"] = []
         state["event_snapshots"] = []
         state["early_death_rolls"] = {}

@@ -10,22 +10,26 @@
     <!-- 1. 核心修复脚本：阻塞渲染，防止深色模式瞬间闪白 -->
     <script>
         (function() {
-            // 立即读取存储的主题和颜色
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            const savedColor = localStorage.getItem('customAccentColor');
-            
-            // 在 body 渲染前应用到 html 标签上
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            
-            if (savedColor) {
-                document.documentElement.setAttribute('data-custom-accent-color', 'true');
-                document.documentElement.style.setProperty('--custom-accent-color', savedColor);
+            try {
+                // 立即读取存储的主题和颜色
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                const savedColor = localStorage.getItem('customAccentColor');
+
+                // 在 body 渲染前应用到 html 标签上
+                document.documentElement.setAttribute('data-theme', savedTheme);
+
+                if (savedColor) {
+                    document.documentElement.setAttribute('data-custom-accent-color', 'true');
+                    document.documentElement.style.setProperty('--custom-accent-color', savedColor);
+                }
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
             }
         })();
     </script>
 </head>
 
-<body>
+<body class="{% if is_active('messages_page') %}messages-layout{% endif %}">
     <!-- 粒子背景容器 -->
     <div id="particles-js"></div>
     
@@ -100,12 +104,33 @@
         const menuToggle = document.getElementById('menuToggle');
         const mainNav = document.getElementById('mainNav');
 
+        function readLocalStorage(key, fallback = null) {
+            try {
+                const value = localStorage.getItem(key);
+                return value === null ? fallback : value;
+            } catch (e) {
+                return fallback;
+            }
+        }
+
+        function writeLocalStorage(key, value) {
+            try {
+                localStorage.setItem(key, value);
+            } catch (e) {}
+        }
+
+        function removeLocalStorage(key) {
+            try {
+                localStorage.removeItem(key);
+            } catch (e) {}
+        }
+
         // --- 主题控制函数 ---
 
         // 1. 设置预设主题 (浅色/深色/活力)
         function applyTheme(themeName) {
             html.setAttribute('data-theme', themeName);
-            localStorage.setItem('theme', themeName);
+            writeLocalStorage('theme', themeName);
             
             // 切换预设主题时，自动移除自定义强调色，恢复主题原生配色
             removeCustomAccent();
@@ -118,7 +143,7 @@
         function applyCustomAccent(color) {
             html.setAttribute('data-custom-accent-color', 'true');
             html.style.setProperty('--custom-accent-color', color);
-            localStorage.setItem('customAccentColor', color);
+            writeLocalStorage('customAccentColor', color);
             
             // 激活自定义颜色时，取消选中所有预设单选框
             themeRadios.forEach(radio => radio.checked = false);
@@ -128,13 +153,13 @@
         function removeCustomAccent() {
             html.removeAttribute('data-custom-accent-color');
             html.style.removeProperty('--custom-accent-color');
-            localStorage.removeItem('customAccentColor');
+            removeLocalStorage('customAccentColor');
         }
 
         // --- 初始化 UI 状态 (页面加载时执行) ---
         document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            const savedColor = localStorage.getItem('customAccentColor');
+            const savedTheme = readLocalStorage('theme', 'light') || 'light';
+            const savedColor = readLocalStorage('customAccentColor');
 
             // 同步 UI 单选框状态
             if (savedColor) {
@@ -145,8 +170,10 @@
                 if (radio) radio.checked = true;
             }
 
-            // 初始化粒子背景
-            initParticles(savedTheme);
+            // 初始化粒子背景；消息页使用 QQ 窗口背景，不启用粒子层
+            if (!document.body.classList.contains('messages-layout')) {
+                initParticles(savedTheme);
+            }
 
             // 卡片入场动画延迟
             document.querySelectorAll('.card').forEach((card, index) => {
@@ -164,30 +191,38 @@
         });
 
         // 监听自定义取色器
-        customColorInput.addEventListener('input', (e) => {
-            applyCustomAccent(e.target.value);
-        });
+        if (customColorInput) {
+            customColorInput.addEventListener('input', (e) => {
+                applyCustomAccent(e.target.value);
+            });
+        }
 
         // 下拉菜单切换
-        settingsButton.addEventListener('click', (e) => {
-            settingsDropdownContent.classList.toggle('show');
-            e.stopPropagation();
-        });
+        if (settingsButton && settingsDropdownContent) {
+            settingsButton.addEventListener('click', (e) => {
+                settingsDropdownContent.classList.toggle('show');
+                e.stopPropagation();
+            });
+        }
 
         // 点击外部关闭下拉菜单
         document.addEventListener('click', (e) => {
+            if (!settingsButton || !settingsDropdownContent) return;
             if (!settingsDropdownContent.contains(e.target) && !settingsButton.contains(e.target)) {
                 settingsDropdownContent.classList.remove('show');
             }
         });
 
         // 移动端菜单切换
-        menuToggle.addEventListener('click', () => {
-            mainNav.classList.toggle('active');
-        });
+        if (menuToggle && mainNav) {
+            menuToggle.addEventListener('click', () => {
+                mainNav.classList.toggle('active');
+            });
+        }
 
         // 移动端点击外部关闭导航
         document.addEventListener('click', (e) => {
+            if (!menuToggle || !mainNav) return;
             if (window.innerWidth <= 768 && mainNav.classList.contains('active')) {
                 if (!mainNav.contains(e.target) && !menuToggle.contains(e.target)) {
                     mainNav.classList.remove('active');
@@ -197,6 +232,7 @@
 
         // --- 粒子系统初始化函数 ---
         function initParticles(theme) {
+            if (typeof window.particlesJS !== 'function') return;
             const color = (theme === 'dark') ? "#3498db" : "#9370db";
             particlesJS('particles-js', {
                 particles: {
@@ -214,6 +250,8 @@
         }
 
         function updateParticles(theme) {
+            if (document.body.classList.contains('messages-layout')) return;
+            if (typeof window.particlesJS !== 'function') return;
             if (window.pJSDom && window.pJSDom.length > 0) {
                 window.pJSDom[0].pJS.fn.vendors.destroypJS();
                 window.pJSDom = [];

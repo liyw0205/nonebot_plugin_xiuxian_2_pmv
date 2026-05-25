@@ -1514,6 +1514,28 @@ def build_bot_avatar_url(adapter: str, bot_id: str = "", bot=None) -> str:
     return ""
 
 
+def is_placeholder_user_name(name, user_id: str = "") -> bool:
+    name = str(name or "").strip()
+    user_id = str(user_id or "").strip()
+
+    if not name:
+        return True
+
+    if name.lower() == "bot":
+        return True
+
+    return bool(user_id and name == user_id)
+
+
+def pick_human_display_name(username, nickname="", user_id: str = "") -> str:
+    for value in (username, nickname):
+        value = str(value or "").strip()
+        if not is_placeholder_user_name(value, user_id):
+            return value
+
+    return ""
+
+
 def fill_message_display_profiles(rows: list[dict]) -> list[dict]:
     if not rows:
         return rows
@@ -1545,21 +1567,46 @@ def fill_session_display_profiles(rows: list[dict]) -> list[dict]:
     if not rows:
         return rows
 
-    for r in rows:
-        scene = str(r.get("scene") or "")
-        if scene not in ("private", "channel_private"):
-            continue
+    conn = None
+    try:
+        for r in rows:
+            scene = str(r.get("scene") or "")
+            if scene not in ("private", "channel_private"):
+                continue
 
-        adapter = str(r.get("adapter") or "")
-        bot_id = str(r.get("bot_id") or "")
-        target_id = str(r.get("target_id") or "")
+            adapter = str(r.get("adapter") or "")
+            bot_id = str(r.get("bot_id") or "")
+            target_id = str(r.get("target_id") or "")
 
-        r["avatar"] = build_user_avatar_url(
-            adapter,
-            bot_id,
-            target_id,
-            str(r.get("avatar") or ""),
-        )
+            title = str(r.get("title") or "").strip()
+            username = str(r.get("username") or "").strip()
+            nickname = str(r.get("nickname") or "").strip()
+
+            if (
+                is_placeholder_user_name(title, target_id)
+                or is_placeholder_user_name(username, target_id)
+                or is_placeholder_user_name(nickname, target_id)
+            ):
+                if conn is None:
+                    conn = get_message_db_connection()
+                human_name = get_latest_human_name_by_user_id(conn, target_id)
+                if human_name:
+                    if is_placeholder_user_name(title, target_id):
+                        r["title"] = human_name
+                    if is_placeholder_user_name(username, target_id):
+                        r["username"] = human_name
+                    if is_placeholder_user_name(nickname, target_id):
+                        r["nickname"] = human_name
+
+            r["avatar"] = build_user_avatar_url(
+                adapter,
+                bot_id,
+                target_id,
+                str(r.get("avatar") or ""),
+            )
+    finally:
+        if conn is not None:
+            conn.close()
 
     return rows
 
@@ -1638,7 +1685,7 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
                 (uid,),
             )
             row = cur.fetchone()
-            if row and row["username"]:
+            if row and pick_human_display_name(row["username"], user_id=uid):
                 name_map[uid] = row["username"]
 
         # 2. 没缓存的，再从群聊消息中找
@@ -1653,22 +1700,25 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
                   AND scene IN ('group', 'channel_group')
                   AND direction = 'recv'
                   AND (
-                    (username IS NOT NULL AND username != '')
-                    OR (nickname IS NOT NULL AND nickname != '')
+                    (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
+                    OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
                   )
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
-            """, (uid,))
+            """, (uid, uid, uid))
             row = cur.fetchone()
             if row:
-                name_map[uid] = row["username"] or row["nickname"] or uid
+                name = pick_human_display_name(row["username"], row["nickname"], uid)
+                if name:
+                    name_map[uid] = name
 
         for r in rows:
             if r.get("scene") in ("private", "channel_private"):
                 uid = str(r.get("user_id") or "")
-                if not r.get("username"):
-                    r["username"] = name_map.get(uid) or r.get("nickname") or uid
-                if not r.get("nickname"):
+                fallback_name = name_map.get(uid) or r.get("nickname") or uid
+                if is_placeholder_user_name(r.get("username"), uid):
+                    r["username"] = fallback_name
+                if is_placeholder_user_name(r.get("nickname"), uid):
                     r["nickname"] = r["username"]
 
         return rows
@@ -1819,46 +1869,54 @@ def get_latest_human_name_by_user_id(conn, user_id: str) -> str:
         (str(user_id),),
     )
     row = cur.fetchone()
-    if row and row["username"]:
-        return str(row["username"])
+    if row:
+        name = pick_human_display_name(row["username"], user_id=user_id)
+        if name:
+            return name
 
     # 从群聊消息里找昵称
     cur.execute("""
         SELECT
-            COALESCE(NULLIF(username, ''), NULLIF(nickname, '')) AS name
+            username,
+            nickname
         FROM messages
         WHERE user_id = ?
           AND direction = 'recv'
           AND scene IN ('group', 'channel_group')
           AND (
-                (username IS NOT NULL AND username != '' AND username != 'Bot')
-             OR (nickname IS NOT NULL AND nickname != '' AND nickname != 'Bot')
+                (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
+             OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
           )
         ORDER BY created_at DESC, id DESC
         LIMIT 1
-    """, (str(user_id),))
+    """, (str(user_id), str(user_id), str(user_id)))
     row = cur.fetchone()
-    if row and row["name"]:
-        return str(row["name"])
+    if row:
+        name = pick_human_display_name(row["username"], row["nickname"], user_id)
+        if name:
+            return name
 
     # 再从私聊消息里找
     cur.execute("""
         SELECT
-            COALESCE(NULLIF(username, ''), NULLIF(nickname, '')) AS name
+            username,
+            nickname
         FROM messages
         WHERE user_id = ?
           AND direction = 'recv'
           AND scene IN ('private', 'channel_private')
           AND (
-                (username IS NOT NULL AND username != '' AND username != 'Bot')
-             OR (nickname IS NOT NULL AND nickname != '' AND nickname != 'Bot')
+                (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
+             OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
           )
         ORDER BY created_at DESC, id DESC
         LIMIT 1
-    """, (str(user_id),))
+    """, (str(user_id), str(user_id), str(user_id)))
     row = cur.fetchone()
-    if row and row["name"]:
-        return str(row["name"])
+    if row:
+        name = pick_human_display_name(row["username"], row["nickname"], user_id)
+        if name:
+            return name
 
     return ""
 

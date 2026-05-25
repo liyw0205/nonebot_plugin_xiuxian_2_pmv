@@ -53,8 +53,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "   初始资质总和15~20随机，单项不低于3，也可能偏科极高\n"
         "2. 经历十幕人生，每幕做出抉择\n"
         "3. 选择会根据当前资质产生更佳、受挫或平稳结果\n"
-        "4. 不同结局获得不同奖励\n"
-        "5. 每次完成后需沉淀12小时\n"
+        "4. 前世评分为百分制：抉择50、最终资质30、完成幕数20\n"
+        "5. 不同结局获得不同奖励\n"
+        "6. 每日00:00与12:00刷新，每个刷新段可完成一次\n"
         "═════════════\n"
         "十九种结局等你解锁！"
     )
@@ -115,7 +116,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 检查冷却
     if not past_life_limit.check_cooldown(user_id):
-        msg = f"前尘往事仍在沉淀，{past_life_limit.get_cooldown_text(user_id)}"
+        msg = f"前尘往事尚未刷新，{past_life_limit.get_cooldown_text(user_id)}"
         await handle_send(bot, event, msg, md_type="前尘", k1="回忆", v1="前尘回忆", k2="帮助", v2="前尘帮助", k3="排行", v3="前尘排行")
         await reincarnate_cmd.finish()
 

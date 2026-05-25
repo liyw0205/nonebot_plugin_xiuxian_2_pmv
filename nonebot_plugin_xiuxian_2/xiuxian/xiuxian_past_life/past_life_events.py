@@ -18,6 +18,10 @@ sql_message = XiuxianDateManage()
 items = Items()
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
+SCORE_CHOICE_MAX = 50
+SCORE_APTITUDE_MAX = 30
+SCORE_STAGE_MAX = 20
+SCORE_APTITUDE_RAW_CAP = 80
 
 # 天赋类型标记（用于显示）
 TALENT_TYPE_LABELS = {
@@ -29,6 +33,33 @@ TALENT_TYPE_LABELS = {
 
 class PastLifeEngine:
     """前世今生·剧本杀引擎"""
+
+    def _scale_score(self, raw_score: int, raw_cap: int, score_cap: int):
+        raw_cap = max(int(raw_cap or 0), 1)
+        score_cap = max(int(score_cap or 0), 0)
+        raw_score = max(0, min(int(raw_score or 0), raw_cap))
+        return min(score_cap, int(raw_score * score_cap / raw_cap + 0.5))
+
+    def _calculate_choice_raw_cap(self):
+        """按当前剧情池计算一轮可取得的最高抉择原始分。"""
+        cap = 0
+        for stage in STAGES:
+            stage_cap = 0
+            for event in stage.get("events", []):
+                for choice in event.get("choices", []):
+                    branch_scores = []
+                    branches = choice.get("branches")
+                    if isinstance(branches, dict):
+                        branch_scores = [
+                            int(branch.get("score", 0) or 0)
+                            for branch in branches.values()
+                            if isinstance(branch, dict)
+                        ]
+                    if not branch_scores:
+                        branch_scores = [int(choice.get("score", 0) or 0)]
+                    stage_cap = max(stage_cap, max(branch_scores))
+            cap += stage_cap
+        return max(cap, 1)
 
     def _get_stage_event(self, state: dict, stage_idx: int):
         """优先使用本轮开始时保存的事件快照，兼容旧存档回退到索引。"""
@@ -55,6 +86,56 @@ class PastLifeEngine:
         result_text = branch.get("result", choice.get("result", ""))
         judge_msg = branch.get("judge", "")
         return effects, score, result_text, f"\n{judge_msg}" if judge_msg else ""
+
+    def _calculate_score_breakdown(self, state: dict):
+        """终局评分：抉择分 + 最终资质分 + 完成幕数分。"""
+        choice_raw = int(state.get("total_score", 0) or 0)
+        choice_raw_cap = self._calculate_choice_raw_cap()
+        choice_score = self._scale_score(choice_raw, choice_raw_cap, SCORE_CHOICE_MAX)
+        accumulated = state.get("accumulated", {})
+        if not isinstance(accumulated, dict):
+            accumulated = {}
+
+        aptitude_raw = sum(
+            max(0, int(accumulated.get(attr, 0) or 0))
+            for attr in ATTR_NAMES
+        )
+        aptitude_score = self._scale_score(
+            aptitude_raw, SCORE_APTITUDE_RAW_CAP, SCORE_APTITUDE_MAX
+        )
+        completed_stages = max(0, min(int(state.get("stage", 0) or 0), len(STAGES)))
+        stage_score = self._scale_score(completed_stages, len(STAGES), SCORE_STAGE_MAX)
+        total = choice_score + aptitude_score + stage_score
+        return {
+            "choice": choice_score,
+            "choice_max": SCORE_CHOICE_MAX,
+            "choice_raw": choice_raw,
+            "choice_raw_cap": choice_raw_cap,
+            "aptitude": aptitude_score,
+            "aptitude_max": SCORE_APTITUDE_MAX,
+            "aptitude_raw": aptitude_raw,
+            "aptitude_raw_cap": SCORE_APTITUDE_RAW_CAP,
+            "stage": stage_score,
+            "stage_max": SCORE_STAGE_MAX,
+            "completed_stages": completed_stages,
+            "total_stages": len(STAGES),
+            "total": min(total, 100),
+        }
+
+    def _finalize_total_score(self, state: dict):
+        breakdown = self._calculate_score_breakdown(state)
+        state["score_breakdown"] = breakdown
+        state["total_score"] = breakdown["total"]
+        return breakdown
+
+    def _format_score_breakdown(self, breakdown: dict):
+        return (
+            f"评分构成：抉择{breakdown['choice']}/{breakdown['choice_max']} + "
+            f"资质{breakdown['aptitude']}/{breakdown['aptitude_max']}"
+            f"（最终资质{breakdown['aptitude_raw']}） + "
+            f"幕数{breakdown['stage']}/{breakdown['stage_max']}"
+            f"（{breakdown['completed_stages']}/{breakdown['total_stages']}幕）"
+        )
 
     def _roll_talent(self, alloc: dict):
         """
@@ -107,6 +188,7 @@ class PastLifeEngine:
             "accumulated": accumulated,
             "talent": talent_info["name"],
             "total_score": 0,
+            "score_breakdown": {},
             "event_indices": event_indices,
             "event_snapshots": event_snapshots,
             "early_death_rolls": {},
@@ -225,6 +307,7 @@ class PastLifeEngine:
 
         if early_death:
             state["stage"] = current_stage + 1
+            score_breakdown = self._finalize_total_score(state)
             past_life_limit.save_user_state(user_id, state)
             ending = early_death["ending"]
             if ending.get("partial_reward"):
@@ -246,7 +329,8 @@ class PastLifeEngine:
                 f"当前属性：{effects_str}\n"
                 f"═════════════\n"
                 f"{early_death['message']}\n\n"
-                f"📜 前世评分：{state['total_score']}分\n\n"
+                f"📜 前世评分：{state['total_score']}分\n"
+                f"{self._format_score_breakdown(score_breakdown)}\n\n"
                 f"🏆 结局：【{ending['name']}】\n"
                 f"{ending['desc']}\n\n"
                 f"═══  前世奖励  ═════\n"
@@ -261,6 +345,7 @@ class PastLifeEngine:
         if next_stage >= len(STAGES):
             # 所有幕数完成 → 计算结局
             state["stage"] = next_stage
+            score_breakdown = self._finalize_total_score(state)
             past_life_limit.save_user_state(user_id, state)
             ending = self._calculate_ending(state)
             rewards = self._calculate_rewards(user_id, ending, state)
@@ -269,7 +354,8 @@ class PastLifeEngine:
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
                 f"═════════════\n"
-                f"📜 前世评分：{state['total_score']}分\n\n"
+                f"📜 前世评分：{state['total_score']}分\n"
+                f"{self._format_score_breakdown(score_breakdown)}\n\n"
                 f"🏆 结局：【{ending['name']}】\n"
                 f"{ending['desc']}\n\n"
                 f"═══  前世奖励  ═════\n"
@@ -401,7 +487,7 @@ class PastLifeEngine:
             cd = past_life_limit.get_cooldown_remaining(user_id)
             if cd > 0:
                 return {
-                    "message": f"前尘往事仍在沉淀，{past_life_limit.get_cooldown_text(user_id)}",
+                    "message": f"前尘往事尚未刷新，{past_life_limit.get_cooldown_text(user_id)}",
                     "state": 0,
                 }
             else:
