@@ -12,7 +12,8 @@ from ..adapter_compat import (
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
-    MessageSegment
+    MessageSegment,
+    get_at_user_id,
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, get_player_info, 
@@ -256,10 +257,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     user_id = user_info['user_id']
 
     user1 = sql_message.get_user_real_info(user_id)
-    give_qq = None  # 艾特的时候存到这里
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
     if give_qq:
         if give_qq == str(user_id):
             msg = "道友不会左右互搏之术！"

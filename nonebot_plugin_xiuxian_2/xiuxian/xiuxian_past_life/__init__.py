@@ -5,7 +5,7 @@
 import random
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
-from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, get_at_user_id
 from nonebot.params import CommandArg
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
@@ -277,12 +277,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 先尝试@目标
     target_user = None
-    for seg in args:
-        if seg.type == "at":
-            qq = seg.data.get("qq", "")
-            if qq:
-                target_user = sql_message.get_user_info_with_id(qq)
-                break
+    qq = get_at_user_id(args)
+    if qq:
+        target_user = sql_message.get_user_info_with_id(qq)
 
     # 没@就按道号
     if not target_user:

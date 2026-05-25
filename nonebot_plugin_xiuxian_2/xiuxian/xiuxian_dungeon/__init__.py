@@ -14,7 +14,8 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     Message,
-    MessageSegment
+    MessageSegment,
+    get_at_user_id,
 )
 
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet, PlayerDataManager
@@ -257,10 +258,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     arg = args.extract_plain_text().strip()
     target_user_id = None
 
-    for arg_item in args:
-        if arg_item.type == "at":
-            target_user_id = str(arg_item.data.get("qq", ""))
-            break
+    target_user_id = get_at_user_id(args)
 
     if not target_user_id and arg:
         target_db_info = sql_message.get_user_info_with_name(arg)
@@ -491,10 +489,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     arg = args.extract_plain_text().strip()
     target_user_id = None
 
-    for arg_item in args:
-        if arg_item.type == "at":
-            target_user_id = str(arg_item.data.get("qq", ""))
-            break
+    target_user_id = get_at_user_id(args)
 
     if not target_user_id and arg:
         target_db_info = sql_message.get_user_info_with_name(arg)
@@ -648,10 +643,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
     arg = args.extract_plain_text().strip()
     target_user_id = None
 
-    for arg_item in args:
-        if arg_item.type == "at":
-            target_user_id = str(arg_item.data.get("qq", ""))
-            break
+    target_user_id = get_at_user_id(args)
 
     if not target_user_id and arg:
         target_db_info = sql_message.get_user_info_with_name(arg)

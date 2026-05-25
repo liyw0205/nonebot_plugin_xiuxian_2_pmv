@@ -16,6 +16,7 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
+    get_at_user_id,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
 from nonebot.params import CommandArg
@@ -1484,10 +1485,7 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = f"只有宗主才能进行传位。"
         await handle_send(bot, event, msg)
         await sect_owner_change.finish()
-    give_qq = None  # 艾特的时候存到这里
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
     if give_qq:
         if give_qq == user_id:
             msg = f"无法对自己的进行传位操作。"

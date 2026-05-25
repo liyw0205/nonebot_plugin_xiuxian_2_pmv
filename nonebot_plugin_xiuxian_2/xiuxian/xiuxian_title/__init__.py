@@ -16,6 +16,7 @@ from ..adapter_compat import (
     Message,
     GroupMessageEvent,
     PrivateMessageEvent,
+    get_at_user_id,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
@@ -240,11 +241,7 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     title_name = title_data["name"]
 
     # 优先解析@
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     # 全服
     if target and target.lower() == "all":

@@ -35,6 +35,9 @@ from ..adapter_compat import (
     get_chat_scene,
     get_group_id,
     get_user_id,
+    get_at_user_id,
+    get_at_user_ids,
+    has_at_user,
     get_message_db_path,
 )
 
@@ -94,6 +97,8 @@ view_blackhouse = on_command("查看小黑屋", aliases={"小黑屋列表"}, per
 impersonate_user_command = on_command("用户伪装", permission=SUPERUSER, priority=5, block=True)
 dm_command = on_command("dm", permission=SUPERUSER, priority=5, block=True)
 keyboard_test_cmd = on_command("按钮测试", permission=SUPERUSER, priority=5, block=True)
+at_test_cmd = on_command("艾特测试", permission=SUPERUSER, priority=5, block=True)
+admin_rename_cmd = on_command("易名", permission=SUPERUSER, priority=5, block=True)
 migrate_qqid_cmd = on_command("转换QQID", permission=SUPERUSER, priority=5, block=True)
 update_id_cmd = on_command("ID更新", permission=SUPERUSER, priority=5, block=True)
 swap_id_cmd = on_command("ID交换", permission=SUPERUSER, priority=5, block=True)
@@ -134,6 +139,84 @@ broadcast_help_cmd = on_command(
     block=True
 )
 
+
+@at_test_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def at_test_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """测试通用艾特解析"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    at_ids = get_at_user_ids(args)
+    if not at_ids:
+        await handle_send(bot, event, "无艾特\n艾特ID列表：[]")
+        return
+
+    lines = ["有艾特", "艾特ID列表："]
+    lines.extend(f"{index}. {user_id}" for index, user_id in enumerate(at_ids, 1))
+    if len(at_ids) > 25:
+        lines.append(f"按钮仅生成前25个，共识别{len(at_ids)}个")
+
+    button_ids = at_ids[:25]
+    rows = [
+        [(str(index), user_id) for index, user_id in enumerate(button_ids[start:start + 5], start + 1)]
+        for start in range(0, len(button_ids), 5)
+    ]
+
+    msg = "\n".join(lines)
+    try:
+        await bot.send(event=event, message=MessageSegment.markdown_keyboard(bot, msg, rows))
+    except Exception as e:
+        logger.error(f"艾特测试按钮发送失败: {e}")
+        await handle_send(bot, event, msg)
+
+
+@admin_rename_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """管理员修改用户道号：易名 旧道号 新道号 / 易名 @用户 新道号"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    arg_list = args.extract_plain_text().strip().split()
+    at_user_id = get_at_user_id(args)
+
+    if at_user_id:
+        if not arg_list:
+            await handle_send(bot, event, "用法：易名 @用户 新道号")
+            return
+        target_user = sql_message.get_user_info_with_id(at_user_id)
+        new_name = arg_list[-1]
+    else:
+        if len(arg_list) < 2:
+            await handle_send(bot, event, "用法：易名 旧道号 新道号\n或：易名 @用户 新道号")
+            return
+        old_name, new_name = arg_list[0], arg_list[1]
+        target_user = sql_message.get_user_info_with_name(old_name)
+
+    new_name = new_name.strip()
+    if not target_user:
+        await handle_send(bot, event, "未找到目标用户（请确认旧道号或艾特用户已踏入修仙界）")
+        return
+
+    old_name = str(target_user.get("user_name", ""))
+    target_user_id = str(target_user.get("user_id", ""))
+
+    if not new_name:
+        await handle_send(bot, event, "新道号不能为空")
+        return
+
+    if len(new_name) > 7:
+        await handle_send(bot, event, "道号长度不能超过7个字符！")
+        return
+
+    same_name_user = sql_message.get_user_info_with_name(new_name)
+    if same_name_user and str(same_name_user.get("user_id", "")) != target_user_id:
+        await handle_send(bot, event, "该道号已被使用，请选择其他道号！")
+        return
+
+    if old_name == new_name:
+        await handle_send(bot, event, f"{old_name} 的道号未变化")
+        return
+
+    result = sql_message.update_user_name(target_user_id, new_name)
+    await handle_send(bot, event, f"已将 {old_name} 的道号修改为 {new_name}\n{result}")
+
+
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -159,11 +242,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         target = plain_args[1]
 
     # 优先找艾特
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     if at_qq:
         user_id = at_qq
@@ -236,11 +315,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     target = plain_args[1] if len(plain_args) >= 2 else None
 
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     if at_qq:
         user_id = at_qq
@@ -307,9 +382,7 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await adjust_exp_command.finish()
 
     # 遍历Message对象，寻找艾特信息
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)
     
     if nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name)
@@ -359,10 +432,7 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     target_qq = None
 
     # 优先找艾特
-    for seg in args:
-        if seg.type == "at":
-            target_qq = seg.data.get("qq", "")
-            break
+    target_qq = get_at_user_id(args)
 
     if target_qq:
         target_user = sql_message.get_user_info_with_id(target_qq)
@@ -439,10 +509,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     target_qq = None
 
     # 优先艾特
-    for seg in args:
-        if seg.type == "at":
-            target_qq = seg.data.get("qq", "")
-            break
+    target_qq = get_at_user_id(args)
 
     if target_qq:
         target_user = sql_message.get_user_info_with_id(target_qq)
@@ -790,9 +857,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     give_qq = None  # 艾特的时候存到这里
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)
     if not args:
         sql_message.restate()
         sql_message.update_all_users_stamina(XiuConfig().max_stamina, XiuConfig().max_stamina)
@@ -1076,11 +1141,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     target_name = None
 
     # 1. 优先找艾特
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     if at_qq:
         target_user_id = at_qq
@@ -1119,11 +1180,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     target_user_id = None
 
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     if at_qq:
         target_user_id = at_qq
@@ -1662,7 +1719,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             await handle_send(bot, event, "您当前没有伪装任何用户。")
         return
 
-    if not arg_text and not any(seg.type == "at" for seg in args):
+    if not arg_text and not has_at_user(args):
         current_target_id = _impersonating_users.get(admin_user_id)
         if current_target_id:
             target_user_info = sql_message.get_user_info_with_id(current_target_id)
@@ -1676,11 +1733,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     target_user_info = None
 
     # 1) 优先 @
-    at_qq = None
-    for seg in args:
-        if seg.type == "at":
-            at_qq = seg.data.get("qq", "")
-            break
+    at_qq = get_at_user_id(args)
 
     if at_qq:
         target_user_id = str(at_qq)

@@ -19,6 +19,7 @@ from ..adapter_compat import (
     MessageEvent,
     GroupMessageEvent,
     PrivateMessageEvent,
+    get_at_user_id,
 )
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -757,9 +758,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await give_stone.finish()
 
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)
             
     if give_qq:
         if str(give_qq) == str(user_id):
@@ -863,9 +862,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await handle_send(bot, event, msg)
         await steal_stone.finish()
     
-    for arg in args:
-        if arg.type == "at":
-            steal_qq = arg.data.get('qq', '')
+    steal_qq = get_at_user_id(args)
     
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     
@@ -950,9 +947,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     user_mes = sql_message.get_user_info_with_id(user_id)
     give_qq = None  # 艾特的时候存到这里
     
-    for arg in args:
-        if arg.type == "at":
-            give_qq = arg.data.get("qq", "")
+    give_qq = get_at_user_id(args)
     
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     

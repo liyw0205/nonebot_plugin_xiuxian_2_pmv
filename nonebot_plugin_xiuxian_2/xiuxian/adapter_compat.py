@@ -2011,6 +2011,108 @@ def _mention_user_is_bot(user: Any, bot_ids: set[str]) -> bool:
 
     return False
 
+
+_MENTION_SEGMENT_TYPES = {"at", "mention_user", "group_mention_user"}
+_MENTION_USER_ID_KEYS = (
+    "qq",
+    "user_id",
+    "member_openid",
+    "id",
+    "openid",
+    "user_openid",
+    "union_openid",
+    "union_user_account",
+)
+
+
+def _mention_user_id_from_data(data: Any) -> Optional[str]:
+    if isinstance(data, dict):
+        for key in _MENTION_USER_ID_KEYS:
+            uid = _to_nonempty_str(data.get(key))
+            if uid is not None and uid.lower() != "all":
+                return uid
+        return None
+
+    for attr in _MENTION_USER_ID_KEYS:
+        uid = _to_nonempty_str(getattr(data, attr, None))
+        if uid is not None and uid.lower() != "all":
+            return uid
+
+    return None
+
+
+def _mention_user_id_from_segment(seg: Any) -> Optional[str]:
+    if isinstance(seg, dict):
+        seg_type = str(seg.get("type", "") or "")
+        data = seg.get("data", {}) or {}
+    else:
+        seg_type = str(getattr(seg, "type", "") or "")
+        data = getattr(seg, "data", {}) or {}
+
+    if seg_type not in _MENTION_SEGMENT_TYPES:
+        return None
+
+    return _mention_user_id_from_data(data)
+
+
+def _iter_message_segments(message_or_event: Any):
+    message = message_or_event
+    try:
+        get_message = getattr(message_or_event, "get_message", None)
+        if callable(get_message):
+            message = get_message()
+    except Exception:
+        message = message_or_event
+
+    if isinstance(message, dict):
+        yield message
+        return
+
+    if isinstance(message, (str, bytes)):
+        return
+
+    if getattr(message, "type", None) is not None and hasattr(message, "data"):
+        yield message
+        return
+
+    try:
+        yield from message
+    except TypeError:
+        return
+
+
+def get_at_user_ids(message_or_event: Any) -> list[str]:
+    """提取消息中的被艾特用户 ID，兼容 OneBot v11 与 QQ 全量消息。"""
+    user_ids: list[str] = []
+
+    def add(uid: Optional[str]) -> None:
+        if uid is not None and uid not in user_ids:
+            user_ids.append(uid)
+
+    for seg in _iter_message_segments(message_or_event):
+        add(_mention_user_id_from_segment(seg))
+
+    try:
+        mentions = getattr(message_or_event, "mentions", None) or []
+    except Exception:
+        mentions = []
+
+    for user in mentions:
+        add(_mention_user_id_from_data(user))
+
+    return user_ids
+
+
+def get_at_user_id(message_or_event: Any) -> Optional[str]:
+    """返回消息中的第一个被艾特用户 ID。"""
+    user_ids = get_at_user_ids(message_or_event)
+    return user_ids[0] if user_ids else None
+
+
+def has_at_user(message_or_event: Any) -> bool:
+    return bool(get_at_user_ids(message_or_event))
+
+
 def _qq_reply_is_to_bot(event: BaseEvent, bot: Optional[BaseBot] = None) -> bool:
     if not (HAS_QQ and isinstance(event, (QQPrivateMessageEvent,) + _QQ_GROUP_MESSAGE_EVENT_TYPES)):
         return False
@@ -3028,6 +3130,9 @@ __all__ = [
     "is_channel_event",
     "get_chat_scene",
     "get_user_id",
+    "get_at_user_id",
+    "get_at_user_ids",
+    "has_at_user",
     "get_group_id",
     "patch_bot_inplace",
     "patch_event_inplace",

@@ -9,7 +9,7 @@ from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
-from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, MessageSegment
+from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, MessageSegment, get_at_user_id
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -149,25 +149,21 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
-    two_qq = None
+    two_qq = get_at_user_id(args)
     exp_count = 1  # 默认双修次数
 
-    for arg in args:
-        if arg.type == "at":
-            two_qq = arg.data.get("qq", "")
-        else:
-            arg_text = args.extract_plain_text().strip()
-            # 尝试解析次数
-            count_match = re.search(r'(\d+)次', arg_text)
-            if count_match:
-                exp_count = int(count_match.group(1))
-                # 移除次数信息，保留道号
-                arg_text = re.sub(r'\d+次', '', arg_text).strip()
-            
-            if arg_text:
-                user_info = sql_message.get_user_info_with_name(arg_text)
-                if user_info:
-                    two_qq = user_info['user_id']
+    arg_text = args.extract_plain_text().strip()
+    # 尝试解析次数
+    count_match = re.search(r'(\d+)次', arg_text)
+    if count_match:
+        exp_count = int(count_match.group(1))
+        # 移除次数信息，保留道号
+        arg_text = re.sub(r'\d+次', '', arg_text).strip()
+
+    if not two_qq and arg_text:
+        user_info = sql_message.get_user_info_with_name(arg_text)
+        if user_info:
+            two_qq = user_info['user_id']
 
     if two_qq is None:
         msg = "请指定双修对象！格式：双修 道号 [次数]"
@@ -885,14 +881,8 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     arg = args.extract_plain_text().strip()
     
     # 尝试解析道号或艾特
-    partner_user_id = None
-    if arg.startswith("@"):
-        # 解析艾特
-        for arg_item in args:
-            if arg_item.type == "at":
-                partner_user_id = arg_item.data.get("qq", "")
-                break
-    else:
+    partner_user_id = get_at_user_id(args)
+    if not partner_user_id:
         # 解析道号
         partner_info = sql_message.get_user_info_with_name(arg)
         if partner_info:
