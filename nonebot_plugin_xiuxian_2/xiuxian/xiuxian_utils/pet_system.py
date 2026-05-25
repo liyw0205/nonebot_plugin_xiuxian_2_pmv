@@ -70,6 +70,8 @@ TALENT_NAMES = {
 }
 
 QIMING_STONE_ID = 20032
+PET_RELEASE_REFUND_ITEM_ID = 20027
+PET_RELEASE_REFUND_RATE = 80
 PET_EGG_IDS = {
     20033: "常见",
     20034: "普通",
@@ -193,6 +195,28 @@ def get_active_pet(user_id: str | int):
 def has_any_pet(user_id: str | int) -> bool:
     data = get_pet_doc(user_id)
     return bool(data.get("active") or data.get("bag"))
+
+
+def get_pet_bag_rows(data: dict):
+    data = _normalize_pet_doc(data)
+    rows = []
+    active_uid = ""
+
+    active = data.get("active")
+    if active:
+        active_uid = str(active.get("uid", ""))
+        row = dict(active)
+        row["is_active"] = True
+        rows.append(row)
+
+    for pet in data.get("bag", []):
+        if active_uid and str(pet.get("uid", "")) == active_uid:
+            continue
+        row = dict(pet)
+        row["is_active"] = False
+        rows.append(row)
+
+    return rows
 
 
 def load_pet_pool():
@@ -513,6 +537,7 @@ def create_pet_instance(template: dict | None = None):
         "forms": template["forms"],
         "stars": 1,
         "exp": 0,
+        "total_exp": 0,
     }
     return _normalize_pet(pet)
 
@@ -630,7 +655,36 @@ def format_stars(stars: int) -> str:
 
 def exp_to_next_star(stars: int) -> int:
     stars = max(1, min(25, int(stars)))
-    return 100 + stars * 80
+    return 100 + stars * 150
+
+
+def calc_pet_total_exp(pet: dict) -> int:
+    try:
+        if "total_exp" in pet and pet.get("total_exp") is not None:
+            return max(0, int(pet.get("total_exp", 0)))
+    except Exception:
+        pass
+
+    pet = _normalize_pet(dict(pet))
+    stars = int(pet.get("stars", 1))
+    current_exp = int(pet.get("exp", 0))
+    used_exp = sum(exp_to_next_star(star) for star in range(1, stars))
+    return max(0, used_exp + current_exp)
+
+
+def calc_pet_release_refund(pet: dict, item_info: dict | None = None):
+    total_exp = calc_pet_total_exp(pet)
+    refund_base_exp = total_exp * PET_RELEASE_REFUND_RATE // 100
+    refund_exp = 800
+
+    if isinstance(item_info, dict):
+        try:
+            refund_exp = int(item_info.get(PET_FEED_EXP_KEY, refund_exp) or refund_exp)
+        except Exception:
+            refund_exp = 800
+
+    refund_exp = max(1, refund_exp)
+    return refund_base_exp // refund_exp, total_exp, refund_base_exp, refund_exp
 
 
 def is_pet_feed_item(item_info: dict) -> bool:
@@ -720,7 +774,17 @@ def feed_active_pet(user_id: str | int, feed_exp: int):
     if int(pet.get("stars", 1)) >= max_stars:
         return pet, 0, [], []
 
-    pet["exp"] = int(pet.get("exp", 0)) + max(0, int(feed_exp))
+    gained_exp = max(0, int(feed_exp))
+    try:
+        if "total_exp" in pet and pet.get("total_exp") is not None:
+            current_total_exp = int(pet.get("total_exp", 0))
+        else:
+            current_total_exp = calc_pet_total_exp(pet)
+    except Exception:
+        current_total_exp = calc_pet_total_exp(pet)
+
+    pet["total_exp"] = max(0, current_total_exp) + gained_exp
+    pet["exp"] = int(pet.get("exp", 0)) + gained_exp
     upgraded = 0
     form_changes = []
     skill_offers = []

@@ -11,13 +11,16 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.pet_system import (
     EGG_COST,
+    PET_RELEASE_REFUND_ITEM_ID,
     QIMING_STONE_ID,
     build_pet_detail,
     calc_feed_exp,
+    calc_pet_release_refund,
     feed_active_pet,
     format_stars,
     fuse_pet,
     get_pet_doc,
+    get_pet_bag_rows,
     grant_pet,
     remove_pet,
     replace_pet_skill,
@@ -145,19 +148,20 @@ def _format_my_pet(data: dict):
 
 
 def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
-    bag = data.get("bag", [])
-    if not bag:
+    rows = get_pet_bag_rows(data)
+    if not rows:
         return "宠物背包为空。"
 
-    total_pages = max(1, (len(bag) + per_page - 1) // per_page)
+    total_pages = max(1, (len(rows) + per_page - 1) // per_page)
     page = max(1, min(int(page), total_pages))
     start = (page - 1) * per_page
     end = start + per_page
 
     lines = ["☆------宠物背包------☆"]
-    for pet in bag[start:end]:
+    for pet in rows[start:end]:
+        active_flag = "【出战中】" if pet.get("is_active") else ""
         lines.append(
-            f"- {pet.get('form_name', pet.get('name', '未知宠物'))}"
+            f"- {active_flag}{pet.get('form_name', pet.get('name', '未知宠物'))}"
             f" | {pet.get('rarity', '常见')}"
             f" | {pet.get('type', '攻击')}"
             f" | {format_stars(pet.get('stars', 1))}"
@@ -178,20 +182,21 @@ def _build_pet_bag_md_text(
     current_page: int,
     per_page: int = 15,
 ) -> tuple[str, int, int]:
-    bag = data.get("bag", [])
-    total_pages = max(1, (len(bag) + per_page - 1) // per_page)
+    rows = get_pet_bag_rows(data)
+    total_pages = max(1, (len(rows) + per_page - 1) // per_page)
     current_page = max(1, min(int(current_page), total_pages))
     start = (current_page - 1) * per_page
     end = start + per_page
 
     lines = [f"☆------{title}------☆", ""]
 
-    for pet in bag[start:end]:
+    for pet in rows[start:end]:
         name = pet.get("form_name", pet.get("name", "未知宠物"))
         rarity = pet.get("rarity", "常见")
         pet_type = pet.get("type", "攻击")
         stars = format_stars(pet.get("stars", 1))
         uid = str(pet.get("uid", ""))
+        active_flag = "【出战中】" if pet.get("is_active") else ""
 
         view_cmd = quote(f"查看宠物 {uid}", safe="")
         active_cmd = quote(f"出战宠物 {uid}", safe="")
@@ -202,7 +207,7 @@ def _build_pet_bag_md_text(
             f"[出战](mqqapi://aio/inlinecmd?command={active_cmd}&enter=false&reply=false) "
             f"[放生](mqqapi://aio/inlinecmd?command={release_cmd}&enter=false&reply=false)"
         )
-        lines.append(f"> - {name_md} | {rarity} | {pet_type} | {stars} | UID:{uid} | {op_md}")
+        lines.append(f"> - {active_flag}{name_md} | {rarity} | {pet_type} | {stars} | UID:{uid} | {op_md}")
         lines.append("\r")
 
     lines.append("")
@@ -227,7 +232,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 2）查看宠物：
    发送：我的宠物（查看当前出战宠物）
-   发送：宠物背包 [页码]（查看未出战宠物）
+   发送：宠物背包 [页码]（查看所有宠物，出战宠物排在最前）
    发送：查看宠物 宠物UID
    每只宠物初始获得1个基础通用技能，技能受宠物稀有度、形态、品阶影响。
    技能效果包含直伤、多段、持续伤害、控制、破盾、增益、护盾、净化、反伤等。
@@ -258,6 +263,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 7）放生：
    发送：放生宠物 宠物UID
    不填UID时默认放生当前出战宠物
+   按累计宠物经验的80%返还一阶天地灵髓，不足1个时不返还
 """.strip()
 
     await send_help_message(
@@ -308,7 +314,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         current_page = 1
 
     data = get_pet_doc(str(user_info["user_id"]))
-    if not data.get("bag"):
+    if not get_pet_bag_rows(data):
         await handle_send(bot, event, "宠物背包为空。")
         return
 
@@ -457,15 +463,35 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     token = args.extract_plain_text().strip()
-    pet = remove_pet(str(user_info["user_id"]), token or None)
+    user_id = str(user_info["user_id"])
+    pet = remove_pet(user_id, token or None)
     if not pet:
         await handle_send(bot, event, "未找到可放生的宠物。")
         return
 
+    refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
+    refund_count, total_exp, refund_base_exp, refund_exp = calc_pet_release_refund(pet, refund_item)
+    refund_name = refund_item.get("name", "一阶天地灵髓")
+    if refund_count > 0:
+        sql_message.send_back(
+            user_id,
+            PET_RELEASE_REFUND_ITEM_ID,
+            refund_name,
+            refund_item.get("type", "特殊道具"),
+            refund_count,
+            1,
+        )
+        refund_msg = (
+            f"\n返还：{refund_name} x{refund_count}"
+            f"（累计经验{total_exp}，按80%计{refund_base_exp}经验折算，{refund_exp}经验/个，余数不返）"
+        )
+    else:
+        refund_msg = f"\n返还：无（累计经验{total_exp}，按80%计{refund_base_exp}经验，不足{refund_exp}）"
+
     await handle_send(
         bot,
         event,
-        f"已放生：{pet.get('form_name', pet.get('name', '未知宠物'))}（UID:{pet.get('uid')}）。",
+        f"已放生：{pet.get('form_name', pet.get('name', '未知宠物'))}（UID:{pet.get('uid')}）。{refund_msg}",
         md_type="背包",
         k1="砸蛋",
         v1="砸蛋",
