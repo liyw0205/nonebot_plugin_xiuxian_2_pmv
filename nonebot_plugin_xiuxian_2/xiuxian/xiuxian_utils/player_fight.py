@@ -120,6 +120,7 @@ def Player_fight(user1, user2, type_in=1, bot_id=0):
 async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0, return_status=False):
     player1_data = get_players_attributes(user1)
     boss_data = get_boss_attributes(boss, bot_id)
+    is_scarecrow = is_scarecrow_boss(boss)
 
     player1_attr = player1_data["属性"]
     player1_attr["natal_data"] = player1_data.get("本命法宝")
@@ -127,9 +128,9 @@ async def Boss_fight(user1, boss: dict, type_in=2, bot_id=0, return_status=False
     boss1 = Entity(boss_data["属性"], team_id=1, is_boss=True)
 
     apply_player_buffs(player1, player1_data)
-    boss1.start_skills.extend(generate_boss_buff(boss))
 
-    if boss['name'] != "稻草人":
+    if not is_scarecrow:
+        boss1.start_skills.extend(generate_boss_buff(boss))
         generate_boss_skill(boss1, [14501, 14502])
 
     battle = BattleSystem([player1], [boss1], bot_id)
@@ -389,6 +390,10 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
             sql_message.update_user_hp_mp(user_id, int(hp), int(mp))
 
 
+def is_scarecrow_boss(boss):
+    return bool(boss.get("is_scarecrow") or boss.get("name") == "稻草人")
+
+
 def get_boss_attributes(boss, bot_id):
     buffs = {}
 
@@ -413,7 +418,8 @@ def get_boss_attributes(boss, bot_id):
         "speed": 0,
         "start_skills": [],
         "set_bonus_effects": [],
-        'monster_type': boss.get("monster_type", "boss")
+        "monster_type": boss.get("monster_type", "boss"),
+        "is_scarecrow": is_scarecrow_boss(boss),
     }
 
     buffs["属性"] = attributes
@@ -784,6 +790,7 @@ class Entity:
         self.team_id = team_id
         self.is_boss = is_boss
         self.type = data.get("monster_type", "player")
+        self.is_scarecrow = bool(data.get("is_scarecrow") or self.name == "稻草人")
 
         self.max_hp = float(data.get("max_hp", 1))
         self.hp = float(data.get("current_hp", 1))
@@ -1105,6 +1112,8 @@ class Entity:
 
     @property
     def poison_dot_dmg(self):
+        if self.is_scarecrow:
+            return 0
         total = 0.0
         for debuff in self.debuffs:
             if debuff.type == DebuffType.POISON_DOT:
@@ -1113,6 +1122,8 @@ class Entity:
 
     @property
     def bleed_dot_dmg(self):
+        if self.is_scarecrow:
+            return 0
         total = 0.0
         for debuff in self.debuffs:
             if debuff.type == DebuffType.BLEED_DOT:
@@ -1394,6 +1405,9 @@ class BattleSystem:
             若目标当前有护盾，则额外造成 dmg * 10% 的穿盾直伤。
         """
         if dmg <= 0:
+            return 0, 0, False
+
+        if damage_type == "dot" and getattr(target, "is_scarecrow", False):
             return 0, 0, False
     
         if target.natal_runtime.get("invincible_active", 0) > 0:
@@ -2619,7 +2633,7 @@ class BattleSystem:
                 else:
                     self.add_message(unit, f"{unit.name}🩸流血损失气血{number_to(int(hp_loss))}点")
 
-            if unit.has_debuff("type", DebuffType.SKILL_DOT):
+            if not unit.is_scarecrow and unit.has_debuff("type", DebuffType.SKILL_DOT):
                 for skill_dot_info in unit.get_debuffs("type", DebuffType.SKILL_DOT):
                     for enemy in enemies:
                         if enemy.name == skill_dot_info.coefficient:

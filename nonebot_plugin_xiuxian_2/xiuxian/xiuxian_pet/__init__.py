@@ -1,10 +1,12 @@
 import re
 import time
+from urllib.parse import quote
 
 from nonebot.params import CommandArg
 
-from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
+from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.pet_system import (
@@ -170,6 +172,48 @@ def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
     return "\n".join(lines)
 
 
+def _build_pet_bag_md_text(
+    title: str,
+    data: dict,
+    current_page: int,
+    per_page: int = 15,
+) -> tuple[str, int, int]:
+    bag = data.get("bag", [])
+    total_pages = max(1, (len(bag) + per_page - 1) // per_page)
+    current_page = max(1, min(int(current_page), total_pages))
+    start = (current_page - 1) * per_page
+    end = start + per_page
+
+    lines = [f"☆------{title}------☆", ""]
+
+    for pet in bag[start:end]:
+        name = pet.get("form_name", pet.get("name", "未知宠物"))
+        rarity = pet.get("rarity", "常见")
+        pet_type = pet.get("type", "攻击")
+        stars = format_stars(pet.get("stars", 1))
+        uid = str(pet.get("uid", ""))
+
+        view_cmd = quote(f"查看宠物 {uid}", safe="")
+        active_cmd = quote(f"出战宠物 {uid}", safe="")
+        release_cmd = quote(f"放生宠物 {uid}", safe="")
+
+        name_md = f"[{name}](mqqapi://aio/inlinecmd?command={view_cmd}&enter=false&reply=false)"
+        op_md = (
+            f"[出战](mqqapi://aio/inlinecmd?command={active_cmd}&enter=false&reply=false) "
+            f"[放生](mqqapi://aio/inlinecmd?command={release_cmd}&enter=false&reply=false)"
+        )
+        lines.append(f"> - {name_md} | {rarity} | {pet_type} | {stars} | UID:{uid} | {op_md}")
+        lines.append("\r")
+
+    lines.append("")
+    lines.append(f"第 {current_page}/{total_pages} 页")
+    if current_page < total_pages:
+        next_cmd = quote(f"宠物背包 {current_page + 1}", safe="")
+        lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_cmd}&enter=false&reply=false)")
+
+    return "\r".join(lines), current_page, total_pages
+
+
 @pet_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
@@ -264,6 +308,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         current_page = 1
 
     data = get_pet_doc(str(user_info["user_id"]))
+    if not data.get("bag"):
+        await handle_send(bot, event, "宠物背包为空。")
+        return
+
+    if XiuConfig().markdown_status:
+        md_text, _, _ = _build_pet_bag_md_text(
+            title=f"{user_info.get('user_name', '道友')}的宠物背包",
+            data=data,
+            current_page=current_page,
+        )
+        try:
+            await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        except Exception:
+            await handle_send(bot, event, md_text)
+        return
+
     await handle_send(
         bot,
         event,
