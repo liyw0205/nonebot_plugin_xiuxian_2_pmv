@@ -18,6 +18,7 @@ from ..xiuxian_utils.pet_system import (
     build_pet_detail,
     calc_feed_exp,
     calc_pet_release_refund,
+    exp_to_next_star,
     feed_active_pet,
     format_stars,
     fuse_pet,
@@ -28,17 +29,21 @@ from ..xiuxian_utils.pet_system import (
     remove_pets_by_keyword,
     remove_pet,
     replace_pet_skill,
+    requires_fusion_for_next_star,
     reroll_pet_skill,
     set_active_pet,
     validate_pet_feed_item,
 )
-from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
+from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message, send_msg_handler
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
 items = Items()
 sql_message = XiuxianDateManage()
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
+pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
+pet_growth_help = on_command("宠物成长帮助", aliases={"宠物养成帮助", "宠物技能帮助"}, priority=10, block=True)
+pet_bag_help = on_command("宠物背包帮助", aliases={"宠物放生帮助"}, priority=10, block=True)
 pet_info = on_command("我的宠物", aliases={"宠物信息"}, priority=10, block=True)
 pet_bag = on_command("宠物背包", aliases={"灵宠背包"}, priority=10, block=True)
 pet_egg = on_command("砸蛋", aliases={"砸宠物蛋"}, priority=10, block=True)
@@ -329,6 +334,41 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
 【宠物系统帮助】
 
+你可以通过以下命令了解更多：
+
+1.  **入门获取**：发送【宠物入门帮助】
+    > 砸蛋、宠物蛋、查看宠物、切换出战
+
+2.  **成长技能**：发送【宠物成长帮助】
+    > 喂食、融合突破、启明、技能替换
+
+3.  **背包放生**：发送【宠物背包帮助】
+    > 宠物背包、放生、一键放生、经验返还
+
+4.  **查看信息**：发送【我的宠物】或【宠物背包】
+
+""".strip()
+
+    await send_help_message(
+        bot,
+        event,
+        msg,
+        k1="入门帮助",
+        v1="宠物入门帮助",
+        k2="成长帮助",
+        v2="宠物成长帮助",
+        k3="背包帮助",
+        v3="宠物背包帮助",
+        k4="我的宠物",
+        v4="我的宠物",
+    )
+
+
+@pet_intro_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = f"""
+【宠物入门帮助】
+
 1）砸蛋：
    发送：砸蛋 [数量]
    数量范围：1-10
@@ -347,42 +387,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 3）切换出战：
    发送：出战宠物 宠物UID
-
-4）喂食升级：
-   发送：宠物喂食 材料名 [数量]
-   例如：宠物喂食 恒心草 10
-   可喂食：药材 / 一至五阶天地灵髓
-   规则：1★=5☆，天地灵髓只能喂食对应★级及以下宠物。
-
-5）宠物启明：
-   发送：宠物启明 [宠物UID]
-   消耗：启明石 x1
-   作用：为指定宠物重新随机获得1个技能，不填UID时默认当前出战宠物。
-
-6）融合进阶：
-   发送：宠物融合 UID 破阶UID 本体UID
-   例如：宠物融合 UID1 UID2 UID3
-   规则：
-   - 默认以当前出战宠物作为主宠
-   - 材料均通过UID区分，同名宠物不会冲突
-   - 本体必须在宠物背包中
-   - 本体必须与主宠同名
-   - UID不需要固定顺序，系统会自动判断本体和破阶宠，多填的会自动忽略
-   - 主宠品阶越高，消耗本体越多
-   - 传说破入3★/4★时额外消耗1只满★普通宠物
-   - 神话破入4★/5★时额外消耗1只满★卓越宠物
-   - 每提升到整★时会随机领悟候选技能，可选择是否替换；满足条件时专属技能有概率进入候选
-
-7）放生：
-   发送：放生宠物 宠物UID
-   不填UID时默认放生当前出战宠物
-   按累计宠物经验的80%返还一阶天地灵髓，不足1个时不返还
-
-8）一键放生：
-   发送：一键放生 稀有度/宠物名称
-   例如：一键放生 常见
-   例如：一键放生 山灵犬
-   规则：只放生背包宠物，出战宠物会跳过
 """.strip()
 
     await send_help_message(
@@ -395,6 +399,102 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         v2="我的宠物",
         k3="宠物背包",
         v3="宠物背包",
+        k4="主帮助",
+        v4="宠物帮助",
+    )
+
+
+@pet_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = """
+【宠物成长帮助】
+
+1）喂食升级：
+   发送：宠物喂食 材料名 [数量]
+   例如：宠物喂食 恒心草 10
+   可喂食：药材 / 一至五阶天地灵髓
+   药材经验：按一品至九品递增，品阶越高经验越多。
+   规则：☆主要通过喂食经验提升；当前品阶达到四个☆时需先喂满经验，再使用宠物融合突破为★。
+   每五个☆折算为一个★，天地灵髓只能喂食对应★级及以下宠物。
+
+2）宠物启明：
+   发送：宠物启明 [宠物UID]
+   消耗：启明石 x1
+   作用：为指定宠物重新随机获得1个技能，不填UID时默认当前出战宠物。
+
+3）融合突破：
+   发送：宠物融合 本体UID [本体UID...] [破阶UID]
+   例如：宠物融合 UID1 UID2 UID3
+   规则：
+   - 默认以当前出战宠物作为主宠
+   - 只在当前品阶达到四个☆时使用；普通☆通过喂食经验提升
+   - 四☆突破前需要先通过喂食补满当前经验
+   - 材料均通过UID区分，同名宠物不会冲突
+   - 本体必须在宠物背包中
+   - 本体必须与主宠同名
+   - UID不需要固定顺序，系统会自动判断本体和破阶宠，多填的会自动忽略
+   - 主宠品阶越高，消耗本体越多
+   - 传说破入★★★/★★★★时额外消耗1只满★普通宠物
+   - 神话破入★★★★/★★★★★时额外消耗1只满★卓越宠物
+   - 每提升到整★时会随机领悟候选技能，可选择是否替换；满足条件时专属技能有概率进入候选
+
+4）技能替换：
+   发送：替换宠物技能
+   发送：保留宠物技能
+   规则：只在启明或突破产生候选技能后有效。
+""".strip()
+
+    await send_help_message(
+        bot,
+        event,
+        msg,
+        k1="喂食",
+        v1="宠物喂食",
+        k2="融合",
+        v2="宠物融合",
+        k3="启明",
+        v3="宠物启明",
+        k4="主帮助",
+        v4="宠物帮助",
+    )
+
+
+@pet_bag_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = """
+【宠物背包帮助】
+
+1）宠物背包：
+   发送：宠物背包 [页码]
+   作用：查看所有宠物，出战宠物排在最前，其余按品阶从高到低排序。
+
+2）查看详情：
+   发送：查看宠物 宠物UID
+
+3）放生：
+   发送：放生宠物 宠物UID
+   不填UID时默认放生当前出战宠物
+   按累计宠物经验的80%返还一阶天地灵髓，不足1个时不返还
+
+4）一键放生：
+   发送：一键放生 稀有度/宠物名称
+   例如：一键放生 常见
+   例如：一键放生 山灵犬
+   规则：只放生背包宠物，出战宠物会跳过
+""".strip()
+
+    await send_help_message(
+        bot,
+        event,
+        msg,
+        k1="宠物背包",
+        v1="宠物背包",
+        k2="查看宠物",
+        v2="查看宠物",
+        k3="一键放生",
+        v3="一键放生 常见",
+        k4="主帮助",
+        v4="宠物帮助",
     )
 
 
@@ -588,6 +688,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             lines.append(_format_egg_pity_status(pity_count, no_mythic_count))
         msg = "\n".join(lines)
 
+    if count > 1:
+        page = ["宠物", "我的宠物", "宠物背包", "宠物背包", "帮助", "宠物帮助"]
+        await send_msg_handler(bot, event, "砸蛋", bot.self_id, [msg], title="☆------砸蛋结果------☆\n", page=page)
+        return
+
     await handle_send(
         bot,
         event,
@@ -716,6 +821,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not data.get("active"):
         await handle_send(bot, event, "道友还没有宠物，可先发送【砸蛋】。")
         return
+    active_pet = data.get("active")
+    active_stars = int(active_pet.get("stars", 1))
+    active_max_stars = int(active_pet.get("max_stars", 5))
+    if active_stars >= active_max_stars:
+        await handle_send(bot, event, f"{active_pet.get('form_name')}已达到当前稀有度上限，无法继续喂食。")
+        return
+    active_need = exp_to_next_star(active_stars)
+    if requires_fusion_for_next_star(active_stars) and int(active_pet.get("exp", 0)) >= active_need:
+        await handle_send(
+            bot,
+            event,
+            f"{active_pet.get('form_name')}四☆突破经验已满（{active_need} / {active_need}），请使用【宠物融合 本体UID】突破。",
+        )
+        return
 
     item_name, count = _parse_feed_args(args.extract_plain_text())
     if not item_name:
@@ -759,27 +878,50 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"当前宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}",
         f"当前品阶：{format_stars(pet.get('stars', 1))}",
     ]
+    next_need = exp_to_next_star(pet.get("stars", 1)) if pet.get("stars", 1) < pet.get("max_stars", 5) else 0
+    if next_need:
+        current_exp = min(int(pet.get("exp", 0)), next_need)
+        exp_label = "四☆突破经验" if requires_fusion_for_next_star(pet.get("stars", 1)) else "当前经验"
+        lines.append(f"{exp_label}：{current_exp} / {next_need}")
+        if requires_fusion_for_next_star(pet.get("stars", 1)) and current_exp >= next_need:
+            lines.append("四☆突破经验已满，请使用【宠物融合 本体UID】突破。")
     if upgraded > 0:
         lines.append(f"提升品阶：+{upgraded}☆")
     if form_changes:
         lines.append("形态进化：" + "、".join(form_changes))
+    has_skill_offer = False
     if skill_offers:
         skill_msg = _cache_skill_offer(user_id, pet, skill_offers[-1])
         if skill_msg:
             lines.append(skill_msg)
+            has_skill_offer = True
 
-    await handle_send(
-        bot,
-        event,
-        "\n".join(lines),
-        md_type="背包",
-        k1="宠物",
-        v1="我的宠物",
-        k2="宠物背包",
-        v2="宠物背包",
-        k3="帮助",
-        v3="宠物帮助",
-    )
+    if has_skill_offer:
+        await handle_send(
+            bot,
+            event,
+            "\n".join(lines),
+            md_type="背包",
+            k1="替换技能",
+            v1="替换宠物技能",
+            k2="保留技能",
+            v2="保留宠物技能",
+            k3="宠物",
+            v3="我的宠物",
+        )
+    else:
+        await handle_send(
+            bot,
+            event,
+            "\n".join(lines),
+            md_type="背包",
+            k1="宠物",
+            v1="我的宠物",
+            k2="宠物背包",
+            v2="宠物背包",
+            k3="帮助",
+            v3="宠物帮助",
+        )
 
 
 @pet_fusion.handle(parameterless=[Cooldown(cd_time=0)])
@@ -791,24 +933,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     tokens = _split_args(args.extract_plain_text())
     if len(tokens) < 1:
-        await handle_send(bot, event, "用法：宠物融合 UID 破阶UID 本体UID\n默认以当前出战宠物作为主宠，UID顺序随意。")
+        await handle_send(bot, event, "用法：宠物融合 本体UID [本体UID...] [破阶UID]\n默认以当前出战宠物作为主宠，UID顺序随意；仅用于当前品阶达到四个☆时突破为★。")
         return
 
     ok, result_msg, pet, skill_offer = fuse_pet(str(user_info["user_id"]), tokens)
+    has_skill_offer = False
     if ok and pet and skill_offer:
         skill_msg = _cache_skill_offer(str(user_info["user_id"]), pet, skill_offer)
         if skill_msg:
             result_msg = f"{result_msg}\n{skill_msg}"
-    await handle_send(
-        bot,
-        event,
-        result_msg,
-        md_type="背包",
-        k1="宠物",
-        v1="我的宠物",
-        k2="帮助",
-        v2="宠物帮助",
-    )
+            has_skill_offer = True
+    if has_skill_offer:
+        await handle_send(
+            bot,
+            event,
+            result_msg,
+            md_type="背包",
+            k1="替换技能",
+            v1="替换宠物技能",
+            k2="保留技能",
+            v2="保留宠物技能",
+            k3="宠物",
+            v3="我的宠物",
+        )
+    else:
+        await handle_send(
+            bot,
+            event,
+            result_msg,
+            md_type="背包",
+            k1="宠物",
+            v1="我的宠物",
+            k2="帮助",
+            v2="宠物帮助",
+        )
 
 
 @pet_reroll_skill.handle(parameterless=[Cooldown(cd_time=0)])

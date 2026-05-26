@@ -30,6 +30,9 @@ wash_accessory = on_command("饰品洗练", priority=10, block=True)
 decompose_accessory = on_command("饰品分解", priority=10, block=True)
 quick_decompose_accessory = on_command("快速分解饰品", aliases={"饰品快速分解"}, priority=10, block=True)
 accessory_help = on_command("饰品帮助", aliases={"饰品系统帮助"}, priority=10, block=True)
+accessory_basic_help = on_command("饰品基础帮助", aliases={"饰品查看帮助", "饰品装备帮助"}, priority=10, block=True)
+accessory_growth_help = on_command("饰品成长帮助", aliases={"饰品洗练帮助", "饰品升阶帮助"}, priority=10, block=True)
+accessory_manage_help = on_command("饰品整理帮助", aliases={"饰品分解帮助", "饰品预设帮助", "饰品管理帮助"}, priority=10, block=True)
 check_accessory = on_command("查看饰品", priority=10, block=True)
 upgrade_accessory = on_command("饰品升阶", aliases={"升阶饰品"}, priority=10, block=True)
 accessory_preset = on_command("饰品预设", aliases={"预设饰品"}, priority=10, block=True)
@@ -528,7 +531,34 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
 【饰品系统帮助】
 
-一、基础功能
+你可以通过以下命令了解更多：
+
+1.  **基础操作**：发送【饰品基础帮助】
+    > 查看、背包、详情、装备、卸下
+
+2.  **成长强化**：发送【饰品成长帮助】
+    > 洗练、升阶、材料规则
+
+3.  **整理预设**：发送【饰品整理帮助】
+    > 分解、快速分解、预设、快速装备
+
+4.  **查看信息**：发送【我的饰品】或【饰品背包】
+""".strip()
+
+    await send_help_message(
+        bot, event, msg,
+        k1="基础帮助", v1="饰品基础帮助",
+        k2="成长帮助", v2="饰品成长帮助",
+        k3="整理帮助", v3="饰品整理帮助",
+        k4="饰品背包", v4="饰品背包"
+    )
+
+
+@accessory_basic_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = """
+【饰品基础帮助】
+
 1）查看已装备饰品：
    发送：我的饰品
 
@@ -547,15 +577,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 5）卸下饰品：
    发送：卸下饰品 部位
    可用部位：手镯 / 戒指 / 手环 / 项链
+""".strip()
 
-二、成长功能
-6）洗练饰品：
+    await send_help_message(
+        bot, event, msg,
+        k1="我的饰品", v1="我的饰品",
+        k2="饰品背包", v2="饰品背包",
+        k3="查看饰品", v3="查看饰品",
+        k4="主帮助", v4="饰品帮助"
+    )
+
+
+@accessory_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = """
+【饰品成长帮助】
+
+1）洗练饰品：
    发送：饰品洗练 饰品UID
    - 消耗【洗练石】随品阶增加
    - 每件饰品独立洗练次数
    - 150次保底：词条值固定上限，仅词条类型变化
 
-7）饰品升阶：
+2）饰品升阶：
    发送：饰品升阶 部位 材料UID1 [材料UID2 ...]
    例如：饰品升阶 项链 UID1 UID2
    规则：
@@ -569,27 +613,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
      4→5：3件材料
    - 最高五阶，五阶不可继续升阶
    - 升阶后：保留当前词条，仅重置洗练次数（wash_count=0）
+""".strip()
+
+    await send_help_message(
+        bot, event, msg,
+        k1="洗练", v1="饰品洗练",
+        k2="升阶示例", v2="饰品升阶 项链 UID1 UID2",
+        k3="饰品背包", v3="饰品背包",
+        k4="主帮助", v4="饰品帮助"
+    )
 
 
-三、分解功能
-8）单件分解：
+@accessory_manage_help.handle(parameterless=[Cooldown(cd_time=3)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    msg = """
+【饰品整理帮助】
+
+1）单件分解：
    发送：饰品分解 饰品UID
    说明：已装备饰品不能直接分解，请先卸下
 
-9）快速分解：
+2）快速分解：
    发送：快速分解饰品 类型 品阶
    类型：全部 / 烈阳 / 玄渊 / 天衡 / 星痕 / 龙魄 / 手镯 / 戒指 / 手环 / 项链
    品阶：全部 / 1~5 / 一阶~五阶
    安全规则：
    - 当“类型=全部”或“品阶=全部”时，自动忽略4/5阶
 
-10）饰品预设：
+3）饰品预设：
    发送：饰品预设 1/2/3
    - 保存当前已装备饰品到对应预设位
    - 若原有记录存在，则自动覆盖
    - 直接发送【饰品预设】可查看所有预设
 
-11）快速装备饰品：
+4）快速装备饰品：
    发送：快速装备饰品 1/2/3
    - 一键装备对应预设中的饰品
    - 若预设中某个UID已不存在，会自动清理该失效记录
@@ -597,9 +654,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await send_help_message(
         bot, event, msg,
-        k1="我的饰品", v1="我的饰品",
-        k2="饰品背包", v2="饰品背包",
-        k3="升阶示例", v3="饰品升阶 项链 UID1 UID2"
+        k1="分解", v1="饰品分解",
+        k2="快速分解", v2="快速分解饰品 全部 全部",
+        k3="预设", v3="饰品预设",
+        k4="主帮助", v4="饰品帮助"
     )
 
 @my_accessory.handle(parameterless=[Cooldown(cd_time=0)])

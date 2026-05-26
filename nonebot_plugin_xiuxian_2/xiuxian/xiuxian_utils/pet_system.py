@@ -98,10 +98,23 @@ PET_EGG_RARITY_KEY = "pet_egg_rarity"
 FEED_BASE_EXP = {
     "药材": 80,
 }
+HERB_TIER_NAMES = {
+    "一品": 1,
+    "二品": 2,
+    "三品": 3,
+    "四品": 4,
+    "五品": 5,
+    "六品": 6,
+    "七品": 7,
+    "八品": 8,
+    "九品": 9,
+}
 EXCLUSIVE_SKILL_ROLL_BASE_CHANCE = 0.12
 EXCLUSIVE_SKILL_ROLL_FORM_BONUS = 0.03
 EXCLUSIVE_SKILL_ROLL_RARITY_BONUS = 0.02
 EXCLUSIVE_SKILL_ROLL_MAX_CHANCE = 0.35
+EXCLUSIVE_SKILL_HIGH_STAR_CHANCE = 0.50
+EXCLUSIVE_SKILL_HIGH_STAR_TARGETS = {20, 25}
 PET_BREAKTHROUGH_RULES = {
     "传说": {
         15: "普通",
@@ -260,7 +273,12 @@ def get_pet_bag_rows(data: dict):
         row["is_active"] = False
         bag_rows.append(row)
 
-    bag_rows.sort(key=lambda pet: -int(pet.get("stars", 1)))
+    bag_rows.sort(key=lambda pet: (
+        -RARITY_INDEX.get(str(pet.get("rarity", "常见")), 0),
+        -int(pet.get("stars", 1)),
+        str(pet.get("form_name", pet.get("name", ""))),
+        str(pet.get("uid", "")),
+    ))
     rows.extend(bag_rows)
 
     return rows
@@ -531,9 +549,12 @@ def roll_basic_pet_skill(pet: dict, exclude_skill_ids: set[str] | None = None):
     return dict(random.choices(candidates, weights=weights, k=1)[0])
 
 
-def _exclusive_skill_roll_chance(pet: dict):
+def _exclusive_skill_roll_chance(pet: dict, override_chance: float | None = None):
     if not get_available_exclusive_skills(pet):
         return 0.0
+
+    if override_chance is not None:
+        return max(0.0, min(1.0, float(override_chance)))
 
     form_index = int(pet.get("form_index", 0))
     rarity_idx = RARITY_INDEX.get(pet.get("rarity", "常见"), 0)
@@ -545,7 +566,22 @@ def _exclusive_skill_roll_chance(pet: dict):
     return max(0.0, min(EXCLUSIVE_SKILL_ROLL_MAX_CHANCE, chance))
 
 
-def roll_pet_skill(pet: dict, include_exclusive: bool = False, exclude_skill_ids: set[str] | None = None):
+def get_star_up_exclusive_chance(stars: int):
+    try:
+        stars = int(stars)
+    except Exception:
+        return None
+    if stars in EXCLUSIVE_SKILL_HIGH_STAR_TARGETS:
+        return EXCLUSIVE_SKILL_HIGH_STAR_CHANCE
+    return None
+
+
+def roll_pet_skill(
+    pet: dict,
+    include_exclusive: bool = False,
+    exclude_skill_ids: set[str] | None = None,
+    exclusive_chance: float | None = None,
+):
     if include_exclusive:
         exclusive_candidates = get_available_exclusive_skills(pet)
         if exclude_skill_ids:
@@ -555,7 +591,7 @@ def roll_pet_skill(pet: dict, include_exclusive: bool = False, exclude_skill_ids
                 if str(skill.get("skill_id", "")) not in exclude_skill_ids
             ]
 
-        chance = _exclusive_skill_roll_chance(pet)
+        chance = _exclusive_skill_roll_chance(pet, override_chance=exclusive_chance)
         if exclusive_candidates and random.random() < chance:
             weights = [max(1, int(skill.get("weight", 1))) for skill in exclusive_candidates]
             return dict(random.choices(exclusive_candidates, weights=weights, k=1)[0])
@@ -563,12 +599,17 @@ def roll_pet_skill(pet: dict, include_exclusive: bool = False, exclude_skill_ids
     return roll_basic_pet_skill(pet, exclude_skill_ids=exclude_skill_ids)
 
 
-def roll_replacement_pet_skill(pet: dict):
+def roll_replacement_pet_skill(pet: dict, exclusive_chance: float | None = None):
     current_skill = pet.get("skill") or (pet.get("skills") or [{}])[0]
     exclude = set()
     if isinstance(current_skill, dict) and current_skill.get("skill_id"):
         exclude.add(str(current_skill.get("skill_id")))
-    return roll_pet_skill(pet, include_exclusive=True, exclude_skill_ids=exclude)
+    return roll_pet_skill(
+        pet,
+        include_exclusive=True,
+        exclude_skill_ids=exclude,
+        exclusive_chance=exclusive_chance,
+    )
 
 
 def get_pet_runtime_skill(pet: dict):
@@ -830,16 +871,25 @@ def format_stars(stars: int) -> str:
     stars = max(1, min(25, int(stars)))
     big = stars // 5
     small = stars % 5
-    if big <= 0:
-        return f"{small}☆"
-    if small <= 0:
-        return f"{big}★"
-    return f"{big}★{small}☆"
+    return ("★" * big + "☆" * small) or "☆"
+
+
+def requires_fusion_for_next_star(stars: int) -> bool:
+    stars = max(1, min(25, int(stars)))
+    return stars < 25 and stars % 5 == 4
+
+
+def get_pet_exp_stage_multiplier(stars: int) -> int:
+    stars = max(1, min(25, int(stars)))
+    star_count = stars // 5
+    if requires_fusion_for_next_star(stars):
+        star_count += 1
+    return 1 + star_count * 2
 
 
 def exp_to_next_star(stars: int) -> int:
     stars = max(1, min(25, int(stars)))
-    return 100 + stars * 80
+    return stars * 150 * get_pet_exp_stage_multiplier(stars)
 
 
 def calc_pet_total_exp(pet: dict) -> int:
@@ -905,7 +955,7 @@ def validate_pet_feed_item(pet: dict, item_info: dict):
         if pet_star_tier > item_star_tier:
             return (
                 False,
-                f"{item_info.get('name', '该道具')}最高只能喂食{item_star_tier}★及以下宠物，"
+                f"{item_info.get('name', '该道具')}最高只能喂食{format_stars(item_star_tier * 5)}及以下宠物，"
                 f"当前宠物为{format_stars(pet.get('stars', 1))}。",
             )
 
@@ -929,6 +979,10 @@ def calc_feed_exp(item_info: dict, count: int = 1):
 
     base = FEED_BASE_EXP.get(item_type, 0)
 
+    if item_type == "药材":
+        base *= get_herb_tier(item_info)
+        return max(0, int(base) * max(1, int(count)))
+
     try:
         rank = int(item_info.get("rank", 0))
     except Exception:
@@ -944,6 +998,27 @@ def calc_feed_exp(item_info: dict, count: int = 1):
         base += min(1200, max(0, buff // 10000000) * 20)
 
     return max(0, int(base) * max(1, int(count)))
+
+
+def get_herb_tier(item_info: dict) -> int:
+    if not isinstance(item_info, dict):
+        return 1
+
+    level = str(item_info.get("level", ""))
+    for tier_name, tier in HERB_TIER_NAMES.items():
+        if tier_name in level:
+            return tier
+
+    try:
+        rank = int(item_info.get("rank", 0))
+    except Exception:
+        rank = 0
+    if rank > 0:
+        if rank >= 48:
+            return 1
+        return max(1, min(9, (51 - rank) // 3))
+
+    return 1
 
 
 def feed_active_pet(user_id: str | int, feed_exp: int):
@@ -977,6 +1052,9 @@ def feed_active_pet(user_id: str | int, feed_exp: int):
         need = exp_to_next_star(int(pet["stars"]))
         if int(pet["exp"]) < need:
             break
+        if requires_fusion_for_next_star(int(pet["stars"])):
+            pet["exp"] = need
+            break
         pet["exp"] -= need
         pet["stars"] += 1
         upgraded += 1
@@ -988,9 +1066,15 @@ def feed_active_pet(user_id: str | int, feed_exp: int):
 
         if int(pet["stars"]) % 5 == 0:
             current_pet = _normalize_pet(dict(pet))
+            exclusive_chance = get_star_up_exclusive_chance(
+                int(current_pet.get("stars", pet["stars"]))
+            )
             skill_offers.append({
                 "stars": int(current_pet.get("stars", pet["stars"])),
-                "skill": roll_replacement_pet_skill(current_pet),
+                "skill": roll_replacement_pet_skill(
+                    current_pet,
+                    exclusive_chance=exclusive_chance,
+                ),
             })
 
     pet = _normalize_pet(pet)
@@ -1045,10 +1129,29 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
         return False, "融合失败：当前没有出战宠物，请先使用【出战宠物 UID】设置主宠。", None, None
 
     max_stars = get_rarity_max_stars(main_pet.get("rarity", "常见"))
-    if int(main_pet.get("stars", 1)) >= max_stars:
+    current_stars = int(main_pet.get("stars", 1))
+    if current_stars >= max_stars:
         return False, f"{main_pet.get('form_name', main_pet.get('name', '宠物'))}已达到{main_pet.get('rarity', '')}稀有度上限（{format_stars(max_stars)}）。", main_pet, None
 
-    need = fusion_need(int(main_pet.get("stars", 1)))
+    if not requires_fusion_for_next_star(current_stars):
+        return (
+            False,
+            f"融合失败：当前品阶为{format_stars(current_stars)}，尚未到四☆突破关口，请先通过【宠物喂食】提升☆。",
+            main_pet,
+            None,
+        )
+
+    fusion_exp_need = exp_to_next_star(current_stars)
+    current_exp = int(main_pet.get("exp", 0))
+    if current_exp < fusion_exp_need:
+        return (
+            False,
+            f"融合失败：四☆突破经验不足（{current_exp} / {fusion_exp_need}），请先通过【宠物喂食】补足经验。",
+            main_pet,
+            None,
+        )
+
+    need = fusion_need(current_stars)
     breakthrough_requirement = get_pet_breakthrough_requirement(main_pet)
 
     hit_indexes = []
@@ -1097,14 +1200,18 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
         del data["bag"][idx]
 
     old_form = int(main_pet.get("form_index", 0))
-    main_pet["stars"] = int(main_pet.get("stars", 1)) + 1
-    main_pet["exp"] = 0
+    main_pet["stars"] = current_stars + 1
+    main_pet["exp"] = max(0, current_exp - fusion_exp_need)
     main_pet = _normalize_pet(main_pet)
     skill_offer = None
     if int(main_pet.get("stars", 1)) % 5 == 0:
+        exclusive_chance = get_star_up_exclusive_chance(int(main_pet.get("stars", 1)))
         skill_offer = {
             "stars": int(main_pet.get("stars", 1)),
-            "skill": roll_replacement_pet_skill(main_pet),
+            "skill": roll_replacement_pet_skill(
+                main_pet,
+                exclusive_chance=exclusive_chance,
+            ),
         }
 
     data["active"] = main_pet
@@ -1122,7 +1229,7 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
             f"【{breakthrough_pet.get('form_name', breakthrough_pet.get('name', '宠物'))}】"
         )
 
-    return True, f"融合成功：{main_pet.get('name')}提升至{format_stars(main_pet.get('stars', 1))}。{form_msg}{breakthrough_msg}", main_pet, skill_offer
+    return True, f"融合成功：消耗四☆突破经验{fusion_exp_need}，{main_pet.get('name')}提升至{format_stars(main_pet.get('stars', 1))}。{form_msg}{breakthrough_msg}", main_pet, skill_offer
 
 
 def replace_pet_skill(user_id: str | int, uid: str, skill: dict):
@@ -1200,14 +1307,22 @@ def build_pet_detail(pet: dict):
             lines.append("可随机领悟专属：" + "、".join(s.get("name", "未知专属") for s in exclusive_skills[:3]))
 
     if need:
-        lines.append(f"经验：{pet.get('exp', 0)} / {need}")
-        lines.append(f"融合所需本体：{fusion_need(pet.get('stars', 1))}只")
-        breakthrough_requirement = get_pet_breakthrough_requirement(pet)
-        if breakthrough_requirement:
-            lines.append(
-                f"破阶所需：满★{breakthrough_requirement['rarity']}宠物1只"
-                f"（破入{format_stars(breakthrough_requirement['target_stars'])}）"
-            )
+        current_exp = min(int(pet.get("exp", 0)), need)
+        lines.append(f"经验：{current_exp} / {need}")
+        if requires_fusion_for_next_star(pet.get("stars", 1)):
+            lines.append(f"四☆突破所需本体：{fusion_need(pet.get('stars', 1))}只")
+            if current_exp >= need:
+                lines.append("四☆突破经验已满，可使用【宠物融合】突破。")
+            else:
+                lines.append("四☆突破前需先喂食补满经验。")
+            breakthrough_requirement = get_pet_breakthrough_requirement(pet)
+            if breakthrough_requirement:
+                lines.append(
+                    f"破阶所需：满★{breakthrough_requirement['rarity']}宠物1只"
+                    f"（破入{format_stars(breakthrough_requirement['target_stars'])}）"
+                )
+        else:
+            lines.append("升☆方式：宠物喂食")
     else:
         lines.append("经验：已达当前稀有度上限")
 
