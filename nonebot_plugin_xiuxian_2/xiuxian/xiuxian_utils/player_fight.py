@@ -57,6 +57,13 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
+PET_ACTIVE_TRIGGER_RULES = {
+    PET_SKILL_ATTACK: (0.38, 0.12, 0.68),
+    PET_SKILL_BUFF: (0.30, 0.08, 0.55),
+    PET_SKILL_PROTECT: (0.32, 0.08, 0.58),
+}
+PET_EXCLUSIVE_TRIGGER_BONUS = 0.05
+
 
 async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None):
     user_data = []
@@ -1763,6 +1770,18 @@ class BattleSystem:
 
         return extra_true_damage, append_msgs
 
+    def _calc_pet_active_chance(self, skill):
+        skill_type = skill.get("type")
+        base, power_scale, cap = PET_ACTIVE_TRIGGER_RULES.get(skill_type, (0.30, 0.08, 0.55))
+        power = max(0.0, float(skill.get("power", 0)))
+        chance = base + power * power_scale
+        if skill.get("category") == "专属" or skill.get("scope") == "专属":
+            chance += PET_EXCLUSIVE_TRIGGER_BONUS
+        return max(0.0, min(cap, chance))
+
+    def _roll_pet_active_trigger(self, skill):
+        return random.random() <= self._calc_pet_active_chance(skill)
+
     def _get_pet_skill_targets(self, owner, skill, preferred_target=None):
         if preferred_target is not None:
             if preferred_target.is_alive and preferred_target.team_id != owner.team_id:
@@ -1845,12 +1864,14 @@ class BattleSystem:
 
         hp_ratio = target.hp / target.max_hp if target.max_hp > 0 else 0
         danger = hp_ratio <= 0.35 or dmg >= target.hp or dmg >= target.max_hp * 0.12
-        chance = 0.32 + min(0.28, power * 0.16)
+        chance = 0.24 + min(0.22, power * 0.10)
         if danger:
-            chance += 0.18
+            chance += 0.14
         if target.debuffs:
-            chance += 0.08
-        if random.random() > min(0.85, chance):
+            chance += 0.05
+        if skill.get("category") == "专属" or skill.get("scope") == "专属":
+            chance += PET_EXCLUSIVE_TRIGGER_BONUS
+        if random.random() > min(0.65, chance):
             return dmg
 
         target.pet_runtime["guard_round"] = self.round
@@ -1867,26 +1888,26 @@ class BattleSystem:
         reflect_scale = max(0.0, float(skill.get("reflect_scale", 1.0)))
 
         parts = []
-        reduction_rate = min(0.28, 0.06 + power * 0.06)
+        reduction_rate = min(0.20, 0.045 + power * 0.045)
         shield_amount = 0
         heal_amount = 0
 
         if effect == "shield":
-            shield_amount = int(target.max_hp * min(0.24, power * 0.16 * shield_scale))
-            reduction_rate = min(0.22, 0.04 + power * 0.04)
+            shield_amount = int(target.max_hp * min(0.14, power * 0.10 * shield_scale))
+            reduction_rate = min(0.16, 0.035 + power * 0.035)
         elif effect == "damage_reduction":
-            reduction_rate = min(0.55, 0.10 + power * 0.14 * scale)
+            reduction_rate = min(0.38, 0.075 + power * 0.085 * scale)
         elif effect in ("evasion_buff", "dodge"):
-            reduction_rate = min(0.60, 0.14 + power * 0.12 * scale)
+            reduction_rate = min(0.42, 0.10 + power * 0.075 * scale)
         elif effect == "reflect":
-            reduction_rate = min(0.35, 0.08 + power * 0.08 * reflect_scale)
-            reflect_value = min(0.45, power * 0.05 * reflect_scale)
+            reduction_rate = min(0.28, 0.06 + power * 0.055 * reflect_scale)
+            reflect_value = min(0.25, power * 0.03 * reflect_scale)
             if reflect_value > 0:
                 target.add_status(StatusEffect(skill_name, BuffType.REFLECT_DAMAGE, reflect_value, 1, False, duration=1, skill_type=0))
                 parts.append(f"附加{round(reflect_value * 100, 2)}%反伤")
         elif effect in ("regen", "hp_regen"):
-            heal_amount = int(target.max_hp * min(0.12, 0.02 + power * 0.04 * scale))
-            reduction_rate = min(0.25, 0.05 + power * 0.05)
+            heal_amount = int(target.max_hp * min(0.06, 0.012 + power * 0.022 * scale))
+            reduction_rate = min(0.18, 0.04 + power * 0.035)
         elif effect in ("cleanse", "purify"):
             count = max(1, int(skill.get("target_count", 1)))
             removed = target.debuffs[:count]
@@ -1895,14 +1916,14 @@ class BattleSystem:
                 target.sync_healing_block_turns()
                 self._record_pet_stat(target, "cleanse", len(removed))
                 parts.append(f"驱散{len(removed)}个负面状态")
-            reduction_rate = min(0.30, 0.07 + power * 0.06)
+            reduction_rate = min(0.22, 0.05 + power * 0.04)
         elif effect in ("debuff_immunity", "immunity"):
             target.add_status(StatusEffect(skill_name, BuffType.DEBUFF_IMMUNITY, 0, 1, False, duration=1, skill_type=0))
             parts.append("护住灵台免疫减益")
-            reduction_rate = min(0.32, 0.08 + power * 0.06)
+            reduction_rate = min(0.24, 0.055 + power * 0.04)
 
         if danger and effect != "shield":
-            shield_amount += int(target.max_hp * min(0.10, 0.02 + power * 0.035))
+            shield_amount += int(target.max_hp * min(0.06, 0.012 + power * 0.02))
 
         if shield_amount > 0:
             target.add_status(StatusEffect(skill_name, BuffType.SHIELD, shield_amount, 1, False, duration=1, skill_type=0))
@@ -1917,7 +1938,7 @@ class BattleSystem:
                 self._record_pet_stat(target, "healing", heal_amount)
                 parts.append(f"回复{number_to(heal_amount)}气血")
 
-        reduced = int(dmg * max(0.0, min(0.75, reduction_rate)))
+        reduced = int(dmg * max(0.0, min(0.55, reduction_rate)))
         if reduced > 0:
             dmg = max(1, int(dmg) - reduced)
             self._record_pet_stat(target, "damage_reduced", reduced)
@@ -1962,12 +1983,14 @@ class BattleSystem:
             return ""
 
         effect = str(skill.get("effect", "shield"))
-        chance = 0.28 + min(0.25, power * 0.14)
+        chance = 0.18 + min(0.20, power * 0.08)
         if effect in ("cleanse", "purify", "debuff_immunity", "immunity"):
-            chance += 0.25
+            chance += 0.18
         if owner.max_hp > 0 and owner.hp / owner.max_hp <= 0.35:
-            chance += 0.10
-        if random.random() > min(0.80, chance):
+            chance += 0.08
+        if skill.get("category") == "专属" or skill.get("scope") == "专属":
+            chance += PET_EXCLUSIVE_TRIGGER_BONUS
+        if random.random() > min(0.58, chance):
             return ""
 
         owner.pet_runtime["control_rescue_round"] = self.round
@@ -2133,7 +2156,7 @@ class BattleSystem:
             )
 
         if effect in ("regen", "hp_regen"):
-            value = min(0.5, power * 0.08 * scale)
+            value = min(0.18, power * 0.035 * scale)
             return self._apply_pet_owner_buff(
                 owner,
                 skill_name,
@@ -2162,23 +2185,23 @@ class BattleSystem:
             else:
                 buff_type = BuffType.ATTACK_UP
 
-        value = power * 0.22 * scale
+        value = power * 0.12 * scale
         if buff_type == BuffType.CRIT_RATE_UP:
-            value = min(0.75, power * scale)
+            value = min(0.25, power * 0.08 * scale)
         elif buff_type == BuffType.CRIT_DAMAGE_UP:
-            value = min(1.2, power * 0.16 * scale)
+            value = min(0.45, power * 0.12 * scale)
         elif buff_type in (BuffType.LIFESTEAL_UP, BuffType.MANA_STEAL_UP):
-            value = min(0.65, power * 0.10 * scale)
+            value = min(0.25, power * 0.045 * scale)
         elif buff_type == BuffType.ARMOR_PENETRATION_UP:
-            value = min(1.0, power * 0.12 * scale)
+            value = min(0.35, power * 0.07 * scale)
         elif buff_type == BuffType.DAMAGE_REDUCTION_UP:
-            value = min(0.85, power * 0.16 * scale)
+            value = min(0.35, power * 0.07 * scale)
         elif buff_type == BuffType.EVASION_UP:
-            value = min(90, power * 8 * scale)
+            value = min(30, power * 4 * scale)
         elif buff_type == BuffType.REFLECT_DAMAGE:
-            value = min(0.9, power * 0.08 * max(0.0, float(skill.get("reflect_scale", 1.0))))
+            value = min(0.35, power * 0.045 * max(0.0, float(skill.get("reflect_scale", 1.0))))
         else:
-            value = min(1.25, value)
+            value = min(0.45, value)
 
         text_map = {
             BuffType.ATTACK_UP: f"提升{round(value * 100, 2)}%攻击，持续{duration}回合",
@@ -2197,7 +2220,8 @@ class BattleSystem:
         duration = max(1, int(skill.get("duration", 1)))
 
         if effect == "shield":
-            shield_amount = int(owner.max_hp * power * 0.35 * max(0.0, float(skill.get("shield_scale", 1.0))))
+            shield_rate = min(0.28, power * 0.14 * max(0.0, float(skill.get("shield_scale", 1.0))))
+            shield_amount = int(owner.max_hp * shield_rate)
             if shield_amount <= 0:
                 return "", 0
             owner.add_status(StatusEffect(skill_name, BuffType.SHIELD, shield_amount, 1, False, duration=duration, skill_type=0))
@@ -2224,6 +2248,8 @@ class BattleSystem:
         skill_name = skill.get("name") or f"{pet.get('form_name', pet.get('name', '宠物'))}的神通"
         power = max(0.0, float(skill.get("power", 0)))
         if power <= 0:
+            return "", 0
+        if not self._roll_pet_active_trigger(skill):
             return "", 0
 
         pet_msg = ""
@@ -2268,16 +2294,18 @@ class BattleSystem:
         if total_dmg <= 0 and not can_help_defense:
             return "", 0
 
-        chance = 0.28 + min(0.25, power * 0.12)
+        chance = 0.16 + min(0.18, power * 0.07)
         if critical:
-            chance += 0.18
+            chance += 0.10
         if finish:
-            chance += 0.22
-        if combo:
             chance += 0.12
+        if combo:
+            chance += 0.06
         if can_help_defense:
-            chance += 0.08
-        if random.random() > min(0.85, chance):
+            chance += 0.05
+        if skill.get("category") == "专属" or skill.get("scope") == "专属":
+            chance += PET_EXCLUSIVE_TRIGGER_BONUS
+        if random.random() > min(0.58, chance):
             return "", 0
 
         owner.pet_runtime["resonance_round"] = self.round
@@ -2295,11 +2323,11 @@ class BattleSystem:
             preferred_target = min(enemies, key=lambda x: x.hp) if enemies else None
 
         if total_dmg > 0 and preferred_target is not None and preferred_target.is_alive:
-            boost_rate = min(0.20, 0.035 + power * 0.055 * max(0.6, scale))
+            boost_rate = min(0.12, 0.02 + power * 0.035 * max(0.6, scale))
             if critical:
-                boost_rate = min(0.24, boost_rate + 0.03)
+                boost_rate = min(0.14, boost_rate + 0.015)
             if finish:
-                boost_rate = min(0.26, boost_rate + 0.04)
+                boost_rate = min(0.15, boost_rate + 0.02)
             boost_dmg = int(total_dmg * boost_rate)
             if boost_dmg > 0:
                 hp_loss, absorbed, blocked = self._apply_damage_with_layers(
@@ -2338,7 +2366,7 @@ class BattleSystem:
 
         hp_ratio = owner.hp / owner.max_hp if owner.max_hp > 0 else 1
         if hp_ratio <= 0.55:
-            heal_amount = int(owner.max_hp * min(0.08, 0.018 + power * 0.032 * max(0.6, scale)))
+            heal_amount = int(owner.max_hp * min(0.04, 0.01 + power * 0.018 * max(0.6, scale)))
             if heal_amount > 0:
                 if owner.healing_block_turns > 0:
                     parts.append("回春被禁疗压制")

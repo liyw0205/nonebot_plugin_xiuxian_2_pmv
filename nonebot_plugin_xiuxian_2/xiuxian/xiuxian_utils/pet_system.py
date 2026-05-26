@@ -47,24 +47,25 @@ RARITY_MAX_STARS = {
 
 FORM_NAMES = ["初始形态", "成长期", "完全期", "巅峰期", "超越形态"]
 FORM_STAR_FLOOR = [1, 5, 10, 15, 20]
-FORM_POWER = [1.0, 1.15, 1.35, 1.6, 1.9]
+FORM_POWER = [1.0, 1.08, 1.18, 1.3, 1.45]
 RARITY_POWER = {
-    "常见": 0.92,
+    "常见": 0.9,
     "普通": 1.0,
-    "卓越": 1.12,
-    "传说": 1.28,
-    "神话": 1.5,
+    "卓越": 1.08,
+    "传说": 1.18,
+    "神话": 1.3,
 }
+PET_EXCLUSIVE_POWER_RATE = 0.45
 
 PET_SKILL_ATTACK = "攻击"
 PET_SKILL_BUFF = "增益"
 PET_SKILL_PROTECT = "保护"
 
 RACE_POWER = {
-    "仙兽": {"攻击": 1.0, "增益": 1.16, "保护": 1.12},
-    "妖兽": {"攻击": 1.18, "增益": 0.95, "保护": 0.95},
-    "鬼怪": {"攻击": 1.08, "增益": 1.08, "保护": 1.02},
-    "凡兽": {"攻击": 1.0, "增益": 1.0, "保护": 1.05},
+    "仙兽": {"攻击": 1.0, "增益": 1.08, "保护": 1.06},
+    "妖兽": {"攻击": 1.10, "增益": 0.97, "保护": 0.97},
+    "鬼怪": {"攻击": 1.04, "增益": 1.05, "保护": 1.02},
+    "凡兽": {"攻击": 1.0, "增益": 1.0, "保护": 1.03},
 }
 
 TALENT_NAMES = {
@@ -859,7 +860,7 @@ def get_form_index(stars: int) -> int:
 
 def get_star_ratio(stars: int) -> float:
     stars = max(1, min(25, int(stars)))
-    return min(1.15, 0.18 + (stars - 1) * 0.04)
+    return min(0.52, 0.10 + (stars - 1) * 0.018)
 
 
 def get_pet_star_tier(stars: int) -> int:
@@ -1349,6 +1350,8 @@ def build_pet_battle_skill(pet: dict):
     form_growth = 1 + form_index * float(skill.get("form_bonus", 0))
     rarity_growth = 1 + rarity_idx * float(skill.get("rarity_bonus", 0))
     power = ratio * race_power * form_power * rarity_power * base_power * star_growth * form_growth * rarity_growth
+    if skill.get("category") == "专属" or skill.get("scope") == "专属":
+        power *= PET_EXCLUSIVE_POWER_RATE
 
     skill_name = skill.get("name") or TALENT_NAMES.get((race, pet_type), TALENT_NAMES[("凡兽", pet_type)])
     name = f"{pet.get('form_name', pet.get('name', '宠物'))}·{skill_name}"
