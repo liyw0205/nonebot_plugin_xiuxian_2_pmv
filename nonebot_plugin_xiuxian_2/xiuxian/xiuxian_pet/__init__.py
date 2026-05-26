@@ -11,6 +11,8 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.pet_system import (
     EGG_COST,
+    EGG_PITY_RARITY_WEIGHTS,
+    EGG_PITY_THRESHOLD,
     PET_RELEASE_REFUND_ITEM_ID,
     QIMING_STONE_ID,
     build_pet_detail,
@@ -22,6 +24,8 @@ from ..xiuxian_utils.pet_system import (
     get_pet_doc,
     get_pet_bag_rows,
     grant_pet,
+    grant_pet_egg_pity_rewards,
+    remove_pets_by_keyword,
     remove_pet,
     replace_pet_skill,
     reroll_pet_skill,
@@ -39,6 +43,7 @@ pet_info = on_command("我的宠物", aliases={"宠物信息"}, priority=10, blo
 pet_bag = on_command("宠物背包", aliases={"灵宠背包"}, priority=10, block=True)
 pet_egg = on_command("砸蛋", aliases={"砸宠物蛋"}, priority=10, block=True)
 pet_release = on_command("放生宠物", aliases={"宠物放生"}, priority=10, block=True)
+pet_release_batch = on_command("一键放生", aliases={"批量放生", "一键放生宠物"}, priority=10, block=True)
 pet_feed = on_command("宠物喂食", priority=10, block=True)
 pet_fusion = on_command("宠物融合", priority=10, block=True)
 pet_check = on_command("查看宠物", priority=10, block=True)
@@ -78,6 +83,106 @@ def _parse_feed_args(text: str):
             item_name = text.strip()
 
     return item_name, max(1, count)
+
+
+def _parse_egg_count(text: str):
+    text = str(text or "").strip()
+    if not text:
+        return 1, ""
+
+    parts = _split_args(text)
+    if len(parts) != 1:
+        return 0, "用法：砸蛋 [数量]，数量范围1-10。"
+
+    try:
+        count = int(parts[0])
+    except ValueError:
+        return 0, "砸蛋数量必须是数字，范围1-10。"
+
+    if count < 1 or count > 10:
+        return 0, "砸蛋数量范围为1-10。"
+
+    return count, ""
+
+
+def _summarize_pet_rarities(pets: list[dict]):
+    counts = {}
+    for pet in pets:
+        rarity = pet.get("rarity", "常见")
+        counts[rarity] = counts.get(rarity, 0) + 1
+    return "、".join(f"{rarity}x{count}" for rarity, count in counts.items()) or "无"
+
+
+def _format_egg_pity_status(pity_count: int, no_mythic_count: int):
+    return (
+        f"保底进度：{pity_count}/{EGG_PITY_THRESHOLD}；"
+        f"神话兜底：{no_mythic_count}/9（满9后下次保底必出神话）"
+    )
+
+
+def _format_egg_pity_weight_text():
+    return "/".join(str(EGG_PITY_RARITY_WEIGHTS.get(rarity, 0)) for rarity in ("卓越", "传说", "神话"))
+
+
+def _format_egg_pity_rewards(rewards: list[dict]):
+    if not rewards:
+        return []
+
+    lines = ["保底触发："]
+    for index, reward in enumerate(rewards, 1):
+        pet = reward.get("pet", {}) or {}
+        location = reward.get("location", "bag")
+        location_msg = "出战" if location == "active" else "背包"
+        forced_msg = "，九连未出神话强制" if reward.get("forced_mythic") else ""
+        lines.append(
+            f"{index}. {pet.get('form_name', pet.get('name', '未知宠物'))}"
+            f"（{pet.get('rarity')}·{pet.get('race')}·{pet.get('type')}{forced_msg}，"
+            f"UID:{pet.get('uid')}，{location_msg}）"
+        )
+    return lines
+
+
+def _grant_pet_release_refund(user_id: str, pets: list[dict]):
+    refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
+    refund_name = refund_item.get("name", "一阶天地灵髓")
+    refund_type = refund_item.get("type", "特殊道具")
+    total_refund_count = 0
+    total_exp = 0
+    total_refund_base_exp = 0
+    refund_exp = 800
+
+    for pet in pets:
+        refund_count, pet_total_exp, pet_refund_base_exp, refund_exp = calc_pet_release_refund(pet, refund_item)
+        total_refund_count += refund_count
+        total_exp += pet_total_exp
+        total_refund_base_exp += pet_refund_base_exp
+
+    if total_refund_count > 0:
+        sql_message.send_back(
+            user_id,
+            PET_RELEASE_REFUND_ITEM_ID,
+            refund_name,
+            refund_type,
+            total_refund_count,
+            1,
+        )
+        if len(pets) == 1:
+            return (
+                f"\n返还：{refund_name} x{total_refund_count}"
+                f"（累计经验{total_exp}，按80%计{total_refund_base_exp}经验折算，{refund_exp}经验/个，余数不返）"
+            )
+        return (
+            f"\n返还：{refund_name} x{total_refund_count}"
+            f"（合计累计经验{total_exp}，逐只按80%折算，合计折算经验{total_refund_base_exp}，"
+            f"{refund_exp}经验/个，余数不返）"
+        )
+
+    if len(pets) == 1:
+        return f"\n返还：无（累计经验{total_exp}，按80%计{total_refund_base_exp}经验，不足{refund_exp}）"
+    return (
+        f"\n返还：无（合计累计经验{total_exp}，逐只按80%折算，"
+        f"合计折算经验{total_refund_base_exp}，均不足{refund_exp}）"
+    )
 
 
 def _resolve_item_name(item_name: str):
@@ -171,7 +276,7 @@ def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
     lines.append(f"\n第 {page}/{total_pages} 页")
     if page < total_pages:
         lines.append(f"输入 宠物背包 {page + 1} 查看下一页")
-    lines.append("可用命令：查看宠物 UID / 出战宠物 UID / 放生宠物 UID")
+    lines.append("可用命令：查看宠物 UID / 出战宠物 UID / 放生宠物 UID / 一键放生 稀有度或宠物名称")
 
     return "\n".join(lines)
 
@@ -225,16 +330,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 【宠物系统帮助】
 
 1）砸蛋：
-   发送：砸蛋
+   发送：砸蛋 [数量]
+   数量范围：1-10
    消耗：{number_to(EGG_COST)}灵石
    规则：没有出战宠物时自动出战，否则进入宠物背包。
+   保底：累计砸蛋{EGG_PITY_THRESHOLD}次自动额外抽取1只卓越/传说/神话宠物（{_format_egg_pity_weight_text()}），连续9次保底未出神话则第10次保底必出神话。
    宠物蛋：发送【道具使用 宠物蛋名 [数量]】可孵化指定稀有度宠物。
 
 2）查看宠物：
    发送：我的宠物（查看当前出战宠物）
-   发送：宠物背包 [页码]（查看所有宠物，出战宠物排在最前）
+   发送：宠物背包 [页码]（查看所有宠物，出战宠物排在最前，其余按品阶从高到低排序）
    发送：查看宠物 宠物UID
    每只宠物初始获得1个基础通用技能，技能受宠物稀有度、形态、品阶影响。
+   满足条件的专属技能不会直接生效，只会在启明或整★领悟时概率随机出现。
    技能效果包含直伤、多段、持续伤害、控制、破盾、增益、护盾、净化、反伤等。
 
 3）切换出战：
@@ -249,21 +357,32 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 5）宠物启明：
    发送：宠物启明 [宠物UID]
    消耗：启明石 x1
-   作用：为指定宠物重新随机获得1个基础技能，不填UID时默认当前出战宠物。
+   作用：为指定宠物重新随机获得1个技能，不填UID时默认当前出战宠物。
 
 6）融合进阶：
-   发送：宠物融合 主宠UID,本体UID1,本体UID2
+   发送：宠物融合 UID 破阶UID 本体UID
+   例如：宠物融合 UID1 UID2 UID3
    规则：
-   - 主宠和本体均通过UID区分，同名宠物不会冲突
+   - 默认以当前出战宠物作为主宠
+   - 材料均通过UID区分，同名宠物不会冲突
    - 本体必须在宠物背包中
    - 本体必须与主宠同名
+   - UID不需要固定顺序，系统会自动判断本体和破阶宠，多填的会自动忽略
    - 主宠品阶越高，消耗本体越多
-   - 每提升到整★时会随机领悟候选技能，可选择是否替换
+   - 传说破入3★/4★时额外消耗1只满★普通宠物
+   - 神话破入4★/5★时额外消耗1只满★卓越宠物
+   - 每提升到整★时会随机领悟候选技能，可选择是否替换；满足条件时专属技能有概率进入候选
 
 7）放生：
    发送：放生宠物 宠物UID
    不填UID时默认放生当前出战宠物
    按累计宠物经验的80%返还一阶天地灵髓，不足1个时不返还
+
+8）一键放生：
+   发送：一键放生 稀有度/宠物名称
+   例如：一键放生 常见
+   例如：一键放生 山灵犬
+   规则：只放生背包宠物，出战宠物会跳过
 """.strip()
 
     await send_help_message(
@@ -375,18 +494,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_egg.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
     user_id = str(user_info["user_id"])
-    if int(user_info.get("stone", 0)) < EGG_COST:
+    count, count_error = _parse_egg_count(args.extract_plain_text())
+    if count_error:
+        await handle_send(bot, event, count_error)
+        return
+
+    total_cost = EGG_COST * count
+    if int(user_info.get("stone", 0)) < total_cost:
         await handle_send(
             bot,
             event,
-            f"砸蛋需要{number_to(EGG_COST)}灵石，道友当前灵石不足。",
+            f"砸蛋{count}次需要{number_to(total_cost)}灵石，道友当前灵石不足。",
             md_type="背包",
             k1="灵石",
             v1="灵石",
@@ -395,27 +520,74 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
+    pets = []
+    error_msg = ""
+    success_cost = 0
     try:
-        pet, location = grant_pet(user_id)
+        for _ in range(count):
+            pet, location = grant_pet(user_id)
+            pets.append((pet, location))
+            success_cost += EGG_COST
     except Exception as e:
-        await handle_send(bot, event, f"砸蛋失败：{e}")
-        return
+        error_msg = str(e)
 
-    if not pet:
+    if not pets:
+        if error_msg:
+            await handle_send(bot, event, f"砸蛋失败：{error_msg}")
+            return
         await handle_send(bot, event, "砸蛋失败：未能生成宠物。")
         return
 
-    sql_message.update_ls(user_id, EGG_COST, 2)
+    pity_rewards = []
+    pity_count = 0
+    no_mythic_count = 0
+    pity_error = ""
+    try:
+        pity_rewards, pity_count, no_mythic_count = grant_pet_egg_pity_rewards(user_id, len(pets))
+    except Exception as e:
+        pity_error = str(e)
 
-    location_msg = "已自动出战" if location == "active" else "已放入宠物背包，可发送【出战宠物 UID】切换出战"
-    msg = (
-        f"砸蛋成功！消耗{number_to(EGG_COST)}灵石。\n"
-        f"获得宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}\n"
-        f"稀有度：{pet.get('rarity')} | 种族：{pet.get('race')} | 类型：{pet.get('type')}\n"
-        f"初始技能：{pet.get('skill', {}).get('name', '未知技能')}\n"
-        f"UID：{pet.get('uid')}\n"
-        f"{location_msg}"
-    )
+    sql_message.update_ls(user_id, success_cost, 2)
+
+    if len(pets) == 1 and not error_msg:
+        pet, location = pets[0]
+        location_msg = "已自动出战" if location == "active" else "已放入宠物背包，可发送【出战宠物 UID】切换出战"
+        msg = (
+            f"砸蛋成功！消耗{number_to(success_cost)}灵石。\n"
+            f"获得宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}\n"
+            f"稀有度：{pet.get('rarity')} | 种族：{pet.get('race')} | 类型：{pet.get('type')}\n"
+            f"初始技能：{pet.get('skill', {}).get('name', '未知技能')}\n"
+            f"UID：{pet.get('uid')}\n"
+            f"{location_msg}"
+        )
+        extra_lines = _format_egg_pity_rewards(pity_rewards)
+        if pity_error:
+            extra_lines.append(f"保底结算失败：{pity_error}")
+        else:
+            extra_lines.append(_format_egg_pity_status(pity_count, no_mythic_count))
+        msg += "\n" + "\n".join(extra_lines)
+    else:
+        pet_list = [pet for pet, _ in pets]
+        lines = [
+            f"砸蛋完成：成功{len(pets)}/{count}次，消耗{number_to(success_cost)}灵石。",
+            f"稀有度统计：{_summarize_pet_rarities(pet_list)}",
+        ]
+        if error_msg:
+            lines.append(f"失败原因：{error_msg}")
+        for index, (pet, location) in enumerate(pets, 1):
+            location_msg = "出战" if location == "active" else "背包"
+            lines.append(
+                f"{index}. {pet.get('form_name', pet.get('name', '未知宠物'))}"
+                f"（{pet.get('rarity')}·{pet.get('race')}·{pet.get('type')}，"
+                f"UID:{pet.get('uid')}，{location_msg}）"
+            )
+        lines.extend(_format_egg_pity_rewards(pity_rewards))
+        if pity_error:
+            lines.append(f"保底结算失败：{pity_error}")
+        else:
+            lines.append(_format_egg_pity_status(pity_count, no_mythic_count))
+        msg = "\n".join(lines)
+
     await handle_send(
         bot,
         event,
@@ -469,24 +641,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到可放生的宠物。")
         return
 
-    refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
-    refund_count, total_exp, refund_base_exp, refund_exp = calc_pet_release_refund(pet, refund_item)
-    refund_name = refund_item.get("name", "一阶天地灵髓")
-    if refund_count > 0:
-        sql_message.send_back(
-            user_id,
-            PET_RELEASE_REFUND_ITEM_ID,
-            refund_name,
-            refund_item.get("type", "特殊道具"),
-            refund_count,
-            1,
-        )
-        refund_msg = (
-            f"\n返还：{refund_name} x{refund_count}"
-            f"（累计经验{total_exp}，按80%计{refund_base_exp}经验折算，{refund_exp}经验/个，余数不返）"
-        )
-    else:
-        refund_msg = f"\n返还：无（累计经验{total_exp}，按80%计{refund_base_exp}经验，不足{refund_exp}）"
+    refund_msg = _grant_pet_release_refund(user_id, [pet])
 
     await handle_send(
         bot,
@@ -497,6 +652,55 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         v1="砸蛋",
         k2="宠物",
         v2="我的宠物",
+    )
+
+
+@pet_release_batch.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    keyword = args.extract_plain_text().strip()
+    if not keyword:
+        await handle_send(bot, event, "用法：一键放生 稀有度/宠物名称\n例如：一键放生 常见")
+        return
+
+    user_id = str(user_info["user_id"])
+    pets, skipped_active = remove_pets_by_keyword(user_id, keyword)
+    if not pets:
+        msg = f"未找到可一键放生的宠物：{keyword}。"
+        if skipped_active:
+            msg += "\n匹配到当前出战宠物，已跳过；如需放生出战宠物，请使用【放生宠物】。"
+        await handle_send(bot, event, msg)
+        return
+
+    refund_msg = _grant_pet_release_refund(user_id, pets)
+    lines = [
+        f"已一键放生：{keyword}，共{len(pets)}只。",
+        f"稀有度统计：{_summarize_pet_rarities(pets)}",
+    ]
+    if skipped_active:
+        lines.append("已跳过当前出战宠物；如需放生出战宠物，请使用【放生宠物】。")
+    for index, pet in enumerate(pets[:10], 1):
+        lines.append(
+            f"{index}. {pet.get('form_name', pet.get('name', '未知宠物'))}"
+            f"（{pet.get('rarity', '常见')}，UID:{pet.get('uid')}）"
+        )
+    if len(pets) > 10:
+        lines.append(f"...其余{len(pets) - 10}只已放生")
+    lines.append(refund_msg.strip())
+
+    await handle_send(
+        bot,
+        event,
+        "\n".join(lines),
+        md_type="背包",
+        k1="宠物背包",
+        v1="宠物背包",
+        k2="砸蛋",
+        v2="砸蛋",
     )
 
 
@@ -586,11 +790,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     tokens = _split_args(args.extract_plain_text())
-    if len(tokens) < 2:
-        await handle_send(bot, event, "用法：宠物融合 主宠UID,本体UID1,本体UID2")
+    if len(tokens) < 1:
+        await handle_send(bot, event, "用法：宠物融合 UID 破阶UID 本体UID\n默认以当前出战宠物作为主宠，UID顺序随意。")
         return
 
-    ok, result_msg, pet, skill_offer = fuse_pet(str(user_info["user_id"]), tokens[0], tokens[1:])
+    ok, result_msg, pet, skill_offer = fuse_pet(str(user_info["user_id"]), tokens)
     if ok and pet and skill_offer:
         skill_msg = _cache_skill_offer(str(user_info["user_id"]), pet, skill_offer)
         if skill_msg:

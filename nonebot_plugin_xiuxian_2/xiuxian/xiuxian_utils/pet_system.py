@@ -15,14 +15,27 @@ PET_CONFIG_PATH = DATABASE / "宠物" / "宠物.json"
 PET_SKILL_CONFIG_PATH = DATABASE / "宠物" / "宠物技能.json"
 
 TABLE = "player_pet"
-FIELDS = ["active", "bag"]
+FIELDS = ["active", "bag", "egg_pity_count", "egg_pity_no_mythic_count"]
 
 EGG_COST = 1000000
+EGG_PITY_THRESHOLD = 1000
+EGG_PITY_RARITY_WEIGHTS = {
+    "卓越": 50,
+    "传说": 35,
+    "神话": 15,
+}
 
 RARITIES = ["常见", "普通", "卓越", "传说", "神话"]
 RACES = ["仙兽", "妖兽", "鬼怪", "凡兽"]
 PET_TYPES = ["攻击", "增益", "保护"]
 RARITY_INDEX = {name: idx for idx, name in enumerate(RARITIES)}
+RARITY_ROLL_WEIGHTS = {
+    "常见": 589,
+    "普通": 300,
+    "卓越": 100,
+    "传说": 10,
+    "神话": 1,
+}
 
 RARITY_MAX_STARS = {
     "常见": 5,
@@ -85,6 +98,20 @@ PET_EGG_RARITY_KEY = "pet_egg_rarity"
 FEED_BASE_EXP = {
     "药材": 80,
 }
+EXCLUSIVE_SKILL_ROLL_BASE_CHANCE = 0.12
+EXCLUSIVE_SKILL_ROLL_FORM_BONUS = 0.03
+EXCLUSIVE_SKILL_ROLL_RARITY_BONUS = 0.02
+EXCLUSIVE_SKILL_ROLL_MAX_CHANCE = 0.35
+PET_BREAKTHROUGH_RULES = {
+    "传说": {
+        15: "普通",
+        20: "普通",
+    },
+    "神话": {
+        20: "卓越",
+        25: "卓越",
+    },
+}
 
 player_data_manager = PlayerDataManager()
 _PET_POOL_CACHE = None
@@ -92,7 +119,12 @@ _PET_SKILL_CACHE = None
 
 
 def _default_pet_doc():
-    return {"active": None, "bag": []}
+    return {
+        "active": None,
+        "bag": [],
+        "egg_pity_count": 0,
+        "egg_pity_no_mythic_count": 0,
+    }
 
 
 def _normalize_pet_doc(doc: dict):
@@ -108,8 +140,19 @@ def _normalize_pet_doc(doc: dict):
         bag = []
     bag = [x for x in bag if isinstance(x, dict)]
 
+    try:
+        egg_pity_count = int(doc.get("egg_pity_count", 0) or 0)
+    except Exception:
+        egg_pity_count = 0
+    try:
+        egg_pity_no_mythic_count = int(doc.get("egg_pity_no_mythic_count", 0) or 0)
+    except Exception:
+        egg_pity_no_mythic_count = 0
+
     doc["active"] = _normalize_pet(active) if active else None
     doc["bag"] = [_normalize_pet(x) for x in bag]
+    doc["egg_pity_count"] = max(0, egg_pity_count)
+    doc["egg_pity_no_mythic_count"] = min(9, max(0, egg_pity_no_mythic_count))
     return doc
 
 
@@ -209,12 +252,16 @@ def get_pet_bag_rows(data: dict):
         row["is_active"] = True
         rows.append(row)
 
+    bag_rows = []
     for pet in data.get("bag", []):
         if active_uid and str(pet.get("uid", "")) == active_uid:
             continue
         row = dict(pet)
         row["is_active"] = False
-        rows.append(row)
+        bag_rows.append(row)
+
+    bag_rows.sort(key=lambda pet: -int(pet.get("stars", 1)))
+    rows.extend(bag_rows)
 
     return rows
 
@@ -484,19 +531,47 @@ def roll_basic_pet_skill(pet: dict, exclude_skill_ids: set[str] | None = None):
     return dict(random.choices(candidates, weights=weights, k=1)[0])
 
 
+def _exclusive_skill_roll_chance(pet: dict):
+    if not get_available_exclusive_skills(pet):
+        return 0.0
+
+    form_index = int(pet.get("form_index", 0))
+    rarity_idx = RARITY_INDEX.get(pet.get("rarity", "常见"), 0)
+    chance = (
+        EXCLUSIVE_SKILL_ROLL_BASE_CHANCE
+        + form_index * EXCLUSIVE_SKILL_ROLL_FORM_BONUS
+        + rarity_idx * EXCLUSIVE_SKILL_ROLL_RARITY_BONUS
+    )
+    return max(0.0, min(EXCLUSIVE_SKILL_ROLL_MAX_CHANCE, chance))
+
+
+def roll_pet_skill(pet: dict, include_exclusive: bool = False, exclude_skill_ids: set[str] | None = None):
+    if include_exclusive:
+        exclusive_candidates = get_available_exclusive_skills(pet)
+        if exclude_skill_ids:
+            exclusive_candidates = [
+                skill
+                for skill in exclusive_candidates
+                if str(skill.get("skill_id", "")) not in exclude_skill_ids
+            ]
+
+        chance = _exclusive_skill_roll_chance(pet)
+        if exclusive_candidates and random.random() < chance:
+            weights = [max(1, int(skill.get("weight", 1))) for skill in exclusive_candidates]
+            return dict(random.choices(exclusive_candidates, weights=weights, k=1)[0])
+
+    return roll_basic_pet_skill(pet, exclude_skill_ids=exclude_skill_ids)
+
+
 def roll_replacement_pet_skill(pet: dict):
     current_skill = pet.get("skill") or (pet.get("skills") or [{}])[0]
     exclude = set()
     if isinstance(current_skill, dict) and current_skill.get("skill_id"):
         exclude.add(str(current_skill.get("skill_id")))
-    return roll_basic_pet_skill(pet, exclude_skill_ids=exclude)
+    return roll_pet_skill(pet, include_exclusive=True, exclude_skill_ids=exclude)
 
 
 def get_pet_runtime_skill(pet: dict):
-    exclusive_skills = get_available_exclusive_skills(pet)
-    if exclusive_skills:
-        return dict(max(exclusive_skills, key=lambda s: float(s.get("base_power", 0))))
-
     skill = pet.get("skill") or (pet.get("skills") or [{}])[0]
     if not isinstance(skill, dict) or skill.get("type") not in PET_TYPES:
         return roll_basic_pet_skill(pet)
@@ -508,7 +583,19 @@ def roll_pet_template():
     pool = list(load_pet_pool().values())
     if not pool:
         raise RuntimeError("宠物池为空，请检查 data/xiuxian/宠物/宠物.json")
-    return random.choices(pool, weights=[p.get("weight", 1) for p in pool], k=1)[0]
+
+    available_rarities = {pet.get("rarity") for pet in pool}
+    rarities = [
+        rarity
+        for rarity in RARITIES
+        if rarity in available_rarities and RARITY_ROLL_WEIGHTS.get(rarity, 0) > 0
+    ]
+    rarity = random.choices(
+        rarities,
+        weights=[RARITY_ROLL_WEIGHTS[rarity] for rarity in rarities],
+        k=1,
+    )[0]
+    return roll_pet_template_by_rarity(rarity)
 
 
 def roll_pet_template_by_rarity(rarity: str):
@@ -542,6 +629,62 @@ def create_pet_instance(template: dict | None = None):
     return _normalize_pet(pet)
 
 
+def _put_pet_into_doc(data: dict, pet: dict):
+    pet = _normalize_pet(pet)
+    if data.get("active"):
+        data["bag"].append(pet)
+        return pet, "bag"
+
+    data["active"] = pet
+    return pet, "active"
+
+
+def roll_egg_pity_rarity(no_mythic_count: int = 0):
+    no_mythic_count = max(0, int(no_mythic_count))
+    if no_mythic_count >= 9:
+        return "神话", True
+
+    rarities = list(EGG_PITY_RARITY_WEIGHTS.keys())
+    rarity = random.choices(
+        rarities,
+        weights=[EGG_PITY_RARITY_WEIGHTS[rarity] for rarity in rarities],
+        k=1,
+    )[0]
+    return rarity, False
+
+
+def grant_pet_egg_pity_rewards(user_id: str | int, draw_count: int):
+    draw_count = max(0, int(draw_count))
+    data = get_pet_doc(user_id)
+    pity_count = int(data.get("egg_pity_count", 0)) + draw_count
+    no_mythic_count = int(data.get("egg_pity_no_mythic_count", 0))
+    rewards = []
+
+    while pity_count >= EGG_PITY_THRESHOLD:
+        pity_count -= EGG_PITY_THRESHOLD
+        rarity, forced_mythic = roll_egg_pity_rarity(no_mythic_count)
+        template = roll_pet_template_by_rarity(rarity)
+        pet, location = _put_pet_into_doc(data, create_pet_instance(template))
+
+        if rarity == "神话":
+            no_mythic_count = 0
+        else:
+            no_mythic_count += 1
+
+        rewards.append({
+            "pet": pet,
+            "location": location,
+            "rarity": rarity,
+            "forced_mythic": forced_mythic,
+            "no_mythic_count": no_mythic_count,
+        })
+
+    data["egg_pity_count"] = pity_count
+    data["egg_pity_no_mythic_count"] = no_mythic_count
+    save_pet_doc(user_id, data)
+    return rewards, pity_count, no_mythic_count
+
+
 def grant_pet_as_active(user_id: str | int, pet: dict | None = None):
     pet, _ = grant_pet(user_id, pet)
     return pet
@@ -550,12 +693,7 @@ def grant_pet_as_active(user_id: str | int, pet: dict | None = None):
 def grant_pet(user_id: str | int, pet: dict | None = None):
     data = get_pet_doc(user_id)
     new_pet = create_pet_instance() if pet is None else _normalize_pet(pet)
-    if data.get("active"):
-        data["bag"].append(new_pet)
-        location = "bag"
-    else:
-        data["active"] = new_pet
-        location = "active"
+    new_pet, location = _put_pet_into_doc(data, new_pet)
     save_pet_doc(user_id, data)
     return new_pet, location
 
@@ -620,6 +758,51 @@ def remove_pet(user_id: str | int, token: str | None = None):
     return removed
 
 
+def _pet_matches_release_keyword(pet: dict, keyword: str):
+    keyword = str(keyword).strip()
+    if not keyword:
+        return False
+
+    if keyword in RARITIES:
+        return pet.get("rarity") == keyword
+
+    names = {str(pet.get("name", "")), str(pet.get("form_name", ""))}
+    forms = pet.get("forms")
+    if isinstance(forms, list):
+        names.update(str(name) for name in forms)
+    return keyword in names
+
+
+def remove_pets_by_keyword(user_id: str | int, keyword: str, include_active: bool = False):
+    data = get_pet_doc(user_id)
+    keyword = str(keyword).strip()
+    removed = []
+    skipped_active = False
+
+    if not keyword:
+        return removed, skipped_active
+
+    active = data.get("active")
+    if active and _pet_matches_release_keyword(active, keyword):
+        if include_active:
+            removed.append(active)
+            data["active"] = None
+        else:
+            skipped_active = True
+
+    kept_bag = []
+    for pet in data.get("bag", []):
+        if _pet_matches_release_keyword(pet, keyword):
+            removed.append(pet)
+        else:
+            kept_bag.append(pet)
+    data["bag"] = kept_bag
+
+    if removed:
+        save_pet_doc(user_id, data)
+    return removed, skipped_active
+
+
 def get_rarity_max_stars(rarity: str) -> int:
     return RARITY_MAX_STARS.get(str(rarity), 5)
 
@@ -634,7 +817,8 @@ def get_form_index(stars: int) -> int:
 
 
 def get_star_ratio(stars: int) -> float:
-    return max(1, min(25, int(stars))) * 0.05
+    stars = max(1, min(25, int(stars)))
+    return min(1.15, 0.18 + (stars - 1) * 0.04)
 
 
 def get_pet_star_tier(stars: int) -> int:
@@ -655,7 +839,7 @@ def format_stars(stars: int) -> str:
 
 def exp_to_next_star(stars: int) -> int:
     stars = max(1, min(25, int(stars)))
-    return 100 + stars * 150
+    return 100 + stars * 80
 
 
 def calc_pet_total_exp(pet: dict) -> int:
@@ -820,35 +1004,96 @@ def fusion_need(stars: int) -> int:
     return min(5, max(1, ((stars - 1) // 5) + 1))
 
 
-def fuse_pet(user_id: str | int, main_token: str, material_tokens: list[str]):
+def get_pet_breakthrough_requirement(pet: dict):
+    if not isinstance(pet, dict):
+        return None
+
+    try:
+        next_stars = int(pet.get("stars", 1)) + 1
+    except Exception:
+        return None
+
+    if next_stars % 5 != 0:
+        return None
+
+    required_rarity = PET_BREAKTHROUGH_RULES.get(str(pet.get("rarity", "")), {}).get(next_stars)
+    if not required_rarity:
+        return None
+
+    return {
+        "target_stars": next_stars,
+        "rarity": required_rarity,
+        "required_stars": get_rarity_max_stars(required_rarity),
+    }
+
+
+def _is_valid_breakthrough_material(pet: dict, requirement: dict | None):
+    if not requirement or not isinstance(pet, dict):
+        return False
+    required_rarity = str(requirement.get("rarity", ""))
+    required_stars = int(requirement.get("required_stars", get_rarity_max_stars(required_rarity)))
+    return (
+        str(pet.get("rarity", "")) == required_rarity
+        and int(pet.get("stars", 1)) >= required_stars
+    )
+
+
+def fuse_pet(user_id: str | int, material_tokens: list[str]):
     data = get_pet_doc(user_id)
-    where, key, main_pet = find_pet_anywhere(data, main_token)
+    main_pet = data.get("active")
     if not main_pet:
-        return False, "未找到主宠，请检查UID。", None, None
+        return False, "融合失败：当前没有出战宠物，请先使用【出战宠物 UID】设置主宠。", None, None
 
     max_stars = get_rarity_max_stars(main_pet.get("rarity", "常见"))
     if int(main_pet.get("stars", 1)) >= max_stars:
         return False, f"{main_pet.get('form_name', main_pet.get('name', '宠物'))}已达到{main_pet.get('rarity', '')}稀有度上限（{format_stars(max_stars)}）。", main_pet, None
 
     need = fusion_need(int(main_pet.get("stars", 1)))
-    if len(material_tokens) < need:
-        return False, f"融合失败：当前品阶需要{need}只同名本体。", main_pet, None
+    breakthrough_requirement = get_pet_breakthrough_requirement(main_pet)
 
     hit_indexes = []
-    used_uids = set()
+    breakthrough_index = None
+    breakthrough_pet = None
+    main_uid = str(main_pet.get("uid", ""))
+    used_uids = {main_uid} if main_uid else set()
     for token in material_tokens:
         w, idx, pet = find_pet_anywhere(data, token)
         if w != "bag" or pet is None:
-            return False, f"融合失败：本体 {token} 必须在宠物背包中，已出战主宠不能作为材料。", main_pet, None
-        if str(pet.get("uid")) in used_uids:
-            return False, f"融合失败：本体 {token} 重复填写。", main_pet, None
-        if str(pet.get("pet_id")) != str(main_pet.get("pet_id")):
-            return False, f"融合失败：{pet.get('form_name', pet.get('name', '本体'))}不是同名本体。", main_pet, None
-        hit_indexes.append(idx)
-        used_uids.add(str(pet.get("uid")))
+            continue
+        pet_uid = str(pet.get("uid", ""))
+        if pet_uid in used_uids:
+            continue
 
-    hit_indexes = sorted(hit_indexes[:need], reverse=True)
-    for idx in hit_indexes:
+        is_same_body = str(pet.get("pet_id")) == str(main_pet.get("pet_id"))
+        is_breakthrough = _is_valid_breakthrough_material(pet, breakthrough_requirement)
+
+        if is_same_body and len(hit_indexes) < need:
+            hit_indexes.append(idx)
+            used_uids.add(pet_uid)
+            continue
+
+        if is_breakthrough and breakthrough_index is None:
+            breakthrough_index = idx
+            breakthrough_pet = pet
+            used_uids.add(pet_uid)
+            continue
+
+    missing_msgs = []
+    if len(hit_indexes) < need:
+        missing_msgs.append(f"同名本体不足：已匹配{len(hit_indexes)}/{need}只")
+    if breakthrough_requirement and breakthrough_index is None:
+        missing_msgs.append(
+            f"破阶宠不足：破入{format_stars(breakthrough_requirement['target_stars'])}"
+            f"需要1只满★{breakthrough_requirement['rarity']}宠物"
+        )
+    if missing_msgs:
+        return False, "融合失败：\n" + "\n".join(missing_msgs), main_pet, None
+
+    consume_indexes = hit_indexes[:need]
+    if breakthrough_index is not None:
+        consume_indexes.append(breakthrough_index)
+
+    for idx in sorted(set(consume_indexes), reverse=True):
         del data["bag"][idx]
 
     old_form = int(main_pet.get("form_index", 0))
@@ -862,10 +1107,7 @@ def fuse_pet(user_id: str | int, main_token: str, material_tokens: list[str]):
             "skill": roll_replacement_pet_skill(main_pet),
         }
 
-    if where == "active":
-        data["active"] = main_pet
-    else:
-        data["bag"][key] = main_pet
+    data["active"] = main_pet
 
     save_pet_doc(user_id, data)
 
@@ -873,7 +1115,14 @@ def fuse_pet(user_id: str | int, main_token: str, material_tokens: list[str]):
     if int(main_pet.get("form_index", 0)) != old_form:
         form_msg = f"\n形态进化：{main_pet.get('form_name')}"
 
-    return True, f"融合成功：{main_pet.get('name')}提升至{format_stars(main_pet.get('stars', 1))}。{form_msg}", main_pet, skill_offer
+    breakthrough_msg = ""
+    if breakthrough_pet:
+        breakthrough_msg = (
+            f"\n破阶消耗：满★{breakthrough_requirement['rarity']}"
+            f"【{breakthrough_pet.get('form_name', breakthrough_pet.get('name', '宠物'))}】"
+        )
+
+    return True, f"融合成功：{main_pet.get('name')}提升至{format_stars(main_pet.get('stars', 1))}。{form_msg}{breakthrough_msg}", main_pet, skill_offer
 
 
 def replace_pet_skill(user_id: str | int, uid: str, skill: dict):
@@ -946,13 +1195,19 @@ def build_pet_detail(pet: dict):
     ]
     if exclusive_skills:
         if skill.get("scope") == "专属":
-            lines.append(f"已觉醒专属：{skill.get('raw_name', '未知专属')}")
+            lines.append(f"已领悟专属：{skill.get('raw_name', '未知专属')}")
         else:
-            lines.append("可觉醒专属：" + "、".join(s.get("name", "未知专属") for s in exclusive_skills[:3]))
+            lines.append("可随机领悟专属：" + "、".join(s.get("name", "未知专属") for s in exclusive_skills[:3]))
 
     if need:
         lines.append(f"经验：{pet.get('exp', 0)} / {need}")
         lines.append(f"融合所需本体：{fusion_need(pet.get('stars', 1))}只")
+        breakthrough_requirement = get_pet_breakthrough_requirement(pet)
+        if breakthrough_requirement:
+            lines.append(
+                f"破阶所需：满★{breakthrough_requirement['rarity']}宠物1只"
+                f"（破入{format_stars(breakthrough_requirement['target_stars'])}）"
+            )
     else:
         lines.append("经验：已达当前稀有度上限")
 
