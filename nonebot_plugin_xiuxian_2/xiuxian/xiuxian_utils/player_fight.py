@@ -28,6 +28,7 @@ from ..xiuxian_natal_treasure.natal_config import (
     SHIELD_BREAK_BONUS_DAMAGE,
     FATE_REVIVE_COUNT_LIMIT,
     IMMORTAL_REVIVE_COUNT_LIMIT,
+    IMMORTAL_REVIVE_CHANCE,
     INVINCIBLE_COUNT_LIMIT,
     INVINCIBLE_FIRST_GAIN_CHANCE,
     INVINCIBLE_SUBSEQUENT_GAIN_CHANCE,
@@ -2457,7 +2458,7 @@ class BattleSystem:
 
         if unit.has_natal_effect(NatalEffectType.IMMORTAL):
             if unit.natal_runtime["immortal_revive_count"] < IMMORTAL_REVIVE_COUNT_LIMIT:
-                if random.random() < 0.5:
+                if random.random() < IMMORTAL_REVIVE_CHANCE:
                     heal_rate = unit.get_natal_effect_value(NatalEffectType.IMMORTAL)
                     unit.natal_runtime["immortal_revive_count"] += 1
                     unit.hp = max(1, int(unit.max_hp * heal_rate))

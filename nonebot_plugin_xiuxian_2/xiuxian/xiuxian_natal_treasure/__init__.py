@@ -29,6 +29,7 @@ from ..xiuxian_utils.item_json import Items
 from .natal_data import *
 from .natal_config import (
     INVINCIBLE_GROWTH_PER_LEVEL_NATAL_TREASURE,
+    IMMORTAL_REVIVE_CHANCE,
     MYSTERIOUS_SCRIPTURE_COST_ENGRAVE,
     MYSTERIOUS_SCRIPTURE_COST_FORGET,
     MAX_EFFECT_SLOTS,
@@ -611,7 +612,7 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
 • **{EFFECT_NAME_MAP[NatalEffectType.TRUE_DAMAGE]}**：攻击时额外造成真实伤害，无视减伤和护盾。
 • **{EFFECT_NAME_MAP[NatalEffectType.CRIT_RESIST]}**：减少被暴击时受到的伤害。
 • **{EFFECT_NAME_MAP[NatalEffectType.FATE]}**：生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
-• **{EFFECT_NAME_MAP[NatalEffectType.IMMORTAL]}**：生命值低于0时有50%概率恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.IMMORTAL]}**：生命值低于0时有{round(IMMORTAL_REVIVE_CHANCE * 100, 2)}%概率恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
 • **{EFFECT_NAME_MAP[NatalEffectType.DEATH_STRIKE]}**：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
 • **{EFFECT_NAME_MAP[NatalEffectType.INVINCIBLE]}**：周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
 • **{EFFECT_NAME_MAP[NatalEffectType.TWIN_STRIKE]}**：普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。道纹等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
