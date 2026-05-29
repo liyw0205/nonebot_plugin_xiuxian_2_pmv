@@ -15,7 +15,24 @@ PET_CONFIG_PATH = DATABASE / "宠物" / "宠物.json"
 PET_SKILL_CONFIG_PATH = DATABASE / "宠物" / "宠物技能.json"
 
 TABLE = "player_pet"
-FIELDS = ["active", "bag", "egg_pity_count", "egg_pity_no_mythic_count"]
+PET_ITEM_TABLE = "player_pet_item"
+LEGACY_JSON_FIELDS = ["active", "bag"]
+FIELDS = ["active_uid", "egg_pity_count", "egg_pity_no_mythic_count"]
+PET_META_STORAGE_FIELDS = FIELDS + LEGACY_JSON_FIELDS
+PET_ITEM_FIELDS = [
+    "id",
+    "user_id",
+    "uid",
+    "is_active",
+    "pet_id",
+    "stars",
+    "exp",
+    "total_exp",
+    "skill_id",
+    "created_at",
+    "updated_at",
+]
+PET_ITEM_LEGACY_FIELDS = ["name", "rarity", "race", "pet_type", "forms", "skills", "skill"]
 
 EGG_COST = 1000000
 EGG_PITY_THRESHOLD = 1000
@@ -130,6 +147,14 @@ PET_BREAKTHROUGH_RULES = {
 player_data_manager = PlayerDataManager()
 _PET_POOL_CACHE = None
 _PET_SKILL_CACHE = None
+_PET_STORAGE_READY = False
+_PET_STORAGE_MIGRATION_ATTEMPTED = False
+
+
+def reset_pet_storage_state():
+    global _PET_STORAGE_READY, _PET_STORAGE_MIGRATION_ATTEMPTED
+    _PET_STORAGE_READY = False
+    _PET_STORAGE_MIGRATION_ATTEMPTED = False
 
 
 def _default_pet_doc():
@@ -224,25 +249,825 @@ def _normalize_pet(pet: dict):
     return pet
 
 
-def get_pet_doc(user_id: str | int):
-    doc = player_data_manager.get_doc(
-        user_id=str(user_id),
+def _json_dump(value):
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _json_load(value, default=None):
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return default
+    return default
+
+
+def _to_int(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
+def _clean_uid(value):
+    value = "" if value is None else str(value)
+    if value.lower() in {"none", "null"}:
+        return ""
+    return value
+
+
+def _pet_storage_id(user_id: str, uid: str):
+    return f"{user_id}:{uid}"
+
+
+def _ensure_pet_storage():
+    global _PET_STORAGE_READY
+    if _PET_STORAGE_READY:
+        return
+
+    q = player_data_manager._quote_ident
+    with player_data_manager._conn_lock:
+        if _PET_STORAGE_READY:
+            return
+
+        player_data_manager._ensure_table_exists(TABLE)
+        for field in PET_META_STORAGE_FIELDS:
+            player_data_manager._ensure_field_exists(TABLE, field, "TEXT")
+
+        cursor = player_data_manager._get_cursor()
+        item_table_sql = q(PET_ITEM_TABLE)
+        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+            cursor.execute(
+                f"""
+                CREATE TABLE {item_table_sql} (
+                    {q("id")} TEXT PRIMARY KEY,
+                    {q("user_id")} TEXT NOT NULL,
+                    {q("uid")} TEXT NOT NULL,
+                    {q("is_active")} INTEGER DEFAULT 0,
+                    {q("pet_id")} TEXT DEFAULT NULL,
+                    {q("stars")} INTEGER DEFAULT 1,
+                    {q("exp")} INTEGER DEFAULT 0,
+                    {q("total_exp")} INTEGER DEFAULT 0,
+                    {q("skill_id")} TEXT DEFAULT NULL,
+                    {q("created_at")} INTEGER DEFAULT 0,
+                    {q("updated_at")} INTEGER DEFAULT 0
+                )
+                """
+            )
+        else:
+            existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+            column_defs = {
+                "id": "TEXT",
+                "user_id": "TEXT",
+                "uid": "TEXT",
+                "is_active": "INTEGER DEFAULT 0",
+                "pet_id": "TEXT DEFAULT NULL",
+                "stars": "INTEGER DEFAULT 1",
+                "exp": "INTEGER DEFAULT 0",
+                "total_exp": "INTEGER DEFAULT 0",
+                "skill_id": "TEXT DEFAULT NULL",
+                "created_at": "INTEGER DEFAULT 0",
+                "updated_at": "INTEGER DEFAULT 0",
+            }
+            for field, data_type in column_defs.items():
+                if field not in existing_fields:
+                    cursor.execute(f"ALTER TABLE {item_table_sql} ADD COLUMN {q(field)} {data_type}")
+
+        cursor.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {q('idx_player_pet_item_user_uid')} "
+            f"ON {item_table_sql} ({q('user_id')}, {q('uid')})"
+        )
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS {q('idx_player_pet_item_user_active')} "
+            f"ON {item_table_sql} ({q('user_id')}, {q('is_active')})"
+        )
+        player_data_manager._commit_write()
+        _PET_STORAGE_READY = True
+
+
+def _row_to_dict(cursor, row):
+    columns = [col[0] for col in cursor.description]
+    return {column: value for column, value in zip(columns, row)}
+
+
+def _get_pet_meta(user_id: str):
+    meta = player_data_manager.get_doc(
+        user_id=user_id,
         table_name=TABLE,
-        fields=FIELDS,
+        fields=PET_META_STORAGE_FIELDS,
         default_factory=_default_pet_doc,
     )
-    return _normalize_pet_doc(doc)
+    if meta is None:
+        meta = _default_pet_doc()
+        meta["user_id"] = user_id
+    return meta
+
+
+def _meta_active_uid(meta: dict):
+    active_uid = _clean_uid(meta.get("active_uid", ""))
+    if active_uid:
+        return active_uid
+
+    legacy_active = meta.get("active")
+    if isinstance(legacy_active, str):
+        return _clean_uid(legacy_active)
+    return ""
+
+
+def _legacy_payload_exists(meta: dict):
+    return isinstance(meta.get("active"), dict) or isinstance(meta.get("bag"), list)
+
+
+def _legacy_doc_from_meta(meta: dict):
+    return {
+        "active": meta.get("active") if isinstance(meta.get("active"), dict) else None,
+        "bag": meta.get("bag") if isinstance(meta.get("bag"), list) else [],
+        "egg_pity_count": _to_int(meta.get("egg_pity_count", 0), 0),
+        "egg_pity_no_mythic_count": _to_int(meta.get("egg_pity_no_mythic_count", 0), 0),
+    }
+
+
+def get_pet_skill_by_id(skill_id: str | None, pet: dict | None = None):
+    skill_id = str(skill_id or "").strip()
+    if not skill_id:
+        return None
+
+    if skill_id.startswith("fallback_") and isinstance(pet, dict):
+        return _fallback_basic_skill(pet)
+
+    pool = load_pet_skill_pool()
+    for group in ("basic", "exclusive"):
+        skill = pool.get(group, {}).get(skill_id)
+        if skill:
+            return dict(skill)
+    return None
+
+
+def _legacy_skill_from_row(row: dict):
+    skill = _json_load(row.get("skill"), default=None)
+    if isinstance(skill, dict):
+        return skill
+
+    skills = _json_load(row.get("skills"), default=[])
+    if isinstance(skills, list):
+        for item in skills:
+            if isinstance(item, dict):
+                return item
+    return None
+
+
+def _row_to_pet(row: dict):
+    template = get_pet_template(str(row.get("pet_id", "")))
+    legacy_forms = _json_load(row.get("forms"), default=[])
+
+    pet = {
+        "uid": row.get("uid", ""),
+        "pet_id": row.get("pet_id", "") or (template or {}).get("pet_id", ""),
+        "name": (template or {}).get("name", row.get("name", "未知宠物")),
+        "rarity": (template or {}).get("rarity", row.get("rarity", "常见")),
+        "race": (template or {}).get("race", row.get("race", "凡兽")),
+        "type": (template or {}).get("type", row.get("pet_type", PET_SKILL_ATTACK)),
+        "forms": (template or {}).get("forms", legacy_forms),
+        "stars": _to_int(row.get("stars", 1), 1),
+        "exp": _to_int(row.get("exp", 0), 0),
+        "total_exp": _to_int(row.get("total_exp", 0), 0),
+    }
+
+    skill_id = str(row.get("skill_id", "") or "").strip()
+    legacy_skill = _legacy_skill_from_row(row)
+    if not skill_id and isinstance(legacy_skill, dict):
+        skill_id = str(legacy_skill.get("skill_id", "") or "").strip()
+
+    skill = get_pet_skill_by_id(skill_id, pet)
+    if skill is None:
+        skill = legacy_skill
+
+    if isinstance(skill, dict):
+        pet["skill"] = skill
+        pet["skills"] = [skill]
+    return _normalize_pet(pet)
+
+
+def _fetch_pet_rows(user_id: str):
+    _ensure_pet_storage()
+    q = player_data_manager._quote_ident
+    with player_data_manager._conn_lock:
+        cursor = player_data_manager._get_cursor()
+        existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+        select_fields = PET_ITEM_FIELDS + [
+            field
+            for field in PET_ITEM_LEGACY_FIELDS
+            if field in existing_fields and field not in PET_ITEM_FIELDS
+        ]
+        col_sql = ", ".join(q(field) for field in select_fields)
+        cursor.execute(
+            f"""
+            SELECT {col_sql}
+            FROM {q(PET_ITEM_TABLE)}
+            WHERE {q("user_id")}=%s
+            ORDER BY {q("is_active")} DESC, {q("created_at")} ASC, {q("id")} ASC
+            """,
+            (user_id,),
+        )
+        return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
+
+
+def _doc_from_rows(meta: dict, rows: list[dict]):
+    active_uid = _meta_active_uid(meta)
+    active_candidates = []
+    bag = []
+
+    for row in rows:
+        pet = _row_to_pet(row)
+        row_active = _to_int(row.get("is_active", 0), 0) == 1
+        if row_active or (active_uid and str(pet.get("uid", "")) == active_uid):
+            active_candidates.append(pet)
+        else:
+            bag.append(pet)
+
+    active = active_candidates[0] if active_candidates else None
+    if len(active_candidates) > 1:
+        bag = active_candidates[1:] + bag
+
+    return {
+        "active": active,
+        "bag": bag,
+        "egg_pity_count": _to_int(meta.get("egg_pity_count", 0), 0),
+        "egg_pity_no_mythic_count": _to_int(meta.get("egg_pity_no_mythic_count", 0), 0),
+    }
+
+
+def _iter_unique_pet_rows(data: dict):
+    seen = set()
+
+    active = data.get("active")
+    if active:
+        active = _normalize_pet(dict(active))
+        uid = str(active.get("uid", ""))
+        if uid:
+            seen.add(uid)
+            yield active, True
+
+    for pet in data.get("bag", []):
+        if not isinstance(pet, dict):
+            continue
+        pet = _normalize_pet(dict(pet))
+        uid = str(pet.get("uid", ""))
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        yield pet, False
+
+
+def _save_pet_meta(user_id: str, data: dict, pet_count: int):
+    active = data.get("active")
+    active_uid = _clean_uid(active.get("uid", "")) if isinstance(active, dict) else ""
+    player_data_manager.save_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        data={
+            "active_uid": active_uid,
+            "egg_pity_count": _to_int(data.get("egg_pity_count", 0), 0),
+            "egg_pity_no_mythic_count": _to_int(data.get("egg_pity_no_mythic_count", 0), 0),
+            "active": active_uid,
+            "bag": f"items:{pet_count}",
+        },
+        fields=PET_META_STORAGE_FIELDS,
+        dirty_check=True,
+    )
+
+
+def _pet_to_item_values(user_id: str, pet: dict, is_active: bool, now: int):
+    uid = str(pet.get("uid", ""))
+    skill = pet.get("skill") or ((pet.get("skills") or [None])[0])
+    skill_id = ""
+    if isinstance(skill, dict):
+        skill_id = str(skill.get("skill_id", "") or "")
+    values = {
+        "id": _pet_storage_id(user_id, uid),
+        "user_id": user_id,
+        "uid": uid,
+        "is_active": 1 if is_active else 0,
+        "pet_id": str(pet.get("pet_id", "")),
+        "stars": _to_int(pet.get("stars", 1), 1),
+        "exp": _to_int(pet.get("exp", 0), 0),
+        "total_exp": _to_int(pet.get("total_exp", 0), 0),
+        "skill_id": skill_id or None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    return [values[field] for field in PET_ITEM_FIELDS]
+
+
+def _clear_legacy_pet_item_columns(cursor, user_id: str):
+    existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+    legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in existing_fields]
+    if not legacy_fields:
+        return
+
+    q = player_data_manager._quote_ident
+    set_sql = ", ".join(f"{q(field)}=NULL" for field in legacy_fields)
+    cursor.execute(
+        f"UPDATE {q(PET_ITEM_TABLE)} SET {set_sql} WHERE {q('user_id')}=%s",
+        (user_id,),
+    )
+
+
+def _save_pet_items(user_id: str, data: dict):
+    _ensure_pet_storage()
+    q = player_data_manager._quote_ident
+    now = int(time.time())
+    pet_rows = list(_iter_unique_pet_rows(data))
+    keep_ids = [_pet_storage_id(user_id, str(pet.get("uid", ""))) for pet, _ in pet_rows]
+
+    with player_data_manager._conn_lock:
+        cursor = player_data_manager._get_cursor()
+        item_table_sql = q(PET_ITEM_TABLE)
+        if keep_ids:
+            placeholders = ", ".join(["%s"] * len(keep_ids))
+            cursor.execute(
+                f"""
+                DELETE FROM {item_table_sql}
+                WHERE {q("user_id")}=%s AND {q("id")} NOT IN ({placeholders})
+                """,
+                [user_id] + keep_ids,
+            )
+        else:
+            cursor.execute(f"DELETE FROM {item_table_sql} WHERE {q('user_id')}=%s", (user_id,))
+
+        col_sql = ", ".join(q(field) for field in PET_ITEM_FIELDS)
+        placeholders = ", ".join(["%s"] * len(PET_ITEM_FIELDS))
+        update_fields = [field for field in PET_ITEM_FIELDS if field not in {"id", "created_at"}]
+        update_sql = ", ".join(f"{q(field)}=EXCLUDED.{q(field)}" for field in update_fields)
+        insert_sql = (
+            f"INSERT INTO {item_table_sql} ({col_sql}) VALUES ({placeholders}) "
+            f"ON CONFLICT ({q('user_id')}, {q('uid')}) DO UPDATE SET {update_sql}"
+        )
+
+        for pet, is_active in pet_rows:
+            cursor.execute(insert_sql, _pet_to_item_values(user_id, pet, is_active, now))
+
+        _clear_legacy_pet_item_columns(cursor, user_id)
+        player_data_manager._commit_write()
+    return len(pet_rows)
+
+
+def _save_pet_doc_to_storage(user_id: str, data: dict):
+    data = _normalize_pet_doc(data)
+    pet_count = _save_pet_items(user_id, data)
+    _save_pet_meta(user_id, data, pet_count)
+
+
+def get_pet_doc(user_id: str | int):
+    user_id = str(user_id)
+    _ensure_pet_storage()
+    meta = _get_pet_meta(user_id)
+    rows = _fetch_pet_rows(user_id)
+
+    if _legacy_payload_exists(meta):
+        if not rows:
+            _save_pet_doc_to_storage(user_id, _legacy_doc_from_meta(meta))
+            meta = _get_pet_meta(user_id)
+            rows = _fetch_pet_rows(user_id)
+        else:
+            doc = _doc_from_rows(meta, rows)
+            _save_pet_meta(user_id, doc, len(rows))
+            meta = _get_pet_meta(user_id)
+
+    return _normalize_pet_doc(_doc_from_rows(meta, rows))
 
 
 def save_pet_doc(user_id: str | int, data: dict):
-    data = _normalize_pet_doc(data)
-    player_data_manager.save_doc(
-        user_id=str(user_id),
-        table_name=TABLE,
-        data=data,
-        fields=FIELDS,
-        dirty_check=True,
+    _save_pet_doc_to_storage(str(user_id), data)
+
+
+def migrate_all_legacy_pet_docs():
+    _ensure_pet_storage()
+    compacted = 0
+    for record in player_data_manager.get_all_records(TABLE):
+        user_id = record.get("user_id")
+        if not user_id:
+            continue
+        if not _legacy_payload_exists(record) and not _pet_item_has_legacy_payload(str(user_id)):
+            continue
+        doc = get_pet_doc(str(user_id))
+        save_pet_doc(str(user_id), doc)
+        compacted += 1
+    return compacted
+
+
+def _pet_item_has_legacy_payload(user_id: str):
+    q = player_data_manager._quote_ident
+    with player_data_manager._conn_lock:
+        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+            return False
+        existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+        legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in existing_fields]
+        if not legacy_fields:
+            return False
+
+        cursor = player_data_manager._get_cursor()
+        clauses = [f"({q(field)} IS NOT NULL AND CAST({q(field)} AS TEXT) <> '')" for field in legacy_fields]
+        cursor.execute(
+            f"""
+            SELECT 1
+            FROM {q(PET_ITEM_TABLE)}
+            WHERE {q("user_id")}=%s AND ({" OR ".join(clauses)})
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone() is not None
+
+
+def migrate_pet_storage_once():
+    global _PET_STORAGE_MIGRATION_ATTEMPTED
+    if _PET_STORAGE_MIGRATION_ATTEMPTED:
+        return 0
+    try:
+        migrated = migrate_all_legacy_pet_docs()
+    except Exception:
+        _PET_STORAGE_MIGRATION_ATTEMPTED = False
+        raise
+    _PET_STORAGE_MIGRATION_ATTEMPTED = True
+    return migrated
+
+
+def _sqlite_quote_ident(name: str):
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _sqlite_column_names(conn, table_name: str):
+    cursor = conn.execute(f"PRAGMA table_info({_sqlite_quote_ident(table_name)})")
+    return [str(row[1]) for row in cursor.fetchall()]
+
+
+def _sqlite_table_exists(conn, table_name: str):
+    cursor = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (table_name,),
     )
+    return cursor.fetchone() is not None
+
+
+def _ensure_sqlite_pet_storage(conn):
+    q = _sqlite_quote_ident
+    if not _sqlite_table_exists(conn, TABLE):
+        return False
+
+    meta_columns = set(_sqlite_column_names(conn, TABLE))
+    for field in PET_META_STORAGE_FIELDS:
+        if field not in meta_columns:
+            conn.execute(f"ALTER TABLE {q(TABLE)} ADD COLUMN {q(field)} TEXT DEFAULT NULL")
+
+    if not _sqlite_table_exists(conn, PET_ITEM_TABLE):
+        conn.execute(
+            f"""
+            CREATE TABLE {q(PET_ITEM_TABLE)} (
+                {q("id")} TEXT PRIMARY KEY,
+                {q("user_id")} TEXT NOT NULL,
+                {q("uid")} TEXT NOT NULL,
+                {q("is_active")} INTEGER DEFAULT 0,
+                {q("pet_id")} TEXT DEFAULT NULL,
+                {q("stars")} INTEGER DEFAULT 1,
+                {q("exp")} INTEGER DEFAULT 0,
+                {q("total_exp")} INTEGER DEFAULT 0,
+                {q("skill_id")} TEXT DEFAULT NULL,
+                {q("created_at")} INTEGER DEFAULT 0,
+                {q("updated_at")} INTEGER DEFAULT 0
+            )
+            """
+        )
+    else:
+        item_columns = set(_sqlite_column_names(conn, PET_ITEM_TABLE))
+        column_defs = {
+            "id": "TEXT",
+            "user_id": "TEXT",
+            "uid": "TEXT",
+            "is_active": "INTEGER DEFAULT 0",
+            "pet_id": "TEXT DEFAULT NULL",
+            "stars": "INTEGER DEFAULT 1",
+            "exp": "INTEGER DEFAULT 0",
+            "total_exp": "INTEGER DEFAULT 0",
+            "skill_id": "TEXT DEFAULT NULL",
+            "created_at": "INTEGER DEFAULT 0",
+            "updated_at": "INTEGER DEFAULT 0",
+        }
+        for field, data_type in column_defs.items():
+            if field not in item_columns:
+                conn.execute(f"ALTER TABLE {q(PET_ITEM_TABLE)} ADD COLUMN {q(field)} {data_type}")
+
+    conn.execute(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS {q('idx_player_pet_item_user_uid')} "
+        f"ON {q(PET_ITEM_TABLE)} ({q('user_id')}, {q('uid')})"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS {q('idx_player_pet_item_user_active')} "
+        f"ON {q(PET_ITEM_TABLE)} ({q('user_id')}, {q('is_active')})"
+    )
+    return True
+
+
+def _sqlite_row_to_legacy_doc(row: dict):
+    active = _json_load(row.get("active"), default=None)
+    bag = _json_load(row.get("bag"), default=[])
+    return {
+        "active": active if isinstance(active, dict) else None,
+        "bag": bag if isinstance(bag, list) else [],
+        "egg_pity_count": _to_int(row.get("egg_pity_count", 0), 0),
+        "egg_pity_no_mythic_count": _to_int(row.get("egg_pity_no_mythic_count", 0), 0),
+    }
+
+
+def _sqlite_legacy_payload_exists(row: dict):
+    active = _json_load(row.get("active"), default=None)
+    bag = _json_load(row.get("bag"), default=None)
+    return isinstance(active, dict) or isinstance(bag, list)
+
+
+def _save_sqlite_pet_doc(conn, user_id: str, data: dict):
+    q = _sqlite_quote_ident
+    data = _normalize_pet_doc(data)
+    pet_rows = list(_iter_unique_pet_rows(data))
+    keep_ids = [_pet_storage_id(user_id, str(pet.get("uid", ""))) for pet, _ in pet_rows]
+    now = int(time.time())
+
+    if keep_ids:
+        placeholders = ", ".join(["?"] * len(keep_ids))
+        conn.execute(
+            f"""
+            DELETE FROM {q(PET_ITEM_TABLE)}
+            WHERE {q("user_id")}=? AND {q("id")} NOT IN ({placeholders})
+            """,
+            [user_id] + keep_ids,
+        )
+    else:
+        conn.execute(f"DELETE FROM {q(PET_ITEM_TABLE)} WHERE {q('user_id')}=?", (user_id,))
+
+    col_sql = ", ".join(q(field) for field in PET_ITEM_FIELDS)
+    placeholders = ", ".join(["?"] * len(PET_ITEM_FIELDS))
+    insert_sql = f"INSERT OR REPLACE INTO {q(PET_ITEM_TABLE)} ({col_sql}) VALUES ({placeholders})"
+    for pet, is_active in pet_rows:
+        conn.execute(insert_sql, _pet_to_item_values(user_id, pet, is_active, now))
+
+    item_columns = set(_sqlite_column_names(conn, PET_ITEM_TABLE))
+    legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in item_columns]
+    if legacy_fields:
+        set_sql = ", ".join(f"{q(field)}=NULL" for field in legacy_fields)
+        conn.execute(
+            f"UPDATE {q(PET_ITEM_TABLE)} SET {set_sql} WHERE {q('user_id')}=?",
+            (user_id,),
+        )
+
+    active = data.get("active")
+    active_uid = _clean_uid(active.get("uid", "")) if isinstance(active, dict) else ""
+    conn.execute(
+        f"""
+        UPDATE {q(TABLE)}
+        SET {q("active_uid")}=?,
+            {q("egg_pity_count")}=?,
+            {q("egg_pity_no_mythic_count")}=?,
+            {q("active")}=?,
+            {q("bag")}=?
+        WHERE {q("user_id")}=?
+        """,
+        (
+            active_uid,
+            str(_to_int(data.get("egg_pity_count", 0), 0)),
+            str(_to_int(data.get("egg_pity_no_mythic_count", 0), 0)),
+            active_uid,
+            f"items:{len(pet_rows)}",
+            user_id,
+        ),
+    )
+
+
+def _fetch_sqlite_pet_rows(conn, user_id: str):
+    q = _sqlite_quote_ident
+    if not _sqlite_table_exists(conn, PET_ITEM_TABLE):
+        return []
+
+    existing_fields = set(_sqlite_column_names(conn, PET_ITEM_TABLE))
+    select_fields = PET_ITEM_FIELDS + [
+        field
+        for field in PET_ITEM_LEGACY_FIELDS
+        if field in existing_fields and field not in PET_ITEM_FIELDS
+    ]
+    cursor = conn.execute(
+        f"""
+        SELECT {', '.join(q(field) for field in select_fields)}
+        FROM {q(PET_ITEM_TABLE)}
+        WHERE {q("user_id")}=?
+        ORDER BY {q("is_active")} DESC, {q("created_at")} ASC, {q("id")} ASC
+        """,
+        (user_id,),
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def _sqlite_item_users_with_legacy_payload(conn):
+    q = _sqlite_quote_ident
+    if not _sqlite_table_exists(conn, PET_ITEM_TABLE):
+        return set()
+
+    item_columns = set(_sqlite_column_names(conn, PET_ITEM_TABLE))
+    legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in item_columns]
+    if not legacy_fields:
+        return set()
+
+    clauses = [f"({q(field)} IS NOT NULL AND CAST({q(field)} AS TEXT) <> '')" for field in legacy_fields]
+    cursor = conn.execute(
+        f"""
+        SELECT DISTINCT {q("user_id")}
+        FROM {q(PET_ITEM_TABLE)}
+        WHERE {" OR ".join(clauses)}
+        """
+    )
+    return {str(row[0]) for row in cursor.fetchall() if row[0]}
+
+
+def _sqlite_pet_user_ids(conn):
+    q = _sqlite_quote_ident
+    user_ids = set()
+
+    if _sqlite_table_exists(conn, TABLE):
+        cursor = conn.execute(
+            f"""
+            SELECT {q("user_id")}
+            FROM {q(TABLE)}
+            WHERE {q("user_id")} IS NOT NULL AND CAST({q("user_id")} AS TEXT) <> ''
+            """
+        )
+        user_ids.update(str(row[0]) for row in cursor.fetchall() if row[0])
+
+    if _sqlite_table_exists(conn, PET_ITEM_TABLE):
+        item_columns = set(_sqlite_column_names(conn, PET_ITEM_TABLE))
+        if "user_id" in item_columns:
+            cursor = conn.execute(
+                f"""
+                SELECT DISTINCT {q("user_id")}
+                FROM {q(PET_ITEM_TABLE)}
+                WHERE {q("user_id")} IS NOT NULL AND CAST({q("user_id")} AS TEXT) <> ''
+                """
+            )
+            user_ids.update(str(row[0]) for row in cursor.fetchall() if row[0])
+
+    return user_ids
+
+
+def _sqlite_get_pet_meta(conn, user_id: str):
+    q = _sqlite_quote_ident
+    if not _sqlite_table_exists(conn, TABLE):
+        return None
+
+    cursor = conn.execute(
+        f"""
+        SELECT {', '.join(q(field) for field in ["user_id"] + PET_META_STORAGE_FIELDS)}
+        FROM {q(TABLE)}
+        WHERE {q("user_id")}=?
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def _sqlite_pet_doc_for_user(conn, user_id: str):
+    meta = _sqlite_get_pet_meta(conn, user_id) or {
+        "user_id": user_id,
+        **_default_pet_doc(),
+    }
+    if _sqlite_legacy_payload_exists(meta):
+        return _sqlite_row_to_legacy_doc(meta)
+
+    rows = _fetch_sqlite_pet_rows(conn, user_id)
+    return _doc_from_rows(meta, rows)
+
+
+def _active_pet_user_has_items(user_id: str):
+    _ensure_pet_storage()
+    q = player_data_manager._quote_ident
+    with player_data_manager._conn_lock:
+        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+            return False
+        cursor = player_data_manager._get_cursor()
+        cursor.execute(
+            f"""
+            SELECT 1
+            FROM {q(PET_ITEM_TABLE)}
+            WHERE {q("user_id")}=%s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone() is not None
+
+
+def _active_pet_meta_exists(user_id: str):
+    _ensure_pet_storage()
+    q = player_data_manager._quote_ident
+    with player_data_manager._conn_lock:
+        cursor = player_data_manager._get_cursor()
+        cursor.execute(
+            f"""
+            SELECT 1
+            FROM {q(TABLE)}
+            WHERE {q("user_id")}=%s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone() is not None
+
+
+def _pet_doc_has_pet(data: dict):
+    data = _normalize_pet_doc(data)
+    return bool(data.get("active") or data.get("bag"))
+
+
+def merge_missing_sqlite_pet_users(sqlite_path: str | Path | None = None):
+    sqlite_path = Path(sqlite_path) if sqlite_path else DATABASE / "player.db"
+    if not sqlite_path.exists():
+        return 0
+
+    import sqlite3
+
+    conn = sqlite3.connect(sqlite_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        has_pet_storage = _ensure_sqlite_pet_storage(conn)
+        if has_pet_storage:
+            conn.commit()
+        elif not _sqlite_table_exists(conn, PET_ITEM_TABLE):
+            return 0
+
+        merged = 0
+        for user_id in sorted(_sqlite_pet_user_ids(conn)):
+            if _active_pet_user_has_items(user_id):
+                continue
+
+            doc = _sqlite_pet_doc_for_user(conn, user_id)
+            if not _pet_doc_has_pet(doc) and _active_pet_meta_exists(user_id):
+                continue
+
+            save_pet_doc(user_id, doc)
+            merged += 1
+
+        return merged
+    finally:
+        conn.close()
+
+
+def migrate_local_sqlite_pet_storage(sqlite_path: str | Path | None = None):
+    sqlite_path = Path(sqlite_path) if sqlite_path else DATABASE / "player.db"
+    if not sqlite_path.exists():
+        return 0
+
+    import sqlite3
+
+    conn = sqlite3.connect(sqlite_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        if not _ensure_sqlite_pet_storage(conn):
+            conn.commit()
+            return 0
+
+        cursor = conn.execute(
+            f"""
+            SELECT {', '.join(_sqlite_quote_ident(field) for field in ["user_id"] + PET_META_STORAGE_FIELDS)}
+            FROM {_sqlite_quote_ident(TABLE)}
+            """
+        )
+        migrated = 0
+        migrated_users = set()
+        for row in cursor.fetchall():
+            record = dict(row)
+            user_id = record.get("user_id")
+            if not user_id or not _sqlite_legacy_payload_exists(record):
+                continue
+            _save_sqlite_pet_doc(conn, str(user_id), _sqlite_row_to_legacy_doc(record))
+            migrated += 1
+            migrated_users.add(str(user_id))
+
+        for user_id in _sqlite_item_users_with_legacy_payload(conn) - migrated_users:
+            meta = _sqlite_get_pet_meta(conn, user_id)
+            if not meta:
+                continue
+            rows = _fetch_sqlite_pet_rows(conn, user_id)
+            _save_sqlite_pet_doc(conn, user_id, _doc_from_rows(meta, rows))
+            migrated += 1
+
+        conn.commit()
+        return migrated
+    finally:
+        conn.close()
 
 
 def get_active_pet(user_id: str | int):

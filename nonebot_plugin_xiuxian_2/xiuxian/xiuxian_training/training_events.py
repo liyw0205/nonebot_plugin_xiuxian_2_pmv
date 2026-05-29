@@ -336,6 +336,42 @@ NOTHING_EVENTS = {
 class TrainingEvents:
     def __init__(self):
         self.event_style = None  # 当前事件风格
+
+    @staticmethod
+    def _get_major_level(level_name):
+        """获取大境界名，用于同境界角色池。"""
+        if not level_name:
+            return ""
+        for stage in ("初期", "中期", "圆满"):
+            if level_name.endswith(stage):
+                return level_name[:-len(stage)]
+        return level_name
+
+    def _get_realm_role(self, user_info):
+        """从当前大境界修为前十中随机取一名玩家作为事件角色。"""
+        if not user_info:
+            return None
+
+        level_name = self._get_major_level(user_info.get("level", ""))
+        if not level_name:
+            return None
+
+        users = sql_message.get_top_users_by_level(level_name, 10)
+        user_id = str(user_info.get("user_id", ""))
+        users = [user for user in users if str(user.get("user_id", "")) != user_id]
+        if not users:
+            return None
+        return random.choice(users)
+
+    def _format_event_message(self, desc_template, value=None, user_info=None):
+        """格式化历练事件文案，支持可选同境界玩家角色。"""
+        role = self._get_realm_role(user_info) if "{role_" in desc_template else None
+        role_name = role.get("user_name") if role else "神秘修士"
+        role_level = role.get("level") if role else self._get_major_level((user_info or {}).get("level", ""))
+
+        if value is None:
+            return desc_template.format(role_name=role_name, role_level=role_level)
+        return desc_template.format(value, role_name=role_name, role_level=role_level)
     
     def handle_event(self, user_id, user_info, event_type):
         """处理历练事件"""

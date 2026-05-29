@@ -1,5 +1,27 @@
 from .core import *  # noqa: F401,F403
 
+
+def _stats_count(sql, params=None):
+    result = execute_sql(DATABASE, sql, params)
+    if isinstance(result, dict):
+        logger.warning(f"首页统计查询失败: {result.get('error', result)} | SQL: {sql}")
+        return 0
+    if not result:
+        return 0
+
+    row = result[0]
+    if isinstance(row, dict):
+        if "c" in row:
+            return row["c"] or 0
+        if row:
+            return next(iter(row.values())) or 0
+
+    try:
+        return row[0] or 0
+    except Exception:
+        return 0
+
+
 @app.route('/get_stats')
 def get_stats():
     if 'admin_id' not in session:
@@ -7,26 +29,28 @@ def get_stats():
     
     try:
         # 1. 数据库统计信息
-        total_users_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM user_xiuxian")
-        total_users = total_users_result[0]['COUNT(*)'] if total_users_result else 0
+        total_users = _stats_count("SELECT COUNT(*) AS c FROM user_xiuxian")
         
-        total_sects_result = execute_sql(DATABASE, "SELECT COUNT(*) FROM sects WHERE sect_owner IS NOT NULL")
-        total_sects = total_sects_result[0]['COUNT(*)'] if total_sects_result else 0
+        total_sects = _stats_count("SELECT COUNT(*) AS c FROM sects WHERE sect_owner IS NOT NULL")
         
+        create_date = db_backend.date_expression("create_time")
         today = datetime.now().strftime('%Y-%m-%d')
-        active_users_result = execute_sql(DATABASE, 
-            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (today,))
-        active_users = active_users_result[0]['COUNT(DISTINCT user_id)'] if active_users_result else 0
+        active_users = _stats_count(
+            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
+            (today,),
+        )
         
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        yesterday_users_result = execute_sql(DATABASE, 
-            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?", (yesterday,))
-        yesterday_users = yesterday_users_result[0]['COUNT(DISTINCT user_id)'] if yesterday_users_result else 0
+        yesterday_users = _stats_count(
+            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
+            (yesterday,),
+        )
         
         seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
-        seven_days_avg_result = execute_sql(DATABASE, 
-            "SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) >= ?", (seven_days_ago,))
-        seven_days_avg = seven_days_avg_result[0]['COUNT(DISTINCT user_id)'] if seven_days_avg_result else 0
+        seven_days_avg = _stats_count(
+            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} >= %s",
+            (seven_days_ago,),
+        )
 
         # 2. 实时机器人 (Bot) 状态获取
         # 通过 NoneBot2 的 get_bots() 跨线程获取实例
@@ -71,8 +95,8 @@ def get_stats():
         })
         
     except Exception as e:
-        logger.error(f"统计信息获取失败: {e}")
-        return jsonify({"success": False, "error": str(e)})
+        logger.exception("统计信息获取失败")
+        return jsonify({"success": False, "error": str(e) or e.__class__.__name__})
 
 @app.route('/get_system_info_extended')
 def get_system_info_extended():
@@ -218,7 +242,7 @@ def search_users():
         return jsonify([])
     
     query = request.args.get('query', '')
-    sql = "SELECT user_id, user_name FROM user_xiuxian WHERE user_name LIKE ? LIMIT 10"
+    sql = "SELECT user_id, user_name FROM user_xiuxian WHERE user_name LIKE %s LIMIT 10"
     results = execute_sql(DATABASE, sql, (f"%{query}%",))
     
     return jsonify([{"id": r['user_id'], "name": r['user_name']} for r in results])

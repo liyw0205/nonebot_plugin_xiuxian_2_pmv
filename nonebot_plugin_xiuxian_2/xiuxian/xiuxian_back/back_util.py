@@ -123,14 +123,14 @@ def get_use_equipment_sql(user_id, goods_id):
 
         # 装备当前法器
         sql_list.append((
-            "UPDATE back SET update_time=?, action_time=?, state=1 WHERE user_id=? AND goods_id=?",
+            "UPDATE back SET update_time=%s, action_time=%s, state=1 WHERE user_id=%s AND goods_id=%s",
             (now_time, now_time, user_id, goods_id)
         ))
 
         # 卸下原法器
         if in_use_id != 0:
             sql_list.append((
-                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                "UPDATE back SET update_time=%s, action_time=%s, state=0 WHERE user_id=%s AND goods_id=%s",
                 (now_time, now_time, user_id, in_use_id)
             ))
 
@@ -140,14 +140,14 @@ def get_use_equipment_sql(user_id, goods_id):
 
         # 装备当前防具
         sql_list.append((
-            "UPDATE back SET update_time=?, action_time=?, state=1 WHERE user_id=? AND goods_id=?",
+            "UPDATE back SET update_time=%s, action_time=%s, state=1 WHERE user_id=%s AND goods_id=%s",
             (now_time, now_time, user_id, goods_id)
         ))
 
         # 卸下原防具
         if in_use_id != 0:
             sql_list.append((
-                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                "UPDATE back SET update_time=%s, action_time=%s, state=0 WHERE user_id=%s AND goods_id=%s",
                 (now_time, now_time, user_id, in_use_id)
             ))
 
@@ -182,14 +182,14 @@ def get_no_use_equipment_sql(user_id, goods_id):
     if goods_id == in_use_id or in_use_id != 0:
         # 卸载当前装备
         sql_list.append((
-            "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+            "UPDATE back SET update_time=%s, action_time=%s, state=0 WHERE user_id=%s AND goods_id=%s",
             (now_time, now_time, user_id, goods_id)
         ))
 
         # 如果还有其他装备需要卸载
         if in_use_id != 0 and goods_id != in_use_id:
             sql_list.append((
-                "UPDATE back SET update_time=?, action_time=?, state=0 WHERE user_id=? AND goods_id=?",
+                "UPDATE back SET update_time=%s, action_time=%s, state=0 WHERE user_id=%s AND goods_id=%s",
                 (now_time, now_time, user_id, in_use_id)
             ))
 

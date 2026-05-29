@@ -3,12 +3,55 @@ from urllib.parse import quote, urlparse
 
 from .core import *  # noqa: F401,F403
 from ..broadcast_manager import format_broadcast_status, start_broadcast
+from ..xiuxian_utils import message_db as message_db_config
+
+
+def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int:
+    try:
+        return min(maximum, max(minimum, int(data.get(key))))
+    except Exception:
+        raise ValueError(f"{key} 必须是 {minimum} 到 {maximum} 的整数")
 
 @app.route('/messages')
 def messages_page():
     if 'admin_id' not in session:
         return redirect(url_for('login'))
     return render_template('messages.html')
+
+@app.route('/api/messages/config', methods=['GET'])
+def api_messages_config():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    config = message_db_config.get_message_db_config()
+    return jsonify({
+        "success": True,
+        "config": config,
+        "record_enabled": message_db_config.is_message_record_enabled(),
+    })
+
+@app.route('/api/messages/config', methods=['POST'])
+def api_messages_config_save():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    try:
+        data = request.get_json(silent=True) or {}
+        config = {
+            "message_db_max_size_mb": _parse_message_config_int(data, "message_db_max_size_mb", 0, 10000),
+            "message_group_keep_days": _parse_message_config_int(data, "message_group_keep_days", 0, 36500),
+            "message_private_keep_days": _parse_message_config_int(data, "message_private_keep_days", 0, 36500),
+        }
+        config = message_db_config.update_message_db_config(config)
+        return jsonify({
+            "success": True,
+            "config": config,
+            "record_enabled": message_db_config.is_message_record_enabled(),
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"保存消息配置失败: {e}"})
 
 @app.route('/api/messages/list')
 def api_messages_list():
@@ -35,49 +78,49 @@ def api_messages_list():
         params = []
 
         if scene and scene != "ALL":
-            where.append("scene = ?")
+            where.append("scene = %s")
             params.append(scene)
 
         if direction and direction != "ALL":
-            where.append("direction = ?")
+            where.append("direction = %s")
             params.append(direction)
 
         if keyword:
             where.append("""
                 (
-                    content LIKE ?
-                    OR username LIKE ?
-                    OR nickname LIKE ?
-                    OR group_name LIKE ?
-                    OR group_id LIKE ?
-                    OR user_id LIKE ?
+                    content LIKE %s
+                    OR username LIKE %s
+                    OR nickname LIKE %s
+                    OR group_name LIKE %s
+                    OR group_id LIKE %s
+                    OR user_id LIKE %s
                 )
             """)
             kw = f"%{keyword}%"
             params.extend([kw, kw, kw, kw, kw, kw])
 
         if group_id:
-            where.append("group_id = ?")
+            where.append("group_id = %s")
             params.append(group_id)
 
         if user_id:
-            where.append("user_id = ?")
+            where.append("user_id = %s")
             params.append(user_id)
 
         if adapter:
-            where.append("adapter = ?")
+            where.append("adapter = %s")
             params.append(adapter)
 
         if start:
-            where.append("created_at >= ?")
+            where.append("created_at >= %s")
             params.append(start.replace("T", " "))
 
         if end:
-            where.append("created_at <= ?")
+            where.append("created_at <= %s")
             params.append(end.replace("T", " "))
         
         if date:
-            where.append("date(created_at) = ?")
+            where.append(f"{db_backend.date_expression('created_at')} = %s")
             params.append(date)
 
         where_sql = " WHERE " + " AND ".join(where) if where else ""
@@ -93,7 +136,7 @@ def api_messages_list():
             FROM messages
             {where_sql}
             ORDER BY created_at DESC, id DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
         """, params + [page_size, offset])
 
         rows = [dict(r) for r in cur.fetchall()]
@@ -164,28 +207,29 @@ def api_messages_dates():
         if not target_id:
             return jsonify({"success": False, "error": "缺少 target_id"})
 
-        where = ["scene = ?"]
+        where = ["scene = %s"]
         params = [scene]
 
         if adapter:
-            where.append("adapter = ?")
+            where.append("adapter = %s")
             params.append(adapter)
 
         if scene in ("group", "channel_group"):
-            where.append("group_id = ?")
+            where.append("group_id = %s")
             params.append(target_id)
         else:
-            where.append("user_id = ?")
+            where.append("user_id = %s")
             params.append(target_id)
 
         conn = get_message_db_connection()
         cur = conn.cursor()
 
+        created_at_date = db_backend.date_expression("created_at")
         cur.execute(f"""
-            SELECT date(created_at) AS d, COUNT(*) AS c
+            SELECT {created_at_date} AS d, COUNT(*) AS c
             FROM messages
             WHERE {' AND '.join(where)}
-            GROUP BY date(created_at)
+            GROUP BY {created_at_date}
             ORDER BY d DESC
             LIMIT 60
         """, params)
@@ -240,7 +284,7 @@ def api_messages_sessions():
         params = [scene]
 
         if adapter:
-            adapter_sql = " AND adapter = ? "
+            adapter_sql = " AND adapter = %s "
             params.append(adapter)
 
         if scene in ("group", "channel_group"):
@@ -252,7 +296,7 @@ def api_messages_sessions():
                         group_id AS target_id,
                         MAX(id) AS latest_id
                     FROM messages
-                    WHERE scene = ?
+                    WHERE scene = %s
                       AND group_id IS NOT NULL
                       AND group_id != ''
                       {adapter_sql}
@@ -293,7 +337,7 @@ def api_messages_sessions():
                         user_id AS target_id,
                         MAX(id) AS latest_id
                     FROM messages
-                    WHERE scene = ?
+                    WHERE scene = %s
                       AND user_id IS NOT NULL
                       AND user_id != ''
                       {adapter_sql}
@@ -388,22 +432,22 @@ def api_messages_list_since():
         if not target_id:
             return jsonify({"success": False, "error": "缺少 target_id"})
 
-        where = ["id > ?", "scene = ?"]
+        where = ["id > %s", "scene = %s"]
         params = [last_row_id, scene]
 
         if adapter:
-            where.append("adapter = ?")
+            where.append("adapter = %s")
             params.append(adapter)
 
         if date:
-            where.append("date(created_at) = ?")
+            where.append(f"{db_backend.date_expression('created_at')} = %s")
             params.append(date)
 
         if scene in ("group", "channel_group"):
-            where.append("group_id = ?")
+            where.append("group_id = %s")
             params.append(target_id)
         else:
-            where.append("user_id = ?")
+            where.append("user_id = %s")
             params.append(target_id)
 
         conn = get_message_db_connection()
@@ -1032,8 +1076,8 @@ def api_messages_revoke():
                 cur.execute(
                     """
                     UPDATE messages
-                    SET content = ?
-                    WHERE id = ?
+                    SET content = %s
+                    WHERE id = %s
                     """,
                     ("[该消息已撤回]", row_id),
                 )
@@ -1041,10 +1085,10 @@ def api_messages_revoke():
                 cur.execute(
                     """
                     UPDATE messages
-                    SET content = ?
-                    WHERE adapter = ?
-                      AND scene = ?
-                      AND message_id = ?
+                    SET content = %s
+                    WHERE adapter = %s
+                      AND scene = %s
+                      AND message_id = %s
                     """,
                     ("[该消息已撤回]", adapter, scene, message_id),
                 )
@@ -1679,7 +1723,7 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
                 """
                 SELECT username
                 FROM user_nicknames
-                WHERE user_id = ?
+                WHERE user_id = %s
                 LIMIT 1
                 """,
                 (uid,),
@@ -1696,12 +1740,12 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
             cur.execute("""
                 SELECT username, nickname
                 FROM messages
-                WHERE user_id = ?
+                WHERE user_id = %s
                   AND scene IN ('group', 'channel_group')
                   AND direction = 'recv'
                   AND (
-                    (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
-                    OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
+                    (username IS NOT NULL AND username != '' AND username != %s AND username != 'Bot')
+                    OR (nickname IS NOT NULL AND nickname != '' AND nickname != %s AND nickname != 'Bot')
                   )
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
@@ -1863,7 +1907,7 @@ def get_latest_human_name_by_user_id(conn, user_id: str) -> str:
         """
         SELECT username
         FROM user_nicknames
-        WHERE user_id = ?
+        WHERE user_id = %s
         LIMIT 1
         """,
         (str(user_id),),
@@ -1880,12 +1924,12 @@ def get_latest_human_name_by_user_id(conn, user_id: str) -> str:
             username,
             nickname
         FROM messages
-        WHERE user_id = ?
+        WHERE user_id = %s
           AND direction = 'recv'
           AND scene IN ('group', 'channel_group')
           AND (
-                (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
-             OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
+                (username IS NOT NULL AND username != '' AND username != %s AND username != 'Bot')
+             OR (nickname IS NOT NULL AND nickname != '' AND nickname != %s AND nickname != 'Bot')
           )
         ORDER BY created_at DESC, id DESC
         LIMIT 1
@@ -1902,12 +1946,12 @@ def get_latest_human_name_by_user_id(conn, user_id: str) -> str:
             username,
             nickname
         FROM messages
-        WHERE user_id = ?
+        WHERE user_id = %s
           AND direction = 'recv'
           AND scene IN ('private', 'channel_private')
           AND (
-                (username IS NOT NULL AND username != '' AND username != ? AND username != 'Bot')
-             OR (nickname IS NOT NULL AND nickname != '' AND nickname != ? AND nickname != 'Bot')
+                (username IS NOT NULL AND username != '' AND username != %s AND username != 'Bot')
+             OR (nickname IS NOT NULL AND nickname != '' AND nickname != %s AND nickname != 'Bot')
           )
         ORDER BY created_at DESC, id DESC
         LIMIT 1

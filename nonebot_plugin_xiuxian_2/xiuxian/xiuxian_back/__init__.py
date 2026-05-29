@@ -2010,7 +2010,7 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     1
                 )
                 sql_message.update_back_equipment(
-                    "UPDATE back SET state=1, goods_name=?, update_time=?, action_time=? WHERE user_id=? AND goods_id=?",
+                    "UPDATE back SET state=1, goods_name=%s, update_time=%s, action_time=%s WHERE user_id=%s AND goods_id=%s",
                     (item_info['name'], now_time, now_time, user_id, item_id)
                 )
                 equipment_problems.append(
@@ -2027,7 +2027,7 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
             if fixes:
                 sql_message.update_back_equipment(
-                    "UPDATE back SET state=1, goods_name=?, update_time=?, action_time=? WHERE user_id=? AND goods_id=?",
+                    "UPDATE back SET state=1, goods_name=%s, update_time=%s, action_time=%s WHERE user_id=%s AND goods_id=%s",
                     (item_info['name'], now_time, now_time, user_id, item_id)
                 )
                 equipment_problems.append(

@@ -68,6 +68,7 @@ level_help = on_command("灵根帮助", aliases={"灵根列表"}, priority=15, b
 level1_help = on_command("品阶帮助", aliases={"品阶列表"}, priority=15, block=True)
 level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, block=True)
 view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
+
 view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", "查数据", "数据记录", "统计信息"}, priority=5, block=True)
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 

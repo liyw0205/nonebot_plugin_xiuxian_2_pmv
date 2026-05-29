@@ -1,9 +1,21 @@
 from .core import *  # noqa: F401,F403
 
+def _maybe_migrate_pet_storage():
+    try:
+        from ..xiuxian_utils.pet_system import migrate_pet_storage_once
+
+        migrated = migrate_pet_storage_once()
+        if migrated:
+            logger.info(f"已迁移 player_pet 旧版大字段记录：{migrated} 条")
+    except Exception as e:
+        logger.warning(f"player_pet 存储迁移检查失败：{e}")
+
+
 @app.route('/database')
 def database():
     if 'admin_id' not in session:
         return redirect(url_for('login'))
+    _maybe_migrate_pet_storage()
     all_tables = get_tables()
     return render_template('database.html', tables=all_tables)
 
@@ -11,6 +23,8 @@ def database():
 def table_view(table_name):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
+    if table_name in ("player_pet", "player_pet_item"):
+        _maybe_migrate_pet_storage()
     
     # 获取所有表结构（按数据库分组）
     all_tables_grouped = get_tables()
@@ -71,6 +85,8 @@ def table_view(table_name):
 def row_edit(table_name, row_id):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
+    if table_name in ("player_pet", "player_pet_item"):
+        _maybe_migrate_pet_storage()
     
     # 获取所有表结构（按数据库分组）
     all_tables_grouped = get_tables()
@@ -163,8 +179,8 @@ def row_edit(table_name, row_id):
                         update_data[field] = value
             
             if update_data:
-                set_clause = ", ".join([f"{field} = ?" for field in update_data.keys()])
-                where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+                set_clause = ", ".join([f"{field} = %s" for field in update_data.keys()])
+                where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
                 sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_conditions}"
                 params = list(update_data.values()) + list(primary_conditions.values())
                 result = execute_sql(db_path, sql, params)
@@ -175,7 +191,7 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "更新成功"})
         
         elif action == 'delete':
-            where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+            where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
             sql = f"DELETE FROM {table_name} WHERE {where_conditions}"
             result = execute_sql(db_path, sql, list(primary_conditions.values()))
             
@@ -185,7 +201,7 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "删除成功"})
     
     # GET 请求，获取行数据
-    where_conditions = " AND ".join([f"{key} = ?" for key in primary_conditions.keys()])
+    where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
     sql = f"SELECT * FROM {table_name} WHERE {where_conditions}"
     row_data = execute_sql(db_path, sql, list(primary_conditions.values()))
     
@@ -226,6 +242,8 @@ def row_edit(table_name, row_id):
 def batch_edit(table_name):
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
+    if table_name in ("player_pet", "player_pet_item"):
+        _maybe_migrate_pet_storage()
 
     # 获取所有表结构（按数据库分组）
     all_tables_grouped = get_tables()
@@ -282,9 +300,7 @@ def batch_edit(table_name):
     # 验证表是否存在
     try:
         conn = get_db_connection(db_path)
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not cursor.fetchone():
+        if not conn.table_exists(table_name):
             conn.close()
             return jsonify({"success": False, "error": f"表不存在：{table_name}"})
         conn.close()
@@ -292,15 +308,17 @@ def batch_edit(table_name):
         return jsonify({"success": False, "error": f"检查表失败：{str(e)}"})
     
     try:
+        table_sql = sql_ident(table_name)
+        batch_field_sql = sql_ident(batch_field)
         # 构建更新语句
         if operation == "set":
-            sql = f"UPDATE {table_name} SET {batch_field} = ?"
+            sql = f"UPDATE {table_sql} SET {batch_field_sql} = %s"
             params = [value]
         elif operation == "add":
-            sql = f"UPDATE {table_name} SET {batch_field} = {batch_field} + ?"
+            sql = f"UPDATE {table_sql} SET {batch_field_sql} = {batch_field_sql} + %s"
             params = [value]
         elif operation == "subtract":
-            sql = f"UPDATE {table_name} SET {batch_field} = {batch_field} - ?"
+            sql = f"UPDATE {table_sql} SET {batch_field_sql} = {batch_field_sql} - %s"
             params = [value]
         else:
             return jsonify({"success": False, "error": "无效的操作类型"})
@@ -311,18 +329,18 @@ def batch_edit(table_name):
                 if search_condition == '=':
                     values = search_value.split()
                     if len(values) > 1:
-                        condition = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                        condition = " OR ".join([sql_like_text(search_field) for _ in values])
                         sql += f" WHERE ({condition})"
                         params.extend([f"%{v}%" for v in values])
                     else:
-                        sql += f" WHERE {search_field} LIKE ?"
+                        sql += f" WHERE {sql_like_text(search_field)}"
                         params.append(f"%{search_value}%")
                 elif search_condition in ('>', '<'):
                     values = search_value.split()
                     if len(values) == 1:
                         if not search_value.replace('.', '', 1).isdigit():
                             return jsonify({"success": False, "error": "搜索值必须是数值"})
-                        sql += f" WHERE {search_field} {search_condition} ?"
+                        sql += f" WHERE {sql_ident(search_field)} {search_condition} %s"
                         params.append(float(values[0]))
                     else:
                         if not values[0].replace('.', '', 1).isdigit():
@@ -333,10 +351,10 @@ def batch_edit(table_name):
                         primary_key = table_info.get('primary_key', 'user_id')
                         searchable_fields = [f for f in fields if f != primary_key]
                         if searchable_fields:
-                            sql += f" WHERE {search_field} {search_condition} ? AND ({' OR '.join([f'{field} LIKE ?' for field in searchable_fields])})"
+                            sql += f" WHERE {sql_ident(search_field)} {search_condition} %s AND ({' OR '.join([sql_like_text(field) for field in searchable_fields])})"
                             params.extend([float(values[0])] + [f"%{values[1]}%" for field in searchable_fields])
                         else:
-                            sql += f" WHERE {search_field} {search_condition} ?"
+                            sql += f" WHERE {sql_ident(search_field)} {search_condition} %s"
                             params.append(float(values[0]))
                 else:
                     return jsonify({"success": False, "error": "无效的搜索条件"})
@@ -349,7 +367,7 @@ def batch_edit(table_name):
                 if searchable_fields:
                     conditions = []
                     for field in searchable_fields:
-                        conditions.append(f"{field} LIKE ?")
+                        conditions.append(sql_like_text(field))
                         params.append(f"%{search_value}%")
                     sql += f" WHERE ({' OR '.join(conditions)})"
                 else:
@@ -370,4 +388,3 @@ def batch_edit(table_name):
         
     except Exception as e:
         return jsonify({"success": False, "error": f"执行错误：{str(e)}"})
-

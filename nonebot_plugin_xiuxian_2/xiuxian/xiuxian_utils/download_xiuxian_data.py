@@ -1005,7 +1005,14 @@ class UpdateManager:
             logger.info(f"开始更新到版本: {release_tag}")
 
             logger.info("创建自动插件备份...")
-            self.enhanced_backup_current_version()
+            plugin_backup_success, plugin_backup_result = self.enhanced_backup_current_version()
+            if not plugin_backup_success:
+                return False, f"插件备份失败: {plugin_backup_result}"
+
+            logger.info("创建自动数据库备份...")
+            db_backup_success, db_backup_result = self.backup_db_files()
+            if not db_backup_success:
+                return False, f"数据库备份失败: {db_backup_result}"
 
             logger.info("创建自动配置备份...")
             backup_success, backup_result = self.backup_all_configs()
@@ -1206,10 +1213,14 @@ class UpdateManager:
 
             temp_dir = Path(tempfile.mkdtemp())
             with zipfile.ZipFile(backup_path, 'r') as zipf:
+                names = set(zipf.namelist())
                 zipf.extractall(temp_dir)
 
             self._restore_files_from_backup(temp_dir)
             shutil.rmtree(temp_dir)
+
+            if any(name in names or f"data/xiuxian/{name}" in names for name in self._sqlite_db_names()):
+                self._compact_pet_storage_after_database_restore()
 
             version_match = re.search(r'backup_.*_(v?[\d.]+)\.zip', backup_filename)
             if version_match:
@@ -1229,45 +1240,41 @@ class UpdateManager:
     # =========================
     # 数据库备份/恢复 + 云端
     # =========================
-    def backup_db_files(self):
-        """备份数据库文件并压缩到 data/xiuxian/backups/db_backup/"""
+    def _compact_pet_storage_after_database_restore(self):
         try:
-            db_files = [
-                Path() / "data" / "xiuxian" / "xiuxian.db",
-                Path() / "data" / "xiuxian" / "xiuxian_impart.db",
-                Path() / "data" / "xiuxian" / "player.db",
-                Path() / "data" / "xiuxian" / "trade.db",
-            ]
+            from .pet_system import migrate_all_legacy_pet_docs, reset_pet_storage_state
 
+            reset_pet_storage_state()
+            migrated = migrate_all_legacy_pet_docs()
+            if migrated:
+                logger.info(f"数据库恢复后已整理宠物旧表数据：{migrated} 条")
+        except Exception as e:
+            logger.warning(f"数据库恢复后整理宠物旧表失败: {e}")
+
+    def _sqlite_db_names(self):
+        return ["xiuxian.db", "xiuxian_impart.db", "player.db", "trade.db"]
+
+    def backup_db_files(self):
+        """备份本地 SQLite 数据库到 data/xiuxian/backups/db_backup/"""
+        try:
             backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
             backup_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            temp_dir = backup_dir / f"temp_{timestamp}"
-            temp_dir.mkdir(exist_ok=True)
-
-            copied = []
-            for db in db_files:
-                if db.exists():
-                    target = temp_dir / db.name
-                    shutil.copy2(db, target)
-                    copied.append(db.name)
-                    logger.info(f"[DB备份] 复制成功: {db.name}")
-                else:
-                    logger.warning(f"[DB备份] 文件不存在，跳过: {db}")
-
-            if not copied:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                return False, "未找到可备份的数据库文件"
-
             zip_name = f"db_backup_{timestamp}.zip"
             zip_path = backup_dir / zip_name
 
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for f in temp_dir.iterdir():
-                    zf.write(f, f.name)
+            added = []
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for db_name in self._sqlite_db_names():
+                    db_path = Path() / "data" / "xiuxian" / db_name
+                    if db_path.exists():
+                        zf.write(db_path, db_name)
+                        added.append(db_name)
 
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            if not added:
+                zip_path.unlink(missing_ok=True)
+                return False, "未找到可备份的 SQLite 数据库文件"
 
             try:
                 cfg = XiuConfig()
@@ -1286,7 +1293,7 @@ class UpdateManager:
                 logger.warning(f"[DB云备份] 执行异常: {e}")
 
             self.clean_old_backups(backup_dir, keep_days=10)
-            return True, f"数据库备份完成: {zip_name}"
+            return True, f"数据库备份完成: {zip_name}，已备份: {', '.join(added)}"
         except Exception as e:
             return False, f"数据库备份失败: {e}"
 
@@ -1320,14 +1327,43 @@ class UpdateManager:
                     "filename": f.name,
                     "size": f.stat().st_size,
                     "created_at": datetime.fromtimestamp(f.stat().st_ctime).isoformat(),
-                    "path": str(f)
+                    "path": str(f),
+                    "type": "sqlite",
                 })
         backups.sort(key=lambda x: x["created_at"], reverse=True)
         return backups
 
+    def _normalize_selected_db_names(self, selected_dbs: list):
+        aliases = {
+            "xiuxian": "xiuxian.db",
+            "xiuxian.db": "xiuxian.db",
+            "xiuxian_impart": "xiuxian_impart.db",
+            "xiuxian_impart.db": "xiuxian_impart.db",
+            "player": "player.db",
+            "player.db": "player.db",
+            "trade": "trade.db",
+            "trade.db": "trade.db",
+        }
+        normalized = []
+        seen = set()
+        for db_name in selected_dbs or []:
+            safe_name = Path(str(db_name)).name
+            normalized_name = aliases.get(safe_name)
+            if not normalized_name:
+                continue
+            if normalized_name not in seen:
+                seen.add(normalized_name)
+                normalized.append(normalized_name)
+        return normalized
+
+    def _db_path_for_name(self, db_name: str):
+        safe_name = Path(str(db_name)).name
+        return Path() / "data" / "xiuxian" / safe_name
+
     def restore_db_files(self, backup_filename: str, selected_dbs: list):
         """从本地 db_backup zip 恢复指定数据库"""
         try:
+            selected_dbs = self._normalize_selected_db_names(selected_dbs)
             if not selected_dbs:
                 return False, "至少选择一个数据库进行恢复"
 
@@ -1335,26 +1371,33 @@ class UpdateManager:
             if not backup_path.exists():
                 return False, f"备份文件不存在: {backup_filename}"
 
-            db_dir = Path() / "data" / "xiuxian"
-            db_dir.mkdir(parents=True, exist_ok=True)
-
             with zipfile.ZipFile(backup_path, 'r') as zf:
                 names = set(zf.namelist())
                 restored = []
                 skipped = []
                 for db_name in selected_dbs:
-                    if db_name in names:
+                    member_name = None
+                    for candidate in (db_name, f"data/xiuxian/{db_name}"):
+                        if candidate in names:
+                            member_name = candidate
+                            break
+
+                    if member_name:
                         temp_dir = Path(tempfile.mkdtemp())
                         try:
-                            zf.extract(db_name, temp_dir)
-                            src = temp_dir / db_name
-                            dst = db_dir / db_name
+                            zf.extract(member_name, temp_dir)
+                            src = temp_dir / member_name
+                            dst = self._db_path_for_name(db_name)
+                            dst.parent.mkdir(parents=True, exist_ok=True)
                             shutil.copy2(src, dst)
                             restored.append(db_name)
                         finally:
                             shutil.rmtree(temp_dir, ignore_errors=True)
                     else:
                         skipped.append(db_name)
+
+            if restored:
+                self._compact_pet_storage_after_database_restore()
 
             msg = f"恢复完成，已恢复: {restored}"
             if skipped:

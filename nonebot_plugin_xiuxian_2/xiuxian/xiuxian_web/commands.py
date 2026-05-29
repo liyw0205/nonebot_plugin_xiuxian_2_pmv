@@ -1,6 +1,7 @@
 from .core import *  # noqa: F401,F403
 
 from .config import get_root_rate
+from ..xiuxian_utils import db_backend
 
 @app.route('/commands')
 def commands():
@@ -43,13 +44,13 @@ def execute_command():
         """)
         conn.commit()
 
-        cur.execute("SELECT equipped, bag FROM player_accessory WHERE user_id = ?", (str(user_id),))
+        cur.execute("SELECT equipped, bag FROM player_accessory WHERE user_id = %s", (str(user_id),))
         row = cur.fetchone()
         if row is None:
             equipped = {"手镯": None, "戒指": None, "手环": None, "项链": None}
             bag = []
             cur.execute(
-                "INSERT INTO player_accessory (user_id, equipped, bag) VALUES (?, ?, ?)",
+                "INSERT INTO player_accessory (user_id, equipped, bag) VALUES (%s, %s, %s)",
                 (str(user_id), _safe_json_dump(equipped), _safe_json_dump(bag))
             )
             conn.commit()
@@ -89,7 +90,7 @@ def execute_command():
         if not item_info:
             return False, 0, "饰品配置不存在"
 
-        conn = sqlite3.connect(PLAYER_DB)
+        conn = db_backend.connect(PLAYER_DB)
         try:
             equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
 
@@ -108,7 +109,7 @@ def execute_command():
 
             cur = conn.cursor()
             cur.execute(
-                "UPDATE player_accessory SET equipped = ?, bag = ? WHERE user_id = ?",
+                "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
                 (_safe_json_dump(equipped), _safe_json_dump(bag), str(user_id))
             )
             conn.commit()
@@ -121,7 +122,7 @@ def execute_command():
     def _remove_accessory_sql(user_id: str, item_id: int, amount: int):
         # 只从bag扣除，不动equipped
         amount = max(1, int(amount))
-        conn = sqlite3.connect(PLAYER_DB)
+        conn = db_backend.connect(PLAYER_DB)
         try:
             equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
 
@@ -141,7 +142,7 @@ def execute_command():
 
             cur = conn.cursor()
             cur.execute(
-                "UPDATE player_accessory SET equipped = ?, bag = ? WHERE user_id = ?",
+                "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
                 (_safe_json_dump(equipped), _safe_json_dump(kept), str(user_id))
             )
             conn.commit()
@@ -162,7 +163,7 @@ def execute_command():
                 if not user_info:
                     return jsonify({"success": False, "error": f"用户 {username} 不存在"})
                 
-                sql = "UPDATE user_xiuxian SET stone = stone + ? WHERE user_id = ?"
+                sql = "UPDATE user_xiuxian SET stone = stone + %s WHERE user_id = %s"
                 execute_sql(DATABASE, sql, (amount, user_info['user_id']))
                 
                 return jsonify({
@@ -170,7 +171,7 @@ def execute_command():
                     "message": f"成功向 {username} {'增加' if amount >= 0 else '减少'} {abs(amount)} 灵石"
                 })
             else:
-                sql = "UPDATE user_xiuxian SET stone = stone + ?"
+                sql = "UPDATE user_xiuxian SET stone = stone + %s"
                 execute_sql(DATABASE, sql, (amount,))
                 return jsonify({
                     "success": True, 
@@ -188,18 +189,18 @@ def execute_command():
                     return jsonify({"success": False, "error": f"用户 {username} 不存在"})
                 
                 if amount > 0:
-                    sql = "UPDATE user_xiuxian SET exp = exp + ? WHERE user_id = ?"
+                    sql = "UPDATE user_xiuxian SET exp = exp + %s WHERE user_id = %s"
                     execute_sql(DATABASE, sql, (amount, user_info['user_id']))
                     return jsonify({"success": True, "message": f"成功向 {username} 增加 {amount} 修为"})
                 else:
-                    sql = "UPDATE user_xiuxian SET exp = exp - ? WHERE user_id = ?"
+                    sql = "UPDATE user_xiuxian SET exp = exp - %s WHERE user_id = %s"
                     execute_sql(DATABASE, sql, (abs(amount), user_info['user_id']))
                     return jsonify({"success": True, "message": f"成功从 {username} 减少 {abs(amount)} 修为"})
             else:
                 if amount > 0:
-                    sql = "UPDATE user_xiuxian SET exp = exp + ?"
+                    sql = "UPDATE user_xiuxian SET exp = exp + %s"
                 else:
-                    sql = "UPDATE user_xiuxian SET exp = exp - ?"
+                    sql = "UPDATE user_xiuxian SET exp = exp - %s"
                 execute_sql(DATABASE, sql, (abs(amount),))
                 return jsonify({
                     "success": True, 
@@ -226,10 +227,10 @@ def execute_command():
             root_name = root_names.get(root_type, "未知灵根")
             root_type_name = ROOTS.get(root_type, "混沌灵根")
             
-            sql = "UPDATE user_xiuxian SET root = ?, root_type = ? WHERE user_id = ?"
+            sql = "UPDATE user_xiuxian SET root = %s, root_type = %s WHERE user_id = %s"
             execute_sql(DATABASE, sql, (root_name, root_type_name, user_info['user_id']))
             
-            sql_power = "UPDATE user_xiuxian SET power = round(exp * ? * (SELECT spend FROM level_data WHERE level = user_xiuxian.level), 0) WHERE user_id = ?"
+            sql_power = "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = user_xiuxian.level), 0) WHERE user_id = %s"
             root_rate = get_root_rate(root_type_name, user_info['user_id'])
             execute_sql(DATABASE, sql_power, (root_rate, user_info['user_id']))
             
@@ -255,13 +256,13 @@ def execute_command():
                 return jsonify({"success": False, "error": f"无法获取境界 {level} 的数据"})
             
             max_exp = int(level_data[level]['power'])
-            sql = "UPDATE user_xiuxian SET exp = ?, level = ? WHERE user_id = ?"
+            sql = "UPDATE user_xiuxian SET exp = %s, level = %s WHERE user_id = %s"
             execute_sql(DATABASE, sql, (max_exp, level, user_info['user_id']))
             
-            sql_hp = "UPDATE user_xiuxian SET hp = exp / 2, mp = exp, atk = exp / 10 WHERE user_id = ?"
+            sql_hp = "UPDATE user_xiuxian SET hp = exp / 2, mp = exp, atk = exp / 10 WHERE user_id = %s"
             execute_sql(DATABASE, sql_hp, (user_info['user_id'],))
             
-            sql_power = "UPDATE user_xiuxian SET power = round(exp * ? * (SELECT spend FROM level_data WHERE level = ?), 0) WHERE user_id = ?"
+            sql_power = "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = %s), 0) WHERE user_id = %s"
             root_rate = get_root_rate(user_info['root_type'], user_info['user_id'])
             execute_sql(DATABASE, sql_power, (root_rate, level, user_info['user_id']))
             
@@ -308,16 +309,16 @@ def execute_command():
                     })
                 else:
                     now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-                    sql_check = "SELECT * FROM back WHERE user_id = ? AND goods_id = ?"
+                    sql_check = "SELECT * FROM back WHERE user_id = %s AND goods_id = %s"
                     existing_item = execute_sql(DATABASE, sql_check, (user_id, goods_id))
 
                     if existing_item:
-                        sql_update = "UPDATE back SET goods_num = goods_num + ?, update_time = ? WHERE user_id = ? AND goods_id = ?"
+                        sql_update = "UPDATE back SET goods_num = goods_num + %s, update_time = %s WHERE user_id = %s AND goods_id = %s"
                         execute_sql(DATABASE, sql_update, (amount, now_time, user_id, goods_id))
                     else:
                         sql_insert = """
                             INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
                         """
                         execute_sql(DATABASE, sql_insert, (user_id, goods_id, goods_name, goods_type, amount, now_time, now_time))
 
@@ -336,16 +337,16 @@ def execute_command():
                             if ok and grant_num > 0:
                                 success_count += 1
                         else:
-                            sql_check = "SELECT * FROM back WHERE user_id = ? AND goods_id = ?"
+                            sql_check = "SELECT * FROM back WHERE user_id = %s AND goods_id = %s"
                             existing_item = execute_sql(DATABASE, sql_check, (user_id, goods_id))
 
                             if existing_item:
-                                sql_update = "UPDATE back SET goods_num = goods_num + ?, update_time = ? WHERE user_id = ? AND goods_id = ?"
+                                sql_update = "UPDATE back SET goods_num = goods_num + %s, update_time = %s WHERE user_id = %s AND goods_id = %s"
                                 execute_sql(DATABASE, sql_update, (amount, now_time, user_id, goods_id))
                             else:
                                 sql_insert = """
                                     INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
                                 """
                                 execute_sql(DATABASE, sql_insert, (user_id, goods_id, goods_name, goods_type, amount, now_time, now_time))
                             success_count += 1
@@ -398,7 +399,7 @@ def execute_command():
                         msg += "（数量不足，已按实际可扣执行）"
                     return jsonify({"success": True, "message": msg})
                 else:
-                    sql_check = "SELECT goods_num FROM back WHERE user_id = ? AND goods_id = ?"
+                    sql_check = "SELECT goods_num FROM back WHERE user_id = %s AND goods_id = %s"
                     user_item = execute_sql(DATABASE, sql_check, (user_id, goods_id))
 
                     if not user_item or int(user_item[0]['goods_num']) <= 0:
@@ -407,10 +408,10 @@ def execute_command():
                     current_num = int(user_item[0]['goods_num'])
                     deduct = min(amount, current_num)
 
-                    sql_update = "UPDATE back SET goods_num = goods_num - ? WHERE user_id = ? AND goods_id = ?"
+                    sql_update = "UPDATE back SET goods_num = goods_num - %s WHERE user_id = %s AND goods_id = %s"
                     execute_sql(DATABASE, sql_update, (deduct, user_id, goods_id))
 
-                    sql_clean = "DELETE FROM back WHERE user_id = ? AND goods_id = ? AND goods_num <= 0"
+                    sql_clean = "DELETE FROM back WHERE user_id = %s AND goods_id = %s AND goods_num <= 0"
                     execute_sql(DATABASE, sql_clean, (user_id, goods_id))
 
                     msg = f"成功从 {username} 扣除 {goods_name} x{deduct}"
@@ -432,16 +433,16 @@ def execute_command():
                                 success_count += 1
                                 total_removed += removed
                         else:
-                            sql_check = "SELECT goods_num FROM back WHERE user_id = ? AND goods_id = ?"
+                            sql_check = "SELECT goods_num FROM back WHERE user_id = %s AND goods_id = %s"
                             user_item = execute_sql(DATABASE, sql_check, (user_id, goods_id))
                             if user_item and int(user_item[0]['goods_num']) > 0:
                                 current_num = int(user_item[0]['goods_num'])
                                 deduct = min(amount, current_num)
 
-                                sql_update = "UPDATE back SET goods_num = goods_num - ? WHERE user_id = ? AND goods_id = ?"
+                                sql_update = "UPDATE back SET goods_num = goods_num - %s WHERE user_id = %s AND goods_id = %s"
                                 execute_sql(DATABASE, sql_update, (deduct, user_id, goods_id))
 
-                                sql_clean = "DELETE FROM back WHERE user_id = ? AND goods_id = ? AND goods_num <= 0"
+                                sql_clean = "DELETE FROM back WHERE user_id = %s AND goods_id = %s AND goods_num <= 0"
                                 execute_sql(DATABASE, sql_clean, (user_id, goods_id))
 
                                 success_count += 1
@@ -470,14 +471,14 @@ def execute_command():
                 if not user_info:
                     return jsonify({"success": False, "error": f"用户 {username} 不存在"})
                 
-                sql_check = "SELECT * FROM xiuxian_impart WHERE user_id = ?"
+                sql_check = "SELECT * FROM xiuxian_impart WHERE user_id = %s"
                 impart_data = execute_sql(IMPART_DB, sql_check, (user_info['user_id'],))
                 
                 if impart_data:
-                    sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + ? WHERE user_id = ?"
+                    sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + %s WHERE user_id = %s"
                     execute_sql(IMPART_DB, sql_update, (amount, user_info['user_id']))
                 else:
-                    sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (?, ?)"
+                    sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (%s, %s)"
                     execute_sql(IMPART_DB, sql_insert, (user_info['user_id'], amount))
                 
                 return jsonify({
@@ -492,14 +493,14 @@ def execute_command():
                 for user in all_users:
                     try:
                         user_id = user['user_id']
-                        sql_check = "SELECT * FROM xiuxian_impart WHERE user_id = ?"
+                        sql_check = "SELECT * FROM xiuxian_impart WHERE user_id = %s"
                         impart_data = execute_sql(IMPART_DB, sql_check, (user_id,))
                         
                         if impart_data:
-                            sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + ? WHERE user_id = ?"
+                            sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + %s WHERE user_id = %s"
                             execute_sql(IMPART_DB, sql_update, (amount, user_id))
                         else:
-                            sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (?, ?)"
+                            sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (%s, %s)"
                             execute_sql(IMPART_DB, sql_insert, (user_id, amount))
                         
                         success_count += 1
@@ -518,4 +519,3 @@ def execute_command():
         return jsonify({"success": False, "error": f"参数格式错误: {str(e)}"})
     except Exception as e:
         return jsonify({"success": False, "error": f"执行错误: {str(e)}"})
-

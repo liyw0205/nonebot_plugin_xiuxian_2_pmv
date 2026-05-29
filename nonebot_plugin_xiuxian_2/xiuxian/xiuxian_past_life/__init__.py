@@ -184,23 +184,33 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info["user_id"]
     state = past_life_limit.get_user_state(user_id)
 
-    endings_log = state.get("endings_log", [])
-    if not isinstance(endings_log, list):
-        endings_log = []
+    endings_log = past_life_limit.normalize_endings_log(state.get("endings_log", []))
 
     if not endings_log:
         msg = "道友尚未经历任何前世，发送【投胎】开始你的第一段前尘往事吧！"
         await handle_send(bot, event, msg, md_type="前尘", k1="投胎", v1="投胎", k2="往事", v2="前尘往事", k3="帮助", v3="前尘帮助")
         await past_memory_cmd.finish()
 
+    try:
+        total_runs = int(state.get("total_runs", 0))
+    except (TypeError, ValueError):
+        total_runs = len(endings_log)
+    fallback_start = max(total_runs - len(endings_log) + 1, 1)
+
     msg = "═══  前尘回忆录  ═════\n"
-    for i, log in enumerate(endings_log[:10], 1):
-        msg += f"\n第{i}世 | {log.get('time', '未知')}\n"
+    for i, log in enumerate(endings_log):
+        try:
+            run_number = int(log.get("run_number", 0))
+        except (TypeError, ValueError):
+            run_number = 0
+        if run_number <= 0:
+            run_number = fallback_start + i
+        msg += f"\n第{run_number}世 | {log.get('time', '未知')}\n"
         msg += f"结局：【{log.get('name', '未知')}】 评分：{log.get('score', 0)}分\n"
         msg += f"─────────────\n"
 
     msg += (
-        f"\n累计前世：{state.get('total_runs', 0)}次\n"
+        f"\n累计前世：{total_runs}次\n"
         f"最佳结局：{state.get('best_ending', '无')}（{state.get('best_score', 0)}分）\n"
         f"═════════════"
     )

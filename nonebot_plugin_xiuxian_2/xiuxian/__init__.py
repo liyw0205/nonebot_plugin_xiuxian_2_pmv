@@ -22,6 +22,7 @@ from pkgutil import iter_modules
 from nonebot.log import logger
 from nonebot import require, load_all_plugins, get_plugin_by_module_name
 from .xiuxian_utils.config import config as _config
+from .xiuxian_utils import db_backend
 from .broadcast_manager import auto_patch_broadcast_for_event
 
 DRIVER = get_driver()
@@ -38,6 +39,32 @@ try:
 except Exception as e:
     logger.opt(colors=True).info(f"<red>下载配置文件失败，修仙插件无法加载，{e}!</red>")
     raise ImportError
+
+try:
+    db_backend.initialize_backend()
+except Exception as e:
+    logger.opt(colors=True).error(f"<red>数据库后端初始化失败，修仙插件无法加载，{e}!</red>")
+    raise
+
+
+def _run_startup_database_maintenance():
+    """启动时整理本地 SQLite 结构。"""
+    if not db_backend.is_backend_initialized():
+        logger.warning("SQLite 后端未初始化，跳过启动数据库维护。")
+        return
+
+    try:
+        from .xiuxian_utils.pet_system import migrate_pet_storage_once
+
+        migrated = migrate_pet_storage_once()
+        if migrated:
+            logger.info(f"宠物数据库自动整理完成：{migrated} 条")
+    except Exception as e:
+        logger.warning(f"宠物数据库自动整理失败：{e}")
+
+
+_run_startup_database_maintenance()
+
 
 put_bot = XiuConfig().put_bot
 shield_group = XiuConfig().shield_group

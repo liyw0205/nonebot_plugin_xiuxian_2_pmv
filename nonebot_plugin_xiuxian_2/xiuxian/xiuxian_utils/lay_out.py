@@ -1,4 +1,5 @@
 import random
+import time
 from nonebot.log import logger
 from nonebot.rule import Rule
 from nonebot import get_driver
@@ -39,10 +40,22 @@ def limit_all_message_():
     limit_all_data  = {}
     logger.opt(colors=True).success(f"<green>已重置消息字典！</green>")
 
-@limit_all_stamina.scheduled_job('interval', minutes=1)
+@limit_all_stamina.scheduled_job('interval', minutes=1, max_instances=1, coalesce=True, misfire_grace_time=30)
 def limit_all_stamina_():
     # 恢复体力
-    sql_message.update_all_users_stamina(XiuConfig().max_stamina, XiuConfig().stamina_recovery_points)
+    started_at = time.monotonic()
+    try:
+        updated = sql_message.update_all_users_stamina(
+            XiuConfig().max_stamina,
+            XiuConfig().stamina_recovery_points,
+        )
+    except Exception as e:
+        logger.opt(exception=e).warning("体力恢复定时任务执行失败，已回滚本轮恢复")
+        return
+
+    elapsed = time.monotonic() - started_at
+    if elapsed >= 10:
+        logger.warning(f"体力恢复定时任务耗时过长：{elapsed:.2f}s，更新用户数：{updated}")
 
 def limit_all_run(user_id: str):
     global limit_all_data

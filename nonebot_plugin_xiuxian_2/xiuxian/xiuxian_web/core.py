@@ -1,4 +1,3 @@
-import sqlite3
 import os
 import asyncio
 import json
@@ -40,15 +39,15 @@ from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
 from ..adapter_compat import (
     MessageSegment,
-    init_message_db,
-    get_message_db_path,
     extract_result_message_id,
     get_bot_id,
     record_web_send_message,
     delete_message_compat,
 )
+from ..xiuxian_utils.message_db import connect_message_db
 from typing import Any
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
@@ -63,8 +62,8 @@ def format_time(seconds: float) -> str:
     return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
 
 def execute_sql(db_path, sql, params=None):
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = db_backend.connect(db_path)
+    conn.row_factory = db_backend.Row
     cursor = conn.cursor()
     try:
         if params: cursor.execute(sql, params)
@@ -75,6 +74,14 @@ def execute_sql(db_path, sql, params=None):
         return {"affected_rows": cursor.rowcount}
     except Exception as e: return {"error": str(e)}
     finally: conn.close()
+
+
+def sql_ident(name):
+    return db_backend.quote_ident(str(name))
+
+
+def sql_like_text(field):
+    return f"CAST({sql_ident(field)} AS TEXT) LIKE %s"
 
 # --- Psutil 处理 ---
 psutil_available = False
@@ -96,7 +103,6 @@ DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
 IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
 PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db"
 TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db"
-MESSAGE_DB = get_message_db_path()
 ADMIN_IDS = get_driver().config.superusers
 PORT = XiuConfig().web_port
 HOST = XiuConfig().web_host
@@ -328,23 +334,18 @@ def get_dynamic_player_tables():
     """动态获取 player.db 中所有存在的表及其字段信息"""
     # 路径使用常量
     player_db_path = PLAYER_DB
-    if not player_db_path.exists():
+    if not db_backend.database_exists(player_db_path):
         return {}
 
     conn = None
     try:
-        conn = sqlite3.connect(player_db_path)
-        cursor = conn.cursor()
-
-        # 获取所有表名
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        table_names = [row[0] for row in cursor.fetchall()]
+        conn = db_backend.connect(player_db_path)
+        table_names = conn.list_tables()
 
         result = {}
         for table_name in table_names:
             # 获取字段列表
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            fields_info = cursor.fetchall()
+            fields_info = conn.table_info(table_name)
             fields = [row[1] for row in fields_info]
 
             # 尝试找出主键
@@ -376,23 +377,18 @@ def get_dynamic_trade_tables():
     """动态获取 trade.db 中所有存在的表及其字段信息"""
     # 路径使用常量
     trade_db_path = TRADE_DB
-    if not trade_db_path.exists():
+    if not db_backend.database_exists(trade_db_path):
         return {}
 
     conn = None
     try:
-        conn = sqlite3.connect(trade_db_path)
-        cursor = conn.cursor()
-
-        # 获取所有表名
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        table_names = [row[0] for row in cursor.fetchall()]
+        conn = db_backend.connect(trade_db_path)
+        table_names = conn.list_tables()
 
         result = {}
         for table_name in table_names:
             # 获取字段列表
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            fields_info = cursor.fetchall()
+            fields_info = conn.table_info(table_name)
             fields = [row[1] for row in fields_info]
 
             # 尝试找出主键
@@ -458,7 +454,7 @@ def get_config_table_structure(config):
     }
     
     # Buff信息表
-    tables["BuffInfo"] = {
+    tables["buffinfo"] = {
         "name": "Buff信息",
         "fields": config.sql_buff,
         "primary_key": "id"
@@ -494,20 +490,15 @@ def get_tables():
 def get_database_tables(db_path):
     """动态获取数据库中的所有表及其字段信息，包括主键（备用函数）"""
     tables = {}
-    if not Path(db_path).exists(): # 添加文件存在性检查
+    if not db_backend.database_exists(db_path): # 添加文件存在性检查
         return {}
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row # 使用行工厂，使结果可按列名访问
-    cursor = conn.cursor()
-    
-    # 获取所有用户表
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    table_names = [row[0] for row in cursor.fetchall()]
+    conn = db_backend.connect(db_path)
+    conn.row_factory = db_backend.Row # 使用行工厂，使结果可按列名访问
+    table_names = conn.list_tables()
     
     for table_name in table_names:
         # 获取表的字段信息
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        fields_info = cursor.fetchall()
+        fields_info = conn.table_info(table_name)
         fields = [row[1] for row in fields_info]
         
         # 查找主键字段
@@ -528,8 +519,8 @@ def get_database_tables(db_path):
 
 def get_db_connection(db_path):
     """获取数据库连接"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = db_backend.connect(db_path)
+    conn.row_factory = db_backend.Row
     return conn
 
 def execute_sql(db_path, sql, params=None):
@@ -558,10 +549,7 @@ def execute_sql(db_path, sql, params=None):
 
 def get_message_db_connection():
     """获取 message.db 连接"""
-    init_message_db()
-    conn = sqlite3.connect(MESSAGE_DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_message_db(row_factory=True)
 
 def get_cached_username_by_user_id(user_id: str) -> str:
     """
@@ -577,7 +565,7 @@ def get_cached_username_by_user_id(user_id: str) -> str:
             """
             SELECT username
             FROM user_nicknames
-            WHERE user_id = ?
+            WHERE user_id = %s
             LIMIT 1
             """,
             (str(user_id),),
@@ -676,14 +664,14 @@ def get_latest_reply_candidates_for_qq(scene: str, target_id: str, limit: int = 
                 FROM messages
                 WHERE adapter = 'QQ'
                   AND direction = 'recv'
-                  AND scene = ?
-                  AND group_id = ?
+                  AND scene = %s
+                  AND group_id = %s
                   AND message_id IS NOT NULL
                   AND message_id != ''
-                  AND created_at >= ?
+                  AND created_at >= %s
                   AND COALESCE(reply_used_count, 0) < 5
                 ORDER BY created_at DESC, id DESC
-                LIMIT ?
+                LIMIT %s
             """, (scene, str(target_id), since, limit))
 
         elif scene in ("private", "channel_private"):
@@ -692,14 +680,14 @@ def get_latest_reply_candidates_for_qq(scene: str, target_id: str, limit: int = 
                 FROM messages
                 WHERE adapter = 'QQ'
                   AND direction = 'recv'
-                  AND scene = ?
-                  AND user_id = ?
+                  AND scene = %s
+                  AND user_id = %s
                   AND message_id IS NOT NULL
                   AND message_id != ''
-                  AND created_at >= ?
+                  AND created_at >= %s
                   AND COALESCE(reply_used_count, 0) < 5
                 ORDER BY created_at DESC, id DESC
-                LIMIT ?
+                LIMIT %s
             """, (scene, str(target_id), since, limit))
 
         else:
@@ -738,9 +726,9 @@ def get_specific_reply_candidate_for_qq(
                 FROM messages
                 WHERE adapter = 'QQ'
                   AND direction = 'recv'
-                  AND scene = ?
-                  AND group_id = ?
-                  AND message_id = ?
+                  AND scene = %s
+                  AND group_id = %s
+                  AND message_id = %s
                   AND COALESCE(reply_used_count, 0) < 5
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
@@ -752,9 +740,9 @@ def get_specific_reply_candidate_for_qq(
                 FROM messages
                 WHERE adapter = 'QQ'
                   AND direction = 'recv'
-                  AND scene = ?
-                  AND user_id = ?
-                  AND message_id = ?
+                  AND scene = %s
+                  AND user_id = %s
+                  AND message_id = %s
                   AND COALESCE(reply_used_count, 0) < 5
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
@@ -794,8 +782,8 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         return {"error": "表中没有字段", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
 
     # 构建基础 SELECT 语句，包含所有字段和 COUNT(*) OVER() 作为总数
-    select_fields = ', '.join(fields)
-    sql = f"SELECT *, COUNT(*) OVER() AS total_count FROM {table_name}"
+    table_sql = sql_ident(table_name)
+    sql = f"SELECT *, COUNT(*) OVER() AS total_count FROM {table_sql}"
 
     params = []
 
@@ -806,11 +794,11 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
             # 处理多关键词搜索
             values = search_value.split()
             if len(values) > 1:
-                placeholders = " OR ".join([f"{search_field} LIKE ?" for _ in values])
+                placeholders = " OR ".join([sql_like_text(search_field) for _ in values])
                 where_clauses.append(f"({placeholders})")
                 params.extend([f"%{value}%" for value in values])
             else:
-                where_clauses.append(f"{search_field} LIKE ?")
+                where_clauses.append(sql_like_text(search_field))
                 params.append(f"%{search_value}%")
         elif search_condition in ('>', '<'):
             # 数值大于或小于搜索
@@ -821,7 +809,7 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
                 # 单个值，保持原样的匹配
                 if not search_value.replace('.', '', 1).isdigit():
                     return {"error": "搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
-                where_clauses.append(f"{search_field} {search_condition} ?")
+                where_clauses.append(f"{sql_ident(search_field)} {search_condition} %s")
                 params.append(float(values[0]))
             else:
                 # 两个值，第一个用于比较，第二个用于全字段搜索
@@ -829,8 +817,8 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
                     return {"error": "第一个搜索值必须是数值", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
                 if not values[1]:
                     return {"error": "第二个搜索值不能为空", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
-                where_clauses.append(f"{search_field} {search_condition} ?")
-                where_clauses.append(f"({' OR '.join([f'{field} LIKE ?' for field in fields if field != primary_key])})")
+                where_clauses.append(f"{sql_ident(search_field)} {search_condition} %s")
+                where_clauses.append(f"({' OR '.join([sql_like_text(field) for field in fields if field != primary_key])})")
                 params.extend([float(values[0])] + [f"%{values[1]}%" for field in fields if field != primary_key])
         else:
             return {"error": "无效的搜索条件", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
@@ -841,7 +829,7 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         if searchable_fields:
             conditions = []
             for field in searchable_fields:
-                conditions.append(f"{field} LIKE ?")
+                conditions.append(sql_like_text(field))
                 params.append(f"%{search_value}%")
             if conditions:
                 where_clauses.append(f"({' OR '.join(conditions)})")
@@ -854,7 +842,7 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         sql += " WHERE " + " AND ".join(where_clauses)
 
     # 添加分页
-    sql += f" LIMIT ? OFFSET ?"
+    sql += f" LIMIT %s OFFSET %s"
     params.extend([per_page, offset])
 
     # 执行查询
@@ -903,7 +891,7 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
 
 def get_user_by_name(username):
     """根据道号获取用户信息（使用execute_sql）"""
-    sql = "SELECT * FROM user_xiuxian WHERE user_name = ?"
+    sql = "SELECT * FROM user_xiuxian WHERE user_name = %s"
     result = execute_sql(DATABASE, sql, (username,))
     if result and len(result) > 0:
         return result[0]
@@ -911,7 +899,7 @@ def get_user_by_name(username):
 
 def get_user_by_id(user_id):
     """根据ID获取用户信息（使用execute_sql）"""
-    sql = "SELECT * FROM user_xiuxian WHERE user_id = ?"
+    sql = "SELECT * FROM user_xiuxian WHERE user_id = %s"
     result = execute_sql(DATABASE, sql, (user_id,))
     if result and len(result) > 0:
         return result[0]

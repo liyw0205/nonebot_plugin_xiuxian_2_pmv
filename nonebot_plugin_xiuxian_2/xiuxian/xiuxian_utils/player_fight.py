@@ -63,6 +63,7 @@ PET_ACTIVE_TRIGGER_RULES = {
     PET_SKILL_PROTECT: (0.32, 0.08, 0.58),
 }
 PET_EXCLUSIVE_TRIGGER_BONUS = 0.05
+PET_PROTECT_TRIGGER_LIMIT = 3
 
 
 async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None):
@@ -833,6 +834,7 @@ class Entity:
             "guard_round": 0,
             "control_rescue_round": 0,
             "resonance_round": 0,
+            "protect_trigger_count": 0,
         }
         self.pet_stats = {
             "trigger": 0,
@@ -1023,7 +1025,7 @@ class Entity:
         else:
             raise ValueError("op 必须是 1(加) 或 2(减)")
 
-        current = min(current, max_value)
+        current = max(0, min(current, max_value))
         setattr(self, stat, current)
 
     def pay_cost(self, hp_cost, mp_cost, deduct=False):
@@ -1062,7 +1064,7 @@ class Entity:
                 extra.append(f"无敌 {self.invincible_count}")
         suffix = f" | {' | '.join(extra)}" if extra else ""
 
-        return f"{self.name}剩余血量{number_to(int(current_data))}\n{stat.upper()} {bar} {int(ratio * 100)}%{suffix}"
+        return f"{self.name}剩余血量{number_to(int(current))}\n{stat.upper()} {bar} {int(ratio * 100)}%{suffix}"
 
     @property
     def is_alive(self):
@@ -1231,10 +1233,12 @@ class BattleSystem:
         self.max_rounds = 30
 
     def add_message(self, unit, message):
+        display_hp = max(0, int(unit.hp))
+        display_max_hp = max(0, int(unit.max_hp))
         msg_dict = {
             "type": "node",
             "data": {
-                "name": f"{unit.name} 当前血量：{number_to(int(unit.hp))} / {number_to(int(unit.max_hp))}",
+                "name": f"{unit.name} 当前血量：{number_to(display_hp)} / {number_to(display_max_hp)}",
                 "uin": str(unit.id),
                 "content": message
             }
@@ -1305,6 +1309,10 @@ class BattleSystem:
                 parts.append(f"救援{int(stats.get('rescue', 0))}次")
             if int(stats.get("support", 0)) > 0:
                 parts.append(f"助战{int(stats.get('support', 0))}次")
+            skill = pet.get("skill") or {}
+            if skill.get("type") == PET_SKILL_PROTECT:
+                used = int((getattr(unit, "pet_runtime", {}) or {}).get("protect_trigger_count", 0))
+                parts.append(f"保护{used}/{PET_PROTECT_TRIGGER_LIMIT}次")
             lines.append(f"{unit.name}的{pet_name}：" + "，".join(parts))
 
         if lines:
@@ -1426,15 +1434,17 @@ class BattleSystem:
         if reflect_dmg <= 0:
             return "", 0
 
-        r_hp_loss, r_absorbed, r_blocked = self._apply_damage_with_layers(
+        r_hp_loss, r_absorbed, r_blocked, r_layer_msgs = self._apply_damage_with_layers(
             defender, attacker, reflect_dmg, damage_type="true"
         )
 
         if r_blocked:
             return f"\n{attacker.name}的无敌抵挡了反伤！", 0
         if r_hp_loss > 0:
-            return f"\n{defender.name}反伤{number_to(r_hp_loss)}点！", r_hp_loss
-        return "", 0
+            msg = "".join(f"\n{m}" for m in r_layer_msgs)
+            msg += f"\n{defender.name}反伤{number_to(r_hp_loss)}点！"
+            return msg, r_hp_loss
+        return "".join(f"\n{m}" for m in r_layer_msgs), 0
 
     def _apply_set_bonus_start_effects(self, unit):
         shield_rate = self._get_set_bonus_total(unit, "shield")
@@ -1499,18 +1509,21 @@ class BattleSystem:
             若目标当前有护盾，则额外造成 dmg * 10% 的穿盾直伤。
         """
         if dmg <= 0:
-            return 0, 0, False
+            return 0, 0, False, []
 
         if damage_type == "dot" and getattr(target, "is_scarecrow", False):
-            return 0, 0, False
+            return 0, 0, False, []
     
         if target.natal_runtime.get("invincible_active", 0) > 0:
             target.natal_runtime["invincible_active"] -= 1
-            return 0, 0, True
+            return 0, 0, True, []
 
-        dmg = self._apply_pet_guard_reaction(attacker, target, int(dmg), damage_type=damage_type)
+        layer_msgs = []
+        dmg, pet_guard_msg = self._apply_pet_guard_reaction(attacker, target, int(dmg), damage_type=damage_type)
+        if pet_guard_msg:
+            layer_msgs.append(pet_guard_msg)
         if dmg <= 0:
-            return 0, 0, False
+            return 0, 0, False, layer_msgs
     
         remain = int(dmg)
         absorbed = 0
@@ -1519,10 +1532,10 @@ class BattleSystem:
         # 真伤 / DOT 不走护盾
         if damage_type in ("true", "dot"):
             dr_eff = max(0, min(0.95, target.damage_reduction_rate))
-            hp_loss = int(max(1, remain * (1 - dr_eff)))
+            hp_loss = self._cap_hp_loss(target, int(max(1, remain * (1 - dr_eff))))
             if hp_loss > 0:
                 target.update_stat("hp", 2, hp_loss)
-            return hp_loss, 0, False
+            return hp_loss, 0, False, layer_msgs
     
         # 记录本次攻击前是否有护盾
         shields = target.get_buffs("type", BuffType.SHIELD)
@@ -1556,11 +1569,13 @@ class BattleSystem:
             pierce_damage = int(remain * pen)
             if pierce_damage > 0:
                 hp_loss += pierce_damage
+
+        hp_loss = self._cap_hp_loss(target, hp_loss)
     
         if hp_loss > 0:
             target.update_stat("hp", 2, hp_loss)
     
-        return hp_loss, absorbed, False
+        return hp_loss, absorbed, False, layer_msgs
 
     def _apply_round_one_skills(self, caster, targets, skills_dict):
         if not skills_dict:
@@ -1637,13 +1652,15 @@ class BattleSystem:
             if not enemy.is_alive:
                 continue
             dmg = max(1, int(enemy.hp * periodic_true_dmg_rate))
-            hp_loss, absorbed, blocked = self._apply_damage_with_layers(unit, enemy, dmg, damage_type="true")
+            hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(unit, enemy, dmg, damage_type="true")
 
             if blocked:
                 self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】道韵发动，被{enemy.name}的无敌抵挡！")
             else:
-                msg = f"【{unit.natal_name or '本命法宝'}】道韵发动，对{enemy.name}造成{number_to(hp_loss)}点真实伤害！"
+                prefix = "".join(f"{m}\n" for m in layer_msgs)
+                msg = prefix + f"【{unit.natal_name or '本命法宝'}】道韵发动，对{enemy.name}造成{number_to(hp_loss)}点真实伤害！"
                 self.add_message(unit, msg)
+                unit.total_dmg += hp_loss
 
             if enemy.hp <= 0:
                 revived = self._try_handle_natal_revive(enemy, unit)
@@ -1694,8 +1711,9 @@ class BattleSystem:
             true_dmg_rate = attacker.get_natal_effect_value(NatalEffectType.TRUE_DAMAGE)
             extra_true_damage = int(attacker.atk_rate * true_dmg_rate)
             if extra_true_damage > 0:
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(attacker, defender, extra_true_damage, damage_type="true")
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(attacker, defender, extra_true_damage, damage_type="true")
                 extra_true_damage = hp_loss
+                append_msgs.extend(layer_msgs)
                 if blocked:
                     append_msgs.append("真实伤害被无敌抵挡")
                 else:
@@ -1761,7 +1779,8 @@ class BattleSystem:
         if true_damage_rate > 0:
             td = int(attacker.atk_rate * true_damage_rate)
             if td > 0:
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(attacker, defender, td, damage_type="true")
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(attacker, defender, td, damage_type="true")
+                append_msgs.extend(layer_msgs)
                 extra_true_damage += hp_loss
                 if blocked:
                     append_msgs.append("套装真伤被无敌抵挡")
@@ -1781,6 +1800,12 @@ class BattleSystem:
 
     def _roll_pet_active_trigger(self, skill):
         return random.random() <= self._calc_pet_active_chance(skill)
+
+    def _cap_hp_loss(self, target, hp_loss):
+        if hp_loss <= 0 or target.hp <= 0:
+            return 0
+        available_hp = int(target.hp) if target.hp >= 1 else 1
+        return min(int(hp_loss), available_hp)
 
     def _get_pet_skill_targets(self, owner, skill, preferred_target=None):
         if preferred_target is not None:
@@ -1806,7 +1831,7 @@ class BattleSystem:
         return [min(enemies, key=lambda x: x.hp)]
 
     def _apply_pet_damage_once(self, owner, target, skill_name, dmg, damage_type="normal", shield_penetration=0.0):
-        hp_loss, absorbed, blocked = self._apply_damage_with_layers(
+        hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(
             owner,
             target,
             int(dmg),
@@ -1815,7 +1840,8 @@ class BattleSystem:
         )
 
         if blocked:
-            return f"{target.name}的无敌抵挡了{skill_name}", 0
+            msg_parts = layer_msgs + [f"{target.name}的无敌抵挡了{skill_name}"]
+            return "，".join(msg_parts), 0
 
         if hp_loss > 0:
             msg = f"对{target.name}造成{number_to(int(hp_loss))}伤害"
@@ -1823,10 +1849,14 @@ class BattleSystem:
             msg = f"伤害被{target.name}的护盾吸收{number_to(int(absorbed))}"
         else:
             msg = f"未对{target.name}造成有效伤害"
+        if layer_msgs:
+            msg = "，".join(layer_msgs + [msg])
 
         if target.hp <= 0:
-            revived = self._try_handle_natal_revive(target, owner)
-            if not revived:
+            revived, revive_msg = self._try_handle_natal_revive_result(target, owner)
+            if revived:
+                msg += f"，{revive_msg}"
+            else:
                 msg += f"，{target.name}💀倒下了"
 
         return msg, max(0, hp_loss)
@@ -1837,30 +1867,41 @@ class BattleSystem:
             return
         stats[key] = stats.get(key, 0) + value
 
+    def _pet_protect_limit_reached(self, owner):
+        runtime = getattr(owner, "pet_runtime", {}) or {}
+        return int(runtime.get("protect_trigger_count", 0)) >= PET_PROTECT_TRIGGER_LIMIT
+
+    def _consume_pet_protect_trigger(self, owner):
+        if not hasattr(owner, "pet_runtime") or not isinstance(owner.pet_runtime, dict):
+            return
+        owner.pet_runtime["protect_trigger_count"] = int(owner.pet_runtime.get("protect_trigger_count", 0)) + 1
+
     def _apply_pet_guard_reaction(self, attacker, target, dmg, damage_type="normal"):
         if dmg <= 0 or damage_type == "dot":
-            return dmg
+            return dmg, ""
         if attacker is None or target is None:
-            return dmg
+            return dmg, ""
         if not getattr(target, "is_alive", False):
-            return dmg
+            return dmg, ""
         if getattr(attacker, "team_id", None) == getattr(target, "team_id", None):
-            return dmg
+            return dmg, ""
         if target.type in ("minion", "summon"):
-            return dmg
+            return dmg, ""
 
         pet = getattr(target, "pet", None)
         if not pet:
-            return dmg
+            return dmg, ""
         skill = pet.get("skill") or {}
         if skill.get("type") != PET_SKILL_PROTECT:
-            return dmg
+            return dmg, ""
+        if self._pet_protect_limit_reached(target):
+            return dmg, ""
         if target.pet_runtime.get("guard_round", 0) == self.round:
-            return dmg
+            return dmg, ""
 
         power = max(0.0, float(skill.get("power", 0)))
         if power <= 0:
-            return dmg
+            return dmg, ""
 
         hp_ratio = target.hp / target.max_hp if target.max_hp > 0 else 0
         danger = hp_ratio <= 0.35 or dmg >= target.hp or dmg >= target.max_hp * 0.12
@@ -1872,9 +1913,10 @@ class BattleSystem:
         if skill.get("category") == "专属" or skill.get("scope") == "专属":
             chance += PET_EXCLUSIVE_TRIGGER_BONUS
         if random.random() > min(0.65, chance):
-            return dmg
+            return dmg, ""
 
         target.pet_runtime["guard_round"] = self.round
+        self._consume_pet_protect_trigger(target)
         self._record_pet_stat(target, "trigger", 1)
         self._record_pet_stat(target, "support", 1)
         self._record_pet_stat(target, "guard", 1)
@@ -1947,8 +1989,7 @@ class BattleSystem:
         if not parts:
             parts.append("挡下部分攻势")
 
-        self.add_message(target, f"【宠物】{skill_name}护主，" + "，".join(parts) + "！")
-        return dmg
+        return dmg, f"【宠物】{skill_name}护主，" + "，".join(parts) + "！"
 
     def _apply_pet_control_rescue(self, owner):
         if not owner.is_alive or owner.type in ("minion", "summon"):
@@ -1961,6 +2002,8 @@ class BattleSystem:
             return ""
         skill = pet.get("skill") or {}
         if skill.get("type") != PET_SKILL_PROTECT:
+            return ""
+        if self._pet_protect_limit_reached(owner):
             return ""
 
         skip_controls = {
@@ -1994,6 +2037,7 @@ class BattleSystem:
             return ""
 
         owner.pet_runtime["control_rescue_round"] = self.round
+        self._consume_pet_protect_trigger(owner)
         self._record_pet_stat(owner, "trigger", 1)
         self._record_pet_stat(owner, "support", 1)
         self._record_pet_stat(owner, "guard", 1)
@@ -2224,7 +2268,7 @@ class BattleSystem:
             shield_amount = int(owner.max_hp * shield_rate)
             if shield_amount <= 0:
                 return "", 0
-            owner.add_status(StatusEffect(skill_name, BuffType.SHIELD, shield_amount, 1, False, duration=duration, skill_type=0))
+            owner.add_status(StatusEffect(skill_name, BuffType.SHIELD, shield_amount, 1, False, duration=max(2, duration), skill_type=0))
             self._record_pet_stat(owner, "shield", shield_amount)
             self._record_pet_stat(owner, "support", 1)
             return f"【宠物】{skill_name}发动，为{owner.name}施加{number_to(shield_amount)}点护盾！", 0
@@ -2243,6 +2287,8 @@ class BattleSystem:
         skill = pet.get("skill") or {}
         skill_type = skill.get("type")
         if allowed_types is not None and skill_type not in allowed_types:
+            return "", 0
+        if skill_type == PET_SKILL_PROTECT and self._pet_protect_limit_reached(owner):
             return "", 0
 
         skill_name = skill.get("name") or f"{pet.get('form_name', pet.get('name', '宠物'))}的神通"
@@ -2263,6 +2309,8 @@ class BattleSystem:
 
         if pet_msg:
             owner.pet_runtime["active_round"] = self.round
+            if skill_type == PET_SKILL_PROTECT:
+                self._consume_pet_protect_trigger(owner)
             self._record_pet_stat(owner, "trigger", 1)
             if pet_dmg > 0:
                 self._record_pet_stat(owner, "damage", pet_dmg)
@@ -2330,12 +2378,13 @@ class BattleSystem:
                 boost_rate = min(0.15, boost_rate + 0.02)
             boost_dmg = int(total_dmg * boost_rate)
             if boost_dmg > 0:
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(
                     owner,
                     preferred_target,
                     boost_dmg,
                     damage_type="normal",
                 )
+                parts.extend(layer_msgs)
                 if blocked:
                     parts.append(f"{preferred_target.name}的无敌抵挡了共鸣增伤")
                 elif hp_loss > 0:
@@ -2343,8 +2392,10 @@ class BattleSystem:
                     self._record_pet_stat(owner, "damage_boost", hp_loss)
                     parts.append(f"追添{number_to(int(hp_loss))}伤害")
                     if preferred_target.hp <= 0:
-                        revived = self._try_handle_natal_revive(preferred_target, owner)
-                        if not revived:
+                        revived, revive_msg = self._try_handle_natal_revive_result(preferred_target, owner)
+                        if revived:
+                            parts.append(revive_msg)
+                        else:
                             parts.append(f"{preferred_target.name}💀倒下了")
                 elif absorbed > 0:
                     parts.append(f"共鸣伤害被护盾吸收{number_to(int(absorbed))}")
@@ -2388,9 +2439,9 @@ class BattleSystem:
             return targets
         return None
 
-    def _try_handle_natal_revive(self, unit, killer=None):
+    def _try_handle_natal_revive_result(self, unit, killer=None):
         if unit.hp > 0:
-            return False
+            return False, ""
 
         death_strike_block_fate = False
         if killer and killer.has_natal_effect(NatalEffectType.DEATH_STRIKE):
@@ -2402,8 +2453,7 @@ class BattleSystem:
                 if random.random() < chance:
                     unit.natal_runtime["fate_revive_count"] += 1
                     unit.hp = unit.max_hp
-                    self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】天命发动，满血复活！")
-                    return True
+                    return True, f"【{unit.natal_name or '本命法宝'}】天命发动，满血复活！"
 
         if unit.has_natal_effect(NatalEffectType.IMMORTAL):
             if unit.natal_runtime["immortal_revive_count"] < IMMORTAL_REVIVE_COUNT_LIMIT:
@@ -2411,8 +2461,7 @@ class BattleSystem:
                     heal_rate = unit.get_natal_effect_value(NatalEffectType.IMMORTAL)
                     unit.natal_runtime["immortal_revive_count"] += 1
                     unit.hp = max(1, int(unit.max_hp * heal_rate))
-                    self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】不灭发动，恢复{round(heal_rate * 100, 2)}%生命！")
-                    return True
+                    return True, f"【{unit.natal_name or '本命法宝'}】不灭发动，恢复{round(heal_rate * 100, 2)}%生命！"
 
         if unit.has_natal_effect(NatalEffectType.NIRVANA):
             if unit.natal_runtime["nirvana_revive_count"] < NIRVANA_REVIVE_LIMIT:
@@ -2422,8 +2471,7 @@ class BattleSystem:
                     unit.natal_runtime["is_nirvana_waiting"] = True
                     unit.natal_runtime["nirvana_turns"] = NIRVANA_DURATION
                     unit.hp = 1
-                    self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】进入涅槃，将于{NIRVANA_DURATION}回合后重生！")
-                    return True
+                    return True, f"【{unit.natal_name or '本命法宝'}】进入涅槃，将于{NIRVANA_DURATION}回合后重生！"
 
         if unit.has_natal_effect(NatalEffectType.SOUL_RETURN):
             if unit.natal_runtime["soul_return_revive_count"] < SOUL_RETURN_REVIVE_LIMIT:
@@ -2433,10 +2481,15 @@ class BattleSystem:
                     unit.natal_runtime["is_soul_form"] = True
                     unit.natal_runtime["soul_return_turns"] = SOUL_RETURN_DURATION
                     unit.hp = 1
-                    self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】魂返发动，灵体持续{SOUL_RETURN_DURATION}回合！")
-                    return True
+                    return True, f"【{unit.natal_name or '本命法宝'}】魂返发动，灵体持续{SOUL_RETURN_DURATION}回合！"
 
-        return False
+        return False, ""
+
+    def _try_handle_natal_revive(self, unit, killer=None):
+        revived, msg = self._try_handle_natal_revive_result(unit, killer)
+        if revived and msg:
+            self.add_message(unit, msg)
+        return revived
 
     def _process_natal_special_states(self, unit):
         if unit.natal_runtime["is_nirvana_waiting"]:
@@ -2585,7 +2638,9 @@ class BattleSystem:
             for mult in hits:
                 dmg, is_crit, status = self._calc_raw_damage(caster, target, float(mult))
                 if status == "Hit":
-                    hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    for layer_msg in layer_msgs:
+                        skill_msg += f"{layer_msg}，"
                     if blocked:
                         skill_msg += "无敌抵挡、"
                         continue
@@ -2615,8 +2670,10 @@ class BattleSystem:
                     skill_msg += "（" + "，".join(all_msgs) + "）"
 
             if target.hp <= 0:
-                revived = self._try_handle_natal_revive(target, caster)
-                if not revived:
+                revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                if revived:
+                    skill_msg += f"\n{revive_msg}"
+                else:
                     skill_msg += f"\n{target.name}💀倒下了！"
 
             # 反伤（目标最终活着且非假死）
@@ -2625,8 +2682,10 @@ class BattleSystem:
             if ref_msg:
                 skill_msg += ref_msg
                 if caster.hp <= 0:
-                    revived = self._try_handle_natal_revive(caster, target)
-                    if not revived:
+                    revived, revive_msg = self._try_handle_natal_revive_result(caster, target)
+                    if revived:
+                        skill_msg += f"\n{revive_msg}"
+                    else:
                         skill_msg += f"\n{caster.name}💀倒下了！"
 
             if skill.turn_cost > 0:
@@ -2692,18 +2751,24 @@ class BattleSystem:
             reflect_base = 0
 
             if status == "Hit":
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
                 if blocked:
-                    skill_msg += f"获得{rand_mult}倍加成，但被{target.name}无敌抵挡！"
+                    prefix = "\n".join(layer_msgs)
+                    if prefix:
+                        prefix += "\n"
+                    skill_msg += f"{prefix}获得{rand_mult}倍加成，但被{target.name}无敌抵挡！"
                     total_dmg = 0
                 else:
+                    prefix = "\n".join(layer_msgs)
+                    if prefix:
+                        prefix += "\n"
                     crit_str = "💥并且发生了会心一击，" if is_crit else ""
                     total_dmg = hp_loss
                     if hp_loss > 0:
                         reflect_base += hp_loss
-                        skill_msg += f"获得{rand_mult}倍加成，{crit_str}造成{number_to(int(total_dmg))}伤害！"
+                        skill_msg += f"{prefix}获得{rand_mult}倍加成，{crit_str}造成{number_to(int(total_dmg))}伤害！"
                     else:
-                        skill_msg += f"获得{rand_mult}倍加成，但伤害被护盾吸收{number_to(int(absorbed))}！"
+                        skill_msg += f"{prefix}获得{rand_mult}倍加成，但伤害被护盾吸收{number_to(int(absorbed))}！"
 
                     extra_true_damage1, extra_msgs1 = self._apply_natal_attack_effects(caster, target, max(total_dmg, 0))
                     extra_true_damage2, extra_msgs2 = self._apply_set_bonus_attack_effects(caster, target, max(total_dmg, 0))
@@ -2715,8 +2780,10 @@ class BattleSystem:
                         skill_msg += "（" + "，".join(all_msgs) + "）"
 
                     if target.hp <= 0:
-                        revived = self._try_handle_natal_revive(target, caster)
-                        if not revived:
+                        revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                        if revived:
+                            skill_msg += f"\n{revive_msg}"
+                        else:
                             skill_msg += f"\n{target.name}💀倒下了！"
 
                     # 反伤
@@ -2724,8 +2791,10 @@ class BattleSystem:
                     if ref_msg:
                         skill_msg += ref_msg
                         if caster.hp <= 0:
-                            revived = self._try_handle_natal_revive(caster, target)
-                            if not revived:
+                            revived, revive_msg = self._try_handle_natal_revive_result(caster, target)
+                            if revived:
+                                skill_msg += f"\n{revive_msg}"
+                            else:
                                 skill_msg += f"\n{caster.name}💀倒下了！"
             else:
                 skill_msg = f"{caster.name}的技能被{targets[0].name}闪避了！"
@@ -2751,7 +2820,9 @@ class BattleSystem:
                 dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values)
                 if status == "Hit":
                     dmg = dmg + int(target.max_hp * skill.atk_coefficient)
-                    hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    if layer_msgs:
+                        skill_msg += "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
                     if blocked:
                         skill_miss_msg += f"{target.name}的无敌抵挡了技能！"
                         continue
@@ -2765,8 +2836,10 @@ class BattleSystem:
                         skill_msg += f"对{target.name}造成的伤害被护盾吸收{number_to(int(absorbed))}！"
 
                     if target.hp <= 0:
-                        revived = self._try_handle_natal_revive(target, caster)
-                        if not revived:
+                        revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                        if revived:
+                            skill_msg += f"\n{revive_msg}"
+                        else:
                             skill_msg += f"\n{target.name}💀倒下了！"
 
                     # 反伤
@@ -2774,8 +2847,10 @@ class BattleSystem:
                     if ref_msg:
                         skill_msg += ref_msg
                         if caster.hp <= 0:
-                            revived = self._try_handle_natal_revive(caster, target)
-                            if not revived:
+                            revived, revive_msg = self._try_handle_natal_revive_result(caster, target)
+                            if revived:
+                                skill_msg += f"\n{revive_msg}"
+                            else:
                                 skill_msg += f"\n{caster.name}💀倒下了！"
                 else:
                     skill_miss_msg += f"{caster.name}的技能被{target.name}闪避了！"
@@ -2792,7 +2867,9 @@ class BattleSystem:
                 reflect_base = 0
                 dmg, is_crit, status = self._calc_raw_damage(caster, target, skill.atk_values, True)
                 if status == "Hit":
-                    hp_loss, absorbed, blocked = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(caster, target, dmg, damage_type="normal")
+                    if layer_msgs:
+                        skill_msg += "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
                     if blocked:
                         skill_miss_msg += f"{target.name}的无敌抵挡了技能！"
                         continue
@@ -2806,8 +2883,10 @@ class BattleSystem:
                         skill_msg += f"对{target.name}造成的伤害被护盾吸收{number_to(int(absorbed))}！"
 
                     if target.hp <= 0:
-                        revived = self._try_handle_natal_revive(target, caster)
-                        if not revived:
+                        revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                        if revived:
+                            skill_msg += f"\n{revive_msg}"
+                        else:
                             skill_msg += f"\n{target.name}💀倒下了！"
 
                     # 反伤
@@ -2815,8 +2894,10 @@ class BattleSystem:
                     if ref_msg:
                         skill_msg += ref_msg
                         if caster.hp <= 0:
-                            revived = self._try_handle_natal_revive(caster, target)
-                            if not revived:
+                            revived, revive_msg = self._try_handle_natal_revive_result(caster, target)
+                            if revived:
+                                skill_msg += f"\n{revive_msg}"
+                            else:
                                 skill_msg += f"\n{caster.name}💀倒下了！"
                 else:
                     skill_miss_msg += f"{caster.name}的技能被{target.name}闪避了！"
@@ -2928,23 +3009,33 @@ class BattleSystem:
             if set_shield_break > 0 and target_has_shield:
                 shield_pen = max(shield_pen, set_shield_break)
         
-            hp_loss, absorbed, blocked = self._apply_damage_with_layers(
+            hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(
                 caster, target, dmg, damage_type="normal", shield_penetration=shield_pen
             )
             if blocked:
-                return f"{caster.name}发起攻击，但被{target.name}的无敌效果抵挡了！", 0
+                prefix = "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
+                return f"{prefix}{caster.name}发起攻击，但被{target.name}的无敌效果抵挡了！", 0
 
             reflect_base = 0
 
             if hp_loss > 0:
                 total_dmg = hp_loss
                 reflect_base += hp_loss
-                if is_crit:
+                if layer_msgs:
+                    attack_intro = f"{caster.name}发起攻击，💥并且发生了会心一击！" if is_crit else f"{caster.name}发起攻击！"
+                    guard_text = "".join(f"\n{layer_msg}" for layer_msg in layer_msgs)
+                    skill_msg += f"{attack_intro}{guard_text}\n对{target.name}造成{number_to(int(total_dmg))}伤害！"
+                elif is_crit:
                     skill_msg += f"{caster.name}发起攻击，💥并且发生了会心一击，对{target.name}造成{number_to(int(total_dmg))}伤害！"
                 else:
                     skill_msg += f"{caster.name}发起攻击，对{target.name}造成{number_to(int(total_dmg))}伤害！"
             else:
-                skill_msg += f"{caster.name}发起攻击，但伤害被{target.name}的护盾吸收{number_to(int(absorbed))}！"
+                if layer_msgs:
+                    attack_intro = f"{caster.name}发起攻击，💥并且发生了会心一击！" if is_crit else f"{caster.name}发起攻击！"
+                    guard_text = "".join(f"\n{layer_msg}" for layer_msg in layer_msgs)
+                    skill_msg += f"{attack_intro}{guard_text}\n伤害被{target.name}的护盾吸收{number_to(int(absorbed))}！"
+                else:
+                    skill_msg += f"{caster.name}发起攻击，但伤害被{target.name}的护盾吸收{number_to(int(absorbed))}！"
 
             if shield_pen > 0:
                 skill_msg += f"（破盾生效：额外造成{round(shield_pen * 100, 2)}%伤害）"
@@ -2973,8 +3064,10 @@ class BattleSystem:
 
             # 先处理目标死亡/复活
             if target.hp <= 0:
-                revived = self._try_handle_natal_revive(target, caster)
-                if not revived:
+                revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                if revived:
+                    skill_msg += f"\n{revive_msg}"
+                else:
                     skill_msg += f"\n{target.name}💀倒下了！"
 
             # 再反伤（仅目标最终活着且非假死）
@@ -2982,8 +3075,10 @@ class BattleSystem:
             if ref_msg:
                 skill_msg += ref_msg
                 if caster.hp <= 0:
-                    revived = self._try_handle_natal_revive(caster, target)
-                    if not revived:
+                    revived, revive_msg = self._try_handle_natal_revive_result(caster, target)
+                    if revived:
+                        skill_msg += f"\n{revive_msg}"
+                    else:
                         skill_msg += f"\n{caster.name}💀倒下了！"
 
             if caster.has_natal_effect(NatalEffectType.TWIN_STRIKE) and target.is_alive:
@@ -2991,7 +3086,9 @@ class BattleSystem:
                 if random.random() < twin_chance:
                     twin_dmg, twin_crit, twin_status = self._calc_raw_damage(caster, target, 1.0)
                     if twin_status == "Hit":
-                        t_hp_loss, t_absorbed, t_blocked = self._apply_damage_with_layers(caster, target, twin_dmg, damage_type="normal")
+                        t_hp_loss, t_absorbed, t_blocked, t_layer_msgs = self._apply_damage_with_layers(caster, target, twin_dmg, damage_type="normal")
+                        if t_layer_msgs:
+                            skill_msg += "".join(f"\n{layer_msg}" for layer_msg in t_layer_msgs)
                         if t_blocked:
                             skill_msg += f"\n{target.name}的无敌抵挡了双生连击！"
                         else:
@@ -3002,8 +3099,10 @@ class BattleSystem:
                                 skill_msg += f"\n双生发动，但伤害被护盾吸收{number_to(int(t_absorbed))}！"
 
                             if target.hp <= 0:
-                                revived = self._try_handle_natal_revive(target, caster)
-                                if not revived:
+                                revived, revive_msg = self._try_handle_natal_revive_result(target, caster)
+                                if revived:
+                                    skill_msg += f"\n{revive_msg}"
+                                else:
                                     skill_msg += f"\n{target.name}💀倒下了！"
                     # 双生这段是否再触发反伤；默认不再二次触发，避免过强
 
@@ -3039,7 +3138,11 @@ class BattleSystem:
 
         if self.round == 1:
             for unit in units:
+                if not unit.is_alive:
+                    continue
                 enemies = self._get_all_enemies(unit)
+                if not enemies:
+                    continue
                 self._apply_round_one_skills(unit, enemies, unit.start_skills)
                 self._apply_set_bonus_start_effects(unit)
                 self._apply_natal_periodic_effects(unit, force=True)
@@ -3075,18 +3178,20 @@ class BattleSystem:
             self._apply_natal_periodic_effects(unit)
 
             if unit.poison_dot_dmg > 0:
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(None, unit, unit.poison_dot_dmg, damage_type="dot")
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(None, unit, unit.poison_dot_dmg, damage_type="dot")
                 if blocked:
                     self.add_message(unit, f"{unit.name}☠️中毒伤害被无敌抵挡")
                 else:
-                    self.add_message(unit, f"{unit.name}☠️中毒消耗气血{number_to(int(hp_loss))}点")
+                    prefix = "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
+                    self.add_message(unit, f"{prefix}{unit.name}☠️中毒消耗气血{number_to(int(hp_loss))}点")
 
             if unit.bleed_dot_dmg > 0:
-                hp_loss, absorbed, blocked = self._apply_damage_with_layers(None, unit, unit.bleed_dot_dmg, damage_type="dot")
+                hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(None, unit, unit.bleed_dot_dmg, damage_type="dot")
                 if blocked:
                     self.add_message(unit, f"{unit.name}🩸流血伤害被无敌抵挡")
                 else:
-                    self.add_message(unit, f"{unit.name}🩸流血损失气血{number_to(int(hp_loss))}点")
+                    prefix = "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
+                    self.add_message(unit, f"{prefix}{unit.name}🩸流血损失气血{number_to(int(hp_loss))}点")
 
             if not unit.is_scarecrow and unit.has_debuff("type", DebuffType.SKILL_DOT):
                 for skill_dot_info in unit.get_debuffs("type", DebuffType.SKILL_DOT):
@@ -3097,12 +3202,13 @@ class BattleSystem:
                                 self.add_message(unit, f"{skill_dot_info.name}的持续伤害被闪避！（剩余{skill_dot_info.duration}回合）")
                                 continue
 
-                            hp_loss, absorbed, blocked = self._apply_damage_with_layers(enemy, unit, dmg, damage_type="dot")
+                            hp_loss, absorbed, blocked, layer_msgs = self._apply_damage_with_layers(enemy, unit, dmg, damage_type="dot")
                             if blocked:
                                 self.add_message(unit, f"{skill_dot_info.name}的持续伤害被无敌抵挡！（剩余{skill_dot_info.duration}回合）")
                             else:
                                 crit_str = "💥会心一击，" if is_crit else ""
-                                msg = f"{skill_dot_info.name}{crit_str}造成{number_to(int(hp_loss))}伤害！（剩余{skill_dot_info.duration}回合）"
+                                prefix = "".join(f"{layer_msg}\n" for layer_msg in layer_msgs)
+                                msg = f"{prefix}{skill_dot_info.name}{crit_str}造成{number_to(int(hp_loss))}伤害！（剩余{skill_dot_info.duration}回合）"
                                 self.add_message(unit, msg)
 
             if not unit.is_alive:

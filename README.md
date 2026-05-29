@@ -43,6 +43,8 @@ NICKNAME = [""]      # 机器人昵称
 DEBUG = False
 HOST = 127.0.0.1
 PORT = 8080          # 反代端口，按需修改
+
+# 数据库使用本地 SQLite 文件，无需额外配置
 ```
 
 在 `.env.dev` 文件中添加 QQ 官方机器人配置（公域群机器人，测试通过）：
@@ -131,6 +133,8 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ## 💿 安装
 
 > ⭐ 新手请优先使用一键安装脚本
+>
+> 当前版本使用本地 SQLite 数据库，无需单独安装数据库服务。
 
 <details>
 <summary>🐧 Linux 一键安装</summary>
@@ -536,6 +540,20 @@ screen -S xiu2 -X quit
 ```
 
 </details>
+
+---
+
+## 🗄️ SQLite 数据库
+
+当前版本使用本地 SQLite 数据库文件，默认位于 `data/xiuxian/`：
+
+- `xiuxian.db`
+- `xiuxian_impart.db`
+- `player.db`
+- `trade.db`
+- `message.db` 会在运行期自动创建，用于消息记录。
+
+Web 面板的数据库备份会直接打包这些 SQLite 文件；恢复时可以按库选择覆盖恢复。
 
 ---
 

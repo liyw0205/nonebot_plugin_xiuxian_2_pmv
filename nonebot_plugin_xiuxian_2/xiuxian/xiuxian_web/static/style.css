@@ -3,14 +3,14 @@
 /* --- 0. Root Variables (用于主题切换和自定义) --- */
 :root {
     /* Base Colors - Light Theme */
-    --bg-primary: #f8f9fa; /* 主背景色 */
+    --bg-primary: #f4f8fc; /* 主背景色 */
     --bg-secondary: #ffffff; /* 卡片/组件背景色 */
-    --text-primary: #212529; /* 主要文本颜色 */
-    --text-secondary: #495057; /* 次要文本颜色 */
-    --border-color: #dee2e6; /* 边框颜色 */
-    --shadow-color: rgba(0, 0, 0, 0.08); /* 阴影颜色 */
-    --accent-color: #007bff; /* 主强调色 (蓝色) */
-    --accent-hover-color: #0056b3; /* 强调色悬停 */
+    --text-primary: #172b3a; /* 主要文本颜色 */
+    --text-secondary: #617485; /* 次要文本颜色 */
+    --border-color: #dbe6ee; /* 边框颜色 */
+    --shadow-color: rgba(33, 87, 128, 0.10); /* 阴影颜色 */
+    --accent-color: #12b7f5; /* QQ 蓝 */
+    --accent-hover-color: #0b9dd8; /* 强调色悬停 */
     --success-color: #28a745; /* 成功色 */
     --danger-color: #dc3545; /* 危险色 */
     --warning-color: #ffc107; /* 警告色 */
@@ -18,48 +18,26 @@
     
     /* Font & Spacing */
     --font-family-sans: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    --base-font-size: 16px;
+    --base-font-size: 14px;
     --heading-font-weight: 600;
     --border-radius-base: 8px;
-    --transition-speed: 0.3s;
+    --transition-speed: 0.2s;
 }
 
 /* Dark Theme */
 [data-theme='dark'] {
-    --bg-primary: #2c3e50;
-    --bg-secondary: #34495e;
-    --text-primary: #ecf0f1;
-    --text-secondary: #bdc3c7;
-    --border-color: #44617a;
-    --shadow-color: rgba(0, 0, 0, 0.2);
-    --accent-color: #3498db;
-    --accent-hover-color: #2980b9;
+    --bg-primary: #1f2d3b;
+    --bg-secondary: #253648;
+    --text-primary: #edf6ff;
+    --text-secondary: #aebfcd;
+    --border-color: #33485c;
+    --shadow-color: rgba(0, 0, 0, 0.26);
+    --accent-color: #35c7ff;
+    --accent-hover-color: #12b7f5;
     --success-color: #27ae60;
     --danger-color: #e74c3c;
     --warning-color: #f39c12;
     --info-color: #1abc9c;
-}
-
-/* Vibrant Theme */
-[data-theme='vibrant'] {
-    --bg-primary: #ffebee;
-    --bg-secondary: #ffffff;
-    --text-primary: #3f51b5;
-    --text-secondary: #607d8b;
-    --border-color: #e0e0e0;
-    --shadow-color: rgba(0, 0, 0, 0.06);
-    --accent-color: #e91e63;
-    --accent-hover-color: #c2185b;
-    --success-color: #8bc34a;
-    --danger-color: #ff5722;
-    --warning-color: #ff9800;
-    --info-color: #03a9f4;
-}
-
-/* Custom Theme Color (overrides accent-color if set) */
-[data-custom-accent-color] {
-    --accent-color: var(--custom-accent-color);
-    --accent-hover-color: color-mix(in srgb, var(--custom-accent-color) 80%, black); /* Slightly darker for hover */
 }
 
 
@@ -72,12 +50,18 @@
 }
 
 body {
-    background-color: var(--bg-primary);
+    background:
+        linear-gradient(135deg, #e8f3ff 0%, #f6fbff 48%, #edf7ff 100%);
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.6;
     font-size: var(--base-font-size);
     transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+}
+
+[data-theme='dark'] body {
+    background:
+        linear-gradient(135deg, #162435 0%, #1c2b3c 50%, #1f3445 100%);
 }
 
 #particles-js {
@@ -89,18 +73,23 @@ body {
 
 /* --- 2. Header & Navigation --- */
 header {
-    background-color: var(--bg-secondary);
-    backdrop-filter: blur(5px); /* 更轻微的模糊效果 */
-    padding: 1rem 2rem;
+    background-color: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(10px);
+    padding: 0 18px;
+    min-height: 54px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 10px var(--shadow-color);
+    box-shadow: 0 8px 24px rgba(36, 74, 110, 0.08);
     position: sticky;
     top: 0;
     z-index: 100;
     border-bottom: 1px solid var(--border-color);
     transition: background-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+}
+
+[data-theme='dark'] header {
+    background-color: rgba(28, 42, 56, 0.9);
 }
 
 .logo {
@@ -112,20 +101,20 @@ header {
 }
 
 .logo-icon {
-    width: 40px;
-    height: 40px;
-    background-color: var(--accent-color);
-    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(135deg, var(--accent-color), #78d6ff);
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.5rem;
+    font-size: 1rem;
     transition: background-color var(--transition-speed) ease;
 }
 
 .logo-text {
-    font-size: 1.5rem;
+    font-size: 1.08rem;
     font-weight: var(--heading-font-weight);
     color: var(--text-primary);
     transition: color var(--transition-speed) ease;
@@ -143,7 +132,24 @@ header {
 nav ul {
     display: flex;
     list-style: none;
-    gap: 1rem; /* 稍微紧凑一点 */
+    gap: 0.35rem;
+}
+
+nav {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+nav::-webkit-scrollbar {
+    display: none;
+}
+
+nav ul {
+    flex-shrink: 0;
 }
 
 nav a {
@@ -152,8 +158,9 @@ nav a {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem; /* 更大的点击区域 */
-    border-radius: var(--border-radius-base);
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 6px;
     transition: all var(--transition-speed) ease;
     font-weight: 500;
 }
@@ -161,103 +168,45 @@ nav a {
 nav a:hover, nav a.active {
     background-color: var(--accent-color);
     color: white;
-    box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2); /* 轻微阴影 */
+    box-shadow: 0 6px 16px rgba(18, 183, 245, 0.20);
 }
 
-/* Theme / Settings Dropdown */
-.settings-dropdown {
-    position: relative;
-    margin-left: 1rem;
-}
-
-.settings-button {
-    background-color: var(--bg-primary);
+.theme-toggle {
+    height: 34px;
+    margin-left: 0.35rem;
+    padding: 0 10px;
+    border-radius: 6px;
+    background-color: var(--bg-secondary);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    padding: 0.75rem 1rem;
-    border-radius: var(--border-radius-base);
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 0.5rem;
     transition: all var(--transition-speed) ease;
+    font-weight: 600;
 }
 
-.settings-button:hover {
-    background-color: var(--border-color);
+.theme-toggle:hover {
+    color: #fff;
+    background-color: var(--accent-color);
     border-color: var(--accent-color);
-}
-
-.dropdown-content {
-    display: none;
-    position: absolute;
-    right: 0;
-    background-color: var(--bg-secondary);
-    min-width: 200px;
-    box-shadow: 0 8px 16px var(--shadow-color);
-    border-radius: var(--border-radius-base);
-    z-index: 1;
-    padding: 10px;
-    margin-top: 5px;
-    border: 1px solid var(--border-color);
-}
-
-.dropdown-content.show {
-    display: block;
-}
-
-.dropdown-content label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 5px;
-    cursor: pointer;
-    font-weight: normal;
-    color: var(--text-secondary);
-    transition: background-color var(--transition-speed) ease;
-}
-
-.dropdown-content label:hover {
-    background-color: var(--bg-primary);
-    border-radius: var(--border-radius-base);
-}
-
-.dropdown-content hr {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 10px 0;
-}
-
-.dropdown-content .color-picker-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 5px;
-}
-
-.dropdown-content .color-picker-group input[type="color"] {
-    width: 40px;
-    height: 25px;
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
 }
 
 
 /* --- 3. Main Container & Card Styles --- */
 .container {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: 14px 18px;
+    max-width: 1380px;
     margin: 0 auto;
 }
 
 .card {
     background-color: var(--bg-secondary);
     border-radius: var(--border-radius-base);
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 4px 12px var(--shadow-color);
+    padding: 1.15rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 12px 34px var(--shadow-color);
     border: 1px solid var(--border-color);
     transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
 }
@@ -285,13 +234,13 @@ h2, h3, h4, h5 {
 }
 
 h2 {
-    font-size: 1.8rem;
-    padding-bottom: 0.5rem;
-    margin-bottom: 1.5rem;
+    font-size: 1.34rem;
+    padding-bottom: 0.45rem;
+    margin-bottom: 1rem;
 }
 
 h3 {
-    font-size: 1.4rem;
+    font-size: 1.14rem;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -308,8 +257,8 @@ p {
 
 /* --- 4. Form Elements --- */
 .form-group {
-    margin-bottom: 1.2rem;
-    padding: 10px; /* 轻微内边距 */
+    margin-bottom: 0.9rem;
+    padding: 10px;
     border-radius: var(--border-radius-base);
     background-color: var(--bg-primary); /* 与卡片背景区分 */
     border: 1px solid var(--border-color);
@@ -325,7 +274,7 @@ label {
 
 input[type="text"], input[type="number"], input[type="file"], select, textarea {
     width: 100%;
-    padding: 0.8rem;
+    padding: 0.62rem 0.7rem;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     background-color: var(--bg-secondary);
@@ -349,7 +298,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="file"]:focus, 
 
 /* --- 5. Buttons --- */
 .btn {
-    padding: 0.8rem 1.5rem;
+    padding: 0.62rem 1rem;
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -455,7 +404,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="file"]:focus, 
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* 稍微调整最小宽度 */
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 
 .stat-card, .monitor-card, .action-card {
@@ -750,38 +699,35 @@ tr:hover {
 
 /* --- 9. Command & Config Management Styles --- */
 .tab-nav {
-    display: flex;
-    gap: 0.6rem;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
     margin-bottom: 1.2rem;
-    border-bottom: 1px solid var(--border-color);
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    padding-bottom: 2px;
-}
-
-.tab-nav::-webkit-scrollbar {
-    height: 6px;
-}
-.tab-nav::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--border-color) 80%, #999);
-    border-radius: 999px;
+    padding: 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-primary));
 }
 
 .tab-link {
-    border: 1px solid transparent;
-    background: var(--bg-primary);
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
     color: var(--text-secondary);
-    padding: 0.7rem 1rem;
+    padding: 0.58rem 0.7rem;
     cursor: pointer;
-    border-radius: 8px 8px 0 0;
+    border-radius: 7px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.45rem;
-    white-space: nowrap;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
+    line-height: 1.25;
     transition: all var(--transition-speed) ease;
     position: relative;
 }
@@ -794,20 +740,13 @@ tr:hover {
 
 .tab-link.active {
     color: #fff;
-    background: var(--accent-color);
+    background: linear-gradient(135deg, var(--accent-color), #35c7ff);
     border-color: var(--accent-color);
     box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-color) 35%, transparent);
 }
 
 .tab-link.active::after {
-    content: "";
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: -2px;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--accent-color);
+    display: none;
 }
 
 .tab-content {
@@ -826,7 +765,7 @@ tr:hover {
 .command-card {
     background-color: var(--bg-primary);
     border-radius: var(--border-radius-base);
-    padding: 1.5rem;
+    padding: 1rem;
     box-shadow: 0 2px 8px var(--shadow-color);
     border: 1px solid var(--border-color);
 }
@@ -835,26 +774,26 @@ tr:hover {
     display: flex;
     align-items: center;
     gap: 15px;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--border-color);
 }
 
 .command-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background-color: var(--accent-color);
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent-color), #78d6ff);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
+    font-size: 1.25rem;
 }
 
 .command-header h3 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.16rem;
 }
 
 .command-description {
@@ -1672,10 +1611,10 @@ tr:hover {
 /* --- 13. Responsive Design --- */
 @media (max-width: 1024px) {
     header {
-        padding: 1rem 1.5rem;
+        padding: 0 14px;
     }
     .container {
-        padding: 1.5rem;
+        padding: 12px 14px;
     }
     .stats-grid, .monitor-grid, .action-grid, .info-grid {
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1690,13 +1629,27 @@ tr:hover {
     }
 }
 
+@media (min-width: 769px) and (max-width: 1180px) {
+    nav a span {
+        display: none;
+    }
+
+    nav a,
+    .theme-toggle {
+        width: 34px;
+        padding: 0;
+        justify-content: center;
+        overflow: hidden;
+    }
+}
+
 @media (max-width: 768px) {
     header {
-        padding: 1rem;
+        padding: 0 10px;
     }
     
     .logo-text {
-        font-size: 1.3rem;
+        font-size: 1rem;
     }
 
     .menu-toggle {
@@ -1705,11 +1658,11 @@ tr:hover {
     
     nav {
         position: fixed;
-        top: 60px; /* Adjust if header height changes */
+        top: 54px;
         left: -100%;
         width: 70%; /* Smaller width for mobile nav */
         max-width: 300px; /* Max width for nav */
-        height: calc(100vh - 60px);
+        height: calc(100vh - 54px);
         background-color: var(--bg-secondary);
         backdrop-filter: blur(5px);
         transition: left 0.3s ease;
@@ -1717,16 +1670,19 @@ tr:hover {
         box-shadow: 2px 0 10px var(--shadow-color);
         overflow-y: auto; /* Allow scrolling for many menu items */
         border-right: 1px solid var(--border-color);
+        display: block;
     }
 
     .tab-nav {
-        flex-wrap: nowrap;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.5rem;
+        padding: 0.55rem;
     }
 
     .tab-link {
-        padding: 0.62rem 0.9rem;
-        font-size: 0.9rem;
+        min-height: 38px;
+        padding: 0.5rem;
+        font-size: 0.84rem;
     }
 
     nav.active {
@@ -1739,28 +1695,14 @@ tr:hover {
         gap: 0.5rem;
     }
     nav a {
+        height: auto;
         padding: 0.8rem 1rem;
     }
     
-    .settings-dropdown {
-        width: 100%;
-        margin-left: 0;
-        margin-top: 1rem;
-        border-top: 1px solid var(--border-color);
-        padding-top: 1rem;
-    }
-    .settings-button {
+    .theme-toggle {
         width: 100%;
         justify-content: flex-start;
-    }
-    .dropdown-content {
-        position: static; /* Static positioning in mobile nav */
-        box-shadow: none;
-        border: none;
-        margin-top: 0;
-        padding-top: 0;
-        max-height: fit-content;
-        min-width: unset;
+        margin: 0 1rem 1rem;
     }
 
     .container {
@@ -1868,7 +1810,7 @@ tr:hover {
 
 @media (max-width: 480px) {
     header {
-        padding: 0.8rem;
+        padding: 0 8px;
     }
     .logo-icon {
         width: 35px;
@@ -1876,13 +1818,13 @@ tr:hover {
         font-size: 1.2rem;
     }
     .logo-text {
-        font-size: 1.2rem;
+        font-size: 0.96rem;
     }
     .menu-toggle {
         font-size: 1.3rem;
     }
     .container {
-        padding: 0.8rem;
+        padding: 0.7rem;
     }
     .card {
         padding: 1rem;
@@ -1913,6 +1855,9 @@ tr:hover {
     }
     .info-item p {
         font-size: 0.85rem;
+    }
+    .tab-nav {
+        grid-template-columns: 1fr;
     }
 }
 

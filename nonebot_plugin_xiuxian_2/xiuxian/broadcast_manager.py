@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import random
-import sqlite3
 import uuid
-from pathlib import Path
 from datetime import datetime, timedelta
 
 from nonebot.log import logger
@@ -16,8 +14,8 @@ from .adapter_compat import (
     get_chat_scene,
     get_group_id,
     get_user_id,
-    get_message_db_path,
 )
+from .xiuxian_utils.message_db import connect_message_db
 
 BROADCAST_TASKS: dict[str, dict] = {}
 
@@ -207,13 +205,7 @@ def _remember_broadcast_target(task: dict, scene: str, target_id: str):
 
 
 def _query_message_db_rows(sql: str, params: tuple = ()) -> list[dict]:
-    db_path = get_message_db_path()
-
-    if not Path(db_path).exists():
-        return []
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = connect_message_db(row_factory=True)
 
     try:
         cur = conn.cursor()
@@ -424,16 +416,16 @@ def _get_qq_recent_targets(adapter: str, kind: str) -> list[dict]:
     if not scenes:
         return []
 
-    placeholders = ",".join(["?"] * len(scenes))
+    placeholders = ",".join(["%s"] * len(scenes))
 
     rows = _query_message_db_rows(
         f"""
         SELECT *
         FROM messages
-        WHERE adapter = ?
+        WHERE adapter = %s
           AND direction = 'recv'
           AND scene IN ({placeholders})
-          AND created_at >= ?
+          AND created_at >= %s
           AND message_id IS NOT NULL
           AND message_id != ''
         ORDER BY created_at DESC, id DESC
@@ -485,7 +477,7 @@ def _get_ob11_history_targets(adapter: str, kind: str) -> list[dict]:
             """
             SELECT scene, group_id AS target_id, MAX(id) AS latest_id
             FROM messages
-            WHERE adapter = ?
+            WHERE adapter = %s
               AND scene IN ('group', 'channel_group')
               AND group_id IS NOT NULL
               AND group_id != ''
@@ -511,7 +503,7 @@ def _get_ob11_history_targets(adapter: str, kind: str) -> list[dict]:
             """
             SELECT scene, user_id AS target_id, MAX(id) AS latest_id
             FROM messages
-            WHERE adapter = ?
+            WHERE adapter = %s
               AND scene IN ('private', 'channel_private')
               AND user_id IS NOT NULL
               AND user_id != ''

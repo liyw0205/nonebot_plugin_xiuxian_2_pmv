@@ -11,17 +11,8 @@
     <script>
         (function() {
             try {
-                // 立即读取存储的主题和颜色
                 const savedTheme = localStorage.getItem('theme') || 'light';
-                const savedColor = localStorage.getItem('customAccentColor');
-
-                // 在 body 渲染前应用到 html 标签上
-                document.documentElement.setAttribute('data-theme', savedTheme);
-
-                if (savedColor) {
-                    document.documentElement.setAttribute('data-custom-accent-color', 'true');
-                    document.documentElement.style.setProperty('--custom-accent-color', savedColor);
-                }
+                document.documentElement.setAttribute('data-theme', savedTheme === 'dark' ? 'dark' : 'light');
             } catch (e) {
                 document.documentElement.setAttribute('data-theme', 'light');
             }
@@ -59,31 +50,10 @@
                 <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
             </ul>
             
-            <!-- 主题/设置下拉菜单 -->
-            <div class="settings-dropdown">
-                <button class="settings-button" id="settingsButton">
-                    <i class="fas fa-palette"></i> 主题设置 <i class="fas fa-caret-down"></i>
-                </button>
-                <div class="dropdown-content" id="settingsDropdownContent">
-                    <label>
-                        <input type="radio" name="theme" value="light">
-                        <i class="fas fa-sun"></i> 浅色模式
-                    </label>
-                    <label>
-                        <input type="radio" name="theme" value="dark">
-                        <i class="fas fa-moon"></i> 深色模式
-                    </label>
-                    <label>
-                        <input type="radio" name="theme" value="vibrant">
-                        <i class="fas fa-paint-roller"></i> 活力模式
-                    </label>
-                    <hr>
-                    <div class="color-picker-group">
-                        <label for="customAccentColorInput"><i class="fas fa-fill-drip"></i> 自定义强调色:</label>
-                        <input type="color" id="customAccentColorInput" value="#007bff">
-                    </div>
-                </div>
-            </div>
+            <button class="theme-toggle" id="themeToggle" type="button" title="切换日夜主题">
+                <i class="fas fa-moon"></i>
+                <span>夜间</span>
+            </button>
         </nav>
     </header>
     
@@ -97,10 +67,7 @@
     <script>
         // --- 逻辑变量定义 ---
         const html = document.documentElement;
-        const themeRadios = document.querySelectorAll('input[name="theme"]');
-        const customColorInput = document.getElementById('customAccentColorInput');
-        const settingsButton = document.getElementById('settingsButton');
-        const settingsDropdownContent = document.getElementById('settingsDropdownContent');
+        const themeToggle = document.getElementById('themeToggle');
         const menuToggle = document.getElementById('menuToggle');
         const mainNav = document.getElementById('mainNav');
 
@@ -119,61 +86,27 @@
             } catch (e) {}
         }
 
-        function removeLocalStorage(key) {
-            try {
-                localStorage.removeItem(key);
-            } catch (e) {}
-        }
-
-        // --- 主题控制函数 ---
-
-        // 1. 设置预设主题 (浅色/深色/活力)
         function applyTheme(themeName) {
-            html.setAttribute('data-theme', themeName);
-            writeLocalStorage('theme', themeName);
-            
-            // 切换预设主题时，自动移除自定义强调色，恢复主题原生配色
-            removeCustomAccent();
-            
-            // 更新粒子颜色
-            updateParticles(themeName);
+            const normalizedTheme = themeName === 'dark' ? 'dark' : 'light';
+            html.setAttribute('data-theme', normalizedTheme);
+            writeLocalStorage('theme', normalizedTheme);
+            updateThemeToggle(normalizedTheme);
+            updateParticles(normalizedTheme);
         }
 
-        // 2. 设置自定义强调色
-        function applyCustomAccent(color) {
-            html.setAttribute('data-custom-accent-color', 'true');
-            html.style.setProperty('--custom-accent-color', color);
-            writeLocalStorage('customAccentColor', color);
-            
-            // 激活自定义颜色时，取消选中所有预设单选框
-            themeRadios.forEach(radio => radio.checked = false);
-        }
-
-        // 3. 移除自定义强调色
-        function removeCustomAccent() {
-            html.removeAttribute('data-custom-accent-color');
-            html.style.removeProperty('--custom-accent-color');
-            removeLocalStorage('customAccentColor');
+        function updateThemeToggle(themeName) {
+            if (!themeToggle) return;
+            const isDark = themeName === 'dark';
+            themeToggle.innerHTML = isDark
+                ? '<i class="fas fa-sun"></i><span>日间</span>'
+                : '<i class="fas fa-moon"></i><span>夜间</span>';
+            themeToggle.setAttribute('aria-label', isDark ? '切换到日间主题' : '切换到夜间主题');
         }
 
         // --- 初始化 UI 状态 (页面加载时执行) ---
         document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = readLocalStorage('theme', 'light') || 'light';
-            const savedColor = readLocalStorage('customAccentColor');
-
-            // 同步 UI 单选框状态
-            if (savedColor) {
-                applyCustomAccent(savedColor);
-                customColorInput.value = savedColor;
-            } else {
-                const radio = document.querySelector(`input[name="theme"][value="${savedTheme}"]`);
-                if (radio) radio.checked = true;
-            }
-
-            // 初始化粒子背景；消息页使用 QQ 窗口背景，不启用粒子层
-            if (!document.body.classList.contains('messages-layout')) {
-                initParticles(savedTheme);
-            }
+            const savedTheme = readLocalStorage('theme', 'light') === 'dark' ? 'dark' : 'light';
+            applyTheme(savedTheme);
 
             // 卡片入场动画延迟
             document.querySelectorAll('.card').forEach((card, index) => {
@@ -183,35 +116,12 @@
 
         // --- 事件监听器 ---
 
-        // 监听主题单选框点击
-        themeRadios.forEach(radio => {
-            radio.addEventListener('change', () => {
-                if (radio.checked) applyTheme(radio.value);
-            });
-        });
-
-        // 监听自定义取色器
-        if (customColorInput) {
-            customColorInput.addEventListener('input', (e) => {
-                applyCustomAccent(e.target.value);
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const nextTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                applyTheme(nextTheme);
             });
         }
-
-        // 下拉菜单切换
-        if (settingsButton && settingsDropdownContent) {
-            settingsButton.addEventListener('click', (e) => {
-                settingsDropdownContent.classList.toggle('show');
-                e.stopPropagation();
-            });
-        }
-
-        // 点击外部关闭下拉菜单
-        document.addEventListener('click', (e) => {
-            if (!settingsButton || !settingsDropdownContent) return;
-            if (!settingsDropdownContent.contains(e.target) && !settingsButton.contains(e.target)) {
-                settingsDropdownContent.classList.remove('show');
-            }
-        });
 
         // 移动端菜单切换
         if (menuToggle && mainNav) {
@@ -233,7 +143,7 @@
         // --- 粒子系统初始化函数 ---
         function initParticles(theme) {
             if (typeof window.particlesJS !== 'function') return;
-            const color = (theme === 'dark') ? "#3498db" : "#9370db";
+            const color = (theme === 'dark') ? "#35c7ff" : "#12b7f5";
             particlesJS('particles-js', {
                 particles: {
                     number: { value: 60, density: { enable: true, value_area: 800 } },

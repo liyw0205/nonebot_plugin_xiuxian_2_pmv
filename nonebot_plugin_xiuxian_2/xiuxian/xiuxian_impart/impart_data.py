@@ -1,9 +1,9 @@
-import sqlite3
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import os
 from nonebot.log import logger
+from ..xiuxian_utils import db_backend
 from .impart_all import impart_all
 
 # 数据库路径
@@ -20,7 +20,7 @@ class IMPART_DATA(object):
         self.data_all = impart_all  # 从外部导入的卡牌数据
         
         # 初始化数据库连接
-        self.conn = sqlite3.connect(DATABASE_IMPART, check_same_thread=False)
+        self.conn = db_backend.connect(DATABASE_IMPART, check_same_thread=False)
         self.cursor = self.conn.cursor()
         
         # 创建传承卡牌数据表
@@ -32,6 +32,7 @@ class IMPART_DATA(object):
     def _create_impart_card_table(self):
         """创建传承卡牌数据表"""
         try:
+            table_created = not self.conn.table_exists("impart_cards")
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS impart_cards (
                     user_id TEXT NOT NULL,
@@ -41,8 +42,9 @@ class IMPART_DATA(object):
                 )
             ''')
             self.conn.commit()
-            logger.opt(colors=True).info("<green>传承卡牌数据表创建成功</green>")
-        except sqlite3.Error as e:
+            if table_created:
+                logger.opt(colors=True).info("<green>传承卡牌数据表创建成功</green>")
+        except db_backend.Error as e:
             logger.error(f"创建传承卡牌数据表失败: {e}")
 
     def _migrate_existing_data(self):
@@ -86,11 +88,16 @@ class IMPART_DATA(object):
         """插入卡牌数据"""
         try:
             self.cursor.execute(
-                "INSERT OR REPLACE INTO impart_cards (user_id, card_name, quantity) VALUES (?, ?, ?)",
+                """
+                INSERT INTO impart_cards (user_id, card_name, quantity)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, card_name) DO UPDATE
+                SET quantity = EXCLUDED.quantity
+                """,
                 (user_id, card_name, quantity)
             )
             self.conn.commit()
-        except sqlite3.Error as e:
+        except db_backend.Error as e:
             logger.error(f"插入卡牌数据失败: {e}")
 
     def find_user_impart(self, user_id: str) -> bool:
@@ -98,12 +105,12 @@ class IMPART_DATA(object):
         user_id = str(user_id)
         try:
             self.cursor.execute(
-                "SELECT COUNT(*) FROM impart_cards WHERE user_id = ?",
+                "SELECT COUNT(*) FROM impart_cards WHERE user_id = %s",
                 (user_id,)
             )
             result = self.cursor.fetchone()
             return result[0] > 0
-        except sqlite3.Error as e:
+        except db_backend.Error as e:
             logger.error(f"检查用户存在失败: {e}")
             return False
 
@@ -119,7 +126,7 @@ class IMPART_DATA(object):
         try:
             # 检查卡片是否已存在
             self.cursor.execute(
-                "SELECT quantity FROM impart_cards WHERE user_id = ? AND card_name = ?",
+                "SELECT quantity FROM impart_cards WHERE user_id = %s AND card_name = %s",
                 (user_id, name)
             )
             result = self.cursor.fetchone()
@@ -128,7 +135,7 @@ class IMPART_DATA(object):
                 # 卡片已存在，增加数量
                 current_count = result[0] + 1
                 self.cursor.execute(
-                    "UPDATE impart_cards SET quantity = ? WHERE user_id = ? AND card_name = ?",
+                    "UPDATE impart_cards SET quantity = %s WHERE user_id = %s AND card_name = %s",
                     (current_count, user_id, name)
                 )
                 is_new = False
@@ -136,7 +143,7 @@ class IMPART_DATA(object):
                 # 新卡片
                 current_count = 1
                 self.cursor.execute(
-                    "INSERT INTO impart_cards (user_id, card_name, quantity) VALUES (?, ?, ?)",
+                    "INSERT INTO impart_cards (user_id, card_name, quantity) VALUES (%s, %s, %s)",
                     (user_id, name, current_count)
                 )
                 is_new = True
@@ -144,7 +151,7 @@ class IMPART_DATA(object):
             self.conn.commit()
             return is_new, current_count
             
-        except sqlite3.Error as e:
+        except db_backend.Error as e:
             logger.error(f"添加卡片失败: {e}")
             return False, 0
 
@@ -162,7 +169,7 @@ class IMPART_DATA(object):
         try:
             # 获取当前卡片数量
             self.cursor.execute(
-                "SELECT card_name, quantity FROM impart_cards WHERE user_id = ?",
+                "SELECT card_name, quantity FROM impart_cards WHERE user_id = %s",
                 (user_id,)
             )
             existing_cards = {row[0]: row[1] for row in self.cursor.fetchall()}
@@ -173,14 +180,14 @@ class IMPART_DATA(object):
                     # 已有卡片，增加数量
                     new_count = existing_cards[card_name] + 1
                     self.cursor.execute(
-                        "UPDATE impart_cards SET quantity = ? WHERE user_id = ? AND card_name = ?",
+                        "UPDATE impart_cards SET quantity = %s WHERE user_id = %s AND card_name = %s",
                         (new_count, user_id, card_name)
                     )
                     card_counts[card_name] = new_count
                 else:
                     # 新卡片
                     self.cursor.execute(
-                        "INSERT INTO impart_cards (user_id, card_name, quantity) VALUES (?, ?, 1)",
+                        "INSERT INTO impart_cards (user_id, card_name, quantity) VALUES (%s, %s, 1)",
                         (user_id, card_name)
                     )
                     new_cards.append(card_name)
@@ -190,7 +197,7 @@ class IMPART_DATA(object):
             self.conn.commit()
             return new_cards, card_counts
             
-        except sqlite3.Error as e:
+        except db_backend.Error as e:
             logger.error(f"批量添加卡片失败: {e}")
             return [], {}
 
@@ -203,7 +210,7 @@ class IMPART_DATA(object):
         user_id = str(user_id)
         try:
             self.cursor.execute(
-                "SELECT card_name, quantity FROM impart_cards WHERE user_id = ?",
+                "SELECT card_name, quantity FROM impart_cards WHERE user_id = %s",
                 (user_id,)
             )
             result = self.cursor.fetchall()
@@ -213,7 +220,7 @@ class IMPART_DATA(object):
             else:
                 return {}
                 
-        except sqlite3.Error as e:
+        except db_backend.Error as e:
             logger.error(f"获取用户卡片列表失败: {e}")
             return None
 

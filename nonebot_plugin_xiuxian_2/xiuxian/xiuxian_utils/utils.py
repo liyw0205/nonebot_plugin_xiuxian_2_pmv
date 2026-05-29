@@ -1789,20 +1789,33 @@ async def send_help_message(
     **_,
 ):
     """发送帮助文本：Markdown 开启时自动生成蓝字命令，关闭时保持纯文本。"""
-    buttons = [(k1, v1), (k2, v2), (k3, v3), (k4, v4)]
+    buttons = ((k1, v1), (k2, v2), (k3, v3), (k4, v4))
     has_button_id = _has_button_id(button_id)
-    md_msg = build_help_native_markdown(msg, buttons, append_buttons=not has_button_id)
-    rows = _build_keyboard_rows(buttons) if _markdown_buttons_enabled() and not has_button_id else None
+    md_msg, fallback_msg, cached_rows = _cached_help_message_payload(str(msg or " "), buttons, has_button_id)
+    rows = [list(row) for row in cached_rows] if _markdown_buttons_enabled() and not has_button_id else None
     await handle_send(
         bot,
         event,
         md_msg,
         native_markdown=True,
-        fallback_msg=strip_md_command_links(msg),
+        fallback_msg=fallback_msg,
         button_id=button_id,
         keyboard_rows=rows,
         at_msg=at_msg,
     )
+
+
+@lru_cache(maxsize=512)
+def _cached_help_message_payload(
+    msg: str,
+    buttons: tuple[tuple[Any, Any], ...],
+    has_button_id: bool,
+) -> tuple[str, str, list[list[tuple[str, str]]]]:
+    """缓存静态帮助文本的 Markdown 化、降级文本和按钮行。"""
+    md_msg = build_help_native_markdown(msg, list(buttons), append_buttons=not has_button_id)
+    fallback_msg = strip_md_command_links(msg)
+    rows = _build_keyboard_rows(list(buttons)) if not has_button_id else []
+    return md_msg, fallback_msg, rows
 
 
 def check_user_md_type(md_type, event):

@@ -18,6 +18,7 @@
                 <button class="active" type="button"><i class="fas fa-comment"></i> 会话</button>
                 <button type="button" onclick="toggleBroadcastPanel(true)"><i class="fas fa-bullhorn"></i> 广播</button>
                 <button type="button" onclick="refreshAll()"><i class="fas fa-sync"></i> 刷新</button>
+                <button type="button" onclick="openMessageConfigPanel()"><i class="fas fa-cog"></i> 配置</button>
             </div>
 
             <div class="qq-window-controls" aria-hidden="true">
@@ -35,9 +36,14 @@
                     <h2><i class="fas fa-comments"></i> 消息</h2>
                     <p>Web QQ / NTQQ 风格消息面板</p>
                 </div>
-                <button class="icon-btn" onclick="refreshAll()" title="刷新">
-                    <i class="fas fa-sync"></i>
-                </button>
+                <div class="qq-side-tools">
+                    <button class="icon-btn" onclick="refreshAll()" title="刷新">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                    <button class="icon-btn" onclick="openMessageConfigPanel()" title="配置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="qq-filter-bar">
@@ -259,6 +265,41 @@
     </div>
 </div>
 
+<div id="messageConfigOverlay" class="message-config-overlay hidden" onclick="closeMessageConfigPanel(event)">
+    <div class="message-config-dialog" role="dialog" aria-modal="true" aria-labelledby="messageConfigTitle" onclick="event.stopPropagation()">
+        <div class="message-config-header">
+            <h3 id="messageConfigTitle"><i class="fas fa-cog"></i> 消息配置</h3>
+            <button class="icon-btn" type="button" onclick="closeMessageConfigPanel()" title="关闭">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="message-config-form">
+            <label>
+                <span>记录上限 MB</span>
+                <input id="messageConfigMaxSize" type="number" min="0" max="10000" step="1" inputmode="numeric" title="0 表示不记录消息">
+            </label>
+            <label>
+                <span>群聊保留天数</span>
+                <input id="messageConfigGroupKeepDays" type="number" min="0" max="36500" step="1" inputmode="numeric">
+            </label>
+            <label>
+                <span>私聊保留天数</span>
+                <input id="messageConfigPrivateKeepDays" type="number" min="0" max="36500" step="1" inputmode="numeric">
+            </label>
+        </div>
+
+        <div id="messageConfigStatus" class="message-config-status"></div>
+
+        <div class="message-config-actions">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="closeMessageConfigPanel()">取消</button>
+            <button id="messageConfigSaveBtn" class="btn btn-primary btn-sm" type="button" onclick="saveMessageConfig()">
+                <i class="fas fa-save"></i> 保存
+            </button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
@@ -306,6 +347,12 @@
     margin: 2px 0 0;
     font-size: 0.78rem;
     color: var(--text-secondary);
+}
+
+.qq-side-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .icon-btn {
@@ -1074,6 +1121,85 @@
     display: none !important;
 }
 
+.message-config-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(10, 24, 42, 0.46);
+    backdrop-filter: blur(3px);
+}
+
+.message-config-dialog {
+    width: min(420px, 100%);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+    color: var(--text-primary);
+}
+
+.message-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.message-config-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-config-form {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+}
+
+.message-config-form label {
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.message-config-form input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.message-config-status {
+    min-height: 20px;
+    padding: 0 16px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.message-config-status.error {
+    color: var(--danger-color);
+}
+
+.message-config-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 16px 16px;
+}
+
 .media-panel {
     margin-top: 8px;
     background: var(--bg-primary);
@@ -1539,16 +1665,11 @@ body.messages-layout nav ul {
 }
 
 body.messages-layout nav a,
-body.messages-layout .settings-button {
+body.messages-layout .theme-toggle {
     height: 34px;
     padding: 0 10px;
     border-radius: 6px;
     font-size: 0.84rem;
-}
-
-body.messages-layout .settings-dropdown {
-    margin-left: 0;
-    flex-shrink: 0;
 }
 
 body.messages-layout .container {
@@ -2022,18 +2143,14 @@ body.messages-layout[data-theme='dark'] header {
     }
 
     body.messages-layout nav a,
-    body.messages-layout .settings-button {
+    body.messages-layout .theme-toggle {
         width: 34px;
         padding: 0;
         justify-content: center;
     }
 
-    body.messages-layout .settings-button {
+    body.messages-layout .theme-toggle {
         overflow: hidden;
-    }
-
-    body.messages-layout .settings-button .fa-caret-down {
-        display: none;
     }
 }
 
@@ -4246,6 +4363,100 @@ function refreshAll() {
     }
 }
 
+function setMessageConfigStatus(text, isError = false) {
+    const status = document.getElementById('messageConfigStatus');
+    if (!status) return;
+    status.textContent = text || '';
+    status.classList.toggle('error', !!isError);
+}
+
+function setMessageConfigSaving(isSaving) {
+    const btn = document.getElementById('messageConfigSaveBtn');
+    if (!btn) return;
+    btn.disabled = !!isSaving;
+    btn.innerHTML = isSaving ? '<i class="fas fa-spinner fa-spin"></i> 保存中' : '<i class="fas fa-save"></i> 保存';
+}
+
+function fillMessageConfigInputs(config) {
+    document.getElementById('messageConfigMaxSize').value = config.message_db_max_size_mb ?? 1000;
+    document.getElementById('messageConfigGroupKeepDays').value = config.message_group_keep_days ?? 0;
+    document.getElementById('messageConfigPrivateKeepDays').value = config.message_private_keep_days ?? 0;
+}
+
+async function loadMessageConfig() {
+    setMessageConfigStatus('加载中...');
+    const res = await fetch('/api/messages/config');
+    const data = await res.json();
+    if (!data.success) {
+        throw new Error(data.error || '加载失败');
+    }
+    fillMessageConfigInputs(data.config || {});
+    setMessageConfigStatus(data.record_enabled ? '' : '当前不记录新消息');
+}
+
+async function openMessageConfigPanel() {
+    const overlay = document.getElementById('messageConfigOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+
+    try {
+        await loadMessageConfig();
+        document.getElementById('messageConfigMaxSize')?.focus();
+    } catch (e) {
+        setMessageConfigStatus(e.message || '加载失败', true);
+    }
+}
+
+function closeMessageConfigPanel(event) {
+    if (event && event.currentTarget !== event.target) {
+        return;
+    }
+    document.getElementById('messageConfigOverlay')?.classList.add('hidden');
+}
+
+function readMessageConfigNumber(id, min, max) {
+    const input = document.getElementById(id);
+    const value = Number(input?.value ?? '');
+    if (!Number.isInteger(value) || value < min || value > max) {
+        throw new Error(`请输入 ${min} 到 ${max} 的整数`);
+    }
+    return value;
+}
+
+async function saveMessageConfig() {
+    let payload;
+    try {
+        payload = {
+            message_db_max_size_mb: readMessageConfigNumber('messageConfigMaxSize', 0, 10000),
+            message_group_keep_days: readMessageConfigNumber('messageConfigGroupKeepDays', 0, 36500),
+            message_private_keep_days: readMessageConfigNumber('messageConfigPrivateKeepDays', 0, 36500),
+        };
+    } catch (e) {
+        setMessageConfigStatus(e.message || '配置无效', true);
+        return;
+    }
+
+    try {
+        setMessageConfigSaving(true);
+        setMessageConfigStatus('');
+        const res = await fetch('/api/messages/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            throw new Error(data.error || '保存失败');
+        }
+        fillMessageConfigInputs(data.config || payload);
+        setMessageConfigStatus(data.record_enabled ? '已保存' : '已保存，当前不记录新消息');
+    } catch (e) {
+        setMessageConfigStatus(e.message || '保存失败', true);
+    } finally {
+        setMessageConfigSaving(false);
+    }
+}
+
 window.addEventListener('beforeunload', () => {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
 });
@@ -4263,6 +4474,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const menu = document.getElementById('messageActionMenu');
         if (menu && !menu.contains(event.target)) {
             closeMessageActionMenu();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeMessageConfigPanel();
         }
     });
     await loadBots();

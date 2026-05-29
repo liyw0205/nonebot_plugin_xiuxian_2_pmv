@@ -39,6 +39,7 @@
         
         {% for db_name, db_info in tables.items() %}
         {% set db_id = db_name|replace(' ', '_')|replace('(', '')|replace(')', '')|replace('.', '_') %}
+        {% set table_total = db_info.tables|length %}
         <div class="database-card card animate-in delay-{{ loop.index + 2 }}">
             <!-- 数据库头部区域 - 可点击展开/收起 -->
             <div class="database-header" onclick="toggleDatabase('{{ db_id }}')" style="cursor: pointer;">
@@ -55,8 +56,8 @@
             
             <!-- 表列表容器 -->
             <div id="{{ db_id }}_tables" class="database-tables" style="display: none;">
-                {% if db_info.tables|length > 0 %}
-                <div class="tables-grid">
+                {% if table_total > 0 %}
+                <div class="tables-grid {% if table_total <= 9 %}tables-grid--one{% elif table_total <= 18 %}tables-grid--two{% else %}tables-grid--three{% endif %}">
                     {% for table_name, table_info in db_info.tables.items() %}
                     <div class="table-card">
                         <div class="table-icon">
@@ -89,6 +90,56 @@
     </div>
 </div>
 
+<style>
+.database-tables .tables-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+.database-tables .tables-grid.tables-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.database-tables .tables-grid.tables-grid--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1024px) {
+    .database-tables .tables-grid.tables-grid--three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (max-width: 640px) {
+    .database-tables .tables-grid {
+        gap: 8px;
+    }
+    .database-tables .table-card {
+        padding: 8px;
+        gap: 6px;
+    }
+    .database-tables .table-icon {
+        display: none;
+    }
+    .database-tables .table-info h5 {
+        font-size: 0.82rem;
+        line-height: 1.25;
+        margin-bottom: 2px;
+        word-break: break-word;
+    }
+    .database-tables .table-info p {
+        font-size: 0.72rem;
+        line-height: 1.2;
+        word-break: break-word;
+    }
+    .database-tables .table-actions {
+        margin-top: 4px;
+    }
+    .database-tables .table-actions .btn {
+        min-height: 30px;
+        padding: 0.36rem 0.4rem;
+        font-size: 0.72rem;
+        white-space: normal;
+        line-height: 1.15;
+    }
+}
+</style>
+
 <script>
 // 数据库展开/收起功能
 function toggleDatabase(dbId) {
@@ -96,7 +147,7 @@ function toggleDatabase(dbId) {
     const toggleIcon = document.getElementById('icon_' + dbId);
     
     if (tableContainer.style.display === 'none') {
-        tableContainer.style.display = 'grid'; // 改用 grid 触发布局重排
+        tableContainer.style.display = 'block';
         toggleIcon.className = 'fas fa-chevron-down';
         // 添加淡入缩放动画
         tableContainer.style.animation = 'fadeInUp 0.3s ease-out forwards';

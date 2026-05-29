@@ -4,17 +4,6 @@
     <h2><i class="fas fa-archive"></i> 备份管理</h2>
     <p>统一管理数据库与插件备份，支持本地恢复、批量删除、云端同步、云端恢复与云端批量删除。</p>
 
-    <!-- 全局进度条 -->
-    <div id="batch-progress-wrap" class="hidden" style="margin-bottom: 15px;">
-        <div class="progress-head">
-            <span id="batch-progress-title">处理中...</span>
-            <span id="batch-progress-text">0 / 0</span>
-        </div>
-        <div class="progress-bar-outer">
-            <div id="batch-progress-bar" class="progress-bar-inner" style="width: 0%;"></div>
-        </div>
-    </div>
-
     <div class="tab-nav">
         <button class="tab-link active" id="tab-btn-db" onclick="switchTab('db', this)">
             <i class="fas fa-database"></i> 数据库备份
@@ -43,34 +32,43 @@
             <div class="info-item" style="margin-top: 15px;">
                 <h4><i class="fas fa-check-square"></i> 恢复数据库选择（至少1个）</h4>
                 <div class="db-select-grid">
-                    <label><input type="checkbox" class="db-check" value="xiuxian.db" checked> xiuxian.db</label>
-                    <label><input type="checkbox" class="db-check" value="xiuxian_impart.db" checked> xiuxian_impart.db</label>
-                    <label><input type="checkbox" class="db-check" value="player.db" checked> player.db</label>
-                    <label><input type="checkbox" class="db-check" value="trade.db" checked> trade.db</label>
+                    <label><input type="checkbox" class="db-check" value="xiuxian" checked> xiuxian</label>
+                    <label><input type="checkbox" class="db-check" value="xiuxian_impart" checked> xiuxian_impart</label>
+                    <label><input type="checkbox" class="db-check" value="player" checked> player</label>
+                    <label><input type="checkbox" class="db-check" value="trade" checked> trade</label>
                 </div>
             </div>
         </div>
 
-        <!-- 本地数据库备份（可折叠） -->
-        <div class="collapse-card" style="margin-top:12px;">
-            <div class="collapse-header" onclick="toggleSection('db-local')">
-                <h3><i class="fas fa-hdd"></i> 本地数据库备份</h3>
-                <button class="btn btn-sm btn-info" id="btn-db-local" type="button">收起</button>
-            </div>
-            <div id="section-db-local" class="collapse-body">
-                <div id="db-backups-list"><div class="loading">加载中...</div></div>
-            </div>
+        <div class="backup-source-switch" data-source-switch="db">
+            <button class="source-switch-btn active" type="button" onclick="switchBackupSource('db', 'local', this)">
+                <i class="fas fa-hdd"></i> 本地
+            </button>
+            <button class="source-switch-btn" type="button" onclick="switchBackupSource('db', 'cloud', this)">
+                <i class="fas fa-cloud"></i> 云端
+            </button>
         </div>
 
-        <!-- 云端数据库备份（可折叠） -->
-        <div class="collapse-card" style="margin-top:12px;">
-            <div class="collapse-header" onclick="toggleSection('db-cloud')">
-                <h3><i class="fas fa-cloud"></i> 云端数据库备份</h3>
-                <button class="btn btn-sm btn-info" id="btn-db-cloud" type="button">收起</button>
-            </div>
-            <div id="section-db-cloud" class="collapse-body">
+        <div class="backup-source-grid" data-source-grid="db">
+            <section class="backup-source-card mobile-active" data-source-scope="db" data-source-kind="local">
+                <div class="backup-source-head">
+                    <h3><i class="fas fa-hdd"></i> 本地数据库备份</h3>
+                    <button class="btn btn-sm btn-info" type="button" onclick="loadDbBackups()">
+                        <i class="fas fa-sync"></i> 刷新
+                    </button>
+                </div>
+                <div id="db-backups-list"><div class="loading">加载中...</div></div>
+            </section>
+
+            <section class="backup-source-card cloud-source" data-source-scope="db" data-source-kind="cloud">
+                <div class="backup-source-head">
+                    <h3><i class="fas fa-cloud"></i> 云端数据库备份</h3>
+                    <button class="btn btn-sm btn-info" type="button" onclick="loadCloudDbBackups()">
+                        <i class="fas fa-sync"></i> 刷新
+                    </button>
+                </div>
                 <div id="cloud-db-backups-list"><div class="loading">加载中...</div></div>
-            </div>
+            </section>
         </div>
     </div>
 
@@ -91,31 +89,39 @@
             </div>
         </div>
 
-        <!-- 本地插件备份（可折叠） -->
-        <div class="collapse-card" style="margin-top:12px;">
-            <div class="collapse-header" onclick="toggleSection('plugin-local')">
-                <h3><i class="fas fa-folder-open"></i> 本地插件备份</h3>
-                <button class="btn btn-sm btn-info" id="btn-plugin-local" type="button">收起</button>
-            </div>
-            <div id="section-plugin-local" class="collapse-body">
-                <div id="plugin-backups-list"><div class="loading">加载中...</div></div>
-            </div>
+        <div class="backup-source-switch" data-source-switch="plugin">
+            <button class="source-switch-btn active" type="button" onclick="switchBackupSource('plugin', 'local', this)">
+                <i class="fas fa-folder-open"></i> 本地
+            </button>
+            <button class="source-switch-btn" type="button" onclick="switchBackupSource('plugin', 'cloud', this)">
+                <i class="fas fa-cloud-download-alt"></i> 云端
+            </button>
         </div>
 
-        <!-- 云端插件备份（可折叠） -->
-        <div class="collapse-card" style="margin-top:12px;">
-            <div class="collapse-header" onclick="toggleSection('plugin-cloud')">
-                <h3><i class="fas fa-cloud-download-alt"></i> 云端插件备份</h3>
-                <button class="btn btn-sm btn-info" id="btn-plugin-cloud" type="button">收起</button>
-            </div>
-            <div id="section-plugin-cloud" class="collapse-body">
+        <div class="backup-source-grid" data-source-grid="plugin">
+            <section class="backup-source-card mobile-active" data-source-scope="plugin" data-source-kind="local">
+                <div class="backup-source-head">
+                    <h3><i class="fas fa-folder-open"></i> 本地插件备份</h3>
+                    <button class="btn btn-sm btn-info" type="button" onclick="loadPluginBackups()">
+                        <i class="fas fa-sync"></i> 刷新
+                    </button>
+                </div>
+                <div id="plugin-backups-list"><div class="loading">加载中...</div></div>
+            </section>
+
+            <section class="backup-source-card cloud-source" data-source-scope="plugin" data-source-kind="cloud">
+                <div class="backup-source-head">
+                    <h3><i class="fas fa-cloud-download-alt"></i> 云端插件备份</h3>
+                    <button class="btn btn-sm btn-info" type="button" onclick="loadCloudPluginBackups()">
+                        <i class="fas fa-sync"></i> 刷新
+                    </button>
+                </div>
                 <div id="cloud-plugin-backups-list"><div class="loading">加载中...</div></div>
-            </div>
+            </section>
         </div>
     </div>
-
-    <div id="backup-status" style="margin-top: 12px;"></div>
 </div>
+<div id="backup-toast-container" class="backup-toast-container" aria-live="polite" aria-atomic="false"></div>
 
 <style>
 .hidden { display: none; }
@@ -141,6 +147,83 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 12px;
+}
+.backup-source-switch {
+    display: none;
+}
+.source-switch-btn {
+    min-height: 40px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.source-switch-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+.backup-source-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+    align-items: start;
+}
+.backup-source-card {
+    min-width: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    padding: 12px;
+    max-height: min(68vh, 760px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+.backup-source-card::-webkit-scrollbar {
+    width: 6px;
+}
+.backup-source-card::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-radius: 999px;
+}
+.backup-source-card.cloud-source {
+    background: linear-gradient(to right, rgba(23, 162, 184, 0.05), transparent), var(--bg-secondary);
+}
+.backup-source-head {
+    position: sticky;
+    top: -12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -12px -12px 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    backdrop-filter: blur(8px);
+}
+.backup-source-head h3 {
+    margin: 0;
+    font-size: 1.04rem;
+}
+.backup-bulk-actions {
+    position: sticky;
+    top: 40px;
+    z-index: 1;
+    margin: 0 0 10px;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    backdrop-filter: blur(8px);
 }
 .backup-card.cloud-item {
     border-left: 4px solid var(--info-color);
@@ -185,42 +268,103 @@
     transition: width 0.25s ease;
 }
 
-/* 折叠区 */
-.collapse-card {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--bg-secondary);
-    overflow: hidden;
-}
-.collapse-header {
+.backup-toast-container {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 2000;
+    width: min(420px, calc(100vw - 32px));
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+.backup-toast {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) 28px;
+    gap: 10px;
+    align-items: start;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--info-color);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    color: var(--text-primary);
+    box-shadow: 0 14px 32px var(--shadow-color);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+    animation: toastIn 0.18s ease-out;
+}
+.backup-toast.toast-success { border-left-color: var(--success-color); }
+.backup-toast.toast-error { border-left-color: var(--danger-color); }
+.backup-toast.toast-progress { border-left-color: var(--accent-color); }
+.toast-icon {
+    display: flex;
+    justify-content: center;
+    color: var(--info-color);
+    padding-top: 2px;
+}
+.toast-success .toast-icon { color: var(--success-color); }
+.toast-error .toast-icon { color: var(--danger-color); }
+.toast-content {
+    min-width: 0;
+}
+.toast-title {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.92rem;
+}
+.toast-message {
+    color: var(--text-secondary);
+    white-space: pre-line;
+    word-break: break-word;
+    line-height: 1.45;
+}
+.toast-close {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
     cursor: pointer;
-    border-bottom: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
 }
-.collapse-header h3 {
-    margin: 0;
-    font-size: 1.05rem;
+.toast-close:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
-.collapse-body {
-    max-height: 3000px;
-    overflow: hidden;
-    transition: max-height .25s ease, opacity .2s ease, padding .2s ease;
-    opacity: 1;
-    padding: 10px;
-}
-.collapse-body.collapsed {
-    max-height: 0;
+.backup-toast.is-leaving {
     opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    transform: translateY(8px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+@keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 768px) {
+    .backup-source-switch {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin: 12px 0;
+        padding: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-primary));
+    }
+    .backup-source-grid { grid-template-columns: 1fr; }
+    .backup-source-card { display: none; }
+    .backup-source-card.mobile-active { display: block; }
+    .backup-source-card { max-height: none; }
+    .backup-bulk-actions { position: static; }
     .backups-container { grid-template-columns: 1fr; }
+    .backup-toast-container {
+        right: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
+    }
 }
 </style>
 
@@ -231,21 +375,93 @@ const selectedCloudPluginBackups = new Set();
 const selectedLocalDbBackups = new Set();
 const selectedCloudDbBackups = new Set();
 
-/* ====================== 折叠状态 ====================== */
-const sectionState = {
-    'db-local': true,
-    'db-cloud': true,
-    'plugin-local': true,
-    'plugin-cloud': true
-};
-
 /* ====================== UI 工具 ====================== */
+let toastSeq = 0;
+let statusToastId = null;
+let progressToastId = null;
+const toastTimers = new Map();
+
+function getToastIcon(type) {
+    if (type === 'success') return 'fas fa-check-circle';
+    if (type === 'error') return 'fas fa-exclamation-circle';
+    if (type === 'progress') return 'fas fa-spinner fa-spin';
+    return 'fas fa-info-circle';
+}
+
+function dismissToast(id, immediate=false) {
+    const toast = document.querySelector(`[data-toast-id="${id}"]`);
+    if (!toast) return;
+    const timer = toastTimers.get(id);
+    if (timer) clearTimeout(timer);
+    toastTimers.delete(id);
+    if (immediate) {
+        toast.remove();
+        return;
+    }
+    toast.classList.add('is-leaving');
+    setTimeout(() => toast.remove(), 180);
+}
+
+function showToast(message, type='info', options={}) {
+    if (!message) return null;
+    const container = document.getElementById('backup-toast-container');
+    if (!container) {
+        alert(message);
+        return null;
+    }
+
+    const id = `backup-toast-${++toastSeq}`;
+    const toast = document.createElement('div');
+    toast.className = `backup-toast toast-${type}`;
+    toast.dataset.toastId = id;
+
+    const icon = document.createElement('div');
+    icon.className = 'toast-icon';
+    icon.innerHTML = `<i class="${getToastIcon(type)}"></i>`;
+
+    const content = document.createElement('div');
+    content.className = 'toast-content';
+    if (options.title) {
+        const title = document.createElement('strong');
+        title.className = 'toast-title';
+        title.textContent = options.title;
+        content.appendChild(title);
+    }
+    const body = document.createElement('div');
+    body.className = 'toast-message';
+    body.textContent = message;
+    content.appendChild(body);
+
+    const close = document.createElement('button');
+    close.className = 'toast-close';
+    close.type = 'button';
+    close.setAttribute('aria-label', '关闭提示');
+    close.innerHTML = '<i class="fas fa-times"></i>';
+    close.onclick = () => dismissToast(id);
+
+    toast.appendChild(icon);
+    toast.appendChild(content);
+    toast.appendChild(close);
+    container.appendChild(toast);
+
+    if (!options.persistent) {
+        const duration = options.duration ?? (type === 'error' ? 7000 : 3800);
+        toastTimers.set(id, setTimeout(() => dismissToast(id), duration));
+    }
+    return id;
+}
+
 function setStatus(msg, type='info') {
-    const box = document.getElementById('backup-status');
-    if (!msg) { box.innerHTML = ''; return; }
-    if (type === 'error') box.innerHTML = `<div class="error">${msg}</div>`;
-    else if (type === 'success') box.innerHTML = `<div class="success">${msg}</div>`;
-    else box.innerHTML = `<div class="loading">${msg}</div>`;
+    if (!msg) {
+        if (statusToastId) dismissToast(statusToastId);
+        statusToastId = null;
+        return;
+    }
+    if (statusToastId) dismissToast(statusToastId, true);
+    statusToastId = showToast(msg, type, {
+        persistent: type === 'info',
+        duration: type === 'error' ? 7500 : 4200
+    });
 }
 
 function switchTab(type, el){
@@ -256,48 +472,50 @@ function switchTab(type, el){
     document.getElementById('tab-'+type).classList.add('active');
 }
 
+function switchBackupSource(scope, source, el) {
+    document.querySelectorAll(`[data-source-switch="${scope}"] .source-switch-btn`).forEach(btn => {
+        btn.classList.remove('active');
+    });
+    if (el) el.classList.add('active');
+
+    document.querySelectorAll(`[data-source-scope="${scope}"]`).forEach(card => {
+        card.classList.toggle('mobile-active', card.dataset.sourceKind === source);
+    });
+}
+
 function getSelectedDbs(){
     return Array.from(document.querySelectorAll('.db-check:checked')).map(x=>x.value);
 }
 
-/* ====================== 折叠 ====================== */
-function toggleSection(key) {
-    sectionState[key] = !sectionState[key];
-    applySectionState(key);
-}
-function applySectionState(key) {
-    const body = document.getElementById(`section-${key}`);
-    const btn = document.getElementById(`btn-${key}`);
-    if (!body || !btn) return;
-    if (sectionState[key]) {
-        body.classList.remove('collapsed');
-        btn.innerText = '收起';
-    } else {
-        body.classList.add('collapsed');
-        btn.innerText = '展开';
-    }
-}
-function initSectionStates() {
-    Object.keys(sectionState).forEach(applySectionState);
-}
-
-/* ====================== 进度条 ====================== */
+/* ====================== 吐司进度 ====================== */
 function showBatchProgress(title='处理中...') {
-    const wrap = document.getElementById('batch-progress-wrap');
-    document.getElementById('batch-progress-title').innerText = title;
-    document.getElementById('batch-progress-text').innerText = '0 / 0';
-    document.getElementById('batch-progress-bar').style.width = '0%';
-    wrap.classList.remove('hidden');
+    if (progressToastId) dismissToast(progressToastId, true);
+    progressToastId = showToast('批量任务进度', 'progress', {persistent: true, title});
+    const toast = document.querySelector(`[data-toast-id="${progressToastId}"] .toast-content`);
+    if (!toast) return;
+    toast.innerHTML = `
+        <strong class="toast-title" id="batch-progress-title">${title}</strong>
+        <div class="progress-head">
+            <span>批量任务进度</span>
+            <span id="batch-progress-text">0 / 0</span>
+        </div>
+        <div class="progress-bar-outer">
+            <div id="batch-progress-bar" class="progress-bar-inner" style="width: 0%;"></div>
+        </div>
+    `;
 }
 function updateBatchProgress(current, total, title=null) {
+    if (!progressToastId) return;
     if (title) document.getElementById('batch-progress-title').innerText = title;
     const percent = total > 0 ? Math.round((current / total) * 100) : 0;
     document.getElementById('batch-progress-text').innerText = `${current} / ${total}`;
     document.getElementById('batch-progress-bar').style.width = `${percent}%`;
 }
 function hideBatchProgress(delay=600) {
+    const id = progressToastId;
+    progressToastId = null;
     setTimeout(() => {
-        document.getElementById('batch-progress-wrap').classList.add('hidden');
+        if (id) dismissToast(id);
     }, delay);
 }
 
@@ -365,7 +583,7 @@ async function loadDbBackups(){
     if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无本地数据库备份</div>'; return; }
 
     el.innerHTML = `
-        <div class="form-actions" style="margin-bottom:10px;">
+        <div class="form-actions backup-bulk-actions">
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-db', true)">全选</button>
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-db', false)">全不选</button>
             <button class="btn btn-info btn-sm" onclick="invertSelection('local-db')">反选</button>
@@ -384,6 +602,7 @@ async function loadDbBackups(){
                     <div class="backup-details" style="margin-top:10px;">
                         <div class="backup-detail-row"><strong>大小:</strong><span>${(b.size/1048576).toFixed(2)} MB</span></div>
                         <div class="backup-detail-row"><strong>创建时间:</strong><span>${new Date(b.created_at).toLocaleString()}</span></div>
+                        <div class="backup-detail-row"><strong>类型:</strong><span>SQLite</span></div>
                     </div>
                     <div class="backup-actions">
                         <button class="btn btn-warning btn-sm" onclick="restoreDbBackup('${b.filename}')">
@@ -399,7 +618,7 @@ async function loadDbBackups(){
 
 async function restoreDbBackup(filename){
     const selected = getSelectedDbs();
-    if(selected.length < 1){ alert('最少选择1个数据库'); return; }
+    if(selected.length < 1){ setStatus('最少选择1个数据库', 'error'); return; }
     if(!confirm(`确认恢复 ${filename} ?\n将恢复: ${selected.join(', ')}`)) return;
 
     setStatus('正在恢复数据库，请稍候...');
@@ -422,7 +641,7 @@ async function loadCloudDbBackups(){
     if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无云端数据库备份</div>'; return; }
 
     el.innerHTML = `
-        <div class="form-actions" style="margin-bottom:10px;">
+        <div class="form-actions backup-bulk-actions">
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-db', true)">全选</button>
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-db', false)">全不选</button>
             <button class="btn btn-info btn-sm" onclick="invertSelection('cloud-db')">反选</button>
@@ -475,7 +694,7 @@ async function syncCloudDb(filename, overwrite=false){
 
 async function cloudRestoreDb(filename){
     const selected = getSelectedDbs();
-    if(selected.length < 1){ alert('最少选择1个数据库'); return; }
+    if(selected.length < 1){ setStatus('最少选择1个数据库', 'error'); return; }
     if(!confirm(`确认云端恢复 ${filename} ?\n将恢复: ${selected.join(', ')}`)) return;
 
     setStatus('正在执行云端恢复...');
@@ -492,7 +711,7 @@ async function cloudRestoreDb(filename){
 /* ===== 数据库批量 ===== */
 async function batchDeleteLocalDbBackups() {
     const filenames = Array.from(selectedLocalDbBackups);
-    if (!filenames.length) return alert('请先勾选要删除的本地数据库备份');
+    if (!filenames.length) { setStatus('请先勾选要删除的本地数据库备份', 'error'); return; }
     if (!confirm(`确认删除选中的 ${filenames.length} 个数据库备份吗？`)) return;
 
     showBatchProgress('正在批量删除数据库备份...');
@@ -521,7 +740,7 @@ async function batchDeleteLocalDbBackups() {
 
 async function batchSyncCloudDbBackups(overwrite=false) {
     const filenames = Array.from(selectedCloudDbBackups);
-    if (!filenames.length) return alert('请先勾选要同步的云端数据库备份');
+    if (!filenames.length) { setStatus('请先勾选要同步的云端数据库备份', 'error'); return; }
 
     showBatchProgress('正在批量同步云端数据库备份...');
     updateBatchProgress(0, filenames.length);
@@ -557,7 +776,7 @@ async function batchSyncCloudDbBackups(overwrite=false) {
 
 async function batchDeleteCloudDbBackups() {
     const filenames = Array.from(selectedCloudDbBackups);
-    if (!filenames.length) return alert('请先勾选要删除的云端数据库备份');
+    if (!filenames.length) { setStatus('请先勾选要删除的云端数据库备份', 'error'); return; }
     if (!confirm(`确认删除云端选中的 ${filenames.length} 个数据库备份吗？\n此操作不可撤销！`)) return;
 
     showBatchProgress('正在批量删除云端数据库备份...');
@@ -602,7 +821,7 @@ async function loadPluginBackups(){
     if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无本地插件备份</div>'; return; }
 
     el.innerHTML = `
-        <div class="form-actions" style="margin-bottom:10px;">
+        <div class="form-actions backup-bulk-actions">
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-plugin', true)">全选</button>
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('local-plugin', false)">全不选</button>
             <button class="btn btn-info btn-sm" onclick="invertSelection('local-plugin')">反选</button>
@@ -657,7 +876,7 @@ async function loadCloudPluginBackups(){
     if(!data.backups.length){ el.innerHTML = '<div class="loading">暂无云端插件备份</div>'; return; }
 
     el.innerHTML = `
-        <div class="form-actions" style="margin-bottom:10px;">
+        <div class="form-actions backup-bulk-actions">
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-plugin', true)">全选</button>
             <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll('cloud-plugin', false)">全不选</button>
             <button class="btn btn-info btn-sm" onclick="invertSelection('cloud-plugin')">反选</button>
@@ -708,7 +927,7 @@ async function cloudRestorePlugin(filename){
 /* ===== 插件批量 ===== */
 async function batchDeleteLocalPluginBackups() {
     const filenames = Array.from(selectedLocalPluginBackups);
-    if (!filenames.length) return alert('请先勾选要删除的本地备份');
+    if (!filenames.length) { setStatus('请先勾选要删除的本地备份', 'error'); return; }
     if (!confirm(`确认删除选中的 ${filenames.length} 个本地备份吗？`)) return;
 
     showBatchProgress('正在批量删除本地插件备份...');
@@ -737,7 +956,7 @@ async function batchDeleteLocalPluginBackups() {
 
 async function batchSyncCloudPluginBackups(overwrite = false) {
     const filenames = Array.from(selectedCloudPluginBackups);
-    if (!filenames.length) return alert('请先勾选要同步的云端备份');
+    if (!filenames.length) { setStatus('请先勾选要同步的云端备份', 'error'); return; }
 
     showBatchProgress('正在批量同步云端插件备份...');
     updateBatchProgress(0, filenames.length);
@@ -773,7 +992,7 @@ async function batchSyncCloudPluginBackups(overwrite = false) {
 
 async function batchDeleteCloudPluginBackups() {
     const filenames = Array.from(selectedCloudPluginBackups);
-    if (!filenames.length) return alert('请先勾选要删除的云端插件备份');
+    if (!filenames.length) { setStatus('请先勾选要删除的云端插件备份', 'error'); return; }
     if (!confirm(`确认删除云端选中的 ${filenames.length} 个插件备份吗？\n此操作不可撤销！`)) return;
 
     showBatchProgress('正在批量删除云端插件备份...');
@@ -802,7 +1021,8 @@ async function batchDeleteCloudPluginBackups() {
 
 /* ====================== 初始化 ====================== */
 document.addEventListener('DOMContentLoaded', ()=>{
-    initSectionStates();
+    switchBackupSource('db', 'local', document.querySelector('[data-source-switch="db"] .source-switch-btn'));
+    switchBackupSource('plugin', 'local', document.querySelector('[data-source-switch="plugin"] .source-switch-btn'));
     loadDbBackups();
     loadCloudDbBackups();
     loadPluginBackups();

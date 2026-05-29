@@ -2,6 +2,37 @@ from .core import *  # noqa: F401,F403
 
 from .config import get_config_values
 
+DB_SELECTION_ALIASES = {
+    "xiuxian": "xiuxian.db",
+    "xiuxian.db": "xiuxian.db",
+    "xiuxian_impart": "xiuxian_impart.db",
+    "xiuxian_impart.db": "xiuxian_impart.db",
+    "player": "player.db",
+    "player.db": "player.db",
+    "trade": "trade.db",
+    "trade.db": "trade.db",
+}
+
+
+def normalize_db_selection(selected_dbs):
+    normalized = []
+    seen = set()
+    for db_name in selected_dbs or []:
+        safe_name = Path(str(db_name)).name
+        normalized_name = DB_SELECTION_ALIASES.get(safe_name)
+        if not normalized_name:
+            continue
+        if normalized_name not in seen:
+            seen.add(normalized_name)
+            normalized.append(normalized_name)
+    return normalized
+
+
+def db_path_for_selection(db_name):
+    safe_name = Path(str(db_name)).name
+    return Path() / "data" / "xiuxian" / safe_name
+
+
 @app.route('/get_cloud_backups')
 def get_cloud_backups():
     """获取云端备份列表"""
@@ -231,7 +262,7 @@ def restore_db_backup():
         return jsonify({"success": False, "error": "未登录"})
     data = request.get_json() or {}
     backup_filename = data.get("backup_filename")
-    selected_dbs = data.get("selected_dbs", [])
+    selected_dbs = normalize_db_selection(data.get("selected_dbs", []))
     if not backup_filename:
         return jsonify({"success": False, "error": "未指定备份文件"})
     if not selected_dbs:
@@ -274,7 +305,7 @@ def cloud_restore_db_backup():
         return jsonify({"success": False, "error": "未登录"})
     data = request.get_json() or {}
     filename = data.get("filename")
-    selected_dbs = data.get("selected_dbs", [])
+    selected_dbs = normalize_db_selection(data.get("selected_dbs", []))
     if not filename:
         return jsonify({"success": False, "error": "未指定云端备份文件"})
     if not selected_dbs:

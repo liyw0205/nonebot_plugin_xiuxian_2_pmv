@@ -129,7 +129,7 @@ bot, event = patch_context(bot, event)
 OneBot v11：
 
 - 包装 `send`、`send_group_msg`、`send_private_msg`、`call_api`。
-- 记录发送消息到 `message.db`。
+- 记录发送消息到本地 SQLite 文件 `message.db`。
 - 支持 `revoke_time` / `revoke_after` 自动撤回。
 
 QQ 官方适配器：
@@ -144,7 +144,7 @@ QQ 官方适配器：
 
 兼容层内置 Web 面板使用的消息记录能力：
 
-- 默认数据库：`message.db`。
+- 默认逻辑库：本地 SQLite 文件 `message.db`。
 - 接收消息：`patch_event_inplace` 后会记录 recv。
 - 发送消息：包装后的发送接口会记录 send。
 - Web 主动发送：使用 `record_web_send_message(...)`。

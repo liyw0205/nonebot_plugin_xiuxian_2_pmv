@@ -27,6 +27,7 @@ FIELDS = [
 ]
 
 REFRESH_INTERVAL_HOURS = 12
+MAX_ENDINGS_LOG = 10
 
 
 class PastLifeLimit:
@@ -74,6 +75,7 @@ class PastLifeLimit:
 
     def save_user_state(self, user_id, state):
         user_id = str(user_id)
+        state["endings_log"] = self.normalize_endings_log(state.get("endings_log", []))
         for f in FIELDS:
             v = state.get(f, self._default_state().get(f))
             player_data_manager.update_or_write_data(
@@ -91,6 +93,24 @@ class PastLifeLimit:
             except ValueError:
                 return None
         return None
+
+    def normalize_endings_log(self, endings_log):
+        """按时间从旧到新整理结局记录，只保留最近十世。"""
+        if not isinstance(endings_log, list):
+            return []
+
+        entries = [
+            (index, entry) for index, entry in enumerate(endings_log)
+            if isinstance(entry, dict)
+        ]
+
+        def sort_key(item):
+            index, entry = item
+            run_time = self._parse_run_time(entry.get("time"))
+            return run_time or datetime.min, index
+
+        ordered = [entry for _, entry in sorted(entries, key=sort_key)]
+        return ordered[-MAX_ENDINGS_LOG:]
 
     def _get_refresh_slot_start(self, now=None):
         """前尘刷新段：每日 00:00 与 12:00。"""
@@ -156,17 +176,22 @@ class PastLifeLimit:
     def save_run_result(self, user_id, ending_name, score):
         """记录一次完成的前世"""
         state = self.get_user_state(user_id)
-        state["total_runs"] = state.get("total_runs", 0) + 1
+        try:
+            total_runs = int(state.get("total_runs", 0))
+        except (TypeError, ValueError):
+            total_runs = 0
+        state["total_runs"] = total_runs + 1
 
         log = state.get("endings_log", [])
         if not isinstance(log, list):
             log = []
-        log.insert(0, {
+        log.append({
+            "run_number": state["total_runs"],
             "name": ending_name,
             "score": score,
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
-        state["endings_log"] = log[:20]
+        state["endings_log"] = self.normalize_endings_log(log)
 
         if score > state.get("best_score", 0):
             state["best_score"] = score

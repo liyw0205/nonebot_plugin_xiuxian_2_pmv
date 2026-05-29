@@ -38,7 +38,6 @@ from ..adapter_compat import (
     get_at_user_id,
     get_at_user_ids,
     has_at_user,
-    get_message_db_path,
 )
 
 from ..broadcast_manager import (
@@ -1336,9 +1335,9 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 重置新手礼包 - 重置新手礼包领取状态
 
 ⚡ 数据维护：
-→ 转换QQID - 将数据库QQ ID迁移为真实ID
-→ ID更新 [旧ID] [新ID] - 手动迁移单个用户ID
-→ ID交换 [ID1] [ID2] - 交换两个用户ID
+→ 转换QQID - 将数据库中的QQ ID迁移为真实ID
+→ ID更新 [旧ID] [新ID] - 手动迁移数据库中的单个用户ID
+→ ID交换 [ID1] [ID2] - 交换数据库中的两个用户ID
 → player数据同步 / player数据同步2 / player数据同步3 / player数据同步4 - 旧版玩家数据迁移
 → 同步灵庄 - 迁移灵庄数据
 → 同步鉴石 - 迁移鉴石数据
@@ -1777,12 +1776,13 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
             f"后续所有修仙命令都将以此身份执行，直至您取消伪装。"
         )
 
+
 @migrate_qqid_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将数据库中的QQ user_id迁移为真实ID"""
     bot, _ = await assign_bot(bot=bot, event=event)
     if XiuConfig().gsk_link:
-        await handle_send(bot, event, "开始执行QQID迁移，正在自动备份并更新数据库，请稍候...")
+        await handle_send(bot, event, "开始执行QQID迁移，正在更新 SQLite 数据库，请稍候...")
     else:
         await handle_send(bot, event, "当前gsk地址为空，请先修改配置gsk_link")
         await migrate_qqid_cmd.finish()
@@ -1790,6 +1790,7 @@ async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     ok, msg = await asyncio.to_thread(migrate_user_id_to_openid)
     await handle_send(bot, event, msg)
     await migrate_qqid_cmd.finish()
+
 
 @update_id_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def update_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1809,7 +1810,7 @@ async def update_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     old_id, new_id = arg_list[0], arg_list[1]
 
-    await handle_send(bot, event, f"开始执行手动ID更新：{old_id} -> {new_id}\n正在备份并校验，请稍候...")
+    await handle_send(bot, event, f"开始执行手动ID更新：{old_id} -> {new_id}\n正在校验并更新 SQLite，请稍候...")
 
     ok, msg = await asyncio.to_thread(migrate_single_user_id, old_id, new_id)
     await handle_send(bot, event, msg)
@@ -1830,7 +1831,7 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     id1, id2 = arg_list[0], arg_list[1]
-    await handle_send(bot, event, f"开始执行ID交换：{id1} - {id2}\n正在备份并校验，请稍候...")
+    await handle_send(bot, event, f"开始执行ID交换：{id1} - {id2}\n正在校验并更新 SQLite，请稍候...")
 
     ok, msg = await asyncio.to_thread(swap_two_user_ids, id1, id2)
     await handle_send(bot, event, msg)

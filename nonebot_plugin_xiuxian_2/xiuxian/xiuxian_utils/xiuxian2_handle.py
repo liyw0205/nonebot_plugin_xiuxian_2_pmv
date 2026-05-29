@@ -6,13 +6,15 @@ import os
 import zipfile
 import random
 import shutil
-import sqlite3
 import string
 import time
+import queue
+import copy
 from datetime import datetime, timedelta
 from pathlib import Path
 import threading
 from nonebot.log import logger
+from . import db_backend
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
 # from .. import DRIVER
@@ -32,6 +34,35 @@ player_num = "123451234"
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
+_USER_CD_TEXT_COLUMNS = {"user_id", "create_time", "scheduled_time", "last_check_info_time"}
+_BACK_TEXT_COLUMNS = {"user_id", "goods_name", "goods_type", "create_time", "update_time", "remake", "action_time"}
+_USER_XIUXIAN_TEXT_COLUMNS = {
+    "user_id",
+    "root",
+    "root_type",
+    "level",
+    "create_time",
+    "user_name",
+    "blessed_spot_name",
+}
+
+
+def _compat_column_definition(table_name: str, column_name: str) -> str:
+    """Schema补字段兼容：时间/文本字段不能用 INTEGER DEFAULT 0。"""
+    text_columns = {
+        "user_cd": _USER_CD_TEXT_COLUMNS,
+        "back": _BACK_TEXT_COLUMNS,
+        "user_xiuxian": _USER_XIUXIAN_TEXT_COLUMNS,
+    }
+    if column_name in text_columns.get(table_name, set()):
+        return "TEXT DEFAULT NULL"
+    return "INTEGER DEFAULT 0"
+
+
+def _quote_ident(name: str) -> str:
+    return db_backend.quote_ident(str(name))
+
+
 class XiuxianDateManage:
     global xiuxian_num
     _instance = {}
@@ -49,30 +80,49 @@ class XiuxianDateManage:
             if not self.database_path.exists():
                 self.database_path.mkdir(parents=True)
             self.database_path /= "xiuxian.db"
-            self.conn = sqlite3.connect(self.database_path, check_same_thread=False)
-            self.lock = threading.RLock()
+            self.conn = db_backend.connect(self.database_path, check_same_thread=False)
+            self._conn_lock = threading.RLock()
+            self.lock = self._conn_lock
+            self._business_lock = threading.RLock()
+            self._fast_conn_pool = queue.LifoQueue()
+            self._fast_conn_count = 0
+            self._fast_conn_lock = threading.Lock()
+            self._fast_conn_max = max(1, int(os.getenv("XIUXIAN_FAST_DB_POOL_SIZE", "64")))
+            self._read_cache = {}
+            self._read_cache_lock = threading.RLock()
+            self._read_cache_ttl = max(0.0, float(os.getenv("XIUXIAN_READ_CACHE_TTL", "2")))
             logger.opt(colors=True).info(f"<green>修仙数据库已连接！</green>")
             self._check_data()
 
     def close(self):
-        with self.lock:
+        with self._conn_lock:
             if getattr(self, "conn", None):
                 self.conn.close()
                 self.conn = None
                 logger.opt(colors=True).info(f"<green>修仙数据库关闭！</green>")
+        while hasattr(self, "_fast_conn_pool"):
+            try:
+                conn = self._fast_conn_pool.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def _check_data(self):
         """检查数据完整性"""
-        with self.lock:
+        with self._conn_lock:
             c = self.conn.cursor()
+            self._normalize_legacy_buffinfo_table(c)
 
             for i in XiuConfig().sql_table:
                 if i == "user_xiuxian":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
+                    except db_backend.OperationalError:
                         c.execute("""CREATE TABLE "user_xiuxian" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "id" INTEGER PRIMARY KEY,
       "user_id" TEXT NOT NULL,
       "sect_id" INTEGER DEFAULT NULL,
       "sect_position" INTEGER DEFAULT NULL,
@@ -97,7 +147,7 @@ class XiuxianDateManage:
                 elif i == "user_cd":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
+                    except db_backend.OperationalError:
                         c.execute("""CREATE TABLE "user_cd" (
       "user_id" TEXT NOT NULL PRIMARY KEY,
       "type" integer DEFAULT 0,
@@ -108,9 +158,9 @@ class XiuxianDateManage:
                 elif i == "sects":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
+                    except db_backend.OperationalError:
                         c.execute("""CREATE TABLE "sects" (
-      "sect_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "sect_id" INTEGER PRIMARY KEY,
       "sect_name" TEXT NOT NULL,
       "sect_owner" integer,
       "sect_scale" integer NOT NULL,
@@ -123,7 +173,7 @@ class XiuxianDateManage:
                 elif i == "back":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
+                    except db_backend.OperationalError:
                         c.execute("""CREATE TABLE "back" (
       "user_id" TEXT NOT NULL,
       "goods_id" INTEGER NOT NULL,
@@ -141,9 +191,9 @@ class XiuxianDateManage:
                 elif i == "BuffInfo":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
-                        c.execute("""CREATE TABLE "BuffInfo" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    except db_backend.OperationalError:
+                        c.execute("""CREATE TABLE buffinfo (
+      "id" INTEGER PRIMARY KEY,
       "user_id" TEXT DEFAULT 0,
       "main_buff" integer DEFAULT 0,
       "sec_buff" integer DEFAULT 0,
@@ -157,697 +207,980 @@ class XiuxianDateManage:
             for i in XiuConfig().sql_user_xiuxian:
                 try:
                     c.execute(f"select {i} from user_xiuxian")
-                except sqlite3.OperationalError:
-                    sql = f"ALTER TABLE user_xiuxian ADD COLUMN {i} INTEGER DEFAULT 0;"
+                except db_backend.OperationalError:
+                    column_def = _compat_column_definition("user_xiuxian", i)
+                    sql = f"ALTER TABLE user_xiuxian ADD COLUMN {i} {column_def};"
                     c.execute(sql)
 
             for d in XiuConfig().sql_user_cd:
                 try:
                     c.execute(f"select {d} from user_cd")
-                except sqlite3.OperationalError:
-                    sql = f"ALTER TABLE user_cd ADD COLUMN {d} INTEGER DEFAULT 0;"
+                except db_backend.OperationalError:
+                    column_def = _compat_column_definition("user_cd", d)
+                    sql = f"ALTER TABLE user_cd ADD COLUMN {d} {column_def};"
                     c.execute(sql)
 
             for s in XiuConfig().sql_sects:
                 try:
                     c.execute(f"select {s} from sects")
-                except sqlite3.OperationalError:
+                except db_backend.OperationalError:
                     sql = f"ALTER TABLE sects ADD COLUMN {s} INTEGER DEFAULT 0;"
                     c.execute(sql)
 
             for m in XiuConfig().sql_buff:
                 try:
                     c.execute(f"select {m} from BuffInfo")
-                except sqlite3.OperationalError:
+                except db_backend.OperationalError:
                     sql = f"ALTER TABLE BuffInfo ADD COLUMN {m} INTEGER DEFAULT 0;"
                     c.execute(sql)
 
             for b in XiuConfig().sql_back:
                 try:
                     c.execute(f"select {b} from back")
-                except sqlite3.OperationalError:
-                    sql = f"ALTER TABLE back ADD COLUMN {b} INTEGER DEFAULT 0;"
+                except db_backend.OperationalError:
+                    column_def = _compat_column_definition("back", b)
+                    sql = f"ALTER TABLE back ADD COLUMN {b} {column_def};"
                     c.execute(sql)
+
+            for column in ("create_time", "scheduled_time", "last_check_info_time"):
+                self._ensure_text_column(c, "user_cd", column)
 
             now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             c.execute(
                 """UPDATE user_cd
-                   SET last_check_info_time = ?
-                   WHERE last_check_info_time = '0' OR last_check_info_time IS NULL
+                   SET create_time = NULL
+                   WHERE trim(COALESCE(create_time, '')) IN ('', '0')
+                """
+            )
+            c.execute(
+                """UPDATE user_cd
+                   SET scheduled_time = NULL
+                   WHERE trim(COALESCE(scheduled_time, '')) IN ('', '0')
+                """
+            )
+            c.execute(
+                """UPDATE user_cd
+                   SET last_check_info_time = %s
+                   WHERE trim(COALESCE(last_check_info_time, '')) IN ('', '0')
                 """,
                 (now_time,)
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_id ON user_xiuxian(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_name ON user_xiuxian(user_name)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_stamina ON user_xiuxian(user_stamina)")
+            self._ensure_back_unique_index(c)
 
-            self.conn.commit()
+            self._commit_write()
+
+    def _ensure_text_column(self, cur, table_name: str, column_name: str):
+        try:
+            columns = {row[1] for row in self.conn.table_info(table_name)}
+            if column_name not in columns:
+                cur.execute(
+                    f"ALTER TABLE {_quote_ident(table_name)} "
+                    f"ADD COLUMN {_quote_ident(column_name)} TEXT DEFAULT NULL"
+                )
+        except Exception as e:
+            logger.warning(f"兼容 {table_name}.{column_name} 文本字段失败：{e}")
+
+    def _normalize_legacy_buffinfo_table(self, cur):
+        """兼容历史大小写不一致的 BuffInfo 表名。"""
+        return
 
     @classmethod
     def close_dbs(cls):
         XiuxianDateManage().close()
 
+    def _ensure_back_unique_index(self, cur):
+        """合并历史重复背包行，并确保背包按用户+物品唯一。"""
+        cur.execute("PRAGMA index_list(back)")
+        if any(row[1] == "idx_back_user_goods_unique" for row in cur.fetchall()):
+            return
+
+        max_goods_num = int(XiuConfig().max_goods_num)
+        cur.execute(
+            """
+            WITH normalized AS (
+                SELECT
+                    rowid AS rid,
+                    user_id,
+                    goods_id,
+                    COALESCE(goods_num, 0) AS goods_num,
+                    COALESCE(bind_num, 0) AS bind_num,
+                    COALESCE(day_num, 0) AS day_num,
+                    COALESCE(all_num, 0) AS all_num,
+                    COALESCE(state, 0) AS state,
+                    SUM(COALESCE(goods_num, 0)) OVER (PARTITION BY user_id, goods_id) AS total_goods_num,
+                    SUM(COALESCE(bind_num, 0)) OVER (PARTITION BY user_id, goods_id) AS total_bind_num,
+                    SUM(COALESCE(day_num, 0)) OVER (PARTITION BY user_id, goods_id) AS total_day_num,
+                    SUM(COALESCE(all_num, 0)) OVER (PARTITION BY user_id, goods_id) AS total_all_num,
+                    SUM(COALESCE(state, 0)) OVER (PARTITION BY user_id, goods_id) AS total_state,
+                    FIRST_VALUE(goods_name) OVER (
+                        PARTITION BY user_id, goods_id
+                        ORDER BY (goods_name IS NOT NULL) DESC, update_time DESC, create_time DESC, rowid DESC
+                    ) AS merged_goods_name,
+                    FIRST_VALUE(goods_type) OVER (
+                        PARTITION BY user_id, goods_id
+                        ORDER BY (goods_type IS NOT NULL) DESC, update_time DESC, create_time DESC, rowid DESC
+                    ) AS merged_goods_type,
+                    MIN(create_time) OVER (PARTITION BY user_id, goods_id) AS merged_create_time,
+                    MAX(update_time) OVER (PARTITION BY user_id, goods_id) AS merged_update_time,
+                    MAX(action_time) OVER (PARTITION BY user_id, goods_id) AS merged_action_time,
+                    FIRST_VALUE(remake) OVER (
+                        PARTITION BY user_id, goods_id
+                        ORDER BY (remake IS NOT NULL) DESC, update_time DESC, create_time DESC, rowid DESC
+                    ) AS merged_remake,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY user_id, goods_id
+                        ORDER BY update_time DESC, create_time DESC, rowid DESC
+                    ) AS rn,
+                    COUNT(*) OVER (PARTITION BY user_id, goods_id) AS duplicate_count
+                FROM back
+            ),
+            keepers AS (
+                SELECT *
+                FROM normalized
+                WHERE rn = 1 AND duplicate_count > 1
+            )
+            UPDATE back AS b
+            SET goods_name = COALESCE(k.merged_goods_name, b.goods_name),
+                goods_type = COALESCE(k.merged_goods_type, b.goods_type),
+                goods_num = LEAST(k.total_goods_num, %s),
+                bind_num = LEAST(k.total_bind_num, LEAST(k.total_goods_num, %s)),
+                day_num = k.total_day_num,
+                all_num = k.total_all_num,
+                state = LEAST(k.total_state, LEAST(k.total_goods_num, %s)),
+                create_time = COALESCE(k.merged_create_time, b.create_time),
+                update_time = COALESCE(k.merged_update_time, b.update_time),
+                action_time = COALESCE(k.merged_action_time, b.action_time),
+                remake = COALESCE(k.merged_remake, b.remake)
+            FROM keepers AS k
+            WHERE b.rowid = k.rid
+            """,
+            (max_goods_num, max_goods_num, max_goods_num),
+        )
+        cur.execute(
+            """
+            DELETE FROM back
+            WHERE rowid IN (
+                SELECT rid
+                FROM (
+                    SELECT rowid AS rid,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY user_id, goods_id
+                           ORDER BY update_time DESC, create_time DESC, rowid DESC
+                       ) AS rn
+                    FROM back
+                ) AS ranked
+                WHERE ranked.rn > 1
+            )
+            """
+        )
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_back_user_goods_unique ON back(user_id, goods_id)")
+
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""
-        with self.lock:
+        with self._conn_lock:
             c = self.conn.cursor()
-            sql = f"INSERT INTO user_xiuxian (user_id, stone, root, root_type, root_level, level, power, create_time, user_name, exp, work_num, sect_id, sect_position, user_stamina, is_novice) VALUES (?, 0, ?, ?, 0, '江湖好手', ?, ?, ?, 100, 5, NULL, NULL, ?, 0)"
+            sql = (
+                "INSERT INTO user_xiuxian "
+                "(user_id, stone, root, root_type, root_level, level, power, create_time, "
+                "user_name, exp, hp, mp, atk, work_num, sect_id, sect_position, user_stamina, is_novice) "
+                "VALUES (%s, 0, %s, %s, 0, '江湖好手', %s, %s, %s, 100, 50, 100, 10, 5, NULL, NULL, %s, 0)"
+            )
             c.execute(sql, (user_id, root, type, power, create_time, user_name, XiuConfig().max_stamina))
-            self.conn.commit()
+
+    def _borrow_fast_conn(self):
+        try:
+            return self._fast_conn_pool.get_nowait()
+        except queue.Empty:
+            pass
+
+        with self._fast_conn_lock:
+            if self._fast_conn_count < self._fast_conn_max:
+                self._fast_conn_count += 1
+                try:
+                    return db_backend.connect(self.database_path, check_same_thread=False)
+                except Exception:
+                    self._fast_conn_count -= 1
+                    raise
+
+        return self._fast_conn_pool.get()
+
+    def _return_fast_conn(self, conn, reusable: bool = True):
+        if not reusable:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            with self._fast_conn_lock:
+                self._fast_conn_count = max(0, self._fast_conn_count - 1)
+            return
+        self._fast_conn_pool.put(conn)
+
+    def _commit_write(self, conn=None):
+        (conn or self.conn).commit()
+        self._clear_read_cache()
+
+    def _clear_read_cache(self):
+        with self._read_cache_lock:
+            self._read_cache.clear()
+
+    def _get_read_cache(self, cache_key):
+        if not cache_key or self._read_cache_ttl <= 0:
+            return None, False
+        now_ts = time.monotonic()
+        with self._read_cache_lock:
+            cached = self._read_cache.get(cache_key)
+            if not cached:
+                return None, False
+            expires_at, value = cached
+            if expires_at <= now_ts:
+                self._read_cache.pop(cache_key, None)
+                return None, False
+            return copy.deepcopy(value), True
+
+    def _set_read_cache(self, cache_key, value, ttl=None):
+        if not cache_key:
+            return value
+        cache_ttl = self._read_cache_ttl if ttl is None else max(0.0, float(ttl))
+        if cache_ttl <= 0:
+            return value
+        with self._read_cache_lock:
+            self._read_cache[cache_key] = (time.monotonic() + cache_ttl, copy.deepcopy(value))
+        return value
+
+    def _read_query(self, sql, params=None, *, one=False, dict_row=False, cache_key=None, cache_ttl=None):
+        cached_value, cached = self._get_read_cache(cache_key)
+        if cached:
+            return cached_value
+
+        conn = None
+        reusable = True
+        try:
+            conn = self._borrow_fast_conn()
+            cur = conn.cursor()
+            cur.execute(sql, params or ())
+            if one:
+                row = cur.fetchone()
+                if row is None:
+                    result = None
+                elif dict_row:
+                    result = dict(zip((column[0] for column in cur.description), row))
+                else:
+                    result = row
+            else:
+                rows = cur.fetchall()
+                if dict_row:
+                    columns = [column[0] for column in cur.description]
+                    result = [dict(zip(columns, row)) for row in rows]
+                else:
+                    result = rows
+            return self._set_read_cache(cache_key, result, cache_ttl)
+        except Exception:
+            reusable = False
+            raise
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
 
     def today_active_users(self):
         """获取今日活跃用户数（今天有操作记录的用户）"""
-        with self.lock:
-            cur = self.conn.cursor()
-            today = datetime.now().strftime('%Y-%m-%d')
-            sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?"
-            cur.execute(sql, (today,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return 0
+        today = datetime.now().strftime('%Y-%m-%d')
+        create_date = db_backend.date_expression("create_time")
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE {create_date} = %s"
+        result = self._read_query(sql, (today,), one=True, cache_key=("today_active_users", today), cache_ttl=10)
+        return result[0] if result else 0
 
     def yesterday_active_users(self):
         """获取昨日活跃用户数（昨天有操作记录的用户）"""
-        with self.lock:
-            cur = self.conn.cursor()
-            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-            sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) = ?"
-            cur.execute(sql, (yesterday,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return 0
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        create_date = db_backend.date_expression("create_time")
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE {create_date} = %s"
+        result = self._read_query(sql, (yesterday,), one=True, cache_key=("yesterday_active_users", yesterday), cache_ttl=30)
+        return result[0] if result else 0
 
     def last_7days_active_users(self):
         """获取近七日活跃用户数（最近7天内有操作记录的用户）"""
-        with self.lock:
-            cur = self.conn.cursor()
-            seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
-            sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE date(create_time) >= ?"
-            cur.execute(sql, (seven_days_ago,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return 0
+        seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
+        create_date = db_backend.date_expression("create_time")
+        sql = f"SELECT COUNT(DISTINCT user_id) FROM user_cd WHERE {create_date} >= %s"
+        result = self._read_query(sql, (seven_days_ago,), one=True, cache_key=("last_7days_active_users", seven_days_ago), cache_ttl=30)
+        return result[0] if result else 0
 
     def all_users(self):
         """获取全部用户数"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = "SELECT COUNT(*) FROM user_xiuxian"
-            cur.execute(sql)
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return 0
+        result = self._read_query("SELECT COUNT(*) FROM user_xiuxian", one=True, cache_key=("all_users",), cache_ttl=10)
+        return result[0] if result else 0
 
     def get_user_count_by_level(self, level_name: str) -> int:
         """查询指定境界的人数"""
-        with self.lock:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM user_xiuxian WHERE level = ?",
-                (level_name,)
-            )
-            return cursor.fetchone()[0]
+        result = self._read_query(
+            "SELECT COUNT(*) FROM user_xiuxian WHERE level = %s",
+            (level_name,),
+            one=True,
+            cache_key=("get_user_count_by_level", level_name),
+            cache_ttl=10,
+        )
+        return result[0] if result else 0
+
+    def get_top_users_by_level(self, level_name: str, limit: int = 10):
+        """获取指定大境界或小境界修为最高的用户列表"""
+        level_name = str(level_name or "").strip()
+        if not level_name:
+            return []
+
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 10
+        limit = max(1, min(limit, 50))
+
+        _, rank_list = convert_rank('江湖好手')
+        exact_match = level_name in rank_list
+        if exact_match:
+            sql = """
+                SELECT * FROM user_xiuxian
+                WHERE level = %s AND user_name IS NOT NULL
+                ORDER BY exp DESC
+                LIMIT %s
+            """
+            return self._read_query(sql, (level_name, limit), dict_row=True)
+
+        possible_prefixes = [level_name]
+        if not level_name.endswith("境"):
+            possible_prefixes.append(f"{level_name}境")
+
+        matched_levels = []
+        for prefix in possible_prefixes:
+            matched_levels = [rank for rank in rank_list if rank.startswith(prefix)]
+            if matched_levels:
+                break
+
+        if not matched_levels:
+            return []
+
+        placeholders = ",".join(["%s"] * len(matched_levels))
+        sql = f"""
+            SELECT * FROM user_xiuxian
+            WHERE level IN ({placeholders}) AND user_name IS NOT NULL
+            ORDER BY exp DESC
+            LIMIT %s
+        """
+        return self._read_query(sql, (*matched_levels, limit), dict_row=True)
 
     def total_items_quantity(self):
         """获取全部用户背包的物品数量总合"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = "SELECT SUM(goods_num) FROM back"
-            cur.execute(sql)
-            result = cur.fetchone()
-            if result and result[0] is not None:
-                return result[0]
-            else:
-                return 0
+        result = self._read_query("SELECT SUM(goods_num) FROM back", one=True, cache_key=("total_items_quantity",), cache_ttl=10)
+        return result[0] if result and result[0] is not None else 0
 
     def get_user_info_with_id(self, user_id):
         """根据USER_ID获取用户信息,不获取功法加成"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from user_xiuxian WHERE user_id=?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                user_dict = dict(zip(columns, result))
-                return user_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from user_xiuxian WHERE user_id=%s",
+            (user_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def get_user_info_with_name(self, user_id):
         """根据user_name获取用户信息"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from user_xiuxian WHERE user_name=?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                user_dict = dict(zip(columns, result))
-                return user_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from user_xiuxian WHERE user_name=%s",
+            (user_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def update_all_users_stamina(self, max_stamina, stamina):
-        """体力未满用户更新体力值"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"""
-                UPDATE user_xiuxian
-                SET user_stamina = MIN(user_stamina + ?, ?)
-                WHERE user_stamina < ?
-            """
-            cur.execute(sql, (stamina, max_stamina, max_stamina))
-            self.conn.commit()
+        """体力未满用户更新体力值。"""
+        conn = db_backend.connect(self.database_path, check_same_thread=False)
+        total_updated = 0
+        batch_size = max(1, int(os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000")))
+
+        try:
+            while True:
+                cur = conn.cursor()
+                sql = """
+                    WITH pending AS (
+                        SELECT id
+                        FROM user_xiuxian
+                        WHERE user_stamina < %s
+                        ORDER BY id
+                        LIMIT %s
+                    )
+                    UPDATE user_xiuxian AS ux
+                    SET user_stamina = LEAST(ux.user_stamina + %s, %s)
+                    WHERE ux.id IN (SELECT id FROM pending)
+                """
+                cur.execute(sql, (max_stamina, batch_size, stamina, max_stamina))
+                updated = max(cur.rowcount, 0)
+                self._commit_write(conn)
+                total_updated += updated
+                if updated < batch_size:
+                    return total_updated
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
 
     def update_user_stamina(self, user_id, stamina_change, key):
         """更新用户体力值 1为增加，2为减少"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             max_stamina = XiuConfig().max_stamina
 
             if key == 1:
-                cur.execute("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+                cur.execute("SELECT user_stamina FROM user_xiuxian WHERE user_id=%s", (user_id,))
                 current_stamina = cur.fetchone()[0]
                 new_stamina = min(current_stamina + stamina_change, max_stamina)
                 if current_stamina < max_stamina:
-                    sql = "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?"
+                    sql = "UPDATE user_xiuxian SET user_stamina=%s WHERE user_id=%s"
                     cur.execute(sql, (new_stamina, user_id))
-                    self.conn.commit()
+                    self._commit_write()
 
             elif key == 2:
-                sql = "UPDATE user_xiuxian SET user_stamina=MAX(user_stamina-?, 0) WHERE user_id=?"
+                sql = "UPDATE user_xiuxian SET user_stamina=GREATEST(user_stamina-%s, 0) WHERE user_id=%s"
                 cur.execute(sql, (stamina_change, user_id))
-                self.conn.commit()
+                self._commit_write()
 
     def get_user_real_info(self, user_id):
         """根据USER_ID获取用户信息,获取功法加成"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from user_xiuxian WHERE user_id=?"
-            cur.execute(sql, (user_id,))
+        conn = None
+        reusable = True
+        try:
+            conn = self._borrow_fast_conn()
+            cur = conn.cursor()
+            cur.execute("select * from user_xiuxian WHERE user_id=%s", (user_id,))
             result = cur.fetchone()
             if result:
-                columns = cur.description
-                user_data_dict = final_user_data(result, columns)
-                return user_data_dict
-            else:
-                return None
+                return final_user_data(result, cur.description)
+            return None
+        except Exception:
+            reusable = False
+            raise
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
 
     def get_player_data(self, user_id, boss=False):
         """根据USER_ID获取用户信息,获取属性"""
-        with self.lock:
-            player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
-            userinfo = sql_message.get_user_real_info(user_id)
-            user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
+        player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
+        userinfo = sql_message.get_user_real_info(user_id)
+        user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
 
-            impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-            boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
-            impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
-            user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
-            user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
-            user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
-            integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
-            exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
+        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+        boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
+        impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
+        user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
+        user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
+        user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
+        integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
+        exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
 
-            if user_main_data != None:
-                main_crit_buff = user_main_data['crit_buff']
-            else:
-                main_crit_buff = 0
+        if user_main_data != None:
+            main_crit_buff = user_main_data['crit_buff']
+        else:
+            main_crit_buff = 0
 
-            if user_armor_data != None:
-                armor_crit_buff = user_armor_data['crit_buff']
-            else:
-                armor_crit_buff = 0
+        if user_armor_data != None:
+            armor_crit_buff = user_armor_data['crit_buff']
+        else:
+            armor_crit_buff = 0
 
-            if user_weapon_data != None:
-                player['会心'] = int(((user_weapon_data['crit_buff']) + (armor_crit_buff) + (main_crit_buff)) * 100)
-            else:
-                player['会心'] = (armor_crit_buff + main_crit_buff) * 100
+        if user_weapon_data != None:
+            player['会心'] = int(((user_weapon_data['crit_buff']) + (armor_crit_buff) + (main_crit_buff)) * 100)
+        else:
+            player['会心'] = (armor_crit_buff + main_crit_buff) * 100
 
-            player['user_id'] = userinfo['user_id']
-            player['道号'] = userinfo['user_name']
-            player['气血'] = userinfo['hp']
-            if boss:
-                player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
-            else:
-                player['攻击'] = int(userinfo['atk'])
-            player['真元'] = userinfo['mp']
-            player['exp'] = userinfo['exp']
-            return player
+        player['user_id'] = userinfo['user_id']
+        player['道号'] = userinfo['user_name']
+        player['气血'] = userinfo['hp']
+        if boss:
+            player['攻击'] = int(userinfo['atk'] * (1 + boss_atk))
+        else:
+            player['攻击'] = int(userinfo['atk'])
+        player['真元'] = userinfo['mp']
+        player['exp'] = userinfo['exp']
+        return player
 
     def get_sect_info(self, sect_id):
         """
         通过宗门编号获取宗门信息
         """
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from sects WHERE sect_id=?"
-            cur.execute(sql, (sect_id,))
-            result = cur.fetchone()
-            if result:
-                sect_id_dict = dict(zip((col[0] for col in cur.description), result))
-                return sect_id_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from sects WHERE sect_id=%s",
+            (sect_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def get_sect_owners(self):
         """获取所有宗主的 user_id"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"SELECT user_id FROM user_xiuxian WHERE sect_position = 0"
-            cur.execute(sql)
-            result = cur.fetchall()
-            return [row[0] for row in result]
+        result = self._read_query(
+            "SELECT user_id FROM user_xiuxian WHERE sect_position = 0",
+            cache_key=("get_sect_owners",),
+            cache_ttl=10,
+        )
+        return [row[0] for row in result]
 
     def get_elders(self):
         """获取所有长老的 user_id"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"SELECT user_id FROM user_xiuxian WHERE sect_position = 2"
-            cur.execute(sql)
-            result = cur.fetchall()
-            return [row[0] for row in result]
+        result = self._read_query(
+            "SELECT user_id FROM user_xiuxian WHERE sect_position = 2",
+            cache_key=("get_elders",),
+            cache_ttl=10,
+        )
+        return [row[0] for row in result]
 
     def create_user(self, user_id, *args):
         """校验用户是否存在"""
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"select * from user_xiuxian WHERE user_id=?"
+            sql = "SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if not result:
                 self._create_user(user_id, args[0], args[1], args[2], args[3], args[4])
-                self.conn.commit()
+                self._commit_write()
                 welcome_msg = f"欢迎进入修仙世界的，你的灵根为：{args[0]},类型是：{args[1]},你的战力为：{args[2]},当前境界：江湖好手"
                 return True, welcome_msg
             else:
                 return False, f"您已迈入修仙世界，输入【我的修仙信息】获取数据吧！"
 
+    def create_user_fast(self, user_id, *args):
+        """注册专用快路径：独立连接短事务，避免压测时被全局连接锁串行化。"""
+        conn = None
+        reusable = True
+        try:
+            conn = self._borrow_fast_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", (user_id,))
+            if cur.fetchone():
+                return False, f"您已迈入修仙世界，输入【我的修仙信息】获取数据吧！"
+            cur.execute("SELECT 1 FROM user_xiuxian WHERE user_name=%s LIMIT 1", (args[4],))
+            if cur.fetchone():
+                return None, "道号已存在，请重试"
+
+            sql = (
+                "INSERT INTO user_xiuxian "
+                "(user_id, stone, root, root_type, root_level, level, power, create_time, "
+                "user_name, exp, hp, mp, atk, work_num, sect_id, sect_position, user_stamina, is_novice) "
+                "VALUES (%s, 0, %s, %s, 0, '江湖好手', %s, %s, %s, 100, 50, 100, 10, 5, NULL, NULL, %s, 0)"
+            )
+            cur.execute(sql, (user_id, args[0], args[1], args[2], args[3], args[4], XiuConfig().max_stamina))
+            conn.commit()
+            welcome_msg = f"欢迎进入修仙世界的，你的灵根为：{args[0]},类型是：{args[1]},你的战力为：{args[2]},当前境界：江湖好手"
+            return True, welcome_msg
+        except Exception as exc:
+            reusable = False
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"注册快路径失败，回退普通注册: {exc}")
+            return self.create_user(user_id, *args)
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
+
+    def get_user_info_with_id_fast(self, user_id):
+        """独立连接查询用户，供高并发入口避开主连接锁。"""
+        conn = None
+        reusable = True
+        try:
+            conn = self._borrow_fast_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM user_xiuxian WHERE user_id=%s", (user_id,))
+            result = cur.fetchone()
+            if result:
+                columns = [column[0] for column in cur.description]
+                return dict(zip(columns, result))
+            return None
+        except Exception as exc:
+            reusable = False
+            logger.warning(f"用户快查失败，回退普通查询: {exc}")
+            return self.get_user_info_with_id(user_id)
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
+
     def get_sign(self, user_id):
         """获取用户签到信息"""
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             cur = self.conn.cursor()
-            sql = "select is_sign from user_xiuxian WHERE user_id=?"
+            sql = "select is_sign from user_xiuxian WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if not result:
                 return f"修仙界没有你的足迹，输入 我要修仙 加入修仙世界吧！"
             elif result[0] == 0:
                 ls = random.randint(XiuConfig().sign_in_lingshi_lower_limit, XiuConfig().sign_in_lingshi_upper_limit)
-                sql2 = f"UPDATE user_xiuxian SET is_sign=1,stone=stone+? WHERE user_id=?"
+                sql2 = f"UPDATE user_xiuxian SET is_sign=1,stone=stone+%s WHERE user_id=%s"
                 cur.execute(sql2, (ls, user_id))
-                self.conn.commit()
+                self._commit_write()
                 return f"签到成功，获取{ls}块灵石!"
             elif result[0] == 1:
                 return f"贪心的人是不会有好运的！"
 
     def get_beg(self, user_id):
         """获取仙途奇缘信息"""
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"select is_beg from user_xiuxian WHERE user_id=?"
+            sql = f"select is_beg from user_xiuxian WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if result[0] == 0:
                 ls = random.randint(XiuConfig().beg_lingshi_lower_limit, XiuConfig().beg_lingshi_upper_limit)
-                sql2 = f"UPDATE user_xiuxian SET is_beg=1,stone=stone+? WHERE user_id=?"
+                sql2 = f"UPDATE user_xiuxian SET is_beg=1,stone=stone+%s WHERE user_id=%s"
                 cur.execute(sql2, (ls, user_id))
-                self.conn.commit()
+                self._commit_write()
                 return ls
             elif result[0] == 1:
                 return None
 
     def get_novice(self, user_id):
         """检查用户是否已领取新手礼包"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select is_novice from user_xiuxian WHERE user_id=?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result[0] == 0:
-                return True
-            elif result[0] == 1:
-                return None
+        result = self._read_query("select is_novice from user_xiuxian WHERE user_id=%s", (user_id,), one=True)
+        if result and result[0] == 0:
+            return True
+        if result and result[0] == 1:
+            return None
 
     def save_novice(self, user_id):
         """标记用户已领取新手礼包"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET is_novice=1 WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET is_novice=1 WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def novice_remake(self):
         """重置新手礼包"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET is_novice=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def get_user_create_time(self, user_id):
         """获取用户创建时间"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = "SELECT create_time FROM user_xiuxian WHERE user_id=?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result and result[0]:
-                return _safe_parse_dt(result[0])
-            return None
+        result = self._read_query("SELECT create_time FROM user_xiuxian WHERE user_id=%s", (user_id,), one=True)
+        if result and result[0]:
+            return _safe_parse_dt(result[0])
+        return None
 
     def ramaker(self, lg, type, user_id):
         """洗灵根"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE user_xiuxian SET root=?,root_type=?,stone=stone-? WHERE user_id=?"
+            sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s,stone=stone-%s WHERE user_id=%s"
             cur.execute(sql, (lg, type, XiuConfig().remake, user_id))
-            self.conn.commit()
+            self._commit_write()
 
             self.update_power2(user_id)
             return f"逆天之行，重获新生，新的灵根为：{lg}，类型为：{type}"
 
     def get_root_rate(self, name, user_id):
         """获取灵根倍率"""
-        with self.lock:
-            data = jsondata.root_data()
-            if name == '命运道果':
-                # 基础加成（永恒道果的7.0）
-                base_rate = data['永恒道果']['type_speeds']
-                # 命运道果的基础增量系数（2.0）
-                current_step_bonus = data[name]['type_speeds']
+        data = jsondata.root_data()
+        if name == '命运道果':
+            # 基础加成（永恒道果的7.0）
+            base_rate = data['永恒道果']['type_speeds']
+            # 命运道果的基础增量系数（2.0）
+            current_step_bonus = data[name]['type_speeds']
+            
+            user_info = self.get_user_info_with_id(user_id)
+            root_level = int((user_info or {}).get('root_level', 0))
+            
+            total_bonus = 0.0
+            remaining_levels = root_level
+            
+            # 阶梯式计算循环
+            while remaining_levels > 0:
+                # 每个阶段计算5级
+                levels_in_this_step = min(remaining_levels, 5)
+                total_bonus += levels_in_this_step * current_step_bonus
+                remaining_levels -= levels_in_this_step
                 
-                user_info = self.get_user_info_with_id(user_id)
-                root_level = int(user_info.get('root_level', 0))
+                # 进入下一阶段，系数减少0.3，最低0.5
+                current_step_bonus = round(max(0.5, current_step_bonus - 0.3), 2)
                 
-                total_bonus = 0.0
-                remaining_levels = root_level
-                
-                # 阶梯式计算循环
-                while remaining_levels > 0:
-                    # 每个阶段计算5级
-                    levels_in_this_step = min(remaining_levels, 5)
-                    total_bonus += levels_in_this_step * current_step_bonus
-                    remaining_levels -= levels_in_this_step
-                    
-                    # 进入下一阶段，系数减少0.3，最低0.5
-                    current_step_bonus = round(max(0.5, current_step_bonus - 0.3), 2)
-                    
-                    # 如果系数已经到0.5了，剩下的等级可以直接批量计算，跳出循环
-                    if current_step_bonus <= 0.5:
-                        total_bonus += remaining_levels * 0.5
-                        break
-                
-                return base_rate + total_bonus
-            else:
-                return data[name]['type_speeds']
+                # 如果系数已经到0.5了，剩下的等级可以直接批量计算，跳出循环
+                if current_step_bonus <= 0.5:
+                    total_bonus += remaining_levels * 0.5
+                    break
+            
+            return base_rate + total_bonus
+        else:
+            return data[name]['type_speeds']
 
     def get_level_power(self, name):
         """获取境界倍率|exp"""
-        with self.lock:
-            data = jsondata.level_data()
-            return data[name]['power']
+        data = jsondata.level_data()
+        return data[name]['power']
 
     def get_level_cost(self, name):
         """获取炼体境界倍率"""
-        with self.lock:
-            data = jsondata.exercises_level_data()
-            return data[name]['cost_exp'], data[name]['cost_stone']
+        data = jsondata.exercises_level_data()
+        return data[name]['cost_exp'], data[name]['cost_stone']
 
     def update_power2(self, user_id) -> None:
         """更新战力"""
-        with self.lock:
+        with self._conn_lock:
             UserMessage = self.get_user_info_with_id(user_id)
             cur = self.conn.cursor()
             level = jsondata.level_data()
             root_rate = sql_message.get_root_rate(UserMessage['root_type'], user_id)
-            sql = f"UPDATE user_xiuxian SET power=round(exp*?*?,0) WHERE user_id=?"
+            sql = f"UPDATE user_xiuxian SET power=round(exp*%s*%s,0) WHERE user_id=%s"
             cur.execute(sql, (root_rate, level[UserMessage['level']]["spend"], user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_ls(self, user_id, price, key):
         """更新灵石 1增加 2减少"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             price = abs(int(price))
             if key == 1:
-                sql = "UPDATE user_xiuxian SET stone=stone+? WHERE user_id=?"
+                sql = "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s"
                 cur.execute(sql, (price, user_id))
             elif key == 2:
-                sql = "UPDATE user_xiuxian SET stone=MAX(stone-?, 0) WHERE user_id=?"
+                sql = "UPDATE user_xiuxian SET stone=GREATEST(stone-%s, 0) WHERE user_id=%s"
                 cur.execute(sql, (price, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_exp(self, user_id, exp):
         """增加修为"""
-        with self.lock:
+        with self._conn_lock:
             exp = number_count(exp)
-            sql = "UPDATE user_xiuxian SET exp=exp+? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET exp=exp+%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (exp, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_j_exp(self, user_id, exp):
         """减少修为"""
-        with self.lock:
+        with self._conn_lock:
             exp = number_count(exp)
-            sql = "UPDATE user_xiuxian SET exp=MAX(exp-?, 0) WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET exp=GREATEST(exp-%s, 0) WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (exp, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_root(self, user_id, key):
         """更新灵根"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if int(key) == 1:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("全属性灵根", "混沌灵根", user_id))
                 root_name = "混沌灵根"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 2:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("融合万物灵根", "融合灵根", user_id))
                 root_name = "融合灵根"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 3:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("月灵根", "超灵根", user_id))
                 root_name = "超灵根"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 4:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("言灵灵根", "龙灵根", user_id))
                 root_name = "龙灵根"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 5:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("金灵根", "天灵根", user_id))
                 root_name = "天灵根"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 6:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("轮回千次不灭，只为臻至巅峰", "轮回道果", user_id))
                 root_name = "轮回道果"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 7:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("轮回万次不灭，只为超越巅峰", "真·轮回道果", user_id))
                 root_name = "真·轮回道果"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 8:
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, ("轮回无尽不灭，只为触及永恒之境", "永恒道果", user_id))
                 root_name = "永恒道果"
-                self.conn.commit()
+                self._commit_write()
 
             elif int(key) == 9:
                 user_info = sql_message.get_user_info_with_id(user_id)
-                sql = f"UPDATE user_xiuxian SET root=?,root_type=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s WHERE user_id=%s"
                 cur.execute(sql, (f"轮回命主·{user_info['user_name']}", "命运道果", user_id))
                 root_name = "命运道果"
-                self.conn.commit()
+                self._commit_write()
 
             return root_name
 
     def update_root_name(self, user_id, root_name):
         """自定义灵根名称，不改变灵根类型和倍率。"""
-        with self.lock:
-            sql = "UPDATE user_xiuxian SET root=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = "UPDATE user_xiuxian SET root=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (root_name, user_id))
-            self.conn.commit()
+            self._commit_write()
             self.update_power2(user_id)
             return f"灵根已改名为：{root_name}"
 
     def update_ls_all(self, price):
         """所有用户增加灵石"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE user_xiuxian SET stone=stone+?"
+            sql = f"UPDATE user_xiuxian SET stone=stone+%s"
             cur.execute(sql, (price,))
-            self.conn.commit()
+            self._commit_write()
 
     def get_exp_rank(self, user_id):
         """修为排行"""
-        with self.lock:
-            sql = f"select rank from(select user_id,exp,dense_rank() over (ORDER BY exp desc) as 'rank' FROM user_xiuxian) WHERE user_id=?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            return result
+        sql = "SELECT rank_value FROM (SELECT user_id, exp, dense_rank() OVER (ORDER BY exp DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
+        return self._read_query(sql, (user_id,), one=True)
 
     def get_stone_rank(self, user_id):
         """灵石排行"""
-        with self.lock:
-            sql = f"select rank from(select user_id,stone,dense_rank() over (ORDER BY stone desc) as 'rank' FROM user_xiuxian) WHERE user_id=?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            return result
+        sql = "SELECT rank_value FROM (SELECT user_id, stone, dense_rank() OVER (ORDER BY stone DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
+        return self._read_query(sql, (user_id,), one=True)
 
     def get_ls_rank(self):
         """灵石排行榜"""
-        with self.lock:
-            sql = f"SELECT user_id,stone FROM user_xiuxian  WHERE stone>0 ORDER BY stone DESC LIMIT 5"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT user_id,stone FROM user_xiuxian  WHERE stone>0 ORDER BY stone DESC LIMIT 5"
+        return self._read_query(sql)
 
     def sign_remake(self):
         """重置签到"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET is_sign=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def beg_remake(self):
         """重置仙途奇缘"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET is_beg=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def ban_user(self, user_id):
         """将用户关进小黑屋"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = ?", (user_id,))
+            cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = %s", (user_id,))
             result = cur.fetchone()
             if not result:
                 return False
             if result[0] == 1:
                 return False
-            sql = "UPDATE user_xiuxian SET is_ban = 1 WHERE user_id = ?"
+            sql = "UPDATE user_xiuxian SET is_ban = 1 WHERE user_id = %s"
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def unban_user(self, user_id):
         """解除用户小黑屋状态"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = ?", (user_id,))
+            cur.execute("SELECT is_ban FROM user_xiuxian WHERE user_id = %s", (user_id,))
             result = cur.fetchone()
             if not result:
                 return False
             if result[0] == 0:
                 return False
-            sql = "UPDATE user_xiuxian SET is_ban = 0 WHERE user_id = ?"
+            sql = "UPDATE user_xiuxian SET is_ban = 0 WHERE user_id = %s"
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_mixelixir_num(self, user_id):
         """增加炼丹次数"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET mixelixir_num=mixelixir_num+1 WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET mixelixir_num=mixelixir_num+1 WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_name(self, user_id, user_name):
         """更新用户道号"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            get_name = f"select user_name from user_xiuxian WHERE user_name=?"
+            get_name = f"select user_name from user_xiuxian WHERE user_name=%s"
             cur.execute(get_name, (user_name,))
             result = cur.fetchone()
             if result:
                 return "已存在该道号！"
             else:
-                sql = f"UPDATE user_xiuxian SET user_name=? WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET user_name=%s WHERE user_id=%s"
                 cur.execute(sql, (user_name, user_id))
-                self.conn.commit()
+                self._commit_write()
                 return '道友的道号更新成啦~'
 
     def updata_level_cd(self, user_id):
         """更新突破境界CD"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET level_up_cd=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET level_up_cd=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             now_time = datetime.now()
             cur.execute(sql, (now_time, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_last_check_info_time(self, user_id):
         """更新查看修仙信息时间"""
-        with self.lock:
-            sql = "UPDATE user_cd SET last_check_info_time = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = "UPDATE user_cd SET last_check_info_time = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             now_time = datetime.now()
             cur.execute(sql, (now_time, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def get_last_check_info_time(self, user_id):
         """获取最后一次查看修仙信息时间"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = "SELECT last_check_info_time FROM user_cd WHERE user_id = ?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result and result[0]:
-                return _safe_parse_dt(result[0])
-            return None
+        sql = "SELECT last_check_info_time FROM user_cd WHERE user_id = %s"
+        result = self._read_query(sql, (user_id,), one=True)
+        if result and result[0]:
+            return _safe_parse_dt(result[0])
+        return None
 
     def updata_level(self, user_id, level_name):
         """更新境界"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET level=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET level=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (level_name, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_root_level(self, user_id, level_num):
         """更新轮回等级"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET root_level=root_level+? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET root_level=root_level+%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (level_num, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def get_user_cd(self, user_id):
         """获取用户操作CD"""
-        with self.lock:
-            sql = f"SELECT * FROM user_cd  WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"SELECT * FROM user_cd  WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
@@ -861,164 +1194,138 @@ class XiuxianDateManage:
 
     def insert_user_cd(self, user_id) -> None:
         """添加用户至CD表"""
-        with self.lock:
-            sql = f"INSERT INTO user_cd (user_id) VALUES (?)"
+        with self._conn_lock:
+            sql = f"INSERT INTO user_cd (user_id) VALUES (%s)"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def create_sect(self, user_id, sect_name) -> None:
         """创建宗门"""
-        with self.lock:
-            sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone, join_open, closed, combat_power) VALUES (?,?,0,0,1,0,0)"
+        with self._conn_lock:
+            sql = f"INSERT INTO sects(sect_name, sect_owner, sect_scale, sect_used_stone, join_open, closed, combat_power) VALUES (%s,%s,0,0,1,0,0)"
             cur = self.conn.cursor()
             cur.execute(sql, (sect_name, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_name(self, sect_id, sect_name) -> None:
         """修改宗门名称"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            get_sect_name = f"select sect_name from sects WHERE sect_name=?"
+            get_sect_name = f"select sect_name from sects WHERE sect_name=%s"
             cur.execute(get_sect_name, (sect_name,))
             result = cur.fetchone()
             if result:
                 return False
             else:
-                sql = f"UPDATE sects SET sect_name=? WHERE sect_id=?"
+                sql = f"UPDATE sects SET sect_name=%s WHERE sect_id=%s"
                 cur.execute(sql, (sect_name, sect_id))
-                self.conn.commit()
+                self._commit_write()
                 return True
 
     def get_sect_info_by_qq(self, user_id):
         """通过用户qq获取宗门信息"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from sects WHERE sect_owner=?"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                sect_onwer_dict = dict(zip(columns, result))
-                return sect_onwer_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from sects WHERE sect_owner=%s",
+            (user_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def calculate_sect_combat_power(self, sect_id):
         """计算宗门战力"""
-        with self.lock:
-            members = self.get_all_users_by_sect_id(sect_id)
-            total_power = 0
-            for member in members:
-                user_real_info = self.get_user_real_info(member['user_id'])
-                if user_real_info and 'power' in user_real_info:
-                    total_power += user_real_info['power']
-            return total_power
+        members = self.get_all_users_by_sect_id(sect_id)
+        total_power = 0
+        for member in members:
+            user_real_info = self.get_user_real_info(member['user_id'])
+            if user_real_info and 'power' in user_real_info:
+                total_power += user_real_info['power']
+        return total_power
 
     def update_sect_combat_power(self, sect_id):
         """更新宗门战力"""
-        with self.lock:
+        with self._conn_lock:
             total_power = self.calculate_sect_combat_power(sect_id)
-            sql = "UPDATE sects SET combat_power = ? WHERE sect_id = ?"
+            sql = "UPDATE sects SET combat_power = %s WHERE sect_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (total_power, sect_id))
-            self.conn.commit()
+            self._commit_write()
             return total_power
 
     def combat_power_top(self):
         """宗门战力排行榜"""
-        with self.lock:
-            sql = f"SELECT sect_id, sect_name, combat_power FROM sects WHERE sect_owner is NOT NULL ORDER BY combat_power DESC LIMIT 50"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT sect_id, sect_name, combat_power FROM sects WHERE sect_owner is NOT NULL ORDER BY combat_power DESC LIMIT 50"
+        return self._read_query(sql)
 
     def get_sect_info_by_id(self, sect_id):
         """通过宗门id获取宗门信息"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from sects WHERE sect_id=?"
-            cur.execute(sql, (sect_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                sect_dict = dict(zip(columns, result))
-                return sect_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from sects WHERE sect_id=%s",
+            (sect_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def update_usr_sect(self, user_id, usr_sect_id, usr_sect_position):
         """更新用户信息表的宗门信息字段"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET sect_id=%s,sect_position=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (usr_sect_id, usr_sect_position, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_owner(self, user_id, sect_id):
         """更新宗门所有者"""
-        with self.lock:
-            sql = f"UPDATE sects SET sect_owner=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET sect_owner=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def get_highest_contrib_user_except_current(self, sect_id, current_owner_id):
         """获取指定宗门的贡献最高的人，排除当前宗主"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = """
-            SELECT user_id
-            FROM user_xiuxian
-            WHERE sect_id = ? AND sect_position = 1 AND user_id != ?
-            ORDER BY sect_contribution DESC
-            LIMIT 1
-            """
-            cur.execute(sql, (sect_id, current_owner_id))
-            result = cur.fetchone()
-            if result:
-                return result
-            else:
-                return None
+        sql = """
+        SELECT user_id
+        FROM user_xiuxian
+        WHERE sect_id = %s AND sect_position = 1 AND user_id != %s
+        ORDER BY sect_contribution DESC
+        LIMIT 1
+        """
+        return self._read_query(sql, (sect_id, current_owner_id), one=True)
 
     def get_highest_contrib_user(self, sect_id):
         """获取宗门中贡献最高的用户（不限职位）"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = """
-            SELECT user_id 
-            FROM user_xiuxian 
-            WHERE sect_id = ? 
-            ORDER BY sect_contribution DESC 
-            LIMIT 1
-            """
-            cur.execute(sql, (sect_id,))
-            result = cur.fetchone()
-            return result
+        sql = """
+        SELECT user_id 
+        FROM user_xiuxian 
+        WHERE sect_id = %s 
+        ORDER BY sect_contribution DESC 
+        LIMIT 1
+        """
+        return self._read_query(sql, (sect_id,), one=True)
 
     def update_sect_join_status(self, sect_id, status):
         """更新宗门加入状态"""
-        with self.lock:
-            sql = f"UPDATE sects SET join_open=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET join_open=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (status, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_closed_status(self, sect_id, status):
         """更新宗门封闭状态"""
-        with self.lock:
-            sql = f"UPDATE sects SET closed=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET closed=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (status, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def delete_sect(self, sect_id):
         """删除宗门并踢出所有成员"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             try:
-                members_sql = "SELECT user_id FROM user_xiuxian WHERE sect_id = ?"
+                members_sql = "SELECT user_id FROM user_xiuxian WHERE sect_id = %s"
                 cur.execute(members_sql, (sect_id,))
                 members = cur.fetchall()
 
@@ -1026,15 +1333,15 @@ class XiuxianDateManage:
                     update_sql = """
                         UPDATE user_xiuxian 
                         SET sect_id = NULL, sect_position = NULL, sect_contribution = 0 
-                        WHERE sect_id = ?
+                        WHERE sect_id = %s
                     """
                     cur.execute(update_sql, (sect_id,))
                     logger.opt(colors=True).info(f"<green>已踢出宗门 {sect_id} 的所有成员，共 {len(members)} 人</green>")
 
-                delete_sql = "DELETE FROM sects WHERE sect_id = ?"
+                delete_sql = "DELETE FROM sects WHERE sect_id = %s"
                 cur.execute(delete_sql, (sect_id,))
 
-                self.conn.commit()
+                self._commit_write()
                 logger.opt(colors=True).info(f"<green>宗门 {sect_id} 解散成功，已清理所有成员数据</green>")
                 return True
 
@@ -1045,64 +1352,47 @@ class XiuxianDateManage:
 
     def get_sect_name(self, sect_name):
         """通过宗门名称获取宗门ID"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = "SELECT sect_id FROM sects WHERE sect_name = ?"
-            cur.execute(sql, (sect_name,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return None
+        result = self._read_query("SELECT sect_id FROM sects WHERE sect_name = %s", (sect_name,), one=True)
+        if result:
+            return result[0]
+        return None
 
     def get_all_sect_id(self):
         """获取全部宗门id"""
-        with self.lock:
-            sql = "SELECT sect_id FROM sects"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            if result:
-                return result
-            else:
-                return None
+        result = self._read_query("SELECT sect_id FROM sects")
+        return result if result else None
 
     def get_all_user_id(self):
         """获取全部用户id"""
-        with self.lock:
-            sql = "SELECT user_id FROM user_xiuxian"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            if result:
-                return [row[0] for row in result]
-            else:
-                return None
+        result = self._read_query("SELECT user_id FROM user_xiuxian")
+        if result:
+            return [row[0] for row in result]
+        return None
 
     def in_closing(self, user_id, the_type):
         """更新用户操作CD"""
-        with self.lock:
+        with self._conn_lock:
             now_time = None
             if the_type == 0:
                 now_time = 0
             else:
                 now_time = datetime.now()
-            sql = "UPDATE user_cd SET type=?,create_time=? WHERE user_id=?"
+            sql = "UPDATE user_cd SET type=%s,create_time=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (the_type, now_time, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def del_exp_decimal(self, user_id, exp):
         """去浮点"""
-        with self.lock:
-            sql = "UPDATE user_xiuxian SET exp=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = "UPDATE user_xiuxian SET exp=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (int(exp), user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def realm_top(self):
         """境界排行"""
-        with self.lock:
+        with self._conn_lock:
             rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
 
             sql = """SELECT user_name, level, exp FROM user_xiuxian 
@@ -1121,92 +1411,57 @@ class XiuxianDateManage:
 
     def stone_top(self):
         """这也是灵石排行榜"""
-        with self.lock:
-            sql = f"SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY stone DESC LIMIT 50"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY stone DESC LIMIT 50"
+        return self._read_query(sql)
 
     def power_top(self):
         """战力排行榜"""
-        with self.lock:
-            sql = f"SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY power DESC LIMIT 50"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY power DESC LIMIT 50"
+        return self._read_query(sql)
 
     def scale_top(self):
         """宗门建设度排行榜"""
-        with self.lock:
-            sql = f"SELECT sect_id, sect_name, sect_scale FROM sects WHERE sect_owner is NOT NULL ORDER BY sect_scale DESC"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT sect_id, sect_name, sect_scale FROM sects WHERE sect_owner is NOT NULL ORDER BY sect_scale DESC"
+        return self._read_query(sql)
 
     def root_top(self):
         """这是轮回排行榜"""
-        with self.lock:
-            sql = f"SELECT user_name,root_level FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY root_level DESC LIMIT 50"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT user_name,root_level FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY root_level DESC LIMIT 50"
+        return self._read_query(sql)
 
     def get_all_sects(self):
         """获取所有宗门信息"""
-        with self.lock:
-            sql = f"SELECT * FROM sects WHERE sect_owner is NOT NULL"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            results = []
-            columns = [column[0] for column in cur.description]
-            for row in result:
-                sect_dict = dict(zip(columns, row))
-                results.append(sect_dict)
-            return results
+        sql = f"SELECT * FROM sects WHERE sect_owner is NOT NULL"
+        return self._read_query(sql, dict_row=True)
 
     def get_all_sects_with_member_count(self):
         """获取所有宗门及其各个宗门成员数"""
-        with self.lock:
-            cur = self.conn.cursor()
-            cur.execute("""
-                SELECT s.sect_id, s.sect_name, s.sect_scale, (SELECT user_name FROM user_xiuxian WHERE user_id = s.sect_owner) as user_name, COUNT(ux.user_id) as member_count
-                FROM sects s
-                LEFT JOIN user_xiuxian ux ON s.sect_id = ux.sect_id
-                GROUP BY s.sect_id
-            """)
-            results = cur.fetchall()
-            return results
+        return self._read_query("""
+            SELECT s.sect_id, s.sect_name, s.sect_scale, (SELECT user_name FROM user_xiuxian WHERE user_id = s.sect_owner) as user_name, COUNT(ux.user_id) as member_count
+            FROM sects s
+            LEFT JOIN user_xiuxian ux ON s.sect_id = ux.sect_id
+            GROUP BY s.sect_id
+        """)
 
     def update_user_is_beg(self, user_id, is_beg):
         """更新用户的最后奇缘时间"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE user_xiuxian SET is_beg=? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET is_beg=%s WHERE user_id=%s"
             cur.execute(sql, (is_beg, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def get_top1_user(self):
         """获取修为第一的用户"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"select * from user_xiuxian ORDER BY exp DESC LIMIT 1"
-            cur.execute(sql)
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                top1_dict = dict(zip(columns, result))
-                return top1_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from user_xiuxian ORDER BY exp DESC LIMIT 1",
+            one=True,
+            dict_row=True,
+        )
 
     def get_realm_top1_user(self):
         """获取境界第一的用户"""
-        with self.lock:
+        with self._conn_lock:
             rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
 
             sql = """SELECT user_name, level, exp FROM user_xiuxian 
@@ -1230,64 +1485,54 @@ class XiuxianDateManage:
 
     def donate_update(self, sect_id, stone_num):
         """宗门捐献更新建设度及可用灵石"""
-        with self.lock:
-            sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+?,sect_scale=sect_scale+? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+%s,sect_scale=sect_scale+%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (stone_num, stone_num * 1, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_used_stone(self, sect_id, sect_used_stone, key):
         """更新宗门灵石储备"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if key == 1:
-                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+? WHERE sect_id=?"
+                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+%s WHERE sect_id=%s"
                 cur.execute(sql, (sect_used_stone, sect_id))
-                self.conn.commit()
+                self._commit_write()
             elif key == 2:
-                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone-? WHERE sect_id=?"
+                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone-%s WHERE sect_id=%s"
                 cur.execute(sql, (sect_used_stone, sect_id))
-                self.conn.commit()
+                self._commit_write()
 
     def update_sect_materials(self, sect_id, sect_materials, key):
         """更新资材"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if key == 1:
-                sql = f"UPDATE sects SET sect_materials=sect_materials+? WHERE sect_id=?"
+                sql = f"UPDATE sects SET sect_materials=sect_materials+%s WHERE sect_id=%s"
                 cur.execute(sql, (sect_materials, sect_id))
-                self.conn.commit()
+                self._commit_write()
             elif key == 2:
-                sql = f"UPDATE sects SET sect_materials=sect_materials-? WHERE sect_id=?"
+                sql = f"UPDATE sects SET sect_materials=sect_materials-%s WHERE sect_id=%s"
                 cur.execute(sql, (sect_materials, sect_id))
-                self.conn.commit()
+                self._commit_write()
 
     def get_all_sects_id_scale(self):
         """获取所有宗门信息"""
-        with self.lock:
-            sql = f"SELECT sect_id, sect_scale, elixir_room_level FROM sects WHERE sect_owner is NOT NULL ORDER BY sect_scale DESC"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        sql = f"SELECT sect_id, sect_scale, elixir_room_level FROM sects WHERE sect_owner is NOT NULL ORDER BY sect_scale DESC"
+        return self._read_query(sql)
 
     def get_all_users_by_sect_id(self, sect_id):
         """获取宗门所有成员信息"""
-        with self.lock:
-            sql = f"SELECT * FROM user_xiuxian WHERE sect_id = ?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (sect_id,))
-            result = cur.fetchall()
-            results = []
-            for user in result:
-                columns = [column[0] for column in cur.description]
-                user_dict = dict(zip(columns, user))
-                results.append(user_dict)
-            return results
+        return self._read_query(
+            "SELECT * FROM user_xiuxian WHERE sect_id = %s",
+            (sect_id,),
+            dict_row=True,
+        )
 
     def do_work(self, user_id, the_type, sc_time=None):
         """更新用户操作CD"""
-        with self.lock:
+        with self._conn_lock:
             now_time = None
             if the_type == 1:
                 now_time = datetime.now()
@@ -1300,98 +1545,90 @@ class XiuxianDateManage:
             elif the_type == 4:
                 now_time = datetime.now()
 
-            sql = f"UPDATE user_cd SET type=?,create_time=?,scheduled_time=? WHERE user_id=?"
+            sql = f"UPDATE user_cd SET type=%s,create_time=%s,scheduled_time=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (the_type, now_time, sc_time, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_levelrate(self, user_id, rate):
         """更新突破成功率"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET level_up_rate=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET level_up_rate=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (rate, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_attribute(self, user_id, hp, mp, atk):
         """更新用户HP,MP,ATK信息"""
-        with self.lock:
+        with self._conn_lock:
             hp = number_count(hp)
             mp = number_count(mp)
             atk = number_count(atk)
-            sql = f"UPDATE user_xiuxian SET hp=?,mp=?,atk=? WHERE user_id=?"
+            sql = f"UPDATE user_xiuxian SET hp=%s,mp=%s,atk=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (hp, mp, atk, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_hp_mp(self, user_id, hp, mp):
         """更新用户HP,MP信息"""
-        with self.lock:
+        with self._conn_lock:
             hp = number_count(hp)
             mp = number_count(mp)
-            sql = f"UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=?"
+            sql = f"UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (hp, mp, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_sect_contribution(self, user_id, sect_contribution):
         """更新用户宗门贡献度"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET sect_contribution=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (sect_contribution, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def deduct_sect_contribution(self, user_id, contribution):
         """扣除用户宗门贡献度"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE user_xiuxian SET sect_contribution=sect_contribution-? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET sect_contribution=sect_contribution-%s WHERE user_id=%s"
             cur.execute(sql, (contribution, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_hp(self, user_id):
         """重置用户hp,mp信息"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10 WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10 WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def restate(self, user_id=None):
         """重置所有用户状态或重置对应人状态"""
-        with self.lock:
+        with self._conn_lock:
             if user_id is None:
                 sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10"
                 cur = self.conn.cursor()
                 cur.execute(sql)
-                self.conn.commit()
+                self._commit_write()
             else:
-                sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10 WHERE user_id=?"
+                sql = f"UPDATE user_xiuxian SET hp=exp/2,mp=exp,atk=exp/10 WHERE user_id=%s"
                 cur = self.conn.cursor()
                 cur.execute(sql, (user_id,))
-                self.conn.commit()
+                self._commit_write()
 
     def get_back_msg(self, user_id):
         """获取用户背包信息"""
-        with self.lock:
-            sql = f"SELECT * FROM back WHERE user_id=? and goods_num >= 1"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id,))
-            result = cur.fetchall()
-            if not result:
-                return None
-
-            columns = [column[0] for column in cur.description]
-            results = []
-            for row in result:
-                back_dict = dict(zip(columns, row))
-                results.append(back_dict)
-            return results
+        result = self._read_query(
+            "SELECT * FROM back WHERE user_id=%s and goods_num >= 1",
+            (user_id,),
+            dict_row=True,
+        )
+        return result if result else None
 
     def check_and_adjust_goods_quantity(self):
         """检查并调整背包表中的物品数量和物品名称"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             sql = "SELECT user_id, goods_id, goods_num, bind_num, goods_name FROM back"
             cur.execute(sql)
@@ -1403,14 +1640,14 @@ class XiuxianDateManage:
                 user_id, goods_id, goods_num, bind_num, goods_name = row
                 if goods_num > XiuConfig().max_goods_num:
                     new_goods_num = XiuConfig().max_goods_num
-                    sql_update = f"UPDATE back SET goods_num=? WHERE user_id=? AND goods_id=?"
+                    sql_update = f"UPDATE back SET goods_num=%s WHERE user_id=%s AND goods_id=%s"
                     cur.execute(sql_update, (new_goods_num, user_id, goods_id))
                     logger.opt(colors=True).info(f"<green>用户 {user_id} 的物品 {goods_name} 的数量已调整为 {new_goods_num}</green>")
                     processed_goods += f"{user_id} 的 {goods_name} 数量异常{goods_num}\n"
 
                 if bind_num > XiuConfig().max_goods_num:
                     new_bind_num = XiuConfig().max_goods_num
-                    sql_update = f"UPDATE back SET bind_num=? WHERE user_id=? AND goods_id=?"
+                    sql_update = f"UPDATE back SET bind_num=%s WHERE user_id=%s AND goods_id=%s"
                     cur.execute(sql_update, (new_bind_num, user_id, goods_id))
                     logger.opt(colors=True).info(f"<green>用户 {user_id} 的物品 {goods_name} 的绑定数量已调整为 {new_bind_num}</green>")
                     processed_goods += f"{user_id} 的 {goods_name} 绑定数量异常{bind_num}\n"
@@ -1423,56 +1660,50 @@ class XiuxianDateManage:
                 if item_info:
                     current_name = item_info.get("name")
                     if current_name and goods_name != current_name:
-                        sql_update = "UPDATE back SET goods_name=? WHERE user_id=? AND goods_id=?"
+                        sql_update = "UPDATE back SET goods_name=%s WHERE user_id=%s AND goods_id=%s"
                         cur.execute(sql_update, (current_name, user_id, goods_id))
                         logger.opt(colors=True).info(
                             f"<green>用户 {user_id} 的物品ID {goods_id} 名称已由 {goods_name} 修正为 {current_name}</green>"
                         )
                         processed_goods += f"{user_id} 的物品ID {goods_id} 名称异常：{goods_name} -> {current_name}\n"
 
-            self.conn.commit()
+            self._commit_write()
             if not processed_goods:
                 return "无"
             return processed_goods
 
     def goods_num(self, user_id, goods_id, num_type=None):
         """判断用户物品数量"""
-        with self.lock:
-            sql = "SELECT goods_num, bind_num, state FROM back WHERE user_id=? and goods_id=?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id, goods_id))
-            result = cur.fetchone()
-            if result:
-                goods_num = result[0]
-                bind_num = result[1]
-                state = result[2]
-                if num_type == 'bind':
-                    return bind_num
-                elif num_type == 'trade':
-                    return goods_num - bind_num - state
-                else:
-                    return goods_num
+        result = self._read_query(
+            "SELECT goods_num, bind_num, state FROM back WHERE user_id=%s and goods_id=%s",
+            (user_id, goods_id),
+            one=True,
+        )
+        if result:
+            goods_num = result[0]
+            bind_num = result[1]
+            state = result[2]
+            if num_type == 'bind':
+                return bind_num
+            elif num_type == 'trade':
+                return goods_num - bind_num - state
             else:
-                return 0
+                return goods_num
+        return 0
 
     def goods_max_num(self, goods_id):
         """返回物品的总数量"""
-        with self.lock:
-            cur = self.conn.cursor()
-            sql = f"SELECT SUM(goods_num) FROM back WHERE goods_id=?"
-            cur.execute(sql, (goods_id,))
-            result = cur.fetchone()
-            if result and result[0] is not None:
-                return result[0]
-            else:
-                return 0
+        result = self._read_query("SELECT SUM(goods_num) FROM back WHERE goods_id=%s", (goods_id,), one=True)
+        if result and result[0] is not None:
+            return result[0]
+        return 0
 
     def unbind_item(self, user_id, goods_id, quantity=1):
         """解绑物品，减少绑定数量"""
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             try:
                 cur = self.conn.cursor()
-                sql = "SELECT goods_num, bind_num FROM back WHERE user_id=? AND goods_id=?"
+                sql = "SELECT goods_num, bind_num FROM back WHERE user_id=%s AND goods_id=%s"
                 cur.execute(sql, (user_id, goods_id))
                 result = cur.fetchone()
 
@@ -1488,10 +1719,10 @@ class XiuxianDateManage:
                 new_bind_num = current_bind_num - quantity
                 new_bind_num = max(0, new_bind_num)
 
-                update_sql = "UPDATE back SET bind_num=?, update_time=? WHERE user_id=? AND goods_id=?"
+                update_sql = "UPDATE back SET bind_num=%s, update_time=%s WHERE user_id=%s AND goods_id=%s"
                 now_time = datetime.now()
                 cur.execute(update_sql, (new_bind_num, now_time, user_id, goods_id))
-                self.conn.commit()
+                self._commit_write()
 
                 return True
 
@@ -1502,345 +1733,347 @@ class XiuxianDateManage:
 
     def get_all_user_exp(self, level):
         """查询所有对应大境界玩家的修为"""
-        with self.lock:
-            sql = f"SELECT exp FROM user_xiuxian  WHERE level like '{level}%'"
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        return self._read_query("SELECT exp FROM user_xiuxian WHERE level like %s", (f"{level}%",))
 
     def update_user_atkpractice(self, user_id, atkpractice):
         """更新用户攻击修炼等级"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET atkpractice={atkpractice} WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET atkpractice={atkpractice} WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_hppractice(self, user_id, hppractice):
         """更新用户元血修炼等级"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET hppractice={hppractice} WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET hppractice={hppractice} WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_mppractice(self, user_id, mppractice):
         """更新用户灵海修炼等级"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET mppractice={mppractice} WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET mppractice={mppractice} WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_sect_task(self, user_id, sect_task):
         """更新用户宗门任务次数"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET sect_task=sect_task+? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET sect_task=sect_task+%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (sect_task, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def sect_task_reset(self):
         """重置宗门任务次数"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET sect_task=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_scale_and_used_stone(self, sect_id, sect_used_stone, sect_scale):
         """更新宗门灵石、建设度"""
-        with self.lock:
-            sql = f"UPDATE sects SET sect_used_stone=?,sect_scale=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET sect_used_stone=%s,sect_scale=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (sect_used_stone, sect_scale, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_elixir_room_level(self, sect_id, level):
         """更新宗门丹房等级"""
-        with self.lock:
-            sql = f"UPDATE sects SET elixir_room_level=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET elixir_room_level=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (level, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_sect_elixir_get_num(self, user_id):
         """更新用户每日领取丹药领取次数"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def sect_elixir_get_num_reset(self):
         """重置宗门丹药领取次数"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET sect_elixir_get=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_mainbuff(self, sect_id, mainbuffid):
         """更新宗门当前的主修功法"""
-        with self.lock:
-            sql = f"UPDATE sects SET mainbuff=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET mainbuff=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (mainbuffid, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def update_sect_secbuff(self, sect_id, secbuffid):
         """更新宗门当前的神通"""
-        with self.lock:
-            sql = f"UPDATE sects SET secbuff=? WHERE sect_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE sects SET secbuff=%s WHERE sect_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (secbuffid, sect_id))
-            self.conn.commit()
+            self._commit_write()
 
     def initialize_user_buff_info(self, user_id):
         """初始化用户buff信息"""
-        with self.lock:
-            sql = f"INSERT INTO BuffInfo (user_id,main_buff,sec_buff,effect1_buff,effect2_buff,faqi_buff,fabao_weapon) VALUES (?,0,0,0,0,0,0)"
+        with self._conn_lock:
+            sql = f"INSERT INTO BuffInfo (user_id,main_buff,sec_buff,effect1_buff,effect2_buff,faqi_buff,fabao_weapon) VALUES (%s,0,0,0,0,0,0)"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def get_user_buff_info(self, user_id):
         """获取用户buff信息"""
-        with self.lock:
-            sql = f"select * from BuffInfo WHERE user_id =?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                buff_dict = dict(zip(columns, result))
-                return buff_dict
-            else:
-                return None
+        return self._read_query(
+            "select * from BuffInfo WHERE user_id =%s",
+            (user_id,),
+            one=True,
+            dict_row=True,
+        )
 
     def updata_user_main_buff(self, user_id, id):
         """更新用户主功法信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET main_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET main_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_sub_buff(self, user_id, id):
         """更新用户辅修功法信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET sub_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET sub_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_sec_buff(self, user_id, id):
         """更新用户副功法信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET sec_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET sec_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_effect1_buff(self, user_id, id):
         """更新用户身法信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET effect1_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET effect1_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_effect2_buff(self, user_id, id):
         """更新用户瞳术信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET effect2_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET effect2_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_faqi_buff(self, user_id, id):
         """更新用户法器信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET faqi_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET faqi_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_fabao_weapon(self, user_id, id):
         """更新用户法宝信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET fabao_weapon = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET fabao_weapon = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_armor_buff(self, user_id, id):
         """更新用户防具信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET armor_buff = ? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET armor_buff = %s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (id, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_atk_buff(self, user_id, buff):
         """更新用户永久攻击buff信息"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET atk_buff=atk_buff+? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET atk_buff=atk_buff+%s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (buff, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def updata_user_blessed_spot(self, user_id, blessed_spot):
         """更新用户洞天福地等级"""
-        with self.lock:
-            sql = f"UPDATE BuffInfo SET blessed_spot=? WHERE user_id = ?"
+        with self._conn_lock:
+            sql = f"UPDATE BuffInfo SET blessed_spot=%s WHERE user_id = %s"
             cur = self.conn.cursor()
             cur.execute(sql, (blessed_spot, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_blessed_spot_flag(self, user_id):
         """更新用户洞天福地是否开启"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET blessed_spot_flag=1 WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET blessed_spot_flag=1 WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_user_blessed_spot_name(self, user_id, blessed_spot_name):
         """更新用户洞天福地的名字"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET blessed_spot_name=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET blessed_spot_name=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (blessed_spot_name, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def day_num_reset(self):
         """重置丹药每日使用次数"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE back SET day_num=0 where goods_type='丹药'"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def mixelixir_num_reset(self):
         """重置每日炼丹次数"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET mixelixir_num=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def reset_work_num(self, count):
         """重置用户悬赏令刷新次数"""
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET work_num=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET work_num=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (count,))
-            self.conn.commit()
+            self._commit_write()
 
     def get_work_num(self, user_id):
         """获取用户悬赏令刷新次数"""
-        with self.lock:
-            sql = f"SELECT work_num FROM user_xiuxian WHERE user_id=?"
-            cur = self.conn.cursor()
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result:
-                work_num = result[0]
-            return work_num
+        result = self._read_query("SELECT work_num FROM user_xiuxian WHERE user_id=%s", (user_id,), one=True)
+        if result:
+            return result[0]
+        return None
 
     def update_work_num(self, user_id, work_num):
-        with self.lock:
-            sql = f"UPDATE user_xiuxian SET work_num=? WHERE user_id=?"
+        with self._conn_lock:
+            sql = f"UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (work_num, user_id,))
-            self.conn.commit()
+            self._commit_write()
 
     def send_back(self, user_id, goods_id, goods_name, goods_type, goods_num, bind_flag=0):
         """插入物品至背包"""
-        with self.lock:
+        with self._conn_lock:
             now_time = datetime.now()
             max_goods_num = int(XiuConfig().max_goods_num)
             goods_num = min(abs(int(goods_num)), max_goods_num)
+            bind_flag = 1 if int(bind_flag) == 1 else 0
+            bind_num = goods_num if bind_flag == 1 else 0
 
+            sql = """
+                INSERT INTO back (
+                    user_id, goods_id, goods_name, goods_type, goods_num,
+                    create_time, update_time, bind_num
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, goods_id) DO UPDATE
+                SET goods_name = EXCLUDED.goods_name,
+                    goods_type = EXCLUDED.goods_type,
+                    update_time = EXCLUDED.update_time,
+                    goods_num = LEAST(COALESCE(back.goods_num, 0) + EXCLUDED.goods_num, %s),
+                    bind_num = CASE
+                        WHEN %s = 1 THEN
+                            LEAST(
+                                COALESCE(back.bind_num, 0) + EXCLUDED.goods_num,
+                                LEAST(COALESCE(back.goods_num, 0) + EXCLUDED.goods_num, %s),
+                                %s
+                            )
+                        ELSE
+                            LEAST(
+                                COALESCE(back.bind_num, 0),
+                                LEAST(COALESCE(back.goods_num, 0) + EXCLUDED.goods_num, %s)
+                            )
+                    END
+            """
             cur = self.conn.cursor()
-            back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
-
-            if back:
-                if bind_flag == 1:
-                    bind_num = back['bind_num'] + goods_num
-                else:
-                    bind_num = min(back['bind_num'], back['goods_num'])
-
-                goods_nums = min(back['goods_num'] + goods_num, max_goods_num)
-                bind_num = min(bind_num, max_goods_num, goods_nums)
-
-                sql = "UPDATE back SET goods_num=?, update_time=?, bind_num=? WHERE user_id=? and goods_id=?"
-                cur.execute(sql, (goods_nums, now_time, bind_num, user_id, goods_id))
-                self.conn.commit()
-            else:
-                bind_num = goods_num if bind_flag == 1 else 0
-                sql = """
-                    INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num)
-                    VALUES (?,?,?,?,?,?,?,?)
-                """
-                cur.execute(sql, (user_id, goods_id, goods_name, goods_type, goods_num, now_time, now_time, bind_num))
-                self.conn.commit()
+            cur.execute(
+                sql,
+                (
+                    str(user_id), int(goods_id), goods_name, goods_type, goods_num,
+                    now_time, now_time, bind_num,
+                    max_goods_num, bind_flag, max_goods_num, max_goods_num, max_goods_num,
+                ),
+            )
+            self._commit_write()
 
     def update_back_j(self, user_id, goods_id, num=1, use_key=0):
         """使用物品"""
-        with self.lock:
+        with self._conn_lock:
             num = abs(int(num))
             user_id = str(user_id)
             goods_id = int(goods_id)
-
-            back = self.get_item_by_good_id_and_user_id(user_id, goods_id)
-            if not back:
-                return
             if num <= 0:
                 return
-            if back['goods_num'] < num:
-                num = back['goods_num']
-            if num <= 0:
-                return
-
-            if back['goods_type'] == "丹药" and use_key == 1:
-                bind_num = back['bind_num'] - num if back['bind_num'] >= num else back['bind_num']
-                day_num = back['day_num'] + num
-                all_num = back['all_num'] + num
-            else:
-                bind_num = back['bind_num'] - num if back['bind_num'] >= num else back['bind_num']
-                day_num = back['day_num']
-                all_num = back['all_num']
-
-            goods_num = back['goods_num'] - num
-            if goods_num <= 0:
-                goods_num = 0
-                bind_num = 0
-
-            bind_num = min(bind_num, goods_num)
-            bind_num = max(bind_num, 0)
 
             now_time = datetime.now()
             sql_str = """
                 UPDATE back
-                SET update_time=?,
-                    action_time=?,
-                    goods_num=?,
-                    day_num=?,
-                    all_num=?,
-                    bind_num=?
-                WHERE user_id=? AND goods_id=?
+                SET update_time=%s,
+                    action_time=%s,
+                    day_num = CASE
+                        WHEN goods_type = '丹药' AND %s = 1
+                        THEN COALESCE(day_num, 0) + LEAST(COALESCE(goods_num, 0), %s)
+                        ELSE COALESCE(day_num, 0)
+                    END,
+                    all_num = CASE
+                        WHEN goods_type = '丹药' AND %s = 1
+                        THEN COALESCE(all_num, 0) + LEAST(COALESCE(goods_num, 0), %s)
+                        ELSE COALESCE(all_num, 0)
+                    END,
+                    goods_num = GREATEST(COALESCE(goods_num, 0) - %s, 0),
+                    bind_num = CASE
+                        WHEN GREATEST(COALESCE(goods_num, 0) - %s, 0) = 0 THEN 0
+                        ELSE LEAST(
+                            CASE
+                                WHEN COALESCE(bind_num, 0) >= LEAST(COALESCE(goods_num, 0), %s)
+                                THEN COALESCE(bind_num, 0) - LEAST(COALESCE(goods_num, 0), %s)
+                                ELSE COALESCE(bind_num, 0)
+                            END,
+                            GREATEST(COALESCE(goods_num, 0) - %s, 0)
+                        )
+                    END
+                WHERE user_id=%s AND goods_id=%s AND COALESCE(goods_num, 0) > 0
             """
             cur = self.conn.cursor()
-            cur.execute(sql_str, (now_time, now_time, goods_num, day_num, all_num, bind_num, user_id, goods_id))
-            self.conn.commit()
+            cur.execute(
+                sql_str,
+                (
+                    now_time, now_time,
+                    int(use_key), num,
+                    int(use_key), num,
+                    num, num, num, num, num,
+                    user_id, goods_id,
+                ),
+            )
+            self._commit_write()
 
     def get_item_by_good_id_and_user_id(self, user_id, goods_id):
         """根据物品id、用户id获取物品信息"""
-        with self.lock:
-            sql = "select * from back WHERE user_id=? and goods_id=?"
+        with self._conn_lock:
+            sql = "select * from back WHERE user_id=%s and goods_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (str(user_id), int(goods_id)))
             result = cur.fetchone()
@@ -1852,7 +2085,7 @@ class XiuxianDateManage:
             return item_dict
 
     def update_back_equipment(self, sql_str, params=None):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if isinstance(sql_str, tuple) and params is None:
                 sql_str, params = sql_str
@@ -1860,31 +2093,29 @@ class XiuxianDateManage:
                 cur.execute(sql_str, params)
             else:
                 cur.execute(sql_str)
-            self.conn.commit()
+            self._commit_write()
 
     def reset_user_drug_resistance(self, user_id):
         """重置用户耐药性"""
-        with self.lock:
-            sql = "UPDATE back SET all_num=0 WHERE goods_type='丹药' AND user_id=?"
+        with self._conn_lock:
+            sql = "UPDATE back SET all_num=0 WHERE goods_type='丹药' AND user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (str(user_id),))
-            self.conn.commit()
+            self._commit_write()
 
     def _ensure_puppet_column(self):
         """确保 user_xiuxian 表中存在 puppet_status 字段，没有就创建"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("PRAGMA table_info(user_xiuxian)")
-            columns = [row[1] for row in cur.fetchall()]
-            if "puppet_status" not in columns:
+            if not self.conn.column_exists("user_xiuxian", "puppet_status"):
                 cur.execute("ALTER TABLE user_xiuxian ADD COLUMN puppet_status INTEGER DEFAULT 0")
-                self.conn.commit()
+                self._commit_write()
 
     def check_puppet_status(self, user_id):
         """查询灵田傀儡状态，没有字段会自动创建"""
-        with self.lock:
+        with self._conn_lock:
             self._ensure_puppet_column()
-            sql = "SELECT puppet_status FROM user_xiuxian WHERE user_id=?"
+            sql = "SELECT puppet_status FROM user_xiuxian WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
@@ -1894,16 +2125,16 @@ class XiuxianDateManage:
 
     def set_puppet_status(self, user_id, status):
         """设置灵田傀儡状态 status: 0关闭 1开启"""
-        with self.lock:
+        with self._conn_lock:
             self._ensure_puppet_column()
-            sql = "UPDATE user_xiuxian SET puppet_status=? WHERE user_id=?"
+            sql = "UPDATE user_xiuxian SET puppet_status=%s WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (status, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def get_all_enabled_puppets(self):
         """获取所有开启灵田傀儡的玩家 user_id 列表"""
-        with self.lock:
+        with self._conn_lock:
             self._ensure_puppet_column()
             sql = "SELECT user_id FROM user_xiuxian WHERE puppet_status=1"
             cur = self.conn.cursor()
@@ -2155,16 +2386,18 @@ class TradeDataManager:
             self._has_init[trade_num] = True
             self.database_path = DATABASE
             self.trade_db_path = self.database_path / "trade.db"
-            if not self.trade_db_path.exists():
-                self.trade_db_path.touch()
-                logger.opt(colors=True).info("<green>trade数据库已创建！</green>")
-            self.conn = sqlite3.connect(self.trade_db_path, check_same_thread=False)
-            self.lock = threading.RLock()
+            self.conn = db_backend.connect(self.trade_db_path, check_same_thread=False)
+            self._conn_lock = threading.RLock()
+            self.lock = self._conn_lock
+            self._business_lock = threading.RLock()
             self._check_data()
+
+    def _commit_write(self, conn=None):
+        (conn or self.conn).commit()
 
     def _check_data(self):
         """检查数据完整性"""
-        with self.lock:
+        with self._conn_lock:
             c = self.conn.cursor()
 
             # 仙肆商品表
@@ -2252,11 +2485,11 @@ class TradeDataManager:
                     end_time REAL NOT NULL
                 )
             """)
-            self.conn.commit()
+            self._commit_write()
 
     def total_goods_quantity(self):
         """获取全部仙肆物品总数（不含系统无限）"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             sql = """
                 SELECT SUM(quantity) AS total_quantity
@@ -2272,13 +2505,13 @@ class TradeDataManager:
 
     def generate_unique_id(self, table_name):
         """生成唯一ID（字符串）"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             for _ in range(200):
                 first = str(random.randint(1, 9))
                 rest = ''.join(random.choices(string.digits, k=random.randint(7, 11)))
                 uid = first + rest
-                cur.execute(f"SELECT 1 FROM {table_name} WHERE id = ?", (uid,))
+                cur.execute(f"SELECT 1 FROM {table_name} WHERE id = %s", (uid,))
                 if not cur.fetchone():
                     return uid
             return f"{int(time.time() * 1000)}{random.randint(100, 999)}"
@@ -2286,17 +2519,17 @@ class TradeDataManager:
     # ======== 仙肆 ========
 
     def add_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
-        with self.lock:
+        with self._conn_lock:
             unique_id = self.generate_unique_id("xianshi_item")
             sql = """
                 INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             self.conn.execute(
                 sql,
                 (str(unique_id), str(user_id), int(goods_id), str(name), str(type), int(price), int(quantity))
             )
-            self.conn.commit()
+            self._commit_write()
 
     def remove_xianshi_item(self, item_id):
         """
@@ -2305,9 +2538,9 @@ class TradeDataManager:
         - quantity == 1 删除记录
         - quantity > 1 数量减1
         """
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("SELECT quantity FROM xianshi_item WHERE id = ?", (str(item_id),))
+            cur.execute("SELECT quantity FROM xianshi_item WHERE id = %s", (str(item_id),))
             row = cur.fetchone()
             if not row:
                 return False
@@ -2316,33 +2549,33 @@ class TradeDataManager:
             if qty == -1:
                 return True
             if qty <= 1:
-                self.conn.execute("DELETE FROM xianshi_item WHERE id = ?", (str(item_id),))
+                self.conn.execute("DELETE FROM xianshi_item WHERE id = %s", (str(item_id),))
             else:
-                self.conn.execute("UPDATE xianshi_item SET quantity=? WHERE id=?", (qty - 1, str(item_id)))
-            self.conn.commit()
+                self.conn.execute("UPDATE xianshi_item SET quantity=%s WHERE id=%s", (qty - 1, str(item_id)))
+            self._commit_write()
             return True
 
     def remove_xianshi_all_item(self, item_id):
-        with self.lock:
-            self.conn.execute("DELETE FROM xianshi_item WHERE id = ?", (str(item_id),))
-            self.conn.commit()
+        with self._conn_lock:
+            self.conn.execute("DELETE FROM xianshi_item WHERE id = %s", (str(item_id),))
+            self._commit_write()
 
     def get_xianshi_items(self, user_id=None, type=None, id=None, name=None):
-        with self.lock:
+        with self._conn_lock:
             conditions = []
             params = []
 
             if user_id is not None:
-                conditions.append("user_id = ?")
+                conditions.append("user_id = %s")
                 params.append(str(user_id))
             if type:
-                conditions.append("type = ?")
+                conditions.append("type = %s")
                 params.append(str(type))
             if id:
-                conditions.append("id = ?")
+                conditions.append("id = %s")
                 params.append(str(id))
             if name:
-                conditions.append("name = ?")
+                conditions.append("name = %s")
                 params.append(str(name))
 
             q = "SELECT * FROM xianshi_item"
@@ -2360,30 +2593,30 @@ class TradeDataManager:
     # ======== 鬼市 ========
 
     def add_guishi_order(self, user_id, item_id, item_name, item_type, price, quantity):
-        with self.lock:
+        with self._conn_lock:
             uid = self.generate_unique_id("guishi_item")
             sql = """
                 INSERT INTO guishi_item (id, user_id, item_id, item_name, item_type, price, quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             self.conn.execute(sql, (
                 str(uid), str(user_id), int(item_id), str(item_name), str(item_type), int(price), int(quantity)
             ))
-            self.conn.commit()
+            self._commit_write()
             return uid
 
     def remove_guishi_order(self, order_id):
-        with self.lock:
-            self.conn.execute("DELETE FROM guishi_item WHERE id = ?", (str(order_id),))
-            self.conn.commit()
+        with self._conn_lock:
+            self.conn.execute("DELETE FROM guishi_item WHERE id = %s", (str(order_id),))
+            self._commit_write()
 
     def increase_filled_quantity(self, order_id, amount):
-        with self.lock:
+        with self._conn_lock:
             self.conn.execute(
-                "UPDATE guishi_item SET filled_quantity = filled_quantity + ? WHERE id = ?",
+                "UPDATE guishi_item SET filled_quantity = filled_quantity + %s WHERE id = %s",
                 (int(amount), str(order_id))
             )
-            self.conn.commit()
+            self._commit_write()
 
     def get_guishi_orders(self, user_id=None, name=None, type=None, id=None):
         """
@@ -2391,28 +2624,28 @@ class TradeDataManager:
         - type='qiugou' -> 匹配 qiugou/求购
         - type='baitan' -> 匹配 baitan/摆摊
         """
-        with self.lock:
+        with self._conn_lock:
             cond = []
             params = []
 
             if user_id is not None:
-                cond.append("user_id = ?")
+                cond.append("user_id = %s")
                 params.append(str(user_id))
             if name:
-                cond.append("item_name = ?")
+                cond.append("item_name = %s")
                 params.append(str(name))
             if type:
                 if type == "qiugou":
-                    cond.append("(item_type = ? OR item_type = ?)")
+                    cond.append("(item_type = %s OR item_type = %s)")
                     params.extend(["qiugou", "求购"])
                 elif type == "baitan":
-                    cond.append("(item_type = ? OR item_type = ?)")
+                    cond.append("(item_type = %s OR item_type = %s)")
                     params.extend(["baitan", "摆摊"])
                 else:
-                    cond.append("item_type = ?")
+                    cond.append("item_type = %s")
                     params.append(str(type))
             if id:
-                cond.append("id = ?")
+                cond.append("id = %s")
                 params.append(str(id))
 
             q = "SELECT * FROM guishi_item"
@@ -2428,16 +2661,16 @@ class TradeDataManager:
             return [dict(zip(cols, r)) for r in rows]
 
     def get_stored_stone(self, user_id):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id = ?", (str(user_id),))
+            cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id = %s", (str(user_id),))
             row = cur.fetchone()
             return int(row[0]) if row else 0
 
     def get_stored_items(self, user_id):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            cur.execute("SELECT items FROM guishi_info WHERE user_id = ?", (str(user_id),))
+            cur.execute("SELECT items FROM guishi_info WHERE user_id = %s", (str(user_id),))
             row = cur.fetchone()
             if not row:
                 return {}
@@ -2449,7 +2682,7 @@ class TradeDataManager:
                 return {}
 
     def add_stored_item(self, user_id, item_id, quantity=1):
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             user_id = str(user_id)
             item_id = str(item_id)
             quantity = int(quantity)
@@ -2459,18 +2692,18 @@ class TradeDataManager:
             payload = json.dumps(current, ensure_ascii=False)
 
             cur = self.conn.cursor()
-            cur.execute("SELECT 1 FROM guishi_info WHERE user_id = ?", (user_id,))
+            cur.execute("SELECT 1 FROM guishi_info WHERE user_id = %s", (user_id,))
             if cur.fetchone():
-                cur.execute("UPDATE guishi_info SET items=? WHERE user_id=?", (payload, user_id))
+                cur.execute("UPDATE guishi_info SET items=%s WHERE user_id=%s", (payload, user_id))
             else:
                 cur.execute(
-                    "INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (?, 0, ?)",
+                    "INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (%s, 0, %s)",
                     (user_id, payload)
                 )
-            self.conn.commit()
+            self._commit_write()
 
     def remove_stored_item(self, user_id, item_id):
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             user_id = str(user_id)
             item_id = str(item_id)
 
@@ -2478,29 +2711,29 @@ class TradeDataManager:
             if item_id in cur_items:
                 del cur_items[item_id]
                 payload = json.dumps(cur_items, ensure_ascii=False)
-                self.conn.execute("UPDATE guishi_info SET items=? WHERE user_id=?", (payload, user_id))
-                self.conn.commit()
+                self.conn.execute("UPDATE guishi_info SET items=%s WHERE user_id=%s", (payload, user_id))
+                self._commit_write()
 
     def update_stored_stone(self, user_id, amount, operation):
         """
         operation: add / subtract
         subtract 下限0
         """
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             user_id = str(user_id)
             amount = int(amount)
 
             cur = self.conn.cursor()
-            cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id=?", (user_id,))
+            cur.execute("SELECT stored_stone FROM guishi_info WHERE user_id=%s", (user_id,))
             row = cur.fetchone()
 
             if row is None:
                 init_val = amount if operation == "add" else 0
                 cur.execute(
-                    "INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (?, ?, '{}')",
+                    "INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (%s, %s, '{}')",
                     (user_id, init_val)
                 )
-                self.conn.commit()
+                self._commit_write()
                 return
 
             old = int(row[0])
@@ -2509,28 +2742,28 @@ class TradeDataManager:
             else:
                 newv = max(old - amount, 0)
 
-            cur.execute("UPDATE guishi_info SET stored_stone=? WHERE user_id=?", (newv, user_id))
-            self.conn.commit()
+            cur.execute("UPDATE guishi_info SET stored_stone=%s WHERE user_id=%s", (newv, user_id))
+            self._commit_write()
 
     # ======== 拍卖等待区 ========
 
     def add_player_auction_item(self, user_id, item_id, item_name, start_price, user_name):
-        with self.lock:
+        with self._conn_lock:
             sql = """
                 INSERT INTO auction_player_upload (user_id, item_id, item_name, start_price, user_name)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             """
             self.conn.execute(sql, (str(user_id), int(item_id), str(item_name), int(start_price), str(user_name)))
-            self.conn.commit()
+            self._commit_write()
 
     def get_player_auction_items(self, user_id=None):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if user_id is None:
                 cur.execute("SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload")
             else:
                 cur.execute(
-                    "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload WHERE user_id = ?",
+                    "SELECT user_id, item_id, item_name, start_price, user_name FROM auction_player_upload WHERE user_id = %s",
                     (str(user_id),)
                 )
             rows = cur.fetchall()
@@ -2538,22 +2771,22 @@ class TradeDataManager:
             return [dict(zip(cols, r)) for r in rows]
 
     def remove_player_auction_item(self, user_id, item_id):
-        with self.lock:
+        with self._conn_lock:
             self.conn.execute(
-                "DELETE FROM auction_player_upload WHERE user_id = ? AND item_id = ?",
+                "DELETE FROM auction_player_upload WHERE user_id = %s AND item_id = %s",
                 (str(user_id), int(item_id))
             )
-            self.conn.commit()
+            self._commit_write()
 
     def clear_player_auctions(self):
-        with self.lock:
+        with self._conn_lock:
             self.conn.execute("DELETE FROM auction_player_upload")
-            self.conn.commit()
+            self._commit_write()
 
     # ======== 当前拍卖 ========
 
     def set_current_auction(self, auction_items: list):
-        with self.lock:
+        with self._business_lock, self._conn_lock:
             self.clear_current_auction()
             cur = self.conn.cursor()
             for x in auction_items:
@@ -2562,7 +2795,7 @@ class TradeDataManager:
                 cur.execute("""
                     INSERT INTO auction_current
                     (id, item_id, name, start_price, current_price, seller_id, seller_name, bids, bid_times, is_system, last_bid_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     str(x["id"]),
                     int(x["item_id"]),
@@ -2576,10 +2809,10 @@ class TradeDataManager:
                     1 if bool(x.get("is_system", False)) else 0,
                     float(x.get("last_bid_time")) if x.get("last_bid_time") is not None else None
                 ))
-            self.conn.commit()
+            self._commit_write()
 
     def get_current_auction(self, auction_id=None):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if auction_id is None:
                 cur.execute("SELECT * FROM auction_current")
@@ -2600,7 +2833,7 @@ class TradeDataManager:
                     out.append(d)
                 return out
             else:
-                cur.execute("SELECT * FROM auction_current WHERE id=?", (str(auction_id),))
+                cur.execute("SELECT * FROM auction_current WHERE id=%s", (str(auction_id),))
                 r = cur.fetchone()
                 if not r:
                     return None
@@ -2618,11 +2851,11 @@ class TradeDataManager:
                 return d
 
     def update_auction_bid(self, auction_id, new_current_price, new_bids, new_bid_times, new_last_bid_time):
-        with self.lock:
+        with self._conn_lock:
             sql = """
                 UPDATE auction_current
-                SET current_price=?, bids=?, bid_times=?, last_bid_time=?
-                WHERE id=?
+                SET current_price=%s, bids=%s, bid_times=%s, last_bid_time=%s
+                WHERE id=%s
             """
             self.conn.execute(
                 sql,
@@ -2634,22 +2867,22 @@ class TradeDataManager:
                     str(auction_id)
                 )
             )
-            self.conn.commit()
+            self._commit_write()
 
     def clear_current_auction(self):
-        with self.lock:
+        with self._conn_lock:
             self.conn.execute("DELETE FROM auction_current")
-            self.conn.commit()
+            self._commit_write()
 
     # ======== 拍卖历史 ========
 
     def add_auction_history_record(self, record: dict):
-        with self.lock:
+        with self._conn_lock:
             sql = """
                 INSERT INTO auction_history
                 (auction_id, item_id, item_name, start_price, final_price, seller_id, seller_name,
                  winner_id, winner_name, status, fee, seller_earnings, start_time, end_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             self.conn.execute(sql, (
                 str(record["auction_id"]),
@@ -2667,21 +2900,21 @@ class TradeDataManager:
                 float(record["start_time"]),
                 float(record["end_time"])
             ))
-            self.conn.commit()
+            self._commit_write()
 
     def get_auction_history(self, auction_id=None):
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if auction_id is None:
                 cur.execute("SELECT * FROM auction_history ORDER BY end_time DESC")
             else:
-                cur.execute("SELECT * FROM auction_history WHERE auction_id=? ORDER BY end_time DESC", (str(auction_id),))
+                cur.execute("SELECT * FROM auction_history WHERE auction_id=%s ORDER BY end_time DESC", (str(auction_id),))
             rows = cur.fetchall()
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, r)) for r in rows]
 
     def close(self):
-        with self.lock:
+        with self._conn_lock:
             if getattr(self, "conn", None):
                 self.conn.close()
                 self.conn = None
@@ -2702,64 +2935,54 @@ class PlayerDataManager:
         if not self._has_init.get(player_num):
             self._has_init[player_num] = True
             self.database_path = DATABASE / "player.db"
-            if not self.database_path.parent.exists():
-                self.database_path.parent.mkdir(parents=True)
-
-            if not self.database_path.exists():
-                self.database_path.touch()
-                logger.opt(colors=True).info(f"<green>player数据库已创建！</green>")
 
             # 持久连接
-            self.conn = sqlite3.connect(self.database_path, check_same_thread=False)
-            self.lock = threading.RLock()
+            self.conn = db_backend.connect(self.database_path, check_same_thread=False)
+            self._conn_lock = threading.RLock()
+            self.lock = self._conn_lock
             self._ensured_tables = set()
             self._ensured_fields = set()
             logger.opt(colors=True).info(f"<green>player数据库已连接！</green>")
 
-    def _ensure_database_exists(self):
-        if not self.database_path.exists():
-            logger.opt(colors=True).info(f"<green>player数据库不存在，正在创建...</green>")
-            self.database_path.touch()
-            logger.opt(colors=True).info(f"<green>player数据库已创建！</green>")
-
     def _get_cursor(self):
         return self.conn.cursor()
+
+    def _commit_write(self, conn=None):
+        (conn or self.conn).commit()
+
+    def _quote_ident(self, name):
+        return db_backend.quote_ident(str(name))
 
     def _ensure_table_exists(self, table_name):
         if table_name in self._ensured_tables:
             return
-        with self.lock:
+        with self._conn_lock:
             if table_name in self._ensured_tables:
                 return
             cursor = self._get_cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                (table_name,)
-            )
-            if cursor.fetchone() is None:
-                cursor.execute(f"CREATE TABLE {table_name} (user_id TEXT PRIMARY KEY)")
+            if not self.conn.table_exists(table_name):
+                cursor.execute(f"CREATE TABLE {self._quote_ident(table_name)} (user_id TEXT PRIMARY KEY)")
                 logger.opt(colors=True).info(f"<green>表 {table_name} 已创建！</green>")
-            self.conn.commit()
+            self._commit_write()
             self._ensured_tables.add(table_name)
 
     def _ensure_field_exists(self, table_name, field, data_type='TEXT'):
         cache_key = (table_name, field)
         if cache_key in self._ensured_fields:
             return
-        with self.lock:
+        with self._conn_lock:
             if cache_key in self._ensured_fields:
                 return
             cursor = self._get_cursor()
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            fields = [col[1] for col in cursor.fetchall()]
+            fields = self.conn.column_names(table_name)
             if field not in fields:
                 cursor.execute(
-                    f"ALTER TABLE {table_name} ADD COLUMN {field} {data_type} DEFAULT NULL"
+                    f"ALTER TABLE {self._quote_ident(table_name)} ADD COLUMN {self._quote_ident(field)} {data_type} DEFAULT NULL"
                 )
                 logger.opt(colors=True).info(
                     f"<green>字段 {field} 已添加到表 {table_name}，类型为 {data_type}！</green>"
                 )
-            self.conn.commit()
+            self._commit_write()
             self._ensured_fields.add(cache_key)
 
     def update_or_write_data(self, user_id, table_name, field, value, data_type='TEXT'):
@@ -2772,10 +2995,11 @@ class PlayerDataManager:
             "DOUBLE": "REAL",
             "BOOL": "NUMERIC",
             "BOOLEAN": "NUMERIC",
+            "BLOB": "BYTEA",
         }
         data_type = alias.get(dt, dt)
 
-        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
+        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BYTEA', 'NUMERIC']:
             logger.warning(f"不支持的数据类型: {data_type} 已设置为默认类型：TEXT")
             data_type = 'TEXT'
 
@@ -2787,18 +3011,20 @@ class PlayerDataManager:
         else:
             value = str(value)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
+            table_sql = self._quote_ident(table_name)
+            field_sql = self._quote_ident(field)
             cursor.execute(
-                f"UPDATE {table_name} SET {field}=? WHERE user_id=?",
+                f"UPDATE {table_sql} SET {field_sql}=%s WHERE user_id=%s",
                 (value, str(user_id))
             )
             if cursor.rowcount == 0:
                 cursor.execute(
-                    f"INSERT INTO {table_name} (user_id, {field}) VALUES (?, ?)",
+                    f"INSERT INTO {table_sql} (user_id, {field_sql}) VALUES (%s, %s)",
                     (str(user_id), value)
                 )
-            self.conn.commit()
+            self._commit_write()
 
     def get_fields(self, user_id, table_name):
         """通过user_id查看一个表这个主键的全部字段"""
@@ -2808,10 +3034,11 @@ class PlayerDataManager:
 
         self._ensure_table_exists(table_name)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
+            table_sql = self._quote_ident(table_name)
             try:
-                cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (str(user_id),))
+                cursor.execute(f"SELECT * FROM {table_sql} WHERE user_id=%s", (str(user_id),))
                 result = cursor.fetchone()
             except Exception as e:
                 logger.error(f"查询表 {table_name} user_id {user_id} 时出错: {e}")
@@ -2841,9 +3068,12 @@ class PlayerDataManager:
         self._ensure_table_exists(table_name)
         self._ensure_field_exists(table_name, field)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"SELECT {field} FROM {table_name} WHERE user_id=?", (str(user_id),))
+            cursor.execute(
+                f"SELECT {self._quote_ident(field)} FROM {self._quote_ident(table_name)} WHERE user_id=%s",
+                (str(user_id),)
+            )
             result = cursor.fetchone()
 
             if result and result[0] is not None:
@@ -2860,9 +3090,9 @@ class PlayerDataManager:
         self._ensure_table_exists(table_name)
         self._ensure_field_exists(table_name, field)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"SELECT user_id, {field} FROM {table_name}")
+            cursor.execute(f"SELECT user_id, {self._quote_ident(field)} FROM {self._quote_ident(table_name)}")
             result = cursor.fetchall()
 
             processed_results = []
@@ -2880,7 +3110,9 @@ class PlayerDataManager:
         """
         更新指定表中所有记录的某个字段的值
         """
-        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']:
+        if data_type == 'BLOB':
+            data_type = 'BYTEA'
+        if data_type not in ['INTEGER', 'REAL', 'TEXT', 'BYTEA', 'NUMERIC']:
             logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to TEXT.</yellow>")
             data_type = 'TEXT'
 
@@ -2892,10 +3124,13 @@ class PlayerDataManager:
         else:
             value = str(value)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"UPDATE {table_name} SET {field}=?", (value,))
-            self.conn.commit()
+            cursor.execute(
+                f"UPDATE {self._quote_ident(table_name)} SET {self._quote_ident(field)}=%s",
+                (value,)
+            )
+            self._commit_write()
 
     def get_all_records(self, table_name) -> list[dict]:
         """
@@ -2903,9 +3138,9 @@ class PlayerDataManager:
         """
         self._ensure_table_exists(table_name)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"SELECT * FROM {table_name}")
+            cursor.execute(f"SELECT * FROM {self._quote_ident(table_name)}")
             rows = cursor.fetchall()
             columns = [col[0] for col in cursor.description]
 
@@ -2929,10 +3164,10 @@ class PlayerDataManager:
         """
         self._ensure_table_exists(table_name)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"DELETE FROM {table_name} WHERE user_id=?", (str(user_id),))
-            self.conn.commit()
+            cursor.execute(f"DELETE FROM {self._quote_ident(table_name)} WHERE user_id=%s", (str(user_id),))
+            self._commit_write()
 
     # ===== 通用文档接口（JSON字段友好） =====
     def _json_load_if_possible(self, val):
@@ -2952,16 +3187,16 @@ class PlayerDataManager:
         self._ensure_table_exists(table_name)
         user_id = str(user_id)
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
 
             if fields:
                 for f in fields:
                     self._ensure_field_exists(table_name, f, "TEXT")
-                col_sql = ", ".join(["user_id"] + [f for f in fields])
-                cursor.execute(f"SELECT {col_sql} FROM {table_name} WHERE user_id=?", (user_id,))
+                col_sql = ", ".join([self._quote_ident("user_id")] + [self._quote_ident(f) for f in fields])
+                cursor.execute(f"SELECT {col_sql} FROM {self._quote_ident(table_name)} WHERE user_id=%s", (user_id,))
             else:
-                cursor.execute(f"SELECT * FROM {table_name} WHERE user_id=?", (user_id,))
+                cursor.execute(f"SELECT * FROM {self._quote_ident(table_name)} WHERE user_id=%s", (user_id,))
 
             row = cursor.fetchone()
             if not row:
@@ -2993,15 +3228,16 @@ class PlayerDataManager:
         for f in fields:
             self._ensure_field_exists(table_name, f, "TEXT")
 
-        with self.lock:
+        with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"SELECT 1 FROM {table_name} WHERE user_id=?", (user_id,))
+            table_sql = self._quote_ident(table_name)
+            cursor.execute(f"SELECT 1 FROM {table_sql} WHERE user_id=%s", (user_id,))
             exists = cursor.fetchone() is not None
 
             old_map = {}
             if dirty_check and exists and fields:
-                col_sql = ", ".join(fields)
-                cursor.execute(f"SELECT {col_sql} FROM {table_name} WHERE user_id=?", (user_id,))
+                col_sql = ", ".join(self._quote_ident(f) for f in fields)
+                cursor.execute(f"SELECT {col_sql} FROM {table_sql} WHERE user_id=%s", (user_id,))
                 old_row = cursor.fetchone()
                 if old_row:
                     for k, v in zip(fields, old_row):
@@ -3026,16 +3262,16 @@ class PlayerDataManager:
             if not exists:
                 cols = ["user_id"] + fields
                 vals = [user_id] + [new_map[f] for f in fields]
-                ph = ",".join(["?"] * len(cols))
-                col_sql = ",".join(cols)
-                cursor.execute(f"INSERT INTO {table_name} ({col_sql}) VALUES ({ph})", vals)
+                ph = ",".join(["%s"] * len(cols))
+                col_sql = ",".join(self._quote_ident(c) for c in cols)
+                cursor.execute(f"INSERT INTO {table_sql} ({col_sql}) VALUES ({ph})", vals)
             else:
                 if fields:
-                    set_sql = ", ".join([f"{f}=?" for f in fields])
+                    set_sql = ", ".join([f"{self._quote_ident(f)}=%s" for f in fields])
                     vals = [new_map[f] for f in fields] + [user_id]
-                    cursor.execute(f"UPDATE {table_name} SET {set_sql} WHERE user_id=?", vals)
+                    cursor.execute(f"UPDATE {table_sql} SET {set_sql} WHERE user_id=%s", vals)
 
-            self.conn.commit()
+            self._commit_write()
 
     def patch_doc(self, user_id, table_name, fields, mutator, default_factory=None):
         """
@@ -3045,7 +3281,7 @@ class PlayerDataManager:
         self._ensure_table_exists(table_name)
         user_id = str(user_id)
 
-        with self.lock:
+        with self._conn_lock:
             doc = self.get_doc(user_id, table_name, fields=fields, default_factory=default_factory)
             if doc is None and default_factory:
                 doc = default_factory()
@@ -3060,7 +3296,7 @@ class PlayerDataManager:
             return doc
 
     def close(self):
-        with self.lock:
+        with self._conn_lock:
             if getattr(self, "conn", None):
                 self.conn.close()
                 self.conn = None
@@ -3085,21 +3321,25 @@ class XIUXIAN_IMPART_BUFF:
             if not self.database_path.exists():
                 self.database_path.mkdir(parents=True)
 
-            self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
-            self.lock = threading.RLock()
+            self.conn = db_backend.connect(self.db_file, check_same_thread=False)
+            self._conn_lock = threading.RLock()
+            self.lock = self._conn_lock
             logger.opt(colors=True).info(f"<green>xiuxian_impart数据库已连接!</green>")
             self._check_data()
 
     def close(self):
-        with self.lock:
+        with self._conn_lock:
             if getattr(self, "conn", None):
                 self.conn.close()
                 self.conn = None
                 logger.opt(colors=True).info(f"<green>xiuxian_impart数据库关闭!</green>")
 
+    def _commit_write(self, conn=None):
+        (conn or self.conn).commit()
+
     def _create_file(self) -> None:
         """创建数据库文件"""
-        with self.lock:
+        with self._conn_lock:
             c = self.conn.cursor()
             c.execute('''CREATE TABLE xiuxian_impart
                                (NO            INTEGER PRIMARY KEY UNIQUE,
@@ -3109,20 +3349,20 @@ class XIUXIAN_IMPART_BUFF:
                                );''')
             c.execute('''''')
             c.execute('''''')
-            self.conn.commit()
+            self._commit_write()
 
     def _check_data(self):
         """检查数据完整性"""
-        with self.lock:
+        with self._conn_lock:
             c = self.conn.cursor()
 
             for i in config_impart.sql_table:
                 if i == "xiuxian_impart":
                     try:
                         c.execute(f"select count(1) from {i}")
-                    except sqlite3.OperationalError:
+                    except db_backend.OperationalError:
                         c.execute(f"""CREATE TABLE "xiuxian_impart" (
-        "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "id" INTEGER PRIMARY KEY,
         "user_id" TEXT DEFAULT 0,
         "impart_hp_per" integer DEFAULT 0,
         "impart_atk_per" integer DEFAULT 0,
@@ -3144,13 +3384,13 @@ class XIUXIAN_IMPART_BUFF:
             for s in config_impart.sql_table_impart_buff:
                 try:
                     c.execute(f"select {s} from xiuxian_impart")
-                except sqlite3.OperationalError:
+                except db_backend.OperationalError:
                     sql = f"ALTER TABLE xiuxian_impart ADD COLUMN {s} integer DEFAULT 0;"
                     logger.opt(colors=True).info(f"<green>{sql}</green>")
                     logger.opt(colors=True).info(f"<green>xiuxian_impart数据库核对成功!</green>")
                     c.execute(sql)
 
-            self.conn.commit()
+            self._commit_write()
 
     @classmethod
     def close_dbs(cls):
@@ -3158,9 +3398,9 @@ class XIUXIAN_IMPART_BUFF:
 
     def create_user(self, user_id):
         """校验用户是否存在"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"select * from xiuxian_impart WHERE user_id=?"
+            sql = f"select * from xiuxian_impart WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if not result:
@@ -3170,20 +3410,20 @@ class XIUXIAN_IMPART_BUFF:
 
     def _create_user(self, user_id: str) -> None:
         """在数据库中创建用户并初始化"""
-        with self.lock:
+        with self._conn_lock:
             if self.create_user(user_id):
                 pass
             else:
                 c = self.conn.cursor()
-                sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,impart_num,exp_day,wish) VALUES(?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
+                sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,impart_num,exp_day,wish) VALUES(%s, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
                 c.execute(sql, (user_id,))
-                self.conn.commit()
+                self._commit_write()
 
     def get_user_impart_info_with_id(self, user_id):
         """根据USER_ID获取用户impart_buff信息"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"select * from xiuxian_impart WHERE user_id=?"
+            sql = f"select * from xiuxian_impart WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if result:
@@ -3195,262 +3435,262 @@ class XIUXIAN_IMPART_BUFF:
 
     def update_impart_hp_per(self, impart_num, user_id):
         """更新impart_hp_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_hp_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_hp_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_hp_per(self, impart_num, user_id):
         """add impart_hp_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_hp_per=impart_hp_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_hp_per=impart_hp_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_atk_per(self, impart_num, user_id):
         """更新impart_atk_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_atk_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_atk_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_atk_per(self, impart_num, user_id):
         """add impart_atk_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_atk_per=impart_atk_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_atk_per=impart_atk_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_mp_per(self, impart_num, user_id):
         """impart_mp_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_mp_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_mp_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_mp_per(self, impart_num, user_id):
         """add impart_mp_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_mp_per=impart_mp_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_mp_per=impart_mp_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_exp_up(self, impart_num, user_id):
         """impart_exp_up"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_exp_up=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_exp_up=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_exp_up(self, impart_num, user_id):
         """add impart_exp_up"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_exp_up=impart_exp_up+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_exp_up=impart_exp_up+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_boss_atk(self, impart_num, user_id):
         """boss_atk"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET boss_atk=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET boss_atk=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_boss_atk(self, impart_num, user_id):
         """add boss_atk"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET boss_atk=boss_atk+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET boss_atk=boss_atk+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_know_per(self, impart_num, user_id):
         """impart_know_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_know_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_know_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_know_per(self, impart_num, user_id):
         """add impart_know_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_know_per=impart_know_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_know_per=impart_know_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_burst_per(self, impart_num, user_id):
         """impart_burst_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_burst_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_burst_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_burst_per(self, impart_num, user_id):
         """add impart_burst_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_burst_per=impart_burst_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_burst_per=impart_burst_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_mix_per(self, impart_num, user_id):
         """impart_mix_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_mix_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_mix_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_mix_per(self, impart_num, user_id):
         """add impart_mix_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_mix_per=impart_mix_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_mix_per=impart_mix_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_reap_per(self, impart_num, user_id):
         """impart_reap_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_reap_per=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_reap_per=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_reap_per(self, impart_num, user_id):
         """add impart_reap_per"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_reap_per=impart_reap_per+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_reap_per=impart_reap_per+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_two_exp(self, impart_num, user_id):
         """更新双修"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_two_exp=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_two_exp=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_num(self, impart_num, user_id):
         """更新抽卡次数"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_num=impart_num+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_num=impart_num+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_two_exp(self, impart_num, user_id):
         """add impart_two_exp"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET impart_two_exp=impart_two_exp+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET impart_two_exp=impart_two_exp+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_impart_wish(self, impart_num, user_id):
         """更新祈愿值/次数"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET wish=? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET wish=%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def add_impart_wish(self, impart_num, user_id):
         """增加祈愿值/次数"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET wish=wish+? WHERE user_id=?"
+            sql = f"UPDATE xiuxian_impart SET wish=wish+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def update_stone_num(self, impart_num, user_id, type_):
         """更新结晶数量"""
-        with self.lock:
+        with self._conn_lock:
             if type_ == 1:
                 cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num+? WHERE user_id=?"
+                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num+%s WHERE user_id=%s"
                 cur.execute(sql, (impart_num, user_id))
-                self.conn.commit()
+                self._commit_write()
                 return True
             if type_ == 2:
                 cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num-? WHERE user_id=?"
+                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num-%s WHERE user_id=%s"
                 cur.execute(sql, (impart_num, user_id))
-                self.conn.commit()
+                self._commit_write()
                 return True
 
     def update_impart_stone_all(self, impart_stone):
         """所有用户增加结晶"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET stone_num=stone_num+?"
+            sql = "UPDATE xiuxian_impart SET stone_num=stone_num+%s"
             cur.execute(sql, (impart_stone,))
-            self.conn.commit()
+            self._commit_write()
 
     def update_impart_lv(self, user_id, impart_lv):
         """更新虚神界等级"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET impart_lv=? WHERE user_id=?"
+            sql = "UPDATE xiuxian_impart SET impart_lv=%s WHERE user_id=%s"
             cur.execute(sql, (impart_lv, user_id))
-            self.conn.commit()
+            self._commit_write()
 
     def impart_lv_reset(self):
         """重置所有用户虚神界等级"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE xiuxian_impart SET impart_lv=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def impart_num_reset(self):
         """重置所有用户传承抽卡次数"""
-        with self.lock:
+        with self._conn_lock:
             sql = f"UPDATE xiuxian_impart SET impart_num=0"
             cur = self.conn.cursor()
             cur.execute(sql)
-            self.conn.commit()
+            self._commit_write()
 
     def get_impart_rank(self):
         """获取虚神界等级排行榜"""
-        with self.lock:
+        with self._conn_lock:
             sql = "SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, stone_num DESC LIMIT 50"
             cur = self.conn.cursor()
             cur.execute(sql)
@@ -3464,14 +3704,14 @@ class XIUXIAN_IMPART_BUFF:
         :param num: 要增加/减少的数值
         :param operation: 1-增加, 2-减少
         """
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
             if operation == 1:
                 sql = """
                 UPDATE xiuxian_impart 
                 SET impart_lv = CASE 
-                    WHEN impart_lv + ? > 30 THEN 30 
-                    ELSE impart_lv + ? 
+                    WHEN impart_lv + %s > 30 THEN 30 
+                    ELSE impart_lv + %s 
                 END 
                 WHERE impart_lv >= 0
                 """
@@ -3480,8 +3720,8 @@ class XIUXIAN_IMPART_BUFF:
                 sql = """
                 UPDATE xiuxian_impart 
                 SET impart_lv = CASE 
-                    WHEN impart_lv - ? < 0 THEN 0 
-                    ELSE impart_lv - ? 
+                    WHEN impart_lv - %s < 0 THEN 0 
+                    ELSE impart_lv - %s 
                 END 
                 WHERE impart_lv > 0
                 """
@@ -3489,13 +3729,13 @@ class XIUXIAN_IMPART_BUFF:
             else:
                 return
 
-            self.conn.commit()
+            self._commit_write()
 
     def convert_stone_to_wishing_stone(self, user_id):
         """将思恋结晶转换为祈愿石（100:1），多余废弃"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "SELECT stone_num FROM xiuxian_impart WHERE user_id=?"
+            sql = "SELECT stone_num FROM xiuxian_impart WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if result is None:
@@ -3504,27 +3744,27 @@ class XIUXIAN_IMPART_BUFF:
             if stone_num < 100:
                 return
             wishing_stone_num = stone_num // 100
-            sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=?"
+            sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=%s"
             cur.execute(sql_update, (user_id,))
-            self.conn.commit()
+            self._commit_write()
             sql_message.send_back(user_id, 20005, "祈愿石", "特殊道具", wishing_stone_num, 1)
 
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET exp_day=exp_day+? WHERE user_id=?"
+            sql = "UPDATE xiuxian_impart SET exp_day=exp_day+%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
     def use_impart_exp_day(self, impart_num, user_id):
         """use impart_exp_day"""
-        with self.lock:
+        with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET exp_day=exp_day-? WHERE user_id=?"
+            sql = "UPDATE xiuxian_impart SET exp_day=exp_day-%s WHERE user_id=%s"
             cur.execute(sql, (impart_num, user_id))
-            self.conn.commit()
+            self._commit_write()
             return True
 
 
@@ -4270,227 +4510,136 @@ def backup_db_files():
     """
     return UpdateManager().backup_db_files()
 
-def _qid(name: str) -> str:
-    # 安全引用SQLite标识符
-    return '"' + str(name).replace('"', '""') + '"'
+_ID_DB_PATHS = {
+    "xiuxian.db": DATABASE / "xiuxian.db",
+    "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
+    "trade.db": DATABASE / "trade.db",
+    "player.db": DATABASE / "player.db",
+}
+
+_ID_TARGET_COLS_BY_DB = {
+    "xiuxian.db": {"user_id", "sect_owner"},
+    "xiuxian_impart.db": {"user_id"},
+    "trade.db": {"user_id"},
+    "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
+}
+
+_TEXT_TYPES = {"text", "character varying", "character"}
 
 
-def _get_tables(conn: sqlite3.Connection):
-    # 获取所有业务表，排除sqlite内部表
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    return [r[0] for r in cur.fetchall() if r and r[0] and not r[0].startswith("sqlite_")]
+def _id_table_targets(conn, db_name: str):
+    target_cols = _ID_TARGET_COLS_BY_DB.get(db_name, {"user_id"})
+    for table in conn.list_tables():
+        fields_info = conn.table_info(table)
+        columns = {row[1] for row in fields_info}
+        hit_cols = sorted(columns.intersection(target_cols))
+        for col in hit_cols:
+            yield table, col, fields_info
 
 
-def _get_table_info(conn: sqlite3.Connection, table: str):
-    # 获取表结构信息
-    cur = conn.cursor()
-    cur.execute(f'PRAGMA table_info({_qid(table)})')
-    return cur.fetchall()  # cid, name, type, notnull, dflt_value, pk
-
-
-def _has_autoincrement(conn: sqlite3.Connection, table: str) -> bool:
-    # 检查原表是否包含AUTOINCREMENT
-    cur = conn.cursor()
-    cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,))
-    row = cur.fetchone()
-    if not row or not row[0]:
-        return False
-    return "AUTOINCREMENT" in row[0].upper()
-
-
-def _build_create_sql_by_table_info(conn: sqlite3.Connection, table: str, to_text_cols: set[str]) -> str:
-    # 基于PRAGMA重建建表SQL，只改指定列为TEXT，保留主键结构
-    cols = _get_table_info(conn, table)
-    if not cols:
-        raise RuntimeError(f"表 {table} 无字段信息")
-
-    col_defs = []
-    pk_cols = []
-    pk_count = sum(1 for c in cols if int(c[5]) > 0)
-    single_pk = (pk_count == 1)
-    autoinc = _has_autoincrement(conn, table)
-
-    for cid, name, ctype, notnull, dflt, pk in cols:
-        raw_type = (ctype or "TEXT").upper().strip()
-        new_type = "TEXT" if name in to_text_cols else raw_type
-
-        part = f"{_qid(name)} {new_type}"
-        if int(notnull) == 1:
-            part += " NOT NULL"
-        if dflt is not None:
-            part += f" DEFAULT {dflt}"
-
-        if int(pk) > 0 and single_pk:
-            part += " PRIMARY KEY"
-            # 仅当该列未改为TEXT，且原列为INTEGER主键并带AUTOINCREMENT时保留自增
-            if (name not in to_text_cols) and (raw_type in ("INTEGER", "INT")) and autoinc:
-                part += " AUTOINCREMENT"
-        elif int(pk) > 0:
-            pk_cols.append((name, int(pk)))
-
-        col_defs.append(part)
-
-    if pk_cols:
-        pk_cols = [x[0] for x in sorted(pk_cols, key=lambda x: x[1])]
-        col_defs.append("PRIMARY KEY (" + ", ".join(_qid(x) for x in pk_cols) + ")")
-
-    tmp_table = f"{table}__tmp_rebuild"
-    return f'CREATE TABLE {_qid(tmp_table)} (\n  ' + ",\n  ".join(col_defs) + "\n)"
-
-
-def _rebuild_table_convert_columns_to_text(conn: sqlite3.Connection, table: str, to_text_cols: set[str]):
-    # 重建表并将指定列改为TEXT，数据原样拷贝（目标列统一转str）
-    cols_info = _get_table_info(conn, table)
-    cols = [c[1] for c in cols_info]
-    hit_cols = [c for c in cols if c in to_text_cols]
-    if not hit_cols:
-        return 0
-
-    cur = conn.cursor()
-    tmp_table = f"{table}__tmp_rebuild"
-    cur.execute(f'DROP TABLE IF EXISTS {_qid(tmp_table)}')
-
-    create_sql = _build_create_sql_by_table_info(conn, table, to_text_cols)
-    cur.execute(create_sql)
-
-    col_sql = ", ".join(_qid(c) for c in cols)
-    cur.execute(f'SELECT {col_sql} FROM {_qid(table)}')
-    rows = cur.fetchall()
-
-    ins_sql = f'INSERT INTO {_qid(tmp_table)} ({col_sql}) VALUES ({",".join(["?"] * len(cols))})'
-    copied = 0
-    for row in rows:
-        row = list(row)
-        for i, c in enumerate(cols):
-            if c in to_text_cols and row[i] is not None:
-                row[i] = str(row[i])
-        cur.execute(ins_sql, tuple(row))
-        copied += 1
-
-    cur.execute(f'DROP TABLE {_qid(table)}')
-    cur.execute(f'ALTER TABLE {_qid(tmp_table)} RENAME TO {_qid(table)}')
-    return copied
-
-
-def _update_ids_in_table(conn: sqlite3.Connection, table: str, target_cols: set[str], id_map: dict[str, str]) -> int:
-    # 按严格相等匹配替换ID，CAST成TEXT后比对
-    cols_info = _get_table_info(conn, table)
-    cols = [c[1] for c in cols_info]
-    hit_cols = [c for c in cols if c in target_cols]
-    if not hit_cols:
-        return 0
-
-    cur = conn.cursor()
-    updated_cells = 0
-    for col in hit_cols:
-        for old_id, new_id in id_map.items():
-            if str(old_id) == str(new_id):
-                continue
-            sql = f'UPDATE {_qid(table)} SET {_qid(col)}=? WHERE CAST({_qid(col)} AS TEXT)=?'
-            cur.execute(sql, (str(new_id), str(old_id)))
-            if cur.rowcount and cur.rowcount > 0:
-                updated_cells += cur.rowcount
-    return updated_cells
-
-
-def _collect_all_candidate_ids(db_paths: dict, target_cols_by_db: dict) -> set[str]:
-    # 从所有数据库目标字段中收集候选ID（去重）
-    all_ids = set()
-
-    for db_name, db_path in db_paths.items():
-        if not db_path.exists():
-            continue
-
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+def _ensure_id_target_columns_text() -> list[str]:
+    logs = []
+    for db_name, db_path in _ID_DB_PATHS.items():
+        conn = db_backend.connect(db_path, check_same_thread=False)
         try:
-            tables = _get_tables(conn)
-            for table in tables:
-                cols_info = _get_table_info(conn, table)
-                cols = {c[1] for c in cols_info}
-                hit_cols = cols.intersection(target_cols_by_db.get(db_name, set()))
-                if not hit_cols:
-                    continue
-
-                cur = conn.cursor()
-                for col in hit_cols:
-                    sql = f'SELECT DISTINCT CAST({_qid(col)} AS TEXT) FROM {_qid(table)} WHERE {_qid(col)} IS NOT NULL'
-                    cur.execute(sql)
-                    rows = cur.fetchall()
-                    for r in rows:
-                        if r and r[0] is not None:
-                            v = str(r[0]).strip()
-                            if v != "":
-                                all_ids.add(v)
+            checked = sum(1 for _table, _col, _fields_info in _id_table_targets(conn, db_name))
+            logs.append(f"{db_name}: ID字段检查完成，字段数={checked}")
+        except Exception as e:
+            conn.rollback()
+            logs.append(f"{db_name}: ID字段TEXT检查失败 -> {e}")
+            raise
         finally:
             conn.close()
+    return logs
 
+
+def _collect_all_candidate_ids() -> set[str]:
+    all_ids = set()
+    for db_name, db_path in _ID_DB_PATHS.items():
+        conn = db_backend.connect(db_path, check_same_thread=False)
+        try:
+            cur = conn.cursor()
+            for table, col, _fields_info in _id_table_targets(conn, db_name):
+                table_sql = db_backend.quote_ident(table)
+                col_sql = db_backend.quote_ident(col)
+                cur.execute(
+                    f"SELECT DISTINCT CAST({col_sql} AS TEXT) FROM {table_sql} WHERE {col_sql} IS NOT NULL"
+                )
+                for row in cur.fetchall():
+                    if row and row[0] is not None:
+                        value = str(row[0]).strip()
+                        if value:
+                            all_ids.add(value)
+        finally:
+            conn.close()
     return all_ids
 
 
-def migrate_user_id_to_openid():
-    """
-    迁移逻辑：
-    1) 先备份数据库
-    2) 将目标字段类型统一改为TEXT
-    3) 一次性收集所有目标字段中的ID，统一生成映射
-    4) 一次性替换所有目标字段中的ID
-    """
-    try:
-        # 先备份
-        ok, backup_msg = backup_db_files()
-        if not ok:
-            return False, f"备份失败，终止迁移：{backup_msg}"
+def _update_ids_in_table(conn, table: str, col: str, id_map: dict[str, str]) -> int:
+    cur = conn.cursor()
+    table_sql = db_backend.quote_ident(table)
+    col_sql = db_backend.quote_ident(col)
+    updated_cells = 0
+    for old_id, new_id in id_map.items():
+        if str(old_id) == str(new_id):
+            continue
+        cur.execute(
+            f"UPDATE {table_sql} SET {col_sql}=%s WHERE CAST({col_sql} AS TEXT)=%s",
+            (str(new_id), str(old_id)),
+        )
+        if cur.rowcount and cur.rowcount > 0:
+            updated_cells += cur.rowcount
+    return updated_cells
 
-        db_paths = {
-            "xiuxian.db": DATABASE / "xiuxian.db",
-            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
-            "trade.db": DATABASE / "trade.db",
-            "player.db": DATABASE / "player.db",
-        }
 
-        # 各库需要迁移的字段（player.db新增 main_id、active_id）
-        target_cols_by_db = {
-            "xiuxian.db": {"user_id", "sect_owner"},
-            "xiuxian_impart.db": {"user_id"},
-            "trade.db": {"user_id"},
-            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
-        }
+def _update_ids(id_map: dict[str, str]) -> tuple[int, list[str]]:
+    logs = []
+    total_updated = 0
+    for db_name, db_path in _ID_DB_PATHS.items():
+        conn = db_backend.connect(db_path, check_same_thread=False)
+        try:
+            db_updated = 0
+            for table, col, _fields_info in _id_table_targets(conn, db_name):
+                db_updated += _update_ids_in_table(conn, table, col, id_map)
+            conn.commit()
+            total_updated += db_updated
+            logs.append(f"{db_name}: ID替换完成，更新单元格={db_updated}")
+        except Exception as e:
+            conn.rollback()
+            logs.append(f"{db_name}: ID替换失败 -> {e}")
+            raise
+        finally:
+            conn.close()
+    return total_updated, logs
 
-        # =========================
-        # A. 先全库目标字段改TEXT
-        # =========================
-        type_logs = []
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                type_logs.append(f"{db_name}: 不存在，跳过")
-                continue
 
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            conn.execute("PRAGMA foreign_keys=OFF")
+def _id_exists(value: str) -> tuple[bool, list[str]]:
+    exists = False
+    details = []
+    for db_name, db_path in _ID_DB_PATHS.items():
+        conn = db_backend.connect(db_path, check_same_thread=False)
+        try:
             cur = conn.cursor()
+            for table, col, _fields_info in _id_table_targets(conn, db_name):
+                table_sql = db_backend.quote_ident(table)
+                col_sql = db_backend.quote_ident(col)
+                cur.execute(
+                    f"SELECT 1 FROM {table_sql} WHERE CAST({col_sql} AS TEXT)=%s LIMIT 1",
+                    (value,),
+                )
+                if cur.fetchone():
+                    exists = True
+                    details.append(f"{db_name}.{table}.{col}")
+        finally:
+            conn.close()
+    return exists, details
 
-            try:
-                cur.execute("BEGIN")
-                tables = _get_tables(conn)
-                converted_rows = 0
 
-                for table in tables:
-                    to_text_cols = target_cols_by_db.get(db_name, {"user_id"})
-                    converted_rows += _rebuild_table_convert_columns_to_text(conn, table, to_text_cols)
-
-                conn.commit()
-                type_logs.append(f"{db_name}: 字段类型处理完成，重建拷贝行数={converted_rows}")
-            except Exception as e:
-                conn.rollback()
-                type_logs.append(f"{db_name}: 字段类型处理失败 -> {e}")
-            finally:
-                conn.close()
-
-        # =========================
-        # B. 一次性收集所有候选ID并映射
-        # =========================
-        all_candidate_ids = _collect_all_candidate_ids(db_paths, target_cols_by_db)
+def migrate_user_id_to_openid():
+    """将数据库中的 QQ user_id 迁移为真实 ID。"""
+    try:
+        type_logs = _ensure_id_target_columns_text()
+        all_candidate_ids = _collect_all_candidate_ids()
         if not all_candidate_ids:
             return False, "未找到任何可迁移ID"
 
@@ -4511,40 +4660,8 @@ def migrate_user_id_to_openid():
         if not id_map:
             return False, "真实ID转换全部失败，未执行替换"
 
-        # =========================
-        # C. 全库替换（一次）
-        # =========================
-        data_logs = []
-        total_updated = 0
+        total_updated, data_logs = _update_ids(id_map)
 
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                data_logs.append(f"{db_name}: 不存在，跳过")
-                continue
-
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            cur = conn.cursor()
-
-            try:
-                cur.execute("BEGIN")
-                tables = _get_tables(conn)
-                target_cols = target_cols_by_db.get(db_name, {"user_id"})
-
-                db_updated = 0
-                for table in tables:
-                    db_updated += _update_ids_in_table(conn, table, target_cols, id_map)
-
-                conn.commit()
-                total_updated += db_updated
-                data_logs.append(f"{db_name}: ID替换完成，更新单元格={db_updated}")
-            except Exception as e:
-                conn.rollback()
-                data_logs.append(f"{db_name}: ID替换失败 -> {e}")
-            finally:
-                conn.close()
-
-        # 可选迁移 players 目录名
         players_dir = DATABASE / "players"
         rename_count = 0
         if players_dir.exists():
@@ -4560,7 +4677,6 @@ def migrate_user_id_to_openid():
 
         msg = (
             f"QQID转换完成！\n"
-            f"备份：{backup_msg}\n"
             f"候选ID总数：{len(all_candidate_ids)}\n"
             f"成功映射：{len(id_map)}\n"
             f"转换失败：{len(fail_ids)}\n"
@@ -4570,126 +4686,32 @@ def migrate_user_id_to_openid():
             f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
         )
         return True, msg
-
     except Exception as e:
         return False, f"迁移异常中止：{e}"
 
+
 def migrate_single_user_id(old_id: str, new_id: str):
-    """
-    手动迁移单个用户ID：old_id -> new_id
-    规则：
-    1) old_id不存在：不更新并提示
-    2) new_id已存在：不更新并提示
-    3) 执行前自动备份数据库
-    """
+    """手动迁移单个用户ID：old_id -> new_id。"""
     try:
         old_id = str(old_id).strip()
         new_id = str(new_id).strip()
 
         if not old_id or not new_id:
             return False, "参数错误：ID1 和 ID2 不能为空"
-
         if old_id == new_id:
             return False, "ID1 与 ID2 相同，无需更新"
 
-        db_paths = {
-            "xiuxian.db": DATABASE / "xiuxian.db",
-            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
-            "trade.db": DATABASE / "trade.db",
-            "player.db": DATABASE / "player.db",
-        }
-
-        # 各库需要迁移的字段（与批量迁移保持一致）
-        target_cols_by_db = {
-            "xiuxian.db": {"user_id", "sect_owner"},
-            "xiuxian_impart.db": {"user_id"},
-            "trade.db": {"user_id"},
-            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
-        }
-
-        # 先判断 old_id 是否存在、new_id 是否已存在
-        old_exists = False
-        new_exists = False
-        old_exists_detail = []
-        new_exists_detail = []
-
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                continue
-
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            try:
-                tables = _get_tables(conn)
-                target_cols = target_cols_by_db.get(db_name, {"user_id"})
-                cur = conn.cursor()
-
-                for table in tables:
-                    cols_info = _get_table_info(conn, table)
-                    cols = {c[1] for c in cols_info}
-                    hit_cols = cols.intersection(target_cols)
-                    if not hit_cols:
-                        continue
-
-                    for col in hit_cols:
-                        # 检查 old_id
-                        cur.execute(
-                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
-                            (old_id,)
-                        )
-                        if cur.fetchone():
-                            old_exists = True
-                            old_exists_detail.append(f"{db_name}.{table}.{col}")
-
-                        # 检查 new_id
-                        cur.execute(
-                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
-                            (new_id,)
-                        )
-                        if cur.fetchone():
-                            new_exists = True
-                            new_exists_detail.append(f"{db_name}.{table}.{col}")
-            finally:
-                conn.close()
+        type_logs = _ensure_id_target_columns_text()
+        old_exists, old_exists_detail = _id_exists(old_id)
+        new_exists, new_exists_detail = _id_exists(new_id)
 
         if not old_exists:
             return False, f"ID1（{old_id}）不存在，未执行更新"
-
         if new_exists:
             return False, f"ID2（{new_id}）已存在，禁止覆盖。\n命中位置：{', '.join(new_exists_detail[:10])}"
 
-        # 开始更新
-        total_updated = 0
-        logs = []
-        id_map = {old_id: new_id}
+        total_updated, data_logs = _update_ids({old_id: new_id})
 
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                logs.append(f"{db_name}: 不存在，跳过")
-                continue
-
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            cur = conn.cursor()
-
-            try:
-                cur.execute("BEGIN")
-                tables = _get_tables(conn)
-                target_cols = target_cols_by_db.get(db_name, {"user_id"})
-
-                db_updated = 0
-                for table in tables:
-                    db_updated += _update_ids_in_table(conn, table, target_cols, id_map)
-
-                conn.commit()
-                total_updated += db_updated
-                logs.append(f"{db_name}: 更新单元格={db_updated}")
-            except Exception as e:
-                conn.rollback()
-                logs.append(f"{db_name}: 更新失败 -> {e}")
-            finally:
-                conn.close()
-
-        # 可选：迁移 players 目录名
         players_dir = DATABASE / "players"
         rename_msg = "未处理"
         if players_dir.exists():
@@ -4708,27 +4730,19 @@ def migrate_single_user_id(old_id: str, new_id: str):
 
         msg = (
             f"手动ID更新完成：{old_id} -> {new_id}\n"
+            f"命中位置：{', '.join(old_exists_detail[:10])}\n"
             f"总更新单元格：{total_updated}\n"
             f"players目录：{rename_msg}\n"
-            f"详情：\n" + "\n".join(logs)
+            f"\n[字段类型阶段]\n" + "\n".join(type_logs) +
+            f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
         )
         return True, msg
-
     except Exception as e:
         return False, f"手动ID更新异常：{e}"
 
-def swap_two_user_ids(id1: str, id2: str):
-    """
-    交换两个用户ID：
-    1) id1 -> id1bak
-    2) id2 -> id1
-    3) id1bak -> id2
 
-    规则：
-    - id1、id2 都必须存在
-    - 执行前自动备份
-    - 任一步失败则回滚（按库事务）
-    """
+def swap_two_user_ids(id1: str, id2: str):
+    """交换两个用户ID。"""
     try:
         id1 = str(id1).strip()
         id2 = str(id2).strip()
@@ -4738,112 +4752,45 @@ def swap_two_user_ids(id1: str, id2: str):
         if id1 == id2:
             return False, "ID1 与 ID2 相同，无法交换"
 
-        db_paths = {
-            "xiuxian.db": DATABASE / "xiuxian.db",
-            "xiuxian_impart.db": DATABASE / "xiuxian_impart.db",
-            "trade.db": DATABASE / "trade.db",
-            "player.db": DATABASE / "player.db",
-        }
-
-        target_cols_by_db = {
-            "xiuxian.db": {"user_id", "sect_owner"},
-            "xiuxian_impart.db": {"user_id"},
-            "trade.db": {"user_id"},
-            "player.db": {"user_id", "partner_id", "group_id", "main_id", "active_id"},
-        }
-
-        # 生成临时bak，避免冲突
-        id1_bak = f"{id1}__bak__{int(time.time())}"
-
-        # 前置存在性检查
-        id1_exists = False
-        id2_exists = False
-
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                continue
-
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            try:
-                tables = _get_tables(conn)
-                target_cols = target_cols_by_db.get(db_name, {"user_id"})
-                cur = conn.cursor()
-
-                for table in tables:
-                    cols_info = _get_table_info(conn, table)
-                    cols = {c[1] for c in cols_info}
-                    hit_cols = cols.intersection(target_cols)
-                    if not hit_cols:
-                        continue
-
-                    for col in hit_cols:
-                        cur.execute(
-                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
-                            (id1,)
-                        )
-                        if cur.fetchone():
-                            id1_exists = True
-
-                        cur.execute(
-                            f'SELECT 1 FROM {_qid(table)} WHERE CAST({_qid(col)} AS TEXT)=? LIMIT 1',
-                            (id2,)
-                        )
-                        if cur.fetchone():
-                            id2_exists = True
-            finally:
-                conn.close()
+        type_logs = _ensure_id_target_columns_text()
+        id1_exists, _id1_detail = _id_exists(id1)
+        id2_exists, _id2_detail = _id_exists(id2)
 
         if not id1_exists or not id2_exists:
             return False, f"交换失败：ID1存在={id1_exists}，ID2存在={id2_exists}。要求两者都存在。"
 
+        temp_id = f"{id1}__swap__{int(time.time())}"
         total_updated = 0
-        logs = []
+        data_logs = []
 
-        # 按库执行三步替换，每个库单独事务
-        for db_name, db_path in db_paths.items():
-            if not db_path.exists():
-                logs.append(f"{db_name}: 不存在，跳过")
-                continue
-
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            cur = conn.cursor()
-
+        for db_name, db_path in _ID_DB_PATHS.items():
+            conn = db_backend.connect(db_path, check_same_thread=False)
             try:
-                cur.execute("BEGIN")
-                tables = _get_tables(conn)
-                target_cols = target_cols_by_db.get(db_name, {"user_id"})
-
                 db_updated = 0
-                # 第一步：id1 -> id1_bak
-                for table in tables:
-                    db_updated += _update_ids_in_table(conn, table, target_cols, {id1: id1_bak})
-                # 第二步：id2 -> id1
-                for table in tables:
-                    db_updated += _update_ids_in_table(conn, table, target_cols, {id2: id1})
-                # 第三步：id1_bak -> id2
-                for table in tables:
-                    db_updated += _update_ids_in_table(conn, table, target_cols, {id1_bak: id2})
-
+                targets = list(_id_table_targets(conn, db_name))
+                for table, col, _fields_info in targets:
+                    db_updated += _update_ids_in_table(conn, table, col, {id1: temp_id})
+                for table, col, _fields_info in targets:
+                    db_updated += _update_ids_in_table(conn, table, col, {id2: id1})
+                for table, col, _fields_info in targets:
+                    db_updated += _update_ids_in_table(conn, table, col, {temp_id: id2})
                 conn.commit()
                 total_updated += db_updated
-                logs.append(f"{db_name}: 更新单元格={db_updated}")
+                data_logs.append(f"{db_name}: 更新单元格={db_updated}")
             except Exception as e:
                 conn.rollback()
-                logs.append(f"{db_name}: 交换失败 -> {e}")
+                data_logs.append(f"{db_name}: 交换失败 -> {e}")
                 return False, f"ID交换失败并已回滚（{db_name}）：{e}"
             finally:
                 conn.close()
 
-        # players目录也做交换
         players_dir = DATABASE / "players"
         rename_msg = "未处理"
         if players_dir.exists():
             p1 = players_dir / id1
             p2 = players_dir / id2
-            pb = players_dir / id1_bak
+            pb = players_dir / temp_id
             try:
-                # 同样三步交换
                 if p1.exists():
                     p1.rename(pb)
                 if p2.exists():
@@ -4858,10 +4805,10 @@ def swap_two_user_ids(id1: str, id2: str):
             f"ID交换完成：{id1} - {id2}\n"
             f"总更新单元格：{total_updated}\n"
             f"players目录：{rename_msg}\n"
-            f"详情：\n" + "\n".join(logs)
+            f"\n[字段类型阶段]\n" + "\n".join(type_logs) +
+            f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
         )
         return True, msg
-
     except Exception as e:
         return False, f"ID交换异常：{e}"
 
