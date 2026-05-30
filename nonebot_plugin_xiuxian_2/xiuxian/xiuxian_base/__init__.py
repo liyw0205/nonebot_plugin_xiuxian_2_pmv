@@ -37,7 +37,6 @@ from ..xiuxian_utils.utils import (
     send_help_message, parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_trade import BANNED_ITEM_IDS
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 from .breakthrough_tribulation import *  # noqa: F401,F403
@@ -478,7 +477,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 炼丹帮助 / 炼丹配方帮助
 - 功法帮助 / 灵田帮助 / 洞府帮助 / 傀儡帮助
 - 合成帮助 / 鉴石帮助
-- 宗门帮助 / 宗门职位帮助
+- 宗门帮助 / 宗门管理 / 宗门职位帮助
 - 道侣帮助 / 炼体帮助
 - 本命法宝帮助 / 本命法宝操作帮助 / 本命法宝道纹帮助 / 本命法宝战斗帮助
 

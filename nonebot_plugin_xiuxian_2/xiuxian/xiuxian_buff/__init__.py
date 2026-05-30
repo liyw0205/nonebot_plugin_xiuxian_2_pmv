@@ -382,6 +382,9 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             give_stone_num = int(give_stone * exp_rate)
             sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
             msg = f"挖矿结束，增加灵石：{give_stone_num}"
+            log_message(user_id, f"[凡人挖矿] 获得灵石{number_to(give_stone_num)}")
+            update_statistics_value(user_id, "凡人挖矿次数")
+            update_statistics_value(user_id, "灵石获取", increment=give_stone_num)
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
@@ -399,6 +402,8 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"修炼结束，本次修炼到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
+            log_message(user_id, f"[修炼] 修炼60秒，到达上限，获得修为{number_to(user_get_exp_max)}")
+            update_statistics_value(user_id, "修炼修为", increment=user_get_exp_max)
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
@@ -409,6 +414,8 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"修炼结束，增加修为：{number_to(exp)}{result_msg[0]}{result_msg[1]}"
+            log_message(user_id, f"[修炼] 修炼60秒，获得修为{number_to(exp)}")
+            update_statistics_value(user_id, "修炼修为", increment=exp)
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
 
@@ -458,6 +465,8 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"修炼结束，本次修炼到达上限，共增加修为：{user_get_exp_max},消耗灵石：{user_get_exp_max * 10}"
         sql_message.update_ls(user_id, int(user_get_exp_max * 10), 2)
         update_statistics_value(user_id, "灵石修炼", increment=user_get_exp_max * 10)
+        update_statistics_value(user_id, "灵石修炼修为", increment=user_get_exp_max)
+        log_message(user_id, f"[灵石修炼] 到达上限，消耗灵石{number_to(user_get_exp_max * 10)}，获得修为{number_to(user_get_exp_max)}")
         await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
     else:
@@ -466,6 +475,8 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"修炼结束，本次修炼共增加修为：{exp},消耗灵石：{stone_num}"
         sql_message.update_ls(user_id, int(stone_num), 2)
         update_statistics_value(user_id, "灵石修炼", increment=stone_num)
+        update_statistics_value(user_id, "灵石修炼修为", increment=exp)
+        log_message(user_id, f"[灵石修炼] 消耗灵石{number_to(stone_num)}，获得修为{number_to(exp)}")
         await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
 
@@ -488,6 +499,8 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if is_type:  # 符合
         sql_message.in_closing(user_id, user_type)
         msg = "进入闭关状态，如需出关，发送【出关】！"
+        log_message(user_id, "[闭关] 进入闭关状态")
+        update_statistics_value(user_id, "闭关次数")
         await handle_send(bot, event, msg, md_type="buff", k1="出关", v1="出关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
     else:
@@ -556,6 +569,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
             msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
             update_statistics_value(user_id, "闭关时长", increment=exp_time)
+            update_statistics_value(user_id, "闭关修为", increment=user_get_exp_max)
+            log_message(user_id, f"[出关] 闭关{exp_time}分钟，到达上限，获得修为{number_to(user_get_exp_max)}")
             await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await out_closing.finish()
         else:
@@ -576,6 +591,9 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{int(exp / 2)}枚{result_msg[0]}{result_msg[1]}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
+                    update_statistics_value(user_id, "闭关修为", increment=exp)
+                    update_statistics_value(user_id, "闭关灵石消耗", increment=int(exp / 2))
+                    log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(int(exp / 2))}，获得修为{number_to(exp)}")
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
                 else:
@@ -589,6 +607,9 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                                                       int(result_hp_mp[2] / 10))
                     msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
+                    update_statistics_value(user_id, "闭关修为", increment=exp)
+                    update_statistics_value(user_id, "闭关灵石消耗", increment=user_stone)
+                    log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(user_stone)}，获得修为{number_to(exp)}")
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
             else:
@@ -599,6 +620,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
                 msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
                 update_statistics_value(user_id, "闭关时长", increment=exp_time)
+                update_statistics_value(user_id, "闭关修为", increment=exp)
+                log_message(user_id, f"[出关] 闭关{exp_time}分钟，获得修为{number_to(exp)}")
                 await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                 await out_closing.finish()
 
@@ -662,9 +685,42 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     crit_resist = float(final_attr.get("crit_resist", 0) * 100)
     crit_damage_reduction = float(final_attr.get("crit_damage_reduction", 0) * 100)
     armor_penetration = float(final_attr.get("armor_penetration", 0) * 100)
+    panel_speed = int(final_attr.get("speed", 0))
+    base_speed = int(final_attr.get("base_speed", 0))
+    total_speed_flat = float(final_attr.get("speed_flat", 0))
+    speed_pct = float(final_attr.get("speed_pct", 0))
 
     accessory_effect = final_attr.get("accessory_effect", {}) or {}
     set_bonus_effects = final_attr.get("set_bonus_effects", []) or []
+    weapon_data = user_buff_data.get_user_weapon_data() or {}
+    armor_data = user_buff_data.get_user_armor_buff_data() or {}
+
+    speed_source_lines = [f"境界基础+{base_speed}"]
+    if main_buff_data:
+        main_speed = float(main_buff_data.get("speed", 0) or 0)
+        main_speed_pct = float(main_buff_data.get("speed_buff", 0) or 0)
+        if main_speed:
+            speed_source_lines.append(f"主功法+{main_speed:.0f}点")
+        if main_speed_pct:
+            speed_source_lines.append(f"主功法+{main_speed_pct * 100:.2f}%")
+    if sub_buff_data:
+        sub_speed = float(sub_buff_data.get("speed", 0) or 0)
+        if sub_speed:
+            speed_source_lines.append(f"辅修功法+{sub_speed:.0f}点")
+    if weapon_data:
+        weapon_speed = float(weapon_data.get("speed", 0) or 0)
+        weapon_speed_pct = float(weapon_data.get("speed_buff", 0) or 0)
+        if weapon_speed:
+            speed_source_lines.append(f"法器+{weapon_speed:.0f}点")
+        if weapon_speed_pct:
+            speed_source_lines.append(f"法器+{weapon_speed_pct * 100:.2f}%")
+    if armor_data:
+        armor_speed = float(armor_data.get("speed", 0) or 0)
+        armor_speed_pct = float(armor_data.get("speed_buff", 0) or 0)
+        if armor_speed:
+            speed_source_lines.append(f"防具+{armor_speed:.0f}点")
+        if armor_speed_pct:
+            speed_source_lines.append(f"防具+{armor_speed_pct * 100:.2f}%")
 
     # 饰品加成展示
     accessory_lines = []
@@ -675,6 +731,8 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         crit_damage_pct = accessory_effect.get("crit_damage", 0)
         dmg_reduction_pct = accessory_effect.get("dmg_reduction", 0)
         crit_resist_pct = accessory_effect.get("crit_resist", 0)
+        accessory_speed_flat = accessory_effect.get("speed", 0)
+        accessory_speed_pct = accessory_effect.get("speed_pct", 0)
 
         if hp_pct:
             accessory_lines.append(f"气血+{hp_pct * 100:.2f}%")
@@ -688,6 +746,12 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             accessory_lines.append(f"减伤+{dmg_reduction_pct * 100:.2f}%")
         if crit_resist_pct:
             accessory_lines.append(f"抗暴+{crit_resist_pct * 100:.2f}%")
+        if accessory_speed_flat:
+            accessory_lines.append(f"速度+{accessory_speed_flat:.0f}点")
+            speed_source_lines.append(f"饰品+{accessory_speed_flat:.0f}点")
+        if accessory_speed_pct:
+            accessory_lines.append(f"速度+{accessory_speed_pct * 100:.2f}%")
+            speed_source_lines.append(f"饰品+{accessory_speed_pct * 100:.2f}%")
 
     # 套装效果展示
     set_bonus_lines = []
@@ -702,6 +766,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             "crit_rate": "会心率",
             "dodge": "闪避",
             "shield_break": "护盾穿透",
+            "speed_pct": "速度提升",
         }
         for sb in set_bonus_effects:
             set_name = sb.get("set", "未知")
@@ -714,6 +779,8 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value:.0f}点")
             else:
                 set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value * 100:.2f}%")
+            if sb_type == "speed_pct":
+                speed_source_lines.append(f"{set_name}{pieces}件+{sb_value * 100:.2f}%")
 
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
@@ -735,6 +802,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     set_bonus_msg = "无"
     if set_bonus_lines:
         set_bonus_msg = "；".join(set_bonus_lines)
+    speed_source_msg = "、".join(speed_source_lines)
 
     msg = f"""
 道号：{player_data['道号']}
@@ -755,6 +823,8 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 抗暴率：{crit_resist:.2f}%
 减会伤：{crit_damage_reduction:.2f}%
 护甲穿透：{armor_penetration:.2f}%
+速度：{panel_speed}（固定+{total_speed_flat:.0f}，百分比+{speed_pct * 100:.2f}%）
+速度来源：{speed_source_msg}
 boss增伤：{boss_damage_bonus:.2f}%
 
 双修保护状态：{current_status_display}
@@ -781,12 +851,15 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent):
     main_buff_data = user_buff_data.get_user_main_buff_data()  # 获取功法buff
     main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
+    main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
     level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     user_exp = user_info['exp']
+    exp_efficiency = level_rate * realm_rate * (1 + main_buff_rate_buff) * (1 + main_buff_clo_exp) * (1 + user_blessed_spot_data)
+    exp_per_min = int(XiuConfig().closing_exp * exp_efficiency)
 
     if list_all == now_index:
         need_exp = user_exp
@@ -804,7 +877,8 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent):
     msg += f"修为：{number_to(user_exp)} (上限{number_to(need_exp * 1.5)})\n"
     msg += f"状态：{exp_meg}\n"
     msg += f"概率：下一次突破成功概率为{jsondata.level_rate_data()[level_name] + leveluprate + main_buff_number_buff}%\n"
-    msg += f"效率：{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%"
+    msg += f"效率：{int(exp_efficiency * 100)}%\n"
+    msg += f"每分钟修为：{number_to(exp_per_min)}"
 
     await handle_send(bot, event, msg, md_type="buff", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
     await my_exp.finish()

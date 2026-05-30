@@ -8,7 +8,6 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import XiuConfig
 from .tianti_data import (
     TiantiDataManager,
     get_tianti_level_data,
@@ -17,6 +16,13 @@ from .tianti_data import (
     get_opened_qiaoxue_count,
     get_qiaoxue_pool,
     get_qiaoxue_map,
+)
+from .tianti_service import (
+    calc_tianti_gain_rate,
+    get_active_medicine_bath,
+    get_sect_fairyland_bonus,
+    get_tianti_cap,
+    settle_tianti_gain,
 )
 
 sql_message = XiuxianDateManage()
@@ -27,7 +33,7 @@ tianti_help = on_command("炼体帮助", priority=10, block=True)
 tianti_settle = on_command("炼体结算", priority=10, block=True)
 tianti_stone = on_command("灵石炼体", priority=10, block=True)
 tianti_break = on_command("炼体突破", priority=10, block=True)
-tianti_info = on_command("我的炼体", priority=10, block=True)
+tianti_info = on_command("我的炼体", aliases={"炼体状态"}, priority=10, block=True)
 tianti_chongqiao = on_command("冲窍", priority=10, block=True)
 tiqiao_info = on_command("我的体窍", priority=10, block=True)
 tianti_level_help = on_command("炼体境界", priority=10, block=True)
@@ -71,68 +77,11 @@ MEDICINE_BATH_TIME_CONFIG = [
 
 
 def _get_tianti_cap(data: dict) -> int:
-    """
-    上限规则：next_need_hp * closing_exp_upper_limit
-    """
-    next_name = get_next_tianti_level_name(data["tianti_level"])
-    if not next_name:
-        return 10**30
-    need_hp = int(get_tianti_level_data(next_name)["need_hp"])
-    return int(need_hp * XiuConfig().closing_exp_upper_limit)
-
-
-def _calc_qiaoxue_bonus(data: dict):
-    """
-    统计已开窍穴总加成
-    """
-    base_ratio = 0.0
-    gain_pct = 0.0
-    detail_list = data.get("opened_qiaoxue_detail", [])
-    for q in detail_list:
-        et = q["effect_type"]
-        ev = float(q["effect_value"])
-        if et == "base_per_min_ratio":
-            base_ratio += ev
-        elif et == "hp_gain_pct":
-            gain_pct += ev
-    return base_ratio, gain_pct
-
-
-def _parse_tianti_time(value):
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _clear_medicine_bath(data: dict):
-    data["medicine_last_time"] = None
-    data["medicine_end_time"] = None
-    data["medicine_effect"] = 0.0
-    data["medicine_name"] = ""
+    return get_tianti_cap(data)
 
 
 def _get_active_medicine_bath(data: dict, now_t: datetime):
-    end_t = _parse_tianti_time(data.get("medicine_end_time"))
-    if not end_t or now_t > end_t:
-        return None
-    try:
-        effect = float(data.get("medicine_effect", 0) or 0)
-    except Exception:
-        effect = 0.0
-    if effect <= 1:
-        return None
-    return {
-        "name": data.get("medicine_name") or "未知药材",
-        "effect": effect,
-        "end_time": end_t,
-    }
+    return get_active_medicine_bath(data, now_t)
 
 
 def _medicine_bath_slot(hour: int):
@@ -187,44 +136,28 @@ def _format_medicine_bath_percent(effect: float):
     return f"{effect * 100:.2f}".rstrip("0").rstrip(".")
 
 
-def _settle_tianti_gain(data: dict, now_t: datetime):
-    last_t = _parse_tianti_time(data.get("last_settle_time"))
-    if not last_t:
-        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-        return {"status": "init"}
+def _get_user_sect_fairyland_level(user_info: dict) -> int:
+    sect_id = user_info.get("sect_id")
+    if not sect_id:
+        return 0
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        return 0
+    try:
+        return int(sect_info.get("sect_fairyland", 0) or 0)
+    except Exception:
+        return 0
 
-    mins = max(0, int((now_t - last_t).total_seconds() // 60))
-    if mins <= 0:
-        return {"status": "empty", "mins": mins}
 
-    lvl_data = get_tianti_level_data(data["tianti_level"])
-    base_per_min = int(lvl_data["hp_gain_per_min"])
-    base_ratio, gain_pct = _calc_qiaoxue_bonus(data)
-    real_per_min = int(base_per_min * (1 + base_ratio))
+def _settle_tianti_gain(data: dict, now_t: datetime, sect_fairyland_level: int = 0):
+    return settle_tianti_gain(data, now_t, sect_fairyland_level)
 
-    bath = _get_active_medicine_bath(data, now_t)
-    bath_effect = bath["effect"] if bath else 1.0
-    bath_expired = False
-    if not bath and data.get("medicine_end_time"):
-        _clear_medicine_bath(data)
-        bath_expired = True
 
-    gain = int(mins * real_per_min * (1 + gain_pct) * bath_effect)
-    cap = _get_tianti_cap(data)
-    old_hp = int(data["tianti_hp"])
-    new_hp = min(cap, old_hp + gain)
-    real_gain = max(0, new_hp - old_hp)
-
-    data["tianti_hp"] = new_hp
-    data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-    return {
-        "status": "ok",
-        "mins": mins,
-        "real_gain": real_gain,
-        "new_hp": new_hp,
-        "bath": bath,
-        "bath_expired": bath_expired,
-    }
+def _format_sect_fairyland_msg(result: dict) -> str:
+    sect_bonus = float(result.get("sect_bonus", 0) or 0)
+    if sect_bonus <= 0:
+        return ""
+    return f"\n宗门炼体堂加成：{sect_bonus * 100:.0f}%"
 
 
 def _get_qiaoxue_unlock_limit(data: dict) -> int:
@@ -246,9 +179,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 4）冲窍：消耗当前10%炼体气血，随机冲击一个未开的窍穴
    ※ 每提升1个炼体小境界，累计解锁1个可开窍数量
 5）炼体药浴 药材x数量 药材x数量：按当前时段消耗多份药材获得360分钟炼体结算加成
-6）我的体窍 [窍穴名/天罡/地煞]：查看体窍总览/分组/单个窍穴
-7）我的炼体：查看当前炼体状态
-8）炼体境界：查看炼体境界表
+6）使用炼体神物：按神物提供的分钟数获得炼体结算气血
+7）我的体窍 [窍穴名/天罡/地煞]：查看体窍总览/分组/单个窍穴
+8）我的炼体：查看当前炼体状态
+9）炼体境界：查看炼体境界表
 """
     await send_help_message(
         bot, event, msg,
@@ -270,7 +204,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data = tianti_manager.get_user_tianti_info(user_id)
     now_t = datetime.now()
 
-    result = _settle_tianti_gain(data, now_t)
+    sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
+    result = _settle_tianti_gain(data, now_t, sect_fairyland_level)
     tianti_manager.save_user_tianti_info(user_id, data)
     if result["status"] == "init":
         await handle_send(bot, event, "已初始化炼体计时，请稍后再来结算。")
@@ -295,6 +230,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"本次获得炼体气血：{number_to(result['real_gain'])}\n"
         f"当前炼体气血：{number_to(result['new_hp'])}"
         f"{bath_msg}"
+        f"{_format_sect_fairyland_msg(result)}"
     )
 
 
@@ -462,7 +398,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "药材不足：\n" + "\n".join(not_enough))
         return
 
-    pre_result = _settle_tianti_gain(data, now_t)
+    sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
+    pre_result = _settle_tianti_gain(data, now_t, sect_fairyland_level)
     if pre_result["status"] == "empty":
         data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -481,6 +418,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     pre_msg = ""
     if pre_result["status"] == "ok" and pre_result.get("real_gain", 0) > 0:
         pre_msg = f"\n药浴前已自动结算炼体气血：{number_to(pre_result['real_gain'])}"
+        pre_msg += _format_sect_fairyland_msg(pre_result)
 
     ignored_msgs = []
     ignored_amount = max(0, valid_requested_amount - consume_units)
@@ -588,7 +526,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         brk = "已达炼体最高境界"
 
-    bath = _get_active_medicine_bath(data, datetime.now())
+    now_t = datetime.now()
+    bath = _get_active_medicine_bath(data, now_t)
+    sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
+    sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
+    rate_info = calc_tianti_gain_rate(data, now_t, sect_fairyland_level)
+    efficiency_percent = int(rate_info["efficiency"] * 100)
     if bath:
         bath_msg = (
             f"\n药浴：{bath['name']}，结算效果{_format_medicine_bath_percent(bath['effect'])}%"
@@ -596,16 +539,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
     else:
         bath_msg = "\n药浴：无"
+    sect_msg = f"\n宗门炼体堂：{sect_fairyland_level}级（炼体气血+{sect_bonus * 100:.0f}%）" if sect_bonus > 0 else "\n宗门炼体堂：无加成"
 
     await handle_send(
         bot, event,
         f"【我的炼体】\n"
         f"境界：{lvl}\n"
         f"炼体气血：{number_to(hp)}\n"
+        f"当前效率：{efficiency_percent}%\n"
+        f"每分钟气血：{number_to(rate_info['per_min'])}\n"
         f"已开窍：{opened}/108\n"
         f"当前可开上限：{unlock_limit}/108\n"
         f"{brk}"
         f"{bath_msg}"
+        f"{sect_msg}"
     )
 
 

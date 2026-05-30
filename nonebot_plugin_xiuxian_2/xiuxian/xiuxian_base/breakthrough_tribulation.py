@@ -16,7 +16,10 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_msg_handler
+from ..xiuxian_utils.utils import (
+    check_user, handle_send, number_to, send_msg_handler,
+    log_message, update_statistics_value
+)
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
 
 sql_message = XiuxianDateManage()
@@ -83,6 +86,65 @@ def clear_user_tribulation_info(user_id):
     
     if file_path.exists():
         file_path.unlink()
+
+def record_level_up_result(
+    user_id, method, attempts=1, success=False, target_level=None,
+    fail_count=0, exp_loss=0, exp_gain=0, item_name=None, item_count=0
+):
+    update_statistics_value(user_id, "突破次数", increment=attempts)
+    if success:
+        update_statistics_value(user_id, "突破成功")
+    if fail_count:
+        update_statistics_value(user_id, "突破失败", increment=fail_count)
+    if exp_loss:
+        update_statistics_value(user_id, "突破损失修为", increment=exp_loss)
+    if exp_gain:
+        update_statistics_value(user_id, "突破获得修为", increment=exp_gain)
+    if item_name and item_count:
+        update_statistics_value(user_id, f"{item_name}消耗", increment=item_count)
+
+    result = "成功" if success else "失败"
+    extra = []
+    if target_level:
+        extra.append(f"目标境界：{target_level}")
+    if fail_count:
+        extra.append(f"失败{fail_count}次")
+    if exp_loss:
+        extra.append(f"损失修为{number_to(exp_loss)}")
+    if exp_gain:
+        extra.append(f"获得修为{number_to(exp_gain)}")
+    if item_name and item_count:
+        extra.append(f"消耗{item_name}{item_count}个")
+    suffix = "，" + "，".join(extra) if extra else ""
+    log_message(user_id, f"[{method}] 突破{result}，尝试{attempts}次{suffix}")
+
+def record_tribulation_result(user_id, method, success, target_level=None, rate=None, item_name=None, item_count=0):
+    update_statistics_value(user_id, "渡劫次数")
+    update_statistics_value(user_id, "渡劫成功" if success else "渡劫失败")
+    if item_name and item_count:
+        update_statistics_value(user_id, f"{item_name}消耗", increment=item_count)
+
+    result = "成功" if success else "失败"
+    extra = []
+    if target_level:
+        extra.append(f"目标境界：{target_level}")
+    if rate is not None:
+        extra.append(f"成功率{rate}%")
+    if item_name and item_count:
+        extra.append(f"消耗{item_name}{item_count}个")
+    suffix = "，" + "，".join(extra) if extra else ""
+    log_message(user_id, f"[{method}] 渡劫{result}{suffix}")
+
+def record_heart_devil_result(user_id, success, rate, devil_name=None, item_used=False):
+    update_statistics_value(user_id, "心魔劫次数")
+    update_statistics_value(user_id, "心魔劫成功" if success else "心魔劫失败")
+    if item_used:
+        update_statistics_value(user_id, "天命丹消耗")
+
+    result = "成功" if success else "失败"
+    name_msg = f"{devil_name}，" if devil_name else ""
+    item_msg = "，消耗天命丹1个" if item_used else ""
+    log_message(user_id, f"[渡心魔劫] {name_msg}{result}，当前渡劫成功率{rate}%{item_msg}")
 
 @tribulation_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -204,6 +266,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = (
             f"✨融合成功！消耗{num}个渡厄丹获得1个天命丹✨"
         )
+        log_message(user_id, f"[融合天命丹] 成功，消耗渡厄丹{num}个，获得天命丹1个")
+        update_statistics_value(user_id, "天命丹融合次数")
+        update_statistics_value(user_id, "天命丹融合成功")
+        update_statistics_value(user_id, "渡厄丹消耗", increment=num)
     else:  # 失败
         # 扣除渡厄丹
         sql_message.update_back_j(user_id, 1999, num)
@@ -213,6 +279,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"当前成功率：{success_rate}%\n"
             f"（每颗渡厄丹提供10%成功率，10颗必成功）"
         )
+        log_message(user_id, f"[融合天命丹] 失败，消耗渡厄丹{num}个，成功率{success_rate}%")
+        update_statistics_value(user_id, "天命丹融合次数")
+        update_statistics_value(user_id, "天命丹融合失败")
+        update_statistics_value(user_id, "渡厄丹消耗", increment=num)
     
     await handle_send(bot, event, msg)
     await fusion_destiny_pill.finish()
@@ -266,6 +336,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         msg = (
             f"✨融合成功！消耗{num}个天命丹获得1个天命渡劫丹✨"
         )
+        log_message(user_id, f"[融合天命渡劫丹] 成功，消耗天命丹{num}个，获得天命渡劫丹1个")
+        update_statistics_value(user_id, "天命渡劫丹融合次数")
+        update_statistics_value(user_id, "天命渡劫丹融合成功")
+        update_statistics_value(user_id, "天命丹消耗", increment=num)
     else:  # 失败
         # 扣除天命丹
         sql_message.update_back_j(user_id, 1996, num)
@@ -275,6 +349,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"当前成功率：{success_rate}%\n"
             f"（每颗天命丹提供10%成功率，10颗必成功）"
         )
+        log_message(user_id, f"[融合天命渡劫丹] 失败，消耗天命丹{num}个，成功率{success_rate}%")
+        update_statistics_value(user_id, "天命渡劫丹融合次数")
+        update_statistics_value(user_id, "天命渡劫丹融合失败")
+        update_statistics_value(user_id, "天命丹消耗", increment=num)
     
     await handle_send(bot, event, msg)
 
@@ -365,6 +443,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         share_msg = trigger_partner_exp_share(user_id, next_level)
         sql_message.update_power2(user_id)
         clear_user_tribulation_info(user_id)
+        record_tribulation_result(user_id, "开始渡劫", True, target_level=next_level, rate=success_rate)
         
         msg = (
             f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
@@ -374,6 +453,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:  # 渡劫失败
         if has_destiny_pill:  # 使用天命丹避免概率降低
             sql_message.update_back_j(user_id, 1996, use_key=1)
+            record_tribulation_result(
+                user_id, "开始渡劫", False, target_level=next_level,
+                rate=success_rate, item_name="天命丹", item_count=1
+            )
             msg = (
                 f"渡劫失败！\n"
                 f"雷劫之下，道心受损！\n"
@@ -386,6 +469,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             )
             
             tribulation_data['current_rate'] = new_rate
+            record_tribulation_result(user_id, "开始渡劫", False, target_level=next_level, rate=new_rate)
             
             msg = (
                 f"渡劫失败！\n"
@@ -487,6 +571,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     share_msg = trigger_partner_exp_share(user_id, next_level)
     sql_message.update_power2(user_id)
     clear_user_tribulation_info(user_id)
+    record_tribulation_result(
+        user_id, "天命渡劫", True, target_level=next_level,
+        item_name="天命渡劫丹", item_count=1
+    )
     
     msg = (
         f"✨天命所归，渡劫成功✨\n"
@@ -599,6 +687,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         tribulation_data['current_rate'] = new_rate
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)
+        record_heart_devil_result(user_id, True, new_rate)
         
         msg = (
             f"✨天赐良机，渡劫成功✨\n"
@@ -609,8 +698,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await heart_devil_tribulation.finish()
         
     elif tribulation_type == 2:  # 直接失败
+        item_used = False
         if has_destiny_pill:  # 使用天命丹避免概率降低
             sql_message.update_back_j(user_id, 1996, use_key=1)
+            item_used = True
             msg = (
                 f"💀渡劫失败💀\n"
                 f"心魔突然爆发，道心受损！\n"
@@ -627,6 +718,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             )
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)
+        record_heart_devil_result(user_id, False, tribulation_data['current_rate'], item_used=item_used)
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
         
@@ -693,6 +785,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             tribulation_data['current_rate'] = new_rate
             tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             save_user_tribulation_info(user_id, tribulation_data)
+            record_heart_devil_result(user_id, True, new_rate, devil_name=devil_name)
             
             msg = (
                 f"⚔️战胜{devil_name}，道心升华⚔️\n"
@@ -701,8 +794,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 f"渡劫成功率提升至{new_rate}%！"
             )
         else:  # 战斗失败
+            item_used = False
             if has_destiny_pill:  # 使用天命丹避免概率降低
                 sql_message.update_back_j(user_id, 1996, use_key=1)
+                item_used = True
                 msg = (
                     f"💀败于{devil_name}，道心受损💀\n"
                     f"{devil_data['lose_desc']}\n"
@@ -719,6 +814,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 )
             tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             save_user_tribulation_info(user_id, tribulation_data)        
+            record_heart_devil_result(
+                user_id, False, tribulation_data['current_rate'],
+                devil_name=devil_name, item_used=item_used
+            )
         await send_msg_handler(bot, event, result, )
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
@@ -845,6 +944,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
         sql_message.update_levelrate(user_id, leveluprate + update_rate)
         msg = f"道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+        record_level_up_result(user_id, "直接突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
 
@@ -857,6 +957,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功！{share_msg}"
+        record_level_up_result(user_id, "直接突破", success=True, target_level=le[0])
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
     else:
@@ -912,6 +1013,9 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     success = False
     result_msg = ""
     attempts = 0
+    fail_count = 0
+    total_exp_loss = 0
+    target_level = None
     
     for i in range(5):
         attempts += 1
@@ -930,6 +1034,8 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
                 nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
                 nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
                 sql_message.update_user_hp_mp(user_id, nowhp, nowmp)
+                fail_count += 1
+                total_exp_loss += now_exp
                 
                 update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                     level_rate * XiuConfig().level_up_probability)
@@ -950,12 +1056,17 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
             sql_message.update_user_hp(user_id)
             result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}"
             success = True
+            target_level = le[0]
             break
     
     if not success and attempts == 5 and "修为不足以突破" not in result_msg:
         result_msg += "连续5次突破尝试结束，未能突破成功。"
     
     sql_message.updata_level_cd(user_id)  # 更新突破CD
+    record_level_up_result(
+        user_id, "连续突破", attempts=attempts, success=success,
+        target_level=target_level, fail_count=fail_count, exp_loss=total_exp_loss
+    )
     await handle_send(bot, event, result_msg)
     await level_up_lx.finish()
     
@@ -1030,6 +1141,10 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"道友突破失败，但是使用了丹药{elixir_name}，本次突破失败不扣除修为反而增加了一成，下次突破成功率增加{update_rate}%！！"
+            record_level_up_result(
+                user_id, "渡厄金丹突破", success=False, fail_count=1,
+                exp_gain=now_exp, item_name="渡厄金丹", item_count=1
+            )
         else:
             # 失败惩罚，随机扣减修为
             percentage = random.randint(
@@ -1046,6 +1161,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+            record_level_up_result(user_id, "渡厄金丹突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
@@ -1060,6 +1176,10 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         now_exp = int(int(exp) * 0.1)
         sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
         msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！{share_msg}"
+        record_level_up_result(
+            user_id, "渡厄金丹突破", success=True, target_level=le[0],
+            exp_gain=now_exp, item_name="渡厄金丹", item_count=1
+        )
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
     else:
@@ -1138,6 +1258,10 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"道友突破失败，但是使用了丹药{elixir_name}，本次突破失败不扣除修为下次突破成功率增加{update_rate}%，道友不要放弃！"
+            record_level_up_result(
+                user_id, "渡厄突破", success=False, fail_count=1,
+                item_name="渡厄丹", item_count=1
+            )
         else:
             # 失败惩罚，随机扣减修为
             percentage = random.randint(
@@ -1154,6 +1278,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
             msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+            record_level_up_result(user_id, "渡厄突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
@@ -1166,6 +1291,10 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         sql_message.update_levelrate(user_id, 0)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功{share_msg}"
+        record_level_up_result(
+            user_id, "渡厄突破", success=True, target_level=le[0],
+            item_name="渡厄丹", item_count=1
+        )
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
     else:
@@ -1234,6 +1363,8 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     attempts = 0
     pills_used = 0
     max_attempts = 5
+    fail_count = 0
+    target_level = None
     
     for i in range(max_attempts):
         attempts += 1
@@ -1250,6 +1381,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
                 # 突破失败，使用渡厄丹
                 pills_used += 1
                 sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
+                fail_count += 1
                 
                 update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                     level_rate * XiuConfig().level_up_probability)
@@ -1278,6 +1410,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
             sql_message.update_user_hp(user_id)
             result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}\n"
             success = True
+            target_level = le[0]
             break
     
     if not success and attempts == max_attempts and "修为不足以突破" not in result_msg:
@@ -1288,6 +1421,11 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     
     # 添加消耗统计
     result_msg += f"\n本次连续突破共消耗{pills_used}个渡厄丹，剩余{dr_pill_count - pills_used}个"
+    record_level_up_result(
+        user_id, "连续渡厄突破", attempts=attempts, success=success,
+        target_level=target_level, fail_count=fail_count,
+        item_name="渡厄丹", item_count=pills_used
+    )
     
     await handle_send(bot, event, result_msg)
     await handle_send(bot, event, result_msg, md_type="修仙", k1="速锁", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
@@ -1353,6 +1491,9 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     attempts = 0
     pills_used = 0
     max_attempts = 5
+    fail_count = 0
+    total_exp_gain = 0
+    target_level = None
     
     for i in range(max_attempts):
         attempts += 1
@@ -1373,6 +1514,8 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
                 # 失败增加修为（渡厄金丹特性）
                 now_exp = int(int(exp) * 0.1)
                 sql_message.update_exp(user_id, now_exp)
+                fail_count += 1
+                total_exp_gain += now_exp
                 
                 update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                     level_rate * XiuConfig().level_up_probability)
@@ -1403,9 +1546,11 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
             # 成功增加修为（渡厄金丹特性）
             now_exp = int(int(exp) * 0.1)
             sql_message.update_exp(user_id, now_exp)
+            total_exp_gain += now_exp
             
             result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！修为增加{number_to(now_exp)}{share_msg}\n"
             success = True
+            target_level = le[0]
             break
     
     if not success and attempts == max_attempts and "修为不足以突破" not in result_msg:
@@ -1415,6 +1560,11 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     sql_message.updata_level_cd(user_id)
     
     result_msg += f"\n本次突破共消耗{pills_used}个渡厄金丹，剩余{drjd_pill_count - pills_used}个"
+    record_level_up_result(
+        user_id, "连续渡厄金丹突破", attempts=attempts, success=success,
+        target_level=target_level, fail_count=fail_count,
+        exp_gain=total_exp_gain, item_name="渡厄金丹", item_count=pills_used
+    )
     
     await handle_send(bot, event, result_msg)
     await level_up_drjd_lx.finish()

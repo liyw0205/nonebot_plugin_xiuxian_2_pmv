@@ -23,7 +23,8 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     handle_pic_send,
     update_statistics_value,
-    send_help_message
+    send_help_message,
+    log_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json
@@ -218,6 +219,16 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await update_user_impart_data(user_id, total_seclusion_time)
     impart_data_draw = await impart_check(user_id)
     update_statistics_value(user_id, "传承祈愿", increment=times)
+    update_statistics_value(user_id, "传承祈愿次数", increment=times // 10)
+    update_statistics_value(user_id, "思恋结晶消耗", increment=required_crystals)
+    update_statistics_value(user_id, "虚神界时间获取", increment=total_seclusion_time)
+    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
+    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
+    update_statistics_value(user_id, "传承保底次数", increment=guaranteed_pulls)
+    log_message(
+        user_id,
+        f"[传承祈愿] 消耗思恋结晶{required_crystals}颗，获得虚神界时间{total_seclusion_time}分钟，新卡{total_new_cards}张，重复{total_duplicates}张"
+    )
 
     # 计算实际抽卡概率
     actual_wish = current_wish % 90  # 显示当前概率计数（0-89）
@@ -330,6 +341,15 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await re_impart_data(user_id)
     impart_data_draw = await impart_check(user_id)
     update_statistics_value(user_id, "传承抽卡", increment=times * 10)
+    update_statistics_value(user_id, "传承抽卡次数", increment=times)
+    update_statistics_value(user_id, "传承抽卡灵石消耗", increment=required_crystals)
+    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
+    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
+    update_statistics_value(user_id, "传承保底次数", increment=guaranteed_pulls)
+    log_message(
+        user_id,
+        f"[传承抽卡] 消耗灵石{number_to(required_crystals)}，抽卡{times}次，新卡{total_new_cards}张，重复{total_duplicates}张"
+    )
 
     # 计算实际抽卡概率
     actual_wish = current_wish % 90  # 显示当前概率计数（0-89）
@@ -392,6 +412,13 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     # 更新用户的抽卡数据（不更新概率计数）
     await re_impart_data(user_id)
+    update_statistics_value(user_id, "祈愿石使用", increment=quantity)
+    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
+    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
+    log_message(
+        user_id,
+        f"[祈愿石] 使用{quantity}颗，获得新卡{total_new_cards}张，重复{total_duplicates}张"
+    )
     
     # 构建结果消息
     new_cards_msg = f"新卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}"
@@ -429,6 +456,9 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # 批量消耗思恋流沙
     sql_message.update_back_j(user_id, item_id, quantity)
+    update_statistics_value(user_id, "思恋流沙使用", increment=quantity)
+    update_statistics_value(user_id, "思恋结晶获取", increment=total_gained)
+    log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{total_gained}颗")
     
     # 构建结果消息
     final_msg = f"获得思恋结晶 {total_gained} 颗\n当前思恋结晶：{current_stones + total_gained}颗"

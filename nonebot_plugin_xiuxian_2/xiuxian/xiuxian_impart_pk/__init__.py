@@ -13,7 +13,10 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
 from datetime import datetime
-from ..xiuxian_utils.utils import check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to, update_statistics_value
+from ..xiuxian_utils.utils import (
+    check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to,
+    update_statistics_value, log_message
+)
 from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
@@ -34,6 +37,15 @@ impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
 impart_top = on_command("虚神界排行榜", priority=8, block=True)
 
+XU_EXP_FATIGUE_RULES = [
+    (180, 100, "道心澄明"),
+    (360, 50, "神魂微疲"),
+    (720, 25, "神魂疲惫"),
+    (None, 10, "神魂重负")
+]
+XU_EXP_DAILY_LEVEL_LIMIT = 3
+XU_EXP_MIN_LOAD_PER_USE = 30
+
 async def impart_re():
     impart_pk.re_data()
     xu_world.re_data()
@@ -46,6 +58,75 @@ async def impart_lv(change_type, change_amount):
     xiuxian_impart.update_all_users_impart_lv(change_amount, change_type)
     
     logger.opt(colors=True).info(f"<green>虚神界等级调整完成</green>")
+
+def calc_xu_exp_by_fatigue(used_load, request_time, exp_per_minute, exp_limit):
+    """按当日神魂承载计算虚神界修炼的疲劳递减收益。"""
+    used_load = max(0, int(used_load))
+    request_time = max(0, int(request_time))
+    exp_per_minute = max(0, int(exp_per_minute))
+    exp_limit = max(0, int(exp_limit))
+
+    if request_time <= 0 or exp_per_minute <= 0 or exp_limit <= 0:
+        return 0, 0, []
+
+    current_load = used_load
+    left_time = request_time
+    total_exp = 0
+    cost_time = 0
+    details = []
+
+    for stage_end, rate, name in XU_EXP_FATIGUE_RULES:
+        if left_time <= 0 or total_exp >= exp_limit:
+            break
+
+        if stage_end is None:
+            stage_time = left_time
+        else:
+            if current_load >= stage_end:
+                continue
+            stage_time = min(left_time, stage_end - current_load)
+
+        if stage_time <= 0:
+            continue
+
+        denominator = exp_per_minute * rate
+        possible_exp = denominator * stage_time // 100
+        remaining_exp = exp_limit - total_exp
+
+        if possible_exp > remaining_exp:
+            actual_time = (remaining_exp * 100 + denominator - 1) // denominator
+            actual_time = max(1, min(stage_time, actual_time))
+            stage_exp = remaining_exp
+        else:
+            actual_time = stage_time
+            stage_exp = possible_exp
+
+        total_exp += stage_exp
+        cost_time += actual_time
+        details.append(f"{name}{actual_time}分钟({rate}%)")
+        current_load += actual_time
+        left_time -= actual_time
+
+    return cost_time, total_exp, details
+
+def get_xu_exp_daily_limit(user_id, user_data, user_info):
+    """获取并初始化当日虚神界修炼收益上限。"""
+    level_list = XiuConfig().level
+    anchor_level = user_data.get("exp_cap_level")
+    anchor_exp = int(user_data.get("exp_cap_exp", 0) or 0)
+
+    if not anchor_level or anchor_level not in level_list:
+        anchor_level = user_info["level"]
+        anchor_exp = int(user_info["exp"])
+        impart_pk.set_exp_cap_anchor(user_id, anchor_level, anchor_exp)
+
+    anchor_index = level_list.index(anchor_level)
+    cap_index = min(anchor_index + XU_EXP_DAILY_LEVEL_LIMIT, len(level_list) - 1)
+    cap_level = level_list[cap_index]
+    cap_exp = int(sql_message.get_level_power(cap_level))
+    daily_limit = max(0, cap_exp - anchor_exp)
+    used_exp = int(user_data.get("exp_gain", 0) or 0)
+    return daily_limit, max(0, daily_limit - used_exp), anchor_level, cap_level
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -67,6 +148,9 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_project.finish()
     msg = xu_world.add_xu_world(user_id)
+    if "成功" in msg:
+        log_message(user_id, f"[虚神界] 投影虚神界成功")
+        update_statistics_value(user_id, "虚神界投影次数")
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_project.finish()
 
@@ -253,6 +337,14 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             }
         })
         await send_msg_handler(bot, event, list_msg)
+        log_message(
+            user_id,
+            f"[虚神界对决] 挑战{NICKNAME}，共{total_battles}场，胜{total_wins}场，败{total_losses}场，获得思恋结晶{player_1_stones}颗"
+        )
+        update_statistics_value(user_id, "虚神界对决次数", increment=total_battles)
+        update_statistics_value(user_id, "虚神界对决胜利", increment=total_wins)
+        update_statistics_value(user_id, "虚神界对决失败", increment=total_losses)
+        update_statistics_value(user_id, "思恋结晶获取", increment=player_1_stones)
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
 
@@ -369,6 +461,22 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     })
     
     await send_msg_handler(bot, event, list_msg)
+    log_message(
+        player_1,
+        f"[虚神界对决] 挑战{player_2_name}，共{total_battles}场，胜{player_1_wins}场，败{player_2_wins}场，获得思恋结晶{player_1_stones}颗"
+    )
+    log_message(
+        player_2,
+        f"[虚神界对决] 被{player_1_name}挑战，共{total_battles}场，胜{player_2_wins}场，败{player_1_wins}场，获得思恋结晶{player_2_stones}颗"
+    )
+    update_statistics_value(player_1, "虚神界对决次数", increment=total_battles)
+    update_statistics_value(player_1, "虚神界对决胜利", increment=player_1_wins)
+    update_statistics_value(player_1, "虚神界对决失败", increment=player_2_wins)
+    update_statistics_value(player_1, "思恋结晶获取", increment=player_1_stones)
+    update_statistics_value(player_2, "虚神界对决次数", increment=total_battles)
+    update_statistics_value(player_2, "虚神界对决胜利", increment=player_2_wins)
+    update_statistics_value(player_2, "虚神界对决失败", increment=player_1_wins)
+    update_statistics_value(player_2, "思恋结晶获取", increment=player_2_stones)
     await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
     await impart_pk_now.finish()
 
@@ -395,11 +503,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         impaer_exp_time = 1
     else:
         impaer_exp_time = int(impaer_exp_time)
-    
-    # 获取闭关类型和经验上限
-    closing_type = OtherSet().set_closing_type(user_info['level'])
-    max_exp = closing_type * XiuConfig().closing_exp_upper_limit
-    current_exp = user_info['exp']
+    impaer_exp_time = max(1, impaer_exp_time)
     
     # 检查可用时间
     if impaer_exp_time > int(impart_data_draw['exp_day']):
@@ -427,34 +531,65 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 计算每分钟基础经验
     exp_per_minute = int(XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + impart_exp_up) * (1 + impart_exp_up2))))
-    
-    # 计算剩余可获取经验
-    remaining_exp = max_exp - current_exp
-    
-    # 计算最大允许修炼时间
-    max_allowed_time = remaining_exp // exp_per_minute if exp_per_minute > 0 else 0
-    
-    # 如果输入时间超过最大允许时间
-    if impaer_exp_time > max_allowed_time:
-        if max_allowed_time > 0:
-            msg = f"修炼时长超出上限，最多可修炼{round(max_allowed_time)}分钟"
-        else:
-            msg = f"修炼时长超出上限，已不可修炼！"
+
+    closing_type = OtherSet().set_closing_type(user_info['level'])
+    max_exp = int(closing_type * XiuConfig().closing_exp_upper_limit)
+    current_exp = int(user_info['exp'])
+    realm_remaining_exp = max(0, max_exp - current_exp)
+    if realm_remaining_exp <= 0:
+        msg = "道友当前修为已达本境界可承载上限，请先尝试突破后再修炼。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
-    
-    # 计算本次修炼实际获得的经验
-    exp = exp_per_minute * impaer_exp_time
-    
+
+    user_data = impart_pk.find_user_data(user_id)
+    daily_limit, remaining_daily_exp, anchor_level, cap_level = get_xu_exp_daily_limit(user_id, user_data, user_info)
+    if remaining_daily_exp <= 0:
+        msg = f"今日神魂承载已至上限，虚神界修炼最多从{anchor_level}承载到{cap_level}，请明日再修炼。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_exp.finish()
+
+    exp_limit = min(remaining_daily_exp, realm_remaining_exp)
+    used_load = int(user_data.get("exp_load", 0) or 0)
+    exp_cost_time, exp, fatigue_details = calc_xu_exp_by_fatigue(
+        used_load, impaer_exp_time, exp_per_minute, exp_limit
+    )
+    if exp_cost_time <= 0 or exp <= 0:
+        msg = "今日神魂承载已满，继续参悟已难有所得，请明日再修炼。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_exp.finish()
+
+    exp_load = max(exp_cost_time, XU_EXP_MIN_LOAD_PER_USE)
+
     # 更新经验并返回成功
-    xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
+    xiuxian_impart.use_impart_exp_day(exp_cost_time, user_id)
     sql_message.update_exp(user_id, exp)
+    impart_pk.add_exp_cultivation(user_id, exp_cost_time, exp_load, exp)
     sql_message.update_power2(user_id)  # 更新战力
     
     # 计算修炼效率百分比
     efficiency_percent = int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)
-    msg = f"虚神界修炼结束，共修炼{round(impaer_exp_time)}分钟，本次增加修为：{number_to(exp)}（修炼效率：{efficiency_percent}%）"
-    update_statistics_value(user_id, "虚神界修炼", increment=impaer_exp_time)
+    new_user_data = impart_pk.find_user_data(user_id)
+    fatigue_msg = "、".join(fatigue_details)
+    cap_msg = f"{number_to(new_user_data.get('exp_gain', 0))}/{number_to(daily_limit)}"
+    extra_msg = ""
+    if exp_cost_time < impaer_exp_time:
+        extra_msg = f"\n本次触及今日承载上限，实际消耗{exp_cost_time}分钟。"
+    msg = (
+        f"虚神界修炼结束，共修炼{round(exp_cost_time)}分钟，本次增加修为：{number_to(exp)}"
+        f"（修炼效率：{efficiency_percent}%）"
+        f"\n神魂承载：{fatigue_msg}"
+        f"\n今日虚神界修炼收益：{cap_msg}"
+        f"\n今日修炼次数：{new_user_data.get('exp_count', 0)}次，承载值：{new_user_data.get('exp_load', 0)}"
+        f"{extra_msg}"
+    )
+    update_statistics_value(user_id, "虚神界修炼", increment=exp_cost_time)
+    update_statistics_value(user_id, "虚神界修炼次数")
+    update_statistics_value(user_id, "虚神界修炼修为", increment=exp)
+    update_statistics_value(user_id, "虚神界修炼承载", increment=exp_load)
+    log_message(
+        user_id,
+        f"[虚神界修炼] 修炼{exp_cost_time}分钟，获得修为{number_to(exp)}，承载值+{exp_load}，今日收益{cap_msg}"
+    )
     await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_exp.finish()
 
@@ -623,6 +758,8 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     match msg_type:
         case "stay":
             impart_pk.update_user_impart_lv(user_info['user_id'])  # 扣除探索次数
+            log_message(user_id, f"[虚神界探索] 停留于{impart_name}，未消耗虚神界时间")
+            update_statistics_value(user_id, "虚神界探索次数")
             await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
             await impart_pk_go.finish()
         case "fail":
@@ -630,6 +767,9 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             xiuxian_impart.use_impart_exp_day(impart_time, user_id)  # 消耗时间
             
             impart_pk.update_user_impart_lv(user_info['user_id'])
+            log_message(user_id, f"[虚神界探索] 探索{impart_name}失败，消耗虚神界时间{impart_time}分钟")
+            update_statistics_value(user_id, "虚神界探索次数")
+            update_statistics_value(user_id, "虚神界探索消耗时间", increment=impart_time)
             await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
             await impart_pk_go.finish()
         case "down":
@@ -650,6 +790,16 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg += f"\n现位于：{impart_name_new}"
     msg += f"\n消耗虚神界时间：{impart_time} 分钟"
     msg += f"\n获得区域道则加持：修为增益{int(impart_exp_up * 100)}%"
+    log_message(
+        user_id,
+        f"[虚神界探索] 从{impart_name}探索至{impart_name_new}，消耗虚神界时间{impart_time}分钟，结果：{msg_type}"
+    )
+    update_statistics_value(user_id, "虚神界探索次数")
+    update_statistics_value(user_id, "虚神界探索消耗时间", increment=impart_time)
+    if msg_type in {"up", "up_rate"}:
+        update_statistics_value(user_id, "虚神界探索上升")
+    elif msg_type in {"down", "down_rate"}:
+        update_statistics_value(user_id, "虚神界探索下降")
     await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_go.finish()
 
@@ -671,6 +821,8 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     if is_type:  # 符合
         sql_message.in_closing(user_id, user_type)
         msg = f"进入虚神界闭关状态，如需出关，发送【虚神界出关】！"
+        log_message(user_id, "[虚神界闭关] 进入虚神界闭关状态")
+        update_statistics_value(user_id, "虚神界闭关次数")
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     else:
@@ -791,6 +943,8 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10)
     )
     update_statistics_value(user_id, "虚神界闭关时长", increment=exp_time)
+    update_statistics_value(user_id, "虚神界闭关修为", increment=total_exp)
+    update_statistics_value(user_id, "虚神界闭关祝福时长", increment=int(exp_day_cost))
 
     # 构造返回消息
     if total_exp >= user_get_exp_max:
@@ -805,6 +959,9 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
                    f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
                    f"{int(effective_single_exp_time)}分钟没有获得祝福，"
                    f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}")
-    
+    log_message(
+        user_id,
+        f"[虚神界出关] 闭关{exp_time}分钟，祝福{int(exp_day_cost)}分钟，获得修为{number_to(total_exp)}"
+    )
     await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_out_closing.finish()

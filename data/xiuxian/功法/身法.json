@@ -4,6 +4,8 @@
         "buff_type": "1",
         "buff": "3",
         "buff2": "1",
+        "speed_buff": 0.01,
+        "speed_buff2": 0.02,
         "desc": "踏叶疾行如惊鸿掠影",
         "rank": "人阶下品",
         "level": "55"
@@ -13,6 +15,8 @@
         "buff_type": "1",
         "buff": "5",
         "buff2": "2",
+        "speed_buff": 0.015,
+        "speed_buff2": 0.03,
         "desc": "长空展翼似孤雁破云",
         "rank": "人阶上品",
         "level": "50"
@@ -22,6 +26,8 @@
         "buff_type": "1",
         "buff": "7",
         "buff2": "2",
+        "speed_buff": 0.02,
+        "speed_buff2": 0.04,
         "desc": "龙形步转引风云相随",
         "rank": "黄阶下品",
         "level": "47"
@@ -31,6 +37,8 @@
         "buff_type": "1",
         "buff": "9",
         "buff2": "3",
+        "speed_buff": 0.025,
+        "speed_buff2": 0.05,
         "desc": "步踏星斗引月华",
         "rank": "黄阶上品",
         "level": "44"
@@ -40,6 +48,8 @@
         "buff_type": "1",
         "buff": "12",
         "buff2": "4",
+        "speed_buff": 0.03,
+        "speed_buff2": 0.07,
         "desc": "风雷乍现遁百里山河",
         "rank": "玄阶下品",
         "level": "41"
@@ -49,6 +59,8 @@
         "buff_type": "1",
         "buff": "15",
         "buff2": "5",
+        "speed_buff": 0.04,
+        "speed_buff2": 0.08,
         "desc": "咫尺天涯",
         "rank": "玄阶上品",
         "level": "38"
@@ -58,6 +70,8 @@
         "buff_type": "1",
         "buff": "18",
         "buff2": "5",
+        "speed_buff": 0.045,
+        "speed_buff2": 0.09,
         "desc": "虹光贯日越三山五岳",
         "rank": "地阶下品",
         "level": "35"
@@ -67,6 +81,8 @@
         "buff_type": "1",
         "buff": "21",
         "buff2": "6",
+        "speed_buff": 0.05,
+        "speed_buff2": 0.1,
         "desc": "破碎虚空掌乾坤倒转",
         "rank": "地阶上品",
         "level": "32"
@@ -76,6 +92,8 @@
         "buff_type": "1",
         "buff": "24",
         "buff2": "7",
+        "speed_buff": 0.055,
+        "speed_buff2": 0.12,
         "desc": "步衍周天引星河",
         "rank": "天阶下品",
         "level": "29"
@@ -85,6 +103,8 @@
         "buff_type": "1",
         "buff": "27",
         "buff2": "8",
+        "speed_buff": 0.06,
+        "speed_buff2": 0.14,
         "desc": "踏光阴如御流水行云",
         "rank": "天阶上品",
         "level": "26"
@@ -94,6 +114,8 @@
         "buff_type": "1",
         "buff": "30",
         "buff2": "8",
+        "speed_buff": 0.07,
+        "speed_buff2": 0.16,
         "desc": "碧落黄泉随心去，一步千里不留痕",
         "rank": "仙阶下品",
         "level": "6"
@@ -103,6 +125,8 @@
         "buff_type": "1",
         "buff": "30",
         "buff2": "11",
+        "speed_buff": 0.08,
+        "speed_buff2": 0.18,
         "desc": "浮生若梦步微尘，一念掠影踏云痕",
         "rank": "仙阶上品",
         "level": "5"
@@ -112,6 +136,8 @@
         "buff_type": "1",
         "buff": "35",
         "buff2": "11",
+        "speed_buff": 0.1,
+        "speed_buff2": 0.22,
         "desc": "振翅九霄越三界",
         "rank": "仙阶极品",
         "level": "-5"
@@ -121,6 +147,8 @@
         "buff_type": "1",
         "buff": "45",
         "buff2": "14",
+        "speed_buff": 0.12,
+        "speed_buff2": 0.28,
         "desc": "身合混沌时空永恒",
         "rank": "无上",
         "level": "-5"

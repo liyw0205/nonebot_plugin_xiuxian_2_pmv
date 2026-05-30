@@ -463,6 +463,23 @@
             "min_power": 0.65,
             "max_power": 1.6
         },
+        "basic_attack_027": {
+            "name": "缚风扑袭",
+            "type": "攻击",
+            "scope": "通用",
+            "category": "基础",
+            "min_rarity": "卓越",
+            "min_form": 0,
+            "min_stars": 1,
+            "base_power": 0.44,
+            "star_bonus": 0.012,
+            "form_bonus": 0.05,
+            "rarity_bonus": 0.025,
+            "weight": 34,
+            "desc": "扑袭时扰乱敌方身法，造成伤害并短暂降低速度。",
+            "effect": "speed_down",
+            "duration": 1
+        },
         "basic_buff_001": {
             "name": "灵息鼓舞",
             "type": "增益",
@@ -908,6 +925,23 @@
             "desc": "玄心护住灵台，获得更稳定的减益免疫。",
             "effect": "debuff_immunity",
             "duration": 2
+        },
+        "basic_buff_027": {
+            "name": "追风灵契",
+            "type": "增益",
+            "scope": "通用",
+            "category": "基础",
+            "min_rarity": "卓越",
+            "min_form": 0,
+            "min_stars": 1,
+            "base_power": 0.42,
+            "star_bonus": 0.012,
+            "form_bonus": 0.05,
+            "rarity_bonus": 0.025,
+            "weight": 32,
+            "desc": "宠物以风息牵引主人，短暂提升战斗速度。",
+            "effect": "speed_buff",
+            "duration": 1
         },
         "basic_protect_001": {
             "name": "护主灵盾",

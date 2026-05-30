@@ -3,7 +3,7 @@ import random
 from nonebot.typing import T_State
 from typing import List
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, OtherSet, BuffJsonDate,
+    XiuxianDateManage, OtherSet, BuffJsonDate, PlayerDataManager,
     get_main_info_msg, UserBuffDate, get_sec_msg
 )
 from nonebot import require
@@ -26,15 +26,23 @@ from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
 from ..xiuxian_utils.utils import (
     check_user, number_to,
-    get_msg_pic, send_msg_handler, handle_send,
-    Txt2Img, update_statistics_value, send_help_message
+    send_msg_handler, handle_send,
+    update_statistics_value, send_help_message,
+    parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_tianti.tianti_data import TiantiDataManager
+from ..xiuxian_tianti.tianti_service import (
+    get_sect_fairyland_bonus,
+    grant_tianti_settle_minutes,
+)
 from urllib.parse import quote
 from ..adapter_compat import is_channel_event
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
+player_data_manager = PlayerDataManager()
+tianti_manager = TiantiDataManager()
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -42,6 +50,22 @@ LEVLECOST = config["LEVLECOST"]
 added_rank = added_ranks()
 cache_help = {}
 userstask = {}
+
+SECT_FAIRYLAND_MAX_LEVEL = 10
+SECT_FAIRYLAND_CLAIM_TABLE = "sect_fairyland_claim"
+SECT_FAIRYLAND_CONFIG = {
+    0: {"name": "暂无", "minutes": 0, "bonus": 0.0, "stone": 0, "materials": 0},
+    1: {"name": "初建炼体堂", "minutes": 30, "bonus": 0.05, "stone": 20000000, "materials": 200000000},
+    2: {"name": "筋骨灵泉", "minutes": 45, "bonus": 0.10, "stone": 50000000, "materials": 500000000},
+    3: {"name": "龙象淬体阵", "minutes": 60, "bonus": 0.15, "stone": 100000000, "materials": 1000000000},
+    4: {"name": "玄元炼体场", "minutes": 90, "bonus": 0.20, "stone": 200000000, "materials": 2000000000},
+    5: {"name": "太古锻身台", "minutes": 120, "bonus": 0.25, "stone": 400000000, "materials": 4000000000},
+    6: {"name": "不灭淬体堂", "minutes": 150, "bonus": 0.30, "stone": 800000000, "materials": 8000000000},
+    7: {"name": "地脉锻骨阵", "minutes": 180, "bonus": 0.35, "stone": 1600000000, "materials": 16000000000},
+    8: {"name": "万象炼体场", "minutes": 240, "bonus": 0.40, "stone": 3200000000, "materials": 32000000000},
+    9: {"name": "鸿蒙淬体台", "minutes": 300, "bonus": 0.45, "stone": 6400000000, "materials": 64000000000},
+    10: {"name": "永恒炼体堂", "minutes": 360, "bonus": 0.50, "stone": 12800000000, "materials": 128000000000},
+}
 
 buffrankkey = {
     "人阶下品": 1,
@@ -58,6 +82,50 @@ buffrankkey = {
     "仙阶上品": 100,
 }
 
+
+def _to_int(value, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except Exception:
+        return default
+
+
+def _get_sect_fairyland_level(sect_info: dict | None) -> int:
+    if not sect_info:
+        return 0
+    return max(0, min(SECT_FAIRYLAND_MAX_LEVEL, _to_int(sect_info.get("sect_fairyland", 0))))
+
+
+def _get_sect_fairyland_config(level: int) -> dict:
+    level = max(0, min(SECT_FAIRYLAND_MAX_LEVEL, _to_int(level)))
+    return SECT_FAIRYLAND_CONFIG[level]
+
+
+def _is_sect_owner(user_info: dict) -> bool:
+    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
+    return int(user_info.get("sect_position", 99)) == owner_position
+
+
+def _fairyland_claim_key(sect_id) -> str:
+    return f"last_claim_{sect_id}"
+
+
+def _get_fairyland_last_claim(user_id, sect_id) -> str:
+    data = player_data_manager.get_fields(str(user_id), SECT_FAIRYLAND_CLAIM_TABLE) or {}
+    value = data.get(_fairyland_claim_key(sect_id), "")
+    return str(value or "")
+
+
+def _set_fairyland_last_claim(user_id, sect_id, day: str):
+    player_data_manager.update_or_write_data(
+        str(user_id),
+        SECT_FAIRYLAND_CLAIM_TABLE,
+        _fairyland_claim_key(sect_id),
+        day,
+        data_type="TEXT",
+    )
+
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
 upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
 uphppractice = on_command("升级元血修炼", priority=5, block=True)
@@ -67,6 +135,7 @@ create_sect = on_command("创建宗门", priority=5, block=True)
 join_sect = on_command("加入宗门", aliases={"宗门加入"}, priority=5, block=True)
 sect_position_update = on_command("宗门职位变更", priority=5, block=True)
 sect_position_help = on_command("宗门职位帮助", priority=5, block=True)
+sect_manage = on_command("宗门管理", aliases={"宗门管理帮助"}, priority=5, block=True)
 sect_donate = on_command("宗门捐献", aliases={"宗门贡献"}, priority=5, block=True)
 sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
@@ -89,6 +158,9 @@ sect_elixir_get = on_command("宗门丹药领取", aliases={"领取宗门丹药"
 sect_rename = on_command("宗门改名", priority=5,  block=True)
 sect_shop = on_command("宗门商店", priority=5, block=True)
 sect_buy = on_command("宗门兑换", priority=5, block=True)
+sect_fairyland_info = on_command("宗门炼体堂", aliases={"炼体堂", "宗门淬体堂"}, priority=5, block=True)
+sect_fairyland_upgrade = on_command("宗门炼体堂升级", aliases={"炼体堂升级", "宗门淬体堂升级"}, priority=5, block=True)
+sect_fairyland_claim = on_command("宗门淬体修行", aliases={"淬体修行", "宗门炼体堂修行", "炼体堂修行", "宗门炼体堂领取"}, priority=5, block=True)
 sect_close_join = on_command("关闭宗门加入", priority=5, block=True)
 sect_open_join = on_command("开放宗门加入", priority=5, block=True)
 sect_close_mountain = on_command("封闭山门", priority=5, block=True)
@@ -105,26 +177,22 @@ __sect_help__ = f"""
   • 宗门列表 - 浏览全服宗门
   • 创建宗门 - 消耗{XiuConfig().sect_create_cost}灵石（需境界{XiuConfig().sect_min_level}）
   • 加入宗门 [ID/名称] - 申请加入指定宗门
-  • 宗门战力排行 - 查看战力前50的宗门
-
-👑 宗主专属：
-  • 宗门职位变更 [道号] [1-15] - 调整成员职位
-  • 宗门改名 [新名称] - 消耗宗门易名符修改宗门名称
-  • 宗主传位 [道号] - 禅让宗主之位
-  • 踢出宗门 [道号] - 移除宗门成员
-  • 开放宗门加入 - 允许其他修士加入宗门
-  • 关闭宗门加入 - 禁止其他修士加入宗门
-  • 封闭山门 - 关闭宗门并退位为长老(需确认)
-  • 解散宗门 - 解散宗门并踢出所有成员(需确认)
+  • 退出宗门 - 离开当前宗门
+  • 宗门战力排行榜 - 查看战力前50的宗门
+  • 宗门管理 - 查看宗主/长老管理指令
 
 📈 宗门建设：
   • 宗门捐献 - 提升建设度（每{config["等级建设度"]}建设度提升1级修炼上限）
   • 升级攻击/元血/灵海修炼 - 提升对应属性（每级+4%攻/8%血/5%真元）
+  • 宗门炼体堂 - 查看宗门炼体堂和每日淬体状态
+  • 宗门炼体堂升级 - 宗主消耗宗门储备和资材提升炼体堂
+  • 宗门淬体修行 - 每日领取炼体结算时间
 
 📚 功法传承：
   • 宗门功法、神通搜寻 - 宗主可消耗资源搜索功法（100次）
   • 学习宗门功法/神通 [名称] - 成员消耗资材学习
   • 宗门功法查看 - 浏览宗门藏书
+  • 宗门神通查看 - 浏览宗门神通
 
 💊 丹房系统：
   • 建设宗门丹房 - 开启每日丹药福利
@@ -134,6 +202,8 @@ __sect_help__ = f"""
   • 宗门任务接取 - 获取任务（每日上限：{config["每日宗门任务次上限"]}次）
   • 宗门任务完成 - 提交任务（CD：{config["宗门任务完成cd"]}秒）
   • 宗门任务刷新 - 更换任务（CD：{config["宗门任务刷新cd"]}秒）
+  • 宗门商店 - 查看可兑换物品
+  • 宗门兑换 [物品] [数量] - 消耗贡献兑换
 
 ⏰ 福利：
   • 每日{config["发放宗门资材"]["时间"]}点发放{config["发放宗门资材"]["倍率"]}倍建设度资材
@@ -143,8 +213,41 @@ __sect_help__ = f"""
   1. 外门弟子无法获得修炼资源
   2. 建设度决定宗门整体实力
   3. 每日任务收益随职位提升
-  4. 封闭山门后长老可以使用【继承宗主】来继承宗主之位
-  5. 长期不活跃的宗主会降职，长期不活跃宗门自动解散
+  4. 管理类操作请发送【宗门管理】查看
+""".strip()
+
+__sect_manage_help__ = """
+【宗门管理】👑
+
+👥 成员管理：
+  • 宗门成员查看 [页码] - 查看成员、职位统计和快捷操作
+  • 宗门职位变更 [道号] [职位编号/职位名称] - 调整成员职位
+  • 宗门职位帮助 - 查看职位编号、加成和人数限制
+  • 踢出宗门 [道号] - 移除宗门成员（长老及以上可用）
+
+🏛️ 山门管理：
+  • 开放宗门加入 - 允许其他修士加入宗门
+  • 关闭宗门加入 - 禁止其他修士加入宗门
+  • 封闭山门 - 关闭宗门并退位为长老（需确认）
+  • 确认封闭山门 - 确认封闭山门
+  • 继承宗主 - 封闭山门后由高职位成员继承宗主
+
+👑 宗主专属：
+  • 宗门改名 [新名称] - 消耗宗门易名符修改宗门名称
+  • 宗主传位 [道号/@道友] - 禅让宗主之位
+  • 解散宗门 - 解散宗门并踢出所有成员（需确认）
+  • 确认解散宗门 - 确认解散宗门
+
+🏗️ 建设管理：
+  • 宗门功法搜寻 / 宗门神通搜寻 - 消耗资源搜索宗门传承
+  • 宗门丹房建设 - 升级宗门丹房
+  • 宗门炼体堂升级 - 升级宗门炼体堂
+
+💡 管理规则：
+  1. 长老及以上可职位变更、踢出低于自己的成员
+  2. 宗主可开放/关闭加入、改名、传位、封闭或解散宗门
+  3. 封闭山门后长老可以使用【继承宗主】继承宗主之位
+  4. 长期不活跃的宗主会降职，长期不活跃宗门自动解散
 """.strip()
 
 # 定时任务每1小时按照宗门贡献度增加资材
@@ -314,15 +417,44 @@ async def auto_handle_inactive_sect_owners():
         logger.info("✅ 宗门状态检测处理完成")
 
 @sect_help.handle(parameterless=[Cooldown(cd_time=0)])
-async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """宗门帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = __sect_help__
-    title = ""
-    font_size = 32
-    img = Txt2Img(font_size)
-    await send_help_message(bot, event, msg, k1="宗门", v1="我的宗门", k2="列表", v2="宗门列表", k3="创建", v3="创建宗门")
+    page = parse_page_arg(args.extract_plain_text())
+    msg, page, total_pages = paginate_text_blocks(__sect_help__, page, per_page=3)
+    msg = f"{msg}\n\n发送“宗门帮助 页码”可跳转页面；管理类指令请发送【宗门管理】。"
+    button_kwargs = build_pagination_buttons(
+        "宗门帮助",
+        page,
+        total_pages,
+        extras=[
+            ("宗门", "我的宗门"),
+            ("管理", "宗门管理"),
+            ("职位", "宗门职位帮助"),
+            ("列表", "宗门列表"),
+        ],
+    )
+    await send_help_message(bot, event, msg, **button_kwargs, button_id=XiuConfig().button_id2)
     await sect_help.finish()
+
+@sect_manage.handle(parameterless=[Cooldown(cd_time=0)])
+async def sect_manage_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门管理帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    await send_help_message(
+        bot,
+        event,
+        __sect_manage_help__,
+        k1="成员",
+        v1="宗门成员查看",
+        k2="职位",
+        v2="宗门职位帮助",
+        k3="宗门",
+        v3="我的宗门",
+        k4="帮助",
+        v4="宗门帮助",
+    )
+    await sect_manage.finish()
 
 @sect_position_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -346,6 +478,156 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     await send_help_message(bot, event, msg, k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_position_help.finish()
+
+
+@sect_fairyland_info.handle(parameterless=[Cooldown(cd_time=0)])
+async def sect_fairyland_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门炼体堂信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_fairyland_info.finish()
+
+    sect_id = user_info["sect_id"]
+    if not sect_id:
+        await handle_send(bot, event, "道友还未加入一方宗门。", md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_info.finish()
+
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        await handle_send(bot, event, "宗门信息不存在，请重新加入或创建宗门。", md_type="宗门", k1="列表", v1="宗门列表", k2="创建", v2="创建宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_info.finish()
+
+    level = _get_sect_fairyland_level(sect_info)
+    cur_conf = _get_sect_fairyland_config(level)
+    today = datetime.now().strftime("%Y-%m-%d")
+    claimed = _get_fairyland_last_claim(user_info["user_id"], sect_id) == today
+
+    next_msg = "已达最高等级"
+    if level < SECT_FAIRYLAND_MAX_LEVEL:
+        next_conf = _get_sect_fairyland_config(level + 1)
+        next_msg = (
+            f"下级：{level + 1}级【{next_conf['name']}】\n"
+            f"升级消耗：宗门储备{number_to(next_conf['stone'])}灵石，宗门资材{number_to(next_conf['materials'])}"
+        )
+
+    msg = (
+        f"【宗门炼体堂】\n"
+        f"宗门：{sect_info['sect_name']}\n"
+        f"等级：{level}级【{cur_conf['name']}】\n"
+        f"炼体结算加成：{get_sect_fairyland_bonus(level) * 100:.0f}%\n"
+        f"每日淬体修行：{cur_conf['minutes']}分钟炼体结算时间\n"
+        f"今日领取：{'已领取' if claimed else '未领取'}\n"
+        f"{next_msg}"
+    )
+    await handle_send(bot, event, msg, md_type="宗门", k1="修行", v1="宗门淬体修行", k2="升级", v2="宗门炼体堂升级", k3="宗门", v3="我的宗门")
+    await sect_fairyland_info.finish()
+
+
+@sect_fairyland_upgrade.handle(parameterless=[Cooldown(cd_time=10)])
+async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """升级宗门炼体堂"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_fairyland_upgrade.finish()
+
+    sect_id = user_info["sect_id"]
+    if not sect_id:
+        await handle_send(bot, event, "道友还未加入一方宗门。", md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_upgrade.finish()
+    if not _is_sect_owner(user_info):
+        await handle_send(bot, event, "只有宗主可以升级宗门炼体堂。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+        await sect_fairyland_upgrade.finish()
+
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        await handle_send(bot, event, "宗门信息不存在，请重新加入或创建宗门。", md_type="宗门", k1="列表", v1="宗门列表", k2="创建", v2="创建宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_upgrade.finish()
+
+    level = _get_sect_fairyland_level(sect_info)
+    if level >= SECT_FAIRYLAND_MAX_LEVEL:
+        await handle_send(bot, event, "宗门炼体堂已达最高等级。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_upgrade.finish()
+
+    next_level = level + 1
+    next_conf = _get_sect_fairyland_config(next_level)
+    need_stone = next_conf["stone"]
+    need_materials = next_conf["materials"]
+
+    if _to_int(sect_info.get("sect_used_stone", 0)) < need_stone:
+        lack = need_stone - _to_int(sect_info.get("sect_used_stone", 0))
+        await handle_send(bot, event, f"宗门储备不足，还需{number_to(lack)}灵石。", md_type="宗门", k1="捐献", v1="宗门捐献", k2="炼体堂", v2="宗门炼体堂", k3="宗门", v3="我的宗门")
+        await sect_fairyland_upgrade.finish()
+    if _to_int(sect_info.get("sect_materials", 0)) < need_materials:
+        lack = need_materials - _to_int(sect_info.get("sect_materials", 0))
+        await handle_send(bot, event, f"宗门资材不足，还需{number_to(lack)}资材。", md_type="宗门", k1="捐献", v1="宗门捐献", k2="炼体堂", v2="宗门炼体堂", k3="宗门", v3="我的宗门")
+        await sect_fairyland_upgrade.finish()
+
+    sql_message.update_sect_used_stone(sect_id, need_stone, 2)
+    sql_message.update_sect_materials(sect_id, need_materials, 2)
+    sql_message.update_sect_fairyland(sect_id, next_level)
+
+    msg = (
+        f"宗门炼体堂升级成功！\n"
+        f"当前等级：{next_level}级【{next_conf['name']}】\n"
+        f"炼体结算加成：{get_sect_fairyland_bonus(next_level) * 100:.0f}%\n"
+        f"每日淬体修行：{next_conf['minutes']}分钟炼体结算时间\n"
+        f"消耗宗门储备：{number_to(need_stone)}灵石\n"
+        f"消耗宗门资材：{number_to(need_materials)}"
+    )
+    await handle_send(bot, event, msg, md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="修行", v2="宗门淬体修行", k3="宗门", v3="我的宗门")
+    await sect_fairyland_upgrade.finish()
+
+
+@sect_fairyland_claim.handle(parameterless=[Cooldown(cd_time=5)])
+async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """领取宗门炼体堂修行时间"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_fairyland_claim.finish()
+
+    sect_id = user_info["sect_id"]
+    if not sect_id:
+        await handle_send(bot, event, "道友还未加入一方宗门。", md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_claim.finish()
+
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        await handle_send(bot, event, "宗门信息不存在，请重新加入或创建宗门。", md_type="宗门", k1="列表", v1="宗门列表", k2="创建", v2="创建宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_claim.finish()
+
+    level = _get_sect_fairyland_level(sect_info)
+    conf = _get_sect_fairyland_config(level)
+    if level <= 0 or conf["minutes"] <= 0:
+        await handle_send(bot, event, "宗门尚未建设炼体堂，无法进行淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="捐献", v2="宗门捐献", k3="宗门", v3="我的宗门")
+        await sect_fairyland_claim.finish()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _get_fairyland_last_claim(user_info["user_id"], sect_id) == today:
+        await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_claim.finish()
+
+    data = tianti_manager.get_user_tianti_info(str(user_info["user_id"]))
+    result = grant_tianti_settle_minutes(data, conf["minutes"], sect_fairyland_level=level)
+    tianti_manager.save_user_tianti_info(str(user_info["user_id"]), data)
+    _set_fairyland_last_claim(user_info["user_id"], sect_id, today)
+
+    msg = (
+        f"宗门淬体修行完成！\n"
+        f"炼体堂：{level}级【{conf['name']}】\n"
+        f"获得炼体结算时间：{conf['minutes']}分钟\n"
+        f"宗门炼体堂加成：{float(result.get('sect_bonus', 0) or 0) * 100:.0f}%\n"
+        f"本次获得炼体气血：{number_to(result['real_gain'])}\n"
+        f"当前炼体气血：{number_to(result['new_hp'])}"
+    )
+    await handle_send(bot, event, msg, md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="炼体", v2="我的炼体", k3="宗门", v3="我的宗门")
+    await sect_fairyland_claim.finish()
+
 
 @sect_elixir_room_make.handle(parameterless=[Cooldown(stamina_cost=2)])
 async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -2126,6 +2408,18 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         # 获取当前宗门人数
         current_members = len(sql_message.get_all_users_by_sect_id(sect_id))
         
+        fairyland_level = _get_sect_fairyland_level(sect_info)
+        fairyland_conf = _get_sect_fairyland_config(fairyland_level)
+        fairyland_text = (
+            "暂无"
+            if fairyland_level <= 0
+            else (
+                f"{fairyland_level}级【{fairyland_conf['name']}】"
+                f"（炼体+{get_sect_fairyland_bonus(fairyland_level) * 100:.0f}%，"
+                f"每日淬体{fairyland_conf['minutes']}分钟）"
+            )
+        )
+
         msg = f"""
 {user_name}所在宗门
 宗门名讳：{sect_info['sect_name']}
@@ -2135,7 +2429,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗门状态：{join_status}{closed_status}
 宗门人数：{current_members}/{max_members}
 宗门建设度：{number_to(sect_info['sect_scale'])}
-洞天福地：{sect_info['sect_fairyland'] if sect_info['sect_fairyland'] else "暂无"}
+炼体堂：{fairyland_text}
 宗门排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
 宗门拥有资材：{number_to(sect_info['sect_materials'])}
 宗门贡献度：{number_to(user_info['sect_contribution'])}

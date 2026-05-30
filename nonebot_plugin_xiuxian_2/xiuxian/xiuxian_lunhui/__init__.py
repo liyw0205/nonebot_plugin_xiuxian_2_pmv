@@ -20,7 +20,10 @@ from ..adapter_compat import (
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     handle_send,
-    send_help_message
+    send_help_message,
+    log_message,
+    update_statistics_value,
+    number_to
 )
 from ..xiuxian_impart.impart_uitls import (
     impart_check,
@@ -116,9 +119,11 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sql_message.updata_level(user_id, '江湖好手') #重置用户境界
         sql_message.update_levelrate(user_id, 0) #重置突破成功率
         sql_message.update_j_exp(user_id, exp) #重置用户修为
-        sql_message.update_exp(user_id, 100)  
+        sql_message.update_exp(user_id, 100)
         sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"{user_name}现在是一介凡人了！！"
+        log_message(user_id, f"[自废修为] 从{user_msg['level']}自废至江湖好手，重置修为{number_to(exp)}")
+        update_statistics_value(user_id, "自废修为次数")
         await handle_send(bot, event, msg)
         await resetting.finish()
     else:
@@ -235,7 +240,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     skill_type = type_map[arg]
     success, reason = retrieve_reincarnation_skill(user_id, skill_type)
-    
+    if success:
+        log_message(user_id, f"[回忆前世] 取回{arg}：{reason}")
+        update_statistics_value(user_id, "回忆前世次数")
+        update_statistics_value(user_id, f"回忆前世{arg}")
+
     await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
 @view_memory.handle(parameterless=[Cooldown(cd_time=0)])
@@ -300,6 +309,8 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 执行轮回操作
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
+    old_level = user_msg['level']
+    old_root = user_msg['root_type']
     exp = user_msg['exp']
     stone = user_info['stone']
     now_stone = int(stone - 1_0000_0000)
@@ -342,6 +353,15 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
     sql_message.send_back(user_id, ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME, "特殊道具", 1, 1)
     msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"
+    log_message(
+        user_id,
+        f"[轮回] {old_root}于{old_level}确认轮回，重置修为{number_to(exp)}，保留灵石至{number_to(min(stone, 1_0000_0000))}"
+    )
+    update_statistics_value(user_id, "轮回次数")
+    if root_level == 0 or root_level == 9:
+        update_statistics_value(user_id, "无限轮回次数")
+    else:
+        update_statistics_value(user_id, "普通轮回次数")
     await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
 
     # 删除确认缓存

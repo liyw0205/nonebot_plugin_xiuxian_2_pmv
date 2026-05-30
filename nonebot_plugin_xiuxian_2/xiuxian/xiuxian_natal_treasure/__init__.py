@@ -586,6 +586,7 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
     charge_effect_bonus_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.CHARGE]["min_value"] * 100
 
     divine_power_bonus_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.DIVINE_POWER]["min_value"] * 100
+    speed_bonus_base = EFFECT_BASE_AND_GROWTH[NatalEffectType.SPEED]["min_value"] * 100
 
     nirvana_duration = NIRVANA_DURATION
     nirvana_shield_base = NIRVANA_SHIELD_BASE * 100
@@ -623,6 +624,7 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
 • **{EFFECT_NAME_MAP[NatalEffectType.SILENCE]}**：攻击时有{round(silence_chance_base, 2)}%概率使目标沉默{silence_duration}回合。
 • **{EFFECT_NAME_MAP[NatalEffectType.CHARGE]}**：本回合不攻击，下回合攻击力额外提升{round(charge_bonus_base + charge_effect_bonus_base, 2)}%（基础{round(charge_bonus_base, 2)}% + 道纹等级提升）。
 • **{EFFECT_NAME_MAP[NatalEffectType.DIVINE_POWER]}**：攻击力额外提升{round(divine_power_bonus_base, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SPEED]}**：战斗中提升{round(speed_bonus_base, 2)}%速度，道纹等级越高提升越高。
 • **{EFFECT_NAME_MAP[NatalEffectType.NIRVANA]}**：阵亡时有队友在场，进入涅槃状态{nirvana_duration}回合后满血复活，并使友方全体获得最大生命{round(nirvana_shield_base, 2)}%护盾，仅{nirvana_revive_limit}次。涅槃期间免疫所有伤害，但若所有队友阵亡则复活失败。
 • **{EFFECT_NAME_MAP[NatalEffectType.SOUL_RETURN]}**：阵亡时有队友在场，进入灵体状态{soul_return_duration}回合后回复最大生命{round(soul_return_hp_base, 2)}%复活，期间可正常攻击且免疫所有伤害，仅{soul_return_revive_limit}次。魂返期间只可进行普通攻击，且若所有队友阵亡则复活失败。
 • **{EFFECT_NAME_MAP[NatalEffectType.SOUL_SUMMON]}**：攻击时有{round(soul_summon_chance_base, 2)}%概率让已死亡的队友进入魂返状态，仅队友战斗触发，每个队友仅可触发{SOUL_SUMMON_LIMIT}次。

@@ -25,7 +25,8 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     send_msg_handler,
-    Txt2Img, number_to, handle_send, send_help_message
+    Txt2Img, number_to, handle_send, send_help_message,
+    log_message, update_statistics_value
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, TradeDataManager, get_weapon_info_msg, get_armor_info_msg,
@@ -45,7 +46,6 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 
 # === 全局常量配置 ===
-BANNED_ITEM_IDS = ["15357", "9935", "9940"]  # 禁止在仙肆/拍卖交易的物品ID
 ITEM_TYPES = ["技能", "装备", "药材", "丹药"] # 仙肆允许上架的物品类型
 MIN_PRICE = 600000 # 仙肆最大上架价格
 MAX_QUANTITY = 999 #仙肆最大上架数量
@@ -57,6 +57,36 @@ GUISHI_AUTO_HOUR = 2           # 鬼市自动交易频率（每2小时）
 GUISHI_MAX_QUANTITY = 10       # 鬼市单次最大交易数量（求购/摆摊）
 MAX_QIUGOU_ORDERS = 10         # 每个用户最大求购订单数
 MAX_BAITAN_ORDERS = 10         # 每个用户最大摆摊订单数
+
+
+def record_trade_event(user_id: str, title: str, detail: str, stats: Optional[Dict[str, int]] = None):
+    """记录交易相关日志和核心统计。"""
+    if str(user_id) == "0":
+        return
+    log_message(str(user_id), f"[{title}] {detail}")
+    if not stats:
+        return
+    for key, increment in stats.items():
+        if increment:
+            update_statistics_value(str(user_id), key, increment=increment)
+
+
+def get_item_trade_rank(item_info: Optional[Dict[str, Any]]) -> Optional[int]:
+    if not item_info or "rank" not in item_info:
+        return None
+    try:
+        return int(item_info["rank"])
+    except (TypeError, ValueError):
+        return None
+
+
+def get_trade_forbid_reason(goods_id: Any, item_info: Optional[Dict[str, Any]], action: str = "交易") -> Optional[str]:
+    item_name = item_info.get("name", f"ID:{goods_id}") if item_info else f"ID:{goods_id}"
+    trade_rank = get_item_trade_rank(item_info)
+    if trade_rank is not None and trade_rank <= 0:
+        return f"{item_name}是不可交易的珍贵物品！"
+    return None
+
 
 # === 仙肆命令 ===
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
@@ -271,6 +301,19 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
                 "fee": fee,
                 "seller_earnings": seller_earnings
             })
+            record_trade_event(
+                highest_bidder_id,
+                "拍卖成交",
+                f"拍得{item['name']}，成交价{number_to(final_price)}灵石，拍卖ID:{item['id']}",
+                {"拍卖成交次数": 1, "拍卖消费灵石": final_price}
+            )
+            if not item["is_system"]:
+                record_trade_event(
+                    item["seller_id"],
+                    "拍卖成交",
+                    f"售出{item['name']}，成交价{number_to(final_price)}灵石，手续费{number_to(fee)}灵石，收入{number_to(seller_earnings)}灵石",
+                    {"拍卖售出次数": 1, "拍卖收入灵石": seller_earnings, "拍卖手续费消耗": fee}
+                )
             
             # 退还其他竞拍者的灵石
             for bidder_id_str, bid_price in item["bids"].items():
@@ -298,6 +341,12 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
                         item_info["type"],
                         1,
                         1 # 流拍退回的物品默认绑定
+                    )
+                    record_trade_event(
+                        item["seller_id"],
+                        "拍卖流拍",
+                        f"{item['name']}流拍，已退回背包，拍卖ID:{item['id']}",
+                        {"拍卖流拍次数": 1}
                     )
         
         auction_results.append(result_record)
@@ -382,6 +431,12 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     
     # 保存更新
     trade_manager.update_auction_bid(item["id"], item["current_price"], item["bids"], item["bid_times"], item["last_bid_time"])
+    record_trade_event(
+        user_id,
+        "拍卖竞拍",
+        f"竞拍{item['name']}，出价{number_to(bid_price)}灵石，拍卖ID:{auction_id}",
+        {"拍卖出价次数": 1, "拍卖出价灵石": bid_price}
+    )
     
     # 构造返回消息
     msg_list = [
@@ -584,9 +639,9 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
-    # 检查是否是禁止交易的物品
-    if str(goods_id) in BANNED_ITEM_IDS:
-        msg = f"物品 {item_name} 禁止交易！"
+    forbid_reason = get_trade_forbid_reason(goods_id, goods_info)
+    if forbid_reason:
+        msg = forbid_reason
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
         
@@ -617,6 +672,12 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总手续费: {number_to(total_fee)} 灵石"
+    record_trade_event(
+        user_id,
+        "仙肆上架",
+        f"上架{item_name}x{success_count}，单价{number_to(price)}灵石，手续费{number_to(total_fee)}灵石",
+        {"仙肆上架次数": 1, "仙肆上架数量": success_count, "仙肆手续费消耗": total_fee}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
     await xian_shop_add.finish()
 
@@ -725,7 +786,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     total_fees_to_deduct = 0
     
     for item in items_to_add:
-        if str(item['id']) in BANNED_ITEM_IDS: # 跳过禁止交易的物品
+        if get_trade_forbid_reason(item['id'], item['info']): # 跳过禁止交易的物品
             continue
 
         min_price_in_xianshi = get_xianshi_min_price(item['name'])
@@ -749,6 +810,12 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             'fee': fee_for_item
         })
         total_fees_to_deduct += fee_for_item
+
+    if not processed_items_summary:
+        msg = "符合条件的物品均为不可交易的珍贵物品，或没有可交易物品。"
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
+        await xianshi_auto_add.finish()
     
     if user_info['stone'] < total_fees_to_deduct:
         msg = f"灵石不足支付总手续费！需要{number_to(total_fees_to_deduct)}灵石，当前拥有{number_to(user_info['stone'])}灵石"
@@ -779,6 +846,12 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     msg = f"\n✨ 成功上架 {successful_items_count} 件物品\n"
     msg += f"💎 总手续费: {number_to(total_fees_to_deduct)}灵石"
+    record_trade_event(
+        user_id,
+        "仙肆自动上架",
+        f"按{item_type}/{rank_name}上架{successful_items_count}件物品，手续费{number_to(total_fees_to_deduct)}灵石",
+        {"仙肆上架次数": 1, "仙肆上架数量": successful_items_count, "仙肆手续费消耗": total_fees_to_deduct}
+    )
     
     await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg_lines, title=f"☆------仙肆自动上架 {item_type} {rank_name}------☆", page_param=msg)
     await xianshi_auto_add.finish()
@@ -835,9 +908,9 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
-    # 检查禁止交易的物品
-    if str(goods_id) in BANNED_ITEM_IDS:
-        msg = f"物品 {item_name} 禁止交易！"
+    forbid_reason = get_trade_forbid_reason(goods_id, goods_info)
+    if forbid_reason:
+        msg = forbid_reason
         sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
@@ -889,6 +962,12 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总价: {number_to(total_price)} 灵石\n"
     msg += f"手续费: {number_to(single_fee)} 灵石"
+    record_trade_event(
+        user_id,
+        "仙肆快速上架",
+        f"快速上架{item_name}x{success_count}，单价{number_to(price)}灵石，手续费{number_to(single_fee)}灵石",
+        {"仙肆上架次数": 1, "仙肆上架数量": success_count, "仙肆手续费消耗": single_fee}
+    )
     
     await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
     await xianshi_fast_add.finish()
@@ -1127,6 +1206,12 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         1 # 每次下架一个
     )
     msg = f"成功下架 {item_to_remove['name']} (ID:{xianshi_id})，已退回背包！"
+    record_trade_event(
+        user_id,
+        "仙肆下架",
+        f"下架{item_to_remove['name']}，仙肆ID:{xianshi_id}",
+        {"仙肆下架次数": 1, "仙肆下架数量": 1}
+    )
     
     await handle_send(bot, event, msg, md_type="交易", k1="下架", v1="仙肆下架", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
     await xian_shop_remove.finish()
@@ -1206,6 +1291,19 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         # 从仙肆系统中移除 (每次购买，无论数量，都从仙肆列表中移除一条记录)
         trade_manager.remove_xianshi_item(xianshi_id)
         msg = f"成功购买 {item_to_buy['name']} x{quantity_to_buy}\n花费 {number_to(total_cost)} 灵石"
+        record_trade_event(
+            user_id,
+            "仙肆购买",
+            f"购买{item_to_buy['name']}x{quantity_to_buy}，花费{number_to(total_cost)}灵石",
+            {"仙肆购买次数": 1, "仙肆购买数量": quantity_to_buy, "仙肆消费灵石": total_cost}
+        )
+        if item_to_buy['user_id'] != 0:
+            record_trade_event(
+                item_to_buy['user_id'],
+                "仙肆售出",
+                f"售出{item_to_buy['name']}x{quantity_to_buy}，收入{number_to(total_cost)}灵石",
+                {"仙肆售出次数": 1, "仙肆售出数量": quantity_to_buy, "仙肆收入灵石": total_cost}
+            )
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     except Exception as e:
         logger.error(f"仙肆购买出错: {e}")
@@ -1279,6 +1377,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     success_items = []
     failed_items = []
+    seller_trade_summary = {}
     
     for i, target_item_name in enumerate(goods_names):
         target_quantity = quantities[i]
@@ -1315,6 +1414,13 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 purchased_count += 1
                 item_total_cost += item_data["price"]
                 total_cost += item_data["price"]
+                seller_summary = seller_trade_summary.setdefault(
+                    seller_id,
+                    {"quantity": 0, "income": 0, "items": {}}
+                )
+                seller_summary["quantity"] += 1
+                seller_summary["income"] += item_data["price"]
+                seller_summary["items"][item_data["name"]] = seller_summary["items"].get(item_data["name"], 0) + 1
                 
             except Exception as e:
                 logger.error(f"快速购买 {item_data['name']} (ID:{item_data['id']}) 时出错: {e}")
@@ -1347,6 +1453,22 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg_parts.append("未进行任何购买操作！")
 
     msg = "\n".join(msg_parts)
+    if total_cost > 0:
+        total_quantity = sum(summary["quantity"] for summary in seller_trade_summary.values())
+        record_trade_event(
+            user_id,
+            "仙肆快速购买",
+            f"快速购买{total_quantity}件物品，花费{number_to(total_cost)}灵石",
+            {"仙肆购买次数": 1, "仙肆购买数量": total_quantity, "仙肆消费灵石": total_cost}
+        )
+        for seller_id, summary in seller_trade_summary.items():
+            items_detail = "、".join(f"{name}x{count}" for name, count in summary["items"].items())
+            record_trade_event(
+                seller_id,
+                "仙肆售出",
+                f"售出{items_detail}，收入{number_to(summary['income'])}灵石",
+                {"仙肆售出次数": 1, "仙肆售出数量": summary["quantity"], "仙肆收入灵石": summary["income"]}
+            )
     await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     await xianshi_fast_buy.finish()
 
@@ -1427,6 +1549,11 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     if goods_type not in ITEM_TYPES:
         msg = f"该物品类型不允许上架！允许类型：{', '.join(ITEM_TYPES)}"
         await handle_send(bot, event, msg)
+        await xian_shop_added_by_admin.finish()
+
+    forbid_reason = get_trade_forbid_reason(goods_id, item_info)
+    if forbid_reason:
+        await handle_send(bot, event, forbid_reason)
         await xian_shop_added_by_admin.finish()
     
     # 上架物品
@@ -1532,6 +1659,12 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     trade_manager.update_stored_stone(user_id, amount, 'add')
     
     msg = f"成功存入 {number_to(amount)} 灵石到鬼市账户！"
+    record_trade_event(
+        user_id,
+        "鬼市存灵石",
+        f"存入{number_to(amount)}灵石到鬼市账户",
+        {"鬼市存入灵石": amount}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_deposit.finish()
 
@@ -1593,6 +1726,12 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     sql_message.update_ls(user_id, actual_amount, 1)
     
     msg = f"成功取出 {number_to(amount)} 灵石（手续费：{fee_rate*100:.0f}%，扣除{number_to(fee)}灵石，实际到账 {number_to(actual_amount)} 灵石）"
+    record_trade_event(
+        user_id,
+        "鬼市取灵石",
+        f"取出{number_to(amount)}灵石，手续费{number_to(fee)}灵石，到账{number_to(actual_amount)}灵石",
+        {"鬼市取出灵石": actual_amount, "鬼市取灵石手续费": fee}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_withdraw.finish()
 
@@ -1640,6 +1779,11 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
 
+    forbid_reason = get_trade_forbid_reason(goods_id, goods_info)
+    if forbid_reason:
+        await handle_send(bot, event, forbid_reason, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_qiugou.finish()
+
     # 检查订单数量限制
     qiugou_orders = trade_manager.get_guishi_orders(user_id=user_id, type="qiugou")
     if qiugou_orders and len(qiugou_orders) >= MAX_QIUGOU_ORDERS:
@@ -1668,6 +1812,12 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"订单ID：{order_id}\n"
     msg += f"♻️ 次日{GUISHI_BAITAN_END_HOUR}点自动取消订单，并退还未购得物品的灵石！"
+    record_trade_event(
+        user_id,
+        "鬼市求购",
+        f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(total_cost)}灵石，订单ID:{order_id}",
+        {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": total_cost}
+    )
     
     # 立即尝试进行交易匹配，避免等待调度器
     transaction_result_msg = await process_guishi_transactions(user_id=user_id)
@@ -1711,6 +1861,12 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
     
     msg = f"成功取消求购订单【{order['item_name']} (ID:{order_id})】！\n"
     msg += f"已退还 {number_to(refund_amount)} 灵石到您的鬼市账户。"
+    record_trade_event(
+        user_id,
+        "鬼市取消求购",
+        f"取消求购{order['item_name']}，订单ID:{order_id}，退还{number_to(refund_amount)}灵石",
+        {"鬼市取消求购次数": 1, "鬼市求购退还灵石": refund_amount}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_cancel_qiugou.finish()
 
@@ -1798,9 +1954,9 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
-    # 检查禁止交易的物品
-    if str(goods_id) in BANNED_ITEM_IDS:
-        msg = f"物品 {item_name} 禁止交易！"
+    forbid_reason = get_trade_forbid_reason(goods_id, goods_info)
+    if forbid_reason:
+        msg = forbid_reason
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
@@ -1819,6 +1975,12 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"
     msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊，超时未收摊将自动清空摊位，物品不退还！"
+    record_trade_event(
+        user_id,
+        "鬼市摆摊",
+        f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
+        {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
+    )
     
     await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_baitan.finish()
@@ -1870,6 +2032,12 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         refund_msg = "\n所有摆摊物品均已售出，没有物品退回。"
         
     msg = f"成功收摊！所有摆摊订单已取消。{refund_msg}"
+    record_trade_event(
+        user_id,
+        "鬼市收摊",
+        f"取消{len(baitan_orders)}条摆摊订单，退回{total_refunded_items}件物品",
+        {"鬼市收摊次数": 1, "鬼市收摊退回物品": total_refunded_items}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="收摊", v1="鬼市收摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_shoutan.finish()
 
@@ -1931,6 +2099,12 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     )
     
     msg = f"成功取出 {item_info['name']} x{stored_quantity}！"
+    record_trade_event(
+        user_id,
+        "鬼市取物品",
+        f"取出暂存物品{item_info['name']}x{stored_quantity}",
+        {"鬼市取物品次数": 1, "鬼市取物品数量": stored_quantity}
+    )
     await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_take_item.finish()
 
@@ -2130,6 +2304,18 @@ async def process_guishi_transactions(user_id: str = None) -> str:
                 # 记录交易日志
                 qiugou_user_name = sql_message.get_user_info_with_id(qiugou_user_id)['user_name'] if sql_message.get_user_info_with_id(qiugou_user_id) else str(qiugou_user_id)
                 baitan_user_name = sql_message.get_user_info_with_id(baitan_user_id)['user_name'] if sql_message.get_user_info_with_id(baitan_user_id) else str(baitan_user_id)
+                record_trade_event(
+                    qiugou_user_id,
+                    "鬼市成交",
+                    f"购得{baitan_item_name}x{trade_quantity}，花费{number_to(trade_amount)}灵石，卖家:{baitan_user_name}",
+                    {"鬼市购买次数": 1, "鬼市购买数量": trade_quantity, "鬼市消费灵石": trade_amount}
+                )
+                record_trade_event(
+                    baitan_user_id,
+                    "鬼市成交",
+                    f"售出{baitan_item_name}x{trade_quantity}，收入{number_to(trade_amount)}灵石，买家:{qiugou_user_name}",
+                    {"鬼市售出次数": 1, "鬼市售出数量": trade_quantity, "鬼市收入灵石": trade_amount}
+                )
                 
                 transaction_log += (f"{qiugou_user_name} 从 {baitan_user_name} 处\n"
                                     f"购买了 {trade_quantity} 个 【{baitan_item_name}】，花费 {number_to(trade_amount)} 灵石。\n")
@@ -2425,9 +2611,9 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
-    # 检查禁止交易的物品
-    if str(goods_id) in BANNED_ITEM_IDS:
-        msg = f"物品 {item_name} 禁止拍卖！"
+    forbid_reason = get_trade_forbid_reason(goods_id, goods_info, "拍卖")
+    if forbid_reason:
+        msg = forbid_reason
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
 
@@ -2446,6 +2632,12 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     trade_manager.add_player_auction_item(user_id, goods_id, item_name, base_price, user_info['user_name'])
     
     msg = f"成功上架 {item_name} 到拍卖等待区！底价：{number_to(base_price)}灵石"
+    record_trade_event(
+        user_id,
+        "拍卖上架",
+        f"上架{item_name}到底价{number_to(base_price)}灵石的拍卖等待区",
+        {"拍卖上架次数": 1}
+    )
     await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
     await auction_add.finish()
 
@@ -2500,6 +2692,12 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
     
     msg = f"成功从拍卖等待区下架 {item_name}！物品已退回背包。"
+    record_trade_event(
+        user_id,
+        "拍卖下架",
+        f"从拍卖等待区下架{item_name}，已退回背包",
+        {"拍卖下架次数": 1}
+    )
     await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
     await auction_remove.finish()
 

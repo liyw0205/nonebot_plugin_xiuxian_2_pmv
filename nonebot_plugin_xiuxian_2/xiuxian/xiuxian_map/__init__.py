@@ -140,9 +140,14 @@ ACTION_ITEM_POOLS = {
     "arena_ticket_low": [20024],
     "token_common": [20001, 20012, 20014],
     "token_rare": [20005, 20007, 20013, 20018],
+    "dongfu_water": [21005],
+    "dongfu_soil": [21006],
+    "dongfu_array": [21007],
+    "dongfu_deed": [21008],
 
     # 神物碎片/高阶资源池
     "god_frag": [15000, 15001, 15002, 15003, 15004],
+    "tianti_god": [15016, 15017, 15018],
 
     # 饰品礼包池
     "acc_pack_low": [
@@ -240,12 +245,14 @@ COMBAT_CONFIG = {
             ("stone_mid", 1, 2, 1.0),
             ("wash_stone_low", 1, 1, 0.35),
             ("token_common", 1, 1, 0.10),
+            ("tianti_god", 1, 1, 0.02),
         ],
         "reward_plan_big_win": [
             ("stone_high", 1, 1, 1.0),
             ("wash_stone_low", 1, 2, 0.65),
             ("token_common", 1, 1, 0.15),
             ("acc_pack_low", 1, 1, 0.05),
+            ("tianti_god", 1, 1, 0.04),
         ],
         "fail_msg": "试炼失利，你负伤而退。",
     },
@@ -257,6 +264,7 @@ COMBAT_CONFIG = {
             ("wash_stone_low", 1, 2, 0.30),
             ("token_common", 1, 1, 0.15),
             ("token_rare", 1, 1, 0.10),
+            ("tianti_god", 1, 1, 0.03),
         ],
         "reward_plan_big_win": [
             ("stone_high", 2, 2, 1.0),
@@ -265,6 +273,7 @@ COMBAT_CONFIG = {
             ("token_rare", 1, 1, 0.10),
             ("god_frag", 1, 1, 0.04),
             ("acc_pack_low", 1, 1, 0.10),
+            ("tianti_god", 1, 1, 0.06),
         ],
         "fail_msg": "险地凶险万分，你仓促脱身。",
     },
@@ -753,6 +762,24 @@ def _expand_reward_plan(reward_plan):
     return expanded
 
 
+def _grant_map_dongfu_material(uid: str, node_type: str, chance_multiplier: float = 1.0):
+    plan = {
+        "水域": ("dongfu_water", 0.16),
+        "灵林": ("dongfu_soil", 0.16),
+        "仙山": ("dongfu_soil", 0.22),
+        "矿脉": ("dongfu_array", 0.16),
+        "试炼": ("dongfu_array", 0.10),
+        "险地": ("dongfu_deed", 0.06),
+    }
+    if node_type not in plan:
+        return None
+    pool_key, chance = plan[node_type]
+    if random.random() > min(0.80, chance * chance_multiplier):
+        return None
+    rewards = _grant_rewards(uid, [(pool_key, 1, 1, 1.0)])
+    return rewards[0] if rewards else None
+
+
 def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
     rewards = []
     for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
@@ -878,7 +905,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "realm": realm,
         "heaven": heaven,
         "node_id": node["id"],
-        "node_name": node["name"]
+        "node_name": node["name"],
+        "node_type": node.get("type", ""),
     }
     for k, v in save_data.items():
         player_data_manager.update_or_write_data(user_id, DONGFU_TABLE, k, v)
@@ -923,9 +951,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "5. 战斗玩法：节点战斗（试炼/险地，含每日上限）\n"
         "6. 长时玩法：开始探索 [分钟] / 探索结算（含每日上限）\n"
         "7. 商店玩法：种子商店 / 购买种子\n"
-        "8. 洞府互动：我的洞府 / 洞府种植 / 洞府布阵 / 潜入洞府\n"
+        "8. 洞府互动：我的洞府 / 洞府地脉 / 洞府巡山 / 洞府种植 / 洞府收获 / 洞府施肥 / 洞府催熟 / 洞府扩建 / 洞府布阵 / 潜入洞府\n"
         "9. 地图委托：地图委托 / 接取委托 / 委托完成\n"
-        "注：地图收益存在日内衰减机制"
+        "注：地图收益存在日内衰减机制；钓鱼/采集/挖矿/探索可产出洞府材料"
     )
     await send_help_message(
         bot, event, msg,
@@ -1511,6 +1539,9 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
     extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["gather"])
     if extra:
         rewards.append(extra)
+    dongfu_material = _grant_map_dongfu_material(uid, st.get("node_type", ""))
+    if dongfu_material:
+        rewards.append(dongfu_material)
 
     INTERACTIVE_ACTION_STATE.pop(uid, None)
     _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
@@ -1634,6 +1665,9 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
     extra = _grant_skill_equip_drop(user_info, drop_rate)
     if extra:
         rewards.append(extra)
+    dongfu_material = _grant_map_dongfu_material(uid, ntype, 1.35 if big_win else 1.0)
+    if dongfu_material:
+        rewards.append(dongfu_material)
 
     title = "大胜而归" if big_win else "战而胜之"
     decay_tip = f"\n当前收益系数：{int(decay * 100)}%" if decay < 1 else ""
@@ -1696,6 +1730,9 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
         if extra:
             rewards.append(extra)
+        dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.2)
+        if dongfu_material:
+            rewards.append(dongfu_material)
         return f"你在【{node_name}】有所收获。", rewards
 
     if event_type == "good":
@@ -1704,10 +1741,14 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
             ("herb_mid", 1, 2, 0.65),
             ("token_common", 1, 1, 0.10),
             ("wash_stone_low", 1, 1, 0.25),
+            ("tianti_god", 1, 1, 0.02),
         ], decay_ratio=_get_reward_decay(uid))
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
         if extra:
             rewards.append(extra)
+        dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.5)
+        if dongfu_material:
+            rewards.append(dongfu_material)
         return f"你在【{node_name}】发现了一处隐秘资源点。", rewards
 
     if event_type == "rare":
@@ -1716,10 +1757,16 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
             ("token_rare", 1, 1, 0.15),
             ("acc_pack_low", 1, 1, 0.05),
             ("god_frag", 1, 1, 0.02),
+            ("tianti_god", 1, 1, 0.05),
         ], decay_ratio=_get_reward_decay(uid))
         extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_rare"])
         if extra:
             rewards.append(extra)
+        dongfu_material = _grant_map_dongfu_material(uid, node_type, 2.5)
+        if dongfu_material:
+            rewards.append(dongfu_material)
+        if random.random() < 0.12:
+            rewards.extend(_grant_rewards(uid, [("dongfu_deed", 1, 1, 1.0)]))
         return f"你在【{node_name}】触发了一场罕见机缘！", rewards
 
     rewards = _grant_rewards(uid, [
@@ -1730,6 +1777,9 @@ def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name:
     extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
     if extra:
         rewards.append(extra)
+    dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.3)
+    if dongfu_material:
+        rewards.append(dongfu_material)
     return f"你在【{node_name}】遭遇阻击，鏖战后夺得战利品。", rewards
 
 

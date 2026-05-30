@@ -31,6 +31,7 @@ class NatalEffectType(IntEnum):
     SOUL_RETURN = 22    # 魂返 (生命值低于0时进入灵体，三回合后回复部分生命值复活)
     SOUL_SUMMON = 23    # 招魂 (攻击时有概率让已死亡的队友进入魂返状态)
     ENLIGHTENMENT = 24  # 启明 (攻击时有概率让已死亡的队友回复10%生命值复活)
+    SPEED = 25          # 迅行 (提升自身速度)
 
 
 NATAL_TREASURE_NAMES = {
@@ -107,6 +108,9 @@ NatalEffectType.IMMORTAL: [
     ],
     NatalEffectType.ENLIGHTENMENT: [
         "启明灯", "回春符", "生机泉", "复苏草", "涅槃金丹"
+    ],
+    NatalEffectType.SPEED: [
+        "追风铃", "逐电靴", "星驰羽", "流光梭", "踏虚令"
     ]
 }
 
@@ -138,7 +142,8 @@ EFFECT_NAME_MAP = {
     NatalEffectType.NIRVANA:     "涅槃",
     NatalEffectType.SOUL_RETURN: "魂返",
     NatalEffectType.SOUL_SUMMON: "招魂",
-    NatalEffectType.ENLIGHTENMENT: "启明"
+    NatalEffectType.ENLIGHTENMENT: "启明",
+    NatalEffectType.SPEED: "迅行"
 }
 
 # 反向映射，用于通过中文名称查找枚举
@@ -175,6 +180,7 @@ EFFECT_BASE_AND_GROWTH = {
     NatalEffectType.SOUL_RETURN:  {"min_value": 0.10, "max_value": 0.15, "growth": 0.01}, # 回复生命百分比
     NatalEffectType.SOUL_SUMMON:  {"min_value": 0.08, "max_value": 0.15, "growth": 0.015}, # 招魂触发概率
     NatalEffectType.ENLIGHTENMENT: {"min_value": 0.05, "max_value": 0.10, "growth": 0.01}, # 启明触发概率
+    NatalEffectType.SPEED:        {"min_value": 0.05, "max_value": 0.12, "growth": 0.01}, # 速度提升百分比
 }
 
 # 神秘经书ID，用于法宝重塑和效果升阶

@@ -13,7 +13,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from datetime import datetime
 import os
 from pathlib import Path
-from ..xiuxian_config import convert_rank, added_ranks as get_added_ranks
+from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_ranks
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
@@ -438,6 +438,7 @@ def get_user_danyao_back_msg(user_id):
 
     danyao_type_map = {
         "hp": "气血回复丹药",
+        "stamina": "体力回复丹药",
         "all": "全状态回复丹药",
         "level_up_rate": "突破丹药",
         "level_up_big": "大境界突破丹药",
@@ -448,6 +449,7 @@ def get_user_danyao_back_msg(user_id):
 
     sorted_danyao = {
         "气血回复丹药": [],
+        "体力回复丹药": [],
         "全状态回复丹药": [],
         "突破丹药": [],
         "大境界突破丹药": [],
@@ -709,7 +711,11 @@ def get_item_msg(goods_id, user_id=None):
             msg += f"\n境界：{rank}\n耐药性：{goods_all_num}/{item_info['all_num']}"
     elif item_info['item_type'] == '神物':
         msg = f"名字：{item_info['name']}\n"
-        msg += f"境界：{item_info['境界']}\n全服持有：{number_to(goods_max_num)} 个\n效果：{item_info['desc']}\n增加{number_to(item_info['buff'])}修为"
+        msg += f"境界：{item_info['境界']}\n全服持有：{number_to(goods_max_num)} 个\n效果：{item_info['desc']}"
+        if item_info.get("buff_type") == "tianti_hp_time":
+            msg += f"\n炼体结算时间：{int(item_info.get('tianti_settle_minutes', 0) or 0)}分钟"
+        else:
+            msg += f"\n增加{number_to(item_info['buff'])}修为"
     elif item_info['item_type'] == '神通':
         msg += f"神通名字：{item_info['name']}\n"
         msg += f"品阶：{item_info['level']}\n"
@@ -890,6 +896,23 @@ def check_use_elixir(user_id, goods_id, num):
                     sql_message.update_back_j(user_id, goods_id, num=num ,use_key=1)
                     sql_message.update_user_hp_mp(user_id, new_hp, new_mp)
 
+    elif goods_info['buff_type'] == "stamina":  # 回复体力的丹药
+        max_stamina = int(XiuConfig().max_stamina)
+        current_stamina = int(user_info.get('user_stamina') or 0)
+        if current_stamina >= max_stamina:
+            msg = f"道友的体力是满的，用不了哦！"
+        elif user_info['root'] != "凡人" and goods_rank < user_rank:
+            msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
+        else:
+            recover_stamina = max(1, int(max_stamina * goods_info['buff'] * num))
+            real_recover = min(recover_stamina, max_stamina - current_stamina)
+            sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
+            sql_message.update_user_stamina(user_id, real_recover, 1)
+            msg = (
+                f"道友成功使用丹药：{goods_name}{num}颗，"
+                f"体力恢复{real_recover}点，当前体力{current_stamina + real_recover}/{max_stamina}！"
+            )
+
     elif goods_info['buff_type'] == "all":  # 回满状态的丹药
         if user_info['root'] == "凡人":
             user_max_hp = int(user_info['exp'] / 2)
@@ -968,4 +991,3 @@ def get_use_jlq_msg(user_id, goods_id):
 
 PATH = Path(__file__).parent
 FILEPATH = PATH / 'shop.json'
-

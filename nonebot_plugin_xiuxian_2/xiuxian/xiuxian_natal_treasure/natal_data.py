@@ -138,7 +138,8 @@ class NatalTreasure:
                                 NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
                                 NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
                                 NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
-                                NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT]:
+                                NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+                                NatalEffectType.SPEED]:
                 base_value = base_value_min 
             else:
                 # 对于其他效果，随机生成一个基础数值
@@ -203,7 +204,8 @@ class NatalTreasure:
                              NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
                              NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
                              NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
-                             NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT]:
+                             NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+                             NatalEffectType.SPEED]:
             base_value = base_value_min 
         else:
             base_value = round(random.uniform(base_value_min, base_value_max), 3) # 增加精度
@@ -460,7 +462,8 @@ class NatalTreasure:
                 elif effect_type in [NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
                                      NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
                                      NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
-                                     NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT]:
+                                     NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+                                     NatalEffectType.SPEED]:
                     return base_value + (effect_level - 1) * growth_per_level
 
                 # 其他常规效果的计算方式：基础值 + (效果等级-1) * 每级成长值
@@ -557,6 +560,9 @@ class NatalTreasure:
                 elif natal_effect_type == NatalEffectType.ENLIGHTENMENT:
                     final_value = self.get_effect_value(natal_effect_type)
                     lines.append(f"  └─ {effect_name} Lv.{effect_level}/{current_max_effect_level}：攻击时有{round(final_value * 100, 2)}%概率让已死亡的队友回复{ENLIGHTENMENT_REVIVE_HP_PERCENT * 100:.2f}%生命值复活，每个队友仅可触发{ENLIGHTENMENT_LIMIT}次。")
+                elif natal_effect_type == NatalEffectType.SPEED:
+                    final_value = self.get_effect_value(natal_effect_type)
+                    lines.append(f"  └─ {effect_name} Lv.{effect_level}/{current_max_effect_level}：战斗中提升{round(final_value * 100, 2)}%速度")
                 else: # 其他常规百分比效果
                     final_value = self.get_effect_value(natal_effect_type)
                     lines.append(f"  └─ {effect_name} Lv.{effect_level}/{current_max_effect_level}：{round(final_value * 100, 2)}%")

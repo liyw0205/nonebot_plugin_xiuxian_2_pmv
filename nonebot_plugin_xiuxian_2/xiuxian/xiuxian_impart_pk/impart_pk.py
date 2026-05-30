@@ -28,20 +28,44 @@ class IMPART_PK(object):
         with open(self.data_path, 'w', encoding='utf-8') as f:
             json.dump(self.data, f, ensure_ascii=False, indent=4)
 
+    def _default_user_data(self, user_number):
+        return {
+            "number": user_number,
+            "pk_num": 7,
+            "win_num": 0,
+            "impart_num": 10,
+            "exp_used": 0,
+            "exp_count": 0,
+            "exp_load": 0,
+            "exp_gain": 0,
+            "exp_cap_level": "",
+            "exp_cap_exp": 0
+        }
+
+    def _ensure_user_fields(self, user_id):
+        user_id = str(user_id)
+        if user_id not in self.data:
+            user_number = len(self.data) + 1
+            self.data[user_id] = self._default_user_data(user_number)
+            self.__save()
+            return False
+
+        defaults = self._default_user_data(self.data[user_id].get("number", len(self.data)))
+        changed = False
+        for key, value in defaults.items():
+            if key not in self.data[user_id]:
+                self.data[user_id][key] = value
+                changed = True
+        if changed:
+            self.__save()
+        return True
+
     def check_user_impart(self, user_id):
         """
         核对用户是否存在
         :param user_id:
         """
-        user_id = str(user_id)
-        try:
-            if self.data[user_id]:
-                return True
-        except KeyError:
-            user_number = len(self.data) + 1
-            self.data[user_id] = {"number": user_number, "pk_num": 7, "win_num": 0, "impart_num": 10}
-            self.__save()
-            return False
+        return self._ensure_user_fields(user_id)
 
     def find_user_data(self, user_id):
         """
@@ -81,6 +105,24 @@ class IMPART_PK(object):
         user_id = str(user_id)
         self.check_user_impart(user_id)
         self.data[user_id]["impart_num"] -= 1
+        self.__save()
+
+    def set_exp_cap_anchor(self, user_id, level, exp):
+        """记录当日首次虚神界修炼时的境界与修为，用于单日收益上限。"""
+        user_id = str(user_id)
+        self.check_user_impart(user_id)
+        self.data[user_id]["exp_cap_level"] = level
+        self.data[user_id]["exp_cap_exp"] = int(exp)
+        self.__save()
+
+    def add_exp_cultivation(self, user_id, exp_time, exp_load, exp_gain):
+        """记录当日虚神界修炼已消耗时间与已获得修为。"""
+        user_id = str(user_id)
+        self.check_user_impart(user_id)
+        self.data[user_id]["exp_used"] += int(exp_time)
+        self.data[user_id]["exp_count"] += 1
+        self.data[user_id]["exp_load"] += int(exp_load)
+        self.data[user_id]["exp_gain"] += int(exp_gain)
         self.__save()
 
     def all_user_data(self):

@@ -6,6 +6,7 @@ from nonebot.log import logger
 
 from .xiuxian2_handle import (
     XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,
+    calc_realm_base_speed,
     get_final_attributes
 )
 from .pet_system import (
@@ -223,7 +224,7 @@ def get_players_attributes(user_id, level_ratios=None):
 
         "accuracy": 100,
         "dodge": set_dodge,
-        "speed": 10,
+        "speed": final_attr.get("speed", 10),
         "start_skills": [],
 
         # 套装扩展，交给战斗层继续处理
@@ -271,7 +272,7 @@ def generate_sub_buff(skill, buff_type_mapping):
     is_debuff = False
     if buff_type_id == 13 or buff_type_id == 14:
         v1 = skill["break"]
-    if buff_type_id == 8 or buff_type_id == 10:
+    if buff_type_id in (8, 10, 16):
         is_debuff = True
 
     mapped = buff_type_mapping.get(buff_type_id)
@@ -314,7 +315,8 @@ def generate_sub_buff(skill, buff_type_mapping):
 def generate_effect_buff(data: dict):
     buff_type_map = {
         "1": BuffType.EVASION_UP,
-        "2": BuffType.ACCURACY_UP
+        "2": BuffType.ACCURACY_UP,
+        "3": BuffType.SPEED_UP
     }
 
     low = int(data["buff"])
@@ -322,15 +324,39 @@ def generate_effect_buff(data: dict):
     if low > high:
         low, high = high, low
 
-    return [{
+    value = random.randint(low, high)
+    if str(data["buff_type"]) == "3":
+        value = value / 100
+
+    buffs = [{
         "name": data["name"],
         "type": buff_type_map[data["buff_type"]],
-        "value": random.randint(low, high),
+        "value": value,
         "coefficient": 1,
         "is_debuff": False,
         "duration": 99,
         "skill_type": 0
     }]
+
+    speed_low = data.get("speed_buff")
+    speed_high = data.get("speed_buff2")
+    if speed_low is not None or speed_high is not None:
+        speed_low = float(speed_low or speed_high or 0)
+        speed_high = float(speed_high or speed_low)
+        if speed_low > speed_high:
+            speed_low, speed_high = speed_high, speed_low
+        speed_value = random.uniform(speed_low, speed_high)
+        buffs.append({
+            "name": f"{data['name']}·疾行",
+            "type": BuffType.SPEED_UP,
+            "value": speed_value,
+            "coefficient": 1,
+            "is_debuff": False,
+            "duration": 99,
+            "skill_type": 0
+        })
+
+    return buffs
 
 
 def generate_main_buff(data, weapon_id):
@@ -424,7 +450,7 @@ def get_boss_attributes(boss, bot_id):
         "armor_penetration": 0,
         "accuracy": 100,
         "dodge": 0,
-        "speed": 0,
+        "speed": calc_realm_base_speed(f"{boss['jj']}中期"),
         "start_skills": [],
         "set_bonus_effects": [],
         "monster_type": boss.get("monster_type", "boss"),
@@ -453,6 +479,7 @@ def generate_boss_buff(boss):
         'boss_hd': 0,
         'boss_zs_boss': 0,
         'boss_sz': 0,
+        'boss_jian_su': 0,
     }
 
     boss_buff_map = {
@@ -471,6 +498,7 @@ def generate_boss_buff(boss):
         'boss_hd': [BuffType.SHIELD_BUFF, "不灭金身"],
         'boss_zs_boss': [BuffType.EXECUTE_EFFECT, "绝命斩杀"],
         'boss_sz': [BuffType.REGENERATION, "生生不息"],
+        'boss_jian_su': [DebuffType.SPEED_DOWN, "迟滞领域"],
     }
 
     boss_level = boss["jj"]
@@ -520,6 +548,7 @@ def generate_boss_buff(boss):
         ("boss_hd", random.uniform(0.15, 0.35)),
         ("boss_zs_boss", random.uniform(0.15, 0.25)),
         ("boss_sz", random.uniform(0.01, 0.05)),
+        ("boss_jian_su", random.uniform(0.08, 0.22)),
     ]
     chosen_key, chosen_val = random.choice(extra_candidates)
     boss_buff[chosen_key] = chosen_val
@@ -612,6 +641,7 @@ class BuffType(IntEnum):
     SHIELD_BUFF = 16
     EXECUTE_EFFECT = 17
     REGENERATION = 18
+    SPEED_UP = 19
 
 
 class DebuffType(IntEnum):
@@ -640,6 +670,7 @@ class DebuffType(IntEnum):
     PARALYSIS = 23
     SILENCE = 24
     HEALING_BLOCK = 25
+    SPEED_DOWN = 26
 
 
 buff_type_mapping = {
@@ -656,7 +687,9 @@ buff_type_mapping = {
     11: BuffType.DEBUFF_IMMUNITY,
     12: "",
     13: BuffType.ARMOR_PENETRATION_UP,
-    14: BuffType.ARMOR_PENETRATION_UP
+    14: BuffType.ARMOR_PENETRATION_UP,
+    15: BuffType.SPEED_UP,
+    16: DebuffType.SPEED_DOWN
 }
 
 BUFF_DESC_TEMPLATES = {
@@ -678,6 +711,7 @@ BUFF_DESC_TEMPLATES = {
     BuffType.SHIELD_BUFF: "获得 {value} 点护盾",
     BuffType.EXECUTE_EFFECT: "激活斩杀效果 (血量低于 {value} 直接斩杀)",
     BuffType.REGENERATION: "获得再生效果 (每回合回复最大生命 {value})",
+    BuffType.SPEED_UP: "速度提升 {value}",
 }
 
 DEBUFF_DESC_TEMPLATES = {
@@ -706,6 +740,7 @@ DEBUFF_DESC_TEMPLATES = {
     DebuffType.PARALYSIS: "麻痹，无法行动",
     DebuffType.SILENCE: "沉默，无法施放法术",
     DebuffType.HEALING_BLOCK: "陷入禁疗，无法恢复生命",
+    DebuffType.SPEED_DOWN: "速度降低 {value}",
 }
 
 PET_BUFF_TYPE_MAP = {
@@ -723,6 +758,7 @@ PET_BUFF_TYPE_MAP = {
     "mp_regen": BuffType.MP_REGEN_PERCENT,
     "reflect": BuffType.REFLECT_DAMAGE,
     "shield": BuffType.SHIELD,
+    "speed": BuffType.SPEED_UP,
 }
 
 PET_CONTROL_TYPE_MAP = {
@@ -1127,6 +1163,11 @@ class Entity:
         return min(180, max(0, val))
 
     @property
+    def speed_rate(self):
+        speed_pct = self._get_effect_value(BuffType.SPEED_UP, DebuffType.SPEED_DOWN)
+        return max(1.0, self.base_speed * max(0.1, 1 + speed_pct))
+
+    @property
     def lifesteal_rate(self):
         if self.has_debuff("type", DebuffType.LIFESTEAL_BLOCK):
             return 0
@@ -1232,6 +1273,7 @@ class BattleSystem:
         self.play_list = []
         self.round = 0
         self.max_rounds = 30
+        self._speed_tiebreaker = {}
 
     def add_message(self, unit, message):
         display_hp = max(0, int(unit.hp))
@@ -1259,6 +1301,12 @@ class BattleSystem:
 
     def _iter_units(self):
         return self.team_a + self.team_b
+
+    def _speed_sort_key(self, unit):
+        key = id(unit)
+        if key not in self._speed_tiebreaker:
+            self._speed_tiebreaker[key] = random.random()
+        return unit.speed_rate, self._speed_tiebreaker[key]
 
     def _add_pet_entry_messages(self):
         lines = []
@@ -1618,12 +1666,12 @@ class BattleSystem:
                 self.add_message(caster, f"{caster.name}使用{name}，对敌方施加禁疗{heal_block_duration}回合")
                 continue
 
-            effect = StatusEffect(name, b_type, val, 1, is_db, duration=99, skill_type=0)
-
             if is_db:
                 for target in targets:
+                    effect = StatusEffect(name, b_type, val, 1, True, duration=99, skill_type=0)
                     target.add_status(effect)
             else:
+                effect = StatusEffect(name, b_type, val, 1, False, duration=99, skill_type=0)
                 caster.add_status(effect)
 
             val_msg = None
@@ -1694,6 +1742,12 @@ class BattleSystem:
             effect = StatusEffect("本命法宝闪避", BuffType.EVASION_UP, evasion_value * 100, 1, False, 2, 0)
             unit.add_status(effect)
             self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】提升了闪避能力！")
+
+        if unit.has_natal_effect(NatalEffectType.SPEED):
+            speed_value = unit.get_natal_effect_value(NatalEffectType.SPEED)
+            effect = StatusEffect("本命法宝迅行", BuffType.SPEED_UP, speed_value, 1, False, 2, 0)
+            unit.add_status(effect)
+            self.add_message(unit, f"【{unit.natal_name or '本命法宝'}】提升了{round(speed_value * 100, 2)}%速度！")
 
         if unit.has_natal_effect(NatalEffectType.INVINCIBLE):
             if unit.natal_runtime["invincible_gain_count"] < INVINCIBLE_COUNT_LIMIT:
@@ -2114,6 +2168,19 @@ class BattleSystem:
                     parts.append(f"{target.name}抵抗了控制")
                 continue
 
+            if effect in ("speed_down", "slow"):
+                direct_dmg = int(owner.atk_rate * power * 0.45)
+                if direct_dmg > 0:
+                    msg, dmg = self._apply_pet_damage_once(owner, target, skill_name, direct_dmg)
+                    parts.append(msg)
+                    total_dmg += dmg
+
+                slow_value = min(0.28, power * 0.055 * max(0.0, float(skill.get("debuff_scale", 1.0))))
+                if target.is_alive and slow_value > 0:
+                    target.add_status(StatusEffect(skill_name, DebuffType.SPEED_DOWN, slow_value, 1, True, duration, 0))
+                    parts.append(f"{target.name}速度降低{round(slow_value * 100, 2)}%，持续{duration}回合")
+                continue
+
             hit_count = max(1, int(skill.get("hit_count", 1)))
             if effect == "multi_hit":
                 hit_count = max(2, hit_count)
@@ -2225,6 +2292,8 @@ class BattleSystem:
                 buff_type = BuffType.DAMAGE_REDUCTION_UP
             elif effect in ("evasion_buff", "dodge"):
                 buff_type = BuffType.EVASION_UP
+            elif effect in ("speed_buff", "haste"):
+                buff_type = BuffType.SPEED_UP
             elif effect == "reflect":
                 buff_type = BuffType.REFLECT_DAMAGE
             else:
@@ -2243,6 +2312,8 @@ class BattleSystem:
             value = min(0.35, power * 0.07 * scale)
         elif buff_type == BuffType.EVASION_UP:
             value = min(30, power * 4 * scale)
+        elif buff_type == BuffType.SPEED_UP:
+            value = min(0.30, power * 0.06 * scale)
         elif buff_type == BuffType.REFLECT_DAMAGE:
             value = min(0.35, power * 0.045 * max(0.0, float(skill.get("reflect_scale", 1.0))))
         else:
@@ -2256,6 +2327,7 @@ class BattleSystem:
             BuffType.ARMOR_PENETRATION_UP: f"提升{round(value * 100, 2)}%穿透，持续{duration}回合",
             BuffType.DAMAGE_REDUCTION_UP: f"提升{round(value * 100, 2)}%伤害减免，持续{duration}回合",
             BuffType.EVASION_UP: f"提升{round(value, 2)}点闪避，持续{duration}回合",
+            BuffType.SPEED_UP: f"提升{round(value * 100, 2)}%速度，持续{duration}回合",
             BuffType.REFLECT_DAMAGE: f"获得{round(value * 100, 2)}%反伤，持续{duration}回合",
         }
         return self._apply_pet_owner_buff(owner, skill_name, buff_type, value, duration, text_map.get(buff_type, f"获得增益，持续{duration}回合"))
@@ -3134,11 +3206,11 @@ class BattleSystem:
 
     def process_turn(self):
         self.round += 1
-        units = [u for u in self.team_a + self.team_b if u.is_alive]
-        units.sort(key=lambda x: x.base_speed, reverse=True)
+        round_units = [u for u in self.team_a + self.team_b if u.is_alive]
+        round_units.sort(key=self._speed_sort_key, reverse=True)
 
         if self.round == 1:
-            for unit in units:
+            for unit in round_units:
                 if not unit.is_alive:
                     continue
                 enemies = self._get_all_enemies(unit)
@@ -3148,9 +3220,21 @@ class BattleSystem:
                 self._apply_set_bonus_start_effects(unit)
                 self._apply_natal_periodic_effects(unit, force=True)
 
-        for unit in units:
-            if not unit.is_alive:
-                continue
+            for unit in round_units:
+                if unit.is_alive:
+                    unit.check_and_clear_debuffs_by_immunity()
+
+        acted = set()
+        while True:
+            waiting_units = [
+                u for u in round_units
+                if u.is_alive and id(u) not in acted
+            ]
+            if not waiting_units:
+                break
+
+            unit = max(waiting_units, key=self._speed_sort_key)
+            acted.add(id(unit))
 
             self._process_natal_special_states(unit)
 

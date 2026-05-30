@@ -38,6 +38,8 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
+from ..xiuxian_tianti.tianti_data import TiantiDataManager
+from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ..xiuxian_utils.pet_system import PET_EGG_IDS, PET_EGG_RARITY_KEY, grant_pet_by_rarity
 from .back_util import *
@@ -48,6 +50,7 @@ from .accessory import AFFIX_KEY_MAP, SET_BONUS, add_accessory_to_bag, quality_t
 items = Items()
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
 # 技能学习确认缓存
@@ -185,6 +188,19 @@ def get_recover(goods_id, num):
     # 确保价格在最低和最高炼金价之间
     price = min(max(price, MIN_PRICE), 5500000) * num
     return price
+
+
+def _get_user_sect_fairyland_level(user_info: dict) -> int:
+    sect_id = user_info.get("sect_id")
+    if not sect_id:
+        return 0
+    sect_info = sql_message.get_sect_info(sect_id)
+    if not sect_info:
+        return 0
+    try:
+        return int(sect_info.get("sect_fairyland", 0) or 0)
+    except Exception:
+        return 0
 
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=0)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -762,17 +778,48 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
             msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
         else:
-            exp = goods_info['buff'] * num
-            sql_message.update_exp(user_id, exp)
-            sql_message.update_power2(user_id)
-            sql_message.update_user_attribute(
-                user_id,
-                int(user_info_full['hp'] + (exp / 2)),
-                int(user_info_full['mp'] + exp),
-                int(user_info_full['atk'] + (exp / 10))
-            )
-            sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-            msg = f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
+            tianti_minutes = int(goods_info.get("tianti_settle_minutes", 0) or 0)
+            if goods_info.get("buff_type") == "tianti_hp_time" and tianti_minutes > 0:
+                total_minutes = tianti_minutes * num
+                data = tianti_manager.get_user_tianti_info(str(user_id))
+                result = grant_tianti_settle_minutes(
+                    data,
+                    total_minutes,
+                    sect_fairyland_level=_get_user_sect_fairyland_level(user_info_full),
+                )
+                tianti_manager.save_user_tianti_info(str(user_id), data)
+                sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
+
+                bath_msg = ""
+                if result.get("bath"):
+                    bath = result["bath"]
+                    bath_msg = f"\n药浴加成：{bath['name']}，有效至{bath['end_time'].strftime('%H:%M')}"
+                elif result.get("bath_expired"):
+                    bath_msg = "\n药浴已过期，本次未获得药浴加成。"
+                sect_bonus_msg = ""
+                if float(result.get("sect_bonus", 0) or 0) > 0:
+                    sect_bonus_msg = f"\n宗门炼体堂加成：{float(result['sect_bonus']) * 100:.0f}%"
+
+                msg = (
+                    f"道友成功使用神物：{goods_info['name']} {num} 个。\n"
+                    f"获得炼体结算时间：{total_minutes}分钟\n"
+                    f"本次获得炼体气血：{number_to(result['real_gain'])}\n"
+                    f"当前炼体气血：{number_to(result['new_hp'])}"
+                    f"{bath_msg}"
+                    f"{sect_bonus_msg}"
+                )
+            else:
+                exp = goods_info['buff'] * num
+                sql_message.update_exp(user_id, exp)
+                sql_message.update_power2(user_id)
+                sql_message.update_user_attribute(
+                    user_id,
+                    int(user_info_full['hp'] + (exp / 2)),
+                    int(user_info_full['mp'] + exp),
+                    int(user_info_full['atk'] + (exp / 10))
+                )
+                sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
+                msg = f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
 
     elif goods_type == "聚灵旗":
         msg = get_use_jlq_msg(user_id, goods_id)
@@ -1351,8 +1398,12 @@ async def chakan_wupin_(
         elif item_type == "神物":
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
-            buff = item_info.get('buff', '')
-            msg = f"※名字:{name}\n效果：{desc}\n境界：{rank}\n增加{number_to(buff)}修为\n"
+            if item_info.get("buff_type") == "tianti_hp_time":
+                minutes = int(item_info.get("tianti_settle_minutes", 0) or 0)
+                effect = f"炼体结算时间{minutes}分钟"
+            else:
+                effect = f"增加{number_to(item_info.get('buff', 0))}修为"
+            msg = f"※名字:{name}\n效果：{desc}\n境界：{rank}\n{effect}\n"
         else:  # 丹药、合成丹药
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
@@ -1592,11 +1643,13 @@ def _build_danyao_sections_for_md(user_id: str):
         return []
 
     buff_type_order = {
-        'hp': 1, 'all': 2, 'level_up_rate': 3, 'level_up_big': 4,
-        'atk_buff': 5, 'exp_up': 6, 'level_up': 7, '未知': 999
+        'hp': 1, 'stamina': 2, 'all': 3, 'level_up_rate': 4,
+        'level_up_big': 5, 'atk_buff': 6, 'exp_up': 7, 'level_up': 8,
+        '未知': 999
     }
     buff_type_names = {
         'hp': '气血回复丹药',
+        'stamina': '体力回复丹药',
         'all': '全状态回复丹药',
         'level_up_rate': '突破丹药',
         'level_up_big': '大境界突破丹药',

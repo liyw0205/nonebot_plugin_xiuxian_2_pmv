@@ -1791,6 +1791,14 @@ class XiuxianDateManage:
             cur.execute(sql, (level, sect_id))
             self._commit_write()
 
+    def update_sect_fairyland(self, sect_id, level):
+        """更新宗门炼体堂等级"""
+        with self._conn_lock:
+            sql = f"UPDATE sects SET sect_fairyland=%s WHERE sect_id=%s"
+            cur = self.conn.cursor()
+            cur.execute(sql, (level, sect_id))
+            self._commit_write()
+
     def update_user_sect_elixir_get_num(self, user_id):
         """更新用户每日领取丹药领取次数"""
         with self._conn_lock:
@@ -2289,47 +2297,56 @@ class OtherSet(XiuConfig):
 
         play_list = []
         suc = None
+        default_msg = {id(player1): msg1, id(player2): msg2}
+
+        def get_player_speed(player: dict):
+            if "速度" in player:
+                return float(player.get("速度", 0) or 0)
+            user_id = player.get("user_id")
+            final_attr = get_final_attributes(user_id, include_current=True) if user_id else None
+            return float(final_attr.get("speed", 0)) if final_attr else 0
+
+        def calc_damage(attacker: dict, defender: dict):
+            msg_tpl = default_msg[id(attacker)]
+            attack = int(round(random.uniform(0.95, 1.05), 2) * attacker['攻击'])
+            if random.randint(0, 100) <= attacker['会心']:
+                attack = int(attack * attacker['爆伤'])
+                msg_tpl = "{}发起会心一击，造成了{}伤害\n"
+            damage = int(attack * (1 - defender['防御']))
+            return msg_tpl, max(0, damage)
+
+        speed_tiebreaker = {id(player1): random.random(), id(player2): random.random()}
+        player1["速度"] = get_player_speed(player1)
+        player2["速度"] = get_player_speed(player2)
         if player1['气血'] <= 0:
             player1['气血'] = 1
         if player2['气血'] <= 0:
             player2['气血'] = 1
         while True:
-            player1_gj = int(round(random.uniform(0.95, 1.05), 2) * player1['攻击'])
-            if random.randint(0, 100) <= player1['会心']:
-                player1_gj = int(player1_gj * player1['爆伤'])
-                msg1 = "{}发起会心一击，造成了{}伤害\n"
+            order = sorted(
+                (player1, player2),
+                key=lambda p: (get_player_speed(p), speed_tiebreaker[id(p)]),
+                reverse=True
+            )
 
-            player2_gj = int(round(random.uniform(0.95, 1.05), 2) * player2['攻击'])
-            if random.randint(0, 100) <= player2['会心']:
-                player2_gj = int(player2_gj * player2['爆伤'])
-                msg2 = "{}发起会心一击，造成了{}伤害\n"
+            for attacker in order:
+                defender = player2 if attacker is player1 else player1
+                if attacker['气血'] <= 0 or defender['气血'] <= 0:
+                    continue
 
-            play1_sh: int = int(player1_gj * (1 - player2['防御']))
-            play2_sh: int = int(player2_gj * (1 - player1['防御']))
+                msg_tpl, damage = calc_damage(attacker, defender)
+                play_list.append(msg_tpl.format(attacker['道号'], damage))
+                defender['气血'] -= damage
+                play_list.append(f"{defender['道号']}剩余血量{defender['气血']}")
+                XiuxianDateManage().update_user_hp_mp(defender['user_id'], defender['气血'], defender['真元'])
 
-            play_list.append(msg1.format(player1['道号'], play1_sh))
-            player2['气血'] = player2['气血'] - play1_sh
-            play_list.append(f"{player2['道号']}剩余血量{player2['气血']}")
-            XiuxianDateManage().update_user_hp_mp(player2['user_id'], player2['气血'], player2['真元'])
+                if defender['气血'] <= 0:
+                    play_list.append(f"{attacker['道号']}胜利")
+                    suc = f"{attacker['道号']}"
+                    XiuxianDateManage().update_user_hp_mp(defender['user_id'], 1, defender['真元'])
+                    break
 
-            if player2['气血'] <= 0:
-                play_list.append(f"{player1['道号']}胜利")
-                suc = f"{player1['道号']}"
-                XiuxianDateManage().update_user_hp_mp(player2['user_id'], 1, player2['真元'])
-                break
-
-            play_list.append(msg2.format(player2['道号'], play2_sh))
-            player1['气血'] = player1['气血'] - play2_sh
-            play_list.append(f"{player1['道号']}剩余血量{player1['气血']}\n")
-            XiuxianDateManage().update_user_hp_mp(player1['user_id'], 1, player1['真元'])
-
-            if player1['气血'] <= 0:
-                play_list.append(f"{player2['道号']}胜利")
-                suc = f"{player2['道号']}"
-                XiuxianDateManage().update_user_hp_mp(player1['user_id'], 1, player1['真元'])
-                break
-            if player1['气血'] <= 0 or player2['气血'] <= 0:
-                play_list.append("逻辑错误！！！")
+            if suc:
                 break
 
         return play_list, suc
@@ -3925,6 +3942,8 @@ def calc_accessory_effects(user_id: str | int) -> dict:
       "crit_damage": float,
       "dmg_reduction": float,
       "crit_resist": float,
+      "speed": float,
+      "speed_pct": float,
       "set_count": {"烈阳":2,...},
       "set_bonus": [{"set":"烈阳","pieces":2,"type":"attack","value":0.08}, ...]
     }
@@ -3936,6 +3955,8 @@ def calc_accessory_effects(user_id: str | int) -> dict:
         "crit_damage": 0.0,
         "dmg_reduction": 0.0,
         "crit_resist": 0.0,
+        "speed": 0.0,
+        "speed_pct": 0.0,
         "set_count": {},
         "set_bonus": []
     }
@@ -3973,6 +3994,8 @@ def calc_accessory_effects(user_id: str | int) -> dict:
                 result["dmg_reduction"] += a_val
             elif mapped == "crit_resist":
                 result["crit_resist"] += a_val
+            elif mapped == "speed":
+                result["speed"] += a_val
 
     # 套装激活（2件/4件）
     for set_name, cnt in result["set_count"].items():
@@ -3997,6 +4020,23 @@ def calc_accessory_effects(user_id: str | int) -> dict:
             })
 
     return result
+
+
+def calc_realm_base_speed(level_name: str) -> int:
+    """按境界生成基础速度；境界越高，基础速度越高。"""
+    _, ranks = convert_rank("江湖好手")
+    level = str(level_name or "")
+
+    try:
+        idx = ranks.index(level)
+    except ValueError:
+        idx = 0
+        for i, rank in enumerate(ranks):
+            if level and (level in rank or rank in level):
+                idx = i
+                break
+
+    return 100 + idx * 4
 
 
 def get_user_accessory_data(user_id: str | int) -> dict:
@@ -4070,6 +4110,7 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     buff_info = user_buff.BuffInfo or {}
 
     main = user_buff.get_user_main_buff_data() or {}
+    sub = user_buff.get_user_sub_buff_data() or {}
     weapon = user_buff.get_user_weapon_data() or {}
     armor = user_buff.get_user_armor_buff_data() or {}
 
@@ -4167,6 +4208,22 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     # 饰品抗暴 -> 独立进入抗暴乘法区
     crit_resist += float(acc_effect.get("crit_resist", 0))
 
+    # 速度：境界提供基础值；装备、功法、饰品词条提供固定值或百分比。
+    base_speed = calc_realm_base_speed(base["level"])
+    speed_flat = (
+        float(main.get("speed", 0))
+        + float(sub.get("speed", 0))
+        + float(weapon.get("speed", 0))
+        + float(armor.get("speed", 0))
+        + float(acc_effect.get("speed", 0))
+    )
+    speed_pct = (
+        float(main.get("speed_buff", 0))
+        + float(weapon.get("speed_buff", 0))
+        + float(armor.get("speed_buff", 0))
+        + float(acc_effect.get("speed_pct", 0))
+    )
+
     # ===== 套装效果直接落地的部分 =====
     set_bonus_effects = acc_effect.get("set_bonus", []) or []
     for sb in set_bonus_effects:
@@ -4184,9 +4241,13 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         elif sb_type == "dodge":
             # dodge 为固定点数，战斗层读取
             pass
+        elif sb_type == "speed_pct":
+            speed_pct += sb_val
         elif sb_type in ["shield", "reflect", "true_damage", "shield_break"]:
             # 这些交给战斗层处理
             pass
+
+    final_speed = max(1, int((base_speed + speed_flat) * max(0.1, 1 + speed_pct)))
 
     # 上限裁剪
     crit_rate = max(0.0, crit_rate)
@@ -4237,6 +4298,10 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
         "current_hp": current_hp,
         "current_mp": current_mp,
         "final_atk": final_atk,
+        "base_speed": base_speed,
+        "speed_flat": speed_flat,
+        "speed_pct": speed_pct,
+        "speed": final_speed,
 
         # 暴击体系
         "crit_rate": crit_rate,
@@ -4272,12 +4337,14 @@ def get_weapon_info_msg(weapon_id, weapon_info=None):
     crit_buff_msg = f"提升{int(weapon_info['crit_buff'] * 100)}%会心率！" if weapon_info['crit_buff'] != 0 else ''
     crit_atk_msg = f"提升{int(weapon_info['critatk'] * 100)}%会心伤害！" if weapon_info['critatk'] != 0 else ''
     def_buff_msg = f"{'提升' if weapon_info['def_buff'] > 0 else '降低'}{int(abs(weapon_info['def_buff']) * 100)}%减伤率！" if weapon_info['def_buff'] != 0 else ''
+    speed_msg = f"提升{int(weapon_info.get('speed', 0))}点速度！" if weapon_info.get('speed', 0) != 0 else ''
+    speed_buff_msg = f"提升{int(weapon_info.get('speed_buff', 0) * 100)}%速度！" if weapon_info.get('speed_buff', 0) != 0 else ''
     zw_buff_msg = f"装备专属武器时提升伤害！！" if weapon_info['zw'] != 0 else ''
     mp_buff_msg = f"降低真元消耗{int(weapon_info['mp_buff'] * 100)}%！" if weapon_info['mp_buff'] != 0 else ''
     crit_damage_reduction_msg = f"降低敌方会心伤害{int(weapon_info.get('crit_damage_reduction', 0) * 100)}%！" if weapon_info.get('crit_damage_reduction', 0) != 0 else ''
     msg += f"名字：{weapon_info['name']}\n"
     msg += f"品阶：{weapon_info['level']}\n"
-    msg += f"效果：{weapon_info['desc']}，{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{mp_buff_msg}{crit_damage_reduction_msg}{zw_buff_msg}"
+    msg += f"效果：{weapon_info['desc']}，{atk_buff_msg}{crit_buff_msg}{crit_atk_msg}{def_buff_msg}{speed_msg}{speed_buff_msg}{mp_buff_msg}{crit_damage_reduction_msg}{zw_buff_msg}"
     return msg
 
 
@@ -4294,9 +4361,11 @@ def get_armor_info_msg(armor_id, armor_info=None):
     def_buff_msg = f"提升{int(armor_info['def_buff'] * 100)}%减伤率！"
     atk_buff_msg = f"提升{int(armor_info['atk_buff'] * 100)}%攻击力！" if armor_info['atk_buff'] != 0 else ''
     crit_buff_msg = f"提升{int(armor_info['crit_buff'] * 100)}%会心率！" if armor_info['crit_buff'] != 0 else ''
+    speed_msg = f"提升{int(armor_info.get('speed', 0))}点速度！" if armor_info.get('speed', 0) != 0 else ''
+    speed_buff_msg = f"提升{int(armor_info.get('speed_buff', 0) * 100)}%速度！" if armor_info.get('speed_buff', 0) != 0 else ''
     msg += f"名字：{armor_info['name']}\n"
     msg += f"品阶：{armor_info['level']}\n"
-    msg += f"效果：{armor_info['desc']}，{def_buff_msg}{atk_buff_msg}{crit_buff_msg}"
+    msg += f"效果：{armor_info['desc']}，{def_buff_msg}{atk_buff_msg}{crit_buff_msg}{speed_msg}{speed_buff_msg}"
     return msg
 
 
@@ -4307,6 +4376,8 @@ def get_main_info_msg(id):
     mpmsg = f"，提升{round(mainbuff['mpbuff'] * 100, 0)}%真元" if mainbuff['mpbuff'] != 0 else ''
     atkmsg = f"，提升{round(mainbuff['atkbuff'] * 100, 0)}%攻击力" if mainbuff['atkbuff'] != 0 else ''
     ratemsg = f"，提升{round(mainbuff['ratebuff'] * 100, 0)}%修炼速度" if mainbuff['ratebuff'] != 0 else ''
+    speed_msg = f"，提升{round(mainbuff.get('speed', 0))}点战斗速度" if mainbuff.get('speed', 0) != 0 else ''
+    speed_buff_msg = f"，提升{round(mainbuff.get('speed_buff', 0) * 100, 0)}%战斗速度" if mainbuff.get('speed_buff', 0) != 0 else ''
     
     cri_tmsg = f"，提升{round(mainbuff['crit_buff'] * 100, 0)}%会心率" if mainbuff['crit_buff'] != 0 else ''
     def_msg = f"，{'提升' if mainbuff['def_buff'] > 0 else '降低'}{round(abs(mainbuff['def_buff']) * 100, 0)}%减伤率" if mainbuff['def_buff'] != 0 else ''
@@ -4323,7 +4394,7 @@ def get_main_info_msg(id):
     random_buff_msg = f"，战斗时随机获得一个战斗属性" if mainbuff['random_buff'] != 0 else ''
     ew_name = items.get_data_by_item_id(mainbuff['ew']) if mainbuff['ew'] != 0 else ''
     ew_msg =  f"，使用{ew_name['name']}时伤害增加50%！" if mainbuff['ew'] != 0 else ''
-    msg = f"{hpmsg}{mpmsg}{atkmsg}{ratemsg}{cri_tmsg}{def_msg}{dan_msg}{dan_exp_msg}{reap_msg}{exp_msg}{critatk_msg}{two_msg}{number_msg}{clo_exp_msg}{clo_rs_msg}{random_buff_msg}{ew_msg}！"
+    msg = f"{hpmsg}{mpmsg}{atkmsg}{ratemsg}{speed_msg}{speed_buff_msg}{cri_tmsg}{def_msg}{dan_msg}{dan_exp_msg}{reap_msg}{exp_msg}{critatk_msg}{two_msg}{number_msg}{clo_exp_msg}{clo_rs_msg}{random_buff_msg}{ew_msg}！"
     return mainbuff, msg
 
 def get_sub_info_msg(id): #辅修功法8
@@ -4348,6 +4419,10 @@ def get_sub_info_msg(id): #辅修功法8
         submsg = "给对手造成" + subbuff['buff'] + "%中毒"
     if subbuff['buff_type'] == '9':
         submsg = f"提升{subbuff['buff']}%气血吸取,提升{subbuff['buff2']}%真元吸取"
+    if subbuff['buff_type'] == '15':
+        submsg = "提升" + subbuff['buff'] + "%战斗速度"
+    if subbuff['buff_type'] == '16':
+        submsg = "降低对手" + subbuff['buff'] + "%战斗速度"
 
     stone_msg  = "提升{}%boss战灵石获取".format(round(subbuff['stone'] * 100, 0)) if subbuff['stone'] != 0 else ''
     integral_msg = "，提升{}点boss战积分获取".format(round(subbuff['integral'])) if subbuff['integral'] != 0 else ''
@@ -4423,6 +4498,16 @@ def get_effect_info_msg(id): #身法、瞳术
         effectmsg = f"提升{effectbuff['buff2']}%～{effectbuff['buff']}%闪避率"
     if effectbuff['buff_type'] == '2':
         effectmsg = f"提升{effectbuff['buff2']}%～{effectbuff['buff']}%命中率"
+    if effectbuff['buff_type'] == '3':
+        effectmsg = f"提升{effectbuff['buff2']}%～{effectbuff['buff']}%战斗速度"
+    speed_low = effectbuff.get("speed_buff")
+    speed_high = effectbuff.get("speed_buff2")
+    if speed_low is not None or speed_high is not None:
+        speed_low = float(speed_low or speed_high or 0)
+        speed_high = float(speed_high or speed_low)
+        if speed_low > speed_high:
+            speed_low, speed_high = speed_high, speed_low
+        effectmsg += f"，提升{round(speed_low * 100, 0)}%～{round(speed_high * 100, 0)}%战斗速度"
     
 
     msg = f"{effectmsg}"

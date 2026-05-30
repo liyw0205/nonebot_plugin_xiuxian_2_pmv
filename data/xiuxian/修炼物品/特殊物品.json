@@ -335,5 +335,41 @@
         "yield_min": 1,
         "yield_max": 2,
         "item_type": "特殊物品"
+    },
+    "21005": {
+        "name": "灵息露",
+        "level": "洞府材料",
+        "type": "特殊物品",
+        "rank": 35,
+        "desc": "水域灵机凝成的清露，可用于洞府催熟，缩短灵田成熟时间。",
+        "dongfu_use": "accelerate",
+        "item_type": "特殊物品"
+    },
+    "21006": {
+        "name": "五色灵壤",
+        "level": "洞府材料",
+        "type": "特殊物品",
+        "rank": 35,
+        "desc": "灵林与仙山中偶得的肥沃灵壤，可用于洞府施肥，提高单块灵田收获。",
+        "dongfu_use": "fertilize",
+        "item_type": "特殊物品"
+    },
+    "21007": {
+        "name": "玄铁阵石",
+        "level": "洞府材料",
+        "type": "特殊物品",
+        "rank": 30,
+        "desc": "矿脉深处出产的阵基材料，可用于高阶洞府布阵。",
+        "dongfu_use": "array",
+        "item_type": "特殊物品"
+    },
+    "21008": {
+        "name": "洞府地契",
+        "level": "稀有洞府材料",
+        "type": "特殊物品",
+        "rank": 15,
+        "desc": "记载洞天灵脉支脉的地契，可用于洞府扩建，开辟额外灵田。",
+        "dongfu_use": "expand",
+        "item_type": "特殊物品"
     }
 }

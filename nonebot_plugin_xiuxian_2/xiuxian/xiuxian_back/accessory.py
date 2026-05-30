@@ -69,15 +69,15 @@ def _paginate_sections(sections, page: int, per_page: int = 15):
 
 TABLE = "player_accessory"
 
-AFFIX_TYPES = ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击"]
+AFFIX_TYPES = ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击", "速度"]
 
 # 品阶1-5洗练区间
 WASH_RANGE = {
-    1: {"气血": (0.02, 0.05), "抗暴": (0.01, 0.03), "防御": (0.01, 0.03), "会心": (0.01, 0.03), "会心伤害": (0.02, 0.05), "攻击": (0.02, 0.05)},
-    2: {"气血": (0.04, 0.08), "抗暴": (0.02, 0.05), "防御": (0.02, 0.05), "会心": (0.02, 0.05), "会心伤害": (0.04, 0.08), "攻击": (0.04, 0.08)},
-    3: {"气血": (0.06, 0.12), "抗暴": (0.03, 0.07), "防御": (0.03, 0.07), "会心": (0.03, 0.07), "会心伤害": (0.06, 0.12), "攻击": (0.06, 0.12)},
-    4: {"气血": (0.08, 0.16), "抗暴": (0.04, 0.10), "防御": (0.04, 0.10), "会心": (0.04, 0.10), "会心伤害": (0.08, 0.16), "攻击": (0.08, 0.16)},
-    5: {"气血": (0.10, 0.20), "抗暴": (0.05, 0.12), "防御": (0.05, 0.12), "会心": (0.05, 0.12), "会心伤害": (0.10, 0.20), "攻击": (0.10, 0.20)},
+    1: {"气血": (0.02, 0.05), "抗暴": (0.01, 0.03), "防御": (0.01, 0.03), "会心": (0.01, 0.03), "会心伤害": (0.02, 0.05), "攻击": (0.02, 0.05), "速度": (4, 9)},
+    2: {"气血": (0.04, 0.08), "抗暴": (0.02, 0.05), "防御": (0.02, 0.05), "会心": (0.02, 0.05), "会心伤害": (0.04, 0.08), "攻击": (0.04, 0.08), "速度": (8, 16)},
+    3: {"气血": (0.06, 0.12), "抗暴": (0.03, 0.07), "防御": (0.03, 0.07), "会心": (0.03, 0.07), "会心伤害": (0.06, 0.12), "攻击": (0.06, 0.12), "速度": (14, 26)},
+    4: {"气血": (0.08, 0.16), "抗暴": (0.04, 0.10), "防御": (0.04, 0.10), "会心": (0.04, 0.10), "会心伤害": (0.08, 0.16), "攻击": (0.08, 0.16), "速度": (22, 40)},
+    5: {"气血": (0.10, 0.20), "抗暴": (0.05, 0.12), "防御": (0.05, 0.12), "会心": (0.05, 0.12), "会心伤害": (0.10, 0.20), "攻击": (0.10, 0.20), "速度": (34, 60)},
 }
 
 SLOTS = ["手镯", "戒指", "手环", "项链"]
@@ -90,6 +90,7 @@ AFFIX_KEY_MAP = {
     "会心": "crit_rate",           # 会心率
     "会心伤害": "crit_damage",     # 会心伤害
     "攻击": "atk_pct",             # 攻击百分比
+    "速度": "speed",               # 固定速度
 }
 
 # 套装效果（2件 / 4件）
@@ -114,6 +115,10 @@ SET_BONUS = {
         2: {"type": "attack", "value": 0.06},
         4: {"type": "shield_break", "value": 0.10},
     },
+    "踏风": {
+        2: {"type": "speed_pct", "value": 0.08},
+        4: {"type": "speed_pct", "value": 0.18},
+    },
 }
 
 def quality_to_cn(q: int) -> str:
@@ -135,11 +140,12 @@ SET_TYPE_CN = {
     "crit_rate": "会心率",
     "dodge": "闪避",
     "shield_break": "护盾穿透",
+    "speed_pct": "速度提升",
 }
 
 SET_VALUE_POINT_TYPES = {"dodge"}
 
-ACCESSORY_SETS = ["烈阳", "玄渊", "天衡", "星痕", "龙魄"]
+ACCESSORY_SETS = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "踏风"]
 ACCESSORY_PARTS = ["手镯", "戒指", "手环", "项链"]
 QUALITY_RANGE = [1, 2, 3, 4, 5]
 
@@ -213,7 +219,8 @@ def roll_affixes(quality: int, count: int = 2):
     out = []
     for t in pool:
         lo, hi = WASH_RANGE[quality][t]
-        out.append({"type": t, "value": round(random.uniform(lo, hi), 4)})
+        value = round(random.uniform(lo, hi)) if t == "速度" else round(random.uniform(lo, hi), 4)
+        out.append({"type": t, "value": value})
     return out
 
 def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = False):
@@ -222,7 +229,10 @@ def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = Fa
     out = []
     for t in pool:
         lo, hi = WASH_RANGE[quality][t]
-        v = hi if pity_reached else round(random.uniform(lo, hi), 4)
+        if t == "速度":
+            v = hi if pity_reached else round(random.uniform(lo, hi))
+        else:
+            v = hi if pity_reached else round(random.uniform(lo, hi), 4)
         out.append({"type": t, "value": v})
     return out
 
@@ -413,7 +423,7 @@ def _build_accessory_sections_for_md(user_id: str):
     bag = data.get("bag", [])
     equipped = data.get("equipped", {})
 
-    set_order = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "其他"]
+    set_order = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "踏风", "其他"]
     buckets = {k: [] for k in set_order}
 
     equipped_rows = []
@@ -700,6 +710,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bonus_lines.append(f"减伤 +{effect['dmg_reduction'] * 100:.2f}%")
     if effect.get("crit_resist", 0):
         bonus_lines.append(f"抗暴 +{effect['crit_resist'] * 100:.2f}%")
+    if effect.get("speed", 0):
+        bonus_lines.append(f"速度 +{effect['speed']:.0f}点")
 
     lines.append("")
     lines.append("【饰品总加成】")
@@ -729,6 +741,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "crit_rate": "会心率",
         "dodge": "闪避",
         "shield_break": "护盾穿透",
+        "speed_pct": "速度提升",
     }
 
     set_bonus = effect.get("set_bonus", [])
@@ -887,7 +900,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         for af in affixes:
             t = af.get("type", "未知")
             v = float(af.get("value", 0))
-            affix_lines.append(f"- {t}：+{round(v * 100, 2)}%")
+            if t == "速度":
+                affix_lines.append(f"- {t}：+{round(v)}点")
+            else:
+                affix_lines.append(f"- {t}：+{round(v * 100, 2)}%")
 
     set_lines = []
     sb = SET_BONUS.get(set_type, {})

@@ -892,6 +892,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.06,
         "desc": "幻影无踪踏九霄，神行千里间攻守齐升",
         "rank": "地阶上品",
         "level": "32"
@@ -1421,6 +1422,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed": 18,
         "desc": "金璇流转护体凝神，波纹震荡之间自有仙威浩荡",
         "rank": "仙阶上品",
         "level": "19"
@@ -1536,6 +1538,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.04,
         "desc": "群魔俯首，渡化万邪，魔威滔天！",
         "rank": "仙阶极品",
         "level": "16"
@@ -1582,6 +1585,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed": 24,
         "desc": "风驰电掣，神风凛冽，仙风道骨，风之力无上！",
         "rank": "仙阶极品",
         "level": "16"
@@ -1642,6 +1646,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.05,
         "desc": "潜龙在渊录，龙潜深渊，蓄势待发，一飞冲天！",
         "rank": "仙阶极品",
         "level": "-5",
@@ -1679,6 +1684,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.05,
         "desc": "神魂合一，天地共鸣，仙法无极！",
         "rank": "无上",
         "level": "1",
@@ -1737,6 +1743,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed": 28,
         "desc": "混沌初开，天地未分，混沌称道！",
         "rank": "无上",
         "level": "1"
@@ -1783,6 +1790,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.06,
         "desc": "天地无极，玄妙无穷，仙法至高！",
         "rank": "无上",
         "level": "1"
@@ -1806,6 +1814,7 @@
         "clo_rs": 10,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.08,
         "desc": "自在无拘，仙法飘逸，无上逍遥！",
         "rank": "无上",
         "level": "1"
@@ -1875,6 +1884,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 15453,
+        "speed": 34,
         "desc": "无始无终，仙法永恒，玄妙莫测，无上仙典！",
         "rank": "无上",
         "level": "1"
@@ -1921,6 +1931,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 0,
+        "speed_buff": 0.06,
         "desc": "轮回无尽，生死循环，无上神通，掌控命运！",
         "rank": "无上",
         "level": "1"
@@ -2083,6 +2094,7 @@
         "clo_rs": 0,
         "random_buff": 0,
         "ew": 15471,
+        "speed": 30,
         "desc": "太一归一，混沌初开，万法归宗，天地一体！",
         "rank": "无上",
         "level": "1",
