@@ -56,7 +56,7 @@ DEFAULT_ARENA_SHOP_CONFIG = {
         },
         "18132": {
             "name": "随机一阶戒指饰品礼包",
-            "cost": 6000,
+            "cost": 600,
             "weekly_limit": 1,
             "required_rank": "黄金"
         },
@@ -68,7 +68,7 @@ DEFAULT_ARENA_SHOP_CONFIG = {
         },
         "18133": {
             "name": "随机一至三阶饰品礼包",
-            "cost": 18000,
+            "cost": 1800,
             "weekly_limit": 1,
             "required_rank": "铂金"
         },
@@ -99,12 +99,6 @@ DEFAULT_ARENA_SHOP_CONFIG = {
         "20037": {
             "name": "太初灵宠蛋",
             "cost": 16000,
-            "weekly_limit": 1,
-            "required_rank": "王者"
-        },
-        "15600": {
-            "name": "紫玄掌",
-            "cost": 120000,
             "weekly_limit": 1,
             "required_rank": "王者"
         },

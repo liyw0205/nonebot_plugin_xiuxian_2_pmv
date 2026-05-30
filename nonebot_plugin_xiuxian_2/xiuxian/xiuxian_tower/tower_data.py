@@ -82,17 +82,17 @@ DEFAULT_CONFIG = {
         },
         "20027": {
             "name": "一阶天地灵髓",
-            "cost": 12000,
+            "cost": 1200,
             "weekly_limit": 5
         },
         "20028": {
             "name": "二阶天地灵髓",
-            "cost": 24000,
+            "cost": 2400,
             "weekly_limit": 4
         },
         "20029": {
             "name": "三阶天地灵髓",
-            "cost": 45000,
+            "cost": 4500,
             "weekly_limit": 3
         },
         "20032": {
@@ -102,12 +102,12 @@ DEFAULT_CONFIG = {
         },
         "18133": {
             "name": "随机一至三阶饰品礼包",
-            "cost": 80000,
+            "cost": 8000,
             "weekly_limit": 1
         },
         "18134": {
             "name": "随机四至五阶饰品礼包",
-            "cost": 260000,
+            "cost": 26000,
             "weekly_limit": 1
         },
         "20033": {

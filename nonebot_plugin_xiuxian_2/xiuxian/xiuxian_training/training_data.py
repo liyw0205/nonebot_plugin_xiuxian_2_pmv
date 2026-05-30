@@ -25,11 +25,6 @@ DEFAULT_CONFIG = {
             "cost": 2000,
             "weekly_limit": 10
         },
-        "20009": {
-            "name": "神秘经书",
-            "cost": 2000,
-            "weekly_limit": 5
-        },        
         "15357": {
             "name": "八九玄功",
             "cost": 100000,
@@ -67,17 +62,17 @@ DEFAULT_CONFIG = {
         },
         "20027": {
             "name": "一阶天地灵髓",
-            "cost": 5000,
+            "cost": 500,
             "weekly_limit": 5
         },
         "20028": {
             "name": "二阶天地灵髓",
-            "cost": 10000,
+            "cost": 1000,
             "weekly_limit": 4
         },
         "20029": {
             "name": "三阶天地灵髓",
-            "cost": 22000,
+            "cost": 2200,
             "weekly_limit": 3
         },
         "20033": {
@@ -107,12 +102,12 @@ DEFAULT_CONFIG = {
         },
         "18132": {
             "name": "随机一阶戒指饰品礼包",
-            "cost": 18000,
+            "cost": 1800,
             "weekly_limit": 1
         },
         "18133": {
             "name": "随机一至三阶饰品礼包",
-            "cost": 60000,
+            "cost": 6000,
             "weekly_limit": 1
         },
         "18159": {

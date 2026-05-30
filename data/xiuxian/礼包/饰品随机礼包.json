@@ -224,6 +224,13 @@
                 "name": "龙魄戒指",
                 "amount": 1,
                 "quality": 1
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
+                "amount": 1,
+                "quality": 1
             }
         ],
         "item_type": "礼包"
@@ -373,6 +380,34 @@
                 "name": "龙魄项链",
                 "amount": 1,
                 "quality": 2
+            },
+            {
+                "buff": 19501,
+                "type": "饰品",
+                "name": "踏风手镯",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 19503,
+                "type": "饰品",
+                "name": "踏风手环",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 19504,
+                "type": "饰品",
+                "name": "踏风项链",
+                "amount": 1,
+                "quality": 3
             }
         ],
         "item_type": "礼包"
@@ -522,6 +557,34 @@
                 "name": "龙魄项链",
                 "amount": 1,
                 "quality": 5
+            },
+            {
+                "buff": 19501,
+                "type": "饰品",
+                "name": "踏风手镯",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
+                "amount": 1,
+                "quality": 4
+            },
+            {
+                "buff": 19503,
+                "type": "饰品",
+                "name": "踏风手环",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19504,
+                "type": "饰品",
+                "name": "踏风项链",
+                "amount": 1,
+                "quality": 4
             }
         ],
         "item_type": "礼包"
@@ -714,6 +777,13 @@
                 "name": "龙魄戒指",
                 "amount": 1,
                 "quality": 2
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
+                "amount": 1,
+                "quality": 2
             }
         ],
         "item_type": "礼包"
@@ -756,6 +826,13 @@
                 "buff": 19402,
                 "type": "饰品",
                 "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 3
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
                 "amount": 1,
                 "quality": 3
             }
@@ -802,6 +879,13 @@
                 "name": "龙魄戒指",
                 "amount": 1,
                 "quality": 4
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
+                "amount": 1,
+                "quality": 4
             }
         ],
         "item_type": "礼包"
@@ -844,6 +928,13 @@
                 "buff": 19402,
                 "type": "饰品",
                 "name": "龙魄戒指",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 19502,
+                "type": "饰品",
+                "name": "踏风戒指",
                 "amount": 1,
                 "quality": 5
             }

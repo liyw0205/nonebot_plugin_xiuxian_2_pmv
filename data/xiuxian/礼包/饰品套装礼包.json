@@ -129,6 +129,32 @@
         "quality_4": 1,
         "item_type": "礼包"
     },
+    "18167": {
+        "name": "一阶踏风套装礼包",
+        "type": "礼包",
+        "desc": "踏风手镯/戒指/手环/项链各1件（一阶）",
+        "buff_1": 19501,
+        "type_1": "饰品",
+        "name_1": "踏风手镯",
+        "amount_1": 1,
+        "quality_1": 1,
+        "buff_2": 19502,
+        "type_2": "饰品",
+        "name_2": "踏风戒指",
+        "amount_2": 1,
+        "quality_2": 1,
+        "buff_3": 19503,
+        "type_3": "饰品",
+        "name_3": "踏风手环",
+        "amount_3": 1,
+        "quality_3": 1,
+        "buff_4": 19504,
+        "type_4": "饰品",
+        "name_4": "踏风项链",
+        "amount_4": 1,
+        "quality_4": 1,
+        "item_type": "礼包"
+    },
     "18131": {
         "name": "随机一阶套装礼包",
         "type": "礼包",
@@ -167,6 +193,13 @@
                 "buff": 18130,
                 "type": "礼包",
                 "name": "一阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 1
+            },
+            {
+                "buff": 18167,
+                "type": "礼包",
+                "name": "一阶踏风套装礼包",
                 "amount": 1,
                 "quality": 1
             }
@@ -693,6 +726,110 @@
         "quality_4": 5,
         "item_type": "礼包"
     },
+    "18168": {
+        "name": "二阶踏风套装礼包",
+        "type": "礼包",
+        "desc": "踏风手镯/戒指/手环/项链各1件（二阶）",
+        "buff_1": 19501,
+        "type_1": "饰品",
+        "name_1": "踏风手镯",
+        "amount_1": 1,
+        "quality_1": 2,
+        "buff_2": 19502,
+        "type_2": "饰品",
+        "name_2": "踏风戒指",
+        "amount_2": 1,
+        "quality_2": 2,
+        "buff_3": 19503,
+        "type_3": "饰品",
+        "name_3": "踏风手环",
+        "amount_3": 1,
+        "quality_3": 2,
+        "buff_4": 19504,
+        "type_4": "饰品",
+        "name_4": "踏风项链",
+        "amount_4": 1,
+        "quality_4": 2,
+        "item_type": "礼包"
+    },
+    "18169": {
+        "name": "三阶踏风套装礼包",
+        "type": "礼包",
+        "desc": "踏风手镯/戒指/手环/项链各1件（三阶）",
+        "buff_1": 19501,
+        "type_1": "饰品",
+        "name_1": "踏风手镯",
+        "amount_1": 1,
+        "quality_1": 3,
+        "buff_2": 19502,
+        "type_2": "饰品",
+        "name_2": "踏风戒指",
+        "amount_2": 1,
+        "quality_2": 3,
+        "buff_3": 19503,
+        "type_3": "饰品",
+        "name_3": "踏风手环",
+        "amount_3": 1,
+        "quality_3": 3,
+        "buff_4": 19504,
+        "type_4": "饰品",
+        "name_4": "踏风项链",
+        "amount_4": 1,
+        "quality_4": 3,
+        "item_type": "礼包"
+    },
+    "18170": {
+        "name": "四阶踏风套装礼包",
+        "type": "礼包",
+        "desc": "踏风手镯/戒指/手环/项链各1件（四阶）",
+        "buff_1": 19501,
+        "type_1": "饰品",
+        "name_1": "踏风手镯",
+        "amount_1": 1,
+        "quality_1": 4,
+        "buff_2": 19502,
+        "type_2": "饰品",
+        "name_2": "踏风戒指",
+        "amount_2": 1,
+        "quality_2": 4,
+        "buff_3": 19503,
+        "type_3": "饰品",
+        "name_3": "踏风手环",
+        "amount_3": 1,
+        "quality_3": 4,
+        "buff_4": 19504,
+        "type_4": "饰品",
+        "name_4": "踏风项链",
+        "amount_4": 1,
+        "quality_4": 4,
+        "item_type": "礼包"
+    },
+    "18171": {
+        "name": "五阶踏风套装礼包",
+        "type": "礼包",
+        "desc": "踏风手镯/戒指/手环/项链各1件（五阶）",
+        "buff_1": 19501,
+        "type_1": "饰品",
+        "name_1": "踏风手镯",
+        "amount_1": 1,
+        "quality_1": 5,
+        "buff_2": 19502,
+        "type_2": "饰品",
+        "name_2": "踏风戒指",
+        "amount_2": 1,
+        "quality_2": 5,
+        "buff_3": 19503,
+        "type_3": "饰品",
+        "name_3": "踏风手环",
+        "amount_3": 1,
+        "quality_3": 5,
+        "buff_4": 19504,
+        "type_4": "饰品",
+        "name_4": "踏风项链",
+        "amount_4": 1,
+        "quality_4": 5,
+        "item_type": "礼包"
+    },
     "18159": {
         "name": "随机二阶套装礼包",
         "type": "礼包",
@@ -731,6 +868,13 @@
                 "buff": 18155,
                 "type": "礼包",
                 "name": "二阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 2
+            },
+            {
+                "buff": 18168,
+                "type": "礼包",
+                "name": "二阶踏风套装礼包",
                 "amount": 1,
                 "quality": 2
             }
@@ -777,6 +921,13 @@
                 "name": "三阶龙魄套装礼包",
                 "amount": 1,
                 "quality": 3
+            },
+            {
+                "buff": 18169,
+                "type": "礼包",
+                "name": "三阶踏风套装礼包",
+                "amount": 1,
+                "quality": 3
             }
         ],
         "item_type": "礼包"
@@ -821,6 +972,13 @@
                 "name": "四阶龙魄套装礼包",
                 "amount": 1,
                 "quality": 4
+            },
+            {
+                "buff": 18170,
+                "type": "礼包",
+                "name": "四阶踏风套装礼包",
+                "amount": 1,
+                "quality": 4
             }
         ],
         "item_type": "礼包"
@@ -863,6 +1021,13 @@
                 "buff": 18158,
                 "type": "礼包",
                 "name": "五阶龙魄套装礼包",
+                "amount": 1,
+                "quality": 5
+            },
+            {
+                "buff": 18171,
+                "type": "礼包",
+                "name": "五阶踏风套装礼包",
                 "amount": 1,
                 "quality": 5
             }
