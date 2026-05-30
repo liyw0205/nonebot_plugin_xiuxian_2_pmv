@@ -52,7 +52,8 @@ class ArenaLimit:
             "max_win_streak": 0,                   # 最大连胜
             "rank": "青铜",                        # 当前段位
             "honor_points": 0,                    # 荣誉值
-            "total_honor_earned": 0               # 累计获得荣誉值
+            "total_honor_earned": 0,              # 累计获得荣誉值
+            "weekly_purchases": {}                # 商店每周限购记录
         }
 
         if not user_info:
@@ -132,6 +133,37 @@ class ArenaLimit:
             "total_honor_earned": new_total
         })
         return new_honor
+
+    def get_weekly_purchases(self, user_id, item_id):
+        """获取用户本周已购买竞技场商店某商品的数量。"""
+        arena_info = self.get_user_arena_info(user_id)
+        item_id = str(item_id)
+        purchases = arena_info.get("weekly_purchases") or {}
+
+        if "_last_reset" in purchases:
+            last_reset = datetime.strptime(purchases.get("_last_reset"), "%Y-%m-%d")
+            current_week = datetime.now().isocalendar()[1]
+            last_week = last_reset.isocalendar()[1]
+            current_year = datetime.now().year
+            last_year = last_reset.year
+
+            if current_week != last_week or current_year != last_year:
+                self.update_arena_data(user_id, {"weekly_purchases": {"_last_reset": datetime.now().strftime("%Y-%m-%d")}})
+                return 0
+            return int(purchases.get(item_id, 0) or 0)
+
+        self.update_arena_data(user_id, {"weekly_purchases": {"_last_reset": datetime.now().strftime("%Y-%m-%d")}})
+        return 0
+
+    def update_weekly_purchase(self, user_id, item_id, quantity):
+        """更新用户本周购买竞技场商店某商品的数量。"""
+        arena_info = self.get_user_arena_info(user_id)
+        item_id = str(item_id)
+        purchases = arena_info.get("weekly_purchases") or {}
+        if "_last_reset" not in purchases:
+            purchases = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
+        purchases[item_id] = int(purchases.get(item_id, 0) or 0) + int(quantity)
+        self.update_arena_data(user_id, {"weekly_purchases": purchases})
 
     def update_arena_data(self, user_id, data):
         """更新用户竞技场数据"""

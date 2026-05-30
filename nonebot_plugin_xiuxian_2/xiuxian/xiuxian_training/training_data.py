@@ -59,6 +59,76 @@ DEFAULT_CONFIG = {
             "name": "福缘石",
             "cost": 5000,
             "weekly_limit": 1
+        },
+        "20023": {
+            "name": "洗练石",
+            "cost": 3000,
+            "weekly_limit": 8
+        },
+        "20027": {
+            "name": "一阶天地灵髓",
+            "cost": 5000,
+            "weekly_limit": 5
+        },
+        "20028": {
+            "name": "二阶天地灵髓",
+            "cost": 10000,
+            "weekly_limit": 4
+        },
+        "20029": {
+            "name": "三阶天地灵髓",
+            "cost": 22000,
+            "weekly_limit": 3
+        },
+        "20033": {
+            "name": "山河灵宠蛋",
+            "cost": 1200,
+            "weekly_limit": 1
+        },
+        "20034": {
+            "name": "云纹灵宠蛋",
+            "cost": 3000,
+            "weekly_limit": 1
+        },
+        "20035": {
+            "name": "星辉灵宠蛋",
+            "cost": 9000,
+            "weekly_limit": 1
+        },
+        "20036": {
+            "name": "天命灵宠蛋",
+            "cost": 22000,
+            "weekly_limit": 1
+        },
+        "20037": {
+            "name": "太初灵宠蛋",
+            "cost": 50000,
+            "weekly_limit": 1
+        },
+        "18132": {
+            "name": "随机一阶戒指饰品礼包",
+            "cost": 18000,
+            "weekly_limit": 1
+        },
+        "18133": {
+            "name": "随机一至三阶饰品礼包",
+            "cost": 60000,
+            "weekly_limit": 1
+        },
+        "18159": {
+            "name": "随机二阶套装礼包",
+            "cost": 180000,
+            "weekly_limit": 1
+        },
+        "15602": {
+            "name": "无暇七绝剑",
+            "cost": 260000,
+            "weekly_limit": 1
+        },
+        "13002": {
+            "name": "黑龙啸天印",
+            "cost": 360000,
+            "weekly_limit": 1
         }
     }
 }

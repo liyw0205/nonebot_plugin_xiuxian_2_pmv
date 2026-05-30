@@ -400,13 +400,14 @@ async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             
         # 检查段位要求
         rank_requirement = item_data.get("required_rank", "青铜")
+        already_purchased = arena_limit.get_weekly_purchases(user_id, item_id)
         
         msg_list.append(
             f"编号：{item_id}\n"
             f"名称：{item_info['name']}\n"
             f"要求段位：{rank_requirement}\n" 
             f"价格：{item_data['cost']}荣誉值\n"
-            f"每周限购：{item_data['weekly_limit']}个\n"
+            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
             f"════════════"
         )
     
@@ -453,6 +454,16 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"段位不足！需要{rank_requirement}段位才能购买{item_info['name']}"
         await handle_send(bot, event, msg)
         await arena_buy.finish()
+
+    # 检查限购
+    already_purchased = arena_limit.get_weekly_purchases(user_id, shop_id)
+    max_quantity = item_data["weekly_limit"] - already_purchased
+    if quantity > max_quantity:
+        quantity = max_quantity
+    if quantity <= 0:
+        msg = f"{item_info['name']}已到限购无法再购买！"
+        await handle_send(bot, event, msg)
+        await arena_buy.finish()
     
     # 检查荣誉值是否足够
     total_cost = item_data["cost"] * quantity
@@ -464,6 +475,7 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     # 兑换商品
     new_honor = arena_info["honor_points"] - total_cost
     arena_limit.update_arena_data(user_id, {"honor_points": new_honor})
+    arena_limit.update_weekly_purchase(user_id, shop_id, quantity)
     
     # 给予物品
     sql_message.send_back(

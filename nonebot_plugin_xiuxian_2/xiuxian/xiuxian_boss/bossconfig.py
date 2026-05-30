@@ -228,6 +228,96 @@ CONFIG = {
             "name": "福缘石",
             "cost": 5000,
             "weekly_limit": 5
+        },
+        "20023": {
+            "name": "洗练石",
+            "cost": 12000,
+            "weekly_limit": 20
+        },
+        "18134": {
+            "name": "随机四至五阶饰品礼包",
+            "cost": 320000,
+            "weekly_limit": 1
+        },
+        "18161": {
+            "name": "随机四阶套装礼包",
+            "cost": 900000,
+            "weekly_limit": 1
+        },
+        "18162": {
+            "name": "随机五阶套装礼包",
+            "cost": 1500000,
+            "weekly_limit": 1
+        },
+        "20029": {
+            "name": "三阶天地灵髓",
+            "cost": 60000,
+            "weekly_limit": 5
+        },
+        "20030": {
+            "name": "四阶天地灵髓",
+            "cost": 120000,
+            "weekly_limit": 4
+        },
+        "20031": {
+            "name": "五阶天地灵髓",
+            "cost": 220000,
+            "weekly_limit": 3
+        },
+        "20032": {
+            "name": "启明石",
+            "cost": 180000,
+            "weekly_limit": 2
+        },
+        "20033": {
+            "name": "山河灵宠蛋",
+            "cost": 12000,
+            "weekly_limit": 1
+        },
+        "20034": {
+            "name": "云纹灵宠蛋",
+            "cost": 26000,
+            "weekly_limit": 1
+        },
+        "20035": {
+            "name": "星辉灵宠蛋",
+            "cost": 42000,
+            "weekly_limit": 1
+        },
+        "20036": {
+            "name": "天命灵宠蛋",
+            "cost": 60000,
+            "weekly_limit": 1
+        },
+        "20037": {
+            "name": "太初灵宠蛋",
+            "cost": 160000,
+            "weekly_limit": 1
+        },
+        "15603": {
+            "name": "子龙朱雀",
+            "cost": 1400000,
+            "weekly_limit": 1
+        },
+        "15604": {
+            "name": "天煞震狱功",
+            "cost": 1800000,
+            "weekly_limit": 1
+        },
+        "15358": {
+            "name": "无始仙经",
+            "cost": 1800000,
+            "weekly_limit": 1
+        },
+        "13004": {
+            "name": "天上天下无双刀",
+            "cost": 2400000,
+            "weekly_limit": 1
+        },
+        "12008": {
+            "name": "龙皇天衍甲",
+            "cost": 2400000,
+            "weekly_limit": 1
         }
     }
 }

@@ -74,6 +74,76 @@ DEFAULT_CONFIG = {
             "name": "福缘石",
             "cost": 5000,
             "weekly_limit": 1
+        },
+        "20023": {
+            "name": "洗练石",
+            "cost": 8000,
+            "weekly_limit": 10
+        },
+        "20027": {
+            "name": "一阶天地灵髓",
+            "cost": 12000,
+            "weekly_limit": 5
+        },
+        "20028": {
+            "name": "二阶天地灵髓",
+            "cost": 24000,
+            "weekly_limit": 4
+        },
+        "20029": {
+            "name": "三阶天地灵髓",
+            "cost": 45000,
+            "weekly_limit": 3
+        },
+        "20032": {
+            "name": "启明石",
+            "cost": 60000,
+            "weekly_limit": 1
+        },
+        "18133": {
+            "name": "随机一至三阶饰品礼包",
+            "cost": 80000,
+            "weekly_limit": 1
+        },
+        "18134": {
+            "name": "随机四至五阶饰品礼包",
+            "cost": 260000,
+            "weekly_limit": 1
+        },
+        "20033": {
+            "name": "山河灵宠蛋",
+            "cost": 3000,
+            "weekly_limit": 1
+        },
+        "20034": {
+            "name": "云纹灵宠蛋",
+            "cost": 6000,
+            "weekly_limit": 1
+        },
+        "20035": {
+            "name": "星辉灵宠蛋",
+            "cost": 12000,
+            "weekly_limit": 1
+        },
+        "20036": {
+            "name": "天命灵宠蛋",
+            "cost": 30000,
+            "weekly_limit": 1
+        },
+        "20037": {
+            "name": "太初灵宠蛋",
+            "cost": 70000,
+            "weekly_limit": 1
+        },
+        "15601": {
+            "name": "血刹碎乾坤",
+            "cost": 300000,
+            "weekly_limit": 1
+        },
+        "12006": {
+            "name": "银月忘川之铠甲",
+            "cost": 360000,
+            "weekly_limit": 1
         }
     },
     "重置时间": {
