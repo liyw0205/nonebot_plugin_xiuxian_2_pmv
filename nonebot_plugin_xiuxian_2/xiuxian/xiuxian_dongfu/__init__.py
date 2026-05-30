@@ -39,6 +39,8 @@ ARRAY_LEVEL_MAX = 10
 VISIT_STAMINA = 5
 INFILTRATE_STAMINA = 8
 INFILTRATE_DAILY_LIMIT = 3
+INFILTRATE_ACTIVE_DAILY_LIMIT = 3
+INFILTRATE_RANDOM_DAILY_LIMIT = 3
 DONGFU_PLOT_COUNT = 3
 DONGFU_PLOT_MAX = 6
 DONGFU_ITEM_ACCELERATE = 21005
@@ -217,6 +219,9 @@ def _default_dongfu():
         "plot_count": DONGFU_PLOT_COUNT,
         "intrude_date": "",
         "intrude_count": 0,
+        "infiltrate_date": "",
+        "infiltrate_active_count": 0,
+        "infiltrate_random_count": 0,
         "patrol_date": "",
         "patrol_count": 0,
         "patrol_guard": 0,
@@ -484,6 +489,48 @@ def _reset_intrude_count_if_needed(d: dict):
     return d
 
 
+def _reset_infiltrate_count_if_needed(d: dict):
+    today = _today_str()
+    if d.get("infiltrate_date") != today:
+        d["infiltrate_date"] = today
+        d["infiltrate_active_count"] = 0
+        d["infiltrate_random_count"] = 0
+    return d
+
+
+def _get_infiltrate_limit(is_random: bool):
+    return INFILTRATE_RANDOM_DAILY_LIMIT if is_random else INFILTRATE_ACTIVE_DAILY_LIMIT
+
+
+def _get_infiltrate_count_field(is_random: bool):
+    return "infiltrate_random_count" if is_random else "infiltrate_active_count"
+
+
+def _get_infiltrate_mode_name(is_random: bool):
+    return "随机潜入" if is_random else "主动潜入"
+
+
+def _get_infiltrate_left(d: dict, is_random: bool):
+    field = _get_infiltrate_count_field(is_random)
+    return max(0, _get_infiltrate_limit(is_random) - _to_int(d.get(field)))
+
+
+def _can_infiltrate(uid: str, is_random: bool):
+    d = _get_dongfu(uid)
+    d = _reset_infiltrate_count_if_needed(d)
+    _save_dongfu(uid, d)
+    return _get_infiltrate_left(d, is_random) > 0, d
+
+
+def _consume_infiltrate_count(uid: str, is_random: bool):
+    d = _get_dongfu(uid)
+    d = _reset_infiltrate_count_if_needed(d)
+    field = _get_infiltrate_count_field(is_random)
+    d[field] = _to_int(d.get(field)) + 1
+    _save_dongfu(uid, d)
+    return d[field], _get_infiltrate_left(d, is_random)
+
+
 def _consume_intrude_count(target_uid: str):
     d = _get_dongfu(target_uid)
     d = _reset_intrude_count_if_needed(d)
@@ -539,6 +586,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "- 地图钓鱼/采集/挖矿/探索可获得洞府材料\n"
         f"- 洞府巡山每日最多{DONGFU_PATROL_DAILY_LIMIT}次，可降低潜入风险\n"
         "- 潜入只能对附近已建设洞府的道友使用\n"
+        f"- 主动潜入每日最多{INFILTRATE_ACTIVE_DAILY_LIMIT}次，随机潜入每日最多{INFILTRATE_RANDOM_DAILY_LIMIT}次\n"
         f"- 每个洞府每日最多被潜入{INFILTRATE_DAILY_LIMIT}次"
     )
     await send_help_message(
@@ -564,8 +612,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     d = _reset_intrude_count_if_needed(d)
+    d = _reset_infiltrate_count_if_needed(d)
     d = _reset_patrol_count_if_needed(d)
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
+    active_left = _get_infiltrate_left(d, is_random=False)
+    random_left = _get_infiltrate_left(d, is_random=True)
     _save_dongfu(uid, d)
     active_count = len(_active_plant_slots(d))
     ready_count = 0
@@ -582,6 +633,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"{_format_geomancy(d)}\n"
         f"灵田：{active_count}/{_to_int(d.get('plot_count'), DONGFU_PLOT_COUNT)} 已播种，{ready_count}块可收获\n"
         f"巡山护府：{_to_int(d.get('patrol_guard'))}层，今日巡山{_to_int(d.get('patrol_count'))}/{DONGFU_PATROL_DAILY_LIMIT}\n"
+        f"今日可发起潜入：主动{active_left}/{INFILTRATE_ACTIVE_DAILY_LIMIT}，随机{random_left}/{INFILTRATE_RANDOM_DAILY_LIMIT}\n"
         f"今日剩余可被潜入次数：{intrude_left}\n"
         f"{_format_plant_slots(d)}"
     )
@@ -1055,6 +1107,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     my_uid = str(user_info["user_id"])
     tname = args.extract_plain_text().strip()
+    is_random_mode = not tname
+    mode_name = _get_infiltrate_mode_name(is_random_mode)
+    can_use, _ = _can_infiltrate(my_uid, is_random_mode)
+    if not can_use:
+        await handle_send(bot, event, f"今日{mode_name}次数已达上限（{_get_infiltrate_limit(is_random_mode)}次）。")
+        return
+
     if not tname:
         target = _get_random_dongfu_target(my_uid)
         if not target:
@@ -1104,6 +1163,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     # 占用目标当日被潜入次数
+    _, infiltrate_left = _consume_infiltrate_count(my_uid, is_random_mode)
     current_intrude = _consume_intrude_count(target_uid)
 
     now = _now()
@@ -1136,6 +1196,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"❌ 你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n"
             f"对方阵法等级：{array_lv}\n"
             f"损失灵石：{number_to(loss_stone)}\n"
+            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
             f"该洞府今日剩余可被潜入次数：{left}"
             f"{guard_msg}"
         )
@@ -1214,6 +1275,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 bot,
                 event,
                 f"⚠️ 你虽摸进了【{tname}】的洞府，却在阵法波动中仓促撤离，一无所获。\n"
+                f"今日剩余{mode_name}次数：{infiltrate_left}\n"
                 f"该洞府今日剩余可被潜入次数：{left}"
             )
         else:
@@ -1221,6 +1283,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 bot,
                 event,
                 f"你潜入了【{tname}】的洞府，但这次并没有找到可带走的灵材。\n"
+                f"今日剩余{mode_name}次数：{infiltrate_left}\n"
                 f"该洞府今日剩余可被潜入次数：{left}"
             )
         return
@@ -1234,6 +1297,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"⚠️ 你潜入【{tname}】洞府的{slot_msg}时触动阵纹，但仍抢先带走部分灵材！\n"
             f"获得：{'、'.join(rewards)}"
             f"{delay_msg}{guard_msg}\n"
+            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
             f"该洞府今日剩余可被潜入次数：{left}"
         )
     else:
@@ -1241,6 +1305,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"🕶️ 你悄然潜入【{tname}】洞府的{slot_msg}，顺走了一批灵材。\n"
             f"获得：{'、'.join(rewards)}"
             f"{delay_msg}{guard_msg}\n"
+            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
             f"该洞府今日剩余可被潜入次数：{left}"
         )
 
