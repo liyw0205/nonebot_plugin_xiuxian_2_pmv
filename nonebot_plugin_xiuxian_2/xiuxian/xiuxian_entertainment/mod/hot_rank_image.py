@@ -12,7 +12,7 @@ hot_rank_image_cmd = on_command(
 async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """热榜60S 图片版"""
     config = XiuConfig()
-    api_url = "https://api.pearktrue.cn/api/60s/image/hot/"
+    api_url = "https://api.pearapi.ai/api/60s/image/hot/"
 
     raw_msg = str(event.message)
     rank_type = "baidu"

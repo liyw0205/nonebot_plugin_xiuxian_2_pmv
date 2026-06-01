@@ -6,7 +6,7 @@ kfc_copywriting_cmd = on_command("肯德基文案", aliases={"疯狂星期四", 
 @kfc_copywriting_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def kfc_copywriting_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """肯德基文案"""
-    api_url = "https://api.pearktrue.cn/api/kfc"
+    api_url = "https://api.pearapi.ai/api/kfc"
 
     try:
         result = await get_json_api(api_url, params={"type": "json"}, timeout=15)

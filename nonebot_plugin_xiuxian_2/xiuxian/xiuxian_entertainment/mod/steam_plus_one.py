@@ -12,7 +12,7 @@ def _safe_list_data(result: dict) -> list:
 async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """Steam喜加一"""
     config = XiuConfig()
-    api_url = "https://api.pearktrue.cn/api/steamplusone/"
+    api_url = "https://api.pearapi.ai/api/steamplusone/"
 
     try:
         result = await get_json_api(api_url, timeout=15)

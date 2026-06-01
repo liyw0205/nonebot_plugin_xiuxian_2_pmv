@@ -954,6 +954,25 @@ class XiuxianDateManage:
                 cur.execute(sql, (price, user_id))
             self._commit_write()
 
+    def try_update_ls(self, user_id, price, key):
+        """更新灵石并返回是否成功；扣减时要求余额足够。"""
+        with self._conn_lock:
+            cur = self.conn.cursor()
+            price = abs(int(price))
+            if price <= 0:
+                return True
+            if key == 1:
+                sql = "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s"
+                cur.execute(sql, (price, user_id))
+            elif key == 2:
+                sql = "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND COALESCE(stone, 0) >= %s"
+                cur.execute(sql, (price, user_id, price))
+            else:
+                return False
+            success = cur.rowcount > 0
+            self._commit_write()
+            return success
+
     def update_exp(self, user_id, exp):
         """增加修为"""
         with self._conn_lock:
@@ -1377,10 +1396,32 @@ class XiuxianDateManage:
                 now_time = 0
             else:
                 now_time = datetime.now()
-            sql = "UPDATE user_cd SET type=%s,create_time=%s WHERE user_id=%s"
+            sql = "UPDATE user_cd SET type=%s,create_time=%s,scheduled_time=NULL WHERE user_id=%s"
             cur = self.conn.cursor()
             cur.execute(sql, (the_type, now_time, user_id))
             self._commit_write()
+
+    def clear_user_type_if_match(self, user_id, the_type, create_time):
+        """仅当用户仍处于同一轮状态时清理状态。"""
+        with self._conn_lock:
+            cur = self.conn.cursor()
+            if create_time is None:
+                sql = """
+                    UPDATE user_cd
+                    SET type=0, create_time=0, scheduled_time=NULL
+                    WHERE user_id=%s AND type=%s AND create_time IS NULL
+                """
+                cur.execute(sql, (user_id, the_type))
+            else:
+                sql = """
+                    UPDATE user_cd
+                    SET type=0, create_time=0, scheduled_time=NULL
+                    WHERE user_id=%s AND type=%s AND create_time=%s
+                """
+                cur.execute(sql, (user_id, the_type, create_time))
+            success = cur.rowcount > 0
+            self._commit_write()
+            return success
 
     def del_exp_decimal(self, user_id, exp):
         """去浮点"""
@@ -2078,6 +2119,63 @@ class XiuxianDateManage:
             )
             self._commit_write()
 
+    def spend_stone_and_consume_trade_items(self, user_id, stone_cost=0, consume_items=None):
+        """原子扣除灵石和可交易物品，失败时不改变数据。"""
+        user_id = str(user_id)
+        stone_cost = abs(int(stone_cost or 0))
+        consume_items = consume_items or []
+
+        normalized_items = {}
+        for goods_id, num in consume_items:
+            goods_id = int(goods_id)
+            num = abs(int(num))
+            if num <= 0:
+                continue
+            normalized_items[goods_id] = normalized_items.get(goods_id, 0) + num
+
+        if stone_cost <= 0 and not normalized_items:
+            return True
+
+        with self._business_lock, self._conn_lock:
+            cur = self.conn.cursor()
+            try:
+                if stone_cost > 0:
+                    cur.execute(
+                        "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND COALESCE(stone, 0) >= %s",
+                        (stone_cost, user_id, stone_cost),
+                    )
+                    if cur.rowcount <= 0:
+                        self.conn.rollback()
+                        return False
+
+                now_time = datetime.now()
+                for goods_id, num in normalized_items.items():
+                    cur.execute(
+                        """
+                        UPDATE back
+                        SET goods_num=COALESCE(goods_num, 0)-%s,
+                            update_time=%s,
+                            action_time=%s
+                        WHERE user_id=%s
+                          AND goods_id=%s
+                          AND COALESCE(goods_num, 0)-COALESCE(bind_num, 0)-COALESCE(state, 0) >= %s
+                        """,
+                        (num, now_time, now_time, user_id, goods_id, num),
+                    )
+                    if cur.rowcount <= 0:
+                        self.conn.rollback()
+                        return False
+
+                self._commit_write()
+                return True
+            except Exception:
+                self.conn.rollback()
+                raise
+
+    def consume_trade_item(self, user_id, goods_id, num=1):
+        """扣除非绑定且未装备的可交易物品。"""
+        return self.spend_stone_and_consume_trade_items(user_id, 0, [(goods_id, num)])
+
     def get_item_by_good_id_and_user_id(self, user_id, goods_id):
         """根据物品id、用户id获取物品信息"""
         with self._conn_lock:
@@ -2548,14 +2646,17 @@ class TradeDataManager:
             )
             self._commit_write()
 
-    def remove_xianshi_item(self, item_id):
+    def remove_xianshi_item(self, item_id, quantity=1):
         """
         删除仙肆物品：
         - quantity == -1 视为系统无限库存，不删除
-        - quantity == 1 删除记录
-        - quantity > 1 数量减1
+        - 库存小于等于购买数量时删除记录
+        - 库存大于购买数量时减少对应数量
         """
         with self._conn_lock:
+            quantity = abs(int(quantity))
+            if quantity <= 0:
+                return True
             cur = self.conn.cursor()
             cur.execute("SELECT quantity FROM xianshi_item WHERE id = %s", (str(item_id),))
             row = cur.fetchone()
@@ -2565,12 +2666,48 @@ class TradeDataManager:
             qty = int(row[0])
             if qty == -1:
                 return True
-            if qty <= 1:
+            if qty < quantity:
+                return False
+            if qty <= quantity:
                 self.conn.execute("DELETE FROM xianshi_item WHERE id = %s", (str(item_id),))
             else:
-                self.conn.execute("UPDATE xianshi_item SET quantity=%s WHERE id=%s", (qty - 1, str(item_id)))
+                self.conn.execute("UPDATE xianshi_item SET quantity=%s WHERE id=%s", (qty - quantity, str(item_id)))
             self._commit_write()
             return True
+
+    def restore_xianshi_item(self, user_id, goods_id, name, type, price, quantity):
+        """购买流程失败时回补仙肆库存。"""
+        with self._conn_lock:
+            quantity = abs(int(quantity))
+            if quantity <= 0:
+                return
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                SELECT id, quantity FROM xianshi_item
+                WHERE user_id=%s AND goods_id=%s AND name=%s AND type=%s AND price=%s
+                LIMIT 1
+                """,
+                (str(user_id), int(goods_id), str(name), str(type), int(price)),
+            )
+            row = cur.fetchone()
+            if row:
+                item_id, old_quantity = row
+                if int(old_quantity) != -1:
+                    cur.execute(
+                        "UPDATE xianshi_item SET quantity=quantity+%s WHERE id=%s",
+                        (quantity, str(item_id)),
+                    )
+            else:
+                unique_id = self.generate_unique_id("xianshi_item")
+                cur.execute(
+                    """
+                    INSERT INTO xianshi_item (id, user_id, goods_id, name, type, price, quantity)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (str(unique_id), str(user_id), int(goods_id), str(name), str(type), int(price), quantity),
+                )
+            self._commit_write()
 
     def remove_xianshi_all_item(self, item_id):
         with self._conn_lock:
@@ -2762,6 +2899,44 @@ class TradeDataManager:
             cur.execute("UPDATE guishi_info SET stored_stone=%s WHERE user_id=%s", (newv, user_id))
             self._commit_write()
 
+    def try_update_stored_stone(self, user_id, amount, operation):
+        """更新鬼市灵石并返回是否成功；扣减时要求余额足够。"""
+        with self._business_lock, self._conn_lock:
+            user_id = str(user_id)
+            amount = abs(int(amount))
+            if amount <= 0:
+                return True
+
+            cur = self.conn.cursor()
+            if operation == "add":
+                cur.execute("SELECT 1 FROM guishi_info WHERE user_id=%s", (user_id,))
+                if cur.fetchone():
+                    cur.execute(
+                        "UPDATE guishi_info SET stored_stone=stored_stone+%s WHERE user_id=%s",
+                        (amount, user_id),
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO guishi_info (user_id, stored_stone, items) VALUES (%s, %s, '{}')",
+                        (user_id, amount),
+                    )
+            elif operation == "subtract":
+                cur.execute(
+                    """
+                    UPDATE guishi_info
+                    SET stored_stone=stored_stone-%s
+                    WHERE user_id=%s AND COALESCE(stored_stone, 0) >= %s
+                    """,
+                    (amount, user_id, amount),
+                )
+                if cur.rowcount <= 0:
+                    self.conn.rollback()
+                    return False
+            else:
+                return False
+            self._commit_write()
+            return True
+
     # ======== 拍卖等待区 ========
 
     def add_player_auction_item(self, user_id, item_id, item_name, start_price, user_name):
@@ -2794,6 +2969,29 @@ class TradeDataManager:
                 (str(user_id), int(item_id))
             )
             self._commit_write()
+
+    def claim_player_auction_item(self, user_id, item_id):
+        """原子领取等待区拍卖物品，用于下架时避免重复退回。"""
+        with self._conn_lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                SELECT user_id, item_id, item_name, start_price, user_name
+                FROM auction_player_upload
+                WHERE user_id = %s AND item_id = %s
+                """,
+                (str(user_id), int(item_id)),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            self.conn.execute(
+                "DELETE FROM auction_player_upload WHERE user_id = %s AND item_id = %s",
+                (str(user_id), int(item_id)),
+            )
+            self._commit_write()
+            cols = ["user_id", "item_id", "item_name", "start_price", "user_name"]
+            return dict(zip(cols, row))
 
     def clear_player_auctions(self):
         with self._conn_lock:
@@ -2885,6 +3083,30 @@ class TradeDataManager:
                 )
             )
             self._commit_write()
+
+    def try_update_auction_bid(self, auction_id, old_current_price, new_current_price, new_bids, new_bid_times, new_last_bid_time):
+        """仅当当前价格未变化时更新竞拍记录。"""
+        with self._business_lock, self._conn_lock:
+            sql = """
+                UPDATE auction_current
+                SET current_price=%s, bids=%s, bid_times=%s, last_bid_time=%s
+                WHERE id=%s AND current_price=%s
+            """
+            cur = self.conn.cursor()
+            cur.execute(
+                sql,
+                (
+                    int(new_current_price),
+                    json.dumps(new_bids or {}, ensure_ascii=False),
+                    json.dumps(new_bid_times or {}, ensure_ascii=False),
+                    float(new_last_bid_time) if new_last_bid_time is not None else None,
+                    str(auction_id),
+                    int(old_current_price),
+                ),
+            )
+            success = cur.rowcount > 0
+            self._commit_write()
+            return success
 
     def clear_current_auction(self):
         with self._conn_lock:

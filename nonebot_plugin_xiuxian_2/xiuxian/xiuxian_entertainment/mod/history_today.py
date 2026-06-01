@@ -6,7 +6,7 @@ history_today_cmd = on_command("历史上的今天", priority=5, block=True)
 @history_today_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def history_today_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """历史上的今天"""
-    api_url = "https://api.pearktrue.cn/api/lsjt?type=json"
+    api_url = "https://api.pearapi.ai/api/lsjt?type=json"
 
     try:
         result = await get_json_api(api_url, timeout=15)

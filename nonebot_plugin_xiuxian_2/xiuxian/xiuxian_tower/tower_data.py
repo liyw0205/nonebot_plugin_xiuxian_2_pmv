@@ -100,6 +100,11 @@ DEFAULT_CONFIG = {
             "cost": 60000,
             "weekly_limit": 1
         },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 6000,
+            "weekly_limit": 1
+        },
         "18133": {
             "name": "随机一至三阶饰品礼包",
             "cost": 8000,

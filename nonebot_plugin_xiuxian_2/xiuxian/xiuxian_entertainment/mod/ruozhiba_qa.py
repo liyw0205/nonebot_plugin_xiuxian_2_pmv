@@ -6,7 +6,7 @@ ruozhiba_qa_cmd = on_command("弱智吧问答", aliases={"弱智吧"}, priority=
 @ruozhiba_qa_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def ruozhiba_qa_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """弱智吧问答"""
-    api_url = "https://api.pearktrue.cn/api/ruozhiba/"
+    api_url = "https://api.pearapi.ai/api/ruozhiba/"
 
     try:
         result = await get_json_api(api_url, timeout=15)

@@ -25,11 +25,6 @@ DEFAULT_CONFIG = {
             "cost": 2000,
             "weekly_limit": 10
         },
-        "20009": {
-            "name": "神秘经书",
-            "cost": 2000,
-            "weekly_limit": 5
-        },
         "15357": {
             "name": "八九玄功",
             "cost": 100000,
@@ -48,6 +43,11 @@ DEFAULT_CONFIG = {
         "10405": {
             "name": "醉仙",
             "cost": 50000,
+            "weekly_limit": 1
+        },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 6000,
             "weekly_limit": 1
         },
         "20011": {

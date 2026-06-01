@@ -7,7 +7,7 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
     """今日超能力"""
     config = XiuConfig()
 
-    api_url = "https://api.pearktrue.cn/api/superpower"
+    api_url = "https://api.pearapi.ai/api/superpower"
 
     try:
         result = await get_json_api(api_url, timeout=15)

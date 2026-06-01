@@ -317,13 +317,16 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not is_type:
         await handle_send(bot, event, msg, md_type=f"{user_type}", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
         await reset_exp.finish()
+    user_cd_message = sql_message.get_user_cd(user_id) or {}
+    reset_create_time = user_cd_message.get("create_time")
     msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
     await asyncio.sleep(60)
-    is_type, msg = check_user_type(user_id, user_type)
-    if is_type:
-        sql_message.in_closing(user_id, 0)
+    if sql_message.clear_user_type_if_match(user_id, user_type, reset_create_time):
         msg = "已重置修炼状态！"
+        await handle_send(bot, event, msg, md_type="buff", k1="修炼", v1="修炼", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
+    else:
+        msg = "当前修炼状态已变化，无需重复重置！"
         await handle_send(bot, event, msg, md_type="buff", k1="修炼", v1="修炼", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     await reset_exp.finish()
         
@@ -374,10 +377,14 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         exp_rate = random.uniform(0.9, 1.3)
         exp = int(exp * exp_rate)
         sql_message.in_closing(user_id, user_type)
+        user_cd_message = sql_message.get_user_cd(user_id) or {}
+        closing_create_time = user_cd_message.get("create_time")
         if user_info['root_type'] == '伪灵根':
             msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\n预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
+            if not sql_message.clear_user_type_if_match(user_id, 5, closing_create_time):
+                await up_exp.finish()
             give_stone = random.randint(10000, 300000)
             give_stone_num = int(give_stone * exp_rate)
             sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
@@ -391,11 +398,11 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
+        if not sql_message.clear_user_type_if_match(user_id, 5, closing_create_time):
+            await up_exp.finish()
         update_statistics_value(user_id, "修炼次数")
-        user_type = 0  # 状态0为无事件
         if exp >= user_get_exp_max:
             # 用户获取的修为到达上限
-            sql_message.in_closing(user_id, user_type)
             sql_message.update_exp(user_id, user_get_exp_max)
             sql_message.update_power2(user_id)  # 更新战力
 
@@ -408,7 +415,6 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await up_exp.finish()
         else:
             # 用户获取的修为没有到达上限
-            sql_message.in_closing(user_id, user_type)
             sql_message.update_exp(user_id, exp)
             sql_message.update_power2(user_id)  # 更新战力
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
@@ -666,7 +672,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
-    sub_buff_data = user_buff_data.get_user_sub_buff_data()
 
     impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     boss_damage_bonus = float(final_attr.get("boss_damage_bonus", 0) * 100)
@@ -686,41 +691,9 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     crit_damage_reduction = float(final_attr.get("crit_damage_reduction", 0) * 100)
     armor_penetration = float(final_attr.get("armor_penetration", 0) * 100)
     panel_speed = int(final_attr.get("speed", 0))
-    base_speed = int(final_attr.get("base_speed", 0))
-    total_speed_flat = float(final_attr.get("speed_flat", 0))
-    speed_pct = float(final_attr.get("speed_pct", 0))
 
     accessory_effect = final_attr.get("accessory_effect", {}) or {}
     set_bonus_effects = final_attr.get("set_bonus_effects", []) or []
-    weapon_data = user_buff_data.get_user_weapon_data() or {}
-    armor_data = user_buff_data.get_user_armor_buff_data() or {}
-
-    speed_source_lines = [f"境界基础+{base_speed}"]
-    if main_buff_data:
-        main_speed = float(main_buff_data.get("speed", 0) or 0)
-        main_speed_pct = float(main_buff_data.get("speed_buff", 0) or 0)
-        if main_speed:
-            speed_source_lines.append(f"主功法+{main_speed:.0f}点")
-        if main_speed_pct:
-            speed_source_lines.append(f"主功法+{main_speed_pct * 100:.2f}%")
-    if sub_buff_data:
-        sub_speed = float(sub_buff_data.get("speed", 0) or 0)
-        if sub_speed:
-            speed_source_lines.append(f"辅修功法+{sub_speed:.0f}点")
-    if weapon_data:
-        weapon_speed = float(weapon_data.get("speed", 0) or 0)
-        weapon_speed_pct = float(weapon_data.get("speed_buff", 0) or 0)
-        if weapon_speed:
-            speed_source_lines.append(f"法器+{weapon_speed:.0f}点")
-        if weapon_speed_pct:
-            speed_source_lines.append(f"法器+{weapon_speed_pct * 100:.2f}%")
-    if armor_data:
-        armor_speed = float(armor_data.get("speed", 0) or 0)
-        armor_speed_pct = float(armor_data.get("speed_buff", 0) or 0)
-        if armor_speed:
-            speed_source_lines.append(f"防具+{armor_speed:.0f}点")
-        if armor_speed_pct:
-            speed_source_lines.append(f"防具+{armor_speed_pct * 100:.2f}%")
 
     # 饰品加成展示
     accessory_lines = []
@@ -748,10 +721,8 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             accessory_lines.append(f"抗暴+{crit_resist_pct * 100:.2f}%")
         if accessory_speed_flat:
             accessory_lines.append(f"速度+{accessory_speed_flat:.0f}点")
-            speed_source_lines.append(f"饰品+{accessory_speed_flat:.0f}点")
         if accessory_speed_pct:
             accessory_lines.append(f"速度+{accessory_speed_pct * 100:.2f}%")
-            speed_source_lines.append(f"饰品+{accessory_speed_pct * 100:.2f}%")
 
     # 套装效果展示
     set_bonus_lines = []
@@ -779,8 +750,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value:.0f}点")
             else:
                 set_bonus_lines.append(f"{set_name}{pieces}件：{show_name}+{sb_value * 100:.2f}%")
-            if sb_type == "speed_pct":
-                speed_source_lines.append(f"{set_name}{pieces}件+{sb_value * 100:.2f}%")
 
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
@@ -802,7 +771,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     set_bonus_msg = "无"
     if set_bonus_lines:
         set_bonus_msg = "；".join(set_bonus_lines)
-    speed_source_msg = "、".join(speed_source_lines)
 
     msg = f"""
 道号：{player_data['道号']}
@@ -823,8 +791,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 抗暴率：{crit_resist:.2f}%
 减会伤：{crit_damage_reduction:.2f}%
 护甲穿透：{armor_penetration:.2f}%
-速度：{panel_speed}（固定+{total_speed_flat:.0f}，百分比+{speed_pct * 100:.2f}%）
-速度来源：{speed_source_msg}
+速度：{panel_speed}
 boss增伤：{boss_damage_bonus:.2f}%
 
 双修保护状态：{current_status_display}

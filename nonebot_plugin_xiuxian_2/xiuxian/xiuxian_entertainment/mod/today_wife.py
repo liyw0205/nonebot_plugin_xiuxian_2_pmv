@@ -14,7 +14,7 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     """今日老婆"""
     config = XiuConfig()
 
-    api_url = "https://api.pearktrue.cn/api/today_wife"
+    api_url = "https://api.pearapi.ai/api/today_wife"
 
     try:
         result = await get_json_api(api_url, timeout=15)

@@ -11,7 +11,7 @@ world_60s_cmd = on_command(
 @world_60s_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def world_60s_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """60S读世界"""
-    api_url = "https://api.pearktrue.cn/api/60s/"
+    api_url = "https://api.pearapi.ai/api/60s/"
 
     try:
         result = await get_json_api(api_url, timeout=15)

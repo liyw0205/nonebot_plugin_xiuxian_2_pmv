@@ -6,7 +6,7 @@ brainteasers_cmd = on_command("脑筋急转弯", priority=5, block=True)
 @brainteasers_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def brainteasers_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """脑筋急转弯"""
-    api_url = "https://api.pearktrue.cn/api/brainteasers/"
+    api_url = "https://api.pearapi.ai/api/brainteasers/"
 
     try:
         result = await get_json_api(api_url, timeout=15)

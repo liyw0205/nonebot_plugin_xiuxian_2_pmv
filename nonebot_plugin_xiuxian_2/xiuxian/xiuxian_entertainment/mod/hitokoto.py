@@ -6,7 +6,7 @@ hitokoto_cmd = on_command("随机一言", priority=5, block=True)
 @hitokoto_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def hitokoto_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """随机一言"""
-    api_url = "https://api.pearktrue.cn/api/hitokoto/"
+    api_url = "https://api.pearapi.ai/api/hitokoto/"
 
     try:
         text = await get_text_api(api_url, timeout=15)

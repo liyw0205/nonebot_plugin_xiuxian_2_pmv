@@ -15,11 +15,11 @@ async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     voice_type = random.choice(["绿茶", "御姐", "怼人"])
     if voice_type == "绿茶":
-        api_url = "https://api.pearktrue.cn/api/greentea/"
+        api_url = "https://api.pearapi.ai/api/greentea/"
     elif voice_type == "御姐":
-        api_url = "https://api.pearktrue.cn/api/yujie/"
+        api_url = "https://api.pearapi.ai/api/yujie/"
     else:
-        api_url = "https://api.pearktrue.cn/api/duiren/"
+        api_url = "https://api.pearapi.ai/api/duiren/"
 
     try:
         result = await get_json_api(api_url, params={"type": "mp3"}, timeout=15)

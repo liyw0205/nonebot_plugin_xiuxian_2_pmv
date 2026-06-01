@@ -66,6 +66,12 @@ DEFAULT_ARENA_SHOP_CONFIG = {
             "weekly_limit": 1,
             "required_rank": "铂金"
         },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 800,
+            "weekly_limit": 1,
+            "required_rank": "铂金"
+        },
         "18133": {
             "name": "随机一至三阶饰品礼包",
             "cost": 1800,

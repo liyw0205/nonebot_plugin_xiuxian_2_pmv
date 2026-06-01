@@ -7,7 +7,7 @@ daily_bing_cmd = on_command("每日Bing图", priority=5, block=True)
 async def daily_bing_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """每日Bing图"""
     config = XiuConfig()
-    api_url = "https://api.pearktrue.cn/api/bing/"
+    api_url = "https://api.pearapi.ai/api/bing/"
 
     try:
         image_url = await get_media_url_api(api_url, timeout=20)

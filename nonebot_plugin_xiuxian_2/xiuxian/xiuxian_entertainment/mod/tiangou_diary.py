@@ -6,7 +6,7 @@ tiangou_diary_cmd = on_command("舔狗日记", priority=5, block=True)
 @tiangou_diary_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def tiangou_diary_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """舔狗日记"""
-    api_url = "https://api.pearktrue.cn/api/jdyl/tiangou.php"
+    api_url = "https://api.pearapi.ai/api/jdyl/tiangou.php"
 
     try:
         text = await get_text_api(api_url, timeout=15)

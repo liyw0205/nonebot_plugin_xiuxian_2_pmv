@@ -269,6 +269,11 @@ CONFIG = {
             "cost": 180000,
             "weekly_limit": 2
         },
+        "20009": {
+            "name": "神秘经书",
+            "cost": 18000,
+            "weekly_limit": 1
+        },
         "20033": {
             "name": "山河灵宠蛋",
             "cost": 12000,

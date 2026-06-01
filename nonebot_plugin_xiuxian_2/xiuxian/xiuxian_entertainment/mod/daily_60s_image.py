@@ -12,7 +12,7 @@ daily_60s_image_cmd = on_command(
 async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """每日60S 图片版"""
     config = XiuConfig()
-    api_url = "https://api.pearktrue.cn/api/60s/image/"
+    api_url = "https://api.pearapi.ai/api/60s/image/"
 
     try:
         image_url = await get_media_url_api(api_url, timeout=20)

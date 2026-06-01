@@ -6,7 +6,7 @@ random_duanzi_cmd = on_command("搞笑段子", aliases={"随机段子"}, priorit
 @random_duanzi_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def random_duanzi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """搞笑段子"""
-    api_url = "https://api.pearktrue.cn/api/random/duanzi/"
+    api_url = "https://api.pearapi.ai/api/random/duanzi/"
 
     try:
         result = await get_json_api(api_url, params={"type": "json"}, timeout=15)

@@ -6,7 +6,7 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     """随机点歌"""
     config = XiuConfig()
 
-    api_url = "https://api.pearktrue.cn/api/click_music"
+    api_url = "https://api.pearapi.ai/api/click_music"
 
     try:
         result = await get_json_api(api_url, timeout=15)
