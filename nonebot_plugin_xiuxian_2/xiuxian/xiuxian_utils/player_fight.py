@@ -480,6 +480,7 @@ def generate_boss_buff(boss):
         'boss_zs_boss': 0,
         'boss_sz': 0,
         'boss_jian_su': 0,
+        'boss_jia_su': 0,
     }
 
     boss_buff_map = {
@@ -499,6 +500,7 @@ def generate_boss_buff(boss):
         'boss_zs_boss': [BuffType.EXECUTE_EFFECT, "绝命斩杀"],
         'boss_sz': [BuffType.REGENERATION, "生生不息"],
         'boss_jian_su': [DebuffType.SPEED_DOWN, "迟滞领域"],
+        'boss_jia_su': [BuffType.SPEED_UP, "疾风领域"],
     }
 
     boss_level = boss["jj"]
@@ -507,12 +509,15 @@ def generate_boss_buff(boss):
     def get_rank_val(name):
         return convert_rank(name)[0]
 
-    def apply_random_group(attr_names, value_options):
-        selected_attr = random.choice(attr_names)
-        idx = attr_names.index(selected_attr)
-        val = value_options[idx]
+    def apply_random_group(attr_names, value_options, excluded_attrs=None):
+        excluded_attrs = set(excluded_attrs or [])
+        candidates = [(attr, value_options[idx]) for idx, attr in enumerate(attr_names) if attr not in excluded_attrs]
+        if not candidates:
+            candidates = list(zip(attr_names, value_options))
+        selected_attr, val = random.choice(candidates)
         final_val = val() if callable(val) else val
         boss_buff[selected_attr] = final_val
+        return selected_attr
 
     cfg = None
 
@@ -534,8 +539,13 @@ def generate_boss_buff(boss):
     if cfg:
         boss_buff['boss_js'] = random.randint(*cfg['js']) / 100 if isinstance(cfg['js'], tuple) else cfg['js']
         boss_buff['boss_cj'] = random.randint(*cfg['cj']) / 100
-        apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
-        apply_random_group(['boss_jg', 'boss_jh', 'boss_jb', 'boss_xl'], cfg['g2'])
+        g1_selected = apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
+        g2_exclusions = {
+            'boss_zs': {'boss_jg'},
+            'boss_hx': {'boss_jh'},
+            'boss_bs': {'boss_jb'},
+        }
+        apply_random_group(['boss_jg', 'boss_jh', 'boss_jb', 'boss_xl'], cfg['g2'], g2_exclusions.get(g1_selected))
     else:
         boss_buff['boss_js'] = 1.0
         boss_buff['boss_cj'] = 0
@@ -549,6 +559,7 @@ def generate_boss_buff(boss):
         ("boss_zs_boss", random.uniform(0.15, 0.25)),
         ("boss_sz", random.uniform(0.01, 0.05)),
         ("boss_jian_su", random.uniform(0.08, 0.22)),
+        ("boss_jia_su", random.uniform(0.08, 0.22)),
     ]
     chosen_key, chosen_val = random.choice(extra_candidates)
     boss_buff[chosen_key] = chosen_val
