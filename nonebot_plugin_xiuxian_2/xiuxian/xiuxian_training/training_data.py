@@ -47,8 +47,8 @@ DEFAULT_CONFIG = {
         },
         "20009": {
             "name": "神秘经书",
-            "cost": 6000,
-            "weekly_limit": 1
+            "cost": 2000,
+            "weekly_limit": 3
         },
         "20011": {
             "name": "易名符",

@@ -1345,7 +1345,7 @@ async def chakan_wupin_(
     args_str = args.extract_plain_text().strip()
     
     # 支持的类型列表
-    valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具", "特殊物品", "神物"]
+    valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具", "饰品", "特殊物品", "神物"]
     
     # 解析类型和页码
     item_type = None
@@ -1367,7 +1367,7 @@ async def chakan_wupin_(
             if len(parts) > 1 and parts[1].isdigit():
                 current_page = int(parts[1])
         else:
-            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|特殊物品|神物】！！！"
+            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|饰品|特殊物品|神物】！！！"
             await handle_send(bot, event, msg, md_type="背包", k1="物品", v1="查看修仙界物品", k2="效果", v2="查看效果", k3="帮助", v3="修仙帮助")
             await chakan_wupin.finish()
     
@@ -1385,7 +1385,7 @@ async def chakan_wupin_(
     
     for item_id, item_info in item_data.items():
         name = item_info['name']
-        if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具"]:
+        if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具", "饰品"]:
             desc = get_item_msg(item_id) # 获取详细描述
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":

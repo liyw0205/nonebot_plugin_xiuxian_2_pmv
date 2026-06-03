@@ -692,11 +692,24 @@ def get_special_msg(l_msg, goods_id, goods_num, bind_num):
     l_msg.append(msg)
     return l_msg
 
+
+def get_accessory_info_msg(accessory_info):
+    """获取静态饰品模板的效果说明。"""
+    return (
+        f"name：{accessory_info.get('name', '未知饰品')}\n"
+        f"desc：{accessory_info.get('desc', '暂无介绍')}\n"
+        f"set_type：{accessory_info.get('set_type', '未知套装')}\n"
+        f"part：{accessory_info.get('part', '未知部位')}"
+    )
+
 def get_item_msg(goods_id, user_id=None):
     """
     获取单个物品的消息
     """
     item_info = items.get_data_by_item_id(goods_id)
+    if item_info['item_type'] == '饰品':
+        return get_accessory_info_msg(item_info)
+
     user_info = sql_message.get_user_info_with_id(user_id) if user_id else None
     required_rank_name, _ = get_required_rank_name(item_info, user_info)
     goods_max_num = sql_message.goods_max_num(goods_id)
