@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title"><i class="fas fa-coins"></i> 经济流水查询</h2>
+        <p>查看 economy_log 最近记录，支持用户、宗门、来源和动作过滤。</p>
+    </div>
+
+    <form class="economy-log-filters" method="get" action="{{ url_for('economy_logs') }}">
+        <div class="form-group">
+            <label for="user_id">用户 ID</label>
+            <input id="user_id" name="user_id" type="text" value="{{ result.filters.get('user_id', '') }}" placeholder="例如：123456">
+        </div>
+
+        <div class="form-group">
+            <label for="sect_id">宗门 ID</label>
+            <input id="sect_id" name="sect_id" type="number" value="{{ result.filters.get('sect_id', '') }}" placeholder="例如：1">
+        </div>
+
+        <div class="form-group">
+            <label for="source">来源</label>
+            <input id="source" name="source" type="text" value="{{ result.filters.get('source', '') }}" placeholder="source">
+        </div>
+
+        <div class="form-group">
+            <label for="action">动作</label>
+            <input id="action" name="action" type="text" value="{{ result.filters.get('action', '') }}" placeholder="action">
+        </div>
+
+        <div class="form-group">
+            <label for="limit">记录数</label>
+            <input id="limit" name="limit" type="number" min="1" max="500" value="{{ result.limit }}">
+        </div>
+
+        <div class="form-actions economy-log-actions">
+            <button class="btn btn-primary" type="submit">
+                <i class="fas fa-search"></i> 查询
+            </button>
+            <a class="btn btn-secondary" href="{{ url_for('economy_logs') }}">
+                <i class="fas fa-undo"></i> 重置
+            </a>
+        </div>
+    </form>
+
+    {% if result.notice %}
+    <div class="economy-log-alert economy-log-alert-info">
+        <i class="fas fa-info-circle"></i>
+        <span>{{ result.notice }}</span>
+    </div>
+    {% endif %}
+
+    {% if result.error %}
+    <div class="economy-log-alert economy-log-alert-error">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>{{ result.error }}</span>
+    </div>
+    {% endif %}
+
+    <div class="economy-log-meta">
+        当前显示 {{ result.rows|length }} 条记录，最多 {{ result.limit }} 条
+    </div>
+
+    <div class="economy-log-table-wrap">
+        <table class="economy-log-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>时间</th>
+                    <th>用户</th>
+                    <th>宗门</th>
+                    <th>来源</th>
+                    <th>动作</th>
+                    <th>灵石</th>
+                    <th>修为</th>
+                    <th>贡献</th>
+                    <th>宗门建设</th>
+                    <th>资材</th>
+                    <th>物品变动</th>
+                    <th>详情</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.rows %}
+                <tr>
+                    <td>{{ row.get('id', '') }}</td>
+                    <td class="text-nowrap">{{ row.get('created_at', '') }}</td>
+                    <td>{{ row.get('user_id') or '' }}</td>
+                    <td>{{ row.get('sect_id') or '' }}</td>
+                    <td>{{ row.get('source', '') }}</td>
+                    <td>{{ row.get('action', '') }}</td>
+                    <td class="number-cell">{{ row.get('stone_delta', 0) }}</td>
+                    <td class="number-cell">{{ row.get('exp_delta', 0) }}</td>
+                    <td class="number-cell">{{ row.get('sect_contribution_delta', 0) }}</td>
+                    <td class="number-cell">{{ row.get('sect_scale_delta', 0) }}</td>
+                    <td class="number-cell">{{ row.get('sect_materials_delta', 0) }}</td>
+                    <td class="json-cell">{{ row.get('item_delta', '') }}</td>
+                    <td class="json-cell">{{ row.get('detail', '') }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td class="empty-cell" colspan="13">
+                        <i class="fas fa-inbox"></i>
+                        <span>暂无经济流水记录</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.economy-log-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    align-items: end;
+}
+
+.economy-log-actions {
+    margin-top: 0;
+    align-self: end;
+}
+
+.economy-log-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.economy-log-alert-info {
+    background: rgba(33, 150, 243, 0.12);
+    color: var(--info-color);
+    border: 1px solid rgba(33, 150, 243, 0.25);
+}
+
+.economy-log-alert-error {
+    background: rgba(244, 67, 54, 0.12);
+    color: var(--danger-color);
+    border: 1px solid rgba(244, 67, 54, 0.25);
+}
+
+.economy-log-meta {
+    margin-top: 14px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.economy-log-table-wrap {
+    margin-top: 10px;
+    overflow: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.economy-log-table {
+    width: 100%;
+    min-width: 1180px;
+    border-collapse: collapse;
+    background: var(--card-bg);
+}
+
+.economy-log-table th,
+.economy-log-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.9rem;
+}
+
+.economy-log-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--primary-color);
+    color: white;
+    white-space: nowrap;
+}
+
+.economy-log-table tbody tr:hover {
+    background: rgba(18, 183, 245, 0.08);
+}
+
+.number-cell {
+    text-align: right;
+    white-space: nowrap;
+    font-family: Consolas, Monaco, monospace;
+}
+
+.json-cell {
+    max-width: 320px;
+    min-width: 180px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 0.82rem;
+}
+
+.text-nowrap {
+    white-space: nowrap;
+}
+
+.empty-cell {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 28px 12px;
+}
+
+.empty-cell i {
+    margin-right: 6px;
+}
+
+@media (max-width: 768px) {
+    .economy-log-actions {
+        grid-column: 1 / -1;
+    }
+}
+</style>
+{% endblock %}
