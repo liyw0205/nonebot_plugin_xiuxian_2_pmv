@@ -34,7 +34,7 @@ def download_xiuxian_data():
         proxy_list = manager.get_proxy_list()
 
         # 测试代理延迟并排序
-        working_proxies = manager.test_proxies(proxy_list)
+        working_proxies = manager.test_proxies(proxy_list, XIUXIAN_ZIP_URL)
         working_proxies_sorted = sorted(working_proxies, key=lambda x: x.get('delay', 9999))[:3]
 
         logger.info(f"检测到 {len(working_proxies_sorted)} 个可用代理，将尝试使用代理下载...")
@@ -189,7 +189,7 @@ class UpdateManager:
             download_path = temp_dir / asset_name
 
             proxy_list = self.get_proxy_list()
-            working_proxies = self.test_proxies(proxy_list)
+            working_proxies = self.test_proxies(proxy_list, target_asset['browser_download_url'])
 
             success = False
             error_messages = []
@@ -230,42 +230,71 @@ class UpdateManager:
     def get_proxy_list(self):
         """代理列表"""
         proxies = [
-            {"url": "https://gh.llkk.cc/", "name": "gh.llkk.cc"},
-            {"url": "https://j.1lin.dpdns.org/", "name": "j.1lin.dpdns.org"},
+            {"url": "https://gh-proxy.com/", "name": "gh-proxy.com"},
+            {"url": "https://gh.jasonzeng.dev/", "name": "gh.jasonzeng.dev"},
             {"url": "https://ghproxy.net/", "name": "ghproxy.net"},
-            {"url": "https://gh-proxy.net/", "name": "gh-proxy.net"},
-            {"url": "https://j.1win.ggff.net/", "name": "j.1win.ggff.net"},
             {"url": "https://tvv.tw/", "name": "tvv.tw"},
-            {"url": "https://ghf.xn--eqrr82bzpe.top/", "name": "ghf.xn--eqrr82bzpe.top"},
-            {"url": "https://ghproxy.vansour.top/", "name": "ghproxy.vansour.top"},
-            {"url": "https://gh.catmak.name/", "name": "gh.catmak.name"},
-            {"url": "https://gitproxy.127731.xyz/", "name": "gitproxy.127731.xyz"},
-            {"url": "https://gitproxy.click/", "name": "gitproxy.click"},
-            {"url": "https://jiashu.1win.eu.org/", "name": "jiashu.1win.eu.org"},
+            {"url": "https://git.yylx.win/", "name": "git.yylx.win"},
+            {"url": "https://wget.la/", "name": "wget.la"},
             {"url": "https://github.dpik.top/", "name": "github.dpik.top"},
-            {"url": "https://github.tbedu.top/", "name": "github.tbedu.top"},
-            {"url": "https://ghm.078465.xyz/", "name": "ghm.078465.xyz"},
-            {"url": "https://hub.gitmirror.com/", "name": "hub.gitmirror.com"},
-            {"url": "https://ghfile.geekertao.top/", "name": "ghfile.geekertao.top"},
-            {"url": "https://gh.dpik.top/", "name": "gh.dpik.top"},
-            {"url": "https://git.yylx.win/", "name": "git.yylx.win"}
+            {"url": "https://ghproxy.imciel.com/", "name": "ghproxy.imciel.com"}
         ]
         return proxies
 
-    def test_proxies(self, proxy_list):
-        """测试代理延迟"""
+    def _looks_like_expected_download(self, original_url, chunk, content_type=""):
+        """判断代理返回内容是否像预期文件，避免把错误页当更新包。"""
+        if not chunk:
+            return False
+
+        head = chunk[:512].lower()
+        if b"<html" in head or b"<!doctype html" in head:
+            return False
+
+        url_path = str(original_url or "").split("?", 1)[0].lower()
+        if url_path.endswith((".tar.gz", ".tgz")):
+            return chunk.startswith(b"\x1f\x8b")
+        if url_path.endswith(".zip"):
+            return chunk.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"))
+
+        content_type = str(content_type or "").lower()
+        if "text/html" in content_type:
+            return False
+        return True
+
+    def test_proxies(self, proxy_list, test_url=None):
+        """按实际目标链接测试代理，确认支持当前拼接下载方式。"""
         import time
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        target_url = test_url or "https://github.com/robots.txt"
 
         def test_proxy(proxy):
             try:
                 start_time = time.time()
-                test_url = f"{proxy['url']}https://github.com/robots.txt"
-                response = requests.get(test_url, timeout=5)
-                if response.status_code == 200:
+                proxy_test_url = f"{proxy['url']}{target_url}"
+                headers = {
+                    "User-Agent": "xiuxian-update-proxy-test",
+                    "Range": "bytes=0-4095",
+                    "Accept": "*/*"
+                }
+                with requests.get(proxy_test_url, headers=headers, stream=True, timeout=(5, 15)) as response:
+                    if response.status_code not in (200, 206):
+                        return None
+
+                    first_chunk = b""
+                    for chunk in response.iter_content(chunk_size=4096):
+                        if chunk:
+                            first_chunk = chunk
+                            break
+
+                    content_type = response.headers.get("content-type", "")
+                    if not self._looks_like_expected_download(target_url, first_chunk, content_type):
+                        return None
+
                     delay = int((time.time() - start_time) * 1000)
-                    proxy['delay'] = delay
-                    return proxy
+                    result = dict(proxy)
+                    result['delay'] = delay
+                    return result
             except Exception as e:
                 logger.debug(f"代理 {proxy['url']} 测试失败: {str(e)}")
             return None
@@ -282,7 +311,10 @@ class UpdateManager:
                     logger.debug(f"代理测试异常: {str(e)}")
 
         working_proxies.sort(key=lambda x: x.get('delay', 9999))
-        logger.info(f"找到 {len(working_proxies)} 个可用代理，最低延迟: {[(p['name'], p.get('delay', '未知')) for p in working_proxies[:3]]}")
+        logger.info(
+            f"找到 {len(working_proxies)} 个可用代理，最低延迟: "
+            f"{[(p['name'], p.get('delay', '未知')) for p in working_proxies[:3]]}"
+        )
         return working_proxies
 
     def download_with_proxy(self, original_url, download_path, proxy):
@@ -297,8 +329,25 @@ class UpdateManager:
             total_size = int(response.headers.get('content-length', 0))
             downloaded_size = 0
 
+            chunks = response.iter_content(chunk_size=8192)
+            first_chunk = b""
+            for chunk in chunks:
+                if chunk:
+                    first_chunk = chunk
+                    break
+
+            content_type = response.headers.get("content-type", "")
+            if not self._looks_like_expected_download(original_url, first_chunk, content_type):
+                return False, "代理返回内容不是预期下载文件"
+
             with open(download_path, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=8192):
+                file.write(first_chunk)
+                downloaded_size += len(first_chunk)
+                if total_size > 0:
+                    percent = (downloaded_size / total_size) * 100
+                    print(f"\r下载进度: {percent:.1f}% ({downloaded_size}/{total_size} bytes)", end='')
+
+                for chunk in chunks:
                     if chunk:
                         file.write(chunk)
                         downloaded_size += len(chunk)
