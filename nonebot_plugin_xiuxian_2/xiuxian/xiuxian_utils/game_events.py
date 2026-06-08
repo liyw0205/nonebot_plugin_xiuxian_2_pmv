@@ -23,8 +23,8 @@ EVENT_STAT_KEYS: dict[str, tuple[str, ...]] = {
     "map_mission_complete": ("地图委托完成",),
     "dongfu_harvest": ("洞府收获",),
     "dungeon_clear": ("副本通关",),
-    "trade_buy": ("交易购买",),
-    "trade_sell": ("交易出售",),
+    "trade_buy": ("交易购买", "拍卖成交"),
+    "trade_sell": ("交易出售", "拍卖成交"),
     "mix_elixir_complete": ("炼丹次数",),
 }
 
