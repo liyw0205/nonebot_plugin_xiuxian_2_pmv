@@ -12,6 +12,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import (
     build_md_command_link,
     check_user,
@@ -505,6 +506,7 @@ def _get_mission_desc(mission_data: dict):
 
 def _grant_map_mission_reward(uid: str, user_info: dict):
     rewards = []
+    reward_meta = {"stone_delta": 0, "item_delta": []}
 
     # 基础灵石奖励：从 stone_high 抽一个
     stone_pool = ACTION_ITEM_POOLS.get("stone_high", [])
@@ -514,6 +516,7 @@ def _grant_map_mission_reward(uid: str, user_info: dict):
             stone_num = int(stone_pick.split("_")[1])
             sql_message.update_ls(uid, stone_num, 1)
             rewards.append(f"灵石x{number_to(stone_num)}")
+            reward_meta["stone_delta"] += stone_num
 
     # 额外奖励池：先随机选池
     extra_pool_key = random.choice(["acc_pack_low", "god_frag", "token_rare"])
@@ -524,8 +527,16 @@ def _grant_map_mission_reward(uid: str, user_info: dict):
         if info:
             sql_message.send_back(uid, gid, info["name"], info.get("type", "材料"), 1, 1)
             rewards.append(f"{info['name']}x1")
+            reward_meta["item_delta"].append(
+                {
+                    "id": gid,
+                    "name": info["name"],
+                    "type": info.get("type", "材料"),
+                    "amount": 1,
+                }
+            )
 
-    return rewards
+    return rewards, reward_meta
 # =========================================
 # 地图工具
 # =========================================
@@ -2067,9 +2078,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-    rewards = _grant_map_mission_reward(uid, user_info)
+    rewards, reward_meta = _grant_map_mission_reward(uid, user_info)
     mission["claimed"] = 1
     _save_map_mission(uid, mission)
+    safe_record_game_event(
+        uid,
+        "map_mission_complete",
+        1,
+        {
+            "source": "map",
+            "action": "mission_complete",
+            **reward_meta,
+            "detail": {
+                "mission_type": mission.get("mission_type"),
+                "target": target,
+                "progress": progress,
+            },
+        },
+    )
 
     msg = (
         f"✅ 地图委托完成！\n"
