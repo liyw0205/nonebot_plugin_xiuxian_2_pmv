@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from ..xiuxian_utils.game_events import safe_record_game_event
 from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
+from .sect_tasks import sect_task_state_manager
 from ..xiuxian_utils.utils import (
     check_user, number_to,
     send_msg_handler, handle_send,
@@ -1398,7 +1399,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     sect_id = user_info['sect_id']
     if sect_id:
         if isUserTask(user_id):
-            create_user_sect_task(user_id)
+            create_user_sect_task(user_id, sect_id)
             if userstask[user_id]['任务内容']['type'] == 1:
                 task_type = "⚔️"
             else:
@@ -1632,7 +1633,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task.finish()
 
-        create_user_sect_task(user_id)
+        create_user_sect_task(user_id, sect_id)
         if userstask[user_id]['任务内容']['type'] == 1:
             task_type = "⚔️"
         else:
@@ -1699,6 +1700,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
             task_type_value = userstask[user_id]['任务内容']['type']
             msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
+            sect_task_state_manager.complete_task(user_id)
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
             safe_record_game_event(
@@ -1759,6 +1761,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
             task_type_value = userstask[user_id]['任务内容']['type']
             msg = f"道友为了完成任务购买宝物消耗灵石：{number_to(costls)}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
+            sect_task_state_manager.complete_task(user_id)
             userstask[user_id] = {}
             update_statistics_value(user_id, "宗门任务")
             safe_record_game_event(
@@ -2885,25 +2888,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await sect_buy.finish()
 
-def create_user_sect_task(user_id):
+def create_user_sect_task(user_id, sect_id=None):
     tasklist = config["宗门任务"]
-    key = random.choices(list(tasklist))[0]
-    userstask[user_id]['任务名称'] = key
-    userstask[user_id]['任务内容'] = tasklist[key]      
+    if sect_id is None:
+        user_info = sql_message.get_user_info_with_id(user_id) or {}
+        sect_id = user_info.get("sect_id")
+    if sect_id:
+        task = sect_task_state_manager.accept_task(user_id, sect_id, tasklist)
+    else:
+        key = random.choices(list(tasklist))[0]
+        task = {"任务名称": key, "任务内容": tasklist[key]}
+    userstask[user_id] = {
+        "任务名称": task["任务名称"],
+        "任务内容": task["任务内容"],
+    }
+    return userstask[user_id]
 
 
 def isUserTask(user_id):
     """判断用户是否已有任务 True:有任务"""
-    Flag = False
-    try:
-        userstask[user_id]
-    except:
+    task = sect_task_state_manager.get_active_task(user_id)
+    if task:
+        userstask[user_id] = {
+            "任务名称": task["任务名称"],
+            "任务内容": task["任务内容"],
+        }
+        return True
+
+    if user_id not in userstask:
         userstask[user_id] = {}
-
-    if userstask[user_id] != {}:
-        Flag = True
-
-    return Flag
+    return userstask[user_id] != {}
 
 
 def get_sect_mainbuff_id_list(sect_id):
