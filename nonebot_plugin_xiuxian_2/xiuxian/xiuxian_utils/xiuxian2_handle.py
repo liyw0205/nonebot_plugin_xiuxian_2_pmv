@@ -269,6 +269,7 @@ class XiuxianDateManage:
             c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_name ON user_xiuxian(user_name)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_stamina ON user_xiuxian(user_stamina)")
             self._ensure_back_unique_index(c)
+            self._ensure_tribulation_table(c)
 
             self._commit_write()
 
@@ -377,6 +378,126 @@ class XiuxianDateManage:
             """
         )
         cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_back_user_goods_unique ON back(user_id, goods_id)")
+
+    def _ensure_tribulation_table(self, cur):
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_tribulation (
+                user_id TEXT PRIMARY KEY,
+                current_rate INTEGER DEFAULT 30,
+                heart_devil_count INTEGER DEFAULT 0,
+                last_time TEXT DEFAULT NULL,
+                next_level TEXT DEFAULT NULL
+            )
+            """
+        )
+        required_columns = {
+            "current_rate": f"INTEGER DEFAULT {int(XiuConfig().tribulation_base_rate)}",
+            "heart_devil_count": "INTEGER DEFAULT 0",
+            "last_time": "TEXT DEFAULT NULL",
+            "next_level": "TEXT DEFAULT NULL",
+        }
+        existing_columns = {row[1] for row in self.conn.table_info("user_tribulation")}
+        for column, column_def in required_columns.items():
+            if column not in existing_columns:
+                cur.execute(
+                    f"ALTER TABLE user_tribulation ADD COLUMN {_quote_ident(column)} {column_def}"
+                )
+
+    def _default_tribulation_info(self):
+        return {
+            "current_rate": int(XiuConfig().tribulation_base_rate),
+            "heart_devil_count": 0,
+            "last_time": None,
+            "next_level": None,
+        }
+
+    def get_user_tribulation_info(self, user_id):
+        """获取用户渡劫状态。"""
+        default_data = self._default_tribulation_info()
+        row = self._read_query(
+            """
+            SELECT current_rate, heart_devil_count, last_time, next_level
+            FROM user_tribulation
+            WHERE user_id = %s
+            """,
+            (str(user_id),),
+            one=True,
+            dict_row=True,
+        )
+        if not row:
+            return default_data
+
+        data = default_data.copy()
+        for key in data:
+            if row.get(key) is not None:
+                data[key] = row[key]
+
+        try:
+            data["current_rate"] = int(data["current_rate"])
+        except (TypeError, ValueError):
+            data["current_rate"] = default_data["current_rate"]
+        try:
+            data["heart_devil_count"] = int(data["heart_devil_count"])
+        except (TypeError, ValueError):
+            data["heart_devil_count"] = default_data["heart_devil_count"]
+        data["last_time"] = data["last_time"] or None
+        data["next_level"] = data["next_level"] or None
+        return data
+
+    def has_user_tribulation_info(self, user_id):
+        """判断用户是否已有渡劫状态。"""
+        row = self._read_query(
+            "SELECT 1 FROM user_tribulation WHERE user_id = %s LIMIT 1",
+            (str(user_id),),
+            one=True,
+        )
+        return row is not None
+
+    def save_user_tribulation_info(self, user_id, data):
+        """保存用户渡劫状态。"""
+        default_data = self._default_tribulation_info()
+        try:
+            current_rate = int(data.get("current_rate", default_data["current_rate"]))
+        except (TypeError, ValueError):
+            current_rate = default_data["current_rate"]
+        try:
+            heart_devil_count = int(data.get("heart_devil_count", default_data["heart_devil_count"]))
+        except (TypeError, ValueError):
+            heart_devil_count = default_data["heart_devil_count"]
+        last_time = data.get("last_time") or None
+        next_level = data.get("next_level") or None
+
+        with self._conn_lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                UPDATE user_tribulation
+                SET current_rate = %s,
+                    heart_devil_count = %s,
+                    last_time = %s,
+                    next_level = %s
+                WHERE user_id = %s
+                """,
+                (current_rate, heart_devil_count, last_time, next_level, str(user_id)),
+            )
+            if cur.rowcount == 0:
+                cur.execute(
+                    """
+                    INSERT INTO user_tribulation
+                        (user_id, current_rate, heart_devil_count, last_time, next_level)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (str(user_id), current_rate, heart_devil_count, last_time, next_level),
+                )
+            self._commit_write()
+
+    def clear_user_tribulation_info(self, user_id):
+        """清空用户渡劫状态。"""
+        with self._conn_lock:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM user_tribulation WHERE user_id = %s", (str(user_id),))
+            self._commit_write()
 
     def _create_user(self, user_id: str, root: str, type: str, power: str, create_time, user_name) -> None:
         """在数据库中创建用户并初始化"""

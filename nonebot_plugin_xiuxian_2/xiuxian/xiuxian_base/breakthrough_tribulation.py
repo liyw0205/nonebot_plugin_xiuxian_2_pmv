@@ -2,7 +2,6 @@ try:
     import ujson as json
 except ImportError:
     import json
-import os
 import random
 from pathlib import Path
 from datetime import datetime
@@ -45,47 +44,44 @@ fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"},
 def get_user_tribulation_info(user_id):
     """获取用户渡劫信息"""
     user_id = str(user_id)
-    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
-    
-    default_data = {
-        "current_rate": XiuConfig().tribulation_base_rate,
-        "heart_devil_count": 0,
-        "last_time": None,
-        "next_level": None
-    }
-    
-    if not file_path.exists():
-        os.makedirs(file_path.parent, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(default_data, f, ensure_ascii=False, indent=4)
-        return default_data
-    
-    with open(file_path, "r", encoding="utf-8") as f:
+    legacy_data = None
+    legacy_path = PLAYERSDATA / user_id / "tribulation_info.json"
+
+    if legacy_path.exists():
         try:
-            data = json.load(f)
-            # 确保所有字段都存在
+            with open(legacy_path, "r", encoding="utf-8") as f:
+                legacy_data = json.load(f)
+        except Exception:
+            legacy_data = None
+
+        if legacy_data and not sql_message.has_user_tribulation_info(user_id):
+            default_data = sql_message.get_user_tribulation_info(user_id)
             for key in default_data:
-                if key not in data:
-                    data[key] = default_data[key]
-            return data
-        except:
-            return default_data
+                if key in legacy_data:
+                    default_data[key] = legacy_data[key]
+            sql_message.save_user_tribulation_info(user_id, default_data)
+
+        try:
+            legacy_path.unlink()
+        except OSError:
+            pass
+
+    return sql_message.get_user_tribulation_info(user_id)
 
 def save_user_tribulation_info(user_id, data):
     """保存用户渡劫信息"""
-    user_id = str(user_id)
-    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
-    
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    sql_message.save_user_tribulation_info(user_id, data)
 
 def clear_user_tribulation_info(user_id):
     """清空用户渡劫信息(渡劫成功后调用)"""
     user_id = str(user_id)
-    file_path = PLAYERSDATA / user_id / "tribulation_info.json"
-    
-    if file_path.exists():
-        file_path.unlink()
+    sql_message.clear_user_tribulation_info(user_id)
+    legacy_path = PLAYERSDATA / user_id / "tribulation_info.json"
+    if legacy_path.exists():
+        try:
+            legacy_path.unlink()
+        except OSError:
+            pass
 
 def record_level_up_result(
     user_id, method, attempts=1, success=False, target_level=None,
@@ -451,30 +447,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"当前境界：{next_level}{share_msg}"
         )
     else:  # 渡劫失败
+        new_rate = min(
+            success_rate + 10,
+            XiuConfig().tribulation_max_rate
+        )
+        tribulation_data['current_rate'] = new_rate
         if has_destiny_pill:  # 使用天命丹避免概率降低
             sql_message.update_back_j(user_id, 1996, use_key=1)
             record_tribulation_result(
                 user_id, "开始渡劫", False, target_level=next_level,
-                rate=success_rate, item_name="天命丹", item_count=1
+                rate=new_rate, item_name="天命丹", item_count=1
             )
             msg = (
                 f"渡劫失败！\n"
                 f"雷劫之下，道心受损！\n"
-                f"幸得天命丹护体，下次渡劫成功率保持：{success_rate}%"
+                f"幸得天命丹护体，下次渡劫成功率提升至：{new_rate}%"
             )
         else:
-            new_rate = max(
-                success_rate - 10, 
-                XiuConfig().tribulation_base_rate
-            )
-            
-            tribulation_data['current_rate'] = new_rate
             record_tribulation_result(user_id, "开始渡劫", False, target_level=next_level, rate=new_rate)
             
             msg = (
                 f"渡劫失败！\n"
                 f"雷劫之下，道心受损！\n"
-                f"下次渡劫成功率：{new_rate}%"
+                f"下次渡劫成功率提升至：{new_rate}%"
             )
         tribulation_data['last_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         save_user_tribulation_info(user_id, tribulation_data)    
