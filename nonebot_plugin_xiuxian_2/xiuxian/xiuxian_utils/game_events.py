@@ -156,6 +156,27 @@ def _check_titles(user_id: str, meta: dict[str, Any]) -> list[str]:
         return []
 
 
+def _record_sect_weekly_progress(
+    user_id: str,
+    event_key: str,
+    amount: int,
+    meta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if meta.get("skip_sect_weekly") is True:
+        return []
+    try:
+        from ..xiuxian_sect.sect_weekly import record_sect_weekly_event
+    except Exception as exc:
+        _log_warning(f"加载宗门周常入口失败：{exc}")
+        return []
+
+    try:
+        return record_sect_weekly_event(user_id, event_key, amount, meta)
+    except Exception as exc:
+        _log_warning(f"记录宗门周常失败：user_id={user_id}, event={event_key}, error={exc}")
+        return []
+
+
 def record_game_event(
     user_id: str,
     event_key: str,
@@ -173,6 +194,7 @@ def record_game_event(
         "statistics": [],
         "tasks": [],
         "titles": [],
+        "sect_weekly": [],
         "economy_log_id": 0,
     }
 
@@ -183,6 +205,7 @@ def record_game_event(
         result["statistics"] = _record_statistics(user_id, event_key, amount, meta)
     result["tasks"] = _record_task_progress(user_id, event_key, amount, meta)
     result["titles"] = _check_titles(user_id, meta)
+    result["sect_weekly"] = _record_sect_weekly_progress(user_id, event_key, amount, meta)
 
     if meta.get("log_economy") or event_key in ECONOMY_EVENT_KEYS:
         economy_delta = _extract_economy_delta(meta)
@@ -215,5 +238,6 @@ def safe_record_game_event(
             "statistics": [],
             "tasks": [],
             "titles": [],
+            "sect_weekly": [],
             "economy_log_id": 0,
         }
