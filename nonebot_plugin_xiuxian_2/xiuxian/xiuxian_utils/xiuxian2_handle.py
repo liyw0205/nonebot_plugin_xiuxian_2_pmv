@@ -3546,6 +3546,23 @@ class XIUXIAN_IMPART_BUFF:
     global impart_num
     _instance = {}
     _has_init = {}
+    _default_fields = {
+        "impart_hp_per": 0,
+        "impart_atk_per": 0,
+        "impart_mp_per": 0,
+        "impart_exp_up": 0,
+        "boss_atk": 0,
+        "impart_know_per": 0,
+        "impart_burst_per": 0,
+        "impart_mix_per": 0,
+        "impart_reap_per": 0,
+        "impart_two_exp": 0,
+        "stone_num": 0,
+        "impart_lv": 0,
+        "impart_num": 0,
+        "exp_day": 0,
+        "wish": 0,
+    }
 
     def __new__(cls):
         if cls._instance.get(impart_num) is None:
@@ -3637,6 +3654,7 @@ class XIUXIAN_IMPART_BUFF:
 
     def create_user(self, user_id):
         """校验用户是否存在"""
+        user_id = str(user_id)
         with self._conn_lock:
             cur = self.conn.cursor()
             sql = f"select * from xiuxian_impart WHERE user_id=%s"
@@ -3649,26 +3667,59 @@ class XIUXIAN_IMPART_BUFF:
 
     def _create_user(self, user_id: str) -> None:
         """在数据库中创建用户并初始化"""
+        user_id = str(user_id)
         with self._conn_lock:
             if self.create_user(user_id):
                 pass
             else:
                 c = self.conn.cursor()
-                sql = f"INSERT INTO xiuxian_impart (user_id, impart_hp_per, impart_atk_per, impart_mp_per, impart_exp_up ,boss_atk,impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,stone_num,impart_lv,impart_num,exp_day,wish) VALUES(%s, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
-                c.execute(sql, (user_id,))
+                columns = ["user_id", *self._default_fields.keys()]
+                values = [user_id, *self._default_fields.values()]
+                placeholders = ", ".join(["%s"] * len(columns))
+                sql = (
+                    "INSERT INTO xiuxian_impart "
+                    f"({', '.join(_quote_ident(column) for column in columns)}) "
+                    f"VALUES({placeholders})"
+                )
+                c.execute(sql, tuple(values))
                 self._commit_write()
+
+    def _repair_user_impart_info(self, user_id: str, user_dict: dict) -> dict:
+        """补齐旧库或异常空数据，避免传承/虚神界入口误报未知错误。"""
+        updates = []
+        values = []
+        for field, default in self._default_fields.items():
+            if user_dict.get(field) in (None, ""):
+                updates.append(f"{_quote_ident(field)}=%s")
+                values.append(default)
+                user_dict[field] = default
+
+        if updates:
+            cur = self.conn.cursor()
+            sql = f"UPDATE xiuxian_impart SET {', '.join(updates)} WHERE user_id=%s"
+            cur.execute(sql, tuple(values + [user_id]))
+            self._commit_write()
+
+        return user_dict
 
     def get_user_impart_info_with_id(self, user_id):
         """根据USER_ID获取用户impart_buff信息"""
+        user_id = str(user_id)
         with self._conn_lock:
             cur = self.conn.cursor()
             sql = f"select * from xiuxian_impart WHERE user_id=%s"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
+            if not result:
+                self._create_user(user_id)
+                cur = self.conn.cursor()
+                cur.execute(sql, (user_id,))
+                result = cur.fetchone()
+
             if result:
                 columns = [column[0] for column in cur.description]
                 user_dict = dict(zip(columns, result))
-                return user_dict
+                return self._repair_user_impart_info(user_id, user_dict)
             else:
                 return None
 
