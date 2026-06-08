@@ -7,6 +7,7 @@ from nonebot.params import CommandArg
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.pet_system import (
@@ -243,6 +244,29 @@ def _grant_pet_travel_rewards(user_id: str, result: dict):
 
     update_statistics_value(user_id, "宠物游历次数")
     update_statistics_value(user_id, "宠物游历时长", increment=int(result.get("travel", {}).get("duration_hours", 0) or 0))
+    safe_record_game_event(
+        user_id,
+        "pet_travel_claim",
+        1,
+        {
+            "source": "pet",
+            "action": "travel_claim",
+            "stone_delta": stone,
+            "exp_delta": exp,
+            "item_delta": [
+                {
+                    "id": reward.get("id"),
+                    "amount": reward.get("amount", 0),
+                }
+                for reward in result.get("items", []) or []
+            ],
+            "detail": {
+                "duration_hours": int(result.get("travel", {}).get("duration_hours", 0) or 0),
+                "scene": result.get("travel", {}).get("scene"),
+                "pet_uid": result.get("travel", {}).get("pet_uid"),
+            },
+        },
+    )
     return lines
 
 
