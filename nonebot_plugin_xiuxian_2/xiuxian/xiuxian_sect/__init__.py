@@ -23,6 +23,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
 from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
+from ..xiuxian_utils.economy_log import safe_log_economy_change
 from ..xiuxian_utils.game_events import safe_record_game_event
 from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
 from .sect_tasks import sect_task_state_manager
@@ -572,6 +573,19 @@ async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMe
     sql_message.update_sect_used_stone(sect_id, need_stone, 2)
     sql_message.update_sect_materials(sect_id, need_materials, 2)
     sql_message.update_sect_fairyland(sect_id, next_level)
+    safe_log_economy_change(
+        user_id=user_info["user_id"],
+        sect_id=sect_id,
+        source="sect",
+        action="fairyland_upgrade",
+        sect_scale_delta=0,
+        sect_materials_delta=-need_materials,
+        detail={
+            "stone_delta_in_sect_storage": -need_stone,
+            "from_level": level,
+            "to_level": next_level,
+        },
+    )
 
     msg = (
         f"宗门炼体堂升级成功！\n"
@@ -673,6 +687,18 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                                                              sect_info['sect_used_stone'] - elixir_room_level_up_use_stone_cost,
                                                              sect_info['sect_scale'] - elixir_room_level_up_sect_scale_cost)
                 sql_message.update_sect_elixir_room_level(sect_id, to_up_level)
+                safe_log_economy_change(
+                    user_id=user_info["user_id"],
+                    sect_id=sect_id,
+                    source="sect",
+                    action="elixir_room_upgrade",
+                    sect_scale_delta=-elixir_room_level_up_sect_scale_cost,
+                    detail={
+                        "stone_delta_in_sect_storage": -elixir_room_level_up_use_stone_cost,
+                        "from_level": int(elixir_room_level),
+                        "to_level": to_up_level,
+                    },
+                )
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await sect_elixir_room_make.finish()
         else:
@@ -2199,6 +2225,17 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + donate_stone)
         # 加宗门资材
         sql_message.update_sect_materials(user_info['sect_id'], add_materials, 1)
+        safe_log_economy_change(
+            user_id=user_id,
+            sect_id=user_info["sect_id"],
+            source="sect",
+            action="donate",
+            stone_delta=-donate_stone,
+            sect_contribution_delta=donate_stone,
+            sect_scale_delta=donate_stone,
+            sect_materials_delta=add_materials,
+            detail={"donate_stone": donate_stone, "materials_rate": materials_rate},
+        )
 
         msg = (
             f"道友捐献灵石{donate_stone}枚，"
@@ -2946,6 +2983,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         item_info["type"], 
         quantity,
         1
+    )
+    safe_log_economy_change(
+        user_id=user_id,
+        sect_id=user_info["sect_id"],
+        source="sect",
+        action="shop_exchange",
+        sect_contribution_delta=-total_cost,
+        sect_materials_delta=-total_cost,
+        item_delta=[
+            {
+                "id": shop_id,
+                "name": item_info["name"],
+                "type": item_info["type"],
+                "amount": quantity,
+            }
+        ],
+        detail={"shop_id": shop_id, "quantity": quantity},
     )
 
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(total_cost)}宗门贡献度！"
