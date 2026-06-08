@@ -17,7 +17,7 @@ PET_SKILL_CONFIG_PATH = DATABASE / "宠物" / "宠物技能.json"
 TABLE = "player_pet"
 PET_ITEM_TABLE = "player_pet_item"
 LEGACY_JSON_FIELDS = ["active", "bag"]
-FIELDS = ["active_uid", "egg_pity_count", "egg_pity_no_mythic_count"]
+FIELDS = ["active_uid", "egg_pity_count", "egg_pity_no_mythic_count", "travel"]
 PET_META_STORAGE_FIELDS = FIELDS + LEGACY_JSON_FIELDS
 PET_ITEM_FIELDS = [
     "id",
@@ -144,6 +144,60 @@ PET_BREAKTHROUGH_RULES = {
     },
 }
 
+PET_TRAVEL_MIN_HOURS = 1
+PET_TRAVEL_MAX_HOURS = 12
+PET_TRAVEL_ITEM_POOLS = {
+    "forage": {
+        "name": "灵草谷",
+        "desc": "采集药材和灵髓，适合补充宠物养成材料。",
+        "items": [
+            {"id": 3001, "min": 8, "max": 18, "weight": 35},
+            {"id": 3002, "min": 8, "max": 18, "weight": 30},
+            {"id": 3037, "min": 6, "max": 14, "weight": 25},
+            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 2, "weight": 10},
+        ],
+    },
+    "training": {
+        "name": "妖兽岭",
+        "desc": "磨砺宠物并搜寻灵髓，收益更偏向宠物成长。",
+        "items": [
+            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 3, "weight": 42},
+            {"id": 20028, "min": 1, "max": 1, "weight": 10},
+            {"id": 3001, "min": 6, "max": 12, "weight": 25},
+            {"id": 3038, "min": 6, "max": 12, "weight": 23},
+        ],
+    },
+    "rift": {
+        "name": "秘境边缘",
+        "desc": "风险更高，可能带回更多灵石和稀有材料。",
+        "items": [
+            {"id": 18076, "min": 1, "max": 1, "weight": 18},
+            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 3, "weight": 32},
+            {"id": 20028, "min": 1, "max": 1, "weight": 13},
+            {"id": 3069, "min": 3, "max": 8, "weight": 18},
+            {"id": 3070, "min": 3, "max": 8, "weight": 19},
+        ],
+    },
+}
+PET_TRAVEL_SCENE_ALIASES = {
+    "灵草谷": "forage",
+    "采药": "forage",
+    "药材": "forage",
+    "妖兽岭": "training",
+    "历练": "training",
+    "磨砺": "training",
+    "秘境边缘": "rift",
+    "秘境": "rift",
+    "探秘": "rift",
+}
+PET_TRAVEL_STORY_TEXTS = (
+    "沿溪寻得一处灵草地，带回几缕温润灵气。",
+    "避开山间妖气后折返，途中拾得散落材料。",
+    "循着灵脉残响游走半日，归来时灵袋微沉。",
+    "在古道旁守候机缘，带回些许可用资粮。",
+    "踏过荒岭雾气，归来时精神更显灵动。",
+)
+
 player_data_manager = PlayerDataManager()
 _PET_POOL_CACHE = None
 _PET_SKILL_CACHE = None
@@ -163,6 +217,60 @@ def _default_pet_doc():
         "bag": [],
         "egg_pity_count": 0,
         "egg_pity_no_mythic_count": 0,
+        "travel": None,
+    }
+
+
+def _normalize_pet_travel_state(travel: dict | None):
+    if not isinstance(travel, dict):
+        return None
+
+    pet_uid = _clean_uid(travel.get("pet_uid", ""))
+    if not pet_uid:
+        return None
+
+    scene = str(travel.get("scene", "forage") or "forage")
+    if scene not in PET_TRAVEL_ITEM_POOLS:
+        scene = "forage"
+
+    try:
+        start_at = int(float(travel.get("start_at", 0) or 0))
+    except Exception:
+        start_at = 0
+    try:
+        end_at = int(float(travel.get("end_at", 0) or 0))
+    except Exception:
+        end_at = 0
+    try:
+        duration_hours = int(float(travel.get("duration_hours", 1) or 1))
+    except Exception:
+        duration_hours = 1
+
+    duration_hours = max(PET_TRAVEL_MIN_HOURS, min(PET_TRAVEL_MAX_HOURS, duration_hours))
+    if start_at <= 0:
+        start_at = int(time.time())
+    if end_at <= start_at:
+        end_at = start_at + duration_hours * 3600
+
+    rarity = str(travel.get("pet_rarity", "常见") or "常见")
+    if rarity not in RARITIES:
+        rarity = "常见"
+    try:
+        stars = int(travel.get("pet_stars", 1) or 1)
+    except Exception:
+        stars = 1
+
+    scene_info = PET_TRAVEL_ITEM_POOLS[scene]
+    return {
+        "pet_uid": pet_uid,
+        "pet_name": str(travel.get("pet_name", "未知宠物") or "未知宠物"),
+        "pet_rarity": rarity,
+        "pet_stars": max(1, min(25, stars)),
+        "scene": scene,
+        "scene_name": scene_info["name"],
+        "start_at": start_at,
+        "end_at": end_at,
+        "duration_hours": duration_hours,
     }
 
 
@@ -192,6 +300,15 @@ def _normalize_pet_doc(doc: dict):
     doc["bag"] = [_normalize_pet(x) for x in bag]
     doc["egg_pity_count"] = max(0, egg_pity_count)
     doc["egg_pity_no_mythic_count"] = min(9, max(0, egg_pity_no_mythic_count))
+    travel = _normalize_pet_travel_state(doc.get("travel"))
+    if travel:
+        pet_uids = set()
+        if doc["active"]:
+            pet_uids.add(str(doc["active"].get("uid", "")))
+        pet_uids.update(str(pet.get("uid", "")) for pet in doc["bag"])
+        if travel["pet_uid"] not in pet_uids:
+            travel = None
+    doc["travel"] = travel
     return doc
 
 
@@ -390,6 +507,7 @@ def _legacy_doc_from_meta(meta: dict):
         "bag": meta.get("bag") if isinstance(meta.get("bag"), list) else [],
         "egg_pity_count": _to_int(meta.get("egg_pity_count", 0), 0),
         "egg_pity_no_mythic_count": _to_int(meta.get("egg_pity_no_mythic_count", 0), 0),
+        "travel": _normalize_pet_travel_state(meta.get("travel")),
     }
 
 
@@ -500,6 +618,7 @@ def _doc_from_rows(meta: dict, rows: list[dict]):
         "bag": bag,
         "egg_pity_count": _to_int(meta.get("egg_pity_count", 0), 0),
         "egg_pity_no_mythic_count": _to_int(meta.get("egg_pity_no_mythic_count", 0), 0),
+        "travel": _normalize_pet_travel_state(meta.get("travel")),
     }
 
 
@@ -528,6 +647,7 @@ def _iter_unique_pet_rows(data: dict):
 def _save_pet_meta(user_id: str, data: dict, pet_count: int):
     active = data.get("active")
     active_uid = _clean_uid(active.get("uid", "")) if isinstance(active, dict) else ""
+    travel = _normalize_pet_travel_state(data.get("travel"))
     player_data_manager.save_doc(
         user_id=user_id,
         table_name=TABLE,
@@ -535,6 +655,7 @@ def _save_pet_meta(user_id: str, data: dict, pet_count: int):
             "active_uid": active_uid,
             "egg_pity_count": _to_int(data.get("egg_pity_count", 0), 0),
             "egg_pity_no_mythic_count": _to_int(data.get("egg_pity_no_mythic_count", 0), 0),
+            "travel": travel,
             "active": active_uid,
             "bag": f"items:{pet_count}",
         },
@@ -782,6 +903,7 @@ def _sqlite_row_to_legacy_doc(row: dict):
         "bag": bag if isinstance(bag, list) else [],
         "egg_pity_count": _to_int(row.get("egg_pity_count", 0), 0),
         "egg_pity_no_mythic_count": _to_int(row.get("egg_pity_no_mythic_count", 0), 0),
+        "travel": _normalize_pet_travel_state(_json_load(row.get("travel"), default=None)),
     }
 
 
@@ -827,12 +949,14 @@ def _save_sqlite_pet_doc(conn, user_id: str, data: dict):
 
     active = data.get("active")
     active_uid = _clean_uid(active.get("uid", "")) if isinstance(active, dict) else ""
+    travel = _normalize_pet_travel_state(data.get("travel"))
     conn.execute(
         f"""
         UPDATE {q(TABLE)}
         SET {q("active_uid")}=?,
             {q("egg_pity_count")}=?,
             {q("egg_pity_no_mythic_count")}=?,
+            {q("travel")}=?,
             {q("active")}=?,
             {q("bag")}=?
         WHERE {q("user_id")}=?
@@ -841,6 +965,7 @@ def _save_sqlite_pet_doc(conn, user_id: str, data: dict):
             active_uid,
             str(_to_int(data.get("egg_pity_count", 0), 0)),
             str(_to_int(data.get("egg_pity_no_mythic_count", 0), 0)),
+            _json_dump(travel) if travel else None,
             active_uid,
             f"items:{len(pet_rows)}",
             user_id,
@@ -1568,6 +1693,179 @@ def grant_pet(user_id: str | int, pet: dict | None = None):
 def grant_pet_by_rarity(user_id: str | int, rarity: str):
     template = roll_pet_template_by_rarity(rarity)
     return grant_pet(user_id, create_pet_instance(template))
+
+
+def get_pet_travel_scene_key(text: str | None = None):
+    text = str(text or "").strip()
+    if not text:
+        return "forage"
+    if text in PET_TRAVEL_ITEM_POOLS:
+        return text
+    return PET_TRAVEL_SCENE_ALIASES.get(text)
+
+
+def get_pet_travel_scenes():
+    return {
+        key: {
+            "name": value["name"],
+            "desc": value["desc"],
+        }
+        for key, value in PET_TRAVEL_ITEM_POOLS.items()
+    }
+
+
+def _travel_pet_power(pet: dict):
+    rarity_idx = RARITY_INDEX.get(str(pet.get("rarity", "常见")), 0)
+    stars = max(1, min(25, _to_int(pet.get("stars", 1), 1)))
+    form_index = get_form_index(stars)
+    return 1.0 + rarity_idx * 0.16 + max(0, stars - 1) * 0.035 + form_index * 0.08
+
+
+def _travel_remaining_seconds(travel: dict, now: int | None = None):
+    if now is None:
+        now = int(time.time())
+    return max(0, int(travel.get("end_at", 0)) - now)
+
+
+def format_pet_travel_time(seconds: int):
+    seconds = max(0, int(seconds))
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0 and minutes > 0:
+        return f"{hours}小时{minutes}分钟"
+    if hours > 0:
+        return f"{hours}小时"
+    if minutes > 0:
+        return f"{minutes}分钟"
+    return "不足1分钟"
+
+
+def start_pet_travel(
+    user_id: str | int,
+    scene: str | None = None,
+    duration_hours: int | str = 4,
+    pet_uid: str | None = None,
+):
+    data = get_pet_doc(user_id)
+    if data.get("travel"):
+        return False, "已有宠物正在游历，请先等待返回并领取游历收获。", data.get("travel"), None
+
+    if pet_uid:
+        _, _, pet = find_pet_anywhere(data, pet_uid)
+    else:
+        pet = data.get("active")
+    if not pet:
+        return False, "当前没有可派遣的宠物，请先获得宠物并设置出战。", None, None
+
+    scene_key = get_pet_travel_scene_key(scene)
+    if not scene_key:
+        return False, "未知游历地点，可选：灵草谷、妖兽岭、秘境边缘。", None, None
+
+    try:
+        duration_hours = int(duration_hours)
+    except Exception:
+        duration_hours = 4
+    duration_hours = max(PET_TRAVEL_MIN_HOURS, min(PET_TRAVEL_MAX_HOURS, duration_hours))
+    now = int(time.time())
+    travel = {
+        "pet_uid": str(pet.get("uid", "")),
+        "pet_name": str(pet.get("form_name", pet.get("name", "未知宠物"))),
+        "pet_rarity": str(pet.get("rarity", "常见")),
+        "pet_stars": _to_int(pet.get("stars", 1), 1),
+        "scene": scene_key,
+        "scene_name": PET_TRAVEL_ITEM_POOLS[scene_key]["name"],
+        "start_at": now,
+        "end_at": now + duration_hours * 3600,
+        "duration_hours": duration_hours,
+    }
+    data["travel"] = travel
+    save_pet_doc(user_id, data)
+    return True, "派遣成功。", _normalize_pet_travel_state(travel), pet
+
+
+def get_pet_travel_status(user_id: str | int):
+    data = get_pet_doc(user_id)
+    return data.get("travel")
+
+
+def is_pet_travel_done(travel: dict | None):
+    travel = _normalize_pet_travel_state(travel)
+    if not travel:
+        return False
+    return _travel_remaining_seconds(travel) <= 0
+
+
+def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: int):
+    pool = PET_TRAVEL_ITEM_POOLS.get(scene_key, PET_TRAVEL_ITEM_POOLS["forage"])["items"]
+    reward_count = 1
+    if duration_hours >= 4:
+        reward_count += 1
+    if duration_hours >= 8:
+        reward_count += 1
+    if random.random() < min(0.45, max(0.0, (multiplier - 1.0) * 0.16)):
+        reward_count += 1
+
+    rewards_by_id = {}
+    for _ in range(reward_count):
+        selected = random.choices(pool, weights=[max(1, item.get("weight", 1)) for item in pool], k=1)[0]
+        amount_min = int(selected.get("min", 1))
+        amount_max = int(selected.get("max", amount_min))
+        amount = random.randint(amount_min, max(amount_min, amount_max))
+        amount = max(1, int(amount * multiplier))
+        item_id = int(selected["id"])
+        rewards_by_id[item_id] = rewards_by_id.get(item_id, 0) + amount
+
+    return [
+        {"id": item_id, "amount": amount}
+        for item_id, amount in rewards_by_id.items()
+        if amount > 0
+    ]
+
+
+def complete_pet_travel(user_id: str | int):
+    data = get_pet_doc(user_id)
+    travel = data.get("travel")
+    if not travel:
+        return False, "当前没有正在游历的宠物。", None
+
+    remaining = _travel_remaining_seconds(travel)
+    if remaining > 0:
+        return False, f"宠物尚未返回，剩余{format_pet_travel_time(remaining)}。", travel
+
+    _, _, pet = find_pet_anywhere(data, travel["pet_uid"])
+    if not pet:
+        data["travel"] = None
+        save_pet_doc(user_id, data)
+        return False, "游历宠物已不存在，本次游历状态已清理。", None
+
+    multiplier = _travel_pet_power(pet)
+    duration_hours = int(travel.get("duration_hours", 1))
+    scene_key = travel.get("scene", "forage")
+    scene_bonus = {
+        "forage": 1.0,
+        "training": 1.08,
+        "rift": 1.18,
+    }.get(scene_key, 1.0)
+    reward_rate = multiplier * scene_bonus
+
+    stone = int(random.randint(18000, 42000) * duration_hours * reward_rate)
+    exp = 0
+    if scene_key in {"training", "rift"}:
+        exp = int(random.randint(300, 900) * duration_hours * reward_rate)
+    item_rewards = _roll_travel_item_reward(scene_key, reward_rate, duration_hours)
+    result = {
+        "travel": travel,
+        "pet": pet,
+        "stone": stone,
+        "exp": exp,
+        "items": item_rewards,
+        "story": random.choice(PET_TRAVEL_STORY_TEXTS),
+        "reward_rate": reward_rate,
+    }
+
+    data["travel"] = None
+    save_pet_doc(user_id, data)
+    return True, "游历完成。", result
 
 
 def find_pet_anywhere(data: dict, token: str):
