@@ -190,6 +190,18 @@ def get_recover(goods_id, num):
     return price
 
 
+def get_alchemy_available_num(back_item):
+    """炼金允许消耗绑定物品，但保留已装备/使用状态占用的数量。"""
+    goods_num = int(back_item.get("goods_num", 0) or 0)
+    state = int(back_item.get("state", 0) or 0)
+    return max(0, goods_num - max(0, state))
+
+
+def get_alchemy_reserved_num(back_item):
+    """返回炼金时需要保留的已装备/使用数量。"""
+    return max(0, int(back_item.get("state", 0) or 0))
+
+
 def _get_user_sect_fairyland_level(user_info: dict) -> int:
     sect_id = user_info.get("sect_id")
     if not sect_id:
@@ -303,11 +315,12 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         return
-    goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
-    if goods_num <= 0:
+    back_item = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+    if not back_item or int(back_item.get("goods_num", 0) or 0) <= 0:
         msg = f"背包中没有足够的 {item_name} ！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         return
+    goods_num = int(back_item.get("goods_num", 0) or 0)
 
     # 检查是否是禁止炼金的物品
     if str(goods_id) in BANNED_ITEM_IDS_ALCHEMY:
@@ -319,14 +332,30 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = "此类物品不支持炼金！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
+
+    available_num = get_alchemy_available_num(back_item)
+    if available_num <= 0:
+        msg = f"{item_name}当前没有可炼金数量，已装备或使用中的物品会被保留！"
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await goods_re_root.finish()
+
     num = 1
     try:
-        if len(args) > 1 and 1 <= int(args[1]) <= int(goods_num):
-            num = int(args[1])
-        elif len(args) > 1 and int(args[1]) > int(goods_num):
-            msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
-            await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
-            await goods_re_root.finish()
+        if len(args) > 1:
+            input_num = int(args[1])
+            if input_num <= 0:
+                msg = "炼金数量必须大于0！"
+                await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+                await goods_re_root.finish()
+            if input_num > available_num:
+                reserved_num = get_alchemy_reserved_num(back_item)
+                msg = f"道友背包中的{item_name}可炼金数量不足，当前共有{goods_num}个，可炼金{available_num}个"
+                if reserved_num > 0:
+                    msg += f"，已装备或使用中保留{reserved_num}个"
+                msg += "！"
+                await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+                await goods_re_root.finish()
+            num = input_num
     except ValueError: # 如果第二个参数不是有效数字，则默认为1
             num = 1 
     
@@ -336,8 +365,11 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
 
-    sql_message.update_back_j(user_id, goods_id, num=num)
-    sql_message.update_ls(user_id, price, 1)
+    if not sql_message.alchemy_items(user_id, price, [(goods_id, num)]):
+        msg = "炼金失败，背包数量发生变化，请重试！"
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await goods_re_root.finish()
+
     msg = f"物品：{item_name} 数量：{num} 炼金成功，凝聚{number_to(price)}枚灵石！"
     await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
     await goods_re_root.finish()
@@ -368,8 +400,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             item_info = items.get_data_by_item_id(item['goods_id'])
             if (item_info and item_info['type'] == "丹药" 
                 and item_info.get('buff_type') == "hp"):
-                # 回血丹都是绑定的，直接使用goods_num
-                available = item['goods_num']
+                available = get_alchemy_available_num(item)
                 if available > 0:
                     elixirs.append({
                         'id': item['goods_id'],
@@ -386,19 +417,20 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         # 执行炼金
         total_stone = 0
         results = []
+        consume_items = []
         
         for elixir in elixirs:
             # 计算价格
             total_price = get_recover(elixir['id'], elixir['num'])
-            
-            # 从背包扣除
-            sql_message.update_back_j(user_id, elixir['id'], num=elixir['num'])
-            
-            # 增加灵石
-            sql_message.update_ls(user_id, total_price, 1)
-            
+
             total_stone += total_price
+            consume_items.append((elixir['id'], elixir['num']))
             results.append(f"{elixir['name']} x{elixir['num']} → {number_to(total_price)}灵石")
+
+        if not sql_message.alchemy_items(user_id, total_stone, consume_items):
+            msg = "快速炼金失败，背包数量发生变化，请重试！"
+            await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+            await fast_alchemy.finish()
         
         # 构建结果消息
         msg = [
@@ -436,7 +468,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
-        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼in", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
     
     # === 筛选物品 ===
@@ -459,22 +491,9 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         rank_match = item_info.get('level', '') in target_ranks
         
         if type_match and rank_match:
-            # 对于装备类型，检查是否已被使用
-            if item['goods_type'] == "装备":
-                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
-                if is_equipped:
-                    # 如果装备已被使用，可炼金数量 = 总数量 - 绑定数量 - 1（已装备的）
-                    available_num = item['goods_num'] - item['bind_num'] - 1
-                else:
-                    # 如果未装备，可炼金数量 = 总数量 - 绑定数量
-                    available_num = item['goods_num'] - item['bind_num']
-            else:
-                # 非装备物品，正常计算
-                available_num = item['goods_num'] - item['bind_num']
-            
-            # 确保可用数量不为负
-            available_num = max(0, available_num)
-            
+            available_num = get_alchemy_available_num(item)
+            reserved_num = get_alchemy_reserved_num(item)
+
             # 检查是否是禁止炼金的物品
             if str(item['goods_id']) in BANNED_ITEM_IDS_ALCHEMY:
                 logger.opt(colors=True).info(f"<yellow>物品 {item['goods_name']} 禁止炼金，已跳过。</yellow>")
@@ -487,7 +506,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     'type': item['goods_type'],
                     'available_num': available_num,
                     'info': item_info,
-                    'is_equipped': check_equipment_use_msg(user_id, item['goods_id']) if item['goods_type'] == "装备" else False
+                    'reserved_num': reserved_num,
                 })
     
     if not items_to_alchemy:
@@ -496,30 +515,29 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await fast_alchemy.finish()
     
     # === 自动炼金逻辑 ===
-    success_count = 0
     total_stone = 0
     result_msg = []
+    consume_items = []
     
     for item in items_to_alchemy:
         
         # 计算价格
         total_price = get_recover(item['id'], item['available_num'])
-        
-        # 从背包扣除
-        sql_message.update_back_j(user_id, item['id'], num=item['available_num'])
-        
-        # 增加灵石
-        sql_message.update_ls(user_id, total_price, 1)
-        
-        success_count += item['available_num']
+
         total_stone += total_price
+        consume_items.append((item['id'], item['available_num']))
         
         # 添加装备状态信息到结果消息
         status_info = ""
-        if item['type'] == "装备" and item['is_equipped']:
-            status_info = " (已装备物品，保留1个)"
+        if item['reserved_num'] > 0:
+            status_info = f" (已装备或使用中，保留{item['reserved_num']}个)"
         
         result_msg.append(f"{item['name']} x{item['available_num']}{status_info} → {number_to(total_price)}灵石")
+
+    if not sql_message.alchemy_items(user_id, total_stone, consume_items):
+        msg = "快速炼金失败，背包数量发生变化，请重试！"
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await fast_alchemy.finish()
     
     # 构建结果消息
     msg = [

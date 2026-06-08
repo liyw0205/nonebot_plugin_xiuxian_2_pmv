@@ -2297,6 +2297,62 @@ class XiuxianDateManage:
         """扣除非绑定且未装备的可交易物品。"""
         return self.spend_stone_and_consume_trade_items(user_id, 0, [(goods_id, num)])
 
+    def alchemy_items(self, user_id, reward_stone=0, consume_items=None):
+        """炼金扣除物品并增加灵石；允许扣绑定物品，但保留 state 占用数量。"""
+        user_id = str(user_id)
+        reward_stone = abs(int(reward_stone or 0))
+        consume_items = consume_items or []
+
+        normalized_items = {}
+        for goods_id, num in consume_items:
+            goods_id = int(goods_id)
+            num = abs(int(num))
+            if num <= 0:
+                continue
+            normalized_items[goods_id] = normalized_items.get(goods_id, 0) + num
+
+        if reward_stone <= 0 or not normalized_items:
+            return False
+
+        with self._business_lock, self._conn_lock:
+            cur = self.conn.cursor()
+            try:
+                now_time = datetime.now()
+                for goods_id, num in normalized_items.items():
+                    cur.execute(
+                        """
+                        UPDATE back
+                        SET goods_num=COALESCE(goods_num, 0)-%s,
+                            bind_num=LEAST(
+                                COALESCE(bind_num, 0),
+                                GREATEST(COALESCE(goods_num, 0)-%s, 0)
+                            ),
+                            update_time=%s,
+                            action_time=%s
+                        WHERE user_id=%s
+                          AND goods_id=%s
+                          AND COALESCE(goods_num, 0)-COALESCE(state, 0) >= %s
+                        """,
+                        (num, num, now_time, now_time, user_id, goods_id, num),
+                    )
+                    if cur.rowcount <= 0:
+                        self.conn.rollback()
+                        return False
+
+                cur.execute(
+                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    (reward_stone, user_id),
+                )
+                if cur.rowcount <= 0:
+                    self.conn.rollback()
+                    return False
+
+                self._commit_write()
+                return True
+            except Exception:
+                self.conn.rollback()
+                raise
+
     def get_item_by_good_id_and_user_id(self, user_id, goods_id):
         """根据物品id、用户id获取物品信息"""
         with self._conn_lock:
