@@ -37,6 +37,7 @@ from ..xiuxian_utils.utils import (
     send_help_message, parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.season_service import get_current_season
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
@@ -58,6 +59,7 @@ hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priorit
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
+season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
 give_stone = on_command("送灵石", permission=GROUP, priority=6, block=True)
@@ -140,6 +142,157 @@ __level2_help__ = f"""
                   ↓          
                  至高
 """.strip()
+
+_SEASON_MODE_ALIASES = {
+    "周榜": "weekly",
+    "周赛季": "weekly",
+    "本周": "weekly",
+    "weekly": "weekly",
+    "week": "weekly",
+    "月榜": "monthly",
+    "月赛季": "monthly",
+    "本月": "monthly",
+    "monthly": "monthly",
+    "month": "monthly",
+    "季度榜": "quarterly",
+    "季榜": "quarterly",
+    "季度赛季": "quarterly",
+    "本季": "quarterly",
+    "quarterly": "quarterly",
+    "quarter": "quarterly",
+}
+
+
+def _parse_season_mode(text: str) -> str:
+    text = str(text or "").strip().lower()
+    for keyword, mode in _SEASON_MODE_ALIASES.items():
+        if keyword.lower() in text:
+            return mode
+    return "monthly"
+
+
+def _format_top_rows(title: str, rows, formatter, limit: int = 5) -> list[str]:
+    lines = [f"\n【{title}】"]
+    if not rows:
+        lines.append("暂无数据")
+        return lines
+
+    for index, row in enumerate(rows[:limit], 1):
+        lines.append(f"{index}. {formatter(row)}")
+    return lines
+
+
+def _get_sect_weekly_rank_snapshot(limit: int = 5):
+    conn = getattr(sql_message, "conn", None)
+    if not conn or not getattr(conn, "table_exists", lambda _table: False)("sect_weekly_goal"):
+        return None
+
+    week_key = get_current_season("weekly").key
+    return sql_message._read_query(
+        """
+        SELECT
+            g.sect_id,
+            COALESCE(s.sect_name, g.sect_id) AS sect_name,
+            SUM(g.progress) AS total_progress
+        FROM sect_weekly_goal AS g
+        LEFT JOIN sects AS s ON s.sect_id = g.sect_id
+        WHERE g.week_key = %s
+        GROUP BY g.sect_id, s.sect_name
+        ORDER BY total_progress DESC
+        LIMIT %s
+        """,
+        (week_key, max(1, min(int(limit or 5), 50))),
+        dict_row=True,
+    )
+
+
+def _build_season_rank_message(mode: str = "monthly") -> str:
+    current = get_current_season(mode)
+    weekly = get_current_season("weekly")
+    monthly = get_current_season("monthly")
+    quarterly = get_current_season("quarterly")
+
+    lines = [
+        "【赛季榜】",
+        f"当前展示：{current.name}",
+        f"周榜周期：{weekly.key}",
+        f"月榜周期：{monthly.key}",
+        f"季度榜周期：{quarterly.key}",
+        "",
+        "说明：当前版本为只读赛季信息入口，以下榜单复用现有全局排行榜查询，展示当前快照，不发放奖励。",
+    ]
+
+    try:
+        lines.extend(
+            _format_top_rows(
+                "修为/境界榜快照 TOP5",
+                sql_message.realm_top(),
+                lambda row: f"{row[0]} {row[1]} 修为{number_to(row[2])}",
+            )
+        )
+    except Exception as exc:
+        logger.warning(f"赛季榜读取修为/境界榜失败：{exc}")
+        lines.extend(["\n【修为/境界榜快照 TOP5】", "暂不可用"])
+
+    try:
+        lines.extend(
+            _format_top_rows(
+                "灵石榜快照 TOP5",
+                sql_message.stone_top(),
+                lambda row: f"{row[0]} 灵石{number_to(row[1])}枚",
+            )
+        )
+    except Exception as exc:
+        logger.warning(f"赛季榜读取灵石榜失败：{exc}")
+        lines.extend(["\n【灵石榜快照 TOP5】", "暂不可用"])
+
+    try:
+        lines.extend(
+            _format_top_rows(
+                "战力榜快照 TOP5",
+                sql_message.power_top(),
+                lambda row: f"{row[0]} 战力{number_to(row[1])}",
+            )
+        )
+    except Exception as exc:
+        logger.warning(f"赛季榜读取战力榜失败：{exc}")
+        lines.extend(["\n【战力榜快照 TOP5】", "暂不可用"])
+
+    try:
+        lines.extend(
+            _format_top_rows(
+                "宗门建设榜快照 TOP5",
+                sql_message.scale_top(),
+                lambda row: f"{row[1]} 建设度{number_to(row[2])}",
+            )
+        )
+    except Exception as exc:
+        logger.warning(f"赛季榜读取宗门建设榜失败：{exc}")
+        lines.extend(["\n【宗门建设榜快照 TOP5】", "暂不可用"])
+
+    try:
+        sect_weekly_rows = _get_sect_weekly_rank_snapshot()
+        if sect_weekly_rows is None:
+            lines.extend(["\n【宗门周常排行快照 TOP5】", "未检测到宗门周常数据表，暂未接入。"])
+        else:
+            lines.extend(
+                _format_top_rows(
+                    "宗门周常排行快照 TOP5",
+                    sect_weekly_rows,
+                    lambda row: f"{row['sect_name']} 进度{number_to(row['total_progress'])}",
+                )
+            )
+    except Exception as exc:
+        logger.warning(f"赛季榜读取宗门周常排行失败：{exc}")
+        lines.extend(["\n【宗门周常排行快照 TOP5】", "暂不可用"])
+
+    lines.extend(
+        [
+            "\n可用命令：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜",
+            "未接入：独立赛季累计榜、赛季结算、赛季奖励。",
+        ]
+    )
+    return "\n".join(lines)
 
 @gfqq.handle(parameterless=[Cooldown(cd_time=30)])
 async def gfqq_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -503,6 +656,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 📊 排行榜
 - 修仙排行榜 / 灵石排行榜 / 战力排行榜
 - 境界排行榜 / 宗门排行榜 / 轮回排行榜
+- 赛季榜 / 赛季榜 周榜 / 赛季榜 月榜 / 赛季榜 季度榜
 
 🌍 其他信息
 - 修仙界信息
@@ -699,6 +853,28 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 break
         await handle_send(bot, event, msg)
         await rank.finish()
+
+
+@season_rank.handle(parameterless=[Cooldown(cd_time=0)])
+async def season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """赛季榜：只读展示当前赛季信息与可用排行快照"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    mode = _parse_season_mode(args.extract_plain_text() or str(event.message))
+    msg = _build_season_rank_message(mode)
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="修仙",
+        k1="周榜",
+        v1="赛季榜 周榜",
+        k2="月榜",
+        v2="赛季榜 月榜",
+        k3="季度榜",
+        v3="赛季榜 季度榜",
+    )
+    await season_rank.finish()
+
 
 @user_stamina.handle(parameterless=[Cooldown(cd_time=0)])
 async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
