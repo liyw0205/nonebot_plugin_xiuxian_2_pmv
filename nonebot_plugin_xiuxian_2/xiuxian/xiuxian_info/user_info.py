@@ -20,7 +20,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
-from ..xiuxian_buff import load_partner
+from ..xiuxian_buff import load_mentor, load_partner
 from nonebot.log import logger
 from urllib.parse import quote
 
@@ -97,6 +97,27 @@ async def get_user_xiuxian_info(user_id):
             affection_level = "💓 缘分伊始"
         partner_info = f"{partner_info_data['user_name']} ({affection_level})" if partner_info_data else "无"
 
+    mentor_data = load_mentor(user_id)
+    mentor_id = mentor_data.get("mentor_id")
+    if mentor_id:
+        mentor_info_data = sql_message.get_user_real_info(mentor_id)
+        mentor_info = mentor_info_data["user_name"] if mentor_info_data else "数据异常"
+    else:
+        mentor_info = "无"
+
+    apprentice_names = []
+    for apprentice_id in mentor_data.get("apprentice_ids", []):
+        apprentice_data = load_mentor(apprentice_id)
+        if str(apprentice_data.get("mentor_id")) != str(user_id):
+            continue
+        apprentice_info_data = sql_message.get_user_real_info(apprentice_id)
+        if apprentice_info_data:
+            apprentice_names.append(apprentice_info_data["user_name"])
+    apprentice_info = "、".join(apprentice_names[:3]) if apprentice_names else "无"
+    if len(apprentice_names) > 3:
+        apprentice_info += f"等{len(apprentice_names)}人"
+    relationship_info = f"道侣：{partner_info}；师父：{mentor_info}；徒弟：{apprentice_info}"
+
     user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
@@ -165,6 +186,9 @@ async def get_user_xiuxian_info(user_id):
         "法器": weapon_name,
         "防具": armor_name,
         "道侣": partner_info,
+        "师父": mentor_info,
+        "徒弟": apprentice_info,
+        "关系": relationship_info,
         "本命法宝": natal_name_level,
         "注册位数": f"第{int(user_num)}人",
         "修为排行": f"第{int(user_rank)}位",
@@ -194,7 +218,7 @@ async def get_user_xiuxian_info(user_id):
 瞳术: {effect2_buff_buff_name}
 法器: {weapon_name}
 防具: {armor_name}
-道侣：{partner_info}
+关系：{relationship_info}
 本命法宝: {natal_name_level}
 注册位数: 第{int(user_num)}人
 修为排行: 第{int(user_rank)}位
@@ -303,7 +327,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             f"瞳术: {_effect_link(detail_map.get('瞳术', '无'))}",
             f"法器: {_effect_link(detail_map.get('法器', '无'))}",
             f"防具: {_effect_link(detail_map.get('防具', '无'))}",
-            f"道侣: {_effect_link(detail_map.get('道侣', '无'), '我的道侣')}",
+            f"关系: {_effect_link(detail_map.get('关系', '无'), '关系帮助')}",
             f"本命法宝: {_effect_link(detail_map.get('本命法宝', '无'), '我的本命法宝')}",
             f"注册位数: {detail_map.get('注册位数', '无')}",
             f"修为排行: {detail_map.get('修为排行', '无')}",

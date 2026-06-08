@@ -46,7 +46,16 @@ from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon import dungeon_manager
 from .two_exp_cd import two_exp_cd
 from nonebot.permission import SUPERUSER
-from .partner import load_partner, load_player_user, trigger_partner_exp_share, two_exp_cd_up, two_exp_limit, use_two_exp_token  # noqa: F401
+from .partner import (  # noqa: F401
+    get_mentor_team_attack_buffs,
+    load_mentor,
+    load_partner,
+    load_player_user,
+    trigger_partner_exp_share,
+    two_exp_cd_up,
+    two_exp_limit,
+    use_two_exp_token,
+)
 
 cache_help = {}
 sql_message = XiuxianDateManage()  # sql类
@@ -98,7 +107,7 @@ async def buff_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """功法帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = __buff_help__
-    await send_help_message(bot, event, msg, k1="功法", v1="我的功法", k2="道侣", v2="道侣帮助", k3="福地", v3="洞天福地")
+    await send_help_message(bot, event, msg, k1="功法", v1="我的功法", k2="关系", v2="关系帮助", k3="福地", v3="洞天福地")
     await buff_help.finish()
 
 @blessed_spot_creat.handle(parameterless=[Cooldown(cd_time=0)])

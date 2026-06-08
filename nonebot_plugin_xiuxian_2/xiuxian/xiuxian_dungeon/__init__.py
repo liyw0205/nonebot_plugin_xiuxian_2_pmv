@@ -928,6 +928,8 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     user_ids_in_battle = [user_id]
     exp_ratios = None
+    mentor_attack_buffs = {}
+    mentor_buff_msg = ""
 
     team_id = get_user_team(str(user_id))
     members_info = [user_info]
@@ -952,6 +954,15 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         else:
             exp_ratios = {member["user_id"]: 1.0 for member in members_info}
 
+        from ..xiuxian_buff.partner import get_mentor_team_attack_buffs
+        mentor_attack_buffs = get_mentor_team_attack_buffs(user_ids_in_battle)
+        if mentor_attack_buffs:
+            buff_names = []
+            for member in members_info:
+                if str(member["user_id"]) in mentor_attack_buffs:
+                    buff_names.append(member["user_name"])
+            mentor_buff_msg = f"\n师徒羁绊「薪火相承」触发：{', '.join(buff_names)}攻击提升10%。"
+
     for user in members_info:
         passed, message = check_user_state(user)
         if passed:
@@ -963,10 +974,20 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     if current_layer == total_layers - 1:
         boss_info = dungeon_manager.get_boss_data(user_info['level'], user_exp)
-        result, winner, status = await pve_fight(user_ids_in_battle, boss_info, bot_id=bot.self_id, level_ratios=exp_ratios)
+        result, winner, status = await pve_fight(
+            user_ids_in_battle,
+            boss_info,
+            bot_id=bot.self_id,
+            level_ratios=exp_ratios,
+            attack_buffs={
+                str(uid): data["attack_multiplier"]
+                for uid, data in mentor_attack_buffs.items()
+            },
+        )
 
         if winner == 0:
             msg = f"恭喜道友击败【{boss_info[0]['name']}】！"
+            msg += mentor_buff_msg
             msg += battle_settlement(user_info, members_info, boss_info, status)
             dungeon_manager.update_player_progress(user_id, status="completed")
         else:
@@ -992,10 +1013,20 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     elif event_result["type"] == "monster":
         msg = f"{event_result.get('description', '')}！"
-        result, winner, status = await pve_fight(user_ids_in_battle, event_result["monster_data"], bot_id=bot.self_id, level_ratios=exp_ratios)
+        result, winner, status = await pve_fight(
+            user_ids_in_battle,
+            event_result["monster_data"],
+            bot_id=bot.self_id,
+            level_ratios=exp_ratios,
+            attack_buffs={
+                str(uid): data["attack_multiplier"]
+                for uid, data in mentor_attack_buffs.items()
+            },
+        )
 
         if winner == 0:
             msg += f"\n恭喜道友击败敌人。"
+            msg += mentor_buff_msg
             msg += battle_settlement(user_info, members_info, event_result["monster_data"], status)
         else:
             msg += f"\n道友不敌，重伤逃遁。"

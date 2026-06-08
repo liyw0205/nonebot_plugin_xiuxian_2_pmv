@@ -316,7 +316,7 @@ __title_help__ = """
 🌟 称号获取
 → 通过统计数据达成条件自动解锁
 → 条件包括：签到、历练、战斗、双修、
-  炼丹、秘境、BOSS讨伐、境界等
+  师徒、炼丹、秘境、BOSS讨伐、境界等
 → 达成条件后自动解锁，无需手动领取
 """.strip()
 
@@ -329,6 +329,7 @@ async def title_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event, __title_help__,
         k1="我的称号", v1="我的称号",
         k2="检查称号", v2="检查称号",
-        k3="存档", v3="我的修仙信息"
+        k3="关系", v3="关系帮助",
+        k4="存档", v4="我的修仙信息"
     )
     await title_help_cmd.finish()

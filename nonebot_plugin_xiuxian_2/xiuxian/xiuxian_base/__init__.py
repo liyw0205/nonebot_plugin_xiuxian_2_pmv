@@ -478,7 +478,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 功法帮助 / 灵田帮助 / 洞府帮助 / 傀儡帮助
 - 合成帮助 / 鉴石帮助
 - 宗门帮助 / 宗门管理 / 宗门职位帮助
-- 道侣帮助 / 炼体帮助
+- 关系帮助 / 炼体帮助
 - 本命法宝帮助 / 本命法宝操作帮助 / 本命法宝道纹帮助 / 本命法宝战斗帮助
 
 🗺 探索战斗

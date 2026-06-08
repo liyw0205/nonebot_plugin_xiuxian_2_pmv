@@ -192,7 +192,7 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
         ("攻击力", DETAIL_MAP.get("攻击力", "0")),
         ("法器", DETAIL_MAP.get("法器", "无")),
         ("防具", DETAIL_MAP.get("防具", "无")),
-        ("道侣", DETAIL_MAP.get("道侣", "无")),
+        ("关系", DETAIL_MAP.get("关系", "无")),
         ("本命法宝", DETAIL_MAP.get("本命法宝", "无")),
     ]
 

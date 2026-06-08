@@ -68,13 +68,17 @@ PET_EXCLUSIVE_TRIGGER_BONUS = 0.05
 PET_PROTECT_TRIGGER_LIMIT = 3
 
 
-async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None):
+async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None):
     user_data = []
     monster_data = []
+    attack_buffs = attack_buffs or {}
 
     for u in user:
         player_data = get_players_attributes(u, level_ratios)
         player_attr = player_data["属性"]
+        attack_multiplier = attack_buffs.get(str(u), attack_buffs.get(u, 1))
+        if attack_multiplier != 1:
+            player_attr["attack"] = int(player_attr["attack"] * attack_multiplier)
         player_attr["natal_data"] = player_data.get("本命法宝")
         player = Entity(player_attr, team_id=0)
         apply_player_buffs(player, player_data)

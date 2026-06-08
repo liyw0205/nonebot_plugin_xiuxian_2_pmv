@@ -2,7 +2,7 @@ import random
 import asyncio
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from ..on_compat import on_command
@@ -26,31 +26,64 @@ from ..xiuxian_utils.xiuxian2_handle import (
     get_player_info,
     save_player_info,
 )
+from .mentor_exp_cd import mentor_exp_cd
 from .two_exp_cd import two_exp_cd
 
 invite_cache = {}
 partner_invite_cache = {}
+mentor_invite_cache = {}
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 two_exp_limit = 3
+mentor_config = XiuConfig()
+mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
+MENTOR_MAX_APPRENTICES = getattr(mentor_config, "mentor_max_apprentices", 5)
+MENTOR_COOLDOWN_DAYS = getattr(mentor_config, "mentor_cooldown_days", 7)
+APPRENTICE_COOLDOWN_DAYS = getattr(mentor_config, "mentor_apprentice_cooldown_days", MENTOR_COOLDOWN_DAYS * 2)
+MENTOR_MAX_EFFECT_GAP = getattr(mentor_config, "mentor_max_effect_gap", 6)
+MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS = getattr(mentor_config, "mentor_new_bind_transmission_wait_hours", 24)
+MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS = getattr(mentor_config, "mentor_same_pair_rebind_cooldown_days", 30)
+MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS = getattr(mentor_config, "mentor_graduate_pair_rebind_cooldown_days", 7)
+MENTOR_GRADUATE_APPRENTICE_STONE_REWARD = getattr(mentor_config, "mentor_graduate_apprentice_stone_reward", 5000000)
+MENTOR_GRADUATE_MENTOR_STONE_REWARD = getattr(mentor_config, "mentor_graduate_mentor_stone_reward", 10000000)
+MENTOR_HISTORY_LIMIT = getattr(mentor_config, "mentor_history_limit", 50)
+MENTOR_TITLE_IDS = {
+    "apprentice": "30115",
+    "mentor": "30116",
+    "graduate": "30117",
+    "mentor_graduate": "30118",
+    "mentor_graduate_5": "30119",
+    "transmission_100": "30120",
+    "receive_transmission_50": "30121",
+}
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+TITLE_JSONPATH = Path() / "data" / "xiuxian" / "修炼物品" / "称号.json"
+_mentor_title_cache = None
 
 two_exp_invite = on_command("双修", priority=6, block=True)
 two_exp_accept = on_command("同意双修", priority=5, block=True)
 two_exp_reject = on_command("拒绝双修", priority=5, block=True)
 two_exp_protect = on_command("双修保护", priority=5, block=True)
-double_cultivation_help = on_command("道侣帮助", aliases={"双修帮助"}, priority=5, block=True)
+double_cultivation_help = on_command("关系帮助", aliases={"道侣帮助", "双修帮助", "师徒帮助"}, priority=5, block=True)
 my_exp_num = on_command("我的双修次数", priority=9, block=True)
 my_partner = on_command("我的道侣", priority=5, block=True)
 bind_partner = on_command("绑定道侣", aliases={"结为道侣"}, priority=5, block=True)
 agree_bind = on_command("同意道侣", aliases={"接受道侣"}, priority=5, block=True)
 unbind_partner = on_command("解除道侣", aliases={"断绝关系"}, priority=5, block=True)
 partner_rank = on_command("道侣排行榜", priority=5, block=True)
+apply_mentor = on_command("拜师", aliases={"申请拜师"}, priority=5, block=True)
+agree_mentor = on_command("同意拜师", aliases={"接受拜师", "收徒", "同意收徒"}, priority=5, block=True)
+reject_mentor = on_command("拒绝拜师", aliases={"拒绝收徒"}, priority=5, block=True)
+my_mentor = on_command("我的师徒", aliases={"我的师父", "我的师傅", "我的徒弟"}, priority=5, block=True)
+mentor_record = on_command("师徒记录", aliases={"师门记录"}, priority=5, block=True)
+mentor_rank = on_command("师徒排行榜", aliases={"名师榜", "师门榜"}, priority=5, block=True)
+unbind_mentor = on_command("解除师徒", aliases={"叛出师门", "逐出师门", "出师"}, priority=5, block=True)
+mentor_transmission = on_command("师徒传功", aliases={"传功"}, priority=5, block=True)
 
 
 __double_cultivation_help__ = f"""
-【双修与道侣系统】🌸
+【关系系统】🌸
 
 💕 双修系统：
   • 双修 [道友QQ/道号] [次数] - 邀请他人双修
@@ -76,12 +109,36 @@ __double_cultivation_help__ = f"""
   • 我的道侣 - 查看当前道侣信息
   • 解除道侣 - 断绝与道侣的关系
 
+🧭 师徒系统：
+  • 拜师 [道友QQ/道号] - 向道友申请拜师
+  • 同意拜师 / 拒绝拜师 - 处理拜师申请
+  • 我的师徒 - 查看师父与徒弟
+  • 师徒记录 - 查看最近师门事件
+  • 师徒排行榜 - 查看名师榜
+  • 师徒传功 [徒弟QQ/道号] - 师父为徒弟传功
+  • 解除师徒 - 脱离当前师门
+  • 出师 - 徒弟达到无界境后脱离师门
+  • 逐出师门 [徒弟QQ/道号] - 师父解除徒弟关系
+
+  ⚙️ 师徒规则：
+  • 拜师时，徒弟境界需低于师父6个小境界或以上
+  • 师父达到无界境初期及以上时，徒弟境界需低于师父3个小境界或以上
+  • 师父最多可收{MENTOR_MAX_APPRENTICES}名徒弟
+  • 每人每天可传功{mentor_transmission_limit}次，每日与双修次数一起刷新
+  • 新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功
+  • 传功时境界差越大效果越好，相差6个小境界时达到最大效果
+  • 徒弟单次最多获得当前修为1%，且不能超过当前境界修为上限
+  • 徒弟境界达到或超过师父时不能传功
+  • 逐出师门后，师父{MENTOR_COOLDOWN_DAYS}天内不能收徒，徒弟{APPRENTICE_COOLDOWN_DAYS}天内不能拜师
+  • 徒弟解除关系后{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜同一位师父，正常出师后为{MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS}天
+  • 无界境出师时，徒弟获得{number_to(MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)}灵石，师父获得{number_to(MENTOR_GRADUATE_MENTOR_STONE_REWARD)}灵石，并解锁师徒称号
+  • 师徒组队探索副本时触发「薪火相承」，相关师徒成员攻击提升10%
 
 ✨ 温馨提示：
   • 双修是修仙界提升修为的重要方式之一
   • 与道侣双修可获得额外的修为收益和情感体验
   • 合理使用双修保护功能，管理好自己的修炼时光
-  • 道侣关系需要双方共同维护，珍惜每一次的双修机会
+  • 道侣与师徒都属于关系系统，需要双方共同维护
 """
 
 
@@ -92,12 +149,15 @@ async def double_cultivation_help_(bot: Bot, event: GroupMessageEvent | PrivateM
         bot, event, __double_cultivation_help__,
         k1="双修", v1="双修",
         k2="道侣", v2="我的道侣",
-        k3="绑定", v3="绑定道侣"
+        k3="师徒", v3="我的师徒",
+        k4="拜师", v4="拜师"
     )
 
 async def two_exp_cd_up():
     two_exp_cd.re_data()
+    mentor_exp_cd.re_data()
     logger.opt(colors=True).info(f"<green>双修次数已更新！</green>")
+    logger.opt(colors=True).info(f"<green>师徒传功次数已更新！</green>")
 
 def load_player_user(user_id):
     """加载用户数据，如果不存在或为空，返回默认数据"""
@@ -1204,6 +1264,1075 @@ def save_partner(user_id, data):
     player_data_manager.update_or_write_data(
         str(user_id), "partner", "affection", affection, data_type="INTEGER"
     )
+
+
+def _normalize_id_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value if not _is_none_like(v)]
+    if isinstance(value, str):
+        if _is_none_like(value):
+            return []
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(v) for v in parsed if not _is_none_like(v)]
+        except (json.JSONDecodeError, TypeError):
+            return [v.strip() for v in value.split(",") if v.strip()]
+    return []
+
+
+def _normalize_dict(value):
+    if value is None or _is_none_like(value):
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return {}
+
+
+def _normalize_history(value):
+    if value is None or _is_none_like(value):
+        return []
+    if isinstance(value, list):
+        return [record for record in value if isinstance(record, dict)]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [record for record in parsed if isinstance(record, dict)]
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
+
+
+def load_mentor(user_id):
+    """加载用户师徒数据。"""
+    info = player_data_manager.get_fields(str(user_id), "mentor")
+
+    if not info:
+        return {
+            "mentor_id": None,
+            "apprentice_ids": [],
+            "bind_time": None,
+            "mentor_cd_until": None,
+            "apprentice_cd_until": None,
+            "mentor_rebind_cd": {},
+            "mentor_history": [],
+        }
+
+    mentor_id = info.get("mentor_id")
+    if _is_none_like(mentor_id):
+        mentor_id = None
+    else:
+        mentor_id = str(mentor_id)
+
+    bind_time = info.get("bind_time")
+    if _is_none_like(bind_time):
+        bind_time = None
+    else:
+        bind_time = str(bind_time)
+
+    mentor_cd_until = info.get("mentor_cd_until")
+    if _is_none_like(mentor_cd_until):
+        mentor_cd_until = None
+    else:
+        mentor_cd_until = str(mentor_cd_until)
+
+    apprentice_cd_until = info.get("apprentice_cd_until")
+    if _is_none_like(apprentice_cd_until):
+        apprentice_cd_until = None
+    else:
+        apprentice_cd_until = str(apprentice_cd_until)
+
+    return {
+        "mentor_id": mentor_id,
+        "apprentice_ids": _normalize_id_list(info.get("apprentice_ids")),
+        "bind_time": bind_time,
+        "mentor_cd_until": mentor_cd_until,
+        "apprentice_cd_until": apprentice_cd_until,
+        "mentor_rebind_cd": _normalize_dict(info.get("mentor_rebind_cd")),
+        "mentor_history": _normalize_history(info.get("mentor_history")),
+    }
+
+
+def save_mentor(user_id, data):
+    """保存用户师徒数据。"""
+    mentor_id = data.get("mentor_id")
+    if _is_none_like(mentor_id):
+        mentor_id = None
+    else:
+        mentor_id = str(mentor_id)
+
+    apprentice_ids = _normalize_id_list(data.get("apprentice_ids"))
+
+    bind_time = data.get("bind_time")
+    if _is_none_like(bind_time):
+        bind_time = None
+    else:
+        bind_time = str(bind_time)
+
+    mentor_cd_until = data.get("mentor_cd_until")
+    if _is_none_like(mentor_cd_until):
+        mentor_cd_until = None
+    else:
+        mentor_cd_until = str(mentor_cd_until)
+
+    apprentice_cd_until = data.get("apprentice_cd_until")
+    if _is_none_like(apprentice_cd_until):
+        apprentice_cd_until = None
+    else:
+        apprentice_cd_until = str(apprentice_cd_until)
+
+    mentor_rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
+    mentor_history = _normalize_history(data.get("mentor_history"))[-MENTOR_HISTORY_LIMIT:]
+
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "mentor_id", mentor_id, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "apprentice_ids", apprentice_ids, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "bind_time", bind_time, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "mentor_cd_until", mentor_cd_until, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "apprentice_cd_until", apprentice_cd_until, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "mentor_rebind_cd", mentor_rebind_cd, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "mentor_history", mentor_history, data_type="TEXT"
+    )
+
+
+def _parse_datetime(value):
+    if _is_none_like(value):
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+
+
+def _format_seconds(seconds):
+    seconds = max(0, int(seconds))
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}天")
+    if hours:
+        parts.append(f"{hours}小时")
+    if minutes or not parts:
+        parts.append(f"{minutes}分钟")
+    return "".join(parts)
+
+
+def _cooldown_remaining(user_id, field):
+    data = load_mentor(user_id)
+    until = _parse_datetime(data.get(field))
+    if until is None:
+        return 0
+    now = datetime.now()
+    if now >= until:
+        return 0
+    return int((until - now).total_seconds())
+
+
+def _set_mentor_cooldown(user_id, field, days):
+    data = load_mentor(user_id)
+    data[field] = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    save_mentor(user_id, data)
+
+
+def _load_mentor_title_data():
+    global _mentor_title_cache
+    if _mentor_title_cache is not None:
+        return _mentor_title_cache
+    try:
+        with open(TITLE_JSONPATH, "r", encoding="UTF-8") as f:
+            _mentor_title_cache = json.load(f)
+    except Exception as e:
+        logger.warning(f"师徒称号数据读取失败: {e}")
+        _mentor_title_cache = {}
+    return _mentor_title_cache
+
+
+def _get_mentor_title_by_id(title_id):
+    return _load_mentor_title_data().get(str(title_id))
+
+
+def _get_user_title_ids(user_id):
+    unlocked = player_data_manager.get_field_data(str(user_id), "title", "unlocked")
+    if not unlocked:
+        return []
+    if isinstance(unlocked, list):
+        return [str(title_id) for title_id in unlocked]
+    if isinstance(unlocked, str):
+        try:
+            return [str(title_id) for title_id in json.loads(unlocked)]
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
+
+
+def _grant_title_to_user(user_id, title_id):
+    title_data = _get_mentor_title_by_id(title_id)
+    if not title_data:
+        return False, "称号ID不存在"
+    unlocked_set = set(_get_user_title_ids(user_id))
+    if str(title_id) in unlocked_set:
+        return False, f"用户已拥有称号【{title_data['name']}】"
+    unlocked_set.add(str(title_id))
+    player_data_manager.update_or_write_data(
+        str(user_id), "title", "unlocked", list(unlocked_set), data_type="TEXT"
+    )
+    return True, f"已赠送称号【{title_data['name']}】"
+
+
+def _grant_mentor_title(user_id, title_key):
+    title_id = MENTOR_TITLE_IDS.get(title_key)
+    if not title_id or not _get_mentor_title_by_id(title_id):
+        return ""
+    ok, _ = _grant_title_to_user(str(user_id), title_id)
+    if not ok:
+        return ""
+    title_data = _get_mentor_title_by_id(title_id)
+    title_name = title_data["name"] if title_data else title_id
+    log_message(str(user_id), f"[师徒称号] 解锁称号【{title_name}】")
+    return f"解锁称号【{title_name}】"
+
+
+def _grant_mentor_titles_by_stats(user_id):
+    stats = player_data_manager.get_fields(str(user_id), "statistics") or {}
+    granted = []
+    if safe_int(stats.get("师徒传功次数")) >= 100:
+        msg = _grant_mentor_title(user_id, "transmission_100")
+        if msg:
+            granted.append(msg)
+    if safe_int(stats.get("接受传功次数")) >= 50:
+        msg = _grant_mentor_title(user_id, "receive_transmission_50")
+        if msg:
+            granted.append(msg)
+    if safe_int(stats.get("培养出师徒弟")) >= 5:
+        msg = _grant_mentor_title(user_id, "mentor_graduate_5")
+        if msg:
+            granted.append(msg)
+    return granted
+
+
+def _add_mentor_history(user_id, event_type, description, related_id=None):
+    data = load_mentor(user_id)
+    history = _normalize_history(data.get("mentor_history"))
+    history.append({
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "type": str(event_type),
+        "related_id": str(related_id) if related_id is not None else "",
+        "description": str(description),
+    })
+    data["mentor_history"] = history[-MENTOR_HISTORY_LIMIT:]
+    save_mentor(user_id, data)
+
+
+def _record_mentor_event(mentor_id, apprentice_id, event_type, mentor_desc, apprentice_desc):
+    _add_mentor_history(mentor_id, event_type, mentor_desc, apprentice_id)
+    _add_mentor_history(apprentice_id, event_type, apprentice_desc, mentor_id)
+
+
+def _set_pair_rebind_cooldown(apprentice_id, mentor_id, days):
+    data = load_mentor(apprentice_id)
+    rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
+    rebind_cd[str(mentor_id)] = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    data["mentor_rebind_cd"] = rebind_cd
+    save_mentor(apprentice_id, data)
+
+
+def _get_pair_rebind_remaining(apprentice_id, mentor_id):
+    data = load_mentor(apprentice_id)
+    rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
+    until = _parse_datetime(rebind_cd.get(str(mentor_id)))
+    if until is None:
+        return 0
+    now = datetime.now()
+    if now >= until:
+        rebind_cd.pop(str(mentor_id), None)
+        data["mentor_rebind_cd"] = rebind_cd
+        save_mentor(apprentice_id, data)
+        return 0
+    return int((until - now).total_seconds())
+
+
+def _get_bind_wait_remaining(apprentice_id):
+    data = load_mentor(apprentice_id)
+    bind_time = _parse_datetime(data.get("bind_time"))
+    if bind_time is None:
+        return 0
+    available_time = bind_time + timedelta(hours=MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS)
+    now = datetime.now()
+    if now >= available_time:
+        return 0
+    return int((available_time - now).total_seconds())
+
+
+def _grant_graduation_rewards(mentor_id, apprentice_id):
+    reward_lines = []
+    mentor_info = sql_message.get_user_real_info(mentor_id)
+    apprentice_info = sql_message.get_user_real_info(apprentice_id)
+
+    if MENTOR_GRADUATE_APPRENTICE_STONE_REWARD > 0:
+        sql_message.update_ls(apprentice_id, MENTOR_GRADUATE_APPRENTICE_STONE_REWARD, 1)
+        update_statistics_value(apprentice_id, "灵石获取", increment=MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)
+        reward_lines.append(f"徒弟获得灵石{number_to(MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)}")
+
+    if MENTOR_GRADUATE_MENTOR_STONE_REWARD > 0:
+        sql_message.update_ls(mentor_id, MENTOR_GRADUATE_MENTOR_STONE_REWARD, 1)
+        update_statistics_value(mentor_id, "灵石获取", increment=MENTOR_GRADUATE_MENTOR_STONE_REWARD)
+        reward_lines.append(f"师父获得灵石{number_to(MENTOR_GRADUATE_MENTOR_STONE_REWARD)}")
+
+    update_statistics_value(apprentice_id, "正常出师次数", increment=1)
+    update_statistics_value(mentor_id, "培养出师徒弟", increment=1)
+
+    title_lines = []
+    for title_msg in (
+        _grant_mentor_title(apprentice_id, "graduate"),
+        _grant_mentor_title(mentor_id, "mentor_graduate"),
+    ):
+        if title_msg:
+            title_lines.append(title_msg)
+    title_lines.extend(_grant_mentor_titles_by_stats(mentor_id))
+
+    mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
+    apprentice_name = apprentice_info["user_name"] if apprentice_info else str(apprentice_id)
+    log_message(mentor_id, f"[师徒出师] 徒弟{apprentice_name}出师，奖励{number_to(MENTOR_GRADUATE_MENTOR_STONE_REWARD)}灵石")
+    log_message(apprentice_id, f"[师徒出师] 从师父{mentor_name}门下出师，奖励{number_to(MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)}灵石")
+
+    return reward_lines, title_lines
+
+
+def _resolve_user_id_from_args(args: Message):
+    target_id = get_at_user_id(args)
+    arg = args.extract_plain_text().strip()
+
+    if target_id:
+        return str(target_id)
+
+    if arg.isdigit():
+        return arg
+
+    if arg:
+        target_info = sql_message.get_user_info_with_name(arg)
+        if target_info:
+            return str(target_info["user_id"])
+
+    return None
+
+
+def _rank_value(level_name):
+    rank, _ = convert_rank(level_name)
+    return rank
+
+
+def is_wujie_or_above(level_name):
+    rank = _rank_value(level_name)
+    wujie_rank = _rank_value("无界境初期")
+    return rank is not None and wujie_rank is not None and rank <= wujie_rank
+
+
+def get_mentor_required_gap(mentor_level):
+    return 3 if is_wujie_or_above(mentor_level) else 6
+
+
+def get_realm_gap(mentor_level, apprentice_level):
+    mentor_rank = _rank_value(mentor_level)
+    apprentice_rank = _rank_value(apprentice_level)
+    if mentor_rank is None or apprentice_rank is None:
+        return 0
+    return apprentice_rank - mentor_rank
+
+
+def get_valid_apprentices(mentor_id):
+    mentor_data = load_mentor(mentor_id)
+    apprentice_ids = []
+    for apprentice_id in mentor_data.get("apprentice_ids", []):
+        apprentice_data = load_mentor(apprentice_id)
+        if str(apprentice_data.get("mentor_id")) == str(mentor_id):
+            apprentice_ids.append(str(apprentice_id))
+    return apprentice_ids
+
+
+def check_is_mentor_pair(mentor_id, apprentice_id):
+    mentor_id = str(mentor_id)
+    apprentice_id = str(apprentice_id)
+    mentor_data = load_mentor(mentor_id)
+    apprentice_data = load_mentor(apprentice_id)
+    return (
+        apprentice_id in _normalize_id_list(mentor_data.get("apprentice_ids"))
+        and str(apprentice_data.get("mentor_id")) == mentor_id
+    )
+
+
+def get_mentor_team_attack_buffs(member_ids):
+    """返回副本组队中的师徒攻击加成。"""
+    member_set = {str(member_id) for member_id in member_ids}
+    buff_user_ids = set()
+
+    for mentor_id in member_set:
+        for apprentice_id in get_valid_apprentices(mentor_id):
+            if apprentice_id in member_set:
+                buff_user_ids.add(mentor_id)
+                buff_user_ids.add(apprentice_id)
+
+    return {
+        user_id: {
+            "name": "薪火相承",
+            "attack_multiplier": 1.10,
+        }
+        for user_id in buff_user_ids
+    }
+
+
+def _validate_mentor_application(apprentice_id, mentor_id):
+    apprentice_id = str(apprentice_id)
+    mentor_id = str(mentor_id)
+
+    apprentice_info = sql_message.get_user_info_with_id(apprentice_id)
+    mentor_info = sql_message.get_user_info_with_id(mentor_id)
+    if not apprentice_info or not mentor_info:
+        return False, "未找到指定道友，对方可能尚未踏入修仙界。"
+
+    apprentice_data = load_mentor(apprentice_id)
+    mentor_data = load_mentor(mentor_id)
+
+    if apprentice_data.get("mentor_id"):
+        return False, "你已经有师父了，请先出师或解除当前师徒关系。"
+
+    if str(mentor_data.get("mentor_id")) == apprentice_id:
+        return False, "不可向自己的徒弟拜师。"
+
+    mentor_cd = _cooldown_remaining(mentor_id, "mentor_cd_until")
+    if mentor_cd > 0:
+        return False, f"对方处于收徒冷却中，剩余{_format_seconds(mentor_cd)}。"
+
+    apprentice_cd = _cooldown_remaining(apprentice_id, "apprentice_cd_until")
+    if apprentice_cd > 0:
+        return False, f"你处于拜师冷却中，剩余{_format_seconds(apprentice_cd)}。"
+
+    pair_rebind_cd = _get_pair_rebind_remaining(apprentice_id, mentor_id)
+    if pair_rebind_cd > 0:
+        return False, f"你暂不能再次拜入对方门下，剩余{_format_seconds(pair_rebind_cd)}。"
+
+    apprentices = get_valid_apprentices(mentor_id)
+    if len(apprentices) >= MENTOR_MAX_APPRENTICES:
+        return False, f"对方门下徒弟已达上限（{MENTOR_MAX_APPRENTICES}人）。"
+
+    gap = get_realm_gap(mentor_info["level"], apprentice_info["level"])
+    required_gap = get_mentor_required_gap(mentor_info["level"])
+    if gap < required_gap:
+        return (
+            False,
+            f"拜师条件不足：你的境界需低于对方{required_gap}个小境界或以上，当前相差{max(gap, 0)}个小境界。",
+        )
+
+    return True, ""
+
+
+def _bind_mentor_relation(mentor_id, apprentice_id):
+    mentor_id = str(mentor_id)
+    apprentice_id = str(apprentice_id)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    mentor_data = load_mentor(mentor_id)
+    apprentice_ids = get_valid_apprentices(mentor_id)
+    if apprentice_id not in apprentice_ids:
+        apprentice_ids.append(apprentice_id)
+    mentor_data["apprentice_ids"] = apprentice_ids
+    save_mentor(mentor_id, mentor_data)
+
+    apprentice_data = load_mentor(apprentice_id)
+    apprentice_data["mentor_id"] = mentor_id
+    apprentice_data["bind_time"] = now
+    save_mentor(apprentice_id, apprentice_data)
+
+    mentor_info = sql_message.get_user_real_info(mentor_id)
+    apprentice_info = sql_message.get_user_real_info(apprentice_id)
+    mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
+    apprentice_name = apprentice_info["user_name"] if apprentice_info else str(apprentice_id)
+
+    update_statistics_value(mentor_id, "收徒次数", increment=1)
+    update_statistics_value(apprentice_id, "拜师次数", increment=1)
+    _record_mentor_event(
+        mentor_id,
+        apprentice_id,
+        "bind",
+        f"收{apprentice_name}为徒",
+        f"拜{mentor_name}为师",
+    )
+    log_message(mentor_id, f"[师徒] 收{apprentice_name}为徒")
+    log_message(apprentice_id, f"[师徒] 拜{mentor_name}为师")
+
+    title_lines = []
+    for title_msg in (
+        _grant_mentor_title(apprentice_id, "apprentice"),
+        _grant_mentor_title(mentor_id, "mentor"),
+    ):
+        if title_msg:
+            title_lines.append(title_msg)
+
+    return now, title_lines
+
+
+def _remove_mentor_relation(mentor_id, apprentice_id):
+    mentor_id = str(mentor_id)
+    apprentice_id = str(apprentice_id)
+
+    mentor_data = load_mentor(mentor_id)
+    mentor_data["apprentice_ids"] = [
+        uid for uid in _normalize_id_list(mentor_data.get("apprentice_ids")) if uid != apprentice_id
+    ]
+    save_mentor(mentor_id, mentor_data)
+
+    apprentice_data = load_mentor(apprentice_id)
+    if str(apprentice_data.get("mentor_id")) == mentor_id:
+        apprentice_data["mentor_id"] = None
+        apprentice_data["bind_time"] = None
+        save_mentor(apprentice_id, apprentice_data)
+
+
+def _get_remaining_mentor_transmission(user_id):
+    used_count = mentor_exp_cd.find_user(user_id)
+    return max(mentor_transmission_limit - used_count, 0)
+
+
+def _build_mentor_help_buttons():
+    return {
+        "md_type": "buff",
+        "k1": "拜师", "v1": "拜师",
+        "k2": "师徒", "v2": "我的师徒",
+        "k3": "传功", "v3": "师徒传功",
+    }
+
+
+@apply_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """申请拜师"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await apply_mentor.finish()
+
+    user_id = str(user_info["user_id"])
+    mentor_id = _resolve_user_id_from_args(args)
+    buttons = _build_mentor_help_buttons()
+
+    if not mentor_id:
+        await handle_send(bot, event, "请指定拜师对象！格式：拜师 道号/QQ", **buttons)
+        await apply_mentor.finish()
+
+    if mentor_id == user_id:
+        await handle_send(bot, event, "道友不能拜自己为师。", **buttons)
+        await apply_mentor.finish()
+
+    if str(user_id) in mentor_invite_cache:
+        inviter_id = mentor_invite_cache[str(user_id)]["inviter"]
+        inviter_info = sql_message.get_user_real_info(inviter_id)
+        remaining_time = 60 - (datetime.now().timestamp() - mentor_invite_cache[str(user_id)]["timestamp"])
+        await handle_send(
+            bot,
+            event,
+            f"你已有来自{inviter_info['user_name']}的拜师申请（剩余{int(remaining_time)}秒），请先处理。",
+            **buttons,
+        )
+        await apply_mentor.finish()
+
+    existing_invite = None
+    for target_id, invite_data in mentor_invite_cache.items():
+        if str(invite_data["inviter"]) == user_id:
+            existing_invite = target_id
+            break
+
+    if existing_invite is not None:
+        target_info = sql_message.get_user_real_info(existing_invite)
+        remaining_time = 60 - (datetime.now().timestamp() - mentor_invite_cache[existing_invite]["timestamp"])
+        await handle_send(
+            bot,
+            event,
+            f"你已经向{target_info['user_name']}发送了拜师申请，请等待{int(remaining_time)}秒后再试。",
+            **buttons,
+        )
+        await apply_mentor.finish()
+
+    if str(mentor_id) in mentor_invite_cache:
+        await handle_send(bot, event, "对方已有待处理的拜师申请，请稍后再试。", **buttons)
+        await apply_mentor.finish()
+
+    ok, reason = _validate_mentor_application(user_id, mentor_id)
+    if not ok:
+        await handle_send(bot, event, reason, **buttons)
+        await apply_mentor.finish()
+
+    mentor_info = sql_message.get_user_real_info(mentor_id)
+    invite_id = f"{user_id}_{mentor_id}_{datetime.now().timestamp()}"
+    mentor_invite_cache[str(mentor_id)] = {
+        "inviter": user_id,
+        "timestamp": datetime.now().timestamp(),
+        "invite_id": invite_id,
+    }
+    asyncio.create_task(expire_mentor_invite(mentor_id, invite_id, bot, event))
+
+    msg = f"已向{mentor_info['user_name']}发送拜师申请，等待对方回应。"
+    await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意拜师", k2="拒绝", v2="拒绝拜师", k3="师徒", v3="我的师徒")
+    await apply_mentor.finish()
+
+
+async def expire_mentor_invite(user_id, invite_id, bot, event):
+    """拜师申请过期处理"""
+    await asyncio.sleep(60)
+    if str(user_id) in mentor_invite_cache and mentor_invite_cache[str(user_id)]["invite_id"] == invite_id:
+        del mentor_invite_cache[str(user_id)]
+        await handle_send(
+            bot,
+            event,
+            "拜师申请已过期！",
+            md_type="buff",
+            k1="拜师", v1="拜师",
+            k2="师徒", v2="我的师徒",
+            k3="关系", v3="关系帮助",
+        )
+
+
+@agree_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """同意拜师"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await agree_mentor.finish()
+
+    mentor_id = str(user_info["user_id"])
+    buttons = _build_mentor_help_buttons()
+
+    if mentor_id not in mentor_invite_cache:
+        await handle_send(bot, event, "没有待处理的拜师申请！", **buttons)
+        await agree_mentor.finish()
+
+    invite_data = mentor_invite_cache[mentor_id]
+    apprentice_id = str(invite_data["inviter"])
+
+    ok, reason = _validate_mentor_application(apprentice_id, mentor_id)
+    if not ok:
+        del mentor_invite_cache[mentor_id]
+        await handle_send(bot, event, f"拜师失败：{reason}", **buttons)
+        await agree_mentor.finish()
+
+    bind_time, title_lines = _bind_mentor_relation(mentor_id, apprentice_id)
+    del mentor_invite_cache[mentor_id]
+
+    apprentice_info = sql_message.get_user_real_info(apprentice_id)
+    title_msg = "\n" + "\n".join(title_lines) if title_lines else ""
+    msg = (
+        f"你已收{apprentice_info['user_name']}为徒，拜师时间为{bind_time}。\n"
+        f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功。"
+        f"{title_msg}"
+    )
+    await handle_send(bot, event, msg, md_type="buff", k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}", k2="师徒", v2="我的师徒", k3="关系", v3="关系帮助")
+    await agree_mentor.finish()
+
+
+@reject_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """拒绝拜师"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await reject_mentor.finish()
+
+    mentor_id = str(user_info["user_id"])
+    buttons = _build_mentor_help_buttons()
+
+    if mentor_id not in mentor_invite_cache:
+        await handle_send(bot, event, "没有待处理的拜师申请！", **buttons)
+        await reject_mentor.finish()
+
+    invite_data = mentor_invite_cache[mentor_id]
+    apprentice_info = sql_message.get_user_real_info(invite_data["inviter"])
+    del mentor_invite_cache[mentor_id]
+
+    await handle_send(bot, event, f"你拒绝了{apprentice_info['user_name']}的拜师申请。", **buttons)
+    await reject_mentor.finish()
+
+
+@my_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看师徒信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await my_mentor.finish()
+
+    user_id = str(user_info["user_id"])
+    mentor_data = load_mentor(user_id)
+    mentor_id = mentor_data.get("mentor_id")
+
+    if mentor_id:
+        mentor_info = sql_message.get_user_real_info(mentor_id)
+        bind_time = mentor_data.get("bind_time") or "未知"
+        mentor_line = f"{mentor_info['user_name']}（{mentor_info['level']}，拜师时间：{bind_time}）" if mentor_info else "数据异常"
+    else:
+        mentor_line = "无"
+
+    apprentice_lines = []
+    for apprentice_id in get_valid_apprentices(user_id):
+        apprentice_info = sql_message.get_user_real_info(apprentice_id)
+        if apprentice_info:
+            apprentice_lines.append(f"- {apprentice_info['user_name']}（{apprentice_info['level']}）")
+
+    apprentice_msg = "\n".join(apprentice_lines) if apprentice_lines else "无"
+
+    mentor_cd = _cooldown_remaining(user_id, "mentor_cd_until")
+    apprentice_cd = _cooldown_remaining(user_id, "apprentice_cd_until")
+    cd_lines = []
+    if mentor_cd > 0:
+        cd_lines.append(f"收徒冷却：{_format_seconds(mentor_cd)}")
+    if apprentice_cd > 0:
+        cd_lines.append(f"拜师冷却：{_format_seconds(apprentice_cd)}")
+    cd_msg = "\n".join(cd_lines) if cd_lines else "无"
+
+    stats_data = player_data_manager.get_fields(user_id, "statistics") or {}
+    remain = _get_remaining_mentor_transmission(user_id)
+    msg = f"""🧭 我的师徒信息
+师父：{mentor_line}
+
+徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）：
+{apprentice_msg}
+
+今日剩余传功次数：{remain}/{mentor_transmission_limit}
+累计收徒：{safe_int(stats_data.get("收徒次数"))}，培养出师：{safe_int(stats_data.get("培养出师徒弟"))}
+累计传功：{safe_int(stats_data.get("师徒传功次数"))}，接受传功：{safe_int(stats_data.get("接受传功次数"))}
+冷却状态：{cd_msg}"""
+
+    await handle_send(bot, event, msg, md_type="buff", k1="拜师", v1="拜师", k2="传功", v2="师徒传功", k3="记录", v3="师徒记录", k4="榜单", v4="师徒排行榜")
+    await my_mentor.finish()
+
+
+@mentor_record.handle(parameterless=[Cooldown(cd_time=0)])
+async def mentor_record_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看师徒记录"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await mentor_record.finish()
+
+    user_id = str(user_info["user_id"])
+    history = list(reversed(load_mentor(user_id).get("mentor_history", [])))
+    if not history:
+        await handle_send(bot, event, "暂无师徒记录。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
+        await mentor_record.finish()
+
+    lines = ["🧭【师徒记录】", "-----------------------------------"]
+    for record in history[:10]:
+        lines.append(
+            f"{record.get('time', '未知时间')} | {record.get('description', '未知事件')}"
+        )
+    lines.append("-----------------------------------")
+    lines.append(f"仅显示最近10条，最多保留{MENTOR_HISTORY_LIMIT}条。")
+    await handle_send(bot, event, "\n".join(lines), md_type="buff", k1="师徒", v1="我的师徒", k2="榜单", v2="师徒排行榜", k3="关系", v3="关系帮助")
+    await mentor_record.finish()
+
+
+@mentor_rank.handle(parameterless=[Cooldown(cd_time=0)])
+async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """师徒排行榜"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await mentor_rank.finish()
+
+    all_stats = player_data_manager.get_all_records("statistics")
+    rank_rows = []
+    for stats in all_stats:
+        user_id = str(stats.get("user_id", ""))
+        if not user_id:
+            continue
+        user_real_info = sql_message.get_user_real_info(user_id)
+        if not user_real_info:
+            continue
+        apprentice_count = len(get_valid_apprentices(user_id))
+        graduate_count = safe_int(stats.get("培养出师徒弟"))
+        transmission_count = safe_int(stats.get("师徒传功次数"))
+        receive_count = safe_int(stats.get("接受传功次数"))
+        score = graduate_count * 1000 + apprentice_count * 100 + transmission_count
+        if score <= 0 and apprentice_count <= 0:
+            continue
+        rank_rows.append({
+            "user_name": user_real_info["user_name"],
+            "level": user_real_info["level"],
+            "apprentice_count": apprentice_count,
+            "graduate_count": graduate_count,
+            "transmission_count": transmission_count,
+            "receive_count": receive_count,
+            "score": score,
+        })
+
+    rank_rows.sort(
+        key=lambda row: (
+            row["graduate_count"],
+            row["apprentice_count"],
+            row["transmission_count"],
+            row["receive_count"],
+        ),
+        reverse=True,
+    )
+
+    if not rank_rows:
+        await handle_send(bot, event, "暂无师徒榜数据。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
+        await mentor_rank.finish()
+
+    lines = ["✨【师徒排行榜】✨", "-----------------------------------"]
+    for idx, row in enumerate(rank_rows[:20], start=1):
+        lines.append(
+            f"第{idx}位 | {row['user_name']}（{row['level']}）\n"
+            f"徒弟：{row['apprentice_count']} | 出师：{row['graduate_count']} | 传功：{row['transmission_count']}"
+        )
+    await handle_send(bot, event, "\n".join(lines), md_type="buff", k1="师徒", v1="我的师徒", k2="记录", v2="师徒记录", k3="关系", v3="关系帮助")
+    await mentor_rank.finish()
+
+
+@unbind_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """解除师徒关系 / 逐出师门 / 出师"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await unbind_mentor.finish()
+
+    user_id = str(user_info["user_id"])
+    target_id = _resolve_user_id_from_args(args)
+    buttons = _build_mentor_help_buttons()
+
+    if target_id:
+        if not check_is_mentor_pair(user_id, target_id):
+            await handle_send(bot, event, "对方不是你的徒弟，无法逐出师门。", **buttons)
+            await unbind_mentor.finish()
+
+        target_info = sql_message.get_user_real_info(target_id)
+        mentor_name = user_info["user_name"]
+        target_name = target_info["user_name"] if target_info else str(target_id)
+        _remove_mentor_relation(user_id, target_id)
+        _set_mentor_cooldown(user_id, "mentor_cd_until", MENTOR_COOLDOWN_DAYS)
+        _set_mentor_cooldown(target_id, "apprentice_cd_until", APPRENTICE_COOLDOWN_DAYS)
+        _set_pair_rebind_cooldown(target_id, user_id, MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)
+        _record_mentor_event(
+            user_id,
+            target_id,
+            "expel",
+            f"将{target_name}逐出师门",
+            f"被师父{mentor_name}逐出师门",
+        )
+        update_statistics_value(user_id, "逐出徒弟次数", increment=1)
+        update_statistics_value(target_id, "被逐出师门次数", increment=1)
+        log_message(user_id, f"[师徒] 将{target_name}逐出师门")
+        log_message(target_id, f"[师徒] 被师父{mentor_name}逐出师门")
+        msg = (
+            f"你已将{target_name}逐出师门。\n"
+            f"你进入{MENTOR_COOLDOWN_DAYS}天收徒冷却，对方进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
+            f"对方{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入你门下。"
+        )
+        await handle_send(bot, event, msg, **buttons)
+        await unbind_mentor.finish()
+
+    mentor_data = load_mentor(user_id)
+    mentor_id = mentor_data.get("mentor_id")
+    if not mentor_id:
+        apprentices = get_valid_apprentices(user_id)
+        if apprentices:
+            await handle_send(bot, event, "你是师父身份，如需解除关系请使用：逐出师门 道号", **buttons)
+        else:
+            await handle_send(bot, event, "你当前没有师徒关系。", **buttons)
+        await unbind_mentor.finish()
+
+    mentor_info = sql_message.get_user_real_info(mentor_id)
+    mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
+    if is_wujie_or_above(user_info["level"]):
+        reward_lines, title_lines = _grant_graduation_rewards(mentor_id, user_id)
+        _remove_mentor_relation(mentor_id, user_id)
+        _set_pair_rebind_cooldown(user_id, mentor_id, MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS)
+        _record_mentor_event(
+            mentor_id,
+            user_id,
+            "graduate",
+            f"徒弟{user_info['user_name']}修至无界境出师",
+            f"从师父{mentor_name}门下出师",
+        )
+        extra_lines = reward_lines + title_lines
+        extra_msg = "\n" + "\n".join(extra_lines) if extra_lines else ""
+        msg = (
+            f"你已修至无界境，正式从{mentor_name}门下出师。\n"
+            f"{MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入同一位师父门下。"
+            f"{extra_msg}"
+        )
+        await handle_send(bot, event, msg, **buttons)
+        await unbind_mentor.finish()
+
+    _remove_mentor_relation(mentor_id, user_id)
+    _set_mentor_cooldown(user_id, "apprentice_cd_until", APPRENTICE_COOLDOWN_DAYS)
+    _set_pair_rebind_cooldown(user_id, mentor_id, MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)
+    _record_mentor_event(
+        mentor_id,
+        user_id,
+        "leave",
+        f"徒弟{user_info['user_name']}离开师门",
+        f"离开师父{mentor_name}门下",
+    )
+    update_statistics_value(user_id, "离开师门次数", increment=1)
+    log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")
+    log_message(mentor_id, f"[师徒] 徒弟{user_info['user_name']}离开师门")
+    msg = (
+        f"你已离开{mentor_name}门下，进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
+        f"{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入同一位师父门下。"
+    )
+    await handle_send(bot, event, msg, **buttons)
+    await unbind_mentor.finish()
+
+
+@mentor_transmission.handle(parameterless=[Cooldown(cd_time=0)])
+async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """师徒传功"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, mentor_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await mentor_transmission.finish()
+
+    mentor_id = str(mentor_info["user_id"])
+    apprentices = get_valid_apprentices(mentor_id)
+    target_id = _resolve_user_id_from_args(args)
+    buttons = _build_mentor_help_buttons()
+
+    if not target_id:
+        if len(apprentices) == 1:
+            target_id = apprentices[0]
+        else:
+            await handle_send(bot, event, "请指定传功对象！格式：师徒传功 徒弟道号/QQ", **buttons)
+            await mentor_transmission.finish()
+
+    target_id = str(target_id)
+    if target_id == mentor_id:
+        await handle_send(bot, event, "不能给自己传功。", **buttons)
+        await mentor_transmission.finish()
+
+    if not check_is_mentor_pair(mentor_id, target_id):
+        await handle_send(bot, event, "对方不是你的徒弟，无法传功。", **buttons)
+        await mentor_transmission.finish()
+
+    apprentice_info = sql_message.get_user_info_with_id(target_id)
+    if not apprentice_info:
+        await handle_send(bot, event, "徒弟信息异常，无法传功。", **buttons)
+        await mentor_transmission.finish()
+
+    gap = get_realm_gap(mentor_info["level"], apprentice_info["level"])
+    if gap <= 0:
+        await handle_send(bot, event, "徒弟境界已与你相同或在你之上，无法继续传功。", **buttons)
+        await mentor_transmission.finish()
+
+    bind_wait_remaining = _get_bind_wait_remaining(target_id)
+    if bind_wait_remaining > 0:
+        await handle_send(
+            bot,
+            event,
+            f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功，剩余{_format_seconds(bind_wait_remaining)}。",
+            **buttons,
+        )
+        await mentor_transmission.finish()
+
+    mentor_remain = _get_remaining_mentor_transmission(mentor_id)
+    apprentice_remain = _get_remaining_mentor_transmission(target_id)
+    if mentor_remain <= 0:
+        await handle_send(bot, event, "你的今日传功次数已用尽。", **buttons)
+        await mentor_transmission.finish()
+    if apprentice_remain <= 0:
+        await handle_send(bot, event, "徒弟今日可接受传功次数已用尽。", **buttons)
+        await mentor_transmission.finish()
+
+    apprentice_exp = int(apprentice_info["exp"])
+    max_exp_limit = int(OtherSet().set_closing_type(apprentice_info["level"])) * XiuConfig().closing_exp_upper_limit
+    remaining_exp = int(max_exp_limit - apprentice_exp)
+    if remaining_exp <= 0:
+        await handle_send(bot, event, "徒弟当前修为已达境界上限，无法继续传功。", **buttons)
+        await mentor_transmission.finish()
+
+    effect_ratio = min(gap, MENTOR_MAX_EFFECT_GAP) / MENTOR_MAX_EFFECT_GAP
+    once_cap = max(1, int(apprentice_exp * 0.01))
+    give_exp = max(1, int(once_cap * effect_ratio))
+    give_exp = min(give_exp, once_cap, remaining_exp)
+
+    if give_exp <= 0:
+        await handle_send(bot, event, "本次传功未能获得修为。", **buttons)
+        await mentor_transmission.finish()
+
+    sql_message.update_exp(target_id, give_exp)
+    sql_message.update_power2(target_id)
+
+    apprentice_after = sql_message.get_user_real_info(target_id)
+    result_msg, result_hp_mp = OtherSet().send_hp_mp(
+        target_id,
+        int(apprentice_after["exp"] / 10),
+        int(apprentice_after["exp"] / 20),
+    )
+    sql_message.update_user_attribute(
+        target_id,
+        result_hp_mp[0],
+        result_hp_mp[1],
+        int(result_hp_mp[2] / 10),
+    )
+
+    mentor_exp_cd.add_user(mentor_id)
+    mentor_exp_cd.add_user(target_id)
+
+    update_statistics_value(mentor_id, "师徒传功次数", increment=1)
+    update_statistics_value(target_id, "接受传功次数", increment=1)
+    update_statistics_value(target_id, "传功获得修为", increment=give_exp)
+    _record_mentor_event(
+        mentor_id,
+        target_id,
+        "transmission",
+        f"向徒弟{apprentice_info['user_name']}传功，授予修为{number_to(give_exp)}",
+        f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
+    )
+    title_lines = _grant_mentor_titles_by_stats(mentor_id) + _grant_mentor_titles_by_stats(target_id)
+    log_message(mentor_id, f"向徒弟{apprentice_info['user_name']}传功，授予修为{number_to(give_exp)}")
+    log_message(target_id, f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}")
+
+    title_msg = "\n" + "\n".join(title_lines) if title_lines else ""
+    msg = (
+        f"师父{mentor_info['user_name']}运转真元，为徒弟{apprentice_info['user_name']}传功。\n"
+        f"境界差：{gap}个小境界，效果系数：{effect_ratio * 100:.0f}%\n"
+        f"{apprentice_info['user_name']}获得修为：{number_to(give_exp)}\n"
+        f"今日剩余传功次数：师父{_get_remaining_mentor_transmission(mentor_id)}/{mentor_transmission_limit}，"
+        f"徒弟{_get_remaining_mentor_transmission(target_id)}/{mentor_transmission_limit}"
+        f"{title_msg}"
+    )
+    await handle_send(bot, event, msg, md_type="buff", k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}", k2="师徒", v2="我的师徒", k3="修为", v3="我的修为")
+    await mentor_transmission.finish()
 
 @partner_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

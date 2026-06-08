@@ -147,6 +147,28 @@ class XiuConfig:
         # 闭关每分钟获取的修为
         self.closing_exp_upper_limit = 1.5
         # 闭关获取修为上限（例如：1.5 下个境界的修为数*1.5）
+        self.mentor_transmission_limit = 3
+        # 师徒传功每日次数，默认与双修次数一致
+        self.mentor_max_apprentices = 5
+        # 师父最多可收徒弟数量
+        self.mentor_cooldown_days = 7
+        # 师父逐出徒弟后的收徒冷却天数
+        self.mentor_apprentice_cooldown_days = self.mentor_cooldown_days * 2
+        # 徒弟离开师门后的拜师冷却天数，默认是师父冷却的2倍
+        self.mentor_max_effect_gap = 6
+        # 师徒传功达到最大效果需要的境界差
+        self.mentor_new_bind_transmission_wait_hours = 24
+        # 新拜师后多久不能传功，防止即时刷传功
+        self.mentor_same_pair_rebind_cooldown_days = 30
+        # 与同一位师父解除关系后，再次拜同一位师父的冷却
+        self.mentor_graduate_pair_rebind_cooldown_days = 7
+        # 出师后再次拜同一位师父的冷却
+        self.mentor_graduate_apprentice_stone_reward = 5000000
+        # 徒弟正常出师奖励灵石
+        self.mentor_graduate_mentor_stone_reward = 10000000
+        # 师父培养徒弟出师奖励灵石
+        self.mentor_history_limit = 50
+        # 师徒记录保留条数
         self.level_punishment_floor = 10
         # 突破失败扣除修为，惩罚下限（百分比）
         self.level_punishment_limit = 20
