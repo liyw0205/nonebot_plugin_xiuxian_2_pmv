@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_world_events import get_spirit_vein_tianti_multiplier
 from .tianti_data import get_next_tianti_level_name, get_tianti_level_data
 
 
@@ -86,12 +87,13 @@ def _apply_tianti_minutes(data: dict, mins: int, now_t: datetime, sect_fairyland
     bath = get_active_medicine_bath(data, now_t)
     bath_effect = bath["effect"] if bath else 1.0
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
+    spirit_vein_multiplier = get_spirit_vein_tianti_multiplier()
     bath_expired = False
     if not bath and data.get("medicine_end_time"):
         clear_medicine_bath(data)
         bath_expired = True
 
-    gain = int(mins * real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus))
+    gain = int(mins * real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus) * spirit_vein_multiplier)
     cap = get_tianti_cap(data)
     old_hp = int(data["tianti_hp"])
     new_hp = min(cap, old_hp + gain)
@@ -107,6 +109,7 @@ def _apply_tianti_minutes(data: dict, mins: int, now_t: datetime, sect_fairyland
         "bath": bath,
         "bath_expired": bath_expired,
         "sect_bonus": sect_bonus,
+        "spirit_vein_bonus": spirit_vein_multiplier - 1,
     }
 
 
@@ -123,7 +126,8 @@ def calc_tianti_gain_rate(data: dict, now_t: datetime | None = None, sect_fairyl
     bath = get_active_medicine_bath(data, now_t)
     bath_effect = bath["effect"] if bath else 1.0
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
-    per_min = int(real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus))
+    spirit_vein_multiplier = get_spirit_vein_tianti_multiplier()
+    per_min = int(real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus) * spirit_vein_multiplier)
 
     return {
         "base_per_min": base_per_min,
@@ -132,6 +136,7 @@ def calc_tianti_gain_rate(data: dict, now_t: datetime | None = None, sect_fairyl
         "bath": bath,
         "bath_effect": bath_effect,
         "sect_bonus": sect_bonus,
+        "spirit_vein_bonus": spirit_vein_multiplier - 1,
         "per_min": per_min,
         "efficiency": (per_min / base_per_min) if base_per_min > 0 else 0,
     }

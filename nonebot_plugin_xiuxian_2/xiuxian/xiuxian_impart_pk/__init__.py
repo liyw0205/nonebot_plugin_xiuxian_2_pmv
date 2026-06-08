@@ -23,6 +23,7 @@ from .impart_pk import impart_pk
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
+from ..xiuxian_world_events import get_spirit_vein_exp_bonus_msg, get_spirit_vein_exp_multiplier
 from .. import NICKNAME
 from nonebot.log import logger
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -38,14 +39,23 @@ impart_pk_out_closing = on_command("虚神界出关", priority=8, block=True)
 impart_pk_in_closing = on_command("虚神界闭关", priority=8, block=True)
 impart_top = on_command("虚神界排行榜", priority=8, block=True)
 
-XU_EXP_FATIGUE_RULES = [
-    (180, 100, "道心澄明"),
-    (360, 50, "神魂微疲"),
-    (720, 25, "神魂疲惫"),
-    (None, 10, "神魂重负")
-]
-XU_EXP_DAILY_LEVEL_LIMIT = 3
-XU_EXP_MIN_LOAD_PER_USE = 30
+XU_SOUL_LOAD_LIMIT = 100
+XU_SOUL_LOAD_PER_USE = 5
+XU_SOUL_LOAD_TIME_STEP = 150
+XU_SOUL_LOAD_PER_TIME_STEP = 5
+XU_SOUL_LOAD_CAP_EXP = 1
+
+
+def _apply_spirit_vein_exp_bonus(exp: int, cap: int | None = None) -> tuple[int, str]:
+    multiplier = get_spirit_vein_exp_multiplier()
+    exp = max(0, int(exp))
+    if multiplier <= 1:
+        return exp, ""
+    exp = int(exp * multiplier)
+    if cap is not None:
+        exp = min(exp, max(0, int(cap)))
+    return exp, get_spirit_vein_exp_bonus_msg()
+
 
 async def impart_re():
     impart_pk.re_data()
@@ -60,74 +70,24 @@ async def impart_lv(change_type, change_amount):
     
     logger.opt(colors=True).info(f"<green>虚神界等级调整完成</green>")
 
-def calc_xu_exp_by_fatigue(used_load, request_time, exp_per_minute, exp_limit):
-    """按当日神魂承载计算虚神界修炼的疲劳递减收益。"""
-    used_load = max(0, int(used_load))
+def clamp_xu_soul_load(value):
+    """神魂承载按百分比保存，旧数据可能是分钟值，这里统一钳到 0-100。"""
+    return min(XU_SOUL_LOAD_LIMIT, max(0, int(value or 0)))
+
+
+def calc_xu_soul_load_gain(request_time, used_time=0):
+    """计算单次虚神界修炼增加的神魂承载百分比。"""
     request_time = max(0, int(request_time))
-    exp_per_minute = max(0, int(exp_per_minute))
-    exp_limit = max(0, int(exp_limit))
-
-    if request_time <= 0 or exp_per_minute <= 0 or exp_limit <= 0:
-        return 0, 0, []
-
-    current_load = used_load
-    left_time = request_time
-    total_exp = 0
-    cost_time = 0
-    details = []
-
-    for stage_end, rate, name in XU_EXP_FATIGUE_RULES:
-        if left_time <= 0 or total_exp >= exp_limit:
-            break
-
-        if stage_end is None:
-            stage_time = left_time
-        else:
-            if current_load >= stage_end:
-                continue
-            stage_time = min(left_time, stage_end - current_load)
-
-        if stage_time <= 0:
-            continue
-
-        denominator = exp_per_minute * rate
-        possible_exp = denominator * stage_time // 100
-        remaining_exp = exp_limit - total_exp
-
-        if possible_exp > remaining_exp:
-            actual_time = (remaining_exp * 100 + denominator - 1) // denominator
-            actual_time = max(1, min(stage_time, actual_time))
-            stage_exp = remaining_exp
-        else:
-            actual_time = stage_time
-            stage_exp = possible_exp
-
-        total_exp += stage_exp
-        cost_time += actual_time
-        details.append(f"{name}{actual_time}分钟({rate}%)")
-        current_load += actual_time
-        left_time -= actual_time
-
-    return cost_time, total_exp, details
-
-def get_xu_exp_daily_limit(user_id, user_data, user_info):
-    """获取并初始化当日虚神界修炼收益上限。"""
-    level_list = XiuConfig().level
-    anchor_level = user_data.get("exp_cap_level")
-    anchor_exp = int(user_data.get("exp_cap_exp", 0) or 0)
-
-    if not anchor_level or anchor_level not in level_list:
-        anchor_level = user_info["level"]
-        anchor_exp = int(user_info["exp"])
-        impart_pk.set_exp_cap_anchor(user_id, anchor_level, anchor_exp)
-
-    anchor_index = level_list.index(anchor_level)
-    cap_index = min(anchor_index + XU_EXP_DAILY_LEVEL_LIMIT, len(level_list) - 1)
-    cap_level = level_list[cap_index]
-    cap_exp = int(sql_message.get_level_power(cap_level))
-    daily_limit = max(0, cap_exp - anchor_exp)
-    used_exp = int(user_data.get("exp_gain", 0) or 0)
-    return daily_limit, max(0, daily_limit - used_exp), anchor_level, cap_level
+    used_time = max(0, int(used_time or 0))
+    before_steps = used_time // XU_SOUL_LOAD_TIME_STEP
+    after_steps = (used_time + request_time) // XU_SOUL_LOAD_TIME_STEP
+    time_steps = max(0, after_steps - before_steps)
+    time_load = time_steps * XU_SOUL_LOAD_PER_TIME_STEP
+    total_load = XU_SOUL_LOAD_PER_USE + time_load
+    details = [f"本次修炼+{XU_SOUL_LOAD_PER_USE}%"]
+    if time_load > 0:
+        details.append(f"累计时长{time_steps}段+{time_load}%")
+    return total_load, details
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -543,53 +503,51 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     user_data = impart_pk.find_user_data(user_id)
-    daily_limit, remaining_daily_exp, anchor_level, cap_level = get_xu_exp_daily_limit(user_id, user_data, user_info)
-    if remaining_daily_exp <= 0:
-        msg = f"今日神魂承载已至上限，虚神界修炼最多从{anchor_level}承载到{cap_level}，请明日再修炼。"
+    used_load = clamp_xu_soul_load(user_data.get("exp_load", 0) if user_data else 0)
+    used_exp_time = int(user_data.get("exp_used", 0) or 0) if user_data else 0
+    exp_cost_time = impaer_exp_time
+    exp_load, load_details = calc_xu_soul_load_gain(exp_cost_time, used_exp_time)
+    new_load = min(XU_SOUL_LOAD_LIMIT, used_load + exp_load)
+    actual_exp_load = max(0, new_load - used_load)
+    load_is_capped = new_load >= XU_SOUL_LOAD_LIMIT
+    if load_is_capped:
+        exp = min(XU_SOUL_LOAD_CAP_EXP, realm_remaining_exp)
+    else:
+        exp = min(int(exp_cost_time * exp_per_minute), realm_remaining_exp)
+    if exp <= 0:
+        msg = "虚神界灵机淡薄，暂未参悟出有效修为。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
-
-    exp_limit = min(remaining_daily_exp, realm_remaining_exp)
-    used_load = int(user_data.get("exp_load", 0) or 0)
-    exp_cost_time, exp, fatigue_details = calc_xu_exp_by_fatigue(
-        used_load, impaer_exp_time, exp_per_minute, exp_limit
-    )
-    if exp_cost_time <= 0 or exp <= 0:
-        msg = "今日神魂承载已满，继续参悟已难有所得，请明日再修炼。"
-        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_exp.finish()
-
-    exp_load = max(exp_cost_time, XU_EXP_MIN_LOAD_PER_USE)
 
     # 更新经验并返回成功
     xiuxian_impart.use_impart_exp_day(exp_cost_time, user_id)
     sql_message.update_exp(user_id, exp)
-    impart_pk.add_exp_cultivation(user_id, exp_cost_time, exp_load, exp)
+    impart_pk.add_exp_cultivation(user_id, exp_cost_time, actual_exp_load, exp)
     sql_message.update_power2(user_id)  # 更新战力
     
     # 计算修炼效率百分比
     efficiency_percent = int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)
     new_user_data = impart_pk.find_user_data(user_id)
-    fatigue_msg = "、".join(fatigue_details)
-    cap_msg = f"{number_to(new_user_data.get('exp_gain', 0))}/{number_to(daily_limit)}"
-    extra_msg = ""
-    if exp_cost_time < impaer_exp_time:
-        extra_msg = f"\n本次触及今日承载上限，实际消耗{exp_cost_time}分钟。"
+    current_load = clamp_xu_soul_load(new_user_data.get("exp_load", 0))
+    load_detail_msg = "、".join(load_details)
+    cap_msg = ""
+    if load_is_capped:
+        cap_msg = f"\n神魂承载已达上限，本次修为固定为{XU_SOUL_LOAD_CAP_EXP}。"
     msg = (
         f"虚神界修炼结束，共修炼{round(exp_cost_time)}分钟，本次增加修为：{number_to(exp)}"
         f"（修炼效率：{efficiency_percent}%）"
-        f"\n神魂承载：{fatigue_msg}"
-        f"\n今日虚神界修炼收益：{cap_msg}"
-        f"\n今日修炼次数：{new_user_data.get('exp_count', 0)}次，承载值：{new_user_data.get('exp_load', 0)}"
-        f"{extra_msg}"
+        f"\n神魂承载：{used_load}% -> {current_load}%（{load_detail_msg}，实际+{actual_exp_load}%）"
+        f"\n今日虚神界修炼收益：{number_to(new_user_data.get('exp_gain', 0))}"
+        f"\n今日修炼次数：{new_user_data.get('exp_count', 0)}次"
+        f"{cap_msg}"
     )
     update_statistics_value(user_id, "虚神界修炼", increment=exp_cost_time)
     update_statistics_value(user_id, "虚神界修炼次数")
     update_statistics_value(user_id, "虚神界修炼修为", increment=exp)
-    update_statistics_value(user_id, "虚神界修炼承载", increment=exp_load)
+    update_statistics_value(user_id, "虚神界修炼承载", increment=actual_exp_load)
     log_message(
         user_id,
-        f"[虚神界修炼] 修炼{exp_cost_time}分钟，获得修为{number_to(exp)}，承载值+{exp_load}，今日收益{cap_msg}"
+        f"[虚神界修炼] 修炼{exp_cost_time}分钟，获得修为{number_to(exp)}，承载{used_load}%->{current_load}%(+{actual_exp_load}%)"
     )
     await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_exp.finish()
@@ -635,6 +593,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg += f"\n现位于：{impart_name_new}（LV {impart_lv}）"
     msg += f"\n虚神界修炼时间：{impart_time} 分钟"
     msg += f"\n修炼效率：{int((impart_exp_up + user_blessed_spot_data) * 100)}% {user_blessed_spot_msg}"
+    msg += f"\n今日神魂承载：{clamp_xu_soul_load(user_data.get('exp_load', 0))}%/{XU_SOUL_LOAD_LIMIT}%"
     msg += f"\n今日可探索次数：{impart_num}"
     msg += f"\n今日可对决次数：{pk_num}"
     msg += f"\n思恋结晶：{stone_num}"
@@ -927,6 +886,8 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         
         total_exp = double_exp + single_exp
 
+    total_exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(total_exp, user_get_exp_max)
+
     # 更新可用修炼时间
     if exp_day_cost > 0:
         xiuxian_impart.use_impart_exp_day(exp_day_cost, user_id)
@@ -949,21 +910,21 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     # 构造返回消息
     if total_exp >= user_get_exp_max:
-        msg = f"虚神界闭关结束，本次虚神界闭关到达上限，共增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}"
+        msg = f"虚神界闭关结束，本次虚神界闭关到达上限，共增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
     else:
         if effective_single_exp_time == 0:
             msg = (f"虚神界闭关结束，共闭关{exp_time}分钟，"
                    f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
-                   f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}")
+                   f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}{spirit_vein_msg}")
         else:
             msg = (f"虚神界闭关结束，共闭关{exp_time}分钟，"
                    f"其中{int(effective_double_exp_time)}分钟获得虚神界祝福，"
                    f"{int(effective_single_exp_time)}分钟没有获得祝福，"
-                   f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}")
+                   f"本次闭关增加修为：{number_to(total_exp)}(修炼效率：{base_exp_rate2}){result_msg[0]}{result_msg[1]}{spirit_vein_msg}")
     log_message(
         user_id,
         f"[虚神界出关] 闭关{exp_time}分钟，祝福{int(exp_day_cost)}分钟，获得修为{number_to(total_exp)}"
     )
-    record_task_progress(user_id, "xu_out_closing")
+    record_task_progress(user_id, "xu_out_closing", exp_time)
     await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_out_closing.finish()

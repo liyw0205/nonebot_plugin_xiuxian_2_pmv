@@ -8,6 +8,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_world_events import get_spirit_vein_tianti_bonus_msg
 from .tianti_data import (
     TiantiDataManager,
     get_tianti_level_data,
@@ -160,6 +161,12 @@ def _format_sect_fairyland_msg(result: dict) -> str:
     return f"\n宗门炼体堂加成：{sect_bonus * 100:.0f}%"
 
 
+def _format_spirit_vein_msg(result: dict) -> str:
+    if float(result.get("spirit_vein_bonus", 0) or 0) <= 0:
+        return ""
+    return get_spirit_vein_tianti_bonus_msg()
+
+
 def _get_qiaoxue_unlock_limit(data: dict) -> int:
     """
     冲窍额度规则：
@@ -231,6 +238,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"当前炼体气血：{number_to(result['new_hp'])}"
         f"{bath_msg}"
         f"{_format_sect_fairyland_msg(result)}"
+        f"{_format_spirit_vein_msg(result)}"
     )
 
 
@@ -540,6 +548,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         bath_msg = "\n药浴：无"
     sect_msg = f"\n宗门炼体堂：{sect_fairyland_level}级（炼体气血+{sect_bonus * 100:.0f}%）" if sect_bonus > 0 else "\n宗门炼体堂：无加成"
+    spirit_vein_msg = _format_spirit_vein_msg(rate_info)
 
     await handle_send(
         bot, event,
@@ -553,6 +562,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"{brk}"
         f"{bath_msg}"
         f"{sect_msg}"
+        f"{spirit_vein_msg}"
     )
 
 

@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import RLock
 
 from nonebot import require
@@ -34,11 +34,17 @@ player_data_manager = PlayerDataManager()
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
+SPIRIT_VEIN_EVENT_KEY = "spirit_vein"
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 EVENT_START_HOUR = 18
 EVENT_END_HOUR = 22
 BOSS_REAL_HP_MULTIPLIER = 10000
 MAX_SINGLE_DAMAGE_RATIO = 0.2
+SPIRIT_VEIN_TRIGGER_CHANCE = 0.10
+SPIRIT_VEIN_MIN_DURATION = 30
+SPIRIT_VEIN_MAX_DURATION = 180
+SPIRIT_VEIN_EXP_BONUS_RATE = 0.20
+SPIRIT_VEIN_TIANTI_BONUS_RATE = 0.20
 
 REALM_LIST = [
     "感气境",
@@ -80,32 +86,37 @@ DEMON_NAMES = [
 _state_lock = RLock()
 
 
-world_event_help = on_command("世界事件帮助", aliases={"魔修入侵帮助"}, priority=5, block=True)
-world_event_info = on_command("世界事件", aliases={"世界事件状态", "魔修入侵", "魔修入侵状态"}, priority=6, block=True)
+world_event_help = on_command("世界事件帮助", priority=5, block=True)
+world_event_info = on_command("魔修入侵", aliases={"魔修入侵状态"}, priority=6, block=True)
+spirit_vein_info = on_command("天降灵脉", aliases={"天降灵脉状态"}, priority=6, block=True)
 start_demon_invasion = on_command("开启魔修入侵", aliases={"魔修入侵开启"}, permission=SUPERUSER, priority=5, block=True)
-close_world_event = on_command("关闭世界事件", aliases={"关闭魔修入侵"}, permission=SUPERUSER, priority=5, block=True)
+close_world_event = on_command("关闭魔修入侵", aliases={"魔修入侵关闭"}, permission=SUPERUSER, priority=5, block=True)
+start_spirit_vein = on_command("开启天降灵脉", aliases={"天降灵脉开启"}, permission=SUPERUSER, priority=5, block=True)
+close_spirit_vein = on_command("关闭天降灵脉", aliases={"天降灵脉关闭"}, permission=SUPERUSER, priority=5, block=True)
 attack_demon_invasion = on_command("讨伐魔修", aliases={"攻击魔修", "魔修讨伐"}, priority=6, block=True)
-claim_demon_reward = on_command("领取魔修奖励", aliases={"领取世界事件奖励"}, priority=6, block=True)
+claim_demon_reward = on_command("领取魔修奖励", priority=6, block=True)
 
 
 __world_event_help__ = f"""
-魔修入侵帮助
+世界事件帮助
 
-开启时间：
+魔修入侵：
   ▶ 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
-
-查询指令：
-  ▶ 魔修入侵状态 - 查看当前入侵状态、对应境界魔修血量和贡献排行
-  ▶ 世界事件 - 查看世界事件状态
-
-战斗指令：
   ▶ 讨伐魔修 - 按自身境界挑战对应境界魔修
   ▶ 领取魔修奖励 - 入侵结束或对应境界魔修被击退后按贡献领取奖励
+
+天降灵脉：
+  ▶ 每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启
+  ▶ 每次持续{SPIRIT_VEIN_MIN_DURATION}-{SPIRIT_VEIN_MAX_DURATION}分钟
+  ▶ 持续期间修炼、出关、虚神界出关获得修为+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%
+  ▶ 持续期间炼体结算获得炼体气血+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%
+  ▶ 天降灵脉 - 查看当前灵脉状态
 
 规则说明：
   ▶ 每个境界会生成独立魔修。
   ▶ 战斗血条只用于对战，真实 BOSS 血条为战斗血条的 {BOSS_REAL_HP_MULTIPLIER} 倍。
   ▶ 伤害按真实削减血量记录贡献。
+  ▶ 天降灵脉持续期间再次触发时会自动跳过，不刷新持续时间。
 """.strip()
 
 
@@ -121,6 +132,19 @@ def _format_time(value: datetime) -> str:
     return value.strftime(TIME_FORMAT)
 
 
+def _parse_time(value) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in (TIME_FORMAT, "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            return datetime.strptime(str(value), fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _to_int(value, default: int = 0) -> int:
     try:
         return int(float(value))
@@ -128,8 +152,8 @@ def _to_int(value, default: int = 0) -> int:
         return default
 
 
-def _load_state() -> dict:
-    state = player_data_manager.get_fields(EVENT_KEY, EVENT_TABLE) or {}
+def _load_state(event_key: str = EVENT_KEY) -> dict:
+    state = player_data_manager.get_fields(event_key, EVENT_TABLE) or {}
     state.pop("user_id", None)
     state.setdefault("active", 0)
     state.setdefault("status", "idle")
@@ -153,7 +177,7 @@ def _load_state() -> dict:
     return state
 
 
-def _save_state(state: dict) -> None:
+def _save_state(state: dict, event_key: str = EVENT_KEY) -> None:
     fields = {
         "active": "INTEGER",
         "status": "TEXT",
@@ -171,7 +195,7 @@ def _save_state(state: dict) -> None:
     }
     for field, data_type in fields.items():
         player_data_manager.update_or_write_data(
-            EVENT_KEY,
+            event_key,
             EVENT_TABLE,
             field,
             state.get(field, "" if data_type == "TEXT" else 0),
@@ -181,6 +205,10 @@ def _save_state(state: dict) -> None:
 
 def _event_id(period: str) -> str:
     return f"demon_invasion:{period}"
+
+
+def _spirit_vein_event_id(started_at: datetime) -> str:
+    return f"spirit_vein:{started_at.strftime('%Y%m%d%H%M')}"
 
 
 def _get_level_power(realm: str) -> int:
@@ -254,9 +282,129 @@ def _build_active_state(period: str | None = None, manual: bool = False) -> dict
     }
 
 
+def _build_spirit_vein_state(duration_minutes: int | None = None, manual: bool = False) -> dict:
+    now = _now()
+    duration_minutes = duration_minutes or random.randint(SPIRIT_VEIN_MIN_DURATION, SPIRIT_VEIN_MAX_DURATION)
+    duration_minutes = max(SPIRIT_VEIN_MIN_DURATION, min(int(duration_minutes), SPIRIT_VEIN_MAX_DURATION))
+    ends_at = now + timedelta(minutes=duration_minutes)
+    return {
+        "active": 1,
+        "status": "active",
+        "event_id": _spirit_vein_event_id(now),
+        "event_type": "spirit_vein",
+        "name": "天降灵脉",
+        "period": now.strftime("%Y-%m-%d"),
+        "manual": 1 if manual else 0,
+        "bosses": {},
+        "participants": {},
+        "claimed": {},
+        "started_at": _format_time(now),
+        "ends_at": _format_time(ends_at),
+        "last_result": f"天降灵脉已开启，持续{duration_minutes}分钟。",
+    }
+
+
 def _is_auto_window(now: datetime | None = None) -> bool:
     now = now or _now()
     return EVENT_START_HOUR <= now.hour < EVENT_END_HOUR
+
+
+def _ensure_spirit_vein_state(now: datetime | None = None) -> dict:
+    now = now or _now()
+    state = _load_state(SPIRIT_VEIN_EVENT_KEY)
+    if state.get("event_type") != "spirit_vein" and not state.get("event_id"):
+        state["event_type"] = "spirit_vein"
+        state["name"] = "天降灵脉"
+
+    ends_at = _parse_time(state.get("ends_at"))
+    if state.get("status") == "active" and ends_at and now >= ends_at:
+        state["active"] = 0
+        state["status"] = "finished"
+        state["last_result"] = f"天降灵脉已于{ends_at.strftime('%H:%M')}消散。"
+        _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+    return state
+
+
+def _is_spirit_vein_active(now: datetime | None = None) -> bool:
+    now = now or _now()
+    with _state_lock:
+        state = _ensure_spirit_vein_state(now)
+    ends_at = _parse_time(state.get("ends_at"))
+    return state.get("status") == "active" and bool(ends_at) and now < ends_at
+
+
+def get_spirit_vein_exp_multiplier() -> float:
+    return 1 + SPIRIT_VEIN_EXP_BONUS_RATE if _is_spirit_vein_active() else 1.0
+
+
+def get_spirit_vein_tianti_multiplier() -> float:
+    return 1 + SPIRIT_VEIN_TIANTI_BONUS_RATE if _is_spirit_vein_active() else 1.0
+
+
+def get_spirit_vein_exp_bonus_msg() -> str:
+    if not _is_spirit_vein_active():
+        return ""
+    return f"\n天降灵脉加成：修为+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%"
+
+
+def get_spirit_vein_tianti_bonus_msg() -> str:
+    if not _is_spirit_vein_active():
+        return ""
+    return f"\n天降灵脉加成：炼体气血+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%"
+
+
+def _build_spirit_vein_message(state: dict) -> str:
+    state = _ensure_spirit_vein_state()
+    if state.get("status") == "active":
+        ends_at = _parse_time(state.get("ends_at"))
+        now = _now()
+        left_minutes = max(0, int(((ends_at or now) - now).total_seconds() // 60))
+        return (
+            "【天降灵脉】\n"
+            "状态：进行中\n"
+            f"开始时间：{state.get('started_at') or '未知'}\n"
+            f"结束时间：{state.get('ends_at') or '未知'}\n"
+            f"剩余时间：约{left_minutes}分钟\n"
+            f"修为加成：+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%\n"
+            f"炼体加成：+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%"
+        )
+    last_result = state.get("last_result") or "当前没有开启中的天降灵脉。"
+    return (
+        f"{last_result}\n"
+        f"触发规则：每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启。\n"
+        f"开启后持续{SPIRIT_VEIN_MIN_DURATION}-{SPIRIT_VEIN_MAX_DURATION}分钟。"
+    )
+
+
+def _try_start_auto_spirit_vein() -> tuple[dict, str]:
+    now = _now()
+    state = _ensure_spirit_vein_state(now)
+    if state.get("status") == "active":
+        return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
+    if random.random() >= SPIRIT_VEIN_TRIGGER_CHANCE:
+        return state, "天降灵脉触发检查完成，本次未开启。"
+
+    state = _build_spirit_vein_state()
+    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+    return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
+
+
+def _start_spirit_vein_manual(duration_minutes: int | None = None) -> dict:
+    state = _build_spirit_vein_state(duration_minutes=duration_minutes, manual=True)
+    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+    return state
+
+
+def _close_spirit_vein_manual() -> dict:
+    state = _load_state(SPIRIT_VEIN_EVENT_KEY)
+    state["active"] = 0
+    state["status"] = "finished"
+    state["event_type"] = "spirit_vein"
+    state["name"] = "天降灵脉"
+    state["manual"] = 1
+    state["last_result"] = "天降灵脉已手动关闭。"
+    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+    return state
 
 
 def _ensure_daily_state() -> dict:
@@ -420,6 +568,21 @@ async def demon_invasion_schedule_job():
         logger.info(log_text)
 
 
+@scheduler.scheduled_job(
+    "cron",
+    minute=30,
+    second=0,
+    id="spirit_vein_schedule",
+    misfire_grace_time=300,
+    coalesce=True,
+    max_instances=1,
+)
+async def spirit_vein_schedule_job():
+    with _state_lock:
+        _, log_text = _try_start_auto_spirit_vein()
+    logger.info(log_text)
+
+
 @world_event_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def world_event_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -429,10 +592,10 @@ async def world_event_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         __world_event_help__,
         k1="状态",
         v1="魔修入侵状态",
-        k2="讨伐",
-        v2="讨伐魔修",
-        k3="领奖",
-        v3="领取魔修奖励",
+        k2="灵脉",
+        v2="天降灵脉",
+        k3="讨伐",
+        v3="讨伐魔修",
     )
     await world_event_help.finish()
 
@@ -455,9 +618,30 @@ async def world_event_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         k2="领奖",
         v2="领取魔修奖励",
         k3="帮助",
-        v3="魔修入侵帮助",
+        v3="世界事件帮助",
     )
     await world_event_info.finish()
+
+
+@spirit_vein_info.handle(parameterless=[Cooldown(cd_time=0)])
+async def spirit_vein_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    with _state_lock:
+        state = _ensure_spirit_vein_state()
+        msg = _build_spirit_vein_message(state)
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="世界事件",
+        k1="修炼",
+        v1="修炼",
+        k2="出关",
+        v2="出关",
+        k3="炼体",
+        v3="炼体结算",
+    )
+    await spirit_vein_info.finish()
 
 
 @start_demon_invasion.handle(parameterless=[Cooldown(cd_time=0)])
@@ -475,6 +659,21 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await start_demon_invasion.finish()
 
 
+@start_spirit_vein.handle(parameterless=[Cooldown(cd_time=0)])
+async def start_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    with _state_lock:
+        state = _start_spirit_vein_manual()
+    msg = (
+        "天降灵脉已手动开启。\n"
+        f"持续至：{state.get('ends_at')}\n"
+        f"修为加成：+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%\n"
+        f"炼体加成：+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%"
+    )
+    await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="天降灵脉状态")
+    await start_spirit_vein.finish()
+
+
 @close_world_event.handle(parameterless=[Cooldown(cd_time=0)])
 async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -489,6 +688,15 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await close_world_event.finish()
 
 
+@close_spirit_vein.handle(parameterless=[Cooldown(cd_time=0)])
+async def close_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    with _state_lock:
+        _close_spirit_vein_manual()
+    await handle_send(bot, event, "天降灵脉已手动关闭。", md_type="世界事件", k1="状态", v1="天降灵脉状态")
+    await close_spirit_vein.finish()
+
+
 @attack_demon_invasion.handle(parameterless=[Cooldown(cd_time=30)])
 async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -500,7 +708,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_id = str(user_info["user_id"])
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
-        await handle_send(bot, event, msg, md_type="世界事件", k1="帮助", v1="魔修入侵帮助")
+        await handle_send(bot, event, msg, md_type="世界事件", k1="帮助", v1="世界事件帮助")
         await attack_demon_invasion.finish()
 
     sql_message.update_last_check_info_time(user_id)

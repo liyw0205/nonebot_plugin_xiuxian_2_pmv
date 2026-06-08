@@ -71,10 +71,10 @@ TASKS: tuple[TaskDefinition, ...] = (
         key="weekly_out_closing",
         cycle="weekly",
         name="道心不辍",
-        desc="本周完成出关或虚神界出关 7 次",
-        target=7,
-        events=("out_closing", "xu_out_closing"),
-        rewards={"items": [{"id": 18082, "amount": 1}]},
+        desc="本周累计修炼、出关或虚神界出关 7200 分钟",
+        target=7200,
+        events=("cultivation_time", "out_closing", "xu_out_closing"),
+        rewards={"items": [{"id": 18134, "amount": 1}]},
     ),
     TaskDefinition(
         key="weekly_work",
@@ -83,7 +83,7 @@ TASKS: tuple[TaskDefinition, ...] = (
         desc="本周结算悬赏令 25 次",
         target=25,
         events=("work",),
-        rewards={"items": [{"id": 18117, "amount": 1}]},
+        rewards={"items": [{"id": 18172, "amount": 1}]},
     ),
     TaskDefinition(
         key="weekly_boss",
@@ -190,7 +190,9 @@ class XiuxianTaskManager:
 
     def record_progress(self, user_id: str, event_key: str, amount: int = 1) -> list[str]:
         user_id = str(user_id)
-        amount = max(1, int(amount))
+        amount = max(0, int(amount))
+        if amount <= 0:
+            return []
         completed: list[str] = []
 
         with self.player_data_manager.lock:

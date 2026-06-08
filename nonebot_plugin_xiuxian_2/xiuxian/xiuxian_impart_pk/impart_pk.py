@@ -37,9 +37,7 @@ class IMPART_PK(object):
             "exp_used": 0,
             "exp_count": 0,
             "exp_load": 0,
-            "exp_gain": 0,
-            "exp_cap_level": "",
-            "exp_cap_exp": 0
+            "exp_gain": 0
         }
 
     def _ensure_user_fields(self, user_id):
@@ -107,21 +105,14 @@ class IMPART_PK(object):
         self.data[user_id]["impart_num"] -= 1
         self.__save()
 
-    def set_exp_cap_anchor(self, user_id, level, exp):
-        """记录当日首次虚神界修炼时的境界与修为，用于单日收益上限。"""
-        user_id = str(user_id)
-        self.check_user_impart(user_id)
-        self.data[user_id]["exp_cap_level"] = level
-        self.data[user_id]["exp_cap_exp"] = int(exp)
-        self.__save()
-
     def add_exp_cultivation(self, user_id, exp_time, exp_load, exp_gain):
-        """记录当日虚神界修炼已消耗时间与已获得修为。"""
+        """记录当日虚神界修炼已消耗时间、神魂承载百分比与已获得修为。"""
         user_id = str(user_id)
         self.check_user_impart(user_id)
         self.data[user_id]["exp_used"] += int(exp_time)
         self.data[user_id]["exp_count"] += 1
-        self.data[user_id]["exp_load"] += int(exp_load)
+        current_load = max(0, int(self.data[user_id].get("exp_load", 0) or 0))
+        self.data[user_id]["exp_load"] = min(100, current_load + max(0, int(exp_load)))
         self.data[user_id]["exp_gain"] += int(exp_gain)
         self.__save()
 

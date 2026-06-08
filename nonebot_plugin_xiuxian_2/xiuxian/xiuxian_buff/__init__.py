@@ -45,6 +45,7 @@ from ..xiuxian_rift.jsondata import read_rift_data
 from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon import dungeon_manager
+from ..xiuxian_world_events import get_spirit_vein_exp_bonus_msg, get_spirit_vein_exp_multiplier
 from .two_exp_cd import two_exp_cd
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
@@ -81,6 +82,19 @@ blessed_spot_rename = on_command("洞天福地改名", priority=7, block=True)
 ling_tian_up = on_command("灵田开垦", priority=5, block=True)
 del_exp_decimal = on_command("抑制黑暗动乱", priority=9, block=True)
 daily_info = on_command("日常", priority=9, block=True)
+
+
+def _apply_spirit_vein_exp_bonus(exp: int, cap: int | None = None) -> tuple[int, str]:
+    multiplier = get_spirit_vein_exp_multiplier()
+    exp = max(0, int(exp))
+    if multiplier <= 1:
+        return exp, ""
+    exp = int(exp * multiplier)
+    if cap is not None:
+        exp = min(exp, max(0, int(cap)))
+    return exp, get_spirit_vein_exp_bonus_msg()
+
+
 __buff_help__ = f"""
 【修仙功法系统】📜
 
@@ -410,6 +424,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await asyncio.sleep(60)
         if not sql_message.clear_user_type_if_match(user_id, 5, closing_create_time):
             await up_exp.finish()
+        exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(exp, user_get_exp_max)
         update_statistics_value(user_id, "修炼次数")
         if exp >= user_get_exp_max:
             # 用户获取的修为到达上限
@@ -418,9 +433,10 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"修炼结束，本次修炼到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
+            msg = f"修炼结束，本次修炼到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
             log_message(user_id, f"[修炼] 修炼60秒，到达上限，获得修为{number_to(user_get_exp_max)}")
             update_statistics_value(user_id, "修炼修为", increment=user_get_exp_max)
+            record_task_progress(user_id, "cultivation_time", 1)
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
@@ -429,9 +445,10 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             sql_message.update_power2(user_id)  # 更新战力
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"修炼结束，增加修为：{number_to(exp)}{result_msg[0]}{result_msg[1]}"
+            msg = f"修炼结束，增加修为：{number_to(exp)}{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
             log_message(user_id, f"[修炼] 修炼60秒，获得修为{number_to(exp)}")
             update_statistics_value(user_id, "修炼修为", increment=exp)
+            record_task_progress(user_id, "cultivation_time", 1)
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
 
@@ -574,6 +591,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             (exp_time * XiuConfig().closing_exp) * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
             # 洞天福地为加法
         )  # 本次闭关获取的修为
+        base_exp = exp
+        exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(base_exp, user_get_exp_max)
         base_exp_rate = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data) * 100)}%"
         if exp >= user_get_exp_max:
             # 用户获取的修为到达上限
@@ -583,11 +602,11 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
             result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
             sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}"
+            msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
             update_statistics_value(user_id, "闭关时长", increment=exp_time)
             update_statistics_value(user_id, "闭关修为", increment=user_get_exp_max)
             log_message(user_id, f"[出关] 闭关{exp_time}分钟，到达上限，获得修为{number_to(user_get_exp_max)}")
-            record_task_progress(user_id, "out_closing")
+            record_task_progress(user_id, "out_closing", exp_time)
             await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await out_closing.finish()
         else:
@@ -596,26 +615,27 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 user_stone = user_mes['stone']  # 用户灵石数
                 if user_stone <= 0:
                     user_stone = 0
-                if exp <= user_stone:
-                    exp = exp * 2
+                if base_exp <= user_stone:
+                    stone_cost = base_exp
+                    exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(base_exp * 2, user_get_exp_max)
                     sql_message.in_closing(user_id, user_type)
                     sql_message.update_exp(user_id, exp)
-                    sql_message.update_ls(user_id, int(exp / 2), 2)
+                    sql_message.update_ls(user_id, stone_cost, 2)
                     sql_message.update_power2(user_id)  # 更新战力
 
                     result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
-                    msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{int(exp / 2)}枚{result_msg[0]}{result_msg[1]}"
+                    msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{stone_cost}枚{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
                     update_statistics_value(user_id, "闭关修为", increment=exp)
-                    update_statistics_value(user_id, "闭关灵石消耗", increment=int(exp / 2))
-                    log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(int(exp / 2))}，获得修为{number_to(exp)}")
-                    record_task_progress(user_id, "out_closing")
+                    update_statistics_value(user_id, "闭关灵石消耗", increment=stone_cost)
+                    log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(stone_cost)}，获得修为{number_to(exp)}")
+                    record_task_progress(user_id, "out_closing", exp_time)
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
                 else:
-                    exp = exp + user_stone
+                    exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(base_exp + user_stone, user_get_exp_max)
                     sql_message.in_closing(user_id, user_type)
                     sql_message.update_exp(user_id, exp)
                     sql_message.update_ls(user_id, user_stone, 2)
@@ -623,12 +643,12 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
                     sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1],
                                                       int(result_hp_mp[2] / 10))
-                    msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}"
+                    msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate})，消耗灵石{user_stone}枚{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
                     update_statistics_value(user_id, "闭关时长", increment=exp_time)
                     update_statistics_value(user_id, "闭关修为", increment=exp)
                     update_statistics_value(user_id, "闭关灵石消耗", increment=user_stone)
                     log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(user_stone)}，获得修为{number_to(exp)}")
-                    record_task_progress(user_id, "out_closing")
+                    record_task_progress(user_id, "out_closing", exp_time)
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
             else:
@@ -637,11 +657,11 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 sql_message.update_power2(user_id)  # 更新战力
                 result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10 * exp_time), int(use_exp / 20 * exp_time))
                 sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-                msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}"
+                msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{base_exp_rate}){result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
                 update_statistics_value(user_id, "闭关时长", increment=exp_time)
                 update_statistics_value(user_id, "闭关修为", increment=exp)
                 log_message(user_id, f"[出关] 闭关{exp_time}分钟，获得修为{number_to(exp)}")
-                record_task_progress(user_id, "out_closing")
+                record_task_progress(user_id, "out_closing", exp_time)
                 await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                 await out_closing.finish()
 
