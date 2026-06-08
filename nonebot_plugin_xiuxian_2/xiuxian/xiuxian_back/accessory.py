@@ -24,6 +24,7 @@ player_data_manager = PlayerDataManager()
 
 my_accessory = on_command("我的饰品", priority=10, block=True)
 accessory_bag = on_command("饰品背包", priority=10, block=True)
+accessory_collection = on_command("饰品图鉴", aliases={"饰品套装", "饰品收集"}, priority=10, block=True)
 equip_accessory = on_command("装备饰品", priority=10, block=True)
 unequip_accessory = on_command("卸下饰品", priority=10, block=True)
 wash_accessory = on_command("饰品洗练", priority=10, block=True)
@@ -400,6 +401,90 @@ def _format_accessory_preset(user_id: str, preset_idx: int):
 
     return "\n".join(lines)
 
+
+def _iter_all_accessories(data: dict):
+    for acc in data.get("bag", []) or []:
+        if acc:
+            yield acc, "背包"
+    for slot in SLOTS:
+        acc = data.get("equipped", {}).get(slot)
+        if acc:
+            yield acc, f"已装备:{slot}"
+
+
+def _build_accessory_collection(user_id: str) -> dict:
+    data = _get_data(str(user_id))
+    collection = {
+        set_name: {
+            quality: {slot: [] for slot in SLOTS}
+            for quality in QUALITY_RANGE
+        }
+        for set_name in ACCESSORY_SETS
+    }
+
+    for acc, where in _iter_all_accessories(data):
+        set_name = str(acc.get("set_type", ""))
+        part = str(acc.get("part", ""))
+        quality = max(1, min(5, int(acc.get("quality", 1) or 1)))
+        if set_name not in collection or part not in SLOTS:
+            continue
+        collection[set_name][quality][part].append(
+            {
+                "uid": acc.get("uid", ""),
+                "name": acc.get("name", "未知饰品"),
+                "where": where,
+            }
+        )
+    return collection
+
+
+def _summarize_accessory_collection(collection: dict) -> dict:
+    result = {}
+    for set_name in ACCESSORY_SETS:
+        quality_map = collection.get(set_name, {})
+        result[set_name] = {
+            "owned_slots": set(),
+            "complete_qualities": [],
+            "best_quality": 0,
+            "total_owned": 0,
+        }
+        for quality in QUALITY_RANGE:
+            slot_map = quality_map.get(quality, {})
+            owned_slots = {slot for slot in SLOTS if slot_map.get(slot)}
+            result[set_name]["owned_slots"].update(owned_slots)
+            result[set_name]["total_owned"] += sum(len(slot_map.get(slot, [])) for slot in SLOTS)
+            if len(owned_slots) == len(SLOTS):
+                result[set_name]["complete_qualities"].append(quality)
+                result[set_name]["best_quality"] = max(result[set_name]["best_quality"], quality)
+    return result
+
+
+def _format_set_bonus_lines(set_name: str) -> list[str]:
+    lines = []
+    for pieces in (2, 4):
+        bonus = SET_BONUS.get(set_name, {}).get(pieces)
+        if not bonus:
+            continue
+        bonus_type = bonus.get("type")
+        bonus_name = SET_TYPE_CN.get(bonus_type, bonus_type)
+        bonus_value = float(bonus.get("value", 0))
+        if bonus_type in SET_VALUE_POINT_TYPES:
+            value_text = f"+{bonus_value:.0f}点"
+        else:
+            value_text = f"+{bonus_value * 100:.2f}%"
+        lines.append(f"{pieces}件：{bonus_name}{value_text}")
+    return lines or ["暂无套装效果"]
+
+
+def _resolve_collection_set_filter(arg: str) -> str | None:
+    text = str(arg or "").strip()
+    if not text or text in {"全部", "总览"}:
+        return None
+    for set_name in ACCESSORY_SETS:
+        if text == set_name or text in f"{set_name}套装":
+            return set_name
+    return None
+
 def _get_upgrade_cost(cur_quality: int) -> int:
     if cur_quality <= 1:
         return 1
@@ -553,13 +638,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     > 分解、快速分解、预设、快速装备
 
 4.  **查看信息**：发送【我的饰品】或【饰品背包】
+    > 套装图鉴、收集进度、已激活效果
 """.strip()
 
     await send_help_message(
         bot, event, msg,
         k1="基础帮助", v1="饰品基础帮助",
         k2="成长帮助", v2="饰品成长帮助",
-        k3="整理帮助", v3="饰品整理帮助",
+        k3="饰品图鉴", v3="饰品图鉴",
         k4="饰品背包", v4="饰品背包"
     )
 
@@ -580,11 +666,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    发送：查看饰品 饰品UID
    例如：查看饰品 acc_1730000000000_1234
 
-4）装备饰品：
+4）查看套装图鉴：
+   发送：饰品图鉴 [套装名]
+   例如：饰品图鉴 烈阳
+
+5）装备饰品：
    发送：装备饰品 饰品UID
    例如：装备饰品 acc_1730000000000_1234
 
-5）卸下饰品：
+6）卸下饰品：
    发送：卸下饰品 部位
    可用部位：手镯 / 戒指 / 手环 / 项链
 """.strip()
@@ -593,7 +683,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event, msg,
         k1="我的饰品", v1="我的饰品",
         k2="饰品背包", v2="饰品背包",
-        k3="查看饰品", v3="查看饰品",
+        k3="饰品图鉴", v3="饰品图鉴",
         k4="主帮助", v4="饰品帮助"
     )
 
@@ -846,6 +936,95 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     lines.append("可用命令：装备饰品 UID / 饰品洗练 UID / 饰品分解 UID")
     page = ["翻页", f"饰品背包 {current_page + 1}", "装备", "装备饰品", "洗练", "饰品洗练", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '饰品背包', bot.self_id, lines, title=title, page=page)
+
+
+@accessory_collection.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = str(user_info["user_id"])
+    arg = args.extract_plain_text().strip()
+    set_filter = _resolve_collection_set_filter(arg)
+    if arg and set_filter is None and arg not in {"全部", "总览"}:
+        await handle_send(
+            bot,
+            event,
+            f"未识别的套装：{arg}\n可用：{'/'.join(ACCESSORY_SETS)}",
+            md_type="背包",
+            k1="图鉴",
+            v1="饰品图鉴",
+            k2="背包",
+            v2="饰品背包",
+            k3="帮助",
+            v3="饰品帮助",
+        )
+        return
+
+    collection = _build_accessory_collection(user_id)
+    summary = _summarize_accessory_collection(collection)
+
+    if set_filter:
+        lines = [f"☆------{set_filter}套装图鉴------☆"]
+        lines.append("套装效果：")
+        lines.extend([f" - {line}" for line in _format_set_bonus_lines(set_filter)])
+        lines.append("")
+        lines.append("收集进度：")
+        for quality in QUALITY_RANGE:
+            slot_map = collection[set_filter][quality]
+            slot_text = []
+            for slot in SLOTS:
+                owned = slot_map.get(slot, [])
+                if owned:
+                    best = owned[0]
+                    location = best.get("where", "背包")
+                    slot_text.append(f"{slot}√({len(owned)}件/{location})")
+                else:
+                    slot_text.append(f"{slot}×")
+            completed = all(slot_map.get(slot) for slot in SLOTS)
+            state = "已集齐" if completed else "未集齐"
+            lines.append(f"{quality_to_cn(quality)}：{state} | {'、'.join(slot_text)}")
+        lines.append("")
+        lines.append("可执行操作：饰品背包、我的饰品、查看饰品")
+    else:
+        total_complete = sum(len(info["complete_qualities"]) for info in summary.values())
+        total_sets = len(ACCESSORY_SETS) * len(QUALITY_RANGE)
+        lines = [
+            "☆------饰品套装图鉴------☆",
+            f"完整套装：{total_complete}/{total_sets}",
+            "",
+            "套装总览：",
+        ]
+        for set_name in ACCESSORY_SETS:
+            info = summary[set_name]
+            owned_slot_count = len(info["owned_slots"])
+            complete_text = (
+                "、".join(quality_to_cn(q) for q in info["complete_qualities"])
+                if info["complete_qualities"]
+                else "暂无完整阶数"
+            )
+            best_quality = info["best_quality"]
+            best_text = quality_to_cn(best_quality) if best_quality else "未集齐"
+            lines.append(
+                f"{set_name}：部位{owned_slot_count}/4，完整阶数：{complete_text}，最高完整：{best_text}"
+            )
+        lines.append("")
+        lines.append("发送【饰品图鉴 套装名】查看详细部位，例如：饰品图鉴 烈阳")
+
+    await handle_send(
+        bot,
+        event,
+        "\n".join(lines),
+        md_type="背包",
+        k1="背包",
+        v1="饰品背包",
+        k2="我的饰品",
+        v2="我的饰品",
+        k3="帮助",
+        v3="饰品帮助",
+    )
 
 @check_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
