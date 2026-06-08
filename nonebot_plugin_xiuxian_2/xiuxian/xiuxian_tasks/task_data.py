@@ -74,7 +74,7 @@ TASKS: tuple[TaskDefinition, ...] = (
         desc="本周累计修炼、出关或虚神界出关 7200 分钟",
         target=7200,
         events=("cultivation_time", "out_closing", "xu_out_closing"),
-        rewards={"items": [{"id": 18134, "amount": 1}]},
+        rewards={"items": [{"id": 18173, "amount": 1}]},
     ),
     TaskDefinition(
         key="weekly_work",
@@ -92,7 +92,7 @@ TASKS: tuple[TaskDefinition, ...] = (
         desc="本周讨伐世界BOSS 150 次",
         target=150,
         events=("boss",),
-        rewards={"items": [{"id": 18134, "amount": 1}]},
+        rewards={"items": [{"id": 18173, "amount": 1}]},
     ),
 )
 
