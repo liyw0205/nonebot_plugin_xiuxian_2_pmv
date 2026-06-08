@@ -133,6 +133,7 @@ upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
 uphppractice = on_command("升级元血修炼", priority=5, block=True)
 upmppractice = on_command("升级灵海修炼", priority=5, block=True)
 my_sect = on_command("我的宗门", aliases={"宗门信息"}, priority=5, block=True)
+sect_buildings = on_command("宗门建设", aliases={"宗门建筑"}, priority=5, block=True)
 create_sect = on_command("创建宗门", priority=5, block=True)
 join_sect = on_command("加入宗门", aliases={"宗门加入"}, priority=5, block=True)
 sect_position_update = on_command("宗门职位变更", priority=5, block=True)
@@ -145,7 +146,7 @@ sect_owner_change = on_command("宗主传位", priority=5, block=True)
 sect_list = on_command("宗门列表", priority=5, block=True)
 sect_power_top = on_command("宗门战力排行榜", priority=5, block=True)
 sect_help = on_command("宗门帮助", priority=5, block=True)
-sect_task = on_command("宗门任务接取", aliases={"我的宗门任务"}, priority=7, block=True)
+sect_task = on_command("宗门任务接取", aliases={"我的宗门任务", "宗门任务"}, priority=7, block=True)
 sect_task_complete = on_command("宗门任务完成", priority=7, block=True)
 sect_task_refresh = on_command("宗门任务刷新", priority=7, block=True)
 sect_mainbuff_get = on_command("宗门功法搜寻", aliases={"搜寻宗门功法"}, priority=6, block=True)
@@ -2488,6 +2489,73 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await my_sect.finish()
+
+
+@sect_buildings.handle(parameterless=[Cooldown(cd_time=0)])
+async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """宗门建设聚合入口"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_buildings.finish()
+
+    sect_id = user_info.get("sect_id")
+    if not sect_id:
+        await handle_send(
+            bot,
+            event,
+            "道友尚未加入宗门，无法查看宗门建设。",
+            md_type="宗门",
+            k1="加入",
+            v1="宗门加入",
+            k2="列表",
+            v2="宗门列表",
+            k3="帮助",
+            v3="宗门帮助",
+        )
+        await sect_buildings.finish()
+
+    sect_info = sql_message.get_sect_info(sect_id)
+    elixir_room_level = int(sect_info.get("elixir_room_level", 0) or 0)
+    elixir_room_config = config["宗门丹房参数"]["elixir_room_level"]
+    elixir_room_name = "未建设" if elixir_room_level <= 0 else elixir_room_config[str(elixir_room_level)]["name"]
+    fairyland_level = _get_sect_fairyland_level(sect_info)
+    fairyland_conf = _get_sect_fairyland_config(fairyland_level)
+    fairyland_name = "未建设" if fairyland_level <= 0 else f"{fairyland_level}级【{fairyland_conf['name']}】"
+    task = sect_task_state_manager.get_active_task(user_info["user_id"])
+    task_msg = "未接取，发送【宗门任务】获取" if not task else f"{task['任务名称']}：{task['任务内容'].get('desc', '')}"
+    members = sql_message.get_all_users_by_sect_id(sect_id)
+    max_members = get_sect_member_limit(sect_info["sect_scale"])
+
+    msg = (
+        f"【宗门建设】\n"
+        f"宗门：{sect_info['sect_name']}（{len(members)}/{max_members}人）\n"
+        f"建设度：{number_to(sect_info['sect_scale'])}\n"
+        f"宗门储备：{number_to(sect_info['sect_used_stone'])}灵石\n"
+        f"宗门资材：{number_to(sect_info['sect_materials'])}\n"
+        f"个人贡献：{number_to(user_info['sect_contribution'])}\n"
+        f"\n当前建筑：\n"
+        f"丹房：{elixir_room_name}\n"
+        f"炼体堂：{fairyland_name}\n"
+        f"修炼上限：{get_sect_level(sect_id)[0]}级\n"
+        f"\n当前任务：\n{task_msg}\n"
+        f"\n可执行操作：宗门任务、宗门捐献、宗门商店、宗门丹房建设、宗门炼体堂升级"
+    )
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="宗门",
+        k1="任务",
+        v1="宗门任务",
+        k2="捐献",
+        v2="宗门捐献",
+        k3="商店",
+        v3="宗门商店",
+    )
+    await sect_buildings.finish()
+
 
 @sect_close_join.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
