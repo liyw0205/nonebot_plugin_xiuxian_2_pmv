@@ -36,6 +36,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_back import type_mapping, rank_map, get_recover # 引用 xiuxian_back 中的类型和炼金函数
 from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank # 引用 xiuxian_back.back_util
 from ..xiuxian_config import XiuConfig, convert_rank
+from . import auction_config
 from .auction_config import * # 显式导入模块，避免冲突和混乱
 from urllib.parse import quote
 
@@ -120,6 +121,7 @@ auction_add = on_command("拍卖上架", priority=5, block=True)
 auction_remove = on_command("拍卖下架", priority=5, block=True)
 my_auction = on_command("我的拍卖", priority=5, block=True)
 auction_info = on_command("拍卖信息", priority=5, block=True)
+auction_activity = on_command("拍卖活动", aliases={"限时交易"}, priority=5, block=True)
 auction_start = on_command("开启拍卖", permission=SUPERUSER, priority=6, block=True)
 auction_end = on_command("结束拍卖", permission=SUPERUSER, priority=6, block=True)
 auction_lock = on_command("封闭拍卖", permission=SUPERUSER, priority=6, block=True)
@@ -578,6 +580,8 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 🔹 我的拍卖 - 查看已上架物品 (等待拍卖)
   
+🔹 拍卖活动 - 查看当前拍卖活动规则和限时交易状态
+
 🔹 拍卖信息 - 查看拍卖状态
   ▶ 包含开启时间、当前状态等信息
 
@@ -2924,6 +2928,41 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="上架", v2="拍卖上架", k3="帮助", v3="拍卖帮助")
     await auction_info.finish()
+
+@auction_activity.handle(parameterless=[Cooldown(cd_time=0)])
+async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """查看拍卖活动/限时交易入口信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    schedule = auction_config.get_auction_schedule()
+    rules = auction_config.get_auction_rules()
+    auction_current_status = get_auction_status()
+    current_auctions_count = len(trade_manager.get_current_auction())
+
+    msg_list = [
+        "\n☆------拍卖活动------☆",
+        f"活动状态: {'进行中' if auction_current_status['active'] else '未开启'}",
+        f"计划开启: {'每日' if schedule['enabled'] else '已暂停'}{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
+        f"持续时间: {schedule['duration_hours']}小时",
+        f"手续费率: {int(rules['fee_rate'] * 100)}%",
+        f"最低起拍价: {number_to(rules['min_price'])}灵石",
+        f"最低加价: {number_to(rules['min_bid_increment'])}灵石或当前价的{int(rules['min_increment_percent'] * 100)}%",
+        f"每人最多上架: {rules['max_user_items']}件",
+        f"当前拍品数量: {current_auctions_count}件"
+    ]
+
+    if auction_current_status["active"]:
+        start_time = auction_current_status["start_time"]
+        end_time = auction_current_status["end_time"]
+        if start_time and end_time:
+            msg_list.append(f"本次时间: {start_time.strftime('%H:%M')} 至 {end_time.strftime('%H:%M')}")
+        else:
+            msg_list.append("本次时间: 拍卖进行中，时间信息不完整")
+    else:
+        msg_list.append(f"等待入场拍品: {auction_current_status['items_count']}件")
+
+    await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
+    await auction_activity.finish()
 
 @auction_start.handle(parameterless=[Cooldown(cd_time=0)])
 async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
