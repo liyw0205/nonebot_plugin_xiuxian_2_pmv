@@ -21,6 +21,7 @@ from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from .. import NICKNAME
 from nonebot.log import logger
@@ -963,5 +964,6 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id,
         f"[虚神界出关] 闭关{exp_time}分钟，祝福{int(exp_day_cost)}分钟，获得修为{number_to(total_exp)}"
     )
+    record_task_progress(user_id, "xu_out_closing")
     await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_out_closing.finish()

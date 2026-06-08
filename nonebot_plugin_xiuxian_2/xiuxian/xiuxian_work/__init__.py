@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value, send_help_message
+from ..xiuxian_tasks.task_data import record_task_progress
 from nonebot.log import logger
 from .reward_data_source import PLAYERSDATA, readf, savef, delete_work_file, has_unaccepted_work
 from ..xiuxian_utils.item_json import Items
@@ -276,6 +277,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         )
     log_message(user_id, msg)
     update_statistics_value(user_id, "悬赏令结算次数")
+    record_task_progress(user_id, "work")
     await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
     return msg
 

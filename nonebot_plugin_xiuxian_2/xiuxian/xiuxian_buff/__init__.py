@@ -31,6 +31,7 @@ from ..xiuxian_utils.utils import (
     check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value,
     send_help_message
 )
+from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_work import count
 from ..xiuxian_impart_pk.impart_pk_uitls import impart_pk_check
@@ -586,6 +587,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             update_statistics_value(user_id, "闭关时长", increment=exp_time)
             update_statistics_value(user_id, "闭关修为", increment=user_get_exp_max)
             log_message(user_id, f"[出关] 闭关{exp_time}分钟，到达上限，获得修为{number_to(user_get_exp_max)}")
+            record_task_progress(user_id, "out_closing")
             await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await out_closing.finish()
         else:
@@ -609,6 +611,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     update_statistics_value(user_id, "闭关修为", increment=exp)
                     update_statistics_value(user_id, "闭关灵石消耗", increment=int(exp / 2))
                     log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(int(exp / 2))}，获得修为{number_to(exp)}")
+                    record_task_progress(user_id, "out_closing")
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
                 else:
@@ -625,6 +628,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     update_statistics_value(user_id, "闭关修为", increment=exp)
                     update_statistics_value(user_id, "闭关灵石消耗", increment=user_stone)
                     log_message(user_id, f"[灵石出关] 闭关{exp_time}分钟，消耗灵石{number_to(user_stone)}，获得修为{number_to(exp)}")
+                    record_task_progress(user_id, "out_closing")
                     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                     await out_closing.finish()
             else:
@@ -637,6 +641,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                 update_statistics_value(user_id, "闭关时长", increment=exp_time)
                 update_statistics_value(user_id, "闭关修为", increment=exp)
                 log_message(user_id, f"[出关] 闭关{exp_time}分钟，获得修为{number_to(exp)}")
+                record_task_progress(user_id, "out_closing")
                 await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
                 await out_closing.finish()
 

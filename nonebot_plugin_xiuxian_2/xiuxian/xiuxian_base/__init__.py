@@ -37,6 +37,7 @@ from ..xiuxian_utils.utils import (
     send_help_message, parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 from .breakthrough_tribulation import *  # noqa: F401,F403
@@ -345,6 +346,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     log_message(user_id, msg)
     update_statistics_value(user_id, "修仙签到")
+    record_task_progress(user_id, "sign_in")
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await sign_in.finish()
 
@@ -444,6 +446,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 我的修仙信息 / 我的存档：查看存档
 - 我的修仙信息图片版：查看图片版存档
 - 修仙签到：每日签到
+- 我的任务 / 每日任务 / 周常任务 / 领取任务奖励
 - 修仙改名：修改道号
 - 灵根改名：消耗灵根改名卡自定义灵根名
 - 官群：加入交流群

@@ -39,6 +39,7 @@ from ..xiuxian_utils.utils import (
     send_msg_handler, log_message, handle_send, update_statistics_value,
     send_help_message
 )
+from ..xiuxian_tasks.task_data import record_task_progress
 from .boss_limit import boss_limit, player_data_manager
 from .. import DRIVER
 # boss定时任务
@@ -663,6 +664,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
+    record_task_progress(user_id, "boss")
 
     try:
         await send_msg_handler(bot, event, result)
