@@ -179,7 +179,8 @@ def record_game_event(
     if amount <= 0:
         return result
 
-    result["statistics"] = _record_statistics(user_id, event_key, amount, meta)
+    if meta.get("skip_statistics") is not True:
+        result["statistics"] = _record_statistics(user_id, event_key, amount, meta)
     result["tasks"] = _record_task_progress(user_id, event_key, amount, meta)
     result["titles"] = _check_titles(user_id, meta)
 
