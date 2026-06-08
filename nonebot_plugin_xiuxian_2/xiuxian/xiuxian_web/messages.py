@@ -12,6 +12,74 @@ def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int
     except Exception:
         raise ValueError(f"{key} 必须是 {minimum} 到 {maximum} 的整数")
 
+
+def _prepare_message_rows(rows: list[dict]) -> list[dict]:
+    rows = fill_private_username_from_group(rows)
+    rows = fill_message_display_profiles(rows)
+
+    for r in rows:
+        raw_content = r.get("content") or ""
+        display_content, content_format = extract_markdown_content_from_repr(raw_content)
+        display_content = normalize_message_display_content(display_content)
+
+        r["display_content"] = display_content
+        r["content_format"] = content_format
+        r["can_revoke"] = bool(
+            r.get("direction") == "send"
+            and r.get("message_id")
+        )
+
+        # 前端不需要展示 msg_id，但需要用来点击回复
+        r["can_reply"] = False
+        r["reply_expired"] = True
+
+        if r.get("adapter") == "QQ" and r.get("direction") == "recv" and r.get("message_id"):
+            valid_seconds = get_qq_reply_valid_seconds(r.get("scene", ""))
+            can_time = is_message_within_seconds(r.get("created_at", ""), valid_seconds)
+            can_count = int(r.get("reply_used_count") or 0) < 5
+
+            r["can_reply"] = bool(can_time and can_count)
+            r["reply_expired"] = not can_time
+
+    for r in rows:
+        group_title = r.get("group_name") or r.get("group_id") or ""
+        user_title = r.get("username") or r.get("nickname") or r.get("user_id") or ""
+
+        r["group_avatar_text"] = group_title[:1] if group_title else "群"
+        r["user_avatar_text"] = user_title[:1] if user_title else "人"
+
+    return rows
+
+
+def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
+    rows = fill_session_display_profiles(rows)
+
+    for r in rows:
+        # 修复私聊标题显示成 Bot 的问题
+        if r.get("scene") in ("private", "channel_private"):
+            title = str(r.get("title") or "").strip()
+            if not title or title.lower() == "bot":
+                human_name = ""
+                if conn is not None:
+                    human_name = get_latest_human_name_by_user_id(conn, str(r.get("target_id") or ""))
+                r["title"] = human_name or str(r.get("target_id") or "未知会话")
+
+        preview_source = {
+            "scene": r.get("scene"),
+            "direction": r.get("direction"),
+            "content": r.get("last_content"),
+            "username": r.get("username"),
+            "nickname": r.get("nickname"),
+            "user_id": r.get("user_id"),
+        }
+        r["last_preview"] = build_session_preview(preview_source)
+
+        title = r.get("title") or r.get("target_id") or ""
+        r["avatar_text"] = str(title)[:1] if title else "?"
+
+    return rows
+
+
 @app.route('/messages')
 def messages_page():
     if 'admin_id' not in session:
@@ -58,6 +126,8 @@ def api_messages_list():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
+    conn = None
+
     try:
         scene = request.args.get("scene", "ALL").strip()
         direction = request.args.get("direction", "ALL").strip()
@@ -72,6 +142,7 @@ def api_messages_list():
 
         page = max(1, int(request.args.get("page", 1)))
         page_size = min(max(int(request.args.get("page_size", 50)), 10), 300)
+        include_total = str(request.args.get("include_total", "1")).strip().lower() not in ("0", "false", "no")
         offset = (page - 1) * page_size
 
         where = []
@@ -128,8 +199,10 @@ def api_messages_list():
         conn = get_message_db_connection()
         cur = conn.cursor()
 
-        cur.execute(f"SELECT COUNT(*) AS c FROM messages {where_sql}", params)
-        total = cur.fetchone()["c"]
+        total = None
+        if include_total:
+            cur.execute(f"SELECT COUNT(*) AS c FROM messages {where_sql}", params)
+            total = cur.fetchone()["c"]
 
         cur.execute(f"""
             SELECT *
@@ -137,46 +210,22 @@ def api_messages_list():
             {where_sql}
             ORDER BY created_at DESC, id DESC
             LIMIT %s OFFSET %s
-        """, params + [page_size, offset])
+        """, params + [page_size if include_total else page_size + 1, offset])
 
-        rows = [dict(r) for r in cur.fetchall()]
-        rows = fill_private_username_from_group(rows)
-        rows = fill_message_display_profiles(rows)
-        
-        for r in rows:
-            raw_content = r.get("content") or ""
-            display_content, content_format = extract_markdown_content_from_repr(raw_content)
-            display_content = normalize_message_display_content(display_content)
-        
-            r["display_content"] = display_content
-            r["content_format"] = content_format
-            r["can_revoke"] = bool(
-                r.get("direction") == "send"
-                and r.get("message_id")
-            )
-        
-            # 前端不需要展示 msg_id，但需要用来点击回复
-            r["can_reply"] = False
-            r["reply_expired"] = True
-        
-            if r.get("adapter") == "QQ" and r.get("direction") == "recv" and r.get("message_id"):
-                valid_seconds = get_qq_reply_valid_seconds(r.get("scene", ""))
-                can_time = is_message_within_seconds(r.get("created_at", ""), valid_seconds)
-                can_count = int(r.get("reply_used_count") or 0) < 5
-        
-                r["can_reply"] = bool(can_time and can_count)
-                r["reply_expired"] = not can_time
+        fetched_rows = [dict(r) for r in cur.fetchall()]
+        has_more = False
+        if not include_total and len(fetched_rows) > page_size:
+            has_more = True
+            fetched_rows = fetched_rows[:page_size]
+        elif include_total:
+            has_more = offset + len(fetched_rows) < int(total or 0)
 
-        for r in rows:
-            group_title = r.get("group_name") or r.get("group_id") or ""
-            user_title = r.get("username") or r.get("nickname") or r.get("user_id") or ""
-
-            r["group_avatar_text"] = group_title[:1] if group_title else "群"
-            r["user_avatar_text"] = user_title[:1] if user_title else "人"
+        rows = _prepare_message_rows(fetched_rows)
 
         return jsonify({
             "success": True,
-            "total": total,
+            "total": total if include_total else len(rows),
+            "has_more": has_more,
             "page": page,
             "page_size": page_size,
             "rows": rows
@@ -186,20 +235,21 @@ def api_messages_list():
         return jsonify({"success": False, "error": f"获取消息列表失败: {e}"})
 
     finally:
-        try:
+        if conn is not None:
             conn.close()
-        except Exception:
-            pass
 
 @app.route('/api/messages/dates')
 def api_messages_dates():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
+    conn = None
+
     try:
         scene = request.args.get("scene", "").strip()
         adapter = request.args.get("adapter", "").strip()
         target_id = request.args.get("target_id", "").strip()
+        include_counts = str(request.args.get("include_counts", "1")).strip().lower() not in ("0", "false", "no")
 
         if scene not in ("group", "private", "channel_group", "channel_private"):
             return jsonify({"success": False, "error": "无效 scene"})
@@ -224,20 +274,41 @@ def api_messages_dates():
         conn = get_message_db_connection()
         cur = conn.cursor()
 
-        created_at_date = db_backend.date_expression("created_at")
-        cur.execute(f"""
-            SELECT {created_at_date} AS d, COUNT(*) AS c
-            FROM messages
-            WHERE {' AND '.join(where)}
-            GROUP BY {created_at_date}
-            ORDER BY d DESC
-            LIMIT 60
-        """, params)
-
         today = datetime.now().strftime("%Y-%m-%d")
         rows = []
 
-        for r in cur.fetchall():
+        if include_counts:
+            created_at_date = db_backend.date_expression("created_at")
+            cur.execute(f"""
+                SELECT {created_at_date} AS d, COUNT(*) AS c
+                FROM messages
+                WHERE {' AND '.join(where)}
+                GROUP BY {created_at_date}
+                ORDER BY d DESC
+                LIMIT 60
+            """, params)
+            date_rows = cur.fetchall()
+        else:
+            cur.execute(f"""
+                SELECT created_at
+                FROM messages
+                WHERE {' AND '.join(where)}
+                ORDER BY created_at DESC, id DESC
+                LIMIT 5000
+            """, params)
+
+            seen_dates = set()
+            date_rows = []
+            for r in cur.fetchall():
+                d = str(r["created_at"] or "")[:10]
+                if not d or d in seen_dates:
+                    continue
+                seen_dates.add(d)
+                date_rows.append({"d": d, "c": None})
+                if len(date_rows) >= 60:
+                    break
+
+        for r in date_rows:
             d = r["d"]
             if d == today:
                 label = "今天"
@@ -263,15 +334,15 @@ def api_messages_dates():
         return jsonify({"success": False, "error": f"获取日期失败: {e}"})
 
     finally:
-        try:
+        if conn is not None:
             conn.close()
-        except Exception:
-            pass
 
 @app.route('/api/messages/sessions')
 def api_messages_sessions():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
+
+    conn = None
 
     try:
         scene = request.args.get("scene", "group").strip()
@@ -306,6 +377,7 @@ def api_messages_sessions():
                     l.adapter,
                     l.scene,
                     l.target_id,
+                    m.id AS last_row_id,
                     COALESCE(NULLIF(m.group_name, ''), l.target_id) AS title,
                     m.bot_id AS bot_id,
                     m.created_at AS last_time,
@@ -314,14 +386,7 @@ def api_messages_sessions():
                     m.username AS username,
                     m.nickname AS nickname,
                     m.avatar AS avatar,
-                    m.user_id AS user_id,
-                    (
-                        SELECT COUNT(*)
-                        FROM messages x
-                        WHERE x.adapter = l.adapter
-                          AND x.scene = l.scene
-                          AND x.group_id = l.target_id
-                    ) AS msg_count
+                    m.user_id AS user_id
                 FROM latest l
                 JOIN messages m ON m.id = l.latest_id
                 ORDER BY m.created_at DESC, m.id DESC
@@ -347,6 +412,7 @@ def api_messages_sessions():
                     l.adapter,
                     l.scene,
                     l.target_id,
+                    m.id AS last_row_id,
                     COALESCE(NULLIF(m.username, ''), NULLIF(m.nickname, ''), l.target_id) AS title,
                     m.bot_id AS bot_id,
                     m.created_at AS last_time,
@@ -355,14 +421,7 @@ def api_messages_sessions():
                     m.username AS username,
                     m.nickname AS nickname,
                     m.avatar AS avatar,
-                    m.user_id AS user_id,
-                    (
-                        SELECT COUNT(*)
-                        FROM messages x
-                        WHERE x.adapter = l.adapter
-                          AND x.scene = l.scene
-                          AND x.user_id = l.target_id
-                    ) AS msg_count
+                    m.user_id AS user_id
                 FROM latest l
                 JOIN messages m ON m.id = l.latest_id
                 ORDER BY m.created_at DESC, m.id DESC
@@ -372,33 +431,12 @@ def api_messages_sessions():
         else:
             return jsonify({"success": False, "error": "无效 scene"})
 
-        rows = [dict(r) for r in cur.fetchall()]
-        rows = fill_session_display_profiles(rows)
-
-        for r in rows:
-            # 修复私聊标题显示成 Bot 的问题
-            if r.get("scene") in ("private", "channel_private"):
-                title = str(r.get("title") or "").strip()
-                if not title or title.lower() == "bot":
-                    human_name = get_latest_human_name_by_user_id(conn, str(r.get("target_id") or ""))
-                    r["title"] = human_name or str(r.get("target_id") or "未知会话")
-
-            # 生成预览文本（支持 markdown 提取）
-            preview_source = {
-                "scene": r.get("scene"),
-                "direction": r.get("direction"),
-                "content": r.get("last_content"),
-                "username": r.get("username"),
-                "nickname": r.get("nickname"),
-                "user_id": r.get("user_id"),
-            }
-            r["last_preview"] = build_session_preview(preview_source)
-
-            title = r.get("title") or r.get("target_id") or ""
-            r["avatar_text"] = str(title)[:1] if title else "?"
+        rows = _prepare_session_rows([dict(r) for r in cur.fetchall()], conn)
+        last_row_id = max([int(r.get("last_row_id") or 0) for r in rows] or [0])
 
         return jsonify({
             "success": True,
+            "last_row_id": last_row_id,
             "rows": rows
         })
 
@@ -406,16 +444,133 @@ def api_messages_sessions():
         return jsonify({"success": False, "error": f"获取会话失败: {e}"})
 
     finally:
-        try:
+        if conn is not None:
             conn.close()
+
+
+@app.route('/api/messages/sessions_since')
+def api_messages_sessions_since():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    conn = None
+
+    try:
+        scene = request.args.get("scene", "group").strip()
+        adapter = request.args.get("adapter", "").strip()
+        try:
+            after_id = max(0, int(request.args.get("after_id", 0)))
         except Exception:
-            pass
+            after_id = 0
+
+        conn = get_message_db_connection()
+        cur = conn.cursor()
+
+        adapter_sql = ""
+        params = [after_id, scene]
+
+        if adapter:
+            adapter_sql = " AND adapter = %s "
+            params.append(adapter)
+
+        if scene in ("group", "channel_group"):
+            cur.execute(f"""
+                WITH latest AS (
+                    SELECT
+                        adapter,
+                        scene,
+                        group_id AS target_id,
+                        MAX(id) AS latest_id
+                    FROM messages
+                    WHERE id > %s
+                      AND scene = %s
+                      AND group_id IS NOT NULL
+                      AND group_id != ''
+                      {adapter_sql}
+                    GROUP BY adapter, scene, group_id
+                )
+                SELECT
+                    l.adapter,
+                    l.scene,
+                    l.target_id,
+                    m.id AS last_row_id,
+                    COALESCE(NULLIF(m.group_name, ''), l.target_id) AS title,
+                    m.bot_id AS bot_id,
+                    m.created_at AS last_time,
+                    m.content AS last_content,
+                    m.direction AS direction,
+                    m.username AS username,
+                    m.nickname AS nickname,
+                    m.avatar AS avatar,
+                    m.user_id AS user_id
+                FROM latest l
+                JOIN messages m ON m.id = l.latest_id
+                ORDER BY m.id DESC
+                LIMIT 300
+            """, params)
+
+        elif scene in ("private", "channel_private"):
+            cur.execute(f"""
+                WITH latest AS (
+                    SELECT
+                        adapter,
+                        scene,
+                        user_id AS target_id,
+                        MAX(id) AS latest_id
+                    FROM messages
+                    WHERE id > %s
+                      AND scene = %s
+                      AND user_id IS NOT NULL
+                      AND user_id != ''
+                      {adapter_sql}
+                    GROUP BY adapter, scene, user_id
+                )
+                SELECT
+                    l.adapter,
+                    l.scene,
+                    l.target_id,
+                    m.id AS last_row_id,
+                    COALESCE(NULLIF(m.username, ''), NULLIF(m.nickname, ''), l.target_id) AS title,
+                    m.bot_id AS bot_id,
+                    m.created_at AS last_time,
+                    m.content AS last_content,
+                    m.direction AS direction,
+                    m.username AS username,
+                    m.nickname AS nickname,
+                    m.avatar AS avatar,
+                    m.user_id AS user_id
+                FROM latest l
+                JOIN messages m ON m.id = l.latest_id
+                ORDER BY m.id DESC
+                LIMIT 300
+            """, params)
+
+        else:
+            return jsonify({"success": False, "error": "无效 scene"})
+
+        rows = _prepare_session_rows([dict(r) for r in cur.fetchall()], conn)
+        last_row_id = max([after_id] + [int(r.get("last_row_id") or 0) for r in rows])
+
+        return jsonify({
+            "success": True,
+            "last_row_id": last_row_id,
+            "rows": rows
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取会话增量失败: {e}"})
+
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 @app.route('/api/messages/list_since')
 def api_messages_list_since():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
+
+    conn = None
 
     try:
         scene = request.args.get("scene", "").strip()
@@ -461,31 +616,7 @@ def api_messages_list_since():
             LIMIT 200
         """, params)
 
-        rows = [dict(r) for r in cur.fetchall()]
-        rows = fill_private_username_from_group(rows)
-        rows = fill_message_display_profiles(rows)
-
-        for r in rows:
-            raw_content = r.get("content") or ""
-            display_content, content_format = extract_markdown_content_from_repr(raw_content)
-            display_content = normalize_message_display_content(display_content)
-
-            r["display_content"] = display_content
-            r["content_format"] = content_format
-            r["can_revoke"] = bool(
-                r.get("direction") == "send"
-                and r.get("message_id")
-            )
-
-            r["can_reply"] = False
-            r["reply_expired"] = True
-
-            if r.get("adapter") == "QQ" and r.get("direction") == "recv" and r.get("message_id"):
-                valid_seconds = get_qq_reply_valid_seconds(r.get("scene", ""))
-                can_time = is_message_within_seconds(r.get("created_at", ""), valid_seconds)
-                can_count = int(r.get("reply_used_count") or 0) < 5
-                r["can_reply"] = bool(can_time and can_count)
-                r["reply_expired"] = not can_time
+        rows = _prepare_message_rows([dict(r) for r in cur.fetchall()])
 
         return jsonify({
             "success": True,
@@ -496,10 +627,98 @@ def api_messages_list_since():
     except Exception as e:
         return jsonify({"success": False, "error": f"获取增量消息失败: {e}"})
     finally:
-        try:
+        if conn is not None:
             conn.close()
+
+
+@app.route('/api/messages/list_before')
+def api_messages_list_before():
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+
+    conn = None
+
+    try:
+        scene = request.args.get("scene", "").strip()
+        target_id = request.args.get("target_id", "").strip()
+        adapter = request.args.get("adapter", "").strip()
+        keyword = request.args.get("keyword", "").strip()
+        date = request.args.get("date", "").strip()
+        try:
+            before_row_id = max(0, int(request.args.get("before_row_id", 0)))
         except Exception:
-            pass
+            before_row_id = 0
+        try:
+            page_size = min(max(int(request.args.get("page_size", 300)), 50), 300)
+        except Exception:
+            page_size = 300
+
+        if scene not in ("group", "private", "channel_group", "channel_private"):
+            return jsonify({"success": False, "error": "无效 scene"})
+        if not target_id:
+            return jsonify({"success": False, "error": "缺少 target_id"})
+        if before_row_id <= 0:
+            return jsonify({"success": True, "rows": [], "has_more": False})
+
+        where = ["id < %s", "scene = %s"]
+        params = [before_row_id, scene]
+
+        if adapter:
+            where.append("adapter = %s")
+            params.append(adapter)
+
+        if date:
+            where.append(f"{db_backend.date_expression('created_at')} = %s")
+            params.append(date)
+
+        if keyword:
+            where.append("""
+                (
+                    content LIKE %s
+                    OR username LIKE %s
+                    OR nickname LIKE %s
+                    OR group_name LIKE %s
+                    OR group_id LIKE %s
+                    OR user_id LIKE %s
+                )
+            """)
+            kw = f"%{keyword}%"
+            params.extend([kw, kw, kw, kw, kw, kw])
+
+        if scene in ("group", "channel_group"):
+            where.append("group_id = %s")
+            params.append(target_id)
+        else:
+            where.append("user_id = %s")
+            params.append(target_id)
+
+        conn = get_message_db_connection()
+        cur = conn.cursor()
+
+        cur.execute(f"""
+            SELECT *
+            FROM messages
+            WHERE {' AND '.join(where)}
+            ORDER BY id DESC
+            LIMIT %s
+        """, params + [page_size + 1])
+
+        fetched_rows = [dict(r) for r in cur.fetchall()]
+        has_more = len(fetched_rows) > page_size
+        rows = _prepare_message_rows(fetched_rows[:page_size])
+
+        return jsonify({
+            "success": True,
+            "rows": rows,
+            "has_more": has_more,
+            "oldest_row_id": rows[-1]["id"] if rows else before_row_id
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"获取历史消息失败: {e}"})
+    finally:
+        if conn is not None:
+            conn.close()
 
 @app.route('/api/messages/send', methods=['POST'])
 def api_messages_send():

@@ -2419,6 +2419,7 @@ let sessionsCache = [];
 let autoRefresh = true; // 默认开启
 let autoRefreshTimer = null;
 let isLoadingMessages = false;
+let isLoadingHistory = false;
 let sendMode = getStoredValue('webMessageSendMode', 'plain') || 'plain';
 let activeSend = getStoredValue('webMessageActiveSend', '') === '1';
 let mdPreviewing = false;
@@ -2431,6 +2432,10 @@ let composerExpanded = false;
 let mediaPanelOpen = false;
 let mediaSendType = '';
 let currentLastRowId = 0;
+let currentOldestRowId = 0;
+let hasMoreHistory = false;
+let lastSessionRowId = 0;
+let historyScrollTimer = null;
 let messagePressTimer = null;
 let messagePressTarget = null;
 let messagePressStart = null;
@@ -3120,6 +3125,156 @@ function renderAvatar(row, isSend = false) {
     return `<div class="msg-avatar">${escapeHtml(getInitial(name, '人'))}</div>`;
 }
 
+function renderMessageRow(row, idx = 0) {
+    const isSend = row.direction === 'send';
+    const name = isSend
+        ? (row.username || row.nickname || 'Bot')
+        : (row.username || row.nickname || row.user_id || '未知用户');
+    const content = row.display_content || row.content || row.raw_message || '';
+    const copyText = buildMessageCopyText(content);
+    const previewText = copyText || String(content || '').slice(0, 60);
+    const messageId = row.message_id || '';
+    const replyUsed = Number(row.reply_used_count || 0);
+    const canReply = !!row.can_reply;
+    const replyExpired = !!row.reply_expired;
+    const createdDate = (row.created_at || '').slice(0, 10);
+
+    const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
+        ? renderMarkdown(content)
+        : renderMessageContent(content);
+
+    const rowClasses = [
+        'msg-row',
+        isSend ? 'send' : 'recv',
+        canReply ? 'can-reply' : '',
+        selectedReplyMessageId && selectedReplyMessageId === messageId ? 'reply-selected' : ''
+    ].filter(Boolean).join(' ');
+
+    return `
+        <div
+            class="${rowClasses}"
+            data-msg-index="${idx}"
+            data-row-id="${escapeHtml(row.id || '')}"
+            data-created-date="${escapeHtml(createdDate)}"
+            data-message-id="${escapeHtml(messageId)}"
+            data-is-send="${isSend ? '1' : '0'}"
+            data-can-reply="${canReply ? '1' : '0'}"
+            data-name="${escapeHtml(name)}"
+            data-preview="${escapeHtml(previewText.slice(0, 60))}"
+            data-copy-text="${escapeHtml(copyText)}"
+            oncontextmenu="openMessageActionMenu(event, this); return false;"
+            onpointerdown="startMessagePress(event, this)"
+            onpointermove="moveMessagePress(event)"
+            onpointerup="cancelMessagePress()"
+            onpointercancel="cancelMessagePress()"
+            onpointerleave="cancelMessagePress()"
+        >
+            ${renderAvatar(row, isSend)}
+            <div class="msg-main">
+                <div class="msg-meta">
+                    <span class="msg-name">${escapeHtml(name)}</span>
+                    <span>${escapeHtml(shortTime(row.created_at))}</span>
+                    <span>${escapeHtml(row.adapter || '')}</span>
+                </div>
+                <div class="msg-bubble">
+                    ${contentHtml}
+                </div>
+                <div class="msg-extra">
+                    ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
+                    ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
+                    ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
+                    ${isSend && row.message_id ? `
+                        <button
+                            class="msg-revoke-btn"
+                            onclick="event.stopPropagation(); revokeMessage(this)"
+                            data-row-id="${escapeHtml(row.id || '')}"
+                            data-adapter="${escapeHtml(row.adapter || '')}"
+                            data-scene="${escapeHtml(row.scene || '')}"
+                            data-message-id="${escapeHtml(row.message_id || '')}"
+                            data-group-id="${escapeHtml(row.group_id || '')}"
+                            data-user-id="${escapeHtml(row.user_id || '')}"
+                            type="button"
+                        >
+                            撤回
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderMessageRows(rows, startIndex = 0, carryDate = '') {
+    let lastDate = carryDate || '';
+    let html = '';
+
+    (rows || []).forEach((row, offset) => {
+        const datePart = (row.created_at || '').slice(0, 10);
+        if (datePart && datePart !== lastDate) {
+            lastDate = datePart;
+            html += `<div class="msg-date-divider" data-date="${escapeHtml(datePart)}"><span>${escapeHtml(datePart)}</span></div>`;
+        }
+        html += renderMessageRow(row, startIndex + offset);
+    });
+
+    return html;
+}
+
+function renderedRowExists(rowId) {
+    if (!rowId) return false;
+    return getMessageRows().some(row => row.dataset.rowId === String(rowId));
+}
+
+function normalizeDateDividers() {
+    const box = document.getElementById('messageList');
+    let activeDate = '';
+
+    Array.from(box.children).forEach(child => {
+        if (child.classList.contains('msg-date-divider')) {
+            const date = child.dataset.date || child.innerText.trim();
+            if (date && date === activeDate) {
+                child.remove();
+            } else {
+                activeDate = date;
+            }
+            return;
+        }
+
+        if (child.classList.contains('msg-row')) {
+            const rowDate = child.dataset.createdDate || '';
+            if (rowDate) {
+                activeDate = rowDate;
+            }
+        }
+    });
+}
+
+function reindexRenderedMessages() {
+    getMessageRows().forEach((row, idx) => {
+        row.dataset.msgIndex = String(idx);
+    });
+}
+
+function getLastRenderedMessageDate() {
+    const rows = getMessageRows();
+    if (!rows.length) return '';
+    return rows[rows.length - 1].dataset.createdDate || '';
+}
+
+function getFirstVisibleMessageIndex(box) {
+    const rows = getMessageRows();
+    if (!rows.length) return -1;
+
+    const boxTop = box.getBoundingClientRect().top;
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].getBoundingClientRect().bottom >= boxTop + 8) {
+            return i;
+        }
+    }
+
+    return rows.length - 1;
+}
+
 function toggleSendMode() {
     setSendMode(sendMode === 'markdown' ? 'plain' : 'markdown');
 }
@@ -3295,6 +3450,89 @@ async function loadBots() {
     } catch (e) {}
 }
 
+function normalizeSessionRows(rows) {
+    return (rows || []).map(s => {
+        if (!s.title || String(s.title).trim().toLowerCase() === 'bot') {
+            s.title = s.target_id || '未知会话';
+        }
+        s.last_preview = buildSessionPreview(s);
+        return s;
+    });
+}
+
+function getSessionRenderKey(s) {
+    return `${getSessionKey(s)}__${s.last_row_id || ''}__${s.last_time || ''}`;
+}
+
+function updateLastSessionRowId(rows, reset = false, fallback = 0) {
+    if (reset) {
+        lastSessionRowId = Number(fallback || 0);
+    } else {
+        lastSessionRowId = Math.max(lastSessionRowId, Number(fallback || 0));
+    }
+
+    (rows || []).forEach(s => {
+        const rowId = Number(s.last_row_id || 0);
+        if (rowId > lastSessionRowId) {
+            lastSessionRowId = rowId;
+        }
+    });
+}
+
+function sortSessionsByLatest(rows) {
+    return (rows || []).sort((a, b) => {
+        const idDelta = Number(b.last_row_id || 0) - Number(a.last_row_id || 0);
+        if (idDelta) return idDelta;
+        return String(b.last_time || '').localeCompare(String(a.last_time || ''));
+    });
+}
+
+function renderSessionsFromCache(silent = false) {
+    const list = document.getElementById('sessionList');
+    const newKeys = sessionsCache.map(getSessionRenderKey);
+
+    if (silent && arraysEqual(lastRenderedSessionKeys, newKeys)) {
+        return;
+    }
+
+    const oldScrollTop = list.scrollTop;
+    lastRenderedSessionKeys = newKeys;
+
+    if (!sessionsCache.length) {
+        list.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无会话</p></div>`;
+        return;
+    }
+
+    list.innerHTML = sessionsCache.map((s, idx) => {
+        const active = currentSession &&
+            currentSession.scene === s.scene &&
+            currentSession.target_id === s.target_id &&
+            currentSession.adapter === s.adapter;
+
+        const title = s.title || s.target_id || '未知会话';
+        const sessionAvatar = isHttpUrl(s.avatar)
+            ? renderAvatarImage(s.avatar)
+            : escapeHtml(s.avatar_text || getInitial(title));
+
+        return `
+            <div class="session-item ${active ? 'active' : ''}" onclick="selectSession(${idx})">
+                <div class="session-avatar">${sessionAvatar}</div>
+                <div class="session-info">
+                    <div class="session-title-row">
+                        <div class="session-title">${escapeHtml(title)}</div>
+                        <div class="session-time">${escapeHtml(shortTime(s.last_time))}</div>
+                    </div>
+                    <div class="session-meta">${escapeHtml(s.last_preview || s.target_id || '')}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (silent) {
+        list.scrollTop = oldScrollTop;
+    }
+}
+
 async function loadSessions(silent = false) {
     const scene = document.getElementById('sceneSelect').value;
     const adapter = document.getElementById('adapterSelect').value;
@@ -3318,64 +3556,52 @@ async function loadSessions(silent = false) {
             return;
         }
 
-        const newRows = data.rows || [];
-
-        newRows.forEach(s => {
-            if (!s.title || String(s.title).trim().toLowerCase() === 'bot') {
-                s.title = s.target_id || '未知会话';
-            }
-            s.last_preview = buildSessionPreview(s);
-        });
-
-        const newKeys = newRows.map(getSessionKey);
-
-        if (silent && arraysEqual(lastRenderedSessionKeys, newKeys)) {
-            sessionsCache = newRows;
-            return;
-        }
-
-        const oldScrollTop = list.scrollTop;
-
-        sessionsCache = newRows;
-        lastRenderedSessionKeys = newKeys;
-
-        if (!sessionsCache.length) {
-            list.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无会话</p></div>`;
-            return;
-        }
-
-        list.innerHTML = sessionsCache.map((s, idx) => {
-            const active = currentSession &&
-                currentSession.scene === s.scene &&
-                currentSession.target_id === s.target_id &&
-                currentSession.adapter === s.adapter;
-
-            const title = s.title || s.target_id || '未知会话';
-            const sessionAvatar = isHttpUrl(s.avatar)
-                ? renderAvatarImage(s.avatar)
-                : escapeHtml(s.avatar_text || getInitial(title));
-
-            return `
-                <div class="session-item ${active ? 'active' : ''}" onclick="selectSession(${idx})">
-                    <div class="session-avatar">${sessionAvatar}</div>
-                    <div class="session-info">
-                        <div class="session-title-row">
-                            <div class="session-title">${escapeHtml(title)}</div>
-                            <div class="session-time">${escapeHtml(shortTime(s.last_time))}</div>
-                        </div>
-                        <div class="session-meta">${escapeHtml(s.last_preview || s.target_id || '')}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        if (silent) {
-            list.scrollTop = oldScrollTop;
-        }
+        sessionsCache = sortSessionsByLatest(normalizeSessionRows(data.rows || []));
+        updateLastSessionRowId(sessionsCache, true, data.last_row_id || 0);
+        renderSessionsFromCache(silent);
     } catch (e) {
         if (!silent) {
             list.innerHTML = `<div class="error">请求异常：${escapeHtml(e)}</div>`;
         }
+    }
+}
+
+async function loadSessionUpdates() {
+    const scene = document.getElementById('sceneSelect').value;
+    const adapter = document.getElementById('adapterSelect').value;
+
+    if (!lastSessionRowId) {
+        await loadSessions(true);
+        return;
+    }
+
+    try {
+        const qs = new URLSearchParams({
+            scene,
+            after_id: String(lastSessionRowId)
+        });
+        if (adapter) qs.set('adapter', adapter);
+
+        const res = await fetch('/api/messages/sessions_since?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) return;
+
+        const updates = normalizeSessionRows(data.rows || []);
+        updateLastSessionRowId(updates, false, data.last_row_id || lastSessionRowId);
+
+        if (!updates.length) {
+            lastSessionRowId = Math.max(lastSessionRowId, Number(data.last_row_id || 0));
+            return;
+        }
+
+        const byKey = new Map();
+        sessionsCache.forEach(s => byKey.set(getSessionKey(s), s));
+        updates.forEach(s => byKey.set(getSessionKey(s), s));
+        sessionsCache = sortSessionsByLatest(Array.from(byKey.values()));
+        renderSessionsFromCache(true);
+    } catch (e) {
+        console.error('会话增量加载失败', e);
     }
 }
 
@@ -3386,6 +3612,11 @@ function selectSession(index) {
     lastRenderedMessageKeys = [];
     hideUnreadHint();
     hasUnreadWhileReadingHistory = false;
+    currentDate = '';
+    currentLastRowId = 0;
+    currentOldestRowId = 0;
+    hasMoreHistory = false;
+    isLoadingHistory = false;
 
     currentSession = {
         adapter: s.adapter || document.getElementById('adapterSelect').value || '',
@@ -3412,7 +3643,8 @@ function selectSession(index) {
     if (shell) shell.classList.add('mobile-chat-open');
 
     loadSessions(true);
-    loadMessageDates().then(() => loadMessages(true, false));
+    loadMessages(true, false);
+    loadMessageDates();
 }
 
 function backToSessions() {
@@ -3426,14 +3658,15 @@ async function loadMessageDates() {
 
     if (!currentSession) {
         sel.disabled = true;
-        sel.innerHTML = `<option value="">今天</option>`;
+        sel.innerHTML = `<option value="">全部历史</option>`;
         return;
     }
 
     try {
         const qs = new URLSearchParams({
             scene: currentSession.scene,
-            target_id: currentSession.target_id
+            target_id: currentSession.target_id,
+            include_counts: '0'
         });
 
         if (currentSession.adapter) {
@@ -3444,10 +3677,9 @@ async function loadMessageDates() {
         const data = await res.json();
 
         if (!data.success) {
-            const today = new Date().toISOString().slice(0, 10);
-            currentDate = today;
-            sel.innerHTML = `<option value="${today}">今天</option>`;
-            sel.value = today;
+            currentDate = '';
+            sel.innerHTML = `<option value="">全部历史</option>`;
+            sel.value = '';
             sel.disabled = false;
             return;
         }
@@ -3459,23 +3691,25 @@ async function loadMessageDates() {
             rows.unshift({
                 date: today,
                 label: '今天',
-                count: 0
+                count: null
             });
         }
 
-        sel.innerHTML = rows.map(x => {
-            return `<option value="${escapeHtml(x.date)}">${escapeHtml(x.label)} (${x.count})</option>`;
+        sel.innerHTML = `<option value="">全部历史</option>` + rows.map(x => {
+            const countText = x.count !== null && x.count !== undefined && x.count !== '' ? ` (${x.count})` : '';
+            return `<option value="${escapeHtml(x.date)}">${escapeHtml(x.label)}${countText}</option>`;
         }).join('');
 
-        currentDate = rows[0]?.date || today;
+        if (currentDate && !rows.some(x => x.date === currentDate)) {
+            currentDate = '';
+        }
         sel.value = currentDate;
         sel.disabled = false;
 
     } catch (e) {
-        const today = new Date().toISOString().slice(0, 10);
-        currentDate = today;
-        sel.innerHTML = `<option value="${today}">今天</option>`;
-        sel.value = today;
+        currentDate = '';
+        sel.innerHTML = `<option value="">全部历史</option>`;
+        sel.value = '';
         sel.disabled = false;
     }
 }
@@ -3484,6 +3718,10 @@ function onDateChange() {
     currentDate = document.getElementById('dateSelect').value;
     clearReplyTarget();
     lastRenderedMessageKeys = [];
+    currentLastRowId = 0;
+    currentOldestRowId = 0;
+    hasMoreHistory = false;
+    isLoadingHistory = false;
     hideUnreadHint();
     loadMessages(true, false);
 }
@@ -3529,85 +3767,14 @@ async function loadMessagesSince() {
 
 function appendMessages(rows) {
     const box = document.getElementById('messageList');
-    let html = '';
+    rows = (rows || []).filter(row => !renderedRowExists(row.id));
+    if (!rows.length) return;
 
-    rows.forEach((row) => {
-        const isSend = row.direction === 'send';
-        const name = isSend
-            ? (row.username || row.nickname || 'Bot')
-            : (row.username || row.nickname || row.user_id || '未知用户');
-        const content = row.display_content || row.content || row.raw_message || '';
-        const copyText = buildMessageCopyText(content);
-        const previewText = copyText || String(content || '').slice(0, 60);
-        const messageId = row.message_id || '';
-        const replyUsed = Number(row.reply_used_count || 0);
-        const canReply = !!row.can_reply;
-        const replyExpired = !!row.reply_expired;
-
-        const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
-            ? renderMarkdown(content)
-            : renderMessageContent(content);
-
-        const rowClasses = [
-            'msg-row',
-            isSend ? 'send' : 'recv',
-            canReply ? 'can-reply' : ''
-        ].filter(Boolean).join(' ');
-
-        html += `
-            <div
-                class="${rowClasses}"
-                data-msg-index="0"
-                data-row-id="${escapeHtml(row.id || '')}"
-                data-message-id="${escapeHtml(messageId)}"
-                data-is-send="${isSend ? '1' : '0'}"
-                data-can-reply="${canReply ? '1' : '0'}"
-                data-name="${escapeHtml(name)}"
-                data-preview="${escapeHtml(previewText.slice(0, 60))}"
-                data-copy-text="${escapeHtml(copyText)}"
-                oncontextmenu="openMessageActionMenu(event, this); return false;"
-                onpointerdown="startMessagePress(event, this)"
-                onpointermove="moveMessagePress(event)"
-                onpointerup="cancelMessagePress()"
-                onpointercancel="cancelMessagePress()"
-                onpointerleave="cancelMessagePress()"
-            >
-                ${renderAvatar(row, isSend)}
-                <div class="msg-main">
-                    <div class="msg-meta">
-                        <span class="msg-name">${escapeHtml(name)}</span>
-                        <span>${escapeHtml(shortTime(row.created_at))}</span>
-                        <span>${escapeHtml(row.adapter || '')}</span>
-                    </div>
-                    <div class="msg-bubble">
-                        ${contentHtml}
-                    </div>
-                    <div class="msg-extra">
-                        ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
-                        ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
-                        ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
-                        ${isSend && row.message_id ? `
-                            <button
-                                class="msg-revoke-btn"
-                                onclick="event.stopPropagation(); revokeMessage(this)"
-                                data-row-id="${escapeHtml(row.id || '')}"
-                                data-adapter="${escapeHtml(row.adapter || '')}"
-                                data-scene="${escapeHtml(row.scene || '')}"
-                                data-message-id="${escapeHtml(row.message_id || '')}"
-                                data-group-id="${escapeHtml(row.group_id || '')}"
-                                data-user-id="${escapeHtml(row.user_id || '')}"
-                                type="button"
-                            >
-                                撤回
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-
-    box.insertAdjacentHTML('beforeend', html);
+    const startIndex = getMessageRows().length;
+    box.insertAdjacentHTML('beforeend', renderMessageRows(rows, startIndex, getLastRenderedMessageDate()));
+    normalizeDateDividers();
+    reindexRenderedMessages();
+    lastRenderedMessageKeys = lastRenderedMessageKeys.concat(rows.map(getMessageKey));
 }
 
 
@@ -3628,7 +3795,8 @@ async function loadMessages(forceBottom = false, silent = false) {
             scene: currentSession.scene,
             direction: 'ALL',
             page: '1',
-            page_size: '180'
+            page_size: '300',
+            include_total: '0'
         });
 
         if (keyword) qs.set('keyword', keyword);
@@ -3660,104 +3828,26 @@ async function loadMessages(forceBottom = false, silent = false) {
         if (!rows.length) {
             box.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无消息</p></div>`;
             lastRenderedMessageKeys = [];
+            currentOldestRowId = 0;
+            currentLastRowId = 0;
+            hasMoreHistory = false;
             return;
         }
 
-        let lastDate = '';
-        let html = '';
-
-        rows.forEach((row, idx) => {
-            const datePart = (row.created_at || '').slice(0, 10);
-            if (datePart && datePart !== lastDate) {
-                lastDate = datePart;
-                html += `<div class="msg-date-divider"><span>${escapeHtml(datePart)}</span></div>`;
-            }
-
-            const isSend = row.direction === 'send';
-            const name = isSend
-                ? (row.username || row.nickname || 'Bot')
-                : (row.username || row.nickname || row.user_id || '未知用户');
-            const content = row.display_content || row.content || row.raw_message || '';
-            const copyText = buildMessageCopyText(content);
-            const previewText = copyText || String(content || '').slice(0, 60);
-            const messageId = row.message_id || '';
-            const replyUsed = Number(row.reply_used_count || 0);
-            const canReply = !!row.can_reply;
-            const replyExpired = !!row.reply_expired;
-
-            const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
-                ? renderMarkdown(content)
-                : renderMessageContent(content);
-
-            const rowClasses = [
-                'msg-row',
-                isSend ? 'send' : 'recv',
-                canReply ? 'can-reply' : '',
-                selectedReplyMessageId && selectedReplyMessageId === messageId ? 'reply-selected' : ''
-            ].filter(Boolean).join(' ');
-
-            html += `
-                <div
-                    class="${rowClasses}"
-                    data-msg-index="${idx}"
-                    data-row-id="${escapeHtml(row.id || '')}"
-                    data-message-id="${escapeHtml(messageId)}"
-                    data-is-send="${isSend ? '1' : '0'}"
-                    data-can-reply="${canReply ? '1' : '0'}"
-                    data-name="${escapeHtml(name)}"
-                    data-preview="${escapeHtml(previewText.slice(0, 60))}"
-                    data-copy-text="${escapeHtml(copyText)}"
-                    oncontextmenu="openMessageActionMenu(event, this); return false;"
-                    onpointerdown="startMessagePress(event, this)"
-                    onpointermove="moveMessagePress(event)"
-                    onpointerup="cancelMessagePress()"
-                    onpointercancel="cancelMessagePress()"
-                    onpointerleave="cancelMessagePress()"
-                >
-                    ${renderAvatar(row, isSend)}
-                    <div class="msg-main">
-                        <div class="msg-meta">
-                            <span class="msg-name">${escapeHtml(name)}</span>
-                            <span>${escapeHtml(shortTime(row.created_at))}</span>
-                            <span>${escapeHtml(row.adapter || '')}</span>
-                        </div>
-                        <div class="msg-bubble">
-                            ${contentHtml}
-                        </div>
-                        <div class="msg-extra">
-                            ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
-                            ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
-                            ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
-                            ${isSend && row.message_id ? `
-                                <button
-                                    class="msg-revoke-btn"
-                                    onclick="event.stopPropagation(); revokeMessage(this)"
-                                    data-row-id="${escapeHtml(row.id || '')}"
-                                    data-adapter="${escapeHtml(row.adapter || '')}"
-                                    data-scene="${escapeHtml(row.scene || '')}"
-                                    data-message-id="${escapeHtml(row.message_id || '')}"
-                                    data-group-id="${escapeHtml(row.group_id || '')}"
-                                    data-user-id="${escapeHtml(row.user_id || '')}"
-                                    type="button"
-                                >
-                                    撤回
-                                </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-
-        box.innerHTML = html;
+        box.innerHTML = renderMessageRows(rows, 0);
+        normalizeDateDividers();
+        reindexRenderedMessages();
         lastRenderedMessageKeys = newKeys;
         currentJumpIndex = rows.length - 1;
         
         if (rows.length) {
+            currentOldestRowId = Number(rows[0].id || 0);
             currentLastRowId = Number(rows[rows.length - 1].id || 0);
         } else {
+            currentOldestRowId = 0;
             currentLastRowId = 0;
         }
+        hasMoreHistory = !!data.has_more;
 
         if (forceBottom || wasBottom) {
             setTimeout(() => {
@@ -3778,6 +3868,84 @@ async function loadMessages(forceBottom = false, silent = false) {
     } finally {
         isLoadingMessages = false;
     }
+}
+
+async function loadOlderMessages() {
+    if (!currentSession || isLoadingMessages || isLoadingHistory || !hasMoreHistory || !currentOldestRowId) return;
+
+    isLoadingHistory = true;
+
+    const box = document.getElementById('messageList');
+    const oldScrollTop = box.scrollTop;
+    const oldScrollHeight = box.scrollHeight;
+
+    try {
+        const keyword = document.getElementById('keywordInput').value.trim();
+        const qs = new URLSearchParams({
+            scene: currentSession.scene,
+            target_id: currentSession.target_id,
+            before_row_id: String(currentOldestRowId),
+            page_size: '300'
+        });
+
+        if (keyword) qs.set('keyword', keyword);
+        if (currentSession.adapter) qs.set('adapter', currentSession.adapter);
+        if (currentDate) qs.set('date', currentDate);
+
+        const res = await fetch('/api/messages/list_before?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            console.error('历史消息加载失败', data.error || '未知错误');
+            return;
+        }
+
+        let rows = data.rows || [];
+        rows = rows.slice().reverse().filter(row => !renderedRowExists(row.id));
+
+        hasMoreHistory = !!data.has_more;
+
+        if (!rows.length) {
+            if (!data.has_more) hasMoreHistory = false;
+            return;
+        }
+
+        box.insertAdjacentHTML('afterbegin', renderMessageRows(rows, 0));
+        normalizeDateDividers();
+        reindexRenderedMessages();
+        lastRenderedMessageKeys = rows.map(getMessageKey).concat(lastRenderedMessageKeys);
+        currentOldestRowId = Number(rows[0].id || currentOldestRowId);
+
+        const delta = box.scrollHeight - oldScrollHeight;
+        box.scrollTop = oldScrollTop + delta;
+    } catch (e) {
+        console.error('历史消息加载异常', e);
+    } finally {
+        isLoadingHistory = false;
+    }
+}
+
+function maybePrefetchHistoryOnScroll() {
+    if (!currentSession || isLoadingMessages || isLoadingHistory || !hasMoreHistory) return;
+
+    const box = document.getElementById('messageList');
+    const firstVisibleIndex = getFirstVisibleMessageIndex(box);
+
+    if (firstVisibleIndex >= 0 && firstVisibleIndex <= 150) {
+        loadOlderMessages();
+    }
+}
+
+function onMessageListScroll() {
+    if (shouldStickToBottom(document.getElementById('messageList'), 120)) {
+        hasUnreadWhileReadingHistory = false;
+        hideUnreadHint();
+    }
+
+    if (historyScrollTimer) {
+        clearTimeout(historyScrollTimer);
+    }
+    historyScrollTimer = setTimeout(maybePrefetchHistoryOnScroll, 80);
 }
 
 function startMessagePress(event, el) {
@@ -4006,6 +4174,7 @@ function onSceneChange() {
     clearReplyTarget();
     lastRenderedMessageKeys = [];
     lastRenderedSessionKeys = [];
+    lastSessionRowId = 0;
     hideUnreadHint();
     resetChatPanel();
     loadSessions(false);
@@ -4017,6 +4186,7 @@ function onAdapterChange() {
     clearReplyTarget();
     lastRenderedMessageKeys = [];
     lastRenderedSessionKeys = [];
+    lastSessionRowId = 0;
     hideUnreadHint();
     resetChatPanel();
     loadSessions(false);
@@ -4025,6 +4195,11 @@ function onAdapterChange() {
 function resetChatPanel() {
     const shell = getQqShell();
     if (shell) shell.classList.remove('mobile-chat-open');
+
+    currentOldestRowId = 0;
+    currentLastRowId = 0;
+    hasMoreHistory = false;
+    isLoadingHistory = false;
 
     setChatAvatar('?', '');
     document.getElementById('chatTitle').innerText = '请选择一个会话';
@@ -4035,7 +4210,7 @@ function resetChatPanel() {
 
     const dateSelect = document.getElementById('dateSelect');
     dateSelect.disabled = true;
-    dateSelect.innerHTML = '<option value="">今天</option>';
+    dateSelect.innerHTML = '<option value="">全部历史</option>';
 
     document.getElementById('messageList').innerHTML = `
         <div class="empty-state">
@@ -4339,7 +4514,7 @@ function toggleAutoRefresh(force = null) {
         if (autoRefreshTimer) clearInterval(autoRefreshTimer);
 
         autoRefreshTimer = setInterval(async () => {
-            await loadSessions(true);   // 左侧暂时还能全量，后面再优化
+            await loadSessionUpdates();
             if (currentSession) {
                 await loadMessagesSince();
             }
@@ -4359,7 +4534,11 @@ function refreshAll() {
     loadSessions(false);
     if (currentSession) {
         lastRenderedMessageKeys = [];
-        loadMessageDates().then(() => loadMessages(false, false));
+        currentOldestRowId = 0;
+        currentLastRowId = 0;
+        hasMoreHistory = false;
+        loadMessages(false, false);
+        loadMessageDates();
     }
 }
 
@@ -4459,6 +4638,7 @@ async function saveMessageConfig() {
 
 window.addEventListener('beforeunload', () => {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    if (historyScrollTimer) clearTimeout(historyScrollTimer);
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -4470,6 +4650,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setMediaPanelOpen(false);
         updateMediaBadge();
     });
+    document.getElementById('messageList')?.addEventListener('scroll', onMessageListScroll, { passive: true });
     document.addEventListener('click', (event) => {
         const menu = document.getElementById('messageActionMenu');
         if (menu && !menu.contains(event.target)) {

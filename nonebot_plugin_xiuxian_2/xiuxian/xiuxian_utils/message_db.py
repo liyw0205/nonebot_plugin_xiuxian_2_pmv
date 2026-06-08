@@ -215,6 +215,10 @@ def _ensure_message_db_schema(conn):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_id ON messages(group_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_latest ON messages(scene, adapter, group_id, id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_private_latest ON messages(scene, adapter, user_id, id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_time ON messages(scene, adapter, group_id, created_at, id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_private_time ON messages(scene, adapter, user_id, created_at, id)")
 
 
 def connect_message_db(row_factory: bool = False):
