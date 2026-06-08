@@ -22,6 +22,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     send_msg_handler,
@@ -307,12 +308,57 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
                 f"拍得{item['name']}，成交价{number_to(final_price)}灵石，拍卖ID:{item['id']}",
                 {"拍卖成交次数": 1, "拍卖消费灵石": final_price}
             )
+            safe_record_game_event(
+                highest_bidder_id,
+                "trade_buy",
+                1,
+                {
+                    "source": "auction",
+                    "action": "auction_buy",
+                    "stone_delta": -int(final_price),
+                    "item_delta": [
+                        {
+                            "id": item["item_id"],
+                            "name": item["name"],
+                            "amount": 1,
+                        }
+                    ],
+                    "detail": {
+                        "auction_id": item["id"],
+                        "seller_id": item["seller_id"],
+                        "final_price": final_price,
+                    },
+                },
+            )
             if not item["is_system"]:
                 record_trade_event(
                     item["seller_id"],
                     "拍卖成交",
                     f"售出{item['name']}，成交价{number_to(final_price)}灵石，手续费{number_to(fee)}灵石，收入{number_to(seller_earnings)}灵石",
                     {"拍卖售出次数": 1, "拍卖收入灵石": seller_earnings, "拍卖手续费消耗": fee}
+                )
+                safe_record_game_event(
+                    item["seller_id"],
+                    "trade_sell",
+                    1,
+                    {
+                        "source": "auction",
+                        "action": "auction_sell",
+                        "stone_delta": int(seller_earnings),
+                        "item_delta": [
+                            {
+                                "id": item["item_id"],
+                                "name": item["name"],
+                                "amount": -1,
+                            }
+                        ],
+                        "detail": {
+                            "auction_id": item["id"],
+                            "winner_id": highest_bidder_id,
+                            "final_price": final_price,
+                            "fee": fee,
+                        },
+                    },
                 )
 
             # 兼容旧拍卖记录：历史版本会保留多个出价人的锁款。
