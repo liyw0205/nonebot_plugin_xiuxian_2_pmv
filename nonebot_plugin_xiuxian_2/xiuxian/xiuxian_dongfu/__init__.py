@@ -11,6 +11,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
@@ -796,6 +797,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     d["plant_slots"] = slots
     _save_dongfu(uid, d)
+    safe_record_game_event(
+        uid,
+        "dongfu_harvest",
+        len(harvest_slots),
+        {
+            "source": "dongfu",
+            "action": "harvest",
+            "item_delta": [
+                {
+                    "id": gid,
+                    "name": reward["name"],
+                    "type": reward["type"],
+                    "amount": reward["num"],
+                }
+                for gid, reward in reward_map.items()
+            ],
+            "detail": {
+                "slots": [slot.get("slot") for slot in harvest_slots],
+                "failed_slots": failed_slots,
+            },
+        },
+    )
 
     lines = [f"洞府收获完成，共收获{len(harvest_slots)}块灵田："]
     if reward_map:
