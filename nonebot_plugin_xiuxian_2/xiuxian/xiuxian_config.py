@@ -169,6 +169,12 @@ class XiuConfig:
         # 师父培养徒弟出师奖励灵石
         self.mentor_history_limit = 50
         # 师徒记录保留条数
+        self.mentor_breakthrough_reward_base_rate = 0.005
+        # 徒弟突破时师父返修基础比例
+        self.mentor_breakthrough_reward_min_rate = 0.001
+        # 徒弟低境界突破时师父返修最低比例
+        self.mentor_breakthrough_reward_max_rate = 0.01
+        # 徒弟高境界突破时师父返修最高比例
         self.level_punishment_floor = 10
         # 突破失败扣除修为，惩罚下限（百分比）
         self.level_punishment_limit = 20

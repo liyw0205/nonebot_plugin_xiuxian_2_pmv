@@ -49,6 +49,9 @@ MENTOR_GRADUATE_APPRENTICE_STONE_REWARD = getattr(mentor_config, "mentor_graduat
 MENTOR_GRADUATE_MENTOR_STONE_REWARD = getattr(mentor_config, "mentor_graduate_mentor_stone_reward", 10000000)
 MENTOR_HISTORY_LIMIT = getattr(mentor_config, "mentor_history_limit", 50)
 MENTOR_APPLY_LIMIT_HOURS = getattr(mentor_config, "mentor_apply_limit_hours", 24)
+MENTOR_BREAKTHROUGH_REWARD_BASE_RATE = getattr(mentor_config, "mentor_breakthrough_reward_base_rate", 0.005)
+MENTOR_BREAKTHROUGH_REWARD_MIN_RATE = getattr(mentor_config, "mentor_breakthrough_reward_min_rate", 0.001)
+MENTOR_BREAKTHROUGH_REWARD_MAX_RATE = getattr(mentor_config, "mentor_breakthrough_reward_max_rate", 0.01)
 try:
     MENTOR_APPLY_LIMIT_HOURS = int(MENTOR_APPLY_LIMIT_HOURS)
 except (ValueError, TypeError):
@@ -2582,3 +2585,77 @@ def trigger_partner_exp_share(user_id, new_level):
                 log_message(partner_id, f"道侣突破{new_level}，获得共享修为：{number_to(give_exp)}")
                 return f"\n道侣{partner_name}感受到你的突破，获得{number_to(give_exp)}修为！"
     return ""
+
+
+def _config_rate(value, default):
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _mentor_breakthrough_reward_rate(apprentice_level):
+    """
+    参考双修按境界段缩放：低境界拿更低比例，高境界最多到配置上限。
+    """
+    base_rate = _config_rate(MENTOR_BREAKTHROUGH_REWARD_BASE_RATE, 0.005)
+    min_rate = _config_rate(MENTOR_BREAKTHROUGH_REWARD_MIN_RATE, 0.001)
+    max_rate = _config_rate(MENTOR_BREAKTHROUGH_REWARD_MAX_RATE, 0.01)
+    if min_rate > max_rate:
+        min_rate, max_rate = max_rate, min_rate
+
+    try:
+        apprentice_rank = convert_rank(apprentice_level)[0]
+        max_rank = convert_rank("江湖好手")[0]
+        rank_progress = max(max_rank - apprentice_rank, 0)
+        apprentice_stage = (max(rank_progress - 1, 0) // 3) + 1
+    except (TypeError, ValueError):
+        apprentice_stage = 1
+
+    level_factor = min(apprentice_stage * 0.2, 2)
+    return max(min_rate, min(max_rate, base_rate * level_factor))
+
+
+def trigger_mentor_breakthrough_reward(apprentice_id, new_level):
+    apprentice_id = str(apprentice_id)
+    apprentice_data = load_mentor(apprentice_id)
+    mentor_id = apprentice_data.get("mentor_id")
+    if not mentor_id or not check_is_mentor_pair(mentor_id, apprentice_id):
+        return ""
+
+    mentor_info = sql_message.get_user_info_with_id(mentor_id)
+    apprentice_info = sql_message.get_user_info_with_id(apprentice_id)
+    if not mentor_info or not apprentice_info:
+        return ""
+
+    mentor_exp = safe_int(mentor_info.get("exp"))
+    if mentor_exp <= 0:
+        return ""
+
+    max_exp_limit = int(OtherSet().set_closing_type(mentor_info["level"])) * XiuConfig().closing_exp_upper_limit
+    remaining_exp = int(max_exp_limit - mentor_exp)
+    if remaining_exp <= 0:
+        return ""
+
+    reward_rate = _mentor_breakthrough_reward_rate(new_level)
+    give_exp = min(int(mentor_exp * reward_rate), remaining_exp)
+    if give_exp <= 0:
+        return ""
+
+    sql_message.update_exp(mentor_id, give_exp)
+    sql_message.update_power2(mentor_id)
+
+    mentor_name = mentor_info["user_name"]
+    apprentice_name = apprentice_info["user_name"]
+    update_statistics_value(mentor_id, "师父突破返修", increment=give_exp)
+    update_statistics_value(apprentice_id, "徒弟突破回馈", increment=give_exp)
+    _record_mentor_event(
+        mentor_id,
+        apprentice_id,
+        "breakthrough_reward",
+        f"徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}",
+        f"突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}",
+    )
+    log_message(mentor_id, f"[师徒] 徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}")
+    log_message(apprentice_id, f"[师徒] 突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}")
+    return f"\n师父{mentor_name}因徒弟突破{new_level}，获得{number_to(give_exp)}修为返修！"

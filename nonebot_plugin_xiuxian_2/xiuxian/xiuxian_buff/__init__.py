@@ -53,6 +53,7 @@ from .partner import (  # noqa: F401
     load_mentor,
     load_partner,
     load_player_user,
+    trigger_mentor_breakthrough_reward,
     trigger_partner_exp_share,
     two_exp_cd_up,
     two_exp_limit,

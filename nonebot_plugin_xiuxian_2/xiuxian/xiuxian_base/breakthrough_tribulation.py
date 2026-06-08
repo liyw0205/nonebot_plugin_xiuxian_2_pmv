@@ -10,7 +10,7 @@ from ..on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent, Message
-from ..xiuxian_buff import trigger_partner_exp_share
+from ..xiuxian_buff import trigger_mentor_breakthrough_reward, trigger_partner_exp_share
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
@@ -90,6 +90,13 @@ def refresh_achievement_titles(user_id):
         check_and_unlock_titles(user_id)
     except Exception as e:
         log_message(user_id, f"[成就称号] 自动检查失败：{e}")
+
+
+def trigger_breakthrough_relation_rewards(user_id, new_level):
+    return (
+        trigger_partner_exp_share(user_id, new_level)
+        + trigger_mentor_breakthrough_reward(user_id, new_level)
+    )
 
 def record_level_up_result(
     user_id, method, attempts=1, success=False, target_level=None,
@@ -447,7 +454,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if roll <= success_rate:  # 渡劫成功
         sql_message.updata_level(user_id, next_level)
-        share_msg = trigger_partner_exp_share(user_id, next_level)
+        share_msg = trigger_breakthrough_relation_rewards(user_id, next_level)
         sql_message.update_power2(user_id)
         clear_user_tribulation_info(user_id)
         record_tribulation_result(user_id, "开始渡劫", True, target_level=next_level, rate=success_rate)
@@ -574,7 +581,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 必定成功
     sql_message.updata_level(user_id, next_level)
-    share_msg = trigger_partner_exp_share(user_id, next_level)
+    share_msg = trigger_breakthrough_relation_rewards(user_id, next_level)
     sql_message.update_power2(user_id)
     clear_user_tribulation_info(user_id)
     record_tribulation_result(
@@ -957,7 +964,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id, le[0])
+        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1056,7 +1063,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         elif isinstance(le, list):
             # 突破成功
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id, le[0])
+            share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -1174,7 +1181,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id, le[0])
+        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1291,7 +1298,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif type(le) == list:
         # 突破成功
         sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_partner_exp_share(user_id, le[0])
+        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
         sql_message.update_power2(user_id)  # 更新战力
         sql_message.updata_level_cd(user_id)  # 更新CD
         sql_message.update_levelrate(user_id, 0)
@@ -1410,7 +1417,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
             pills_used += 1
             sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id, le[0])
+            share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
@@ -1544,7 +1551,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
             pills_used += 1
             sql_message.update_back_j(user_id, 1998, 1)  # 消耗1个渡厄金丹
             sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_partner_exp_share(user_id, le[0])
+            share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
             sql_message.update_power2(user_id)
             sql_message.update_levelrate(user_id, 0)
             sql_message.update_user_hp(user_id)
