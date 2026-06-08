@@ -3,7 +3,10 @@ import asyncio
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, leave_harm_time
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.player_fight import Boss_fight
-from ..xiuxian_utils.utils import number_to, check_user, check_user_type, send_msg_handler
+from ..xiuxian_utils.utils import (
+    number_to, check_user, check_user_type, send_msg_handler,
+    update_statistics_value
+)
 from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
@@ -160,6 +163,8 @@ class TowerBattle:
             tower_info["current_floor"] = boss_info["floor"]
             tower_info["max_floor"] = max(tower_info["max_floor"], boss_info["floor"])
             tower_limit.save_user_tower_info(user_id, tower_info)
+            update_statistics_value(user_id, "通天塔通关层数")
+            update_statistics_value(user_id, "通天塔最高层", value=tower_info["max_floor"])
             
             # 给予灵石
             sql_message.update_ls(user_id, total_stone, 1)
@@ -253,6 +258,8 @@ class TowerBattle:
             tower_info["max_floor"] = max(tower_info["max_floor"], max_success)
             tower_info["score"] += total_score
             tower_limit.save_user_tower_info(user_id, tower_info)
+            update_statistics_value(user_id, "通天塔通关层数", increment=len(success_floors))
+            update_statistics_value(user_id, "通天塔最高层", value=tower_info["max_floor"])
             
             # 给予总灵石奖励
             if total_stone > 0:

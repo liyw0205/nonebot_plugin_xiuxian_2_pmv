@@ -27,7 +27,8 @@ from .title_data import (
     get_all_titles, get_title_by_id,
     check_and_unlock_titles, get_user_unlocked_titles,
     get_user_equipped_title, equip_title, unequip_title,
-    refresh_title_cache, find_title_id_by_name_or_id, grant_title_to_user
+    refresh_title_cache, find_title_id_by_name_or_id, grant_title_to_user,
+    get_title_achievement_records
 )
 
 sql_message = XiuxianDateManage()
@@ -42,6 +43,46 @@ title_refresh_cmd = on_command("刷新称号", priority=5, block=True)
 title_check_cmd = on_command("检查称号", aliases={"检测称号"}, priority=5, block=True)
 title_info_cmd = on_command("称号详情", priority=5, block=True)
 title_grant_cmd = on_command("赠送称号", permission=SUPERUSER, priority=5, block=True)
+achievement_list_cmd = on_command("我的成就", aliases={"成就列表", "查看成就"}, priority=5, block=True)
+achievement_check_cmd = on_command("检查成就", aliases={"检测成就"}, priority=5, block=True)
+
+
+def _parse_page_and_filter(arg_text: str):
+    page = 1
+    filter_text = ""
+    for part in arg_text.split():
+        if part.isdigit():
+            page = max(1, int(part))
+        elif part:
+            filter_text = part
+    return page, filter_text
+
+
+def _filter_achievement_records(records: list[dict], filter_text: str) -> list[dict]:
+    if not filter_text or filter_text in {"全部", "所有"}:
+        return records
+    if filter_text in {"已完成", "完成", "已解锁", "解锁"}:
+        return [record for record in records if record["unlocked"]]
+    if filter_text in {"未完成", "未解锁", "进行中"}:
+        return [record for record in records if not record["unlocked"]]
+    return [
+        record for record in records
+        if filter_text in record["category"]
+        or filter_text in record["name"]
+        or filter_text in record["condition"]
+    ]
+
+
+def _format_achievement_record(record: dict) -> str:
+    status = "已完成" if record["unlocked"] else ("可解锁" if record["satisfied"] else "未完成")
+    percent = int(record["ratio"] * 100)
+    lines = [
+        f"【{record['name']}】{status} {percent}%",
+        f"  {record['desc']}",
+    ]
+    for item in record["progress"]:
+        lines.append(f"  - {item['key']}：{item['display']}")
+    return "\n".join(lines)
 
 
 @title_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
@@ -183,6 +224,85 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await title_check_cmd.finish()
 
 
+@achievement_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看称号成就进度"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await achievement_list_cmd.finish()
+
+    user_id = user_info["user_id"]
+    newly_unlocked = check_and_unlock_titles(user_id)
+    records = get_title_achievement_records(user_id)
+    total_count = len(records)
+    unlocked_count = len([record for record in records if record["unlocked"]])
+
+    page, filter_text = _parse_page_and_filter(args.extract_plain_text().strip())
+    records = _filter_achievement_records(records, filter_text)
+    records.sort(key=lambda item: (item["unlocked"], -item["ratio"], item["category"], item["id"]))
+
+    per_page = 6
+    total_page = max(1, (len(records) + per_page - 1) // per_page)
+    page = min(page, total_page)
+    show_records = records[(page - 1) * per_page: page * per_page]
+
+    title = f"【我的成就】{unlocked_count}/{total_count}"
+    if filter_text:
+        title += f"｜筛选：{filter_text}"
+    lines = [title, f"第{page}/{total_page}页", "═════════════"]
+    if newly_unlocked:
+        lines.append("本次新解锁：")
+        lines.extend(f"【{title_data['name']}】{title_data['desc']}" for title_data in newly_unlocked)
+        lines.append("═════════════")
+
+    if show_records:
+        lines.extend(_format_achievement_record(record) for record in show_records)
+    else:
+        lines.append("暂无符合条件的成就。")
+
+    lines.append("═════════════")
+    lines.append("发送【我的成就 页码】翻页；可加筛选：已完成、未完成、境界突破、战斗挑战等")
+    msg_text = "\n\n".join(lines)
+    await handle_send(
+        bot, event, msg_text, md_type="修仙",
+        k1="检查", v1="检查成就",
+        k2="称号", v2="我的称号",
+        k3="帮助", v3="称号帮助"
+    )
+    await achievement_list_cmd.finish()
+
+
+@achievement_check_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+async def achievement_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """手动检查成就称号"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await achievement_check_cmd.finish()
+
+    user_id = user_info["user_id"]
+    newly_unlocked = check_and_unlock_titles(user_id)
+    records = get_title_achievement_records(user_id)
+    unlocked_count = len([record for record in records if record["unlocked"]])
+
+    if newly_unlocked:
+        lines = ["检查完成，解锁新成就："]
+        lines.extend(f"【{title_data['name']}】{title_data['desc']}" for title_data in newly_unlocked)
+    else:
+        lines = [f"检查完成，当前已完成{unlocked_count}/{len(records)}个成就，暂无新成就解锁。"]
+
+    await handle_send(
+        bot, event, "\n".join(lines), md_type="修仙",
+        k1="成就", v1="我的成就",
+        k2="称号", v2="我的称号",
+        k3="帮助", v3="称号帮助"
+    )
+    await achievement_check_cmd.finish()
+
+
 @title_info_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看称号详情"""
@@ -301,6 +421,7 @@ __title_help__ = """
 → 发送"我的称号"查看第一页
 → 发送"我的称号 2"查看第二页（每页10个）
 → 发送"称号详情 + 名称"查看详情
+→ 发送"我的成就"查看称号成就进度
 
 🌟 装备称号
 → 发送"装备称号 + 名称"
@@ -312,6 +433,7 @@ __title_help__ = """
 
 🌟 检查称号
 → 发送"检查称号"手动检测新称号
+→ 发送"检查成就"手动检测新成就
 
 🌟 称号获取
 → 通过统计数据达成条件自动解锁

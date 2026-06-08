@@ -474,7 +474,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 邀请帮助 / 补偿帮助 / 礼包帮助 / 兑换码帮助
 
 🎒 背包外观
-- 背包帮助 / 饰品帮助 / 称号帮助
+- 背包帮助 / 饰品帮助 / 称号帮助 / 我的成就
 
 🧪 功能系统
 - 炼丹帮助 / 炼丹配方帮助
@@ -487,7 +487,7 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 🗺 探索战斗
 - 地图帮助 / 附近道友 / 论道切磋
 - 秘境帮助 / 历练帮助 / 悬赏令帮助
-- 世界BOSS帮助 / 通天塔帮助 / 竞技场帮助
+- 世界BOSS帮助 / 世界事件帮助 / 通天塔帮助 / 竞技场帮助
 - 幻境寻心
 - 队伍帮助 / 副本帮助
 

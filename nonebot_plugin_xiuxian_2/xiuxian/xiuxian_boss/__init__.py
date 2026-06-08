@@ -40,6 +40,7 @@ from ..xiuxian_utils.utils import (
     send_help_message
 )
 from ..xiuxian_tasks.task_data import record_task_progress
+from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
 from .. import DRIVER
 # boss定时任务
@@ -60,7 +61,7 @@ boss_info = on_command("世界BOSS查询", aliases={"世界boss查询", "世界B
 boss_info2 = on_command("世界BOSS列表", aliases={"世界boss列表", "世界Boss列表"}, priority=6, block=True)
 battle = on_command("世界BOSS讨伐", aliases={"世界boss讨伐", "世界Boss讨伐", "讨伐世界BOSS", "讨伐世界boss", "讨伐世界Boss"}, priority=6, block=True)
 boss_help = on_command("世界BOSS帮助", aliases={"世界boss帮助", "世界Boss帮助"}, priority=5, block=True)
-boss_admin = on_command("世界BOSS管理", aliases={"世界boss管理", "世界Boss管理"}, priority=5, block=True)
+boss_admin = on_command("世界BOSS管理", aliases={"世界boss管理", "世界Boss管理"}, permission=SUPERUSER, priority=5, block=True)
 boss_delete = on_command("世界BOSS天罚", aliases={"世界boss天罚", "世界Boss天罚", "天罚世界BOSS", "天罚世界boss", "天罚世界Boss"}, permission=SUPERUSER, priority=7, block=True)
 boss_delete_all = on_command("世界BOSS全部天罚", aliases={"世界boss全部天罚", "世界Boss全部天罚", "天罚全部世界BOSS", "天罚全部世界boss", "天罚全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
 boss_integral_info = on_command("世界BOSS信息", aliases={"世界boss信息", "世界Boss信息"}, priority=10, block=True)
@@ -664,7 +665,13 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
+    if boss_now_hp <= 0:
+        update_statistics_value(user_id, "击败世界BOSS")
     record_task_progress(user_id, "boss")
+    try:
+        check_and_unlock_titles(user_id)
+    except Exception as e:
+        log_message(user_id, f"[成就称号] 自动检查失败：{e}")
 
     try:
         await send_msg_handler(bot, event, result)

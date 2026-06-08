@@ -23,6 +23,7 @@ from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
+from ..xiuxian_title.title_data import check_and_unlock_titles
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
@@ -129,6 +130,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_challenge.finish()
     success, msg = await challenge_floor(bot, event, user_id)
+    try:
+        check_and_unlock_titles(user_id)
+    except Exception as e:
+        log_message(user_id, f"[成就称号] 自动检查失败：{e}")
     
     await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     log_message(user_id, msg)
@@ -173,6 +178,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         target_floors = 10  # 默认10层
     
     success, msg = await challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
+    try:
+        check_and_unlock_titles(user_id)
+    except Exception as e:
+        log_message(user_id, f"[成就称号] 自动检查失败：{e}")
     
     await handle_send(bot, event, msg, md_type="通天塔", k1="速通", v1="速通通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     log_message(user_id, msg)

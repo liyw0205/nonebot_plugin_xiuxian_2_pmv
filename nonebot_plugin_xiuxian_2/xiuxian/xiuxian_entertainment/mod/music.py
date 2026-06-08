@@ -66,12 +66,7 @@ async def music_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "3) 选歌\n"
         "   例：选歌 1\n"
         "4) 翻页\n"
-        "   例：点歌下一页 / 点歌上一页 / 点歌第3页\n"
-        "5) 管理员配置\n"
-        "   点歌配置 查看\n"
-        "   点歌配置 设置 song_limit 10\n"
-        "   点歌配置 设置 default_platform netease\n"
-        "   点歌配置 设置 page_size 5"
+        "   例：点歌下一页 / 点歌上一页 / 点歌第3页"
     )
     await send_help_message(
         bot, event,

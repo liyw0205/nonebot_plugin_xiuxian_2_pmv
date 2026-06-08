@@ -20,6 +20,7 @@ from ..xiuxian_utils.utils import (
     log_message, update_statistics_value
 )
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
+from ..xiuxian_title.title_data import check_and_unlock_titles
 
 sql_message = XiuxianDateManage()
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
@@ -83,6 +84,13 @@ def clear_user_tribulation_info(user_id):
         except OSError:
             pass
 
+def refresh_achievement_titles(user_id):
+    """统计变更后自动解锁称号成就，失败不影响主流程。"""
+    try:
+        check_and_unlock_titles(user_id)
+    except Exception as e:
+        log_message(user_id, f"[成就称号] 自动检查失败：{e}")
+
 def record_level_up_result(
     user_id, method, attempts=1, success=False, target_level=None,
     fail_count=0, exp_loss=0, exp_gain=0, item_name=None, item_count=0
@@ -98,6 +106,7 @@ def record_level_up_result(
         update_statistics_value(user_id, "突破获得修为", increment=exp_gain)
     if item_name and item_count:
         update_statistics_value(user_id, f"{item_name}消耗", increment=item_count)
+    refresh_achievement_titles(user_id)
 
     result = "成功" if success else "失败"
     extra = []
@@ -119,6 +128,7 @@ def record_tribulation_result(user_id, method, success, target_level=None, rate=
     update_statistics_value(user_id, "渡劫成功" if success else "渡劫失败")
     if item_name and item_count:
         update_statistics_value(user_id, f"{item_name}消耗", increment=item_count)
+    refresh_achievement_titles(user_id)
 
     result = "成功" if success else "失败"
     extra = []
@@ -136,6 +146,7 @@ def record_heart_devil_result(user_id, success, rate, devil_name=None, item_used
     update_statistics_value(user_id, "心魔劫成功" if success else "心魔劫失败")
     if item_used:
         update_statistics_value(user_id, "天命丹消耗")
+    refresh_achievement_titles(user_id)
 
     result = "成功" if success else "失败"
     name_msg = f"{devil_name}，" if devil_name else ""
