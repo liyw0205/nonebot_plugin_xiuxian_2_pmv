@@ -22,6 +22,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "end_time": "",                   # YYYYMMDDHHMMSS
         "last_display_refresh_time": "",  # YYYYMMDDHHMMSS
         "items_count": 0
+    },
+    "activity": {
+        "hot_items_limit": 5,
+        "recent_deals_limit": 5
     }
 }
 
@@ -121,6 +125,10 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     st["last_display_refresh_time"] = str(st.get("last_display_refresh_time", ""))
     st["items_count"] = max(int(st.get("items_count", 0)), 0)
 
+    activity = merged["activity"]
+    activity["hot_items_limit"] = max(int(activity.get("hot_items_limit", 5)), 1)
+    activity["recent_deals_limit"] = max(int(activity.get("recent_deals_limit", 5)), 1)
+
     return merged
 
 
@@ -151,6 +159,10 @@ def get_auction_rules() -> Dict[str, Any]:
 
 def get_auction_status_config() -> Dict[str, Any]:
     return get_auction_config()["auction_status"]
+
+
+def get_auction_activity_config() -> Dict[str, Any]:
+    return get_auction_config()["activity"]
 
 
 def get_auction_status_from_config_file() -> Dict[str, Any]:

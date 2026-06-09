@@ -177,6 +177,27 @@ def _record_sect_weekly_progress(
         return []
 
 
+def _record_season_rank_progress(
+    user_id: str,
+    event_key: str,
+    amount: int,
+    meta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if meta.get("skip_season_rank") is True:
+        return []
+    try:
+        from .season_rank_service import record_event_season_scores
+    except Exception as exc:
+        _log_warning(f"加载赛季积分入口失败：{exc}")
+        return []
+
+    try:
+        return record_event_season_scores(user_id, event_key, amount, meta)
+    except Exception as exc:
+        _log_warning(f"记录赛季积分失败：user_id={user_id}, event={event_key}, error={exc}")
+        return []
+
+
 def record_game_event(
     user_id: str,
     event_key: str,
@@ -195,6 +216,7 @@ def record_game_event(
         "tasks": [],
         "titles": [],
         "sect_weekly": [],
+        "season_rank": [],
         "economy_log_id": 0,
     }
 
@@ -206,6 +228,7 @@ def record_game_event(
     result["tasks"] = _record_task_progress(user_id, event_key, amount, meta)
     result["titles"] = _check_titles(user_id, meta)
     result["sect_weekly"] = _record_sect_weekly_progress(user_id, event_key, amount, meta)
+    result["season_rank"] = _record_season_rank_progress(user_id, event_key, amount, meta)
 
     if meta.get("log_economy") or event_key in ECONOMY_EVENT_KEYS:
         economy_delta = _extract_economy_delta(meta)
@@ -239,5 +262,6 @@ def safe_record_game_event(
             "tasks": [],
             "titles": [],
             "sect_weekly": [],
+            "season_rank": [],
             "economy_log_id": 0,
         }

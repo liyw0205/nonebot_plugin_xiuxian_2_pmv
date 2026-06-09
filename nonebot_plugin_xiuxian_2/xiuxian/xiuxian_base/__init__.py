@@ -38,6 +38,11 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.season_service import get_current_season
+from ..xiuxian_utils.season_rank_service import (
+    DEFAULT_SEASON_RANK_TYPES,
+    get_top_season_rank,
+    get_user_current_season_entries,
+)
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
@@ -60,6 +65,7 @@ help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, bloc
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
 season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
+my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
 give_stone = on_command("送灵石", permission=GROUP, priority=6, block=True)
@@ -162,6 +168,28 @@ _SEASON_MODE_ALIASES = {
     "quarter": "quarterly",
 }
 
+_SEASON_RANK_TYPE_ALIASES = {
+    "交易活跃榜": "交易活跃",
+    "交易榜": "交易活跃",
+    "交易": "交易活跃",
+    "拍卖": "交易活跃",
+    "讨伐榜": "讨伐",
+    "讨伐": "讨伐",
+    "boss": "讨伐",
+    "世界boss": "讨伐",
+    "世界事件": "讨伐",
+    "宗门贡献榜": "宗门贡献",
+    "宗门贡献": "宗门贡献",
+    "宗门": "宗门贡献",
+    "贡献": "宗门贡献",
+    "试炼榜": "试炼",
+    "副本榜": "试炼",
+    "试炼": "试炼",
+    "副本": "试炼",
+    "战力榜": "战力",
+    "战力": "战力",
+}
+
 
 def _parse_season_mode(text: str) -> str:
     text = str(text or "").strip().lower()
@@ -169,6 +197,14 @@ def _parse_season_mode(text: str) -> str:
         if keyword.lower() in text:
             return mode
     return "monthly"
+
+
+def _parse_season_rank_type(text: str) -> str | None:
+    text = str(text or "").strip().lower()
+    for keyword, rank_type in _SEASON_RANK_TYPE_ALIASES.items():
+        if keyword.lower() in text:
+            return rank_type
+    return None
 
 
 def _format_top_rows(title: str, rows, formatter, limit: int = 5) -> list[str]:
@@ -179,6 +215,23 @@ def _format_top_rows(title: str, rows, formatter, limit: int = 5) -> list[str]:
 
     for index, row in enumerate(rows[:limit], 1):
         lines.append(f"{index}. {formatter(row)}")
+    return lines
+
+
+def _format_season_rank_rows(title: str, rows, limit: int = 5) -> list[str]:
+    lines = [f"\n【{title}】"]
+    if not rows:
+        lines.append("本周期暂无独立赛季数据")
+        return lines
+
+    for row in rows[:limit]:
+        if str(row.get("user_id") or ""):
+            name = row.get("user_name") or row.get("user_id")
+        elif int(row.get("sect_id") or 0):
+            name = row.get("sect_name") or f"宗门{row.get('sect_id')}"
+        else:
+            name = "未知"
+        lines.append(f"{row.get('rank', '?')}. {name} 积分{number_to(row.get('score', 0))}")
     return lines
 
 
@@ -206,21 +259,8 @@ def _get_sect_weekly_rank_snapshot(limit: int = 5):
     )
 
 
-def _build_season_rank_message(mode: str = "monthly") -> str:
-    current = get_current_season(mode)
-    weekly = get_current_season("weekly")
-    monthly = get_current_season("monthly")
-    quarterly = get_current_season("quarterly")
-
-    lines = [
-        "【赛季榜】",
-        f"当前展示：{current.name}",
-        f"周榜周期：{weekly.key}",
-        f"月榜周期：{monthly.key}",
-        f"季度榜周期：{quarterly.key}",
-        "",
-        "说明：当前版本为只读赛季信息入口，以下榜单复用现有全局排行榜查询，展示当前快照，不发放奖励。",
-    ]
+def _append_global_rank_snapshots(lines: list[str]) -> None:
+    lines.append("\n以下为全局排行榜快照，仅作无赛季数据时参考。")
 
     try:
         lines.extend(
@@ -286,12 +326,94 @@ def _build_season_rank_message(mode: str = "monthly") -> str:
         logger.warning(f"赛季榜读取宗门周常排行失败：{exc}")
         lines.extend(["\n【宗门周常排行快照 TOP5】", "暂不可用"])
 
+
+def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = None) -> str:
+    current = get_current_season(mode)
+    weekly = get_current_season("weekly")
+    monthly = get_current_season("monthly")
+    quarterly = get_current_season("quarterly")
+
+    lines = [
+        "【赛季榜】",
+        f"当前展示：{current.name}",
+        f"周榜周期：{weekly.key}",
+        f"月榜周期：{monthly.key}",
+        f"季度榜周期：{quarterly.key}",
+        "",
+        "说明：当前展示独立赛季累计数据；暂无赛季数据时会降级展示全局快照参考。",
+    ]
+
+    any_season_data = False
+    if rank_type:
+        try:
+            rows = get_top_season_rank(rank_type, current.mode, limit=10)
+        except Exception as exc:
+            logger.warning(f"赛季榜读取{rank_type}失败：{exc}")
+            rows = []
+        any_season_data = bool(rows)
+        lines.extend(_format_season_rank_rows(f"{current.name}{rank_type}榜 TOP10", rows, limit=10))
+    else:
+        for season_rank_type in DEFAULT_SEASON_RANK_TYPES:
+            try:
+                rows = get_top_season_rank(season_rank_type, current.mode, limit=5)
+            except Exception as exc:
+                logger.warning(f"赛季榜读取{season_rank_type}失败：{exc}")
+                rows = []
+            if rows:
+                any_season_data = True
+                lines.extend(
+                    _format_season_rank_rows(
+                        f"{current.name}{season_rank_type}榜 TOP5",
+                        rows,
+                        limit=5,
+                    )
+                )
+
+    if not any_season_data:
+        lines.append("\n本周期暂无独立赛季累计数据。")
+        _append_global_rank_snapshots(lines)
+
     lines.extend(
         [
-            "\n可用命令：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜",
-            "未接入：独立赛季累计榜、赛季结算、赛季奖励。",
+            "\n可用命令：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜、赛季榜 周榜 战力、我的赛季",
+            "当前支持榜单：交易活跃、讨伐、宗门贡献、试炼、战力。",
+            "未接入：赛季结算、赛季奖励。",
         ]
     )
+    return "\n".join(lines)
+
+
+def _build_my_season_rank_message(user_id: str, mode: str | None = None) -> str:
+    modes = [mode] if mode else ["weekly", "monthly", "quarterly"]
+    entries = get_user_current_season_entries(user_id, modes=modes)
+    lines = ["【我的赛季】"]
+
+    if not entries:
+        lines.append("当前周期暂无赛季积分记录。")
+        lines.append("可通过交易、讨伐、宗门任务、副本等玩法累计赛季积分。")
+        return "\n".join(lines)
+
+    grouped: dict[str, list[dict]] = {}
+    for row in entries:
+        grouped.setdefault(str(row.get("mode") or ""), []).append(row)
+
+    mode_names = {
+        "weekly": "周榜",
+        "monthly": "月榜",
+        "quarterly": "季度榜",
+    }
+    for mode_key in ("weekly", "monthly", "quarterly"):
+        rows = grouped.get(mode_key, [])
+        if not rows:
+            continue
+        season = get_current_season(mode_key)
+        lines.append(f"\n【{season.key}{mode_names.get(mode_key, mode_key)}】")
+        for row in rows:
+            lines.append(
+                f"{row.get('rank_type')}：积分{number_to(row.get('score', 0))}，"
+                f"当前第{row.get('rank', '?')}名"
+            )
+
     return "\n".join(lines)
 
 @gfqq.handle(parameterless=[Cooldown(cd_time=30)])
@@ -857,10 +979,12 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @season_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """赛季榜：只读展示当前赛季信息与可用排行快照"""
+    """赛季榜：展示当前赛季累计榜，暂无数据时降级展示全局快照"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    mode = _parse_season_mode(args.extract_plain_text() or str(event.message))
-    msg = _build_season_rank_message(mode)
+    text = args.extract_plain_text() or str(event.message)
+    mode = _parse_season_mode(text)
+    rank_type = _parse_season_rank_type(text)
+    msg = _build_season_rank_message(mode, rank_type)
     await handle_send(
         bot,
         event,
@@ -874,6 +998,35 @@ async def season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         v3="赛季榜 季度榜",
     )
     await season_rank.finish()
+
+
+@my_season_rank.handle(parameterless=[Cooldown(cd_time=0)])
+async def my_season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """我的赛季：展示个人当前赛季累计积分"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await my_season_rank.finish()
+
+    text = args.extract_plain_text() or str(event.message)
+    mode = _parse_season_mode(text) if text else None
+    if text and not any(keyword.lower() in str(text).strip().lower() for keyword in _SEASON_MODE_ALIASES):
+        mode = None
+    msg = _build_my_season_rank_message(user_info["user_id"], mode)
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="修仙",
+        k1="周榜",
+        v1="赛季榜 周榜",
+        k2="月榜",
+        v2="赛季榜 月榜",
+        k3="赛季榜",
+        v3="赛季榜",
+    )
+    await my_season_rank.finish()
 
 
 @user_stamina.handle(parameterless=[Cooldown(cd_time=0)])

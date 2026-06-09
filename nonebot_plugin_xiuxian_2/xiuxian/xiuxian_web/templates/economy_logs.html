@@ -1,13 +1,37 @@
 {% extends "base.html" %}
 
+{% macro delta_cell(value, class_name) -%}
+    <td class="number-cell {{ class_name }}">{{ value }}</td>
+{%- endmacro %}
+
+{% macro json_cell(cell, copy_id) -%}
+    <td class="json-cell">
+        {% if cell.display %}
+            <details class="json-fold" {% if not cell.is_long %}open{% endif %}>
+                <summary>
+                    <span>{{ "JSON" if cell.is_json else "文本" }}</span>
+                    <button class="copy-json-btn" type="button" data-copy="{{ cell.display|e }}">
+                        <i class="fas fa-copy"></i> 复制
+                    </button>
+                </summary>
+                <pre id="{{ copy_id }}">{{ cell.display }}</pre>
+            </details>
+        {% else %}
+            <span class="muted-text">无</span>
+        {% endif %}
+    </td>
+{%- endmacro %}
+
 {% block content %}
 <div class="card">
     <div class="card-header">
         <h2 class="card-title"><i class="fas fa-coins"></i> 经济流水查询</h2>
-        <p>查看 economy_log 最近记录，支持用户、宗门、来源和动作过滤。</p>
+        <p>查看 economy_log 记录，支持分页、时间范围、来源动作过滤和当前筛选汇总。</p>
     </div>
 
     <form class="economy-log-filters" method="get" action="{{ url_for('economy_logs') }}">
+        <input type="hidden" name="page" value="1">
+
         <div class="form-group">
             <label for="user_id">用户 ID</label>
             <input id="user_id" name="user_id" type="text" value="{{ result.filters.get('user_id', '') }}" placeholder="例如：123456">
@@ -20,17 +44,37 @@
 
         <div class="form-group">
             <label for="source">来源</label>
-            <input id="source" name="source" type="text" value="{{ result.filters.get('source', '') }}" placeholder="source">
+            <select id="source" name="source">
+                <option value="">全部来源</option>
+                {% for option in result.source_options %}
+                <option value="{{ option }}" {% if result.filters.get('source') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <div class="form-group">
             <label for="action">动作</label>
-            <input id="action" name="action" type="text" value="{{ result.filters.get('action', '') }}" placeholder="action">
+            <select id="action" name="action">
+                <option value="">全部动作</option>
+                {% for option in result.action_options %}
+                <option value="{{ option }}" {% if result.filters.get('action') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <div class="form-group">
-            <label for="limit">记录数</label>
-            <input id="limit" name="limit" type="number" min="1" max="500" value="{{ result.limit }}">
+            <label for="start_time">开始时间</label>
+            <input id="start_time" name="start_time" type="text" value="{{ result.filters.get('start_time', '') }}" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+
+        <div class="form-group">
+            <label for="end_time">结束时间</label>
+            <input id="end_time" name="end_time" type="text" value="{{ result.filters.get('end_time', '') }}" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+
+        <div class="form-group">
+            <label for="page_size">每页记录数</label>
+            <input id="page_size" name="page_size" type="number" min="1" max="500" value="{{ result.page_size }}">
         </div>
 
         <div class="form-actions economy-log-actions">
@@ -39,6 +83,9 @@
             </button>
             <a class="btn btn-secondary" href="{{ url_for('economy_logs') }}">
                 <i class="fas fa-undo"></i> 重置
+            </a>
+            <a class="btn btn-secondary" href="{{ url_for('economy_logs_export', **result.export_args) }}">
+                <i class="fas fa-file-csv"></i> 导出 CSV
             </a>
         </div>
     </form>
@@ -57,8 +104,53 @@
     </div>
     {% endif %}
 
+    <div class="economy-summary-grid">
+        <div class="economy-summary-item">
+            <span>灵石流入</span>
+            <strong class="delta-positive">{{ result.summary.stone_in }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>灵石流出</span>
+            <strong class="delta-negative">{{ result.summary.stone_out }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>修为变化</span>
+            <strong>{{ result.summary.exp_total }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>宗门贡献</span>
+            <strong>{{ result.summary.sect_contribution_total }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>宗门建设</span>
+            <strong>{{ result.summary.sect_scale_total }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>宗门资材</span>
+            <strong>{{ result.summary.sect_materials_total }}</strong>
+        </div>
+    </div>
+
     <div class="economy-log-meta">
-        当前显示 {{ result.rows|length }} 条记录，最多 {{ result.limit }} 条
+        共 {{ result.total }} 条记录，当前第 {{ result.page }} / {{ result.total_pages }} 页，本页 {{ result.rows|length }} 条。
+    </div>
+
+    <div class="pagination economy-log-pagination">
+        {% if result.has_prev %}
+            <a href="{{ url_for('economy_logs', **result.first_page_args) }}">首页</a>
+            <a href="{{ url_for('economy_logs', **result.prev_page_args) }}">上一页</a>
+        {% else %}
+            <span>首页</span>
+            <span>上一页</span>
+        {% endif %}
+        <span>第 {{ result.page }} 页</span>
+        {% if result.has_next %}
+            <a href="{{ url_for('economy_logs', **result.next_page_args) }}">下一页</a>
+            <a href="{{ url_for('economy_logs', **result.last_page_args) }}">末页</a>
+        {% else %}
+            <span>下一页</span>
+            <span>末页</span>
+        {% endif %}
     </div>
 
     <div class="economy-log-table-wrap">
@@ -89,13 +181,13 @@
                     <td>{{ row.get('sect_id') or '' }}</td>
                     <td>{{ row.get('source', '') }}</td>
                     <td>{{ row.get('action', '') }}</td>
-                    <td class="number-cell">{{ row.get('stone_delta', 0) }}</td>
-                    <td class="number-cell">{{ row.get('exp_delta', 0) }}</td>
-                    <td class="number-cell">{{ row.get('sect_contribution_delta', 0) }}</td>
-                    <td class="number-cell">{{ row.get('sect_scale_delta', 0) }}</td>
-                    <td class="number-cell">{{ row.get('sect_materials_delta', 0) }}</td>
-                    <td class="json-cell">{{ row.get('item_delta', '') }}</td>
-                    <td class="json-cell">{{ row.get('detail', '') }}</td>
+                    {{ delta_cell(row.get('stone_delta', 0), row.get('stone_delta_class', '')) }}
+                    {{ delta_cell(row.get('exp_delta', 0), row.get('exp_delta_class', '')) }}
+                    {{ delta_cell(row.get('sect_contribution_delta', 0), row.get('sect_contribution_delta_class', '')) }}
+                    {{ delta_cell(row.get('sect_scale_delta', 0), row.get('sect_scale_delta_class', '')) }}
+                    {{ delta_cell(row.get('sect_materials_delta', 0), row.get('sect_materials_delta_class', '')) }}
+                    {{ json_cell(row.item_delta_json, 'item-delta-' ~ loop.index) }}
+                    {{ json_cell(row.detail_json, 'detail-' ~ loop.index) }}
                 </tr>
                 {% else %}
                 <tr>
@@ -145,10 +237,40 @@
     border: 1px solid rgba(244, 67, 54, 0.25);
 }
 
+.economy-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.economy-summary-item {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--card-bg);
+}
+
+.economy-summary-item span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-bottom: 4px;
+}
+
+.economy-summary-item strong {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 1rem;
+}
+
 .economy-log-meta {
     margin-top: 14px;
     color: var(--text-secondary);
     font-size: 0.9rem;
+}
+
+.economy-log-pagination {
+    margin-top: 12px;
 }
 
 .economy-log-table-wrap {
@@ -160,7 +282,7 @@
 
 .economy-log-table {
     width: 100%;
-    min-width: 1180px;
+    min-width: 1280px;
     border-collapse: collapse;
     background: var(--card-bg);
 }
@@ -193,13 +315,58 @@
     font-family: Consolas, Monaco, monospace;
 }
 
+.delta-positive {
+    color: #188038;
+    font-weight: 600;
+}
+
+.delta-negative {
+    color: #d93025;
+    font-weight: 600;
+}
+
+.delta-zero,
+.muted-text {
+    color: var(--text-secondary);
+}
+
 .json-cell {
-    max-width: 320px;
-    min-width: 180px;
-    white-space: pre-wrap;
-    word-break: break-word;
+    max-width: 360px;
+    min-width: 220px;
     font-family: Consolas, Monaco, monospace;
     font-size: 0.82rem;
+}
+
+.json-fold summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.json-fold pre {
+    margin: 8px 0 0;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.copy-json-btn {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 3px 6px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+
+.copy-json-btn:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
 .text-nowrap {
@@ -222,4 +389,32 @@
     }
 }
 </style>
+
+<script>
+document.addEventListener('click', async function(event) {
+    const button = event.target.closest('.copy-json-btn');
+    if (!button) return;
+    const text = button.getAttribute('data-copy') || '';
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+        }
+        const oldText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check"></i> 已复制';
+        window.setTimeout(function() { button.innerHTML = oldText; }, 1200);
+    } catch (error) {
+        button.innerHTML = '<i class="fas fa-times"></i> 失败';
+    }
+});
+</script>
 {% endblock %}

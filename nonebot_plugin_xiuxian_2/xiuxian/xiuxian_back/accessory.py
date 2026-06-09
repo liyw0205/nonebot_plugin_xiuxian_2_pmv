@@ -24,7 +24,20 @@ player_data_manager = PlayerDataManager()
 
 my_accessory = on_command("我的饰品", priority=10, block=True)
 accessory_bag = on_command("饰品背包", priority=10, block=True)
-accessory_collection = on_command("饰品图鉴", aliases={"饰品套装", "饰品收集"}, priority=10, block=True)
+accessory_collection = on_command(
+    "饰品图鉴",
+    aliases={
+        "饰品套装", "饰品收集",
+        "烈阳套", "烈阳套装", "烈阳图鉴",
+        "玄渊套", "玄渊套装", "玄渊图鉴",
+        "天衡套", "天衡套装", "天衡图鉴",
+        "星痕套", "星痕套装", "星痕图鉴",
+        "龙魄套", "龙魄套装", "龙魄图鉴",
+        "踏风套", "踏风套装", "踏风图鉴",
+    },
+    priority=10,
+    block=True,
+)
 equip_accessory = on_command("装备饰品", priority=10, block=True)
 unequip_accessory = on_command("卸下饰品", priority=10, block=True)
 wash_accessory = on_command("饰品洗练", priority=10, block=True)
@@ -459,6 +472,116 @@ def _summarize_accessory_collection(collection: dict) -> dict:
     return result
 
 
+def _empty_set_detail() -> dict:
+    return {
+        "owned_by_slot": {slot: 0 for slot in SLOTS},
+        "equipped_by_slot": {slot: 0 for slot in SLOTS},
+        "bag_by_slot": {slot: 0 for slot in SLOTS},
+        "owned_total": 0,
+        "equipped_total": 0,
+        "bag_total": 0,
+        "duplicate_total": 0,
+        "missing_slots": list(SLOTS),
+        "equipped_slots": [],
+        "bag_slots": [],
+    }
+
+
+def _build_accessory_set_details(user_id: str) -> dict:
+    data = _get_data(str(user_id))
+    details = {set_name: _empty_set_detail() for set_name in ACCESSORY_SETS}
+
+    for acc, where in _iter_all_accessories(data):
+        set_name = str(acc.get("set_type", ""))
+        part = str(acc.get("part", ""))
+        if set_name not in details or part not in SLOTS:
+            continue
+
+        info = details[set_name]
+        info["owned_by_slot"][part] += 1
+        info["owned_total"] += 1
+
+        if str(where).startswith("已装备"):
+            info["equipped_by_slot"][part] += 1
+            info["equipped_total"] += 1
+        else:
+            info["bag_by_slot"][part] += 1
+            info["bag_total"] += 1
+
+    for info in details.values():
+        info["missing_slots"] = [slot for slot in SLOTS if info["owned_by_slot"].get(slot, 0) <= 0]
+        info["equipped_slots"] = [slot for slot in SLOTS if info["equipped_by_slot"].get(slot, 0) > 0]
+        info["bag_slots"] = [slot for slot in SLOTS if info["bag_by_slot"].get(slot, 0) > 0]
+        info["duplicate_total"] = sum(max(0, cnt - 1) for cnt in info["owned_by_slot"].values())
+
+    return details
+
+
+def _format_slots(slots: list[str], empty_text: str = "无") -> str:
+    return "、".join(slots) if slots else empty_text
+
+
+def _format_owned_slot_counts(slot_counts: dict) -> str:
+    return "、".join(f"{slot}{int(slot_counts.get(slot, 0))}" for slot in SLOTS)
+
+
+def _format_set_progress(info: dict) -> str:
+    if "owned_slots" in info:
+        owned = min(len(SLOTS), len(info.get("owned_slots", set())))
+    else:
+        owned = sum(1 for slot in SLOTS if info.get("owned_by_slot", {}).get(slot, 0) > 0)
+    missing = info.get("missing_slots", [])
+    if not missing:
+        return f"部位{owned}/4，缺失：无"
+    return f"部位{owned}/4，缺失：{_format_slots(missing)}"
+
+
+def _format_active_set_bonus_lines(set_name: str, equipped_total: int) -> list[str]:
+    lines = []
+    for pieces in (2, 4):
+        if equipped_total < pieces:
+            continue
+        bonus = SET_BONUS.get(set_name, {}).get(pieces)
+        if not bonus:
+            continue
+        bonus_type = bonus.get("type")
+        bonus_name = SET_TYPE_CN.get(bonus_type, bonus_type)
+        bonus_value = float(bonus.get("value", 0))
+        if bonus_type in SET_VALUE_POINT_TYPES:
+            value_text = f"+{bonus_value:.0f}点"
+        else:
+            value_text = f"+{bonus_value * 100:.2f}%"
+        lines.append(f"{pieces}件：{bonus_name}{value_text}")
+    return lines
+
+
+def _next_set_bonus_hint(set_name: str, detail: dict) -> str:
+    equipped_total = int(detail.get("equipped_total", 0))
+    if equipped_total >= 4:
+        return "已激活最高4件效果"
+
+    next_pieces = 2 if equipped_total < 2 else 4
+    missing_count = max(0, next_pieces - equipped_total)
+    equipped_slots = set(detail.get("equipped_slots", []))
+    candidate_slots = [
+        slot
+        for slot in SLOTS
+        if slot not in equipped_slots and detail.get("owned_by_slot", {}).get(slot, 0) > 0
+    ]
+    if candidate_slots:
+        return f"距离{next_pieces}件效果还差{missing_count}件，可补装备部位：{_format_slots(candidate_slots)}"
+
+    owned_missing = [
+        slot
+        for slot in SLOTS
+        if slot not in equipped_slots and detail.get("owned_by_slot", {}).get(slot, 0) <= 0
+    ]
+    if owned_missing:
+        return f"距离{next_pieces}件效果还差{missing_count}件，缺少部位：{_format_slots(owned_missing)}"
+
+    return f"距离{next_pieces}件效果还差{missing_count}件"
+
+
 def _format_set_bonus_lines(set_name: str) -> list[str]:
     lines = []
     for pieces in (2, 4):
@@ -478,12 +601,57 @@ def _format_set_bonus_lines(set_name: str) -> list[str]:
 
 def _resolve_collection_set_filter(arg: str) -> str | None:
     text = str(arg or "").strip()
+    text = text.lstrip("/!！.")
+    for suffix in ("图鉴", "套装", "套"):
+        if text.endswith(suffix):
+            text = text[:-len(suffix)].strip()
     if not text or text in {"全部", "总览"}:
         return None
     for set_name in ACCESSORY_SETS:
-        if text == set_name or text in f"{set_name}套装":
+        if text == set_name:
             return set_name
     return None
+
+
+def _extract_plain_text_from_event(event) -> str:
+    try:
+        return str(event.get_plaintext()).strip()
+    except Exception:
+        pass
+    for attr in ("raw_message", "plaintext", "content"):
+        value = getattr(event, attr, None)
+        if value:
+            return str(value).strip()
+    return ""
+
+
+def _accessory_collection_buttons(set_filter: str | None = None) -> dict:
+    target = set_filter or "烈阳"
+    return {
+        "md_type": "背包",
+        "k1": f"{target}图鉴",
+        "v1": f"饰品图鉴 {target}",
+        "k2": "饰品背包",
+        "v2": "饰品背包",
+        "k3": "我的饰品",
+        "v3": "我的饰品",
+        "k4": "快速装备",
+        "v4": "快速装备饰品",
+    }
+
+
+def _format_collection_slot_detail(owned: list[dict]) -> str:
+    if not owned:
+        return "×"
+
+    equipped_count = sum(1 for item in owned if str(item.get("where", "")).startswith("已装备"))
+    bag_count = len(owned) - equipped_count
+    parts = []
+    if equipped_count:
+        parts.append(f"已装备{equipped_count}")
+    if bag_count:
+        parts.append(f"背包{bag_count}")
+    return f"√({len(owned)}件/{'、'.join(parts)})"
 
 def _get_upgrade_cost(cur_quality: int) -> int:
     if cur_quality <= 1:
@@ -948,28 +1116,48 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_id = str(user_info["user_id"])
     arg = args.extract_plain_text().strip()
     set_filter = _resolve_collection_set_filter(arg)
+    if not arg:
+        event_text = _extract_plain_text_from_event(event)
+        direct_filter = _resolve_collection_set_filter(event_text)
+        if direct_filter:
+            arg = event_text
+            set_filter = direct_filter
     if arg and set_filter is None and arg not in {"全部", "总览"}:
         await handle_send(
             bot,
             event,
             f"未识别的套装：{arg}\n可用：{'/'.join(ACCESSORY_SETS)}",
-            md_type="背包",
-            k1="图鉴",
-            v1="饰品图鉴",
-            k2="背包",
-            v2="饰品背包",
-            k3="帮助",
-            v3="饰品帮助",
+            **_accessory_collection_buttons(None),
         )
         return
 
     collection = _build_accessory_collection(user_id)
     summary = _summarize_accessory_collection(collection)
+    details = _build_accessory_set_details(user_id)
+    total_owned = sum(info["owned_total"] for info in details.values())
 
     if set_filter:
+        detail = details[set_filter]
+        equipped_total = int(detail.get("equipped_total", 0))
+        active_lines = _format_active_set_bonus_lines(set_filter, equipped_total)
+
         lines = [f"☆------{set_filter}套装图鉴------☆"]
         lines.append("套装效果：")
         lines.extend([f" - {line}" for line in _format_set_bonus_lines(set_filter)])
+        lines.append("")
+        lines.append("当前激活：")
+        lines.append(f" - 已装备{equipped_total}/4件：{_format_slots(detail.get('equipped_slots', []), '暂无')}")
+        if active_lines:
+            lines.extend([f" - 已激活{line}" for line in active_lines])
+        else:
+            lines.append(" - 暂无激活效果")
+        lines.append(f" - {_next_set_bonus_hint(set_filter, detail)}")
+        lines.append("")
+        lines.append("持有整理：")
+        lines.append(f" - 已装备件：{_format_owned_slot_counts(detail.get('equipped_by_slot', {}))}")
+        lines.append(f" - 背包件：{_format_owned_slot_counts(detail.get('bag_by_slot', {}))}")
+        lines.append(f" - 重复件：{int(detail.get('duplicate_total', 0))}件")
+        lines.append(f" - 缺失部位：{_format_slots(detail.get('missing_slots', []))}")
         lines.append("")
         lines.append("收集进度：")
         for quality in QUALITY_RANGE:
@@ -977,29 +1165,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             slot_text = []
             for slot in SLOTS:
                 owned = slot_map.get(slot, [])
-                if owned:
-                    best = owned[0]
-                    location = best.get("where", "背包")
-                    slot_text.append(f"{slot}√({len(owned)}件/{location})")
-                else:
-                    slot_text.append(f"{slot}×")
+                slot_text.append(f"{slot}{_format_collection_slot_detail(owned)}")
             completed = all(slot_map.get(slot) for slot in SLOTS)
             state = "已集齐" if completed else "未集齐"
             lines.append(f"{quality_to_cn(quality)}：{state} | {'、'.join(slot_text)}")
         lines.append("")
-        lines.append("可执行操作：饰品背包、我的饰品、查看饰品")
+        if detail.get("owned_total", 0) <= 0:
+            lines.append("当前还没有该套装饰品，可先查看饰品背包或继续获取饰品。")
+        else:
+            lines.append("可执行操作：饰品背包、我的饰品、快速装备饰品")
     else:
         total_complete = sum(len(info["complete_qualities"]) for info in summary.values())
         total_sets = len(ACCESSORY_SETS) * len(QUALITY_RANGE)
         lines = [
             "☆------饰品套装图鉴------☆",
             f"完整套装：{total_complete}/{total_sets}",
+            f"当前持有：{total_owned}件",
             "",
             "套装总览：",
         ]
+        if total_owned <= 0:
+            lines.append("暂无饰品记录，所有套装部位均未收集。")
         for set_name in ACCESSORY_SETS:
             info = summary[set_name]
-            owned_slot_count = len(info["owned_slots"])
             complete_text = (
                 "、".join(quality_to_cn(q) for q in info["complete_qualities"])
                 if info["complete_qualities"]
@@ -1007,8 +1195,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             )
             best_quality = info["best_quality"]
             best_text = quality_to_cn(best_quality) if best_quality else "未集齐"
+            progress_text = _format_set_progress(details[set_name])
             lines.append(
-                f"{set_name}：部位{owned_slot_count}/4，完整阶数：{complete_text}，最高完整：{best_text}"
+                f"{set_name}：{progress_text}，完整阶数：{complete_text}，最高完整：{best_text}"
             )
         lines.append("")
         lines.append("发送【饰品图鉴 套装名】查看详细部位，例如：饰品图鉴 烈阳")
@@ -1017,13 +1206,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         bot,
         event,
         "\n".join(lines),
-        md_type="背包",
-        k1="背包",
-        v1="饰品背包",
-        k2="我的饰品",
-        v2="我的饰品",
-        k3="帮助",
-        v3="饰品帮助",
+        **_accessory_collection_buttons(set_filter),
     )
 
 @check_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
