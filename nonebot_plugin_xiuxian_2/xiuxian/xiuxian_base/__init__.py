@@ -34,7 +34,7 @@ from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     get_msg_pic, number_to,
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value,
-    send_help_message, parse_page_arg, paginate_text_blocks, build_pagination_buttons
+    send_help_message
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.season_service import get_current_season
@@ -716,98 +716,47 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
     msg = """【修仙帮助】
 
-🌟 基础入门
+基础指令：
 - 我要修仙：创建角色
-- 我的修仙信息 / 我的存档：查看存档
-- 我的修仙信息图片版：查看图片版存档
+- 我的修仙信息：查看存档
 - 修仙签到：每日签到
-- 我的任务 / 每日任务 / 周常任务 / 领取任务奖励
-- 修仙改名：修改道号
-- 灵根改名：消耗灵根改名卡自定义灵根名
-- 官群：加入交流群
-- 更新日志：查看版本内容
+- 突破 / 直接突破：提升境界
+- 闭关 / 出关：修炼修为
+- 背包：查看物品
+- 我的任务：查看任务
 
-📈 境界成长
-- 突破 / 直接突破 / 渡厄突破
-- 连续突破 / 连续渡厄突破 / 连续金丹突破
-- 我的突破概率
-- 我的体力
-- 渡劫 / 开始渡劫 / 天命渡劫 / 渡心魔劫
+常用入口：
+- 修仙数据 / 修仙日志 / 修仙界信息
+- 修仙排行榜 / 赛季榜 / 我的赛季
 - 境界帮助 / 品阶帮助 / 灵根帮助
 
-🧘 修炼相关
-- 闭关 / 出关 / 灵石出关
-- 灵石修炼 / 双修
-- 我的修为
-- 我的状态
-- 重入仙途
+功能入口：
+- 背包帮助 / 饰品帮助 / 称号帮助
+- 宗门帮助 / 关系帮助 / 炼体帮助
+- 炼丹帮助 / 功法帮助 / 洞府帮助
+- 地图帮助 / 秘境帮助 / 历练帮助
+- 世界BOSS帮助 / 世界事件帮助
+- 交易帮助 / 拍卖活动 / 灵庄帮助
+- 宠物帮助 / 本命法宝帮助
+- 传承帮助 / 虚神界帮助 / 前尘帮助
 
-💰 资源交互
-- 送灵石 / 偷灵石 / 抢灵石
-- 鸿运
-- 仙缘帮助 / 交易帮助 / 灵庄帮助
-- 邀请帮助 / 补偿帮助 / 礼包帮助 / 兑换码帮助
-
-🎒 背包外观
-- 背包帮助 / 饰品帮助 / 称号帮助 / 我的成就
-
-🧪 功能系统
-- 炼丹帮助 / 炼丹配方帮助
-- 功法帮助 / 灵田帮助 / 洞府帮助 / 傀儡帮助
-- 合成帮助 / 鉴石帮助
-- 宗门帮助 / 宗门管理 / 宗门职位帮助
-- 关系帮助 / 炼体帮助
-- 本命法宝帮助 / 本命法宝操作帮助 / 本命法宝道纹帮助 / 本命法宝战斗帮助
-
-🗺 探索战斗
-- 地图帮助 / 附近道友 / 论道切磋
-- 秘境帮助 / 历练帮助 / 悬赏令帮助
-- 世界BOSS帮助 / 世界事件帮助 / 通天塔帮助 / 竞技场帮助
-- 幻境寻心
-- 队伍帮助 / 副本帮助
-
-🌌 剧情传承
-- 仙途奇缘帮助
-- 传承帮助 / 虚神界帮助
-- 轮回重修帮助 / 前尘帮助
-
-🎮 娱乐功能
-- 娱乐帮助 / 小游戏帮助 / 点歌帮助
-- 五子棋帮助 / 扫雷帮助 / 十点半帮助 / 猜数字帮助
-
-📊 排行榜
-- 修仙排行榜 / 灵石排行榜 / 战力排行榜
-- 境界排行榜 / 宗门排行榜 / 轮回排行榜
-- 赛季榜 / 赛季榜 周榜 / 赛季榜 月榜 / 赛季榜 季度榜
-
-🌍 其他信息
-- 修仙界信息
-- 修仙日志
-- 修仙数据
-
-※ 说明：
-发送“XX帮助”可查看对应玩法详细说明。
+说明：
+道侣、师徒等社交关系请发送【关系帮助】。
+具体玩法发送对应“XX帮助”查看，不在主帮助展开。
 """.strip()
 
-    page = parse_page_arg(args.extract_plain_text())
-    msg, page, total_pages = paginate_text_blocks(msg, page, per_page=4)
-    msg = f"{msg}\n\n发送“修仙帮助 页码”可跳转页面。"
-    button_kwargs = build_pagination_buttons(
-        "修仙帮助",
-        page,
-        total_pages,
-        extras=[
-            ("存档", "我的修仙信息"),
-            ("背包", "背包帮助"),
-            ("地图", "地图帮助"),
-            ("秘境", "秘境帮助"),
-        ],
-    )
     await send_help_message(
         bot,
         event,
         msg,
-        **button_kwargs,
+        k1="存档",
+        v1="我的修仙信息",
+        k2="关系",
+        v2="关系帮助",
+        k3="背包",
+        v3="背包帮助",
+        k4="地图",
+        v4="地图帮助",
         button_id=XiuConfig().button_id2,
     )
     await help_in.finish()
