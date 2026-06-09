@@ -752,7 +752,7 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 """.strip(),
         "交易": """
 【交易系统总览】
-输入以下关键词查看详细帮助：
+分类帮助：
 🔹 仙肆帮助 - 全服交易市场
 🔹 鬼市帮助 - 黑市功能
 🔹 拍卖帮助 - 拍卖行功能
@@ -790,9 +790,9 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = help_sections["交易"]
         else:
             # 默认显示交易总览和可用指令
-            msg = "请输入正确的帮助关键词：\n"
-            msg += "仙肆帮助 | 拍卖帮助 | 交易帮助\n"
-            msg += "或输入'交易帮助全部'查看完整帮助"
+            msg = "可用分类：\n"
+            msg += "仙肆帮助 | 鬼市帮助 | 拍卖帮助 | 交易帮助\n"
+            msg += "完整列表：交易帮助全部"
     
     await send_help_message(bot, event, msg, k1="仙肆", v1="仙肆帮助", k2="鬼市", v2="鬼市帮助", k3="拍卖", v3="拍卖帮助")
     await trade_help.finish()

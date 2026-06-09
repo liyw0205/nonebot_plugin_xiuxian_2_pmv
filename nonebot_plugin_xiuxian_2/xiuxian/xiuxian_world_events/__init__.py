@@ -112,7 +112,7 @@ __world_event_help__ = f"""
   ▶ 持续期间炼体结算获得炼体气血+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%
   ▶ 天降灵脉 - 查看当前灵脉状态
 
-规则说明：
+规则：
   ▶ 每个境界会生成独立魔修。
   ▶ 战斗血条只用于对战，真实 BOSS 血条为战斗血条的 {BOSS_REAL_HP_MULTIPLIER} 倍。
   ▶ 伤害按真实削减血量记录贡献。

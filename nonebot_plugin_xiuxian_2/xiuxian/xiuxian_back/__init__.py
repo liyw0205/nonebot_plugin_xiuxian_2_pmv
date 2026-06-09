@@ -2119,7 +2119,7 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if len(equipment_problems) > 10:
             result_msg.append(f"...等共{len(equipment_problems)}个已装备问题")
 
-    result_msg.append("\n说明：背包名称按 goods_id 读取当前物品配置，名称一致则跳过，不一致则修正。")
+    result_msg.append("\n备注：背包名称按 goods_id 读取当前物品配置，名称一致则跳过，不一致则修正。")
     await send_msg_handler(bot, event, '背包检测', bot.self_id, result_msg)
     await check_user_back.finish()
 

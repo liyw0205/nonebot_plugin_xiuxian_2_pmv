@@ -399,7 +399,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     effect_type_to_forget = EFFECT_NAME_TO_TYPE.get(effect_name_to_forget)
     if not effect_type_to_forget:
-        await handle_send(bot, event, f"未识别的道纹名称【{effect_name_to_forget}】，请检查输入或发送【本命法宝道纹帮助】了解所有道纹。",
+        await handle_send(bot, event, f"未识别的道纹名称【{effect_name_to_forget}】，道纹列表：本命法宝道纹帮助。",
                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="帮助", v2="本命法宝帮助", k3="法宝", v3="我的本命法宝")
         await natal_forget.finish()
 
@@ -475,19 +475,18 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg = """
 【本命法宝系统帮助】
 
-这里是你的专属本命法宝系统，助你叱咤修仙界！
-你可以通过以下命令了解更多：
+分支帮助：
 
-1.  **管理操作**：发送【本命法宝操作帮助】
+1.  **管理操作**：本命法宝操作帮助
     > 觉醒、重塑、铭刻、遗忘道纹、养成、升阶
 
-2.  **道纹详情**：发送【本命法宝道纹帮助】
+2.  **道纹详情**：本命法宝道纹帮助
     > 查看所有道纹的具体效果说明
 
-3.  **战斗机制**：发送【本命法宝战斗帮助】
+3.  **战斗机制**：本命法宝战斗帮助
     > 了解法宝效果在战斗中如何触发和作用
 
-4.  **查看信息**：发送【我的本命法宝】
+4.  **查看信息**：我的本命法宝
     > 查看你的法宝当前状态
 
 """

@@ -340,7 +340,6 @@ def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = No
         f"月榜：{monthly.key}",
         f"季度榜：{quarterly.key}",
         "",
-        "说明：这里展示本期赛季积分；本期暂无记录时，会先展示当前仙榜前列。",
     ]
 
     any_season_data = False
@@ -582,7 +581,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         f"{create_msg}\n"
         f"你获得了随机道号：{user_name}\n"
         f"耳边响起一个神秘人的声音：不要忘记仙途奇缘！\n"
-        f"不知道怎么玩可以发送【修仙帮助】"
+        f"基础指令：修仙帮助"
     )
     await handle_send(
         bot,
@@ -720,10 +719,17 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 我要修仙：创建角色
 - 我的修仙信息：查看存档
 - 修仙签到：每日签到
+- 鸿运：查看签到奖池
+- 修仙改名 新道号：修改道号
+- 灵根改名 新灵根名：修改灵根名
+- 重入仙途：重置灵根
 - 突破 / 直接突破：提升境界
 - 闭关 / 出关：修炼修为
+- 我的体力：查看体力
 - 背包：查看物品
 - 我的任务：查看任务
+- 送灵石 道号 数量：赠送灵石
+- 偷灵石 / 抢灵石 道号：夺取灵石
 
 常用入口：
 - 修仙数据 / 修仙日志 / 修仙界信息
@@ -739,10 +745,6 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 交易帮助 / 拍卖活动 / 灵庄帮助
 - 宠物帮助 / 本命法宝帮助
 - 传承帮助 / 虚神界帮助 / 前尘帮助
-
-说明：
-道侣、师徒等社交关系请发送【关系帮助】。
-具体玩法发送对应“XX帮助”查看，不在主帮助展开。
 """.strip()
 
     await send_help_message(

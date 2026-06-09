@@ -119,7 +119,7 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         new_msg += "\n"
 
     if not unlocked_ids:
-        msg_text = f"{new_msg}你还没有解锁任何称号！\n继续修仙探索，解锁更多称号吧！\n发送【称号帮助】查看称号获取方式"
+        msg_text = f"{new_msg}你还没有解锁任何称号！\n继续修仙探索，解锁更多称号吧！\n获取方式：称号帮助"
         await handle_send(bot, event, msg_text, md_type="修仙", k1="帮助", v1="称号帮助", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await title_list_cmd.finish()
 

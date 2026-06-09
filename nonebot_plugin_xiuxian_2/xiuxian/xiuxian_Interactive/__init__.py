@@ -1362,7 +1362,7 @@ async def handle_interaction(bot: Bot, event: GroupMessageEvent | PrivateMessage
             "加油 - 鼓励道友修炼"
         ],
         "帮助类": [
-            "互动 - 查看本帮助信息"
+            "互动 - 查看互动指令"
         ]
     }
     

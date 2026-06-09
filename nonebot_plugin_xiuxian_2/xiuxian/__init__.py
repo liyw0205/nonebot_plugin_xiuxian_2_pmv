@@ -97,7 +97,7 @@ __plugin_meta__ = PluginMetadata(
     description='',
     usage=(
         "必死之境机逢仙缘，修仙之路波澜壮阔！\n"
-        " 输入 < 修仙帮助 > 获取仙界信息"
+        "修仙帮助：查看仙界信息"
     ),
     extra={
         "show": True,

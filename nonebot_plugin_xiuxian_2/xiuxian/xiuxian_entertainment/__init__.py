@@ -41,7 +41,7 @@ def _build_fun_help_page(page: int):
             "6、舔狗日记\n"
             "7、随机一言\n"
             "8、历史上的今天\n\n"
-            "发送【娱乐帮助 2】查看第2页。"
+            "下一页：娱乐帮助 2"
         )
         shell_text = (
             "娱乐功能 第1页\r"
@@ -53,7 +53,7 @@ def _build_fun_help_page(page: int):
             "6. 舔狗日记\r"
             "7. 随机一言\r"
             "8. 历史上的今天\r\r"
-            "发送 娱乐帮助 2 查看下一页"
+            "下一页：娱乐帮助 2"
         )
         t1 = {
             "key": "t1",
@@ -106,7 +106,7 @@ def _build_fun_help_page(page: int):
             "6、热榜图片\n"
             "7、60S读世界\n"
             "8、每日60S图片\n\n"
-            "发送【娱乐帮助 3】查看第3页。"
+            "下一页：娱乐帮助 3"
         )
         shell_text = (
             "娱乐功能 第2页\r"
@@ -118,7 +118,7 @@ def _build_fun_help_page(page: int):
             "6. 热榜图片\r"
             "7. 60S读世界\r"
             "8. 每日60S图片\r\r"
-            "发送 娱乐帮助 3 查看下一页"
+            "下一页：娱乐帮助 3"
         )
         t1 = {
             "key": "t1",
@@ -173,7 +173,7 @@ def _build_fun_help_page(page: int):
             "   - 猜 50\n"
             "   - 猜数字信息\n"
             "   - 结束猜数字\n\n"
-            "发送【娱乐帮助 1】返回第1页。"
+            "返回：娱乐帮助 1"
         )
         shell_text = (
             "娱乐功能 第3页\r"
@@ -182,7 +182,7 @@ def _build_fun_help_page(page: int):
             "3. 哈基米\r"
             "4. 猜数字\r"
             "   开始猜数字 / 猜 50 / 猜数字信息 / 结束猜数字\r\r"
-            "发送 娱乐帮助 1 返回第一页"
+            "返回：娱乐帮助 1"
         )
         t1 = {
             "key": "t1",
@@ -349,7 +349,7 @@ async def send_game_help(bot: Bot, event, config: XiuConfig):
                     "2. 扫雷\r"
                     "3. 十点半\r"
                     "4. 猜数字\r"
-                    "发送：五子棋帮助 / 扫雷帮助 / 十点半帮助 / 猜数字帮助 查看详细规则"
+                    "规则：五子棋帮助 / 扫雷帮助 / 十点半帮助 / 猜数字帮助"
                 )]
             }
             md_msg = MessageSegment.markdown_template(

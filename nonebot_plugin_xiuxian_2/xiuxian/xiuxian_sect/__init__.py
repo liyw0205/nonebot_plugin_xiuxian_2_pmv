@@ -463,7 +463,7 @@ async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     page = parse_page_arg(args.extract_plain_text())
     msg, page, total_pages = paginate_text_blocks(__sect_help__, page, per_page=3)
-    msg = f"{msg}\n\n发送“宗门帮助 页码”可跳转页面；管理类指令请发送【宗门管理】。"
+    msg = f"{msg}\n\n翻页：宗门帮助 页码；管理：宗门管理。"
     button_kwargs = build_pagination_buttons(
         "宗门帮助",
         page,
@@ -2685,7 +2685,7 @@ async def sect_weekly_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             [
                 f"{goal['name']}（{status}）",
                 f"进度：{number_to(goal['progress'])}/{number_to(goal['target'])}",
-                f"说明：{goal['desc']}",
+                f"内容：{goal['desc']}",
                 f"奖励：{_format_sect_weekly_reward(goal['rewards'])}",
                 "",
             ]

@@ -91,7 +91,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "【通天塔商店】 - 查看通天塔商店商品\n"
         "【通天塔兑换+编号】 - 兑换商店商品\n"
         "════════════\n"
-        "通天塔规则说明：\n"
+        "通天塔规则：\n"
         "1. 每周一0点重置所有用户层数\n"
         "2. 每周一0点重置商店限购\n"
         "3. 每10层可获得额外奖励\n"
@@ -100,7 +100,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "1. 每通关1层获得100积分\n"
         "2. 每通关10层额外获得500积分\n"
         "════════════\n"
-        "输入对应命令开始你的通天塔之旅吧！"
+        "入口：挑战通天塔 / 通天塔信息 / 通天塔商店"
     )
     
     await send_help_message(bot, event, msg, k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
