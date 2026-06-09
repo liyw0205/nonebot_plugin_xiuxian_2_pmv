@@ -210,7 +210,7 @@ def _parse_season_rank_type(text: str) -> str | None:
 def _format_top_rows(title: str, rows, formatter, limit: int = 5) -> list[str]:
     lines = [f"\n【{title}】"]
     if not rows:
-        lines.append("暂无数据")
+        lines.append("暂无上榜记录")
         return lines
 
     for index, row in enumerate(rows[:limit], 1):
@@ -221,7 +221,7 @@ def _format_top_rows(title: str, rows, formatter, limit: int = 5) -> list[str]:
 def _format_season_rank_rows(title: str, rows, limit: int = 5) -> list[str]:
     lines = [f"\n【{title}】"]
     if not rows:
-        lines.append("本周期暂无独立赛季数据")
+        lines.append("本期暂无上榜记录")
         return lines
 
     for row in rows[:limit]:
@@ -235,7 +235,7 @@ def _format_season_rank_rows(title: str, rows, limit: int = 5) -> list[str]:
     return lines
 
 
-def _get_sect_weekly_rank_snapshot(limit: int = 5):
+def _get_sect_weekly_rank_fallback(limit: int = 5):
     conn = getattr(sql_message, "conn", None)
     if not conn or not getattr(conn, "table_exists", lambda _table: False)("sect_weekly_goal"):
         return None
@@ -259,72 +259,72 @@ def _get_sect_weekly_rank_snapshot(limit: int = 5):
     )
 
 
-def _append_global_rank_snapshots(lines: list[str]) -> None:
-    lines.append("\n以下为全局排行榜快照，仅作无赛季数据时参考。")
+def _append_global_rank_preview(lines: list[str]) -> None:
+    lines.append("\n本期还没有赛季记录，先看当前仙榜前列。")
 
     try:
         lines.extend(
             _format_top_rows(
-                "修为/境界榜快照 TOP5",
+                "修为境界榜 前五",
                 sql_message.realm_top(),
                 lambda row: f"{row[0]} {row[1]} 修为{number_to(row[2])}",
             )
         )
     except Exception as exc:
         logger.warning(f"赛季榜读取修为/境界榜失败：{exc}")
-        lines.extend(["\n【修为/境界榜快照 TOP5】", "暂不可用"])
+        lines.extend(["\n【修为境界榜 前五】", "暂不可看"])
 
     try:
         lines.extend(
             _format_top_rows(
-                "灵石榜快照 TOP5",
+                "灵石榜 前五",
                 sql_message.stone_top(),
                 lambda row: f"{row[0]} 灵石{number_to(row[1])}枚",
             )
         )
     except Exception as exc:
         logger.warning(f"赛季榜读取灵石榜失败：{exc}")
-        lines.extend(["\n【灵石榜快照 TOP5】", "暂不可用"])
+        lines.extend(["\n【灵石榜 前五】", "暂不可看"])
 
     try:
         lines.extend(
             _format_top_rows(
-                "战力榜快照 TOP5",
+                "战力榜 前五",
                 sql_message.power_top(),
                 lambda row: f"{row[0]} 战力{number_to(row[1])}",
             )
         )
     except Exception as exc:
         logger.warning(f"赛季榜读取战力榜失败：{exc}")
-        lines.extend(["\n【战力榜快照 TOP5】", "暂不可用"])
+        lines.extend(["\n【战力榜 前五】", "暂不可看"])
 
     try:
         lines.extend(
             _format_top_rows(
-                "宗门建设榜快照 TOP5",
+                "宗门建设榜 前五",
                 sql_message.scale_top(),
                 lambda row: f"{row[1]} 建设度{number_to(row[2])}",
             )
         )
     except Exception as exc:
         logger.warning(f"赛季榜读取宗门建设榜失败：{exc}")
-        lines.extend(["\n【宗门建设榜快照 TOP5】", "暂不可用"])
+        lines.extend(["\n【宗门建设榜 前五】", "暂不可看"])
 
     try:
-        sect_weekly_rows = _get_sect_weekly_rank_snapshot()
+        sect_weekly_rows = _get_sect_weekly_rank_fallback()
         if sect_weekly_rows is None:
-            lines.extend(["\n【宗门周常排行快照 TOP5】", "未检测到宗门周常数据表，暂未接入。"])
+            lines.extend(["\n【宗门周常榜 前五】", "宗门周常暂未开启。"])
         else:
             lines.extend(
                 _format_top_rows(
-                    "宗门周常排行快照 TOP5",
+                    "宗门周常榜 前五",
                     sect_weekly_rows,
                     lambda row: f"{row['sect_name']} 进度{number_to(row['total_progress'])}",
                 )
             )
     except Exception as exc:
         logger.warning(f"赛季榜读取宗门周常排行失败：{exc}")
-        lines.extend(["\n【宗门周常排行快照 TOP5】", "暂不可用"])
+        lines.extend(["\n【宗门周常榜 前五】", "暂不可看"])
 
 
 def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = None) -> str:
@@ -335,12 +335,12 @@ def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = No
 
     lines = [
         "【赛季榜】",
-        f"当前展示：{current.name}",
-        f"周榜周期：{weekly.key}",
-        f"月榜周期：{monthly.key}",
-        f"季度榜周期：{quarterly.key}",
+        f"本期榜单：{current.name}",
+        f"周榜：{weekly.key}",
+        f"月榜：{monthly.key}",
+        f"季度榜：{quarterly.key}",
         "",
-        "说明：当前展示独立赛季累计数据；暂无赛季数据时会降级展示全局快照参考。",
+        "说明：这里展示本期赛季积分；本期暂无记录时，会先展示当前仙榜前列。",
     ]
 
     any_season_data = False
@@ -351,7 +351,7 @@ def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = No
             logger.warning(f"赛季榜读取{rank_type}失败：{exc}")
             rows = []
         any_season_data = bool(rows)
-        lines.extend(_format_season_rank_rows(f"{current.name}{rank_type}榜 TOP10", rows, limit=10))
+        lines.extend(_format_season_rank_rows(f"{current.name}{rank_type}榜 前十", rows, limit=10))
     else:
         for season_rank_type in DEFAULT_SEASON_RANK_TYPES:
             try:
@@ -363,21 +363,21 @@ def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = No
                 any_season_data = True
                 lines.extend(
                     _format_season_rank_rows(
-                        f"{current.name}{season_rank_type}榜 TOP5",
+                        f"{current.name}{season_rank_type}榜 前五",
                         rows,
                         limit=5,
                     )
                 )
 
     if not any_season_data:
-        lines.append("\n本周期暂无独立赛季累计数据。")
-        _append_global_rank_snapshots(lines)
+        lines.append("\n本期暂无赛季积分记录。")
+        _append_global_rank_preview(lines)
 
     lines.extend(
         [
-            "\n可用命令：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜、赛季榜 周榜 战力、我的赛季",
-            "当前支持榜单：交易活跃、讨伐、宗门贡献、试炼、战力。",
-            "未接入：赛季结算、赛季奖励。",
+            "\n可发送：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜、赛季榜 周榜 战力、我的赛季",
+            "可看榜单：交易活跃、讨伐、宗门贡献、试炼、战力。",
+            "赛季奖励稍后开启。",
         ]
     )
     return "\n".join(lines)
@@ -871,7 +871,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
         p_rank = sql_message.realm_top()
-        msg = f"\n> ✨位面境界排行榜TOP50✨\n"
+        msg = f"\n> ✨位面境界排行榜 前五十✨\n"
         num = 0
         for i in p_rank:
             num += 1
@@ -882,7 +882,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "灵石排行榜":
         a_rank = sql_message.stone_top()
-        msg = f"\n> ✨位面灵石排行榜TOP50✨\n"
+        msg = f"\n> ✨位面灵石排行榜 前五十✨\n"
         num = 0
         for i in a_rank:
             num += 1
@@ -893,7 +893,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "战力排行榜":
         c_rank = sql_message.power_top()
-        msg = f"\n> ✨位面战力排行榜TOP50✨\n"
+        msg = f"\n> ✨位面战力排行榜 前五十✨\n"
         num = 0
         for i in c_rank:
             num += 1
@@ -904,7 +904,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
         s_rank = sql_message.scale_top()
-        msg = f"\n> ✨位面宗门建设排行榜TOP50✨\n"
+        msg = f"\n> ✨位面宗门建设排行榜 前五十✨\n"
         num = 0
         for i in s_rank:
             num += 1
@@ -915,7 +915,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "轮回排行榜":
         r_rank = sql_message.root_top()
-        msg = f"\n> ✨轮回排行榜TOP50✨\n"
+        msg = f"\n> ✨轮回排行榜 前五十✨\n"
         num = 0
         for i in r_rank:
             num += 1
@@ -928,7 +928,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 @season_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """赛季榜：展示当前赛季累计榜，暂无数据时降级展示全局快照"""
+    """赛季榜：展示当前赛季累计榜，暂无数据时展示常用排行榜参考"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     text = args.extract_plain_text() or str(event.message)
     mode = _parse_season_mode(text)

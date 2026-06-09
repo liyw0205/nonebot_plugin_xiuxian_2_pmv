@@ -1754,7 +1754,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
-                msg = f"检测到修为将要到达上限！"
+                msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
             sql_message.update_user_hp_mp(user_id, user_info['hp'] - costhp, user_info['mp'])
             sql_message.update_exp(user_id, get_exp)
@@ -1815,7 +1815,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
-                msg = f"检测到修为将要到达上限！"
+                msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
             sql_message.update_ls(user_id, costls, 2)
             sql_message.update_exp(user_id, get_exp)

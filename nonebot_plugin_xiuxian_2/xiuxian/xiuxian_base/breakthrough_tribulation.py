@@ -888,11 +888,11 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升，别忘了还有渡厄突破
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     if pause_flag:
-        msg = f"由于检测到背包有丹药：{elixir_name}，效果：{elixir_desc}，突破已经准备就绪\n请发送 ，【渡厄突破】 或 【直接突破】来选择是否使用丹药突破！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
+        msg = f"道友背包中备有丹药：{elixir_name}，效果：{elixir_desc}，突破已经准备就绪\n请发送【渡厄突破】或【直接突破】来选择是否使用丹药突破！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
     else:
-        msg = f"由于检测到背包没有【渡厄丹】，突破已经准备就绪\n请发送，【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
+        msg = f"道友背包中暂无【渡厄丹】，突破已经准备就绪\n请发送【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
 
@@ -1173,7 +1173,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
-            msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+            msg = f"道友未备好{elixir_name}，突破失败，境界受损，修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
             record_level_up_result(user_id, "渡厄金丹突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
@@ -1290,7 +1290,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                 level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
             sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
-            msg = f"没有检测到{elixir_name}，道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+            msg = f"道友未备好{elixir_name}，突破失败，境界受损，修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
             record_level_up_result(user_id, "渡厄突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()

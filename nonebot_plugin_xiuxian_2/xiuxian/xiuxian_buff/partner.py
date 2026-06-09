@@ -556,7 +556,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
                 f"\n{user_2_info['user_name']} +{add_affection_2}"
             )
         else:
-            affection_msg = "\n\n⚠️检测到道侣关系数据异常，本次未增加亲密度。"
+            affection_msg = "\n\n道侣名册暂未理顺，本次亲密度未增加。"
 
     if event_descriptions:
         msg = f"{random.choice(event_descriptions)}\n\n"
@@ -1119,7 +1119,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     if not bind_time_str:
         # 如果没有绑定时间，视为异常情况，允许解绑
-        msg = "检测到绑定时间异常，允许解绑道侣。"
+        msg = "道侣结契时间记录缺失，本次可直接解除关系。"
         await handle_send(bot, event, msg)
         # 继续执行解绑逻辑
     else:
@@ -1136,7 +1136,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 await unbind_partner.finish()
         except ValueError:
             # 如果 bind_time 格式不正确，视为异常，允许解绑
-            msg = "检测到绑定时间格式异常，允许解绑道侣。"
+            msg = "道侣结契时间记录异常，本次可直接解除关系。"
             await handle_send(bot, event, msg)
             # 继续执行解绑逻辑
     

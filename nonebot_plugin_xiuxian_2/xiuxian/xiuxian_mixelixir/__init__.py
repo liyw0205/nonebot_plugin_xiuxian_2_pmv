@@ -328,7 +328,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         mix_elixir_msgs = await get_mix_elixir_msg(yaocai_dict)  # 现在返回一个配方列表
 
     if not mix_elixir_msgs:  # 如果没有找到任何配方
-        msg = "系统未检测到丹方，道友背包内的药材不满足！"
+        msg = "道友当前药材尚凑不出可炼丹方！"
         await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir.finish()
     else:
