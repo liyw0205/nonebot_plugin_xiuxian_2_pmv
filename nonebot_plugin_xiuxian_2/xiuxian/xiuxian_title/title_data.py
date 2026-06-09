@@ -10,7 +10,7 @@ except ImportError:
     import json
 import re
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Set
 from nonebot.log import logger
 
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -20,6 +20,8 @@ TITLE_JSONPATH = READPATH / "修炼物品" / "称号.json"
 
 # 全局缓存
 _TITLE_CACHE: Dict[str, dict] = {}
+_TITLE_CONDITION_KEY_CACHE: Set[str] = set()
+_UNKNOWN_CONDITION_KEYS_LOGGED: Set[str] = set()
 
 
 def load_title_data() -> Dict[str, dict]:
@@ -85,6 +87,29 @@ def parse_condition(condition_str: str) -> List[Tuple[str, str, str]]:
     return conditions
 
 
+def get_title_condition_keys() -> Set[str]:
+    """获取称号配置中声明过的所有条件键。"""
+    global _TITLE_CONDITION_KEY_CACHE
+    if _TITLE_CONDITION_KEY_CACHE:
+        return _TITLE_CONDITION_KEY_CACHE
+
+    keys = set()
+    for title_data in load_title_data().values():
+        condition = str(title_data.get("condition", "")).strip()
+        for key, _, _ in parse_condition(condition):
+            if key:
+                keys.add(key)
+    _TITLE_CONDITION_KEY_CACHE = keys
+    return _TITLE_CONDITION_KEY_CACHE
+
+
+def _log_unknown_condition_key_once(key: str) -> None:
+    if key in _UNKNOWN_CONDITION_KEYS_LOGGED:
+        return
+    _UNKNOWN_CONDITION_KEYS_LOGGED.add(key)
+    logger.debug(f"称号条件未知键: {key}")
+
+
 def _compare(actual, operator: str, expected) -> bool:
     """通用比较函数"""
     try:
@@ -133,7 +158,7 @@ def check_condition_for_user(user_id: str, condition_str: str) -> bool:
     for key, op, value in conditions:
         # 1. 先尝试从统计数据中查找
         stats_val = get_statistics_data(user_id, key)
-        if stats_val is not None:
+        if stats_val not in (None, {}):
             if not _compare(stats_val, op, value):
                 return False
             continue
@@ -171,8 +196,14 @@ def check_condition_for_user(user_id: str, condition_str: str) -> bool:
                     return False
                 continue
 
-        # 未知条件键，条件不满足
-        logger.warning(f"称号条件未知键: {key}")
+        # 称号配置里的普通计数器缺失时按 0 处理，避免每次刷新成就刷屏 warning。
+        if key in get_title_condition_keys():
+            if not _compare(0, op, value):
+                return False
+            continue
+
+        # 真正未声明过的条件键只记录一次 debug 日志，避免污染正常运行日志。
+        _log_unknown_condition_key_once(key)
         return False
 
     return True
@@ -532,7 +563,8 @@ def get_title_info_text(title_id: str) -> str:
 
 def refresh_title_cache():
     """刷新称号数据缓存"""
-    global _TITLE_CACHE
+    global _TITLE_CACHE, _TITLE_CONDITION_KEY_CACHE
     _TITLE_CACHE.clear()
+    _TITLE_CONDITION_KEY_CACHE.clear()
     load_title_data()
     logger.info("称号数据缓存已刷新")
