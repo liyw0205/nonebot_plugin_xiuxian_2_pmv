@@ -376,7 +376,6 @@ def _build_season_rank_message(mode: str = "monthly", rank_type: str | None = No
         [
             "\n可发送：赛季榜、赛季榜 周榜、赛季榜 月榜、赛季榜 季度榜、赛季榜 周榜 战力、我的赛季",
             "可看榜单：交易活跃、讨伐、宗门贡献、试炼、战力。",
-            "赛季奖励稍后开启。",
         ]
     )
     return "\n".join(lines)
