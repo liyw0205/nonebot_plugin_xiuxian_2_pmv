@@ -70,7 +70,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     # 检查是否是必定成功ID，如果是则跳过福缘石检测
     if int(equipment_id) not in FIXED_SUCCESS_IDS or str(equipment['type']) != "特殊道具":
         # 检查是否有福缘石
-        back_msg = sql_message.get_back_msg(user_id)
+        back_msg = sql_message.get_back_msg(user_id) or []
         has_protection = False
         for back in back_msg:
             if back['goods_id'] == 20006 and back['goods_num'] > 0:
@@ -116,7 +116,7 @@ async def general_fusion(user_id, equipment_id, equipment):
     :return: (成功与否, 消息)
     """
     user_info = sql_message.get_user_info_with_id(user_id)
-    back_msg = sql_message.get_back_msg(user_id)
+    back_msg = sql_message.get_back_msg(user_id) or []
     
     fusion_info = equipment.get('fusion', None)
     if not fusion_info:

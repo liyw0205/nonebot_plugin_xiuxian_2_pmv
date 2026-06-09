@@ -449,7 +449,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     else:            
         # 检查易名符
         has_item = False
-        back_msg = sql_message.get_back_msg(user_id)
+        back_msg = sql_message.get_back_msg(user_id) or []
         for item in back_msg:
             if item['goods_id'] == 20011 and item['goods_name'] == "易名符":
                 has_item = True

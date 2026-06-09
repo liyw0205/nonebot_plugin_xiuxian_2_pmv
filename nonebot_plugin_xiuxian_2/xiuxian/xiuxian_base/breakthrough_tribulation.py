@@ -253,7 +253,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await fusion_destiny_pill.finish()
     
     # 检查渡厄丹数量
-    back_msg = sql_message.get_back_msg(user_id)
+    back_msg = sql_message.get_back_msg(user_id) or []
     elixir_count = 0
     for item in back_msg:
         if item['goods_id'] == 1999:  # 渡厄丹ID
@@ -323,7 +323,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await fusion_destiny_tribulation_pill.finish()
     
     # 检查天命丹数量
-    back_msg = sql_message.get_back_msg(user_id)
+    back_msg = sql_message.get_back_msg(user_id) or []
     elixir_count = 0
     for item in back_msg:
         if item['goods_id'] == 1996:  # 天命丹ID
@@ -428,7 +428,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 检查是否有天命丹
     has_destiny_pill = False
-    back = sql_message.get_back_msg(user_id)
+    back = sql_message.get_back_msg(user_id) or []
     for item in back:
         if item['goods_id'] == 1996:  # 天命丹ID
             has_destiny_pill = True
@@ -511,7 +511,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         tribulation_cd = int(tribulation_cd * 0.5)
     
     # 检查是否有天命渡劫丹
-    back = sql_message.get_back_msg(user_id)
+    back = sql_message.get_back_msg(user_id) or []
     has_item = False
     for item in back:
         if item['goods_id'] == 1997:
@@ -672,7 +672,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await heart_devil_tribulation.finish()
     
     # 检查是否有天命丹
-    back = sql_message.get_back_msg(user_id)
+    back = sql_message.get_back_msg(user_id) or []
     has_destiny_pill = False
     for item in back:
         if item['goods_id'] == 1996:  # 天命丹ID
@@ -873,18 +873,17 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await level_up.finish()
 
     level_rate = jsondata.level_rate_data()[level_name]  # 对应境界突破的概率
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
     items = Items()
     pause_flag = False
     elixir_name = None
     elixir_desc = None
-    if user_backs is not None:
-        for back in user_backs:
-            if int(back['goods_id']) == 1999:  # 检测到有对应丹药
-                pause_flag = True
-                elixir_name = back['goods_name']
-                elixir_desc = items.get_data_by_item_id(1999)['desc']
-                break
+    for back in user_backs:
+        if int(back['goods_id']) == 1999:  # 检测到有对应丹药
+            pause_flag = True
+            elixir_name = back['goods_name']
+            elixir_desc = items.get_data_by_item_id(1999)['desc']
+            break
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升，别忘了还有渡厄突破
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     if pause_flag:
@@ -1127,14 +1126,13 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     le = OtherSet().get_type(exp, level_rate + user_leveluprate + number, level_name)
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
     pause_flag = False
-    if user_backs is not None:
-        for back in user_backs:
-            if int(back['goods_id']) == 1998:  # 检测到有对应丹药
-                pause_flag = True
-                elixir_name = back['goods_name']
-                break
+    for back in user_backs:
+        if int(back['goods_id']) == 1998:  # 检测到有对应丹药
+            pause_flag = True
+            elixir_name = back['goods_name']
+            break
 
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
@@ -1246,14 +1244,13 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     le = OtherSet().get_type(exp, level_rate + user_leveluprate + number, level_name)
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
     pause_flag = False
-    if user_backs is not None:
-        for back in user_backs:
-            if int(back['goods_id']) == 1999:  # 检测到有对应丹药
-                pause_flag = True
-                elixir_name = back['goods_name']
-                break
+    for back in user_backs:
+        if int(back['goods_id']) == 1999:  # 检测到有对应丹药
+            pause_flag = True
+            elixir_name = back['goods_name']
+            break
     
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
@@ -1359,7 +1356,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     
     # 检查渡厄丹数量（只需要1个即可开始）
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = sql_message.get_back_msg(user_id) or []
     dr_pill_count = 0
     for back in user_backs:
         if int(back['goods_id']) == 1999:  # 渡厄丹ID
@@ -1487,7 +1484,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     
     # 检查渡厄金丹数量（只需要1个即可开始）
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = sql_message.get_back_msg(user_id) or []
     drjd_pill_count = 0
     for back in user_backs:
         if int(back['goods_id']) == 1998:  # 渡厄金丹ID

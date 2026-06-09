@@ -566,7 +566,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     arg = args.extract_plain_text().strip()
 
     back_msg = sql_message.get_back_msg(user_id)  # 背包sql信息,list(back)
-    if back_msg is None:
+    if not back_msg:
         msg = "道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await no_use_zb.finish()

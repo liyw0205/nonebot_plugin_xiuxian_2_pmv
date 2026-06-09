@@ -1786,7 +1786,7 @@ class XiuxianDateManage:
             (user_id,),
             dict_row=True,
         )
-        return result if result else None
+        return result or []
 
     def check_and_adjust_goods_quantity(self):
         """检查并调整背包表中的物品数量和物品名称"""

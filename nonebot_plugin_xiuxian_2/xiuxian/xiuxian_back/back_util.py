@@ -98,7 +98,7 @@ def check_equipment_can_use(user_id, goods_id):
     """
     flag = False
     back_equipment = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
-    if back_equipment['state'] == 0:
+    if back_equipment and int(back_equipment.get('state', 0) or 0) == 0:
         flag = True
     return flag
 
@@ -201,7 +201,9 @@ def check_equipment_use_msg(user_id, goods_id):
     检测装备是否已用
     """
     user_back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
-    state = user_back['state']
+    if not user_back:
+        return False
+    state = int(user_back.get('state', 0) or 0)
     is_use = False
     if state == 0:
         is_use = False
@@ -215,7 +217,7 @@ def get_user_main_back_msg(user_id):
     """
     l_msg = []
     user_backs = sql_message.get_back_msg(user_id)  # list(back)
-    if user_backs is None:
+    if not user_backs:
         return l_msg
     
     equipment_types = {
@@ -353,7 +355,7 @@ def get_user_equipment_msg(user_id):
     """
     l_msg = []
     user_backs = sql_message.get_back_msg(user_id)
-    if user_backs is None:
+    if not user_backs:
         return l_msg
     
     equipped_weapons = []
@@ -433,7 +435,7 @@ def get_user_danyao_back_msg(user_id):
     """
     l_msg = []
     user_backs = sql_message.get_back_msg(user_id)
-    if user_backs is None:
+    if not user_backs:
         return l_msg
 
     danyao_type_map = {
@@ -497,7 +499,7 @@ def get_user_yaocai_back_msg(user_id):
     """
     l_msg = []
     user_backs = sql_message.get_back_msg(user_id)
-    if user_backs is None:
+    if not user_backs:
         return l_msg
     
     sorted_yaocai = {k: [] for k in YAOCAI_RANK_ORDER}
@@ -532,7 +534,7 @@ def get_user_yaocai_detail_back_msg(user_id):
     """
     l_msg = []
     user_backs = sql_message.get_back_msg(user_id)
-    if user_backs is None:
+    if not user_backs:
         return l_msg
     
     sorted_yaocai = {k: [] for k in YAOCAI_RANK_ORDER}
@@ -825,7 +827,9 @@ def check_use_elixir(user_id, goods_id, num):
     goods_rank = goods_info['rank'] + ADDED_RANKS - 2
     goods_name = goods_info['name']
     back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
-    goods_all_num = back['all_num'] # 数据库里的使用数量
+    if not back or int(back.get('goods_num', 0) or 0) <= 0:
+        return f"背包中没有足够的 {goods_name} ！"
+    goods_all_num = int(back.get('all_num', 0) or 0) # 数据库里的使用数量
     remaining_limit = goods_info['all_num'] - goods_all_num  # 剩余可用数量
 
     if goods_info['buff_type'] == "level_up_rate":  # 增加突破概率的丹药

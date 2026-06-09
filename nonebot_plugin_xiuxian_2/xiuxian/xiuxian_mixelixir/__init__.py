@@ -268,7 +268,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await mix_elixir.finish()
     user_id = user_info['user_id']
     user_back = sql_message.get_back_msg(user_id)
-    if user_back is None:
+    if not user_back:
         msg = "道友的背包空空如也，无法炼丹"
         await handle_send(bot, event, msg)
         await mix_elixir.finish()
