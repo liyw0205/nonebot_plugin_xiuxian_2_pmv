@@ -469,7 +469,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     > 宠物背包、放生、一键放生、经验返还
 
 4.  **游历派遣**：宠物游历帮助
-    > 派遣出战宠物外出，返回后领取灵石、材料或灵髓
+    > 派遣出战宠物外出，返回后领取材料、灵髓或宠物资源
 
 5.  **查看信息**：我的宠物 / 宠物背包
 
@@ -645,7 +645,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 4）收益规则：
    游历时长越长，奖励次数越多。
-   宠物稀有度、品阶和形态会提高收益。
+   宠物稀有度、品阶和形态会提高材料收益。
+   有低概率带回宠物资源，宠物蛋概率参考地图奖励池。
    宠物游历不影响出战和战斗。
 """.strip()
 

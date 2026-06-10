@@ -146,6 +146,21 @@ PET_BREAKTHROUGH_RULES = {
 
 PET_TRAVEL_MIN_HOURS = 1
 PET_TRAVEL_MAX_HOURS = 12
+PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_PER_4_HOURS = 0.05
+PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_CAP = 0.15
+PET_TRAVEL_PET_RESOURCE_POOL = [
+    20033, 20033, 20033, 20033, 20033, 20033,
+    20034, 20034, 20034, 20034, 20034,
+    20035, 20035, 20035,
+    20036, 20036,
+    20037,
+    20027, 20027, 20027, 20027, 20027, 20027,
+    20028, 20028, 20028, 20028,
+    20029, 20029,
+    20030,
+    20031,
+    20032,
+]
 PET_TRAVEL_ITEM_POOLS = {
     "forage": {
         "name": "灵草谷",
@@ -169,13 +184,13 @@ PET_TRAVEL_ITEM_POOLS = {
     },
     "rift": {
         "name": "秘境边缘",
-        "desc": "风险更高，可能带回更多灵石和稀有材料。",
+        "desc": "风险更高，可能带回更稀有材料。",
         "items": [
-            {"id": 18076, "min": 1, "max": 1, "weight": 18},
+            {"id": 18076, "min": 1, "max": 1, "weight": 5, "amount_multiplier_cap": 1.0},
             {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 3, "weight": 32},
             {"id": 20028, "min": 1, "max": 1, "weight": 13},
-            {"id": 3069, "min": 3, "max": 8, "weight": 18},
-            {"id": 3070, "min": 3, "max": 8, "weight": 19},
+            {"id": 3069, "min": 1, "max": 3, "weight": 18, "amount_multiplier_cap": 1.0},
+            {"id": 3070, "min": 1, "max": 3, "weight": 19, "amount_multiplier_cap": 1.0},
         ],
     },
 }
@@ -1795,6 +1810,16 @@ def is_pet_travel_done(travel: dict | None):
     return _travel_remaining_seconds(travel) <= 0
 
 
+def _roll_travel_pet_resource_reward(duration_hours: int):
+    chance = min(
+        PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_CAP,
+        PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_PER_4_HOURS * max(1, int(duration_hours)) / 4,
+    )
+    if random.random() > chance:
+        return []
+    return [{"id": int(random.choice(PET_TRAVEL_PET_RESOURCE_POOL)), "amount": 1}]
+
+
 def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: int):
     pool = PET_TRAVEL_ITEM_POOLS.get(scene_key, PET_TRAVEL_ITEM_POOLS["forage"])["items"]
     reward_count = 1
@@ -1811,9 +1836,14 @@ def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: 
         amount_min = int(selected.get("min", 1))
         amount_max = int(selected.get("max", amount_min))
         amount = random.randint(amount_min, max(amount_min, amount_max))
-        amount = max(1, int(amount * multiplier))
+        amount_multiplier = min(multiplier, float(selected.get("amount_multiplier_cap", multiplier)))
+        amount = max(1, int(amount * amount_multiplier))
         item_id = int(selected["id"])
         rewards_by_id[item_id] = rewards_by_id.get(item_id, 0) + amount
+
+    for reward in _roll_travel_pet_resource_reward(duration_hours):
+        item_id = int(reward["id"])
+        rewards_by_id[item_id] = rewards_by_id.get(item_id, 0) + int(reward["amount"])
 
     return [
         {"id": item_id, "amount": amount}
@@ -1848,10 +1878,8 @@ def complete_pet_travel(user_id: str | int):
     }.get(scene_key, 1.0)
     reward_rate = multiplier * scene_bonus
 
-    stone = int(random.randint(18000, 42000) * duration_hours * reward_rate)
+    stone = 0
     exp = 0
-    if scene_key in {"training", "rift"}:
-        exp = int(random.randint(300, 900) * duration_hours * reward_rate)
     item_rewards = _roll_travel_item_reward(scene_key, reward_rate, duration_hours)
     result = {
         "travel": travel,
