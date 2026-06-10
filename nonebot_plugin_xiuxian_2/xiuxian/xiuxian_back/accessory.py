@@ -82,6 +82,7 @@ def _paginate_sections(sections, page: int, per_page: int = 15):
 
 
 TABLE = "player_accessory"
+ACCESSORY_BAG_LIMIT = 1000
 
 AFFIX_TYPES = ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击", "速度"]
 
@@ -227,6 +228,23 @@ def _save_data(user_id: str, data: dict):
         dirty_check=True
     )
 
+def get_accessory_total_count(data: dict) -> int:
+    data = _normalize_accessory_doc(data)
+    total = len(data.get("bag", []) or [])
+    total += sum(1 for item in (data.get("equipped", {}) or {}).values() if item)
+    return total
+
+def get_accessory_count(user_id: str) -> int:
+    return get_accessory_total_count(_get_data(str(user_id)))
+
+def get_accessory_remaining_capacity(user_id: str) -> int:
+    return max(0, ACCESSORY_BAG_LIMIT - get_accessory_count(str(user_id)))
+
+def can_add_accessories(user_id: str, count: int = 1) -> tuple[bool, int, int]:
+    owned = get_accessory_count(str(user_id))
+    remaining = max(0, ACCESSORY_BAG_LIMIT - owned)
+    return int(count) <= remaining, owned, remaining
+
 def roll_affixes(quality: int, count: int = 2):
     count = max(1, min(4, count))
     pool = random.sample(AFFIX_TYPES, count)
@@ -266,6 +284,8 @@ def create_accessory_instance(item_id: int, quality: int = 1):
 
 def add_accessory_to_bag(user_id: str, item_id: int, quality: int = 1):
     data = _get_data(user_id)
+    if get_accessory_total_count(data) >= ACCESSORY_BAG_LIMIT:
+        raise RuntimeError(f"饰品持有数量已达上限{ACCESSORY_BAG_LIMIT}，请先分解或整理饰品。")
     ins = create_accessory_instance(item_id, quality)
     data["bag"].append(ins)
     _save_data(user_id, data)
@@ -744,9 +764,12 @@ def _build_accessory_md_text(
     sections: list[tuple[str, list[dict]]],
     current_page: int,
     total_pages: int,
-    next_cmd: str = ""
+    next_cmd: str = "",
+    capacity_text: str = "",
 ) -> str:
     lines = [f"☆------{title}------☆", ""]
+    if capacity_text:
+        lines.extend([capacity_text, ""])
 
     for sec_title, rows in sections:
         if not rows:
@@ -1047,6 +1070,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not bag:
         await handle_send(bot, event, "饰品背包为空")
         return
+    capacity_text = f"容量：{get_accessory_total_count(data)}/{ACCESSORY_BAG_LIMIT}"
 
     if XiuConfig().markdown_status:
         sections = _build_accessory_sections_for_md(user_id)
@@ -1063,7 +1087,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             sections=page_sections,
             current_page=current_page,
             total_pages=total_pages,
-            next_cmd=f"饰品背包 {current_page + 1}"
+            next_cmd=f"饰品背包 {current_page + 1}",
+            capacity_text=capacity_text,
         )
 
         try:
@@ -1087,7 +1112,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     page_flat = flat_rows[start:end]
 
     title = [f"☆------{user_info.get('user_name', '道友')}的饰品背包------☆"]
-    lines = []
+    lines = [capacity_text]
     last_sec = None
     for sec_title, r in page_flat:
         if sec_title != last_sec:

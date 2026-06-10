@@ -14,6 +14,7 @@ from ..xiuxian_utils.pet_system import (
     EGG_COST,
     EGG_PITY_RARITY_WEIGHTS,
     EGG_PITY_THRESHOLD,
+    PET_BAG_LIMIT,
     PET_TRAVEL_MAX_HOURS,
     PET_TRAVEL_MIN_HOURS,
     PET_RELEASE_REFUND_ITEM_ID,
@@ -21,6 +22,7 @@ from ..xiuxian_utils.pet_system import (
     build_pet_detail,
     calc_feed_exp,
     calc_pet_release_refund,
+    can_add_pets,
     complete_pet_travel,
     exp_to_next_star,
     feed_active_pet,
@@ -31,6 +33,7 @@ from ..xiuxian_utils.pet_system import (
     get_pet_travel_status,
     get_pet_doc,
     get_pet_bag_rows,
+    get_pet_total_count,
     grant_pet,
     grant_pet_egg_pity_rewards,
     remove_pets_by_keyword,
@@ -390,7 +393,7 @@ def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
     start = (page - 1) * per_page
     end = start + per_page
 
-    lines = ["☆------宠物背包------☆"]
+    lines = ["☆------宠物背包------☆", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}"]
     for pet in rows[start:end]:
         active_flag = "【出战中】" if pet.get("is_active") else ""
         lines.append(
@@ -421,7 +424,7 @@ def _build_pet_bag_md_text(
     start = (current_page - 1) * per_page
     end = start + per_page
 
-    lines = [f"☆------{title}------☆", ""]
+    lines = [f"☆------{title}------☆", "", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}", ""]
 
     for pet in rows[start:end]:
         name = pet.get("form_name", pet.get("name", "未知宠物"))
@@ -906,6 +909,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             v1="灵石",
             k2="帮助",
             v2="宠物帮助",
+        )
+        return
+
+    data = get_pet_doc(user_id)
+    pity_pet_count = (int(data.get("egg_pity_count", 0) or 0) + count) // EGG_PITY_THRESHOLD
+    needed_capacity = count + pity_pet_count
+    ok, owned, remaining = can_add_pets(user_id, needed_capacity)
+    if not ok:
+        await handle_send(
+            bot,
+            event,
+            (
+                f"宠物背包容量不足，无法砸蛋{count}次。\n"
+                f"当前容量：{owned}/{PET_BAG_LIMIT}，剩余{remaining}格；本次最多需要{needed_capacity}格"
+                f"（含可能触发的保底宠物{pity_pet_count}只）。\n"
+                "请先放生或整理宠物。"
+            ),
+            md_type="背包",
+            k1="宠物背包",
+            v1="宠物背包",
+            k2="放生",
+            v2="一键放生",
         )
         return
 

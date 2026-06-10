@@ -13,9 +13,11 @@ from .xiuxian2_handle import PlayerDataManager
 DATABASE = Path() / "data" / "xiuxian"
 PET_CONFIG_PATH = DATABASE / "宠物" / "宠物.json"
 PET_SKILL_CONFIG_PATH = DATABASE / "宠物" / "宠物技能.json"
+HERB_CONFIG_PATH = DATABASE / "丹药" / "药材.json"
 
 TABLE = "player_pet"
 PET_ITEM_TABLE = "player_pet_item"
+PET_BAG_LIMIT = 1000
 LEGACY_JSON_FIELDS = ["active", "bag"]
 FIELDS = ["active_uid", "egg_pity_count", "egg_pity_no_mythic_count", "travel"]
 PET_META_STORAGE_FIELDS = FIELDS + LEGACY_JSON_FIELDS
@@ -146,52 +148,90 @@ PET_BREAKTHROUGH_RULES = {
 
 PET_TRAVEL_MIN_HOURS = 1
 PET_TRAVEL_MAX_HOURS = 12
-PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_PER_4_HOURS = 0.05
-PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_CAP = 0.15
-PET_TRAVEL_PET_RESOURCE_POOL = [
-    20033, 20033, 20033, 20033, 20033, 20033,
-    20034, 20034, 20034, 20034, 20034,
-    20035, 20035, 20035,
-    20036, 20036,
-    20037,
-    20027, 20027, 20027, 20027, 20027, 20027,
-    20028, 20028, 20028, 20028,
-    20029, 20029,
-    20030,
-    20031,
-    20032,
-]
 PET_TRAVEL_ITEM_POOLS = {
     "forage": {
         "name": "灵草谷",
-        "desc": "采集药材和灵髓，适合补充宠物养成材料。",
+        "desc": "采集低阶药材和灵髓，适合稳定补充宠物养成材料。",
         "items": [
-            {"id": 3001, "min": 8, "max": 18, "weight": 35},
-            {"id": 3002, "min": 8, "max": 18, "weight": 30},
-            {"id": 3037, "min": 6, "max": 14, "weight": 25},
-            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 2, "weight": 10},
+            {"herb_levels": ["一品药材"], "min": 8, "max": 18, "weight": 40},
+            {"herb_levels": ["二品药材"], "min": 6, "max": 14, "weight": 32},
+            {"herb_levels": ["三品药材"], "min": 4, "max": 10, "weight": 18},
         ],
+        "pet_egg_drop": {
+            "chance_per_4_hours": 0.015,
+            "cap": 0.045,
+            "items": [
+                {"id": 20033, "weight": 85},
+                {"id": 20034, "weight": 15},
+            ],
+        },
+        "marrow_drop": {
+            "chance_per_4_hours": 0.04,
+            "cap": 0.12,
+            "items": [
+                {"id": 20027, "weight": 70},
+                {"id": 20028, "weight": 25},
+                {"id": 20029, "weight": 5},
+            ],
+        },
     },
     "training": {
         "name": "妖兽岭",
-        "desc": "磨砺宠物并搜寻灵髓，收益更偏向宠物成长。",
+        "desc": "磨砺宠物并搜寻中阶药材，宠物资源掉落更高。",
         "items": [
-            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 3, "weight": 42},
-            {"id": 20028, "min": 1, "max": 1, "weight": 10},
-            {"id": 3001, "min": 6, "max": 12, "weight": 25},
-            {"id": 3038, "min": 6, "max": 12, "weight": 23},
+            {"herb_levels": ["三品药材"], "min": 6, "max": 14, "weight": 28},
+            {"herb_levels": ["四品药材"], "min": 5, "max": 12, "weight": 32},
+            {"herb_levels": ["五品药材"], "min": 3, "max": 8, "weight": 24},
+            {"herb_levels": ["六品药材"], "min": 2, "max": 5, "weight": 12, "amount_multiplier_cap": 1.5},
         ],
+        "pet_egg_drop": {
+            "chance_per_4_hours": 0.03,
+            "cap": 0.09,
+            "items": [
+                {"id": 20033, "weight": 55},
+                {"id": 20034, "weight": 32},
+                {"id": 20035, "weight": 12},
+                {"id": 20036, "weight": 1},
+            ],
+        },
+        "marrow_drop": {
+            "chance_per_4_hours": 0.06,
+            "cap": 0.18,
+            "items": [
+                {"id": 20027, "weight": 50},
+                {"id": 20028, "weight": 35},
+                {"id": 20029, "weight": 15},
+            ],
+        },
     },
     "rift": {
         "name": "秘境边缘",
-        "desc": "风险更高，可能带回更稀有材料。",
+        "desc": "风险更高，可能带回高阶药材和稀有灵宠蛋。",
         "items": [
             {"id": 18076, "min": 1, "max": 1, "weight": 5, "amount_multiplier_cap": 1.0},
-            {"id": PET_RELEASE_REFUND_ITEM_ID, "min": 1, "max": 3, "weight": 32},
-            {"id": 20028, "min": 1, "max": 1, "weight": 13},
-            {"id": 3069, "min": 1, "max": 3, "weight": 18, "amount_multiplier_cap": 1.0},
-            {"id": 3070, "min": 1, "max": 3, "weight": 19, "amount_multiplier_cap": 1.0},
+            {"herb_levels": ["七品药材"], "min": 2, "max": 5, "weight": 28, "amount_multiplier_cap": 1.2},
+            {"herb_levels": ["八品药材"], "min": 1, "max": 4, "weight": 30, "amount_multiplier_cap": 1.0},
+            {"herb_levels": ["九品药材"], "min": 1, "max": 3, "weight": 24, "amount_multiplier_cap": 1.0},
         ],
+        "pet_egg_drop": {
+            "chance_per_4_hours": 0.05,
+            "cap": 0.15,
+            "items": [
+                {"id": 20034, "weight": 42},
+                {"id": 20035, "weight": 34},
+                {"id": 20036, "weight": 18},
+                {"id": 20037, "weight": 6},
+            ],
+        },
+        "marrow_drop": {
+            "chance_per_4_hours": 0.08,
+            "cap": 0.24,
+            "items": [
+                {"id": 20027, "weight": 35},
+                {"id": 20028, "weight": 40},
+                {"id": 20029, "weight": 25},
+            ],
+        },
     },
 }
 PET_TRAVEL_SCENE_ALIASES = {
@@ -216,6 +256,7 @@ PET_TRAVEL_STORY_TEXTS = (
 player_data_manager = PlayerDataManager()
 _PET_POOL_CACHE = None
 _PET_SKILL_CACHE = None
+_HERB_IDS_BY_LEVEL_CACHE = None
 _PET_STORAGE_READY = False
 _PET_STORAGE_MIGRATION_ATTEMPTED = False
 
@@ -1250,6 +1291,45 @@ def get_pet_bag_rows(data: dict):
     return rows
 
 
+def get_pet_total_count(data: dict) -> int:
+    data = _normalize_pet_doc(data)
+    seen = set()
+    total = 0
+
+    active = data.get("active")
+    if active:
+        uid = str(active.get("uid", ""))
+        if uid:
+            seen.add(uid)
+        total += 1
+
+    for pet in data.get("bag", []):
+        if not isinstance(pet, dict):
+            continue
+        uid = str(pet.get("uid", ""))
+        if uid and uid in seen:
+            continue
+        if uid:
+            seen.add(uid)
+        total += 1
+
+    return total
+
+
+def get_pet_count(user_id: str | int) -> int:
+    return get_pet_total_count(get_pet_doc(user_id))
+
+
+def get_pet_remaining_capacity(user_id: str | int) -> int:
+    return max(0, PET_BAG_LIMIT - get_pet_count(user_id))
+
+
+def can_add_pets(user_id: str | int, count: int = 1) -> tuple[bool, int, int]:
+    owned = get_pet_count(user_id)
+    remaining = max(0, PET_BAG_LIMIT - owned)
+    return max(0, int(count)) <= remaining, owned, remaining
+
+
 def load_pet_pool():
     global _PET_POOL_CACHE
     if _PET_POOL_CACHE is not None:
@@ -1295,6 +1375,38 @@ def load_pet_pool():
 
     _PET_POOL_CACHE = pool
     return _PET_POOL_CACHE
+
+
+def load_herb_ids_by_level():
+    global _HERB_IDS_BY_LEVEL_CACHE
+    if _HERB_IDS_BY_LEVEL_CACHE is not None:
+        return _HERB_IDS_BY_LEVEL_CACHE
+
+    result = {}
+    try:
+        with open(HERB_CONFIG_PATH, "r", encoding="utf-8") as f:
+            raw = json.loads(f.read() or "{}")
+    except Exception as e:
+        logger.warning(f"药材池加载失败: {e}")
+        raw = {}
+
+    if isinstance(raw, dict):
+        for item_id, item in raw.items():
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "药材" and item.get("item_type") != "药材":
+                continue
+            level = str(item.get("level", "") or "")
+            if not level:
+                continue
+            try:
+                item_id_int = int(item_id)
+            except Exception:
+                continue
+            result.setdefault(level, []).append(item_id_int)
+
+    _HERB_IDS_BY_LEVEL_CACHE = result
+    return _HERB_IDS_BY_LEVEL_CACHE
 
 
 def get_pet_template(pet_id: str):
@@ -1637,6 +1749,9 @@ def create_pet_instance(template: dict | None = None):
 
 
 def _put_pet_into_doc(data: dict, pet: dict):
+    if get_pet_total_count(data) >= PET_BAG_LIMIT:
+        raise RuntimeError(f"宠物持有数量已达上限{PET_BAG_LIMIT}，请先放生或整理宠物。")
+
     pet = _normalize_pet(pet)
     if data.get("active"):
         data["bag"].append(pet)
@@ -1668,6 +1783,8 @@ def grant_pet_egg_pity_rewards(user_id: str | int, draw_count: int):
     rewards = []
 
     while pity_count >= EGG_PITY_THRESHOLD:
+        if get_pet_total_count(data) >= PET_BAG_LIMIT:
+            break
         pity_count -= EGG_PITY_THRESHOLD
         rarity, forced_mythic = roll_egg_pity_rarity(no_mythic_count)
         template = roll_pet_template_by_rarity(rarity)
@@ -1810,18 +1927,71 @@ def is_pet_travel_done(travel: dict | None):
     return _travel_remaining_seconds(travel) <= 0
 
 
-def _roll_travel_pet_resource_reward(duration_hours: int):
-    chance = min(
-        PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_CAP,
-        PET_TRAVEL_PET_RESOURCE_DROP_CHANCE_PER_4_HOURS * max(1, int(duration_hours)) / 4,
-    )
-    if random.random() > chance:
+def _resolve_travel_reward_item_id(selected: dict):
+    if "id" in selected:
+        try:
+            return int(selected["id"])
+        except Exception:
+            return None
+
+    ids = selected.get("ids")
+    if isinstance(ids, list) and ids:
+        try:
+            return int(random.choice(ids))
+        except Exception:
+            return None
+
+    herb_levels = selected.get("herb_levels")
+    if isinstance(herb_levels, str):
+        herb_levels = [herb_levels]
+    if isinstance(herb_levels, list) and herb_levels:
+        herb_pool = load_herb_ids_by_level()
+        candidates = []
+        for level in herb_levels:
+            candidates.extend(herb_pool.get(str(level), []))
+        if candidates:
+            return int(random.choice(candidates))
+
+    return None
+
+
+def _roll_travel_drop_group(drop_config: dict | None, duration_hours: int, multiplier: float = 1.0):
+    if not isinstance(drop_config, dict):
         return []
-    return [{"id": int(random.choice(PET_TRAVEL_PET_RESOURCE_POOL)), "amount": 1}]
+
+    pool = drop_config.get("items", [])
+    if not isinstance(pool, list) or not pool:
+        return []
+
+    try:
+        chance_per_4_hours = float(drop_config.get("chance_per_4_hours", 0) or 0)
+    except Exception:
+        chance_per_4_hours = 0
+    try:
+        chance_cap = float(drop_config.get("cap", chance_per_4_hours) or chance_per_4_hours)
+    except Exception:
+        chance_cap = chance_per_4_hours
+
+    chance = min(chance_cap, chance_per_4_hours * max(1, int(duration_hours)) / 4)
+    if chance <= 0 or random.random() > chance:
+        return []
+
+    selected = random.choices(pool, weights=[max(1, int(item.get("weight", 1) or 1)) for item in pool], k=1)[0]
+    item_id = _resolve_travel_reward_item_id(selected)
+    if item_id is None:
+        return []
+
+    amount_min = int(selected.get("min", 1) or 1)
+    amount_max = int(selected.get("max", amount_min) or amount_min)
+    amount = random.randint(amount_min, max(amount_min, amount_max))
+    amount_multiplier = min(multiplier, float(selected.get("amount_multiplier_cap", multiplier)))
+    amount = max(1, int(amount * amount_multiplier))
+    return [{"id": item_id, "amount": amount}]
 
 
 def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: int):
-    pool = PET_TRAVEL_ITEM_POOLS.get(scene_key, PET_TRAVEL_ITEM_POOLS["forage"])["items"]
+    scene_pool = PET_TRAVEL_ITEM_POOLS.get(scene_key, PET_TRAVEL_ITEM_POOLS["forage"])
+    pool = scene_pool["items"]
     reward_count = 1
     if duration_hours >= 4:
         reward_count += 1
@@ -1838,10 +2008,15 @@ def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: 
         amount = random.randint(amount_min, max(amount_min, amount_max))
         amount_multiplier = min(multiplier, float(selected.get("amount_multiplier_cap", multiplier)))
         amount = max(1, int(amount * amount_multiplier))
-        item_id = int(selected["id"])
+        item_id = _resolve_travel_reward_item_id(selected)
+        if item_id is None:
+            continue
         rewards_by_id[item_id] = rewards_by_id.get(item_id, 0) + amount
 
-    for reward in _roll_travel_pet_resource_reward(duration_hours):
+    extra_rewards = []
+    extra_rewards.extend(_roll_travel_drop_group(scene_pool.get("pet_egg_drop"), duration_hours))
+    extra_rewards.extend(_roll_travel_drop_group(scene_pool.get("marrow_drop"), duration_hours))
+    for reward in extra_rewards:
         item_id = int(reward["id"])
         rewards_by_id[item_id] = rewards_by_id.get(item_id, 0) + int(reward["amount"])
 

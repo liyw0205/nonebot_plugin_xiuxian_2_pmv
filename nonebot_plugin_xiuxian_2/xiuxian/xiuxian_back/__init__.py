@@ -41,9 +41,9 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 from ..xiuxian_tianti.tianti_data import TiantiDataManager
 from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
-from ..xiuxian_utils.pet_system import PET_EGG_IDS, PET_EGG_RARITY_KEY, grant_pet_by_rarity
+from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
 from .back_util import *
-from .accessory import AFFIX_KEY_MAP, SET_BONUS, add_accessory_to_bag, quality_to_cn  # noqa: F401
+from .accessory import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 
 
 # 初始化组件
@@ -664,6 +664,39 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         package_name = goods_info['name']
         all_msgs = []
 
+        def _collect_package_rewards():
+            rewards = []
+            errors = []
+            if int(goods_info.get("roll", 0) or 0) == 1:
+                roll_pool = goods_info.get("roll_pool", [])
+                if not isinstance(roll_pool, list) or not roll_pool:
+                    errors.append(f"【失败】{package_name}：roll_pool为空或配置错误")
+                else:
+                    rewards.append(random.choice(roll_pool))
+                return rewards, errors
+
+            i = 1
+            while True:
+                buff_key = f"buff_{i}"
+                name_key = f"name_{i}"
+                type_key = f"type_{i}"
+                amount_key = f"amount_{i}"
+                quality_key = f"quality_{i}"
+
+                if name_key not in goods_info:
+                    break
+
+                rewards.append({
+                    "buff": goods_info.get(buff_key, None),
+                    "name": goods_info.get(name_key),
+                    "type": goods_info.get(type_key, None),
+                    "amount": goods_info.get(amount_key, 1),
+                    "quality": goods_info.get(quality_key, 1)
+                })
+                i += 1
+
+            return rewards, errors
+
         def _grant_one_reward(rwd: dict):
             """
             rwd字段建议：
@@ -706,38 +739,40 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             sql_message.send_back(user_id, int(r_buff), r_name, g_type, r_amount, 1)
             return f"获得 {r_name} x{r_amount}"
 
-        # 使用num个礼包
+        package_rewards = []
+        accessory_need = 0
         for _ in range(num):
-            # roll随机礼包模式
-            if int(goods_info.get("roll", 0) or 0) == 1:
-                roll_pool = goods_info.get("roll_pool", [])
-                if not isinstance(roll_pool, list) or not roll_pool:
-                    all_msgs.append(f"【失败】{package_name}：roll_pool为空或配置错误")
-                else:
-                    hit = random.choice(roll_pool)
-                    all_msgs.append(_grant_one_reward(hit))
-            else:
-                # 固定礼包模式：遍历 buff_i / name_i / type_i / amount_i / quality_i
-                i = 1
-                while True:
-                    buff_key = f"buff_{i}"
-                    name_key = f"name_{i}"
-                    type_key = f"type_{i}"
-                    amount_key = f"amount_{i}"
-                    quality_key = f"quality_{i}"
+            rewards, errors = _collect_package_rewards()
+            package_rewards.append(rewards)
+            all_msgs.extend(errors)
+            for rwd in rewards:
+                if rwd.get("type") != "饰品" or rwd.get("buff", None) is None:
+                    continue
+                try:
+                    accessory_need += max(0, int(rwd.get("amount", 1) or 1))
+                except Exception:
+                    accessory_need += 1
 
-                    if name_key not in goods_info:
-                        break
+        if accessory_need > 0:
+            ok, owned, remaining = can_add_accessories(str(user_id), accessory_need)
+            if not ok:
+                msg = (
+                    f"饰品背包容量不足，无法打开{package_name}。\n"
+                    f"当前容量：{owned}/{ACCESSORY_BAG_LIMIT}，剩余{remaining}格；"
+                    f"本次将获得饰品{accessory_need}件。\n"
+                    "请先分解或整理饰品。"
+                )
+                await handle_send(bot, event, msg, md_type="背包", k1="饰品", v1="饰品背包", k2="分解", v2="快速分解饰品")
+                await use.finish()
+                return
 
-                    one = {
-                        "buff": goods_info.get(buff_key, None),
-                        "name": goods_info.get(name_key),
-                        "type": goods_info.get(type_key, None),
-                        "amount": goods_info.get(amount_key, 1),
-                        "quality": goods_info.get(quality_key, 1)
-                    }
-                    all_msgs.append(_grant_one_reward(one))
-                    i += 1
+        # 使用num个礼包
+        for rewards in package_rewards:
+            for rwd in rewards:
+                try:
+                    all_msgs.append(_grant_one_reward(rwd))
+                except Exception as e:
+                    all_msgs.append(f"【失败】{rwd.get('name', '未知物品')}：{e}")
 
             # 每开1个礼包，扣1个礼包道具
             sql_message.update_back_j(user_id, goods_id, num=1, use_key=1)
@@ -1004,6 +1039,23 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     use_num = min(max(1, int(num)), int(have))
     if use_num <= 0:
         await handle_send(bot, event, f"背包中没有{item_info.get('name', '宠物蛋')}。")
+        return
+    ok, owned, remaining = can_add_pets(user_id, use_num)
+    if not ok:
+        await handle_send(
+            bot,
+            event,
+            (
+                f"宠物背包容量不足，无法使用{item_info.get('name', '宠物蛋')}。\n"
+                f"当前容量：{owned}/{PET_BAG_LIMIT}，剩余{remaining}格；本次需要{use_num}格。\n"
+                "请先放生或整理宠物。"
+            ),
+            md_type="背包",
+            k1="宠物背包",
+            v1="宠物背包",
+            k2="放生",
+            v2="一键放生",
+        )
         return
 
     lines = []
