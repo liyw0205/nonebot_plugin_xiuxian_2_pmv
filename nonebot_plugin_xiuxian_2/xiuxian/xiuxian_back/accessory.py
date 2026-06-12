@@ -41,6 +41,8 @@ accessory_collection = on_command(
 equip_accessory = on_command("装备饰品", priority=10, block=True)
 unequip_accessory = on_command("卸下饰品", priority=10, block=True)
 wash_accessory = on_command("饰品洗练", priority=10, block=True)
+lock_accessory_affix = on_command("饰品锁定", aliases={"锁定饰品词条", "饰品词条锁定"}, priority=10, block=True)
+unlock_accessory_affix = on_command("饰品解锁", aliases={"解锁饰品词条", "饰品词条解锁"}, priority=10, block=True)
 decompose_accessory = on_command("饰品分解", priority=10, block=True)
 quick_decompose_accessory = on_command("快速分解饰品", aliases={"饰品快速分解"}, priority=10, block=True)
 accessory_help = on_command("饰品帮助", aliases={"饰品系统帮助"}, priority=10, block=True)
@@ -166,6 +168,7 @@ QUALITY_RANGE = [1, 2, 3, 4, 5]
 
 WASH_STONE_ID = 20023
 WASH_STONE_NAME = "洗练石"
+LOCKED_AFFIX_KEY = "locked_affixes"
 
 WASH_STONE_COST = {
     1: 1,
@@ -245,7 +248,12 @@ def can_add_accessories(user_id: str, count: int = 1) -> tuple[bool, int, int]:
     remaining = max(0, ACCESSORY_BAG_LIMIT - owned)
     return int(count) <= remaining, owned, remaining
 
+def _target_affix_count_for_quality(quality: int) -> int:
+    quality = max(1, min(5, int(quality)))
+    return 3 if quality >= 4 else 2
+
 def roll_affixes(quality: int, count: int = 2):
+    quality = max(1, min(5, int(quality)))
     count = max(1, min(4, count))
     pool = random.sample(AFFIX_TYPES, count)
     out = []
@@ -255,9 +263,16 @@ def roll_affixes(quality: int, count: int = 2):
         out.append({"type": t, "value": value})
     return out
 
-def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = False):
-    count = max(1, min(4, count))
-    pool = random.sample(AFFIX_TYPES, count)
+def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = False, exclude_types=None):
+    quality = max(1, min(5, int(quality)))
+    count = max(0, min(4, count))
+    if count <= 0:
+        return []
+    excluded = set(exclude_types or [])
+    candidates = [t for t in AFFIX_TYPES if t not in excluded]
+    if len(candidates) < count:
+        candidates = AFFIX_TYPES[:]
+    pool = random.sample(candidates, count)
     out = []
     for t in pool:
         lo, hi = WASH_RANGE[quality][t]
@@ -268,8 +283,123 @@ def roll_affixes_with_pity(quality: int, count: int = 2, pity_reached: bool = Fa
         out.append({"type": t, "value": v})
     return out
 
+def _format_affix_value(affix: dict) -> str:
+    t = affix.get("type", "未知")
+    v = float(affix.get("value", 0))
+    if t == "速度":
+        return f"+{round(v)}点"
+    return f"+{round(v * 100, 2)}%"
+
+def _normalize_locked_affixes(acc: dict, affix_count: int | None = None) -> list[int]:
+    if affix_count is None:
+        affixes = acc.get("affixes", []) if isinstance(acc, dict) else []
+        affix_count = len(affixes) if isinstance(affixes, list) else 0
+    raw = acc.get(LOCKED_AFFIX_KEY, []) if isinstance(acc, dict) else []
+    if not isinstance(raw, list):
+        raw = []
+
+    locked = []
+    for idx in raw:
+        try:
+            idx = int(idx)
+        except Exception:
+            continue
+        if 0 <= idx < affix_count and idx not in locked:
+            locked.append(idx)
+    return sorted(locked)
+
+def _set_locked_affixes(acc: dict, locked_indexes: list[int]):
+    locked = sorted({int(i) for i in locked_indexes})
+    if locked:
+        acc[LOCKED_AFFIX_KEY] = locked
+    else:
+        acc.pop(LOCKED_AFFIX_KEY, None)
+
+def _split_affix_index_tokens(tokens: list[str]) -> list[str]:
+    out = []
+    for token in tokens:
+        for part in str(token).replace("，", ",").replace("、", ",").split(","):
+            part = part.strip().lstrip("#")
+            if part:
+                out.append(part)
+    return out
+
+def _parse_affix_indexes(tokens: list[str], affix_count: int):
+    parts = _split_affix_index_tokens(tokens)
+    if not parts:
+        return None, "请指定词条序号，例如：1 或 1 2"
+
+    indexes = []
+    for part in parts:
+        try:
+            idx = int(part)
+        except Exception:
+            return None, f"词条序号错误：{part}"
+        if idx < 1 or idx > affix_count:
+            return None, f"词条序号必须在1到{affix_count}之间"
+        zero_idx = idx - 1
+        if zero_idx not in indexes:
+            indexes.append(zero_idx)
+    return sorted(indexes), ""
+
+def _format_locked_positions(locked_indexes: list[int]) -> str:
+    if not locked_indexes:
+        return "无"
+    return "、".join(str(i + 1) for i in sorted(locked_indexes))
+
+def _wash_stone_need(quality: int, locked_count: int = 0) -> int:
+    base = WASH_STONE_COST.get(max(1, min(5, int(quality))), 1)
+    return base * (1 + max(0, int(locked_count)))
+
+def _fit_affixes_to_quality(quality: int, affixes: list[dict], pity_reached: bool = False):
+    target_count = _target_affix_count_for_quality(quality)
+    current = list(affixes or [])[:target_count] if isinstance(affixes, list) else []
+    if len(current) >= target_count:
+        return current
+
+    existing_types = {
+        str(af.get("type", ""))
+        for af in current
+        if isinstance(af, dict)
+    }
+    current.extend(
+        roll_affixes_with_pity(
+            quality,
+            target_count - len(current),
+            pity_reached=pity_reached,
+            exclude_types=existing_types
+        )
+    )
+    return current
+
+def _reroll_affixes_preserving_locked(quality: int, old_affixes: list[dict], locked_indexes: list[int], pity_reached: bool = False):
+    target_count = _target_affix_count_for_quality(quality)
+    old_affixes = list(old_affixes or [])[:target_count] if isinstance(old_affixes, list) else []
+    locked_set = {i for i in locked_indexes if 0 <= i < len(old_affixes) and i < target_count}
+    locked_types = {
+        str(old_affixes[i].get("type", ""))
+        for i in locked_set
+        if i < len(old_affixes) and isinstance(old_affixes[i], dict)
+    }
+    new_affixes = roll_affixes_with_pity(
+        quality,
+        target_count - len(locked_set),
+        pity_reached=pity_reached,
+        exclude_types=locked_types
+    )
+    new_iter = iter(new_affixes)
+
+    result = []
+    for idx in range(target_count):
+        if idx in locked_set and idx < len(old_affixes):
+            result.append(old_affixes[idx])
+        else:
+            result.append(next(new_iter))
+    return result
+
 def create_accessory_instance(item_id: int, quality: int = 1):
     item = items.get_data_by_item_id(item_id)
+    quality = max(1, min(5, int(quality)))
     uid = f"acc_{int(time.time())}_{random.randint(1,9999)}"
     return {
         "uid": uid,
@@ -278,7 +408,8 @@ def create_accessory_instance(item_id: int, quality: int = 1):
         "part": item["part"],
         "set_type": item["set_type"],
         "quality": quality,
-        "affixes": roll_affixes(quality, 2),
+        "affixes": roll_affixes(quality, _target_affix_count_for_quality(quality)),
+        LOCKED_AFFIX_KEY: [],
         "wash_count": 0
     }
 
@@ -887,10 +1018,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 1）洗练饰品：
    发送：饰品洗练 饰品UID
    - 消耗【洗练石】随品阶增加
+   - 一至三阶饰品2条词条，四至五阶饰品3条词条
+   - 可锁定词条后洗练，锁定1条消耗翻2倍，锁定2条消耗翻3倍
+   - 不能锁定全部词条，至少保留1条参与洗练
    - 每件饰品独立洗练次数
    - 150次保底：词条值固定上限，仅词条类型变化
 
-2）饰品升阶：
+2）锁定/解锁词条：
+   发送：饰品锁定 饰品UID 词条序号
+   例如：饰品锁定 acc_1730000000000_1234 1 2
+   发送：饰品解锁 饰品UID 词条序号
+   发送：饰品解锁 饰品UID 全部
+
+3）饰品升阶：
    发送：饰品升阶 部位 材料UID1 [材料UID2 ...]
    例如：饰品升阶 项链 UID1 UID2
    规则：
@@ -903,7 +1043,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
      3→4：2件材料
      4→5：3件材料
    - 最高五阶，五阶不可继续升阶
-   - 升阶后：保留当前词条，仅重置洗练次数（wash_count=0）
+   - 升到四阶后补至3条词条；升阶会重置洗练次数（wash_count=0）
 """.strip()
 
     await send_help_message(
@@ -1280,17 +1420,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     desc = item_info.get("desc", "暂无介绍")
 
     affixes = target.get("affixes", [])
+    affix_count = len(affixes) if isinstance(affixes, list) else 0
+    locked_indexes = _normalize_locked_affixes(target, affix_count)
     if not affixes:
         affix_lines = ["- 无词条"]
     else:
         affix_lines = []
-        for af in affixes:
+        for idx, af in enumerate(affixes):
             t = af.get("type", "未知")
-            v = float(af.get("value", 0))
-            if t == "速度":
-                affix_lines.append(f"- {t}：+{round(v)}点")
-            else:
-                affix_lines.append(f"- {t}：+{round(v * 100, 2)}%")
+            lock_tag = "（已锁定）" if idx in locked_indexes else ""
+            affix_lines.append(f"- {idx + 1}. {t}：{_format_affix_value(af)}{lock_tag}")
+
+    next_wash_need = _wash_stone_need(quality, len(locked_indexes))
+    target_affix_count = _target_affix_count_for_quality(quality)
 
     set_lines = []
     sb = SET_BONUS.get(set_type, {})
@@ -1321,6 +1463,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"部位：{part}\n"
         f"套装：{set_type}\n"
         f"状态：{where}\n"
+        f"词条槽位：{affix_count}/{target_affix_count}\n"
+        f"锁定词条：{_format_locked_positions(locked_indexes)}\n"
+        f"下次洗练消耗：{WASH_STONE_NAME}x{next_wash_need}\n"
         f"介绍：{desc}\n\n"
         f"【当前词条】\n" + "\n".join(affix_lines) + "\n\n"
         f"【套装效果】\n" + "\n".join(set_lines)
@@ -1427,6 +1572,148 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await handle_send(bot, event, result["msg"])
 
+@lock_accessory_affix.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    parts = args.extract_plain_text().split()
+    if len(parts) < 2:
+        await handle_send(bot, event, "用法：饰品锁定 饰品UID 词条序号\n例如：饰品锁定 acc_1730000000000_1234 1 2")
+        return
+
+    uid = parts[0].strip()
+    index_tokens = parts[1:]
+    user_id = str(user_info["user_id"])
+    result = {"ok": False, "msg": "锁定失败：未找到饰品"}
+
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+        w, k, target = _find_accessory_anywhere(doc, uid)
+        if not target:
+            return False
+
+        affixes = target.get("affixes", [])
+        affix_count = len(affixes) if isinstance(affixes, list) else 0
+        if affix_count <= 0:
+            result["msg"] = "锁定失败：该饰品没有可锁定词条"
+            return False
+
+        indexes, err = _parse_affix_indexes(index_tokens, affix_count)
+        if err:
+            result["msg"] = f"锁定失败：{err}"
+            return False
+
+        q = max(1, min(5, int(target.get("quality", 1))))
+        target_count = _target_affix_count_for_quality(q)
+        current_locked = _normalize_locked_affixes(target, affix_count)
+        new_locked = sorted(set(current_locked + indexes))
+        if len(new_locked) >= target_count:
+            result["msg"] = f"锁定失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练"
+            return False
+
+        _set_locked_affixes(target, new_locked)
+        if w == "bag":
+            doc["bag"][k] = target
+        else:
+            doc["equipped"][k] = target
+
+        need = _wash_stone_need(q, len(new_locked))
+        result["ok"] = True
+        result["msg"] = (
+            f"已锁定：{target.get('name', '未知饰品')}\n"
+            f"锁定词条：{_format_locked_positions(new_locked)}\n"
+            f"下次洗练消耗：{WASH_STONE_NAME}x{need}"
+        )
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    await handle_send(
+        bot, event, result["msg"],
+        md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
+    )
+
+@unlock_accessory_affix.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    parts = args.extract_plain_text().split()
+    if len(parts) < 2:
+        await handle_send(bot, event, "用法：饰品解锁 饰品UID 词条序号/全部\n例如：饰品解锁 acc_1730000000000_1234 1\n或：饰品解锁 acc_1730000000000_1234 全部")
+        return
+
+    uid = parts[0].strip()
+    index_tokens = parts[1:]
+    unlock_all = any(str(token).strip() in {"全部", "全解", "all", "ALL"} for token in index_tokens)
+    user_id = str(user_info["user_id"])
+    result = {"ok": False, "msg": "解锁失败：未找到饰品"}
+
+    def _mut(doc):
+        nonlocal result
+        doc = _normalize_accessory_doc(doc)
+        w, k, target = _find_accessory_anywhere(doc, uid)
+        if not target:
+            return False
+
+        affixes = target.get("affixes", [])
+        affix_count = len(affixes) if isinstance(affixes, list) else 0
+        current_locked = _normalize_locked_affixes(target, affix_count)
+        if not current_locked:
+            result["msg"] = "该饰品当前没有锁定词条"
+            return False
+
+        if unlock_all:
+            new_locked = []
+        else:
+            indexes, err = _parse_affix_indexes(index_tokens, affix_count)
+            if err:
+                result["msg"] = f"解锁失败：{err}"
+                return False
+            remove_set = set(indexes)
+            new_locked = [idx for idx in current_locked if idx not in remove_set]
+
+        _set_locked_affixes(target, new_locked)
+        if w == "bag":
+            doc["bag"][k] = target
+        else:
+            doc["equipped"][k] = target
+
+        q = max(1, min(5, int(target.get("quality", 1))))
+        need = _wash_stone_need(q, len(new_locked))
+        result["ok"] = True
+        result["msg"] = (
+            f"已解锁：{target.get('name', '未知饰品')}\n"
+            f"锁定词条：{_format_locked_positions(new_locked)}\n"
+            f"下次洗练消耗：{WASH_STONE_NAME}x{need}"
+        )
+        return True
+
+    player_data_manager.patch_doc(
+        user_id=user_id,
+        table_name=TABLE,
+        fields=["equipped", "bag"],
+        mutator=_mut,
+        default_factory=_default_accessory_doc
+    )
+
+    await handle_send(
+        bot, event, result["msg"],
+        md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
+    )
+
 @wash_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
@@ -1448,7 +1735,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     q = max(1, min(5, int(target.get("quality", 1))))
-    need = WASH_STONE_COST.get(q, 1)
+    affixes = target.get("affixes", [])
+    affix_count = len(affixes) if isinstance(affixes, list) else 0
+    locked_indexes = _normalize_locked_affixes(target, affix_count)
+    target_count = _target_affix_count_for_quality(q)
+    if len(locked_indexes) >= target_count:
+        await handle_send(bot, event, f"洗练失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练")
+        return
+
+    need = _wash_stone_need(q, len(locked_indexes))
     have = sql_message.goods_num(user_id, WASH_STONE_ID)
 
     if have < need:
@@ -1473,14 +1768,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             return False
 
         q2 = max(1, min(5, int(t.get("quality", 1))))
-        old_cnt = len(t.get("affixes", [])) if isinstance(t.get("affixes", []), list) else 2
-        old_cnt = max(1, min(4, old_cnt))
+        old_affixes = t.get("affixes", [])
+        if not isinstance(old_affixes, list):
+            old_affixes = []
+        locked = _normalize_locked_affixes(t, len(old_affixes))
+        target_cnt = _target_affix_count_for_quality(q2)
+        if len(locked) >= target_cnt:
+            result["msg"] = f"洗练失败：{quality_to_cn(q2)}最多锁定{target_cnt - 1}条，至少保留1条参与洗练"
+            return False
 
         wash_count = int(t.get("wash_count", 0)) + 1
         t["wash_count"] = wash_count
 
         pity_reached = wash_count >= 150
-        t["affixes"] = roll_affixes_with_pity(q2, old_cnt, pity_reached=pity_reached)
+        t["affixes"] = _reroll_affixes_preserving_locked(
+            q2,
+            old_affixes,
+            locked,
+            pity_reached=pity_reached
+        )
+        _set_locked_affixes(t, _normalize_locked_affixes(t, len(t["affixes"])))
 
         if w == "bag":
             doc["bag"][k] = t
@@ -1492,6 +1799,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         result["msg"] = (
             f"洗练完成：{t.get('name','未知饰品')}（{quality_to_cn(q2)}）\n"
             f"消耗{WASH_STONE_NAME}：{need}个\n"
+            f"锁定词条：{_format_locked_positions(locked)}\n"
             f"当前洗练次数：{wash_count}/150 {tip}"
         )
         return True
@@ -1715,6 +2023,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     new_q = old_q + 1
     main_acc["quality"] = new_q
     main_acc["wash_count"] = 0
+    main_acc["affixes"] = _fit_affixes_to_quality(new_q, main_acc.get("affixes", []))
+    _set_locked_affixes(main_acc, _normalize_locked_affixes(main_acc, len(main_acc.get("affixes", []))))
 
     data["equipped"][part] = main_acc
     data["bag"] = bag
@@ -1724,7 +2034,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         bot, event,
         f"升阶成功：{main_acc.get('name', '未知饰品')} {quality_to_cn(old_q)} → {quality_to_cn(new_q)}\n"
         f"消耗材料：{need_cnt}件同阶同款饰品\n"
-        f"当前词条已保留，仅重置洗练次数",
+        f"当前词条已保留，{quality_to_cn(new_q)}词条数为{_target_affix_count_for_quality(new_q)}条，洗练次数已重置",
         md_type="背包",
         k1="我的饰品", v1="我的饰品",
         k2="饰品背包", v2="饰品背包",

@@ -49,7 +49,8 @@
   "wash_rule": {
     "affix_pool": ["气血", "抗暴", "防御", "会心", "会心伤害", "攻击", "速度"],
     "default_affix_count": 2,
-    "max_affix_count": 4,
+    "quality_affix_count": { "1": 2, "2": 2, "3": 2, "4": 3, "5": 3 },
+    "max_affix_count": 3,
     "allow_duplicate_affix": false,
     "value_round": 4
   },
