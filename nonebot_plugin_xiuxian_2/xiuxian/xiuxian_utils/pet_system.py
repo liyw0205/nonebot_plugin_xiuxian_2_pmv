@@ -148,14 +148,16 @@ PET_BREAKTHROUGH_RULES = {
 
 PET_TRAVEL_MIN_HOURS = 1
 PET_TRAVEL_MAX_HOURS = 12
+PET_TRAVEL_HERB_AMOUNT_MULTIPLIER_CAP = 2.5
+PET_TRAVEL_HERB_AMOUNT_PER_ROLL_CAP = 5
 PET_TRAVEL_ITEM_POOLS = {
     "forage": {
         "name": "灵草谷",
         "desc": "采集低阶药材和灵髓，适合稳定补充宠物养成材料。",
         "items": [
-            {"herb_levels": ["一品药材"], "min": 8, "max": 18, "weight": 40},
-            {"herb_levels": ["二品药材"], "min": 6, "max": 14, "weight": 32},
-            {"herb_levels": ["三品药材"], "min": 4, "max": 10, "weight": 18},
+            {"herb_levels": ["一品药材"], "min": 1, "max": 5, "weight": 40},
+            {"herb_levels": ["二品药材"], "min": 1, "max": 4, "weight": 32},
+            {"herb_levels": ["三品药材"], "min": 1, "max": 3, "weight": 18},
         ],
         "pet_egg_drop": {
             "chance_per_4_hours": 0.015,
@@ -179,10 +181,10 @@ PET_TRAVEL_ITEM_POOLS = {
         "name": "妖兽岭",
         "desc": "磨砺宠物并搜寻中阶药材，宠物资源掉落更高。",
         "items": [
-            {"herb_levels": ["三品药材"], "min": 6, "max": 14, "weight": 28},
-            {"herb_levels": ["四品药材"], "min": 5, "max": 12, "weight": 32},
-            {"herb_levels": ["五品药材"], "min": 3, "max": 8, "weight": 24},
-            {"herb_levels": ["六品药材"], "min": 2, "max": 5, "weight": 12, "amount_multiplier_cap": 1.5},
+            {"herb_levels": ["三品药材"], "min": 1, "max": 4, "weight": 28},
+            {"herb_levels": ["四品药材"], "min": 1, "max": 3, "weight": 32},
+            {"herb_levels": ["五品药材"], "min": 1, "max": 2, "weight": 24},
+            {"herb_levels": ["六品药材"], "min": 1, "max": 2, "weight": 12},
         ],
         "pet_egg_drop": {
             "chance_per_4_hours": 0.03,
@@ -209,9 +211,9 @@ PET_TRAVEL_ITEM_POOLS = {
         "desc": "风险更高，可能带回高阶药材和稀有灵宠蛋。",
         "items": [
             {"id": 18076, "min": 1, "max": 1, "weight": 5, "amount_multiplier_cap": 1.0},
-            {"herb_levels": ["七品药材"], "min": 2, "max": 5, "weight": 28, "amount_multiplier_cap": 1.2},
-            {"herb_levels": ["八品药材"], "min": 1, "max": 4, "weight": 30, "amount_multiplier_cap": 1.0},
-            {"herb_levels": ["九品药材"], "min": 1, "max": 3, "weight": 24, "amount_multiplier_cap": 1.0},
+            {"herb_levels": ["七品药材"], "min": 1, "max": 2, "weight": 28},
+            {"herb_levels": ["八品药材"], "min": 1, "max": 2, "weight": 30},
+            {"herb_levels": ["九品药材"], "min": 1, "max": 2, "weight": 24},
         ],
         "pet_egg_drop": {
             "chance_per_4_hours": 0.05,
@@ -1997,8 +1999,6 @@ def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: 
         reward_count += 1
     if duration_hours >= 8:
         reward_count += 1
-    if random.random() < min(0.45, max(0.0, (multiplier - 1.0) * 0.16)):
-        reward_count += 1
 
     rewards_by_id = {}
     for _ in range(reward_count):
@@ -2006,8 +2006,12 @@ def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: 
         amount_min = int(selected.get("min", 1))
         amount_max = int(selected.get("max", amount_min))
         amount = random.randint(amount_min, max(amount_min, amount_max))
-        amount_multiplier = min(multiplier, float(selected.get("amount_multiplier_cap", multiplier)))
+        is_herb_reward = bool(selected.get("herb_levels"))
+        default_cap = PET_TRAVEL_HERB_AMOUNT_MULTIPLIER_CAP if is_herb_reward else multiplier
+        amount_multiplier = min(multiplier, float(selected.get("amount_multiplier_cap", default_cap)))
         amount = max(1, int(amount * amount_multiplier))
+        if is_herb_reward:
+            amount = min(PET_TRAVEL_HERB_AMOUNT_PER_ROLL_CAP, amount)
         item_id = _resolve_travel_reward_item_id(selected)
         if item_id is None:
             continue
