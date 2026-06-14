@@ -25,12 +25,29 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title"><i class="fas fa-coins"></i> 经济流水查询</h2>
-        <p>查看 economy_log 记录，支持分页、时间范围、来源动作过滤和当前筛选汇总。</p>
+        <h2 class="card-title"><i class="fas fa-coins"></i> 经济审计</h2>
+        <p>按当前筛选统计经济产出、消耗、玩家排行和大额变动，底部保留原始流水明细。</p>
+    </div>
+
+    <div class="economy-quick-filter">
+        <a class="quick-filter-link {% if not result.filters.get('preset') and not result.filters.get('start_time') and not result.filters.get('end_time') %}active{% endif %}" href="{{ url_for('economy_logs', page_size=result.page_size) }}">全部</a>
+        {% for key, preset in result.quick_presets.items() %}
+        <a class="quick-filter-link {% if result.filters.get('preset') == key %}active{% endif %}" href="{{ url_for('economy_logs', preset=key, page_size=result.page_size) }}">{{ preset[0] }}</a>
+        {% endfor %}
     </div>
 
     <form class="economy-log-filters" method="get" action="{{ url_for('economy_logs') }}">
         <input type="hidden" name="page" value="1">
+
+        <div class="form-group">
+            <label for="preset">时间范围</label>
+            <select id="preset" name="preset">
+                <option value="">全部/手动</option>
+                {% for key, preset in result.quick_presets.items() %}
+                <option value="{{ key }}" {% if result.filters.get('preset') == key %}selected{% endif %}>{{ preset[0] }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
         <div class="form-group">
             <label for="user_id">用户 ID</label>
@@ -63,6 +80,11 @@
         </div>
 
         <div class="form-group">
+            <label for="trace_id">链路 ID</label>
+            <input id="trace_id" name="trace_id" type="text" value="{{ result.filters.get('trace_id', '') }}" placeholder="交易/奖励链路">
+        </div>
+
+        <div class="form-group">
             <label for="start_time">开始时间</label>
             <input id="start_time" name="start_time" type="text" value="{{ result.filters.get('start_time', '') }}" placeholder="YYYY-MM-DD HH:MM:SS">
         </div>
@@ -76,6 +98,26 @@
             <label for="page_size">每页记录数</label>
             <input id="page_size" name="page_size" type="number" min="1" max="500" value="{{ result.page_size }}">
         </div>
+
+        <div class="form-group">
+            <label for="min_abs_stone_delta">灵石阈值</label>
+            <input id="min_abs_stone_delta" name="min_abs_stone_delta" type="number" min="0" value="{{ result.filters.get('min_abs_stone_delta', '') }}" placeholder="最小绝对变动">
+        </div>
+
+        <div class="form-group">
+            <label for="anomaly_stone_delta">异常阈值</label>
+            <input id="anomaly_stone_delta" name="anomaly_stone_delta" type="number" min="0" value="{{ result.filters.get('anomaly_stone_delta', '') }}" placeholder="默认100000000">
+        </div>
+
+        <label class="economy-check-option">
+            <input name="has_item_delta" type="checkbox" value="1" {% if result.filters.get('has_item_delta') %}checked{% endif %}>
+            <span>只看物品变动</span>
+        </label>
+
+        <label class="economy-check-option">
+            <input name="anomaly_only" type="checkbox" value="1" {% if result.filters.get('anomaly_only') %}checked{% endif %}>
+            <span>只看异常</span>
+        </label>
 
         <div class="form-actions economy-log-actions">
             <button class="btn btn-primary" type="submit">
@@ -106,12 +148,24 @@
 
     <div class="economy-summary-grid">
         <div class="economy-summary-item">
+            <span>记录数</span>
+            <strong>{{ result.summary.records }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>涉及玩家</span>
+            <strong>{{ result.summary.unique_users }}</strong>
+        </div>
+        <div class="economy-summary-item">
             <span>灵石流入</span>
             <strong class="delta-positive">{{ result.summary.stone_in }}</strong>
         </div>
         <div class="economy-summary-item">
             <span>灵石流出</span>
             <strong class="delta-negative">{{ result.summary.stone_out }}</strong>
+        </div>
+        <div class="economy-summary-item">
+            <span>灵石净变化</span>
+            <strong class="{% if result.summary.stone_net > 0 %}delta-positive{% elif result.summary.stone_net < 0 %}delta-negative{% else %}delta-zero{% endif %}">{{ result.summary.stone_net }}</strong>
         </div>
         <div class="economy-summary-item">
             <span>修为变化</span>
@@ -129,7 +183,152 @@
             <span>宗门资材</span>
             <strong>{{ result.summary.sect_materials_total }}</strong>
         </div>
+        <div class="economy-summary-item">
+            <span>物品变动记录</span>
+            <strong>{{ result.summary.item_change_records }}</strong>
+        </div>
     </div>
+
+    <div class="economy-dashboard-grid">
+        <section class="economy-panel">
+            <div class="economy-panel-header">
+                <h3>来源排行</h3>
+                <span>按灵石吞吐</span>
+            </div>
+            <table class="economy-mini-table">
+                <thead>
+                    <tr>
+                        <th>来源/动作</th>
+                        <th>记录</th>
+                        <th>流入</th>
+                        <th>流出</th>
+                        <th>净值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stat in result.source_stats %}
+                    <tr>
+                        <td>
+                            <strong>{{ stat.source or '未标记' }}</strong>
+                            <span>{{ stat.action or '未标记' }}</span>
+                        </td>
+                        <td>{{ stat.records }}</td>
+                        <td class="delta-positive">{{ stat.stone_in }}</td>
+                        <td class="delta-negative">{{ stat.stone_out }}</td>
+                        <td class="{% if stat.stone_net > 0 %}delta-positive{% elif stat.stone_net < 0 %}delta-negative{% else %}delta-zero{% endif %}">{{ stat.stone_net }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="muted-text">暂无数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="economy-panel">
+            <div class="economy-panel-header">
+                <h3>玩家排行</h3>
+                <span>按灵石吞吐</span>
+            </div>
+            <table class="economy-mini-table">
+                <thead>
+                    <tr>
+                        <th>玩家</th>
+                        <th>记录</th>
+                        <th>流入</th>
+                        <th>流出</th>
+                        <th>净值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stat in result.user_stats %}
+                    <tr>
+                        <td>
+                            <strong>{{ stat.user_name or stat.user_id }}</strong>
+                            <span>{{ stat.user_id }}</span>
+                        </td>
+                        <td>{{ stat.records }}</td>
+                        <td class="delta-positive">{{ stat.stone_in }}</td>
+                        <td class="delta-negative">{{ stat.stone_out }}</td>
+                        <td class="{% if stat.stone_net > 0 %}delta-positive{% elif stat.stone_net < 0 %}delta-negative{% else %}delta-zero{% endif %}">{{ stat.stone_net }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="muted-text">暂无数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="economy-panel">
+            <div class="economy-panel-header">
+                <h3>宗门排行</h3>
+                <span>按灵石吞吐</span>
+            </div>
+            <table class="economy-mini-table">
+                <thead>
+                    <tr>
+                        <th>宗门</th>
+                        <th>记录</th>
+                        <th>流入</th>
+                        <th>流出</th>
+                        <th>净值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stat in result.sect_stats %}
+                    <tr>
+                        <td>
+                            <strong>{{ stat.sect_name or stat.sect_id }}</strong>
+                            <span>{{ stat.sect_id }}</span>
+                        </td>
+                        <td>{{ stat.records }}</td>
+                        <td class="delta-positive">{{ stat.stone_in }}</td>
+                        <td class="delta-negative">{{ stat.stone_out }}</td>
+                        <td class="{% if stat.stone_net > 0 %}delta-positive{% elif stat.stone_net < 0 %}delta-negative{% else %}delta-zero{% endif %}">{{ stat.stone_net }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="muted-text">暂无数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <section class="economy-panel economy-large-panel">
+        <div class="economy-panel-header">
+            <h3>大额变动</h3>
+            <span>当前筛选内按灵石绝对值排序</span>
+        </div>
+        <div class="economy-mini-table-wrap">
+            <table class="economy-mini-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>时间</th>
+                        <th>用户</th>
+                        <th>来源</th>
+                        <th>动作</th>
+                        <th>灵石</th>
+                        <th>链路</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in result.large_rows %}
+                    <tr>
+                        <td>{{ row.get('id', '') }}</td>
+                        <td class="text-nowrap">{{ row.get('created_at', '') }}</td>
+                        <td>{{ row.get('user_id') or '' }}</td>
+                        <td>{{ row.get('source', '') }}</td>
+                        <td>{{ row.get('action', '') }}</td>
+                        {{ delta_cell(row.get('stone_delta', 0), row.get('stone_delta_class', '')) }}
+                        <td>{{ row.get('trace_id') or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="muted-text">暂无数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 
     <div class="economy-log-meta">
         共 {{ result.total }} 条记录，当前第 {{ result.page }} / {{ result.total_pages }} 页，本页 {{ result.rows|length }} 条。
@@ -168,6 +367,7 @@
                     <th>贡献</th>
                     <th>宗门建设</th>
                     <th>资材</th>
+                    <th>链路 ID</th>
                     <th>物品变动</th>
                     <th>详情</th>
                 </tr>
@@ -186,12 +386,13 @@
                     {{ delta_cell(row.get('sect_contribution_delta', 0), row.get('sect_contribution_delta_class', '')) }}
                     {{ delta_cell(row.get('sect_scale_delta', 0), row.get('sect_scale_delta_class', '')) }}
                     {{ delta_cell(row.get('sect_materials_delta', 0), row.get('sect_materials_delta_class', '')) }}
+                    <td>{{ row.get('trace_id') or '' }}</td>
                     {{ json_cell(row.item_delta_json, 'item-delta-' ~ loop.index) }}
                     {{ json_cell(row.detail_json, 'detail-' ~ loop.index) }}
                 </tr>
                 {% else %}
                 <tr>
-                    <td class="empty-cell" colspan="13">
+                    <td class="empty-cell" colspan="14">
                         <i class="fas fa-inbox"></i>
                         <span>暂无经济流水记录</span>
                     </td>
@@ -203,11 +404,51 @@
 </div>
 
 <style>
+.economy-quick-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 16px;
+}
+
+.quick-filter-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    background: var(--card-bg);
+}
+
+.quick-filter-link.active,
+.quick-filter-link:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: rgba(18, 183, 245, 0.08);
+}
+
 .economy-log-filters {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 12px;
     align-items: end;
+}
+
+.economy-check-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+}
+
+.economy-check-option input {
+    width: 16px;
+    height: 16px;
 }
 
 .economy-log-actions {
@@ -263,6 +504,83 @@
     font-size: 1rem;
 }
 
+.economy-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.economy-panel {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--card-bg);
+    overflow: hidden;
+}
+
+.economy-large-panel {
+    margin-top: 12px;
+}
+
+.economy-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.economy-panel-header h3 {
+    margin: 0;
+    font-size: 0.98rem;
+}
+
+.economy-panel-header span {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.economy-mini-table-wrap {
+    overflow: auto;
+}
+
+.economy-mini-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.economy-mini-table th,
+.economy-mini-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    font-size: 0.86rem;
+    vertical-align: top;
+}
+
+.economy-mini-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.economy-mini-table td strong {
+    display: block;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.economy-mini-table td span {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    word-break: break-all;
+}
+
 .economy-log-meta {
     margin-top: 14px;
     color: var(--text-secondary);
@@ -282,7 +600,7 @@
 
 .economy-log-table {
     width: 100%;
-    min-width: 1280px;
+    min-width: 1360px;
     border-collapse: collapse;
     background: var(--card-bg);
 }
@@ -386,6 +704,12 @@
 @media (max-width: 768px) {
     .economy-log-actions {
         grid-column: 1 / -1;
+    }
+
+    .economy-panel-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
     }
 }
 </style>

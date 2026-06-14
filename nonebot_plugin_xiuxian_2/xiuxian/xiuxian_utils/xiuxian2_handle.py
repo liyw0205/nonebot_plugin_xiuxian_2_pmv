@@ -100,6 +100,7 @@ class XiuxianDateManage:
                 self.conn.close()
                 self.conn = None
                 logger.opt(colors=True).info(f"<green>修仙数据库关闭！</green>")
+            self._clear_read_cache()
         while hasattr(self, "_fast_conn_pool"):
             try:
                 conn = self._fast_conn_pool.get_nowait()
@@ -109,6 +110,37 @@ class XiuxianDateManage:
                 conn.close()
             except Exception:
                 pass
+        if hasattr(self, "_fast_conn_lock"):
+            with self._fast_conn_lock:
+                self._fast_conn_count = 0
+
+    def reconnect(self):
+        """恢复数据库文件后重建当前单例持有的 SQLite 连接。"""
+        with self._conn_lock:
+            if getattr(self, "conn", None):
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+                self.conn = None
+            self._clear_read_cache()
+
+            while hasattr(self, "_fast_conn_pool"):
+                try:
+                    conn = self._fast_conn_pool.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if hasattr(self, "_fast_conn_lock"):
+                with self._fast_conn_lock:
+                    self._fast_conn_count = 0
+
+            self.conn = db_backend.connect(self.database_path, check_same_thread=False)
+            self._check_data()
+            logger.opt(colors=True).info(f"<green>修仙数据库已重连！</green>")
 
     def _check_data(self):
         """检查数据完整性"""
@@ -757,7 +789,10 @@ class XiuxianDateManage:
 
             if key == 1:
                 cur.execute("SELECT user_stamina FROM user_xiuxian WHERE user_id=%s", (user_id,))
-                current_stamina = cur.fetchone()[0]
+                row = cur.fetchone()
+                if not row:
+                    return
+                current_stamina = int(row[0] or 0)
                 new_stamina = min(current_stamina + stamina_change, max_stamina)
                 if current_stamina < max_stamina:
                     sql = "UPDATE user_xiuxian SET user_stamina=%s WHERE user_id=%s"
@@ -1062,20 +1097,101 @@ class XiuxianDateManage:
             cur.execute(sql, (root_rate, level[UserMessage['level']]["spend"], user_id))
             self._commit_write()
 
-    def update_ls(self, user_id, price, key):
+    def _safe_log_economy_context(
+        self,
+        log_context,
+        *,
+        user_id=None,
+        default_action="",
+        stone_delta=0,
+        exp_delta=0,
+        sect_contribution_delta=0,
+        sect_scale_delta=0,
+        sect_materials_delta=0,
+        item_delta=None,
+        detail=None,
+    ):
+        """按调用方提供的上下文写经济流水；未提供来源/动作时不记录。"""
+        if not log_context:
+            return 0
+        if isinstance(log_context, str):
+            log_context = {"source": log_context}
+        if not isinstance(log_context, dict):
+            return 0
+
+        source = str(log_context.get("source") or "").strip()
+        action = str(log_context.get("action") or default_action or "").strip()
+        if not source or not action:
+            return 0
+
+        merged_detail = {}
+        if isinstance(detail, dict):
+            merged_detail.update(detail)
+        context_detail = log_context.get("detail")
+        if isinstance(context_detail, dict):
+            merged_detail.update(context_detail)
+        elif context_detail not in (None, ""):
+            merged_detail["context_detail"] = str(context_detail)
+
+        try:
+            from .economy_log import safe_log_economy_change
+
+            return safe_log_economy_change(
+                user_id=log_context.get("user_id", user_id),
+                sect_id=log_context.get("sect_id"),
+                source=source,
+                action=action,
+                stone_delta=stone_delta,
+                exp_delta=exp_delta,
+                sect_contribution_delta=sect_contribution_delta,
+                sect_scale_delta=sect_scale_delta,
+                sect_materials_delta=sect_materials_delta,
+                item_delta=item_delta,
+                detail=merged_detail,
+                trace_id=log_context.get("trace_id"),
+            )
+        except Exception as exc:
+            logger.warning(f"记录经济流水失败：{exc}")
+            return 0
+
+    def update_ls(self, user_id, price, key, log_context=None):
         """更新灵石 1增加 2减少"""
         with self._conn_lock:
             cur = self.conn.cursor()
             price = abs(int(price))
+            current_stone = None
+            stone_delta = 0
+            if log_context:
+                cur.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (user_id,))
+                row = cur.fetchone()
+                if row:
+                    current_stone = int(row[0] or 0)
             if key == 1:
                 sql = "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s"
                 cur.execute(sql, (price, user_id))
+                if cur.rowcount > 0:
+                    stone_delta = price
             elif key == 2:
                 sql = "UPDATE user_xiuxian SET stone=GREATEST(stone-%s, 0) WHERE user_id=%s"
                 cur.execute(sql, (price, user_id))
+                if cur.rowcount > 0:
+                    stone_delta = -min(current_stone if current_stone is not None else price, price)
             self._commit_write()
+            if log_context and stone_delta:
+                self._safe_log_economy_context(
+                    log_context,
+                    user_id=user_id,
+                    default_action="stone_add" if key == 1 else "stone_cost",
+                    stone_delta=stone_delta,
+                    detail={
+                        "asset": "stone",
+                        "method": "update_ls",
+                        "key": key,
+                        "requested_amount": price,
+                    },
+                )
 
-    def try_update_ls(self, user_id, price, key):
+    def try_update_ls(self, user_id, price, key, log_context=None):
         """更新灵石并返回是否成功；扣减时要求余额足够。"""
         with self._conn_lock:
             cur = self.conn.cursor()
@@ -1092,6 +1208,19 @@ class XiuxianDateManage:
                 return False
             success = cur.rowcount > 0
             self._commit_write()
+            if log_context and success:
+                self._safe_log_economy_context(
+                    log_context,
+                    user_id=user_id,
+                    default_action="stone_add" if key == 1 else "stone_cost",
+                    stone_delta=price if key == 1 else -price,
+                    detail={
+                        "asset": "stone",
+                        "method": "try_update_ls",
+                        "key": key,
+                        "requested_amount": price,
+                    },
+                )
             return success
 
     def update_exp(self, user_id, exp):
@@ -2144,7 +2273,7 @@ class XiuxianDateManage:
             cur.execute(sql, (work_num, user_id,))
             self._commit_write()
 
-    def send_back(self, user_id, goods_id, goods_name, goods_type, goods_num, bind_flag=0):
+    def send_back(self, user_id, goods_id, goods_name, goods_type, goods_num, bind_flag=0, log_context=None):
         """插入物品至背包"""
         with self._conn_lock:
             now_time = datetime.now()
@@ -2152,6 +2281,19 @@ class XiuxianDateManage:
             goods_num = min(abs(int(goods_num)), max_goods_num)
             bind_flag = 1 if int(bind_flag) == 1 else 0
             bind_num = goods_num if bind_flag == 1 else 0
+            user_id = str(user_id)
+            goods_id = int(goods_id)
+
+            actual_add = goods_num
+            if log_context:
+                cur = self.conn.cursor()
+                cur.execute(
+                    "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                    (user_id, goods_id),
+                )
+                row = cur.fetchone()
+                current_num = int(row[0] or 0) if row else 0
+                actual_add = min(goods_num, max(max_goods_num - current_num, 0))
 
             sql = """
                 INSERT INTO back (
@@ -2182,14 +2324,34 @@ class XiuxianDateManage:
             cur.execute(
                 sql,
                 (
-                    str(user_id), int(goods_id), goods_name, goods_type, goods_num,
+                    user_id, goods_id, goods_name, goods_type, goods_num,
                     now_time, now_time, bind_num,
                     max_goods_num, bind_flag, max_goods_num, max_goods_num, max_goods_num,
                 ),
             )
             self._commit_write()
+            if log_context and actual_add > 0:
+                self._safe_log_economy_context(
+                    log_context,
+                    user_id=user_id,
+                    default_action="item_add",
+                    item_delta=[
+                        {
+                            "id": goods_id,
+                            "name": goods_name,
+                            "type": goods_type,
+                            "amount": actual_add,
+                            "bind_flag": bind_flag,
+                        }
+                    ],
+                    detail={
+                        "asset": "item",
+                        "method": "send_back",
+                        "requested_amount": goods_num,
+                    },
+                )
 
-    def update_back_j(self, user_id, goods_id, num=1, use_key=0):
+    def update_back_j(self, user_id, goods_id, num=1, use_key=0, log_context=None):
         """使用物品"""
         with self._conn_lock:
             num = abs(int(num))
@@ -2199,6 +2361,20 @@ class XiuxianDateManage:
                 return
 
             now_time = datetime.now()
+            actual_cost = 0
+            goods_name = ""
+            goods_type = ""
+            if log_context:
+                cur = self.conn.cursor()
+                cur.execute(
+                    "SELECT goods_name, goods_type, goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                    (user_id, goods_id),
+                )
+                row = cur.fetchone()
+                if row:
+                    goods_name = row[0] or ""
+                    goods_type = row[1] or ""
+                    actual_cost = min(int(row[2] or 0), num)
             sql_str = """
                 UPDATE back
                 SET update_time=%s,
@@ -2239,8 +2415,28 @@ class XiuxianDateManage:
                 ),
             )
             self._commit_write()
+            if log_context and actual_cost > 0:
+                self._safe_log_economy_context(
+                    log_context,
+                    user_id=user_id,
+                    default_action="item_cost",
+                    item_delta=[
+                        {
+                            "id": goods_id,
+                            "name": goods_name,
+                            "type": goods_type,
+                            "amount": -actual_cost,
+                            "use_key": int(use_key),
+                        }
+                    ],
+                    detail={
+                        "asset": "item",
+                        "method": "update_back_j",
+                        "requested_amount": num,
+                    },
+                )
 
-    def spend_stone_and_consume_trade_items(self, user_id, stone_cost=0, consume_items=None):
+    def spend_stone_and_consume_trade_items(self, user_id, stone_cost=0, consume_items=None, log_context=None):
         """原子扣除灵石和可交易物品，失败时不改变数据。"""
         user_id = str(user_id)
         stone_cost = abs(int(stone_cost or 0))
@@ -2260,6 +2456,19 @@ class XiuxianDateManage:
         with self._business_lock, self._conn_lock:
             cur = self.conn.cursor()
             try:
+                item_log_info = {}
+                if log_context and normalized_items:
+                    for goods_id in normalized_items:
+                        cur.execute(
+                            "SELECT goods_name, goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                            (user_id, goods_id),
+                        )
+                        row = cur.fetchone()
+                        item_log_info[goods_id] = {
+                            "name": row[0] if row else "",
+                            "type": row[1] if row else "",
+                        }
+
                 if stone_cost > 0:
                     cur.execute(
                         "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND COALESCE(stone, 0) >= %s",
@@ -2288,6 +2497,30 @@ class XiuxianDateManage:
                         return False
 
                 self._commit_write()
+                if log_context:
+                    item_delta = []
+                    for goods_id, num in normalized_items.items():
+                        item_info = item_log_info.get(goods_id, {})
+                        item_delta.append(
+                            {
+                                "id": goods_id,
+                                "name": item_info.get("name", ""),
+                                "type": item_info.get("type", ""),
+                                "amount": -num,
+                            }
+                        )
+                    self._safe_log_economy_context(
+                        log_context,
+                        user_id=user_id,
+                        default_action="trade_consume",
+                        stone_delta=-stone_cost,
+                        item_delta=item_delta,
+                        detail={
+                            "asset": "stone_and_trade_item",
+                            "method": "spend_stone_and_consume_trade_items",
+                            "stone_cost": stone_cost,
+                        },
+                    )
                 return True
             except Exception:
                 self.conn.rollback()
@@ -3336,6 +3569,19 @@ class TradeDataManager:
                 self.conn = None
                 logger.opt(colors=True).info("<green>trade数据库关闭！</green>")
 
+    def reconnect(self):
+        """恢复 trade.db 后重建当前单例持有的连接。"""
+        with self._conn_lock:
+            if getattr(self, "conn", None):
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+                self.conn = None
+            self.conn = db_backend.connect(self.trade_db_path, check_same_thread=False)
+            self._check_data()
+            logger.opt(colors=True).info("<green>trade数据库已重连！</green>")
+
 # 这里是Player部分
 class PlayerDataManager:
     global player_num
@@ -3717,6 +3963,20 @@ class PlayerDataManager:
                 self.conn.close()
                 self.conn = None
                 logger.opt(colors=True).info(f"<green>player数据库已关闭！</green>")
+
+    def reconnect(self):
+        """恢复 player.db 后重建当前单例持有的连接。"""
+        with self._conn_lock:
+            if getattr(self, "conn", None):
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+                self.conn = None
+            self.conn = db_backend.connect(self.database_path, check_same_thread=False)
+            self._ensured_tables.clear()
+            self._ensured_fields.clear()
+            logger.opt(colors=True).info(f"<green>player数据库已重连！</green>")
     
 # 这里是虚神界部分
 class XIUXIAN_IMPART_BUFF:
@@ -3766,6 +4026,19 @@ class XIUXIAN_IMPART_BUFF:
                 self.conn.close()
                 self.conn = None
                 logger.opt(colors=True).info(f"<green>xiuxian_impart数据库关闭!</green>")
+
+    def reconnect(self):
+        """恢复 xiuxian_impart.db 后重建当前单例持有的连接。"""
+        with self._conn_lock:
+            if getattr(self, "conn", None):
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+                self.conn = None
+            self.conn = db_backend.connect(self.db_file, check_same_thread=False)
+            self._check_data()
+            logger.opt(colors=True).info(f"<green>xiuxian_impart数据库已重连!</green>")
 
     def _commit_write(self, conn=None):
         (conn or self.conn).commit()

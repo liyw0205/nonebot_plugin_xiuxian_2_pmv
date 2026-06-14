@@ -204,6 +204,7 @@ class RewardService:
             sect_materials_delta=granted["sect_materials"],
             item_delta=granted["items"],
             detail={"source": source, **dict(meta.get("detail") or {})},
+            trace_id=meta.get("trace_id"),
         )
 
         return {

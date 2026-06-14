@@ -68,6 +68,16 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
+
+def _admin_economy_context(event, action: str, **detail):
+    operator_id = str(get_user_id(event))
+    return {
+        "source": "admin",
+        "action": action,
+        "trace_id": f"admin:{action}:{operator_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
+        "detail": {"operator_id": operator_id, **detail},
+    }
+
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
 adjust_exp_command = on_command("修为调整", permission=SUPERUSER, priority=10, block=True)
 gmm_command = on_command("轮回力量", permission=SUPERUSER, priority=10, block=True)
@@ -290,7 +300,16 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 pass
     else:  # 单人
         key = 1 if amount > 0 else 2
-        sql_message.update_ls(user_id, abs(amount), key)
+        sql_message.update_ls(
+            user_id,
+            abs(amount),
+            key,
+            log_context=_admin_economy_context(
+                event,
+                "admin_stone_add" if amount > 0 else "admin_stone_cost",
+                target_name=target_name,
+            ),
+        )
         action = "赠送" if amount > 0 else "扣除"
         msg = f"成功{action}{number_to(abs(amount))}枚灵石给 {target_name} 道友！"
         await handle_send(bot, event, msg)
@@ -605,6 +624,13 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await cz.finish()
 
         success_count = 0
+        log_context = _admin_economy_context(
+            event,
+            "admin_item_add_all",
+            item_id=goods_id,
+            item_name=item_info["name"],
+            target="all",
+        )
 
         for uid in all_users:
             try:
@@ -614,7 +640,14 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                     for _ in range(quantity):
                         add_accessory_to_bag(uid_str, goods_id, quality)
                 else:
-                    sql_message.send_back(uid_str, goods_id, item_info["name"], goods_type, quantity)
+                    sql_message.send_back(
+                        uid_str,
+                        goods_id,
+                        item_info["name"],
+                        goods_type,
+                        quantity,
+                        log_context=log_context,
+                    )
 
                 success_count += 1
             except Exception as e:
@@ -642,7 +675,20 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 add_accessory_to_bag(user_id, goods_id, quality)
             msg = f"成功向 {target} 发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
         else:
-            sql_message.send_back(user_id, goods_id, item_info["name"], goods_type, quantity)
+            sql_message.send_back(
+                user_id,
+                goods_id,
+                item_info["name"],
+                goods_type,
+                quantity,
+                log_context=_admin_economy_context(
+                    event,
+                    "admin_item_add",
+                    item_id=goods_id,
+                    item_name=item_info["name"],
+                    target_name=target,
+                ),
+            )
             msg = f"成功向 {target} 发放 {item_info['name']} x{quantity}"
 
         await handle_send(bot, event, msg)
@@ -661,7 +707,20 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             add_accessory_to_bag(self_user_id, goods_id, quality)
         msg = f"成功向您发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
     else:
-        sql_message.send_back(self_user_id, goods_id, item_info["name"], goods_type, quantity)
+        sql_message.send_back(
+            self_user_id,
+            goods_id,
+            item_info["name"],
+            goods_type,
+            quantity,
+            log_context=_admin_economy_context(
+                event,
+                "admin_item_add",
+                item_id=goods_id,
+                item_name=item_info["name"],
+                target="self",
+            ),
+        )
         msg = f"成功向您发放 {item_info['name']} x{quantity}"
 
     await handle_send(bot, event, msg)
@@ -758,6 +817,13 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
         success_user_count = 0
         total_removed = 0
+        log_context = _admin_economy_context(
+            event,
+            "admin_item_cost_all",
+            item_id=goods_id,
+            item_name=item_info["name"],
+            target="all",
+        )
 
         for uid in all_users:
             uid_str = str(uid)
@@ -772,7 +838,12 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                     have = sql_message.goods_num(uid_str, goods_id)
                     if have > 0:
                         deduct = min(quantity, have)
-                        sql_message.update_back_j(uid_str, goods_id, num=deduct)
+                        sql_message.update_back_j(
+                            uid_str,
+                            goods_id,
+                            num=deduct,
+                            log_context=log_context,
+                        )
                         success_user_count += 1
                         total_removed += deduct
             except Exception as e:
@@ -814,7 +885,18 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 await hmll.finish()
 
             deduct = min(quantity, have)
-            sql_message.update_back_j(user_id, goods_id, num=deduct)
+            sql_message.update_back_j(
+                user_id,
+                goods_id,
+                num=deduct,
+                log_context=_admin_economy_context(
+                    event,
+                    "admin_item_cost",
+                    item_id=goods_id,
+                    item_name=item_info["name"],
+                    target_name=target,
+                ),
+            )
             msg = f"成功从 {target} 扣除 {item_info['name']} x{deduct}"
             if deduct < quantity:
                 msg += "（数量不足，已按实际可扣执行）"
@@ -847,7 +929,18 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await hmll.finish()
 
         deduct = min(quantity, have)
-        sql_message.update_back_j(self_user_id, goods_id, num=deduct)
+        sql_message.update_back_j(
+            self_user_id,
+            goods_id,
+            num=deduct,
+            log_context=_admin_economy_context(
+                event,
+                "admin_item_cost",
+                item_id=goods_id,
+                item_name=item_info["name"],
+                target="self",
+            ),
+        )
         msg = f"成功从您这里扣除 {item_info['name']} x{deduct}"
         if deduct < quantity:
             msg += "（数量不足，已按实际可扣执行）"

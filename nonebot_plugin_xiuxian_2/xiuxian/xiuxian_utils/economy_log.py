@@ -55,10 +55,13 @@ def ensure_economy_log_table() -> None:
                 sect_materials_delta INTEGER NOT NULL DEFAULT 0,
                 item_delta TEXT NOT NULL DEFAULT '[]',
                 detail TEXT NOT NULL DEFAULT '{}',
+                trace_id TEXT,
                 created_at TEXT NOT NULL
             )
             """
         )
+        if not sql_message.conn.column_exists("economy_log", "trace_id"):
+            cur.execute("ALTER TABLE economy_log ADD COLUMN trace_id TEXT")
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_economy_log_user_time "
             "ON economy_log(user_id, created_at)"
@@ -70,6 +73,10 @@ def ensure_economy_log_table() -> None:
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_economy_log_source_action "
             "ON economy_log(source, action)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_economy_log_trace_id "
+            "ON economy_log(trace_id)"
         )
         sql_message._commit_write()
 
@@ -87,6 +94,7 @@ def log_economy_change(
     sect_materials_delta: int = 0,
     item_delta: list[dict[str, Any]] | dict[str, Any] | None = None,
     detail: dict[str, Any] | None = None,
+    trace_id: str | int | None = None,
     created_at: datetime | str | None = None,
 ) -> int:
     ensure_economy_log_table()
@@ -104,9 +112,9 @@ def log_economy_change(
                 user_id, sect_id, source, action,
                 stone_delta, exp_delta, sect_contribution_delta,
                 sect_scale_delta, sect_materials_delta,
-                item_delta, detail, created_at
+                item_delta, detail, trace_id, created_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 user_id_text,
@@ -120,6 +128,7 @@ def log_economy_change(
                 _to_int(sect_materials_delta),
                 item_delta_text,
                 detail_text,
+                None if trace_id in (None, "") else str(trace_id),
                 _normalize_time(created_at),
             ),
         )

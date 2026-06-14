@@ -238,6 +238,7 @@ def record_game_event(
             source=str(meta.get("source") or event_key),
             action=str(meta.get("action") or "event"),
             detail={"event_key": event_key, "amount": amount, **dict(meta.get("detail") or {})},
+            trace_id=meta.get("trace_id"),
             **economy_delta,
         )
 
