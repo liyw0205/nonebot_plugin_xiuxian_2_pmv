@@ -5,12 +5,15 @@ import tarfile
 import wget
 import json
 import requests
+import sqlite3
+import subprocess
 from urllib.parse import quote
 import tempfile
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from nonebot.log import logger
+from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
 
 def download_xiuxian_data():
@@ -376,6 +379,11 @@ class UpdateManager:
             if item.is_dir():
                 self._merge_directories(item, target_item)
             else:
+                if self._is_sqlite_sidecar_name(item.name):
+                    continue
+                if item.name in self._sqlite_db_names():
+                    self._restore_sqlite_file(item, target_item, item.name)
+                    continue
                 target_item.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, target_item)
 
@@ -1268,7 +1276,13 @@ class UpdateManager:
             self._restore_files_from_backup(temp_dir)
             shutil.rmtree(temp_dir)
 
-            if any(name in names or f"data/xiuxian/{name}" in names for name in self._sqlite_db_names()):
+            restored_dbs = [
+                name
+                for name in self._sqlite_db_names()
+                if name in names or f"data/xiuxian/{name}" in names
+            ]
+            if restored_dbs:
+                self._reload_restored_database_handles(restored_dbs)
                 self._compact_pet_storage_after_database_restore()
 
             version_match = re.search(r'backup_.*_(v?[\d.]+)\.zip', backup_filename)
@@ -1303,6 +1317,367 @@ class UpdateManager:
     def _sqlite_db_names(self):
         return ["xiuxian.db", "xiuxian_impart.db", "player.db", "trade.db"]
 
+    def _validate_sqlite_file(self, db_path: Path):
+        """校验 SQLite 文件可读，避免把损坏库恢复到线上。"""
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            row = conn.execute("PRAGMA quick_check").fetchone()
+            if row and str(row[0]).lower() == "ok":
+                return True, ""
+            return False, f"quick_check={row[0] if row else '无结果'}"
+        except sqlite3.DatabaseError as e:
+            return False, str(e)
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def _sqlite_sidecar_paths(self, db_path: Path):
+        return [db_path.with_name(f"{db_path.name}-wal"), db_path.with_name(f"{db_path.name}-shm")]
+
+    def _is_sqlite_sidecar_name(self, filename: str) -> bool:
+        return any(
+            filename == f"{db_name}-wal" or filename == f"{db_name}-shm"
+            for db_name in self._sqlite_db_names()
+        )
+
+    def _remove_sqlite_sidecars(self, db_path: Path):
+        for sidecar in self._sqlite_sidecar_paths(db_path):
+            try:
+                if sidecar.exists():
+                    sidecar.unlink()
+            except Exception as e:
+                logger.warning(f"[DB恢复] 清理 WAL 边车失败 {sidecar}: {e}")
+
+    def _copy_salvage_table_rows(self, src_conn, dst_conn, table_name: str, columns: list[str]):
+        q_table = db_backend.quote_ident(table_name)
+        col_sql = ", ".join(db_backend.quote_ident(col) for col in columns)
+        insert_sql = (
+            f"INSERT OR IGNORE INTO {q_table} "
+            f"({col_sql}) VALUES ({', '.join(['?'] * len(columns))})"
+        )
+
+        def insert_rows(rows):
+            rows = list(rows)
+            if not rows:
+                return 0
+            before = dst_conn.total_changes
+            dst_conn.executemany(insert_sql, ([row[col] for col in columns] for row in rows))
+            return dst_conn.total_changes - before
+
+        try:
+            return insert_rows(src_conn.execute(f"SELECT {col_sql} FROM {q_table}").fetchall()), 0
+        except Exception:
+            pass
+
+        try:
+            row = src_conn.execute(f"SELECT min(rowid), max(rowid) FROM {q_table}").fetchone()
+            min_rowid, max_rowid = row[0], row[1]
+        except Exception as e:
+            logger.warning(f"[DB恢复] {table_name} 无法按 rowid 抢救: {e}")
+            return 0, 1
+
+        if min_rowid is None or max_rowid is None:
+            return 0, 0
+
+        def copy_range(start: int, end: int):
+            try:
+                rows = src_conn.execute(
+                    f"SELECT {col_sql} FROM {q_table} WHERE rowid BETWEEN ? AND ? ORDER BY rowid",
+                    (start, end),
+                ).fetchall()
+                return insert_rows(rows), 0
+            except Exception:
+                if start == end:
+                    return 0, 1
+                mid = (start + end) // 2
+                left_count, left_skipped = copy_range(start, mid)
+                right_count, right_skipped = copy_range(mid + 1, end)
+                return left_count + right_count, left_skipped + right_skipped
+
+        copied = 0
+        skipped = 0
+        chunk_size = 512
+        current = int(min_rowid)
+        max_rowid = int(max_rowid)
+        while current <= max_rowid:
+            end = min(current + chunk_size - 1, max_rowid)
+            chunk_copied, chunk_skipped = copy_range(current, end)
+            copied += chunk_copied
+            skipped += chunk_skipped
+            current = end + 1
+        return copied, skipped
+
+    def _python_salvage_sqlite_db(self, src_path: Path, dst_path: Path):
+        """纯 Python 逐表抢救：用于 sqlite3 CLI 不可用或 .recover 失败时。"""
+        src_conn = None
+        dst_conn = None
+        temp_dir = Path(tempfile.mkdtemp())
+        temp_db = temp_dir / dst_path.name
+        table_stats = []
+        failed_objects = []
+        try:
+            src_conn = sqlite3.connect(src_path, timeout=30)
+            src_conn.row_factory = sqlite3.Row
+            dst_conn = sqlite3.connect(temp_db, timeout=30)
+            dst_conn.execute("PRAGMA journal_mode=DELETE")
+            dst_conn.execute("PRAGMA synchronous=OFF")
+            dst_conn.execute("PRAGMA foreign_keys=OFF")
+
+            objects = src_conn.execute(
+                """
+                SELECT type, name, tbl_name, sql
+                FROM sqlite_master
+                WHERE sql IS NOT NULL
+                ORDER BY CASE type
+                    WHEN 'table' THEN 0
+                    WHEN 'index' THEN 1
+                    WHEN 'trigger' THEN 2
+                    WHEN 'view' THEN 3
+                    ELSE 4
+                END, name
+                """
+            ).fetchall()
+
+            tables = []
+            deferred_objects = []
+            for row in objects:
+                obj_type = row["type"]
+                name = row["name"]
+                sql = row["sql"]
+                if obj_type == "table":
+                    if str(name).startswith("sqlite_"):
+                        continue
+                    dst_conn.execute(sql)
+                    tables.append(str(name))
+                else:
+                    deferred_objects.append((obj_type, str(name), sql))
+            dst_conn.commit()
+
+            for table_name in tables:
+                try:
+                    columns = [
+                        row[1]
+                        for row in src_conn.execute(
+                            f"PRAGMA table_info({db_backend.quote_ident(table_name)})"
+                        ).fetchall()
+                    ]
+                    copied, skipped = self._copy_salvage_table_rows(src_conn, dst_conn, table_name, columns)
+                    table_stats.append((table_name, copied, skipped))
+                    if skipped:
+                        logger.warning(f"[DB恢复] {src_path.name}.{table_name} 抢救跳过疑似坏行/空洞 {skipped} 个")
+                    dst_conn.commit()
+                except Exception as e:
+                    failed_objects.append(f"table {table_name}: {e}")
+                    logger.warning(f"[DB恢复] {src_path.name}.{table_name} 抢救失败: {e}")
+
+            for obj_type, name, sql in deferred_objects:
+                try:
+                    dst_conn.execute(sql)
+                except Exception as e:
+                    failed_objects.append(f"{obj_type} {name}: {e}")
+                    logger.warning(f"[DB恢复] 重建 {obj_type} {name} 失败，已跳过: {e}")
+            dst_conn.commit()
+
+            ok, msg = self._validate_sqlite_file(temp_db)
+            if not ok:
+                return False, f"Python 抢救后校验失败: {msg}"
+
+            if dst_conn is not None:
+                dst_conn.close()
+                dst_conn = None
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(temp_db, dst_path)
+
+            skipped_summary = {
+                table: skipped
+                for table, _copied, skipped in table_stats
+                if skipped
+            }
+            if skipped_summary:
+                logger.warning(f"[DB恢复] {src_path.name} 抢救完成但有不可读行/空洞: {skipped_summary}")
+            if failed_objects:
+                logger.warning(f"[DB恢复] {src_path.name} 抢救时跳过对象: {'; '.join(failed_objects)}")
+            return True, ""
+        except Exception as e:
+            return False, f"Python 抢救失败: {e}"
+        finally:
+            if dst_conn is not None:
+                dst_conn.close()
+            if src_conn is not None:
+                src_conn.close()
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _recover_sqlite_db(self, src_path: Path, dst_path: Path):
+        """使用 sqlite3 CLI 的 .recover 尽量抢救损坏库。"""
+        sqlite_bin = shutil.which("sqlite3")
+        if not sqlite_bin:
+            logger.warning("[DB恢复] 未找到 sqlite3 命令，改用 Python 逐表抢救")
+            return self._python_salvage_sqlite_db(src_path, dst_path)
+
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            sql_path = temp_dir / "recover.sql"
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            dst_path.unlink(missing_ok=True)
+
+            recover_errors = []
+            for recover_cmd in (".recover --ignore-freelist", ".recover"):
+                with open(sql_path, "w", encoding="utf-8") as sql_file:
+                    result = subprocess.run(
+                        [sqlite_bin, str(src_path), recover_cmd],
+                        stdout=sql_file,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=300,
+                    )
+                if sql_path.exists() and sql_path.stat().st_size > 0:
+                    break
+                recover_errors.append(result.stderr.strip() or f"{recover_cmd} 无输出")
+            else:
+                msg = "; ".join(recover_errors) or ".recover 未产生可导入 SQL"
+                logger.warning(f"[DB恢复] {msg}，改用 Python 逐表抢救")
+                return self._python_salvage_sqlite_db(src_path, dst_path)
+
+            with open(sql_path, "r", encoding="utf-8") as sql_file:
+                load_result = subprocess.run(
+                    [sqlite_bin, str(dst_path)],
+                    stdin=sql_file,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=300,
+            )
+            if load_result.returncode != 0:
+                msg = load_result.stderr.strip() or ".recover SQL 导入失败"
+                logger.warning(f"[DB恢复] {msg}，改用 Python 逐表抢救")
+                return self._python_salvage_sqlite_db(src_path, dst_path)
+
+            ok, msg = self._validate_sqlite_file(dst_path)
+            if not ok:
+                logger.warning(f"[DB恢复] .recover 后校验失败，改用 Python 逐表抢救: {msg}")
+                return self._python_salvage_sqlite_db(src_path, dst_path)
+            return True, ""
+        except subprocess.TimeoutExpired:
+            logger.warning("[DB恢复] .recover 执行超时，改用 Python 逐表抢救")
+            return self._python_salvage_sqlite_db(src_path, dst_path)
+        except Exception as e:
+            logger.warning(f"[DB恢复] .recover 执行失败，改用 Python 逐表抢救: {e}")
+            return self._python_salvage_sqlite_db(src_path, dst_path)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _snapshot_sqlite_db(self, src_path: Path, dst_path: Path):
+        """使用 SQLite backup API 生成一致性快照，兼容 WAL 写入中的数据库。"""
+        src_conn = None
+        dst_conn = None
+        try:
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            src_conn = sqlite3.connect(src_path, timeout=30)
+            dst_conn = sqlite3.connect(dst_path, timeout=30)
+            src_conn.backup(dst_conn)
+            dst_conn.commit()
+        except sqlite3.DatabaseError as e:
+            logger.warning(f"[DB恢复] {src_path.name} 快照失败，尝试 .recover 抢救: {e}")
+            return self._recover_sqlite_db(src_path, dst_path)
+        finally:
+            if dst_conn is not None:
+                dst_conn.close()
+            if src_conn is not None:
+                src_conn.close()
+
+        ok, msg = self._validate_sqlite_file(dst_path)
+        if not ok:
+            logger.warning(f"[DB恢复] {src_path.name} 快照校验失败，尝试 .recover 抢救: {msg}")
+            return self._recover_sqlite_db(src_path, dst_path)
+        return True, ""
+
+    def _close_database_handles(self, db_names: list[str]):
+        try:
+            from .xiuxian2_handle import (
+                XIUXIAN_IMPART_BUFF,
+                PlayerDataManager,
+                TradeDataManager,
+                XiuxianDateManage,
+            )
+
+            manager_classes = {
+                "xiuxian.db": XiuxianDateManage,
+                "player.db": PlayerDataManager,
+                "trade.db": TradeDataManager,
+                "xiuxian_impart.db": XIUXIAN_IMPART_BUFF,
+            }
+            for db_name in db_names:
+                try:
+                    manager_cls = manager_classes.get(db_name)
+                    manager = manager_cls() if manager_cls else None
+                    if manager and hasattr(manager, "close"):
+                        manager.close()
+                except Exception as e:
+                    logger.warning(f"[DB恢复] 关闭 {db_name} 旧连接失败: {e}")
+        except Exception as e:
+            logger.warning(f"[DB恢复] 加载数据库管理器失败: {e}")
+
+    def _restore_sqlite_file(self, src_path: Path, dst_path: Path, db_name: str):
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            clean_path = temp_dir / db_name
+            ok, msg = self._snapshot_sqlite_db(src_path, clean_path)
+            if not ok:
+                raise RuntimeError(msg)
+
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            self._backup_current_db_before_restore(dst_path, db_name)
+            self._close_database_handles([db_name])
+            self._remove_sqlite_sidecars(dst_path)
+            os.replace(clean_path, dst_path)
+            self._remove_sqlite_sidecars(dst_path)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _backup_current_db_before_restore(self, dst_path: Path, db_name: str):
+        if not dst_path.exists():
+            return
+        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_restore_before"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = backup_dir / f"{timestamp}_{db_name}"
+        ok, msg = self._snapshot_sqlite_db(dst_path, backup_path)
+        if ok:
+            logger.info(f"[DB恢复] 已备份当前数据库: {backup_path}")
+            return
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = backup_dir / f"{timestamp}_{db_name}.raw"
+        try:
+            shutil.copy2(dst_path, raw_path)
+            logger.warning(f"[DB恢复] 当前库快照失败，已保留原始副本 {raw_path}: {msg}")
+        except Exception as e:
+            logger.warning(f"[DB恢复] 当前库备份失败 {dst_path}: {e}")
+
+    def _reload_restored_database_handles(self, restored_dbs: list[str]):
+        try:
+            from .xiuxian2_handle import (
+                XIUXIAN_IMPART_BUFF,
+                PlayerDataManager,
+                TradeDataManager,
+                XiuxianDateManage,
+            )
+
+            manager_classes = {
+                "xiuxian.db": XiuxianDateManage,
+                "player.db": PlayerDataManager,
+                "trade.db": TradeDataManager,
+                "xiuxian_impart.db": XIUXIAN_IMPART_BUFF,
+            }
+            for db_name in restored_dbs:
+                try:
+                    manager_cls = manager_classes.get(db_name)
+                    manager = manager_cls() if manager_cls else None
+                    if manager and hasattr(manager, "reconnect"):
+                        manager.reconnect()
+                except Exception as e:
+                    logger.warning(f"[DB恢复] 重建 {db_name} 数据库连接失败: {e}")
+        except Exception as e:
+            logger.warning(f"[DB恢复] 加载数据库管理器失败: {e}")
+
     def backup_db_files(self):
         """备份本地 SQLite 数据库到 data/xiuxian/backups/db_backup/"""
         try:
@@ -1314,12 +1689,21 @@ class UpdateManager:
             zip_path = backup_dir / zip_name
 
             added = []
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for db_name in self._sqlite_db_names():
-                    db_path = Path() / "data" / "xiuxian" / db_name
-                    if db_path.exists():
-                        zf.write(db_path, db_name)
+            temp_dir = Path(tempfile.mkdtemp())
+            try:
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for db_name in self._sqlite_db_names():
+                        db_path = Path() / "data" / "xiuxian" / db_name
+                        if not db_path.exists():
+                            continue
+                        snapshot_path = temp_dir / db_name
+                        ok, msg = self._snapshot_sqlite_db(db_path, snapshot_path)
+                        if not ok:
+                            raise RuntimeError(msg)
+                        zf.write(snapshot_path, db_name)
                         added.append(db_name)
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
             if not added:
                 zip_path.unlink(missing_ok=True)
@@ -1411,7 +1795,9 @@ class UpdateManager:
 
     def restore_db_files(self, backup_filename: str, selected_dbs: list):
         """从本地 db_backup zip 恢复指定数据库"""
+        temp_dir = None
         try:
+            backup_filename = Path(str(backup_filename)).name
             selected_dbs = self._normalize_selected_db_names(selected_dbs)
             if not selected_dbs:
                 return False, "至少选择一个数据库进行恢复"
@@ -1420,10 +1806,12 @@ class UpdateManager:
             if not backup_path.exists():
                 return False, f"备份文件不存在: {backup_filename}"
 
+            temp_dir = Path(tempfile.mkdtemp())
+            staged = {}
             with zipfile.ZipFile(backup_path, 'r') as zf:
                 names = set(zf.namelist())
-                restored = []
                 skipped = []
+                failed = []
                 for db_name in selected_dbs:
                     member_name = None
                     for candidate in (db_name, f"data/xiuxian/{db_name}"):
@@ -1432,20 +1820,36 @@ class UpdateManager:
                             break
 
                     if member_name:
-                        temp_dir = Path(tempfile.mkdtemp())
-                        try:
-                            zf.extract(member_name, temp_dir)
-                            src = temp_dir / member_name
-                            dst = self._db_path_for_name(db_name)
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(src, dst)
-                            restored.append(db_name)
-                        finally:
-                            shutil.rmtree(temp_dir, ignore_errors=True)
+                        staged_path = temp_dir / db_name
+                        with zf.open(member_name) as src, open(staged_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+                        for suffix in ("-wal", "-shm"):
+                            for sidecar_member in (f"{member_name}{suffix}", f"{db_name}{suffix}"):
+                                if sidecar_member in names:
+                                    sidecar_path = temp_dir / f"{db_name}{suffix}"
+                                    with zf.open(sidecar_member) as src, open(sidecar_path, "wb") as dst:
+                                        shutil.copyfileobj(src, dst)
+                                    break
+                        clean_path = temp_dir / f"{db_name}.clean"
+                        ok, check_msg = self._snapshot_sqlite_db(staged_path, clean_path)
+                        if ok:
+                            staged[db_name] = clean_path
+                        else:
+                            failed.append(f"{db_name}: {check_msg}")
                     else:
                         skipped.append(db_name)
 
+            if failed:
+                return False, f"数据库恢复失败，备份库校验未通过: {'; '.join(failed)}"
+
+            restored = []
+            for db_name, staged_path in staged.items():
+                dst = self._db_path_for_name(db_name)
+                self._restore_sqlite_file(staged_path, dst, db_name)
+                restored.append(db_name)
+
             if restored:
+                self._reload_restored_database_handles(restored)
                 self._compact_pet_storage_after_database_restore()
 
             msg = f"恢复完成，已恢复: {restored}"
@@ -1454,6 +1858,9 @@ class UpdateManager:
             return True, msg
         except Exception as e:
             return False, f"数据库恢复失败: {e}"
+        finally:
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     def list_webdav_db_backups(self):
         """列出云端 db_backup/*.zip"""
@@ -1527,10 +1934,18 @@ class UpdateManager:
             if r.status_code != 200:
                 return False, f"下载失败 HTTP {r.status_code}"
 
-            with open(local_path, "wb") as f:
-                for chunk in r.iter_content(16384):
-                    if chunk:
-                        f.write(chunk)
+            tmp_path = local_path.with_name(f"{local_path.name}.tmp")
+            try:
+                with open(tmp_path, "wb") as f:
+                    for chunk in r.iter_content(16384):
+                        if chunk:
+                            f.write(chunk)
+                if not zipfile.is_zipfile(tmp_path):
+                    return False, "下载完成但文件不是有效 zip"
+                os.replace(tmp_path, local_path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
 
             return True, local_path
         except Exception as e:
@@ -1539,11 +1954,13 @@ class UpdateManager:
     def cloud_restore_db_files(self, filename: str, selected_dbs: list):
         """云端数据库恢复：本地无则先下，再恢复"""
         try:
+            filename = Path(str(filename)).name
             local_path = Path() / "data" / "xiuxian" / "backups" / "db_backup" / filename
-            if not local_path.exists():
-                ok, msg = self.download_db_backup_from_webdav(filename, overwrite=False)
-                if not ok and msg != "FILE_EXISTS":
+            ok, msg = self.download_db_backup_from_webdav(filename, overwrite=True)
+            if not ok:
+                if not local_path.exists():
                     return False, msg
+                logger.warning(f"[DB云恢复] 重新下载失败，尝试使用本地已有备份 {filename}: {msg}")
             return self.restore_db_files(filename, selected_dbs)
         except Exception as e:
             return False, f"云端数据库恢复失败: {e}"
