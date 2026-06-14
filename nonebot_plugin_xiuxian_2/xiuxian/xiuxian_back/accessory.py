@@ -1417,6 +1417,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     part = target.get("part", item_info.get("part", "未知部位"))
     set_type = target.get("set_type", item_info.get("set_type", "未知套装"))
     quality = int(target.get("quality", 1))
+    wash_count = max(0, int(target.get("wash_count", 0) or 0))
     desc = item_info.get("desc", "暂无介绍")
 
     affixes = target.get("affixes", [])
@@ -1463,6 +1464,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"部位：{part}\n"
         f"套装：{set_type}\n"
         f"状态：{where}\n"
+        f"当前洗练次数：{wash_count}/150\n"
         f"词条槽位：{affix_count}/{target_affix_count}\n"
         f"锁定词条：{_format_locked_positions(locked_indexes)}\n"
         f"下次洗练消耗：{WASH_STONE_NAME}x{next_wash_need}\n"
