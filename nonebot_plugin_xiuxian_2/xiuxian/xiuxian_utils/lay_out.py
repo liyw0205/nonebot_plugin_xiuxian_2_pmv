@@ -226,13 +226,32 @@ def Cooldown(
         if user_id in ADMIN_IDS:
             return
         if stamina_cost > 0:
-            user_data = sql_message.get_user_info_with_id(user_id)
+            stamina_user_id = user_id
+            user_data = None
+            checked_user = False
+            try:
+                checked_user = True
+                is_user, active_user_data, check_msg = check_user(event)
+                if active_user_data:
+                    user_data = active_user_data
+                    stamina_user_id = str(active_user_data.get("user_id", user_id))
+                    if not is_user:
+                        await handle_send(bot, event, check_msg)
+                        await matcher.finish()
+            except Exception as e:
+                checked_user = False
+                logger.warning(f"获取当前体力身份失败，回退到真实ID {user_id}: {e}")
+
+            if user_data is None and not checked_user:
+                user_data = sql_message.get_user_info_with_id(stamina_user_id)
+
             if user_data:
-                if user_data['user_stamina'] < stamina_cost:
+                current_stamina = int(user_data.get("user_stamina") or 0)
+                if current_stamina < stamina_cost:
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
                     await handle_send(bot, event, msg)
                     await matcher.finish()
-                sql_message.update_user_stamina(user_id, stamina_cost, 2)  # 减少体力
+                sql_message.update_user_stamina(stamina_user_id, stamina_cost, 2)  # 减少体力
         if cd_time <= 0:
             return
         if running[key] <= 0:

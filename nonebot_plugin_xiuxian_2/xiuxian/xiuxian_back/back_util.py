@@ -914,6 +914,8 @@ def check_use_elixir(user_id, goods_id, num):
                     sql_message.update_user_hp_mp(user_id, new_hp, new_mp)
 
     elif goods_info['buff_type'] == "stamina":  # 回复体力的丹药
+        user_info = sql_message.get_user_info_with_id(user_id) or user_info
+        user_rank = convert_rank(user_info['level'])[0]
         max_stamina = int(XiuConfig().max_stamina)
         current_stamina = int(user_info.get('user_stamina') or 0)
         if current_stamina >= max_stamina:
