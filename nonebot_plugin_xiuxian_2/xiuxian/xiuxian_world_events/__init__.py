@@ -39,7 +39,9 @@ TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 EVENT_START_HOUR = 18
 EVENT_END_HOUR = 22
 BOSS_REAL_HP_MULTIPLIER = 10000
-MAX_SINGLE_DAMAGE_RATIO = 0.2
+MAX_SINGLE_DAMAGE_RATIO = 0.1
+MAX_PURSUIT_DAMAGE_RATIO = 0.05
+DEMON_ATTACK_LIMIT = 3
 DEMON_STONE_REWARD_CAP = 50000000
 SPIRIT_VEIN_TRIGGER_CHANCE = 0.10
 SPIRIT_VEIN_MIN_DURATION = 30
@@ -105,7 +107,7 @@ __world_event_help__ = f"""
   ▶ 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
   ▶ 讨伐魔修 - 按自身境界挑战对应境界魔修
   ▶ 领取魔修奖励 - 入侵结束或对应境界魔修被击退后按贡献领取奖励
-  ▶ 每期只能讨伐一次、领取一次
+  ▶ 每期最多讨伐{DEMON_ATTACK_LIMIT}次、领取一次
   ▶ 魔修被击退后可立即领奖，每小时30分会刷新已击退的魔修
   ▶ 灵石固定奖池{number_to(DEMON_STONE_REWARD_CAP)}，按贡献占比瓜分
 
@@ -535,11 +537,6 @@ def _find_participant_record(state: dict, user_id: str, preferred_realm: str | N
     return "", None
 
 
-def _has_user_attacked(state: dict, user_id: str) -> bool:
-    _, record = _find_participant_record(state, user_id)
-    return bool(record and (_to_int(record.get("attacks"), 0) > 0 or _to_int(record.get("damage"), 0) > 0))
-
-
 def _has_user_claimed(claimed: dict, user_id: str, record_key: str | None = None) -> bool:
     if record_key and claimed.get(record_key):
         return True
@@ -836,27 +833,28 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     with _state_lock:
         state = _ensure_daily_state()
         no_active_event = state.get("status") != "active"
-        finished_realm = None
         attack_limit_msg = ""
         realm = ""
         boss_snapshot = {}
         battle_hp = 1
+        pursuit_mode = False
         if not no_active_event:
             realm, boss_info = _get_user_boss(state, user_info)
             if boss_info is None:
                 no_active_event = True
             else:
-                _, existing_record = _find_participant_record(state, user_id, realm)
-                if existing_record and (
-                    _to_int(existing_record.get("attacks"), 0) > 0 or _to_int(existing_record.get("damage"), 0) > 0
-                ):
-                    if _record_reward_ready(state, existing_record):
-                        attack_limit_msg = "你本期已经讨伐过魔修，可发送【领取魔修奖励】领取奖励。"
-                    else:
-                        attack_limit_msg = "你本期已经讨伐过魔修，不能重复出手。"
-                elif _to_int(boss_info.get("boss_hp"), 0) <= 0:
-                    finished_realm = realm
+                record_key, existing_record = _find_participant_record(state, user_id, realm)
+                boss_wave = max(_to_int(boss_info.get("wave"), 1), 1)
+                existing_attacks = _to_int((existing_record or {}).get("attacks"), 0)
+                existing_wave = _record_wave(existing_record)
+                boss_defeated = _to_int(boss_info.get("boss_hp"), 0) <= 0
+                already_claimed = _has_user_claimed(state.get("claimed", {}), user_id, record_key)
+                if already_claimed:
+                    attack_limit_msg = "你已领取本期魔修奖励，不能继续追击。"
+                elif existing_record and existing_wave == boss_wave and existing_attacks >= DEMON_ATTACK_LIMIT:
+                    attack_limit_msg = f"你本期已经讨伐魔修{DEMON_ATTACK_LIMIT}次，不能继续出手。"
                 else:
+                    pursuit_mode = boss_defeated
                     boss_snapshot = dict(boss_info)
                     battle_hp = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("battle_hp")), 0), 1)
                     boss_snapshot["气血"] = battle_hp
@@ -869,10 +867,6 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await attack_demon_invasion.finish()
     if attack_limit_msg:
         await handle_send(bot, event, attack_limit_msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
-        await attack_demon_invasion.finish()
-    if finished_realm:
-        msg = f"{finished_realm}魔修已被击退，请发送【领取魔修奖励】领取奖励。"
-        await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
 
     result, victor, bossinfo_new, status_list = await Boss_fight(
@@ -899,31 +893,53 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             else:
                 boss_wave = max(_to_int(boss_info.get("wave"), 1), 1)
                 snapshot_wave = max(_to_int(boss_snapshot.get("wave"), 1), 1)
-                if boss_wave != snapshot_wave or _to_int(boss_info.get("boss_hp"), 0) <= 0:
+                if boss_wave != snapshot_wave:
                     battle_closed = True
-                elif _has_user_attacked(state, user_id):
-                    battle_closed = True
-                    attack_duplicate_after_fight = True
                 else:
-                    boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
-                    current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
-                    max_single_damage = max(int(boss_all_hp * MAX_SINGLE_DAMAGE_RATIO), 1)
-                    real_damage = min(total_damage * BOSS_REAL_HP_MULTIPLIER, max_single_damage, current_hp)
-                    boss_now_hp = max(current_hp - real_damage, 0)
-                    boss_info["boss_hp"] = boss_now_hp
-                    boss_info["battle_hp"] = boss_info.get("battle_max_hp", boss_info.get("battle_hp", battle_hp))
-                    boss_info["气血"] = boss_info["battle_hp"]
-                    boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
-                    killed = boss_now_hp <= 0
+                    record_key, existing_record = _find_participant_record(state, user_id, realm)
+                    existing_attacks = _to_int((existing_record or {}).get("attacks"), 0)
+                    existing_wave = _record_wave(existing_record)
+                    already_claimed = _has_user_claimed(state.get("claimed", {}), user_id, record_key)
+                    if (
+                        already_claimed
+                        or (
+                            existing_record
+                            and existing_wave == boss_wave
+                            and existing_attacks >= DEMON_ATTACK_LIMIT
+                        )
+                    ):
+                        battle_closed = True
+                        attack_duplicate_after_fight = True
+                    else:
+                        boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
+                        current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
+                        pursuit_mode = current_hp <= 0
+                        damage_ratio = MAX_PURSUIT_DAMAGE_RATIO if pursuit_mode else MAX_SINGLE_DAMAGE_RATIO
+                        max_single_damage = max(int(boss_all_hp * damage_ratio), 1)
+                        raw_real_damage = total_damage * BOSS_REAL_HP_MULTIPLIER
+                        if pursuit_mode:
+                            real_damage = min(raw_real_damage, max_single_damage)
+                            boss_now_hp = current_hp
+                        else:
+                            real_damage = min(raw_real_damage, max_single_damage, current_hp)
+                            boss_now_hp = max(current_hp - real_damage, 0)
+                        boss_info["boss_hp"] = boss_now_hp
+                        boss_info["battle_hp"] = boss_info.get("battle_max_hp", boss_info.get("battle_hp", battle_hp))
+                        boss_info["气血"] = boss_info["battle_hp"]
+                        boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
+                        killed = (not pursuit_mode) and boss_now_hp <= 0
 
-                    _record_participant(state, user_info, realm, boss_wave, real_damage, killed)
-                    if killed:
-                        _mark_wave_reward_ready(state, realm, boss_wave)
-                        boss_info["battle_hp"] = 0
-                        boss_info["气血"] = 0
-                        boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
-                    state["bosses"][realm] = boss_info
-                    _save_state(state)
+                        _record_participant(state, user_info, realm, boss_wave, real_damage, killed)
+                        if pursuit_mode:
+                            _mark_wave_reward_ready(state, realm, boss_wave)
+                            boss_info["last_result"] = f"{user_info.get('user_name', user_id)}追击了{realm}魔修。"
+                        elif killed:
+                            _mark_wave_reward_ready(state, realm, boss_wave)
+                            boss_info["battle_hp"] = 0
+                            boss_info["气血"] = 0
+                            boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
+                        state["bosses"][realm] = boss_info
+                        _save_state(state)
 
     if battle_closed:
         msg = "你本期已经讨伐过魔修，本次战斗未重复计入贡献。" if attack_duplicate_after_fight else "本场魔修入侵已经结束或已刷新，本次战斗未计入贡献。"
@@ -943,10 +959,19 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     else:
         msg = ""
 
-    if killed:
+    if pursuit_mode:
+        msg += (
+            f"道友追击已败退的{boss_snapshot.get('name', '魔修')}。\n"
+            f"本次战斗造成伤害：{number_to(total_damage)}\n"
+            f"追击贡献上限：{int(MAX_PURSUIT_DAMAGE_RATIO * 100)}%\n"
+            f"本次追击贡献：{number_to(real_damage)}\n"
+            f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
+        )
+    elif killed:
         msg += (
             f"恭喜道友击退{boss_snapshot.get('name', '魔修')}！\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
+            f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
             f"实际削减真实血条：{number_to(real_damage)}\n"
             f"参与者可发送【领取魔修奖励】按贡献领取奖励。"
         )
@@ -955,6 +980,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         msg += (
             f"道友{result_text}。\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
+            f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
             f"实际削减真实血条：{number_to(real_damage)}\n"
             f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
         )
