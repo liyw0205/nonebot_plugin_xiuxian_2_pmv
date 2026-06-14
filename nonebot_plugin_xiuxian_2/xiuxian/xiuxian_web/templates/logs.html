@@ -5,6 +5,16 @@
     <h2><i class="fas fa-file-alt"></i> 日志查看</h2>
     <p>支持：日志文件选择、关键字、级别、起止时间筛选（ANSI 颜色可读性增强）</p>
 
+    <div class="log-mode-tabs">
+        <button id="log-file-tab" class="active" type="button" onclick="switchLogMode('file')">
+            <i class="fas fa-file-lines"></i> 日志文件
+        </button>
+        <button id="log-user-tab" type="button" onclick="switchLogMode('user')">
+            <i class="fas fa-user-clock"></i> 用户查看
+        </button>
+    </div>
+
+    <div id="log-file-panel" class="log-panel">
     <div class="log-filters">
         <div class="form-group">
             <label for="log-file">日志文件</label>
@@ -78,11 +88,144 @@
     </div>
 
     <div id="pager" class="pagination" style="margin-top: 12px;"></div>
+    </div>
+
+    <div id="log-user-panel" class="log-panel hidden">
+        <div class="log-user-layout">
+            <aside class="log-user-side">
+                <div class="log-user-search">
+                    <label for="log-user-search-input">道号 / ID</label>
+                    <div class="log-user-search-row">
+                        <input
+                            id="log-user-search-input"
+                            type="text"
+                            placeholder="输入道号或用户ID"
+                            onkeydown="if(event.key==='Enter') searchLogUsers()"
+                        >
+                        <button class="btn btn-primary btn-sm" type="button" onclick="searchLogUsers()">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="log-user-list" class="log-user-list">
+                    <div class="loading">输入道号或 ID 后搜索用户</div>
+                </div>
+            </aside>
+
+            <section class="log-user-chat">
+                <div class="log-user-chat-header">
+                    <div id="log-user-avatar" class="log-user-avatar">人</div>
+                    <div class="log-user-title-wrap">
+                        <div id="log-user-title" class="log-user-title">请选择用户</div>
+                        <div id="log-user-subtitle" class="log-user-subtitle">按道号或 ID 搜索后查看消息历史</div>
+                    </div>
+                </div>
+
+                <div class="log-user-filters">
+                    <div class="form-group">
+                        <label for="log-user-scene">会话类型</label>
+                        <select id="log-user-scene" onchange="loadLogUserMessages(1)">
+                            <option value="ALL">全部</option>
+                            <option value="private">私聊消息</option>
+                            <option value="group">群消息</option>
+                            <option value="channel_private">频道私信</option>
+                            <option value="channel_group">频道消息</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="log-user-direction">方向</label>
+                        <select id="log-user-direction" onchange="loadLogUserMessages(1)">
+                            <option value="ALL">全部</option>
+                            <option value="recv">用户指令</option>
+                            <option value="send">Bot 回复</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="log-user-keyword">消息关键字</label>
+                        <input
+                            id="log-user-keyword"
+                            type="text"
+                            placeholder="筛选消息内容"
+                            onkeydown="if(event.key==='Enter') loadLogUserMessages(1)"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="log-user-start">开始时间</label>
+                        <input id="log-user-start" type="datetime-local" step="1" onchange="loadLogUserMessages(1)">
+                    </div>
+                    <div class="form-group">
+                        <label for="log-user-end">结束时间</label>
+                        <input id="log-user-end" type="datetime-local" step="1" onchange="loadLogUserMessages(1)">
+                    </div>
+                </div>
+
+                <div class="form-actions log-user-actions">
+                    <button class="btn btn-primary" type="button" onclick="loadLogUserMessages(1)">
+                        <i class="fas fa-search"></i> 查询历史
+                    </button>
+                    <button class="btn btn-info" type="button" onclick="resetLogUserFilters()">
+                        <i class="fas fa-undo"></i> 重置筛选
+                    </button>
+                    <button class="btn btn-secondary" type="button" onclick="scrollLogUserMessagesToBottom()">
+                        <i class="fas fa-arrow-down"></i> 最新消息
+                    </button>
+                </div>
+
+                <div id="log-user-meta" class="log-meta"></div>
+                <div id="log-user-message-list" class="log-user-message-list">
+                    <div class="empty-state">
+                        <i class="fas fa-user-clock"></i>
+                        <p>请选择用户</p>
+                    </div>
+                </div>
+                <div id="log-user-pager" class="pagination" style="margin-top: 12px;"></div>
+            </section>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
 <style>
+.hidden {
+    display: none !important;
+}
+
+.log-mode-tabs {
+    display: inline-flex;
+    gap: 6px;
+    padding: 4px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+}
+
+.log-mode-tabs button {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 600;
+}
+
+.log-mode-tabs button.active {
+    background: var(--accent-color);
+    color: #fff;
+}
+
+.log-panel {
+    min-width: 0;
+}
+
 .log-filters {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -182,6 +325,391 @@
     border-color: #334155;
     color: #e2e8f0;
 }
+
+.log-user-layout {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    min-height: 650px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+.log-user-side {
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-user-search {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-user-search-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.log-user-list {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px;
+}
+
+.log-user-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.16s;
+    border: 1px solid transparent;
+}
+
+.log-user-item:hover {
+    background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+
+.log-user-item.active {
+    background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-primary));
+    border-color: color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+}
+
+.log-user-avatar,
+.log-user-item-avatar,
+.msg-avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-color), var(--info-color));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    overflow: hidden;
+}
+
+.log-user-avatar img,
+.log-user-item-avatar img,
+.msg-avatar img,
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: inherit;
+}
+
+.log-user-item-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.log-user-item-title {
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.log-user-item-subtitle,
+.log-user-item-meta {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.log-user-chat {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #f4f7fb;
+}
+
+.log-user-chat-header {
+    min-height: 64px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-user-title-wrap {
+    min-width: 0;
+    flex: 1;
+}
+
+.log-user-title {
+    font-weight: 800;
+    color: var(--text-primary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.log-user-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.log-user-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-user-filters .form-group {
+    margin-bottom: 0;
+    padding: 8px;
+}
+
+.log-user-actions {
+    margin: 0;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-user-message-list {
+    flex: 1;
+    min-height: 360px;
+    max-height: 68vh;
+    overflow: auto;
+    padding: 18px 20px 12px;
+    background:
+        linear-gradient(#f4f7fb, #f4f7fb),
+        repeating-linear-gradient(45deg, rgba(18, 183, 245, 0.04) 0 1px, transparent 1px 14px);
+}
+
+.msg-date-divider {
+    text-align: center;
+    margin: 12px 0;
+}
+
+.msg-date-divider span {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--border-color);
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.msg-row {
+    display: flex;
+    gap: 9px;
+    margin-bottom: 13px;
+    align-items: flex-start;
+}
+
+.msg-row.send {
+    flex-direction: row-reverse;
+}
+
+.msg-row.send .msg-avatar {
+    background: var(--success-color);
+}
+
+.msg-main {
+    max-width: min(72%, 760px);
+}
+
+.msg-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.7rem;
+    color: #8796a3;
+    margin-bottom: 4px;
+}
+
+.msg-row.send .msg-meta {
+    justify-content: flex-end;
+}
+
+.msg-name {
+    font-weight: 650;
+}
+
+.msg-bubble {
+    position: relative;
+    padding: 9px 12px;
+    border-radius: 7px;
+    background: #fff;
+    border: 1px solid #dbe6ee;
+    color: #223443;
+    word-break: break-word;
+    box-shadow: 0 2px 8px rgba(31, 77, 112, 0.06);
+}
+
+.msg-row.recv .msg-bubble {
+    border-top-left-radius: 2px;
+}
+
+.msg-row.send .msg-bubble {
+    background: #d7f4ff;
+    border-color: #b8e7fb;
+    border-top-right-radius: 2px;
+}
+
+.msg-extra {
+    margin-top: 4px;
+    font-size: 0.66rem;
+    color: #8796a3;
+    opacity: 0.8;
+}
+
+.msg-raw {
+    white-space: pre-wrap;
+}
+
+.msg-md {
+    line-height: 1.55;
+}
+
+.msg-md p {
+    margin: 0.25rem 0;
+}
+
+.msg-md code {
+    background: rgba(0, 0, 0, 0.12);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.msg-media {
+    margin-top: 6px;
+}
+
+.msg-bubble img,
+.msg-md img {
+    display: block;
+    max-width: min(260px, 100%);
+    max-height: 320px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-top: 6px;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.msg-row.send .msg-bubble img,
+.msg-row.send .msg-md img {
+    margin-left: auto;
+}
+
+.msg-image-fallback {
+    display: none;
+    margin-top: 6px;
+    font-size: 0.75rem;
+}
+
+.msg-image.load-failed img {
+    display: none;
+}
+
+.msg-image.load-failed .msg-image-fallback {
+    display: inline-flex;
+}
+
+.empty-state {
+    height: 100%;
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--text-secondary);
+}
+
+[data-theme='dark'] .log-user-chat,
+[data-theme='dark'] .log-user-message-list {
+    background: #1f2d3b;
+}
+
+[data-theme='dark'] .log-user-message-list {
+    background:
+        linear-gradient(#1f2d3b, #1f2d3b),
+        repeating-linear-gradient(45deg, rgba(53, 199, 255, 0.035) 0 1px, transparent 1px 14px);
+}
+
+[data-theme='dark'] .msg-date-divider span,
+[data-theme='dark'] .msg-bubble {
+    background: #253648;
+    border-color: #33485c;
+    color: #edf6ff;
+}
+
+[data-theme='dark'] .msg-row.send .msg-bubble {
+    background: color-mix(in srgb, var(--accent-color) 18%, #253648);
+    border-color: color-mix(in srgb, var(--accent-color) 35%, #33485c);
+}
+
+@media (max-width: 900px) {
+    .log-user-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .log-user-side {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        max-height: 280px;
+    }
+}
+
+@media (max-width: 768px) {
+    .log-mode-tabs {
+        display: flex;
+        width: 100%;
+    }
+
+    .log-mode-tabs button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .log-user-message-list {
+        padding: 9px 7px 6px;
+        max-height: 62vh;
+    }
+
+    .msg-main {
+        max-width: 84%;
+    }
+
+    .msg-avatar {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        font-size: 0.68rem;
+    }
+
+    .msg-bubble {
+        padding: 6px 9px;
+        font-size: 0.9rem;
+        line-height: 1.42;
+    }
+}
 </style>
 
 <script>
@@ -198,6 +726,20 @@ let realtimeTimer = null;
 let realtimeOffset = 0;
 let realtimeFile = '';
 
+let currentLogMode = 'file';
+let logUserRows = [];
+let selectedLogUser = null;
+let logUserPage = 1;
+let logUserTotal = 0;
+const logUserPageSize = 200;
+
+const LOG_USER_SCENE_LABELS = {
+    group: '群消息',
+    private: '私聊消息',
+    channel_group: '频道消息',
+    channel_private: '频道私信'
+};
+
 function fmtDateTimeLocalToBackend(val) {
     if (!val) return '';
     let s = val.replace('T', ' ');
@@ -209,6 +751,470 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, m => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[m]));
+}
+
+function switchLogMode(mode) {
+    currentLogMode = mode === 'user' ? 'user' : 'file';
+    document.getElementById('log-file-tab')?.classList.toggle('active', currentLogMode === 'file');
+    document.getElementById('log-user-tab')?.classList.toggle('active', currentLogMode === 'user');
+    document.getElementById('log-file-panel')?.classList.toggle('hidden', currentLogMode !== 'file');
+    document.getElementById('log-user-panel')?.classList.toggle('hidden', currentLogMode !== 'user');
+
+    if (currentLogMode === 'user' && !logUserRows.length) {
+        searchLogUsers();
+    }
+}
+
+function fmtTime(s) {
+    if (!s) return '';
+    return String(s).replace('T', ' ').slice(0, 19);
+}
+
+function shortTime(s) {
+    const x = fmtTime(s);
+    if (!x) return '';
+    const today = new Date().toISOString().slice(0, 10);
+    return x.startsWith(today) ? x.slice(11, 16) : x.slice(5, 16);
+}
+
+function getInitial(text, fallback = '?') {
+    text = String(text || '').trim();
+    return text ? text.slice(0, 1).toUpperCase() : fallback;
+}
+
+function isHttpUrl(url) {
+    return /^https?:\/\//i.test(String(url || '').trim());
+}
+
+function renderAvatarImage(url) {
+    return `<img class="avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy">`;
+}
+
+function renderLogUserAvatar(user) {
+    if (user?.avatar && isHttpUrl(user.avatar)) {
+        return renderAvatarImage(user.avatar);
+    }
+    return escapeHtml(user?.avatar_text || getInitial(user?.title, '人'));
+}
+
+function setLogUserHeader(user) {
+    const avatar = document.getElementById('log-user-avatar');
+    const title = document.getElementById('log-user-title');
+    const subtitle = document.getElementById('log-user-subtitle');
+
+    if (!user) {
+        avatar.innerText = '人';
+        title.innerText = '请选择用户';
+        subtitle.innerText = '按道号或 ID 搜索后查看消息历史';
+        return;
+    }
+
+    avatar.innerHTML = renderLogUserAvatar(user);
+    title.innerText = user.title || user.user_name || user.user_id || '未知用户';
+    subtitle.innerText = user.subtitle || `ID: ${user.user_id || ''}`;
+}
+
+function renderLogUserList() {
+    const list = document.getElementById('log-user-list');
+    if (!logUserRows.length) {
+        list.innerHTML = `<div class="empty-state"><i class="fas fa-user-slash"></i><p>未找到用户</p></div>`;
+        return;
+    }
+
+    list.innerHTML = logUserRows.map((u, idx) => {
+        const active = selectedLogUser && selectedLogUser.user_id === u.user_id;
+        const meta = [
+            u.level || '',
+            u.root_type || '',
+            `${u.message_count || 0} 条消息`
+        ].filter(Boolean).join(' ｜ ');
+
+        return `
+            <div class="log-user-item ${active ? 'active' : ''}" onclick="selectLogUser(${idx})">
+                <div class="log-user-item-avatar">${renderLogUserAvatar(u)}</div>
+                <div class="log-user-item-info">
+                    <div class="log-user-item-title">${escapeHtml(u.title || u.user_id || '未知用户')}</div>
+                    <div class="log-user-item-subtitle">${escapeHtml(u.subtitle || '')}</div>
+                    <div class="log-user-item-meta">${escapeHtml(meta)}${u.last_time ? ` ｜ ${escapeHtml(shortTime(u.last_time))}` : ''}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function searchLogUsers() {
+    const list = document.getElementById('log-user-list');
+    const query = document.getElementById('log-user-search-input').value.trim();
+    list.innerHTML = `<div class="loading"><i class="fas fa-spinner fa-spin"></i> 搜索中...</div>`;
+
+    try {
+        const qs = new URLSearchParams({ query, limit: '30' });
+        const res = await fetch('/api/logs/users?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            list.innerHTML = `<div class="error">搜索失败：${escapeHtml(data.error || '未知错误')}</div>`;
+            return;
+        }
+
+        logUserRows = data.rows || [];
+        renderLogUserList();
+    } catch (e) {
+        list.innerHTML = `<div class="error">请求异常：${escapeHtml(String(e))}</div>`;
+    }
+}
+
+function selectLogUser(index) {
+    const user = logUserRows[index];
+    if (!user) return;
+
+    selectedLogUser = user;
+    logUserPage = 1;
+    setLogUserHeader(user);
+    renderLogUserList();
+    loadLogUserMessages(1);
+}
+
+function resetLogUserFilters() {
+    document.getElementById('log-user-scene').value = 'ALL';
+    document.getElementById('log-user-direction').value = 'ALL';
+    document.getElementById('log-user-keyword').value = '';
+    document.getElementById('log-user-start').value = '';
+    document.getElementById('log-user-end').value = '';
+    loadLogUserMessages(1);
+}
+
+function scrollLogUserMessagesToBottom() {
+    const box = document.getElementById('log-user-message-list');
+    box.scrollTop = box.scrollHeight;
+}
+
+function decodeQQFaceExtText(ext) {
+    try {
+        let value = String(ext || '').replace(/\s+/g, '');
+        value += '='.repeat((4 - value.length % 4) % 4);
+        const binary = atob(value);
+        const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+        const raw = new TextDecoder('utf-8').decode(bytes);
+        const data = JSON.parse(raw);
+        return String(data.text || '').trim();
+    } catch (e) {
+        return '';
+    }
+}
+
+function stripQQFaceMarkup(text) {
+    text = String(text || '');
+    text = text.replace(
+        /<faceType=\d+,\s*faceId=(?:"[^"]*"|'[^']*'|[^,>]+),\s*ext=(?:"([^"]*)"|'([^']*)'|([^>]+))>\s*/g,
+        function(full, ext1, ext2, ext3) {
+            const label = decodeQQFaceExtText(ext1 || ext2 || ext3 || '');
+            return label ? `[表情:${label}]` : '';
+        }
+    );
+    return text.replace(/\uFFFC/g, '').trim();
+}
+
+function normalizeLoggedHttpUrl(url) {
+    return String(url || '').replace(/\s+/g, '').trim();
+}
+
+function decodeReprString(value) {
+    return String(value || '')
+        .replace(/\\r/g, '\r')
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+}
+
+function extractReprField(dataBody, field) {
+    dataBody = String(dataBody || '');
+    const escapedField = String(field).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const singleRe = new RegExp(`['"]${escapedField}['"]\\s*:\\s*'((?:\\\\.|[^'])*)'`);
+    const doubleRe = new RegExp(`['"]${escapedField}['"]\\s*:\\s*"((?:\\\\.|[^"])*)"`);
+    const match = dataBody.match(singleRe) || dataBody.match(doubleRe);
+    return match ? decodeReprString(match[1]) : '';
+}
+
+function extractAttachmentUrlFromData(dataBody) {
+    for (const field of ['url', 'file', 'path', 'src']) {
+        const value = extractReprField(dataBody, field);
+        if (/^https?:\/\//i.test(value)) {
+            return normalizeLoggedHttpUrl(value);
+        }
+    }
+    return '';
+}
+
+function normalizeAttachmentRepr(text) {
+    text = String(text || '');
+    text = text.replace(
+        /Attachment\(type=['"]([^'"]+)['"],\s*data=\{([\s\S]*?)\}\)/g,
+        function(full, type, dataBody) {
+            const url = extractAttachmentUrlFromData(dataBody);
+            return url ? `<attachment[${type}]:${url}>` : '';
+        }
+    );
+    text = text.replace(
+        /\[(图片消息|语音消息|视频消息|文件消息|附件消息)\]\s*(https?:\/\/[^\s<>"']+)/g,
+        function(full, label, url) {
+            const typeMap = {
+                '图片消息': 'image',
+                '语音消息': 'audio',
+                '视频消息': 'video',
+                '文件消息': 'file',
+                '附件消息': 'attachment'
+            };
+            return `<attachment[${typeMap[label] || 'attachment'}]:${normalizeLoggedHttpUrl(url)}>`;
+        }
+    );
+    return text;
+}
+
+function getAttachmentLabel(type) {
+    type = String(type || '').toLowerCase();
+    const labelMap = {
+        image: '图片消息',
+        file: '文件消息',
+        audio: '语音消息',
+        record: '语音消息',
+        voice: '语音消息',
+        video: '视频消息',
+        attachment: '附件消息'
+    };
+    return labelMap[type] || `${type}附件`;
+}
+
+function shouldProxyImageUrl(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        const host = parsed.hostname.toLowerCase();
+        return host === 'multimedia.nt.qq.com.cn' || host.endsWith('.qpic.cn');
+    } catch (e) {
+        return false;
+    }
+}
+
+function getImageRenderUrl(url) {
+    url = String(url || '').trim();
+    if (!shouldProxyImageUrl(url)) return url;
+    return `/api/messages/media_proxy?url=${encodeURIComponent(url)}`;
+}
+
+function renderAttachmentHtml(type, url) {
+    type = String(type || '').toLowerCase();
+    url = String(url || '').trim();
+    if (!url) return '';
+
+    const safeUrl = escapeHtml(url);
+    const safeImageUrl = escapeHtml(getImageRenderUrl(url));
+    const label = escapeHtml(getAttachmentLabel(type));
+
+    if (type === 'image') {
+        return `
+            <div class="msg-media msg-image">
+                <img src="${safeImageUrl}" alt="${label}" loading="lazy" onerror="this.closest('.msg-image')?.classList.add('load-failed')">
+                <a class="msg-image-fallback" href="${safeUrl}" target="_blank" rel="noopener noreferrer">打开图片链接</a>
+            </div>
+        `;
+    }
+
+    if (type === 'audio' || type === 'record' || type === 'voice') {
+        return `
+            <div class="msg-media msg-audio">
+                <div><i class="fas fa-microphone"></i> ${label}</div>
+                <audio controls preload="none" style="max-width: 280px; width: 100%;"><source src="${safeUrl}"></audio>
+            </div>
+        `;
+    }
+
+    if (type === 'video') {
+        return `
+            <div class="msg-media msg-video">
+                <div><i class="fas fa-video"></i> ${label}</div>
+                <video controls preload="metadata" style="max-width: min(320px, 100%); max-height: 360px; border-radius: 8px; display: block;"><source src="${safeUrl}"></video>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="msg-media msg-file">
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-info btn-sm">
+                <i class="fas fa-paperclip"></i> ${label}
+            </a>
+        </div>
+    `;
+}
+
+function looksLikeMarkdown(text) {
+    text = String(text || '');
+    return /(^#{1,6}\s)|(\*\*.+\*\*)|(```)|(^[-*]\s)|(\|.+\|)/m.test(text);
+}
+
+function renderMarkdownContent(text) {
+    try {
+        if (!window.marked) {
+            return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+        }
+        const raw = marked.parse(String(text || ''));
+        const clean = window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
+        return `<div class="msg-md">${clean}</div>`;
+    } catch (e) {
+        return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+    }
+}
+
+function renderLogUserMessageContent(row) {
+    let text = stripQQFaceMarkup(normalizeAttachmentRepr(row.display_content || row.content || ''));
+    const attachmentRe = /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g;
+
+    if (attachmentRe.test(text)) {
+        attachmentRe.lastIndex = 0;
+        let html = '';
+        let lastIndex = 0;
+        let match;
+
+        while ((match = attachmentRe.exec(text)) !== null) {
+            const before = text.slice(lastIndex, match.index);
+            if (before) {
+                html += looksLikeMarkdown(before)
+                    ? renderMarkdownContent(before)
+                    : `<div class="msg-raw">${escapeHtml(before)}</div>`;
+            }
+            html += renderAttachmentHtml(match[1], match[2]);
+            lastIndex = attachmentRe.lastIndex;
+        }
+
+        const rest = text.slice(lastIndex);
+        if (rest) {
+            html += looksLikeMarkdown(rest)
+                ? renderMarkdownContent(rest)
+                : `<div class="msg-raw">${escapeHtml(rest)}</div>`;
+        }
+        return html || `<div class="msg-raw">[空消息]</div>`;
+    }
+
+    if (row.content_format === 'markdown' || looksLikeMarkdown(text)) {
+        return renderMarkdownContent(text);
+    }
+
+    return `<div class="msg-raw">${escapeHtml(text || '[空消息]')}</div>`;
+}
+
+function renderLogUserMessageRow(row, idx = 0) {
+    const isSend = row.direction === 'send';
+    const name = isSend
+        ? (row.username || row.nickname || 'Bot')
+        : (row.username || row.nickname || row.user_id || '未知用户');
+    const avatarHtml = row.avatar && isHttpUrl(row.avatar)
+        ? renderAvatarImage(row.avatar)
+        : escapeHtml(getInitial(name, isSend ? '机' : '人'));
+    const sceneText = LOG_USER_SCENE_LABELS[row.scene] || row.scene || '';
+    const placeText = row.group_name || row.group_id || '';
+
+    return `
+        <div class="msg-row ${isSend ? 'send' : 'recv'}" data-msg-index="${idx}" data-row-id="${escapeHtml(row.id || '')}">
+            <div class="msg-avatar">${avatarHtml}</div>
+            <div class="msg-main">
+                <div class="msg-meta">
+                    <span class="msg-name">${escapeHtml(name)}</span>
+                    <span>${escapeHtml(shortTime(row.created_at))}</span>
+                    <span>${escapeHtml(row.adapter || '')}</span>
+                    <span>${escapeHtml(sceneText)}</span>
+                    ${placeText ? `<span>${escapeHtml(placeText)}</span>` : ''}
+                </div>
+                <div class="msg-bubble">${renderLogUserMessageContent(row)}</div>
+                <div class="msg-extra">
+                    ${isSend && row.source_message_id ? `回复源: ${escapeHtml(row.source_message_id)}` : ''}
+                    ${!isSend && row.message_id ? `消息ID: ${escapeHtml(row.message_id)}` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderLogUserMessageRows(rows) {
+    let lastDate = '';
+    let html = '';
+    (rows || []).forEach((row, idx) => {
+        const datePart = (row.created_at || '').slice(0, 10);
+        if (datePart && datePart !== lastDate) {
+            lastDate = datePart;
+            html += `<div class="msg-date-divider"><span>${escapeHtml(datePart)}</span></div>`;
+        }
+        html += renderLogUserMessageRow(row, idx);
+    });
+    return html;
+}
+
+function renderLogUserPager() {
+    const pager = document.getElementById('log-user-pager');
+    const totalPages = Math.max(1, Math.ceil(logUserTotal / logUserPageSize));
+    const maxShow = 10;
+    let start = Math.max(1, logUserPage - 4);
+    let end = Math.min(totalPages, start + maxShow - 1);
+    if (end - start + 1 < maxShow) start = Math.max(1, end - maxShow + 1);
+
+    let html = '';
+    if (logUserPage > 1) {
+        html += `<a href="javascript:void(0)" onclick="loadLogUserMessages(${logUserPage - 1})">上一页</a>`;
+    }
+    for (let i = start; i <= end; i++) {
+        html += `<a href="javascript:void(0)" class="${i === logUserPage ? 'active' : ''}" onclick="loadLogUserMessages(${i})">${i}</a>`;
+    }
+    if (logUserPage < totalPages) {
+        html += `<a href="javascript:void(0)" onclick="loadLogUserMessages(${logUserPage + 1})">下一页</a>`;
+    }
+    pager.innerHTML = html;
+}
+
+async function loadLogUserMessages(page = 1) {
+    if (!selectedLogUser || !selectedLogUser.user_id) return;
+
+    logUserPage = page;
+    const box = document.getElementById('log-user-message-list');
+    const meta = document.getElementById('log-user-meta');
+    box.innerHTML = `<div class="loading"><i class="fas fa-spinner fa-spin"></i> 读取消息中...</div>`;
+
+    const qs = new URLSearchParams({
+        user_id: selectedLogUser.user_id,
+        scene: document.getElementById('log-user-scene').value,
+        direction: document.getElementById('log-user-direction').value,
+        keyword: document.getElementById('log-user-keyword').value.trim(),
+        start: fmtDateTimeLocalToBackend(document.getElementById('log-user-start').value),
+        end: fmtDateTimeLocalToBackend(document.getElementById('log-user-end').value),
+        page: String(page),
+        page_size: String(logUserPageSize)
+    });
+
+    try {
+        const res = await fetch('/api/logs/user_messages?' + qs.toString());
+        const data = await res.json();
+
+        if (!data.success) {
+            box.innerHTML = `<div class="error">读取失败：${escapeHtml(data.error || '未知错误')}</div>`;
+            meta.innerText = '';
+            return;
+        }
+
+        logUserTotal = data.total || 0;
+        const rows = (data.rows || []).slice().reverse();
+        meta.innerText = `用户：${selectedLogUser.title || selectedLogUser.user_id} ｜ 共 ${logUserTotal} 条 ｜ 第 ${data.page} 页`;
+
+        if (!rows.length) {
+            box.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无消息</p></div>`;
+        } else {
+            box.innerHTML = renderLogUserMessageRows(rows);
+            scrollLogUserMessagesToBottom();
+        }
+
+        renderLogUserPager();
+    } catch (e) {
+        box.innerHTML = `<div class="error">请求异常：${escapeHtml(String(e))}</div>`;
+        meta.innerText = '';
+    }
 }
 
 function normalizeAnsi(s) {
