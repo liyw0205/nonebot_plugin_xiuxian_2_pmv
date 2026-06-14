@@ -40,6 +40,7 @@ EVENT_START_HOUR = 18
 EVENT_END_HOUR = 22
 BOSS_REAL_HP_MULTIPLIER = 10000
 MAX_SINGLE_DAMAGE_RATIO = 0.2
+DEMON_STONE_REWARD_CAP = 50000000
 SPIRIT_VEIN_TRIGGER_CHANCE = 0.10
 SPIRIT_VEIN_MIN_DURATION = 30
 SPIRIT_VEIN_MAX_DURATION = 180
@@ -104,6 +105,9 @@ __world_event_help__ = f"""
   ▶ 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
   ▶ 讨伐魔修 - 按自身境界挑战对应境界魔修
   ▶ 领取魔修奖励 - 入侵结束或对应境界魔修被击退后按贡献领取奖励
+  ▶ 每期只能讨伐一次、领取一次
+  ▶ 魔修被击退后可立即领奖，每小时30分会刷新已击退的魔修
+  ▶ 灵石固定奖池{number_to(DEMON_STONE_REWARD_CAP)}，按贡献占比瓜分
 
 天降灵脉：
   ▶ 每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启
@@ -233,17 +237,17 @@ def _normalize_realm(level: str) -> str:
     return "感气境"
 
 
-def _create_demon_boss(realm: str) -> dict:
+def _create_demon_boss(realm: str, wave: int = 1) -> dict:
     power = _get_level_power(realm)
     battle_hp = int(power * random.randint(32, 42))
     battle_mp = int(power * random.randint(6, 9))
     battle_atk = int(power * random.uniform(3.8, 5.2))
     real_hp = battle_hp * BOSS_REAL_HP_MULTIPLIER
-    stone = max(int(power * random.randint(180, 260)), 50000)
     name = f"{random.choice(DEMON_NAMES)}·{realm}"
     return {
         "name": name,
         "jj": realm,
+        "wave": max(1, int(wave)),
         "气血": battle_hp,
         "总血量": battle_hp,
         "真元": battle_mp,
@@ -252,8 +256,8 @@ def _create_demon_boss(realm: str) -> dict:
         "battle_max_hp": battle_hp,
         "boss_hp": real_hp,
         "boss_max_hp": real_hp,
-        "max_stone": stone,
-        "stone": stone,
+        "max_stone": DEMON_STONE_REWARD_CAP,
+        "stone": DEMON_STONE_REWARD_CAP,
         "monster_type": "boss",
     }
 
@@ -451,6 +455,8 @@ def _get_user_boss(state: dict, user_info: dict, create_missing: bool = True) ->
     if boss_info is None and create_missing and realm in REALM_LIST:
         boss_info = _create_demon_boss(realm)
         bosses[realm] = boss_info
+    elif boss_info is not None:
+        boss_info.setdefault("wave", 1)
     return realm, boss_info
 
 
@@ -479,9 +485,10 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
             lines.extend(
                 [
                     "",
-                    f"你的境界魔修：{boss_info.get('name', realm)}",
+                    f"你的境界魔修：{boss_info.get('name', realm)}（第{max(_to_int(boss_info.get('wave'), 1), 1)}波）",
                     f"真实血条：{number_to(boss_hp)} / {number_to(boss_max_hp)}",
                     f"对战血条：{number_to(battle_hp)} / {number_to(battle_max_hp)}",
+                    f"灵石固定奖池：{number_to(DEMON_STONE_REWARD_CAP)}",
                     "",
                     "本境界贡献排行：",
                     _format_participant_rank(state.get("participants", {}), realm),
@@ -510,13 +517,60 @@ def _participant_key(user_id: str, realm: str) -> str:
     return f"{realm}:{user_id}"
 
 
-def _record_participant(state: dict, user_info: dict, realm: str, damage: int, killed: bool) -> None:
+def _record_wave(record: dict | None) -> int:
+    return max(_to_int((record or {}).get("wave"), 1), 1)
+
+
+def _find_participant_record(state: dict, user_id: str, preferred_realm: str | None = None) -> tuple[str, dict | None]:
+    participants = state.get("participants", {})
+    if preferred_realm:
+        record_key = _participant_key(user_id, preferred_realm)
+        record = participants.get(record_key)
+        if record:
+            return record_key, record
+
+    for record_key, record in participants.items():
+        if str(record.get("user_id")) == str(user_id):
+            return record_key, record
+    return "", None
+
+
+def _has_user_attacked(state: dict, user_id: str) -> bool:
+    _, record = _find_participant_record(state, user_id)
+    return bool(record and (_to_int(record.get("attacks"), 0) > 0 or _to_int(record.get("damage"), 0) > 0))
+
+
+def _has_user_claimed(claimed: dict, user_id: str, record_key: str | None = None) -> bool:
+    if record_key and claimed.get(record_key):
+        return True
+    suffix = f":{user_id}"
+    for key, value in claimed.items():
+        if value and str(key).endswith(suffix):
+            return True
+    return False
+
+
+def _record_reward_ready(state: dict, record: dict | None) -> bool:
+    if not record:
+        return False
+    if _to_int(record.get("reward_ready"), 0) == 1:
+        return True
+
+    realm = record.get("realm")
+    boss_info = state.get("bosses", {}).get(realm)
+    if not boss_info:
+        return False
+    return _record_wave(record) == max(_to_int(boss_info.get("wave"), 1), 1) and _to_int(boss_info.get("boss_hp"), 0) <= 0
+
+
+def _record_participant(state: dict, user_info: dict, realm: str, wave: int, damage: int, killed: bool) -> None:
     user_id = str(user_info["user_id"])
     participants = state.setdefault("participants", {})
     record_key = _participant_key(user_id, realm)
     record = participants.get(record_key, {})
     record["user_id"] = user_id
     record["realm"] = realm
+    record["wave"] = max(1, int(wave))
     record["name"] = user_info.get("user_name") or user_info.get("user_id") or user_id
     record["damage"] = _to_int(record.get("damage"), 0) + max(0, int(damage))
     record["attacks"] = _to_int(record.get("attacks"), 0) + 1
@@ -525,12 +579,26 @@ def _record_participant(state: dict, user_info: dict, realm: str, damage: int, k
     participants[record_key] = record
 
 
-def _total_recorded_damage(participants: dict, realm: str) -> int:
+def _total_recorded_damage(participants: dict, realm: str, wave: int | None = None) -> int:
     return sum(
         max(0, _to_int(item.get("damage"), 0))
         for item in participants.values()
-        if item.get("realm") == realm
+        if item.get("realm") == realm and (wave is None or _record_wave(item) == wave)
     )
+
+
+def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
+    participants = state.setdefault("participants", {})
+    total_damage = max(_total_recorded_damage(participants, realm, wave), 1)
+    for item in participants.values():
+        if item.get("realm") != realm or _record_wave(item) != wave:
+            continue
+        if _to_int(item.get("damage"), 0) <= 0:
+            continue
+        item["reward_ready"] = 1
+        item["reward_wave"] = wave
+        item["reward_total_damage"] = total_damage
+    return total_damage
 
 
 def _start_auto_demon_invasion() -> dict:
@@ -551,6 +619,27 @@ def _finish_auto_demon_invasion() -> tuple[dict, bool]:
     return state, True
 
 
+def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
+    state = _ensure_daily_state()
+    if state.get("status") != "active":
+        return state, []
+
+    refreshed_realms: list[str] = []
+    bosses = state.setdefault("bosses", {})
+    for realm, boss_info in list(bosses.items()):
+        if _to_int(boss_info.get("boss_hp"), 0) > 0:
+            continue
+        wave = max(_to_int(boss_info.get("wave"), 1), 1)
+        _mark_wave_reward_ready(state, realm, wave)
+        bosses[realm] = _create_demon_boss(realm, wave=wave + 1)
+        refreshed_realms.append(realm)
+
+    if refreshed_realms:
+        state["last_result"] = f"每小时30分刷新检查：{', '.join(refreshed_realms)}魔修已重新入侵。"
+        _save_state(state)
+    return state, refreshed_realms
+
+
 @scheduler.scheduled_job("cron", hour=f"{EVENT_START_HOUR},{EVENT_END_HOUR}", minute=0, id="demon_invasion_schedule")
 async def demon_invasion_schedule_job():
     now = _now()
@@ -566,6 +655,25 @@ async def demon_invasion_schedule_job():
 
     if log_text:
         logger.info(log_text)
+
+
+@scheduler.scheduled_job(
+    "cron",
+    hour=f"{EVENT_START_HOUR}-{EVENT_END_HOUR - 1}",
+    minute=30,
+    second=0,
+    id="demon_invasion_refresh_schedule",
+    misfire_grace_time=300,
+    coalesce=True,
+    max_instances=1,
+)
+async def demon_invasion_refresh_schedule_job():
+    with _state_lock:
+        _, refreshed_realms = _refresh_defeated_demon_bosses()
+    if refreshed_realms:
+        logger.info(f"魔修入侵刷新检查完成，刷新境界：{', '.join(refreshed_realms)}")
+    else:
+        logger.info("魔修入侵刷新检查完成，暂无已击退魔修需要刷新。")
 
 
 @scheduler.scheduled_job(
@@ -729,6 +837,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         state = _ensure_daily_state()
         no_active_event = state.get("status") != "active"
         finished_realm = None
+        attack_limit_msg = ""
         realm = ""
         boss_snapshot = {}
         battle_hp = 1
@@ -737,17 +846,29 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             if boss_info is None:
                 no_active_event = True
             else:
-                if _to_int(boss_info.get("boss_hp"), 0) <= 0:
+                _, existing_record = _find_participant_record(state, user_id, realm)
+                if existing_record and (
+                    _to_int(existing_record.get("attacks"), 0) > 0 or _to_int(existing_record.get("damage"), 0) > 0
+                ):
+                    if _record_reward_ready(state, existing_record):
+                        attack_limit_msg = "你本期已经讨伐过魔修，可发送【领取魔修奖励】领取奖励。"
+                    else:
+                        attack_limit_msg = "你本期已经讨伐过魔修，不能重复出手。"
+                elif _to_int(boss_info.get("boss_hp"), 0) <= 0:
                     finished_realm = realm
-                boss_snapshot = dict(boss_info)
-                battle_hp = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("battle_hp")), 0), 1)
-                boss_snapshot["气血"] = battle_hp
-                boss_snapshot["总血量"] = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("总血量")), 0), 1)
-                _save_state(state)
+                else:
+                    boss_snapshot = dict(boss_info)
+                    battle_hp = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("battle_hp")), 0), 1)
+                    boss_snapshot["气血"] = battle_hp
+                    boss_snapshot["总血量"] = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("总血量")), 0), 1)
+                    _save_state(state)
 
     if no_active_event:
         msg = f"当前没有正在进行的魔修入侵。\n开启时间：每日{EVENT_START_HOUR}:00-{EVENT_END_HOUR}:00。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
+        await attack_demon_invasion.finish()
+    if attack_limit_msg:
+        await handle_send(bot, event, attack_limit_msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
     if finished_realm:
         msg = f"{finished_realm}魔修已被击退，请发送【领取魔修奖励】领取奖励。"
@@ -763,6 +884,11 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     total_damage = _extract_total_damage(status_list, user_id)
 
+    real_damage = 0
+    boss_now_hp = 0
+    boss_all_hp = 1
+    killed = False
+    attack_duplicate_after_fight = False
     with _state_lock:
         state = _ensure_daily_state()
         battle_closed = state.get("status") != "active"
@@ -771,27 +897,36 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             if not boss_info:
                 battle_closed = True
             else:
-                boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
-                current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
-                max_single_damage = max(int(boss_all_hp * MAX_SINGLE_DAMAGE_RATIO), 1)
-                real_damage = min(total_damage * BOSS_REAL_HP_MULTIPLIER, max_single_damage, current_hp)
-                boss_now_hp = max(current_hp - real_damage, 0)
-                boss_info["boss_hp"] = boss_now_hp
-                boss_info["battle_hp"] = boss_info.get("battle_max_hp", boss_info.get("battle_hp", battle_hp))
-                boss_info["气血"] = boss_info["battle_hp"]
-                boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
-                killed = boss_now_hp <= 0
+                boss_wave = max(_to_int(boss_info.get("wave"), 1), 1)
+                snapshot_wave = max(_to_int(boss_snapshot.get("wave"), 1), 1)
+                if boss_wave != snapshot_wave or _to_int(boss_info.get("boss_hp"), 0) <= 0:
+                    battle_closed = True
+                elif _has_user_attacked(state, user_id):
+                    battle_closed = True
+                    attack_duplicate_after_fight = True
+                else:
+                    boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
+                    current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
+                    max_single_damage = max(int(boss_all_hp * MAX_SINGLE_DAMAGE_RATIO), 1)
+                    real_damage = min(total_damage * BOSS_REAL_HP_MULTIPLIER, max_single_damage, current_hp)
+                    boss_now_hp = max(current_hp - real_damage, 0)
+                    boss_info["boss_hp"] = boss_now_hp
+                    boss_info["battle_hp"] = boss_info.get("battle_max_hp", boss_info.get("battle_hp", battle_hp))
+                    boss_info["气血"] = boss_info["battle_hp"]
+                    boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
+                    killed = boss_now_hp <= 0
 
-                _record_participant(state, user_info, realm, real_damage, killed)
-                if killed:
-                    boss_info["battle_hp"] = 0
-                    boss_info["气血"] = 0
-                    boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
-                state["bosses"][realm] = boss_info
-                _save_state(state)
+                    _record_participant(state, user_info, realm, boss_wave, real_damage, killed)
+                    if killed:
+                        _mark_wave_reward_ready(state, realm, boss_wave)
+                        boss_info["battle_hp"] = 0
+                        boss_info["气血"] = 0
+                        boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
+                    state["bosses"][realm] = boss_info
+                    _save_state(state)
 
     if battle_closed:
-        msg = "本场魔修入侵已经结束，本次战斗未计入贡献。"
+        msg = "你本期已经讨伐过魔修，本次战斗未重复计入贡献。" if attack_duplicate_after_fight else "本场魔修入侵已经结束或已刷新，本次战斗未计入贡献。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
 
@@ -829,12 +964,12 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         event,
         msg,
         md_type="世界事件",
-        k1="再战",
-        v1="讨伐魔修",
+        k1="领奖",
+        v1="领取魔修奖励",
         k2="状态",
         v2="魔修入侵状态",
-        k3="领奖",
-        v3="领取魔修奖励",
+        k3="帮助",
+        v3="世界事件帮助",
     )
     log_message(user_id, msg)
     await attack_demon_invasion.finish()
@@ -851,31 +986,32 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = str(user_info["user_id"])
     with _state_lock:
         state = _ensure_daily_state()
-        realm, boss_info = _get_user_boss(state, user_info, create_missing=False)
-        reward_pending = state.get("status") == "active" and boss_info and _to_int(boss_info.get("boss_hp"), 0) > 0
-        no_reward_event = state.get("status") not in ("active", "finished") or not boss_info
-
+        preferred_realm = _normalize_realm(user_info.get("level", ""))
         participants = state.get("participants", {})
-        record_key = _participant_key(user_id, realm)
-        record = None if no_reward_event else participants.get(record_key)
+        record_key, record = _find_participant_record(state, user_id, preferred_realm)
+
+        realm = (record or {}).get("realm") or preferred_realm
+        wave = _record_wave(record)
+        reward_ready = _record_reward_ready(state, record)
+        no_reward_event = state.get("status") not in ("active", "finished")
         no_contribution = not record or _to_int(record.get("damage"), 0) <= 0
+        reward_pending = state.get("status") == "active" and not no_contribution and not reward_ready
 
         claimed = state.setdefault("claimed", {})
-        already_claimed = claimed.get(record_key) if not no_reward_event else False
+        already_claimed = _has_user_claimed(claimed, user_id, record_key) if not no_reward_event else False
 
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
-            total_damage = max(_total_recorded_damage(participants, realm), 1)
+            total_damage = max(_to_int(record.get("reward_total_damage"), 0), _total_recorded_damage(participants, realm, wave), 1)
             damage = _to_int(record.get("damage"), 0)
             contribution = damage / total_damage
-            boss_stone = max(_to_int(boss_info.get("max_stone", boss_info.get("stone")), 50000), 50000)
-            stone_reward = max(int(boss_stone * contribution), 1000)
+            stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
             exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * min(0.05, 0.005 + 0.045 * contribution))
 
             claimed[record_key] = True
             _save_state(state)
 
     if reward_pending:
-        msg = f"{realm}魔修尚未被击退，暂不能领取奖励。"
+        msg = f"你参与的第{wave}波{realm}魔修尚未被击退，暂不能领取奖励。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="讨伐", v1="讨伐魔修")
         await claim_demon_reward.finish()
     if no_reward_event:
@@ -899,6 +1035,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg = (
         f"领取魔修入侵奖励成功！\n"
         f"对应境界：{realm}\n"
+        f"对应波次：第{wave}波\n"
         f"贡献伤害：{number_to(damage)}\n"
         f"贡献占比：{contribution * 100:.2f}%\n"
         f"获得灵石：{number_to(stone_reward)}\n"
