@@ -21,6 +21,7 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     update_statistics_value,
 )
+from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.xiuxian2_handle import (
     PlayerDataManager,
     XiuxianDateManage,
@@ -31,6 +32,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+items = Items()
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -43,6 +45,12 @@ MAX_SINGLE_DAMAGE_RATIO = 0.1
 MAX_PURSUIT_DAMAGE_RATIO = 0.05
 DEMON_ATTACK_LIMIT = 3
 DEMON_STONE_REWARD_CAP = 50000000
+DEMON_EXP_REWARD_CAP_RATE = 0.05
+DEMON_MIN_REWARD_CONTRIBUTION = 0.01
+DEMON_TALISMAN_ITEM_ID = 20010
+DEMON_TALISMAN_CONTRIBUTION_STEP = 0.10
+DEMON_TALISMAN_REWARD_CAP = 3
+DEMON_FULL_RANDOM_POOL_CONTRIBUTION = 0.50
 SPIRIT_VEIN_TRIGGER_CHANCE = 0.10
 SPIRIT_VEIN_MIN_DURATION = 30
 SPIRIT_VEIN_MAX_DURATION = 180
@@ -109,7 +117,7 @@ __world_event_help__ = f"""
   ▶ 领取魔修奖励 - 入侵结束或对应境界魔修被击退后按贡献领取奖励
   ▶ 每期最多讨伐{DEMON_ATTACK_LIMIT}次、领取一次
   ▶ 魔修被击退后可立即领奖，每小时30分会刷新已击退的魔修
-  ▶ 灵石固定奖池{number_to(DEMON_STONE_REWARD_CAP)}，按贡献占比瓜分
+  ▶ 奖励按贡献结算，可能获得珍稀奖励
 
 天降灵脉：
   ▶ 每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启
@@ -156,6 +164,46 @@ def _to_int(value, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
+
+
+def _reward_contribution(contribution: float) -> float:
+    try:
+        value = float(contribution)
+    except (TypeError, ValueError):
+        value = 0
+    return min(max(value, DEMON_MIN_REWARD_CONTRIBUTION), 1.0)
+
+
+def _demon_talisman_reward_count(contribution: float) -> int:
+    count = int((contribution + 1e-12) / DEMON_TALISMAN_CONTRIBUTION_STEP)
+    return min(max(count, 0), DEMON_TALISMAN_REWARD_CAP)
+
+
+def _is_demon_random_reward_item(item: dict, contribution: float) -> bool:
+    item_type = item.get("item_type")
+    if item_type == "特殊物品":
+        return True
+    if item_type in ("功法", "辅修功法", "神通"):
+        return _to_int(item.get("rank"), -1) > 0
+    if item_type in ("身法", "瞳术"):
+        return contribution >= DEMON_FULL_RANDOM_POOL_CONTRIBUTION or _to_int(item.get("rank"), -1) > 0
+    if item_type in ("法器", "防具"):
+        if "fusion" in item:
+            return False
+        return contribution >= DEMON_FULL_RANDOM_POOL_CONTRIBUTION or _to_int(item.get("rank"), -1) > 0
+    return False
+
+
+def _get_demon_random_reward_pool(contribution: float) -> list[tuple[int, dict]]:
+    pool = []
+    for item_id, item in items.items.items():
+        if not _is_demon_random_reward_item(item, contribution):
+            continue
+        try:
+            pool.append((int(item_id), item))
+        except (TypeError, ValueError):
+            continue
+    return pool
 
 
 def _load_state(event_key: str = EVENT_KEY) -> dict:
@@ -490,7 +538,7 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
                     f"你的境界魔修：{boss_info.get('name', realm)}（第{max(_to_int(boss_info.get('wave'), 1), 1)}波）",
                     f"真实血条：{number_to(boss_hp)} / {number_to(boss_max_hp)}",
                     f"对战血条：{number_to(battle_hp)} / {number_to(battle_max_hp)}",
-                    f"灵石固定奖池：{number_to(DEMON_STONE_REWARD_CAP)}",
+                    "奖励：按贡献结算，可能获得珍稀奖励",
                     "",
                     "本境界贡献排行：",
                     _format_participant_rank(state.get("participants", {}), realm),
@@ -1029,9 +1077,16 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
             total_damage = max(_to_int(record.get("reward_total_damage"), 0), _total_recorded_damage(participants, realm, wave), 1)
             damage = _to_int(record.get("damage"), 0)
-            contribution = damage / total_damage
+            raw_contribution = damage / total_damage
+            contribution = _reward_contribution(raw_contribution)
             stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
-            exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * min(0.05, 0.005 + 0.045 * contribution))
+            exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * DEMON_EXP_REWARD_CAP_RATE * contribution)
+            talisman_reward = _demon_talisman_reward_count(contribution)
+            random_reward = None
+            if random.random() <= contribution:
+                reward_pool = _get_demon_random_reward_pool(contribution)
+                if reward_pool:
+                    random_reward = random.choice(reward_pool)
 
             claimed[record_key] = True
             _save_state(state)
@@ -1056,16 +1111,50 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     sql_message.update_ls(user_id, stone_reward, 1)
     if exp_reward > 0:
         sql_message.update_exp(user_id, exp_reward)
+
+    if talisman_reward > 0:
+        talisman_info = items.get_data_by_item_id(DEMON_TALISMAN_ITEM_ID)
+        if talisman_info:
+            sql_message.send_back(
+                user_id,
+                DEMON_TALISMAN_ITEM_ID,
+                talisman_info["name"],
+                talisman_info["type"],
+                talisman_reward,
+                1,
+            )
+
+    random_reward_text = "未获得"
+    if random_reward:
+        random_item_id, random_item_info = random_reward
+        sql_message.send_back(
+            user_id,
+            random_item_id,
+            random_item_info["name"],
+            random_item_info["type"],
+            1,
+            1,
+        )
+        random_reward_level = random_item_info.get("level")
+        random_reward_name = random_item_info.get("name", f"未知物品{random_item_id}")
+        random_reward_text = f"{random_reward_level}:{random_reward_name}" if random_reward_level else random_reward_name
+
     update_statistics_value(user_id, "魔修入侵领奖")
+
+    contribution_text = f"{raw_contribution * 100:.2f}%"
+    if abs(contribution - raw_contribution) > 1e-12:
+        contribution_text += f"（按{contribution * 100:.2f}%结算）"
 
     msg = (
         f"领取魔修入侵奖励成功！\n"
         f"对应境界：{realm}\n"
         f"对应波次：第{wave}波\n"
         f"贡献伤害：{number_to(damage)}\n"
-        f"贡献占比：{contribution * 100:.2f}%\n"
+        f"贡献占比：{contribution_text}\n"
         f"获得灵石：{number_to(stone_reward)}\n"
-        f"获得修为：{number_to(exp_reward)}"
+        f"获得修为：{number_to(exp_reward)}\n"
+        f"获得灵签宝箓：{talisman_reward}个\n"
+        f"珍稀奖励：{random_reward_text}"
     )
     await handle_send(
         bot,

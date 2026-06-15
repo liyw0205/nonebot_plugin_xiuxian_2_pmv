@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..on_compat import on_command
 from nonebot.log import logger
-from nonebot.params import CommandArg
+from nonebot.params import Command, CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, MessageSegment, get_at_user_id
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -114,7 +114,7 @@ __double_cultivation_help__ = f"""
   • 同意拜师 [徒弟道号/QQ]
   • 拒绝拜师 [徒弟道号/QQ]
   • 拜师保护 [开启/关闭/状态]
-  • 我的师徒
+  • 我的师徒 / 我的师父 / 我的徒弟
   • 师徒传功 [徒弟道号/QQ]
   • 师徒记录 / 师徒排行榜
   • 解除师徒 / 出师 / 逐出师门
@@ -2163,7 +2163,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
 
 @my_mentor.handle(parameterless=[Cooldown(cd_time=0)])
-async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, command: tuple = Command()):
     """查看师徒信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -2203,6 +2203,32 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     remain = _get_remaining_mentor_transmission(user_id)
     mentor_protect_status = "开启（自动拒绝拜师）" if mentor_data.get("mentor_protect") == "on" else "关闭（允许拜师申请）"
     pending_count = _count_pending_mentor_invites(user_id)
+    command_name = str(command[0]) if command else "我的师徒"
+
+    if command_name in {"我的师父", "我的师傅"}:
+        msg = f"""🧭 我的师父信息
+师父：{mentor_line}
+
+今日剩余传功次数：{remain}/{mentor_transmission_limit}
+接受传功：{safe_int(stats_data.get("接受传功次数"))}
+拜师冷却：{_format_seconds(apprentice_cd) if apprentice_cd > 0 else "无"}"""
+        await handle_send(bot, event, msg, md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="徒弟", v3="我的徒弟", k4="记录", v4="师徒记录")
+        await my_mentor.finish()
+
+    if command_name == "我的徒弟":
+        msg = f"""🧭 我的徒弟信息
+徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）：
+{apprentice_msg}
+
+拜师保护：{mentor_protect_status}
+待处理拜师申请：{pending_count}条
+今日剩余传功次数：{remain}/{mentor_transmission_limit}
+累计收徒：{safe_int(stats_data.get("收徒次数"))}，培养出师：{safe_int(stats_data.get("培养出师徒弟"))}
+累计传功：{safe_int(stats_data.get("师徒传功次数"))}
+收徒冷却：{_format_seconds(mentor_cd) if mentor_cd > 0 else "无"}"""
+        await handle_send(bot, event, msg, md_type="buff", k1="师徒", v1="我的师徒", k2="传功", v2="师徒传功", k3="师父", v3="我的师父", k4="保护", v4="拜师保护 状态")
+        await my_mentor.finish()
+
     msg = f"""🧭 我的师徒信息
 师父：{mentor_line}
 
