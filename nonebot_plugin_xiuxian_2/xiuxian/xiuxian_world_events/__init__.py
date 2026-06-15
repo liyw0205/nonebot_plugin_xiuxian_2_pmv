@@ -608,7 +608,7 @@ def _record_reward_ready(state: dict, record: dict | None) -> bool:
     return _record_wave(record) == max(_to_int(boss_info.get("wave"), 1), 1) and _to_int(boss_info.get("boss_hp"), 0) <= 0
 
 
-def _record_participant(state: dict, user_info: dict, realm: str, wave: int, damage: int, killed: bool) -> None:
+def _record_participant(state: dict, user_info: dict, realm: str, wave: int, damage: int, killed: bool, boss_max_hp: int) -> None:
     user_id = str(user_info["user_id"])
     participants = state.setdefault("participants", {})
     record_key = _participant_key(user_id, realm)
@@ -619,22 +619,16 @@ def _record_participant(state: dict, user_info: dict, realm: str, wave: int, dam
     record["name"] = user_info.get("user_name") or user_info.get("user_id") or user_id
     record["damage"] = _to_int(record.get("damage"), 0) + max(0, int(damage))
     record["attacks"] = _to_int(record.get("attacks"), 0) + 1
+    record["reward_base_hp"] = max(_to_int(record.get("reward_base_hp"), 0), _to_int(boss_max_hp, 0), 1)
     if killed:
         record["last_hit"] = 1
     participants[record_key] = record
 
 
-def _total_recorded_damage(participants: dict, realm: str, wave: int | None = None) -> int:
-    return sum(
-        max(0, _to_int(item.get("damage"), 0))
-        for item in participants.values()
-        if item.get("realm") == realm and (wave is None or _record_wave(item) == wave)
-    )
-
-
 def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
     participants = state.setdefault("participants", {})
-    total_damage = max(_total_recorded_damage(participants, realm, wave), 1)
+    boss_info = state.get("bosses", {}).get(realm, {})
+    reward_base_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
     for item in participants.values():
         if item.get("realm") != realm or _record_wave(item) != wave:
             continue
@@ -642,8 +636,26 @@ def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
             continue
         item["reward_ready"] = 1
         item["reward_wave"] = wave
-        item["reward_total_damage"] = total_damage
-    return total_damage
+        item["reward_base_hp"] = max(_to_int(item.get("reward_base_hp"), 0), reward_base_hp)
+        item["reward_total_damage"] = item["reward_base_hp"]
+    return reward_base_hp
+
+
+def _record_reward_base_hp(state: dict, record: dict | None, realm: str, wave: int) -> int:
+    if not record:
+        return 1
+
+    boss_info = state.get("bosses", {}).get(realm, {})
+    current_boss_base = 0
+    if boss_info and max(_to_int(boss_info.get("wave"), 1), 1) == wave:
+        current_boss_base = _to_int(boss_info.get("boss_max_hp"), 0)
+
+    return max(
+        _to_int(record.get("reward_base_hp"), 0),
+        current_boss_base,
+        _to_int(record.get("damage"), 0),
+        1,
+    )
 
 
 def _start_auto_demon_invasion() -> dict:
@@ -977,7 +989,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                         boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
                         killed = (not pursuit_mode) and boss_now_hp <= 0
 
-                        _record_participant(state, user_info, realm, boss_wave, real_damage, killed)
+                        _record_participant(state, user_info, realm, boss_wave, real_damage, killed, boss_all_hp)
                         if pursuit_mode:
                             _mark_wave_reward_ready(state, realm, boss_wave)
                             boss_info["last_result"] = f"{user_info.get('user_name', user_id)}追击了{realm}魔修。"
@@ -1061,7 +1073,6 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     with _state_lock:
         state = _ensure_daily_state()
         preferred_realm = _normalize_realm(user_info.get("level", ""))
-        participants = state.get("participants", {})
         record_key, record = _find_participant_record(state, user_id, preferred_realm)
 
         realm = (record or {}).get("realm") or preferred_realm
@@ -1075,9 +1086,9 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         already_claimed = _has_user_claimed(claimed, user_id, record_key) if not no_reward_event else False
 
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
-            total_damage = max(_to_int(record.get("reward_total_damage"), 0), _total_recorded_damage(participants, realm, wave), 1)
+            reward_base_hp = _record_reward_base_hp(state, record, realm, wave)
             damage = _to_int(record.get("damage"), 0)
-            raw_contribution = damage / total_damage
+            raw_contribution = damage / reward_base_hp
             contribution = _reward_contribution(raw_contribution)
             stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
             exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * DEMON_EXP_REWARD_CAP_RATE * contribution)
