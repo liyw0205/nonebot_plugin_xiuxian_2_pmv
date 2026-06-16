@@ -49,6 +49,7 @@ MENTOR_GRADUATE_APPRENTICE_STONE_REWARD = getattr(mentor_config, "mentor_graduat
 MENTOR_GRADUATE_MENTOR_STONE_REWARD = getattr(mentor_config, "mentor_graduate_mentor_stone_reward", 10000000)
 MENTOR_HISTORY_LIMIT = getattr(mentor_config, "mentor_history_limit", 50)
 MENTOR_APPLY_LIMIT_HOURS = getattr(mentor_config, "mentor_apply_limit_hours", 24)
+MENTOR_BREAKTHROUGH_REWARD_LIMIT = 27
 MENTOR_BREAKTHROUGH_REWARD_BASE_RATE = getattr(mentor_config, "mentor_breakthrough_reward_base_rate", 0.005)
 MENTOR_BREAKTHROUGH_REWARD_MIN_RATE = getattr(mentor_config, "mentor_breakthrough_reward_min_rate", 0.001)
 MENTOR_BREAKTHROUGH_REWARD_MAX_RATE = getattr(mentor_config, "mentor_breakthrough_reward_max_rate", 0.01)
@@ -1359,6 +1360,7 @@ def load_mentor(user_id):
             "mentor_protect": "off",
             "mentor_apply_time": None,
             "mentor_apply_target": None,
+            "breakthrough_reward_count": 0,
         }
 
     mentor_id = info.get("mentor_id")
@@ -1412,6 +1414,7 @@ def load_mentor(user_id):
         "mentor_protect": mentor_protect,
         "mentor_apply_time": mentor_apply_time,
         "mentor_apply_target": mentor_apply_target,
+        "breakthrough_reward_count": safe_int(info.get("breakthrough_reward_count"), 0),
     }
 
 
@@ -1461,6 +1464,10 @@ def save_mentor(user_id, data):
 
     mentor_rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
     mentor_history = _normalize_history(data.get("mentor_history"))[-MENTOR_HISTORY_LIMIT:]
+    breakthrough_reward_count = min(
+        max(safe_int(data.get("breakthrough_reward_count"), 0), 0),
+        MENTOR_BREAKTHROUGH_REWARD_LIMIT,
+    )
 
     player_data_manager.update_or_write_data(
         str(user_id), "mentor", "mentor_id", mentor_id, data_type="TEXT"
@@ -1491,6 +1498,9 @@ def save_mentor(user_id, data):
     )
     player_data_manager.update_or_write_data(
         str(user_id), "mentor", "mentor_apply_target", mentor_apply_target, data_type="TEXT"
+    )
+    player_data_manager.update_or_write_data(
+        str(user_id), "mentor", "breakthrough_reward_count", breakthrough_reward_count, data_type="INTEGER"
     )
 
 
@@ -1951,6 +1961,7 @@ def _remove_mentor_relation(mentor_id, apprentice_id):
     if str(apprentice_data.get("mentor_id")) == mentor_id:
         apprentice_data["mentor_id"] = None
         apprentice_data["bind_time"] = None
+        apprentice_data["breakthrough_reward_count"] = 0
         save_mentor(apprentice_id, apprentice_data)
 
 
@@ -2649,6 +2660,10 @@ def trigger_mentor_breakthrough_reward(apprentice_id, new_level):
     if not mentor_id or not check_is_mentor_pair(mentor_id, apprentice_id):
         return ""
 
+    reward_count = safe_int(apprentice_data.get("breakthrough_reward_count"), 0)
+    if reward_count >= MENTOR_BREAKTHROUGH_REWARD_LIMIT:
+        return ""
+
     mentor_info = sql_message.get_user_info_with_id(mentor_id)
     apprentice_info = sql_message.get_user_info_with_id(apprentice_id)
     if not mentor_info or not apprentice_info:
@@ -2668,6 +2683,9 @@ def trigger_mentor_breakthrough_reward(apprentice_id, new_level):
     if give_exp <= 0:
         return ""
 
+    apprentice_data["breakthrough_reward_count"] = reward_count + 1
+    save_mentor(apprentice_id, apprentice_data)
+
     sql_message.update_exp(mentor_id, give_exp)
     sql_message.update_power2(mentor_id)
 
@@ -2679,9 +2697,15 @@ def trigger_mentor_breakthrough_reward(apprentice_id, new_level):
         mentor_id,
         apprentice_id,
         "breakthrough_reward",
-        f"徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}",
-        f"突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}",
+        f"徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}（{reward_count + 1}/{MENTOR_BREAKTHROUGH_REWARD_LIMIT}）",
+        f"突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}（{reward_count + 1}/{MENTOR_BREAKTHROUGH_REWARD_LIMIT}）",
     )
-    log_message(mentor_id, f"[师徒] 徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}")
-    log_message(apprentice_id, f"[师徒] 突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}")
+    log_message(
+        mentor_id,
+        f"[师徒] 徒弟{apprentice_name}突破{new_level}，获得返修{number_to(give_exp)}（{reward_count + 1}/{MENTOR_BREAKTHROUGH_REWARD_LIMIT}）",
+    )
+    log_message(
+        apprentice_id,
+        f"[师徒] 突破{new_level}，师父{mentor_name}获得返修{number_to(give_exp)}（{reward_count + 1}/{MENTOR_BREAKTHROUGH_REWARD_LIMIT}）",
+    )
     return f"\n师父{mentor_name}因徒弟突破{new_level}，获得{number_to(give_exp)}修为返修！"
