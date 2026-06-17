@@ -44,6 +44,10 @@ BOSS_REAL_HP_MULTIPLIER = 10000
 MAX_SINGLE_DAMAGE_RATIO = 0.2
 MAX_PURSUIT_DAMAGE_RATIO = 0.1
 DEMON_ATTACK_LIMIT = 3
+DEMON_CHIEF_WAVE = EVENT_END_HOUR - EVENT_START_HOUR + 1
+DEMON_CHIEF_HP_MULTIPLIER = 100
+DEMON_CHIEF_ATK_MULTIPLIER = 10
+DEMON_CHIEF_REWARD_MULTIPLIER = 1.5
 DEMON_STONE_REWARD_CAP = 50000000
 DEMON_EXP_REWARD_CAP_RATE = 0.05
 DEMON_MIN_REWARD_CONTRIBUTION = 0.01
@@ -93,6 +97,11 @@ DEMON_NAMES = [
     "无相魔影",
     "黑莲魔尊",
 ]
+DEMON_CHIEF_NAMES = [
+    "万劫魔尊",
+    "玄冥魔主",
+    "无相天魔",
+]
 
 _state_lock = RLock()
 
@@ -118,6 +127,7 @@ __world_event_help__ = f"""
   ▶ 每期最多讨伐{DEMON_ATTACK_LIMIT}次、每期领取一次
   ▶ 当前境界魔修被击退或入侵结束后可领取奖励
   ▶ 每小时30分刷新已击退的魔修，已记录贡献会保留到本期领奖
+  ▶ 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER:g}
   ▶ 奖励按本期累计贡献结算，领取后不能继续讨伐
 
 天降灵脉：
@@ -177,6 +187,26 @@ def _to_float(value, default: float = 0.0) -> float:
 def _reward_contribution(contribution: float) -> float:
     value = _to_float(contribution)
     return min(max(value, DEMON_MIN_REWARD_CONTRIBUTION), 1.0)
+
+
+def _is_demon_chief_wave(wave: int) -> bool:
+    return max(_to_int(wave, 1), 1) >= DEMON_CHIEF_WAVE
+
+
+def _boss_reward_multiplier(boss_info: dict | None) -> float:
+    return max(_to_float((boss_info or {}).get("reward_multiplier"), 1.0), 1.0)
+
+
+def _record_reward_multiplier(record: dict | None) -> float:
+    return max(_to_float((record or {}).get("reward_multiplier"), 1.0), 1.0)
+
+
+def _format_contribution_percent(contribution: float, reward_multiplier: float = 1.0) -> str:
+    contribution = min(max(_to_float(contribution), 0.0), 1.0)
+    settlement_contribution = min(max(contribution * max(_to_float(reward_multiplier, 1.0), 1.0), 0.0), 1.0)
+    if abs(settlement_contribution - contribution) > 1e-12:
+        return f"{contribution * 100:.2f}%，结算{settlement_contribution * 100:.2f}%"
+    return f"{contribution * 100:.2f}%"
 
 
 def _demon_talisman_reward_count(contribution: float) -> int:
@@ -293,16 +323,22 @@ def _normalize_realm(level: str) -> str:
 
 
 def _create_demon_boss(realm: str, wave: int = 1) -> dict:
+    wave = max(1, int(wave))
+    is_chief = _is_demon_chief_wave(wave)
     power = _get_level_power(realm)
     battle_hp = int(power * random.randint(32, 42))
     battle_mp = int(power * random.randint(6, 9))
     battle_atk = int(power * random.uniform(3.8, 5.2))
+    if is_chief:
+        battle_hp *= DEMON_CHIEF_HP_MULTIPLIER
+        battle_atk *= DEMON_CHIEF_ATK_MULTIPLIER
     real_hp = battle_hp * BOSS_REAL_HP_MULTIPLIER
-    name = f"{random.choice(DEMON_NAMES)}·{realm}"
+    name_pool = DEMON_CHIEF_NAMES if is_chief else DEMON_NAMES
+    name = f"{random.choice(name_pool)}·{realm}"
     return {
         "name": name,
         "jj": realm,
-        "wave": max(1, int(wave)),
+        "wave": wave,
         "气血": battle_hp,
         "总血量": battle_hp,
         "真元": battle_mp,
@@ -314,6 +350,8 @@ def _create_demon_boss(realm: str, wave: int = 1) -> dict:
         "max_stone": DEMON_STONE_REWARD_CAP,
         "stone": DEMON_STONE_REWARD_CAP,
         "monster_type": "boss",
+        "is_chief": 1 if is_chief else 0,
+        "reward_multiplier": DEMON_CHIEF_REWARD_MULTIPLIER if is_chief else 1.0,
     }
 
 
@@ -507,7 +545,8 @@ def _format_participant_rank(
         damage = _to_int(item.get("damage"), 0)
         attacks = _to_int(item.get("attacks"), 0)
         contribution = _to_float(item.get("reward_contribution"), 0.0)
-        contribution_text = f"，贡献{contribution * 100:.2f}%" if contribution > 0 else ""
+        base_contribution = _to_float(item.get("base_contribution"), contribution)
+        contribution_text = f"，贡献{_format_contribution_percent(base_contribution, _record_reward_multiplier(item))}" if contribution > 0 else ""
         lines.append(f"{index}. {name}：{number_to(damage)}真实伤害{contribution_text}，出手{attacks}次")
     return "\n".join(lines)
 
@@ -546,13 +585,18 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
             boss_max_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
             battle_hp = max(_to_int(boss_info.get("battle_hp", boss_info.get("气血")), 0), 0)
             battle_max_hp = max(_to_int(boss_info.get("battle_max_hp", boss_info.get("总血量")), 0), 1)
+            boss_title = "魔修首领" if _to_int(boss_info.get("is_chief"), 0) == 1 else "魔修"
+            reward_multiplier = _boss_reward_multiplier(boss_info)
+            reward_text = "奖励：按贡献结算，可能获得珍稀奖励"
+            if reward_multiplier > 1:
+                reward_text = f"奖励：首领贡献结算x{reward_multiplier:g}，可能获得珍稀奖励"
             lines.extend(
                 [
                     "",
-                    f"你的境界魔修：{boss_info.get('name', realm)}（第{max(_to_int(boss_info.get('wave'), 1), 1)}波）",
+                    f"你的境界{boss_title}：{boss_info.get('name', realm)}（第{max(_to_int(boss_info.get('wave'), 1), 1)}波）",
                     f"真实血条：{number_to(boss_hp)} / {number_to(boss_max_hp)}",
                     f"对战血条：{number_to(battle_hp)} / {number_to(battle_max_hp)}",
-                    "奖励：按贡献结算，可能获得珍稀奖励",
+                    reward_text,
                     "",
                     "本境界本波贡献排行：",
                     _format_participant_rank(
@@ -659,6 +703,7 @@ def _record_participant(
     wave: int,
     damage: int,
     contribution: float,
+    reward_multiplier: float,
     killed: bool,
     boss_max_hp: int,
     pursuit_mode: bool,
@@ -679,21 +724,25 @@ def _record_participant(
     record["attacks"] = _to_int(record.get("attacks"), 0) + 1
     record["reward_base_hp"] = max(_to_int(record.get("reward_base_hp"), 0), _to_int(boss_max_hp, 0), 1)
     record["reward_total_damage"] = record["reward_base_hp"]
-    record["reward_contribution"] = min(
-        _to_float(record.get("reward_contribution"), 0.0) + max(0.0, float(contribution)),
+    reward_multiplier = max(_to_float(reward_multiplier, 1.0), 1.0)
+    settlement_contribution = max(0.0, float(contribution)) * reward_multiplier
+    record["reward_multiplier"] = max(_record_reward_multiplier(record), reward_multiplier)
+    record["base_contribution"] = min(
+        _to_float(record.get("base_contribution"), 0.0) + max(0.0, float(contribution)),
         1.0,
     )
+    record["reward_contribution"] = min(_to_float(record.get("reward_contribution"), 0.0) + settlement_contribution, 1.0)
     if pursuit_mode:
         record["pursuit_damage"] = _to_int(record.get("pursuit_damage"), 0) + max(0, int(damage))
         record["pursuit_contribution"] = min(
-            _to_float(record.get("pursuit_contribution"), 0.0) + max(0.0, float(contribution)),
+            _to_float(record.get("pursuit_contribution"), 0.0) + settlement_contribution,
             1.0,
         )
         record["pursuit_attacks"] = _to_int(record.get("pursuit_attacks"), 0) + 1
     else:
         record["normal_damage"] = _to_int(record.get("normal_damage"), 0) + max(0, int(damage))
         record["normal_contribution"] = min(
-            _to_float(record.get("normal_contribution"), 0.0) + max(0.0, float(contribution)),
+            _to_float(record.get("normal_contribution"), 0.0) + settlement_contribution,
             1.0,
         )
         record["normal_attacks"] = _to_int(record.get("normal_attacks"), 0) + 1
@@ -716,10 +765,9 @@ def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
         item["reward_base_hp"] = max(_to_int(item.get("reward_base_hp"), 0), reward_base_hp)
         item["reward_total_damage"] = item["reward_base_hp"]
         if "reward_contribution" not in item:
-            item["reward_contribution"] = min(
-                max(_to_int(item.get("damage"), 0) / max(_to_int(item.get("reward_base_hp"), 0), 1), 0.0),
-                1.0,
-            )
+            base_contribution = min(max(_to_int(item.get("damage"), 0) / max(_to_int(item.get("reward_base_hp"), 0), 1), 0.0), 1.0)
+            item["base_contribution"] = base_contribution
+            item["reward_contribution"] = min(base_contribution * _record_reward_multiplier(item), 1.0)
     return reward_base_hp
 
 
@@ -746,7 +794,8 @@ def _record_reward_contribution(state: dict, record: dict | None, realm: str, wa
     if "reward_contribution" in record:
         return min(max(_to_float(record.get("reward_contribution"), 0.0), 0.0), 1.0)
     reward_base_hp = _record_reward_base_hp(state, record, realm, wave)
-    return min(max(_to_int(record.get("damage"), 0) / reward_base_hp, 0.0), 1.0)
+    base_contribution = min(max(_to_int(record.get("damage"), 0) / reward_base_hp, 0.0), 1.0)
+    return min(base_contribution * _record_reward_multiplier(record), 1.0)
 
 
 def _find_user_records(state: dict, user_id: str, preferred_realm: str | None = None) -> list[tuple[str, dict]]:
@@ -1078,6 +1127,8 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     boss_all_hp = 1
     killed = False
     contribution_ratio = 0.0
+    reward_multiplier = 1.0
+    total_contribution = 0.0
     attack_duplicate_after_fight = False
     with _state_lock:
         state = _ensure_daily_state()
@@ -1100,6 +1151,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                         attack_duplicate_after_fight = True
                     else:
                         boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
+                        reward_multiplier = _boss_reward_multiplier(boss_info)
                         current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
                         pursuit_mode = current_hp <= 0
                         damage_ratio = MAX_PURSUIT_DAMAGE_RATIO if pursuit_mode else MAX_SINGLE_DAMAGE_RATIO
@@ -1125,6 +1177,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                             boss_wave,
                             real_damage,
                             contribution_ratio,
+                            reward_multiplier,
                             killed,
                             boss_all_hp,
                             pursuit_mode,
@@ -1138,6 +1191,10 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                             boss_info["气血"] = 0
                             boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
                         state["bosses"][realm] = boss_info
+                        _, total_contribution, _, _ = _sum_reward_contribution(
+                            state,
+                            _find_user_records(state, user_id, realm),
+                        )
                         _save_state(state)
 
     if battle_closed:
@@ -1162,16 +1219,16 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         msg += (
             f"道友追击已败退的{boss_snapshot.get('name', '魔修')}。\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
-            f"追击贡献上限：{int(MAX_PURSUIT_DAMAGE_RATIO * 100)}%\n"
-            f"本次追击贡献：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
+            f"本次追击贡献：{number_to(real_damage)}（{_format_contribution_percent(contribution_ratio, reward_multiplier)}）\n"
+            f"本期总贡献：{total_contribution * 100:.2f}%\n"
             f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
         )
     elif killed:
         msg += (
             f"恭喜道友击退{boss_snapshot.get('name', '魔修')}！\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
-            f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
-            f"实际削减真实血条：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
+            f"本次贡献：{number_to(real_damage)}（{_format_contribution_percent(contribution_ratio, reward_multiplier)}）\n"
+            f"本期总贡献：{total_contribution * 100:.2f}%\n"
             f"参与者可发送【领取魔修奖励】按本期累计贡献领取奖励，领取后不能继续讨伐。"
         )
     else:
@@ -1179,8 +1236,8 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         msg += (
             f"道友{result_text}。\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
-            f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
-            f"实际削减真实血条：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
+            f"本次贡献：{number_to(real_damage)}（{_format_contribution_percent(contribution_ratio, reward_multiplier)}）\n"
+            f"本期总贡献：{total_contribution * 100:.2f}%\n"
             f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
         )
 
