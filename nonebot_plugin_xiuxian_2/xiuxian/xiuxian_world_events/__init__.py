@@ -115,9 +115,10 @@ __world_event_help__ = f"""
   ▶ 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
   ▶ 讨伐魔修 - 按自身境界挑战对应境界魔修
   ▶ 领取魔修奖励 - 入侵结束或对应境界魔修被击退后按贡献领取奖励
-  ▶ 每期最多讨伐{DEMON_ATTACK_LIMIT}次、领取一次
-  ▶ 魔修被击退后可立即领奖，每小时30分会刷新已击退的魔修
-  ▶ 奖励按贡献结算，可能获得珍稀奖励
+  ▶ 每期最多讨伐{DEMON_ATTACK_LIMIT}次、每期领取一次
+  ▶ 当前境界魔修被击退或入侵结束后可领取奖励
+  ▶ 每小时30分刷新已击退的魔修，已记录贡献会保留到本期领奖
+  ▶ 奖励按本期累计贡献结算，领取后不能继续讨伐
 
 天降灵脉：
   ▶ 每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启
@@ -166,11 +167,15 @@ def _to_int(value, default: int = 0) -> int:
         return default
 
 
-def _reward_contribution(contribution: float) -> float:
+def _to_float(value, default: float = 0.0) -> float:
     try:
-        value = float(contribution)
+        return float(value)
     except (TypeError, ValueError):
-        value = 0
+        return default
+
+
+def _reward_contribution(contribution: float) -> float:
+    value = _to_float(contribution)
     return min(max(value, DEMON_MIN_REWARD_CONTRIBUTION), 1.0)
 
 
@@ -479,10 +484,17 @@ def _ensure_daily_state() -> dict:
     return state
 
 
-def _format_participant_rank(participants: dict, realm: str | None = None, limit: int = 5) -> str:
+def _format_participant_rank(
+    participants: dict,
+    realm: str | None = None,
+    wave: int | None = None,
+    limit: int = 5,
+) -> str:
     rows = []
     for item in participants.values():
         if realm and item.get("realm") != realm:
+            continue
+        if wave is not None and _record_wave(item) != wave:
             continue
         rows.append(item)
     rows.sort(key=lambda item: _to_int(item.get("damage"), 0), reverse=True)
@@ -494,7 +506,9 @@ def _format_participant_rank(participants: dict, realm: str | None = None, limit
         name = item.get("name") or item.get("user_id") or "未知道友"
         damage = _to_int(item.get("damage"), 0)
         attacks = _to_int(item.get("attacks"), 0)
-        lines.append(f"{index}. {name}：{number_to(damage)}真实伤害，出手{attacks}次")
+        contribution = _to_float(item.get("reward_contribution"), 0.0)
+        contribution_text = f"，贡献{contribution * 100:.2f}%" if contribution > 0 else ""
+        lines.append(f"{index}. {name}：{number_to(damage)}真实伤害{contribution_text}，出手{attacks}次")
     return "\n".join(lines)
 
 
@@ -540,8 +554,12 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
                     f"对战血条：{number_to(battle_hp)} / {number_to(battle_max_hp)}",
                     "奖励：按贡献结算，可能获得珍稀奖励",
                     "",
-                    "本境界贡献排行：",
-                    _format_participant_rank(state.get("participants", {}), realm),
+                    "本境界本波贡献排行：",
+                    _format_participant_rank(
+                        state.get("participants", {}),
+                        realm,
+                        max(_to_int(boss_info.get("wave"), 1), 1),
+                    ),
                 ]
             )
 
@@ -563,29 +581,49 @@ def _extract_total_damage(status_list: list, user_id: str) -> int:
     return total_damage
 
 
-def _participant_key(user_id: str, realm: str) -> str:
-    return f"{realm}:{user_id}"
+def _participant_key(user_id: str, realm: str, wave: int | None = None) -> str:
+    if wave is None:
+        return f"{realm}:{user_id}"
+    return f"{realm}:{max(_to_int(wave, 1), 1)}:{user_id}"
 
 
 def _record_wave(record: dict | None) -> int:
     return max(_to_int((record or {}).get("wave"), 1), 1)
 
 
-def _find_participant_record(state: dict, user_id: str, preferred_realm: str | None = None) -> tuple[str, dict | None]:
+def _find_participant_record(
+    state: dict,
+    user_id: str,
+    preferred_realm: str | None = None,
+    preferred_wave: int | None = None,
+) -> tuple[str, dict | None]:
     participants = state.get("participants", {})
     if preferred_realm:
+        if preferred_wave is not None:
+            record_key = _participant_key(user_id, preferred_realm, preferred_wave)
+            record = participants.get(record_key)
+            if record:
+                return record_key, record
+
         record_key = _participant_key(user_id, preferred_realm)
         record = participants.get(record_key)
-        if record:
+        if record and (preferred_wave is None or _record_wave(record) == max(_to_int(preferred_wave, 1), 1)):
             return record_key, record
 
     for record_key, record in participants.items():
-        if str(record.get("user_id")) == str(user_id):
-            return record_key, record
+        if str(record.get("user_id")) != str(user_id):
+            continue
+        if preferred_realm and record.get("realm") != preferred_realm:
+            continue
+        if preferred_wave is not None and _record_wave(record) != max(_to_int(preferred_wave, 1), 1):
+            continue
+        return record_key, record
     return "", None
 
 
 def _has_user_claimed(claimed: dict, user_id: str, record_key: str | None = None) -> bool:
+    if claimed.get(str(user_id)):
+        return True
     if record_key and claimed.get(record_key):
         return True
     suffix = f":{user_id}"
@@ -595,9 +633,15 @@ def _has_user_claimed(claimed: dict, user_id: str, record_key: str | None = None
     return False
 
 
+def _claim_key(user_id: str) -> str:
+    return str(user_id)
+
+
 def _record_reward_ready(state: dict, record: dict | None) -> bool:
     if not record:
         return False
+    if state.get("status") == "finished":
+        return True
     if _to_int(record.get("reward_ready"), 0) == 1:
         return True
 
@@ -608,18 +652,51 @@ def _record_reward_ready(state: dict, record: dict | None) -> bool:
     return _record_wave(record) == max(_to_int(boss_info.get("wave"), 1), 1) and _to_int(boss_info.get("boss_hp"), 0) <= 0
 
 
-def _record_participant(state: dict, user_info: dict, realm: str, wave: int, damage: int, killed: bool, boss_max_hp: int) -> None:
+def _record_participant(
+    state: dict,
+    user_info: dict,
+    realm: str,
+    wave: int,
+    damage: int,
+    contribution: float,
+    killed: bool,
+    boss_max_hp: int,
+    pursuit_mode: bool,
+) -> None:
     user_id = str(user_info["user_id"])
     participants = state.setdefault("participants", {})
-    record_key = _participant_key(user_id, realm)
+    wave = max(1, int(wave))
+    record_key = _participant_key(user_id, realm, wave)
     record = participants.get(record_key, {})
+    legacy_key, legacy_record = _find_participant_record(state, user_id, realm, wave)
+    if legacy_record and legacy_key != record_key:
+        record = participants.pop(legacy_key)
     record["user_id"] = user_id
     record["realm"] = realm
-    record["wave"] = max(1, int(wave))
+    record["wave"] = wave
     record["name"] = user_info.get("user_name") or user_info.get("user_id") or user_id
     record["damage"] = _to_int(record.get("damage"), 0) + max(0, int(damage))
     record["attacks"] = _to_int(record.get("attacks"), 0) + 1
     record["reward_base_hp"] = max(_to_int(record.get("reward_base_hp"), 0), _to_int(boss_max_hp, 0), 1)
+    record["reward_total_damage"] = record["reward_base_hp"]
+    record["reward_contribution"] = min(
+        _to_float(record.get("reward_contribution"), 0.0) + max(0.0, float(contribution)),
+        1.0,
+    )
+    if pursuit_mode:
+        record["pursuit_damage"] = _to_int(record.get("pursuit_damage"), 0) + max(0, int(damage))
+        record["pursuit_contribution"] = min(
+            _to_float(record.get("pursuit_contribution"), 0.0) + max(0.0, float(contribution)),
+            1.0,
+        )
+        record["pursuit_attacks"] = _to_int(record.get("pursuit_attacks"), 0) + 1
+    else:
+        record["normal_damage"] = _to_int(record.get("normal_damage"), 0) + max(0, int(damage))
+        record["normal_contribution"] = min(
+            _to_float(record.get("normal_contribution"), 0.0) + max(0.0, float(contribution)),
+            1.0,
+        )
+        record["normal_attacks"] = _to_int(record.get("normal_attacks"), 0) + 1
     if killed:
         record["last_hit"] = 1
     participants[record_key] = record
@@ -638,6 +715,11 @@ def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
         item["reward_wave"] = wave
         item["reward_base_hp"] = max(_to_int(item.get("reward_base_hp"), 0), reward_base_hp)
         item["reward_total_damage"] = item["reward_base_hp"]
+        if "reward_contribution" not in item:
+            item["reward_contribution"] = min(
+                max(_to_int(item.get("damage"), 0) / max(_to_int(item.get("reward_base_hp"), 0), 1), 0.0),
+                1.0,
+            )
     return reward_base_hp
 
 
@@ -656,6 +738,60 @@ def _record_reward_base_hp(state: dict, record: dict | None, realm: str, wave: i
         _to_int(record.get("damage"), 0),
         1,
     )
+
+
+def _record_reward_contribution(state: dict, record: dict | None, realm: str, wave: int) -> float:
+    if not record:
+        return 0.0
+    if "reward_contribution" in record:
+        return min(max(_to_float(record.get("reward_contribution"), 0.0), 0.0), 1.0)
+    reward_base_hp = _record_reward_base_hp(state, record, realm, wave)
+    return min(max(_to_int(record.get("damage"), 0) / reward_base_hp, 0.0), 1.0)
+
+
+def _find_user_records(state: dict, user_id: str, preferred_realm: str | None = None) -> list[tuple[str, dict]]:
+    participants = state.get("participants", {})
+    records: list[tuple[str, dict]] = []
+
+    for record_key, record in participants.items():
+        if str(record.get("user_id")) != str(user_id):
+            continue
+        if _to_int(record.get("damage"), 0) <= 0:
+            continue
+        records.append((record_key, record))
+
+    def sort_key(item: tuple[str, dict]) -> tuple[int, str]:
+        record_key, record = item
+        preferred_sort = 0 if preferred_realm and record.get("realm") == preferred_realm else 1
+        return preferred_sort, _record_wave(record), record_key
+
+    return sorted(records, key=sort_key)
+
+
+def _count_user_attacks(state: dict, user_id: str) -> int:
+    total = 0
+    for record in state.get("participants", {}).values():
+        if str(record.get("user_id")) != str(user_id):
+            continue
+        total += max(_to_int(record.get("attacks"), 0), 0)
+    return total
+
+
+def _sum_reward_contribution(state: dict, records: list[tuple[str, dict]]) -> tuple[int, float, int, int]:
+    total_damage = 0
+    total_contribution = 0.0
+    first_wave = 0
+    last_wave = 0
+    for _, record in records:
+        wave = _record_wave(record)
+        if first_wave <= 0 or wave < first_wave:
+            first_wave = wave
+        if wave > last_wave:
+            last_wave = wave
+        realm = record.get("realm") or ""
+        total_damage += _to_int(record.get("damage"), 0)
+        total_contribution += _record_reward_contribution(state, record, realm, wave)
+    return total_damage, min(max(total_contribution, 0.0), 1.0), first_wave, last_wave
 
 
 def _start_auto_demon_invasion() -> dict:
@@ -903,15 +1039,14 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             if boss_info is None:
                 no_active_event = True
             else:
-                record_key, existing_record = _find_participant_record(state, user_id, realm)
                 boss_wave = max(_to_int(boss_info.get("wave"), 1), 1)
-                existing_attacks = _to_int((existing_record or {}).get("attacks"), 0)
-                existing_wave = _record_wave(existing_record)
+                record_key, _ = _find_participant_record(state, user_id, realm, boss_wave)
+                existing_attacks = _count_user_attacks(state, user_id)
                 boss_defeated = _to_int(boss_info.get("boss_hp"), 0) <= 0
                 already_claimed = _has_user_claimed(state.get("claimed", {}), user_id, record_key)
                 if already_claimed:
-                    attack_limit_msg = "你已领取本期魔修奖励，不能继续追击。"
-                elif existing_record and existing_wave == boss_wave and existing_attacks >= DEMON_ATTACK_LIMIT:
+                    attack_limit_msg = "你已领取本期魔修奖励，不能继续讨伐。"
+                elif existing_attacks >= DEMON_ATTACK_LIMIT:
                     attack_limit_msg = f"你本期已经讨伐魔修{DEMON_ATTACK_LIMIT}次，不能继续出手。"
                 else:
                     pursuit_mode = boss_defeated
@@ -942,6 +1077,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     boss_now_hp = 0
     boss_all_hp = 1
     killed = False
+    contribution_ratio = 0.0
     attack_duplicate_after_fight = False
     with _state_lock:
         state = _ensure_daily_state()
@@ -956,18 +1092,10 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 if boss_wave != snapshot_wave:
                     battle_closed = True
                 else:
-                    record_key, existing_record = _find_participant_record(state, user_id, realm)
-                    existing_attacks = _to_int((existing_record or {}).get("attacks"), 0)
-                    existing_wave = _record_wave(existing_record)
+                    record_key, _ = _find_participant_record(state, user_id, realm, boss_wave)
+                    existing_attacks = _count_user_attacks(state, user_id)
                     already_claimed = _has_user_claimed(state.get("claimed", {}), user_id, record_key)
-                    if (
-                        already_claimed
-                        or (
-                            existing_record
-                            and existing_wave == boss_wave
-                            and existing_attacks >= DEMON_ATTACK_LIMIT
-                        )
-                    ):
+                    if already_claimed or existing_attacks >= DEMON_ATTACK_LIMIT:
                         battle_closed = True
                         attack_duplicate_after_fight = True
                     else:
@@ -988,8 +1116,19 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                         boss_info["气血"] = boss_info["battle_hp"]
                         boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
                         killed = (not pursuit_mode) and boss_now_hp <= 0
+                        contribution_ratio = min(max(real_damage / boss_all_hp, 0.0), 1.0)
 
-                        _record_participant(state, user_info, realm, boss_wave, real_damage, killed, boss_all_hp)
+                        _record_participant(
+                            state,
+                            user_info,
+                            realm,
+                            boss_wave,
+                            real_damage,
+                            contribution_ratio,
+                            killed,
+                            boss_all_hp,
+                            pursuit_mode,
+                        )
                         if pursuit_mode:
                             _mark_wave_reward_ready(state, realm, boss_wave)
                             boss_info["last_result"] = f"{user_info.get('user_name', user_id)}追击了{realm}魔修。"
@@ -1002,7 +1141,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                         _save_state(state)
 
     if battle_closed:
-        msg = "你本期已经讨伐过魔修，本次战斗未重复计入贡献。" if attack_duplicate_after_fight else "本场魔修入侵已经结束或已刷新，本次战斗未计入贡献。"
+        msg = "你本期次数已用尽或已领取本期奖励，本次战斗未重复计入贡献。" if attack_duplicate_after_fight else "本场魔修入侵已经结束或已刷新，本次战斗未计入贡献。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
 
@@ -1024,7 +1163,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             f"道友追击已败退的{boss_snapshot.get('name', '魔修')}。\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
             f"追击贡献上限：{int(MAX_PURSUIT_DAMAGE_RATIO * 100)}%\n"
-            f"本次追击贡献：{number_to(real_damage)}\n"
+            f"本次追击贡献：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
             f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
         )
     elif killed:
@@ -1032,8 +1171,8 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             f"恭喜道友击退{boss_snapshot.get('name', '魔修')}！\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
             f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
-            f"实际削减真实血条：{number_to(real_damage)}\n"
-            f"参与者可发送【领取魔修奖励】按贡献领取奖励。"
+            f"实际削减真实血条：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
+            f"参与者可发送【领取魔修奖励】按本期累计贡献领取奖励，领取后不能继续讨伐。"
         )
     else:
         result_text = "战胜了魔修化身" if victor == "群友赢了" else "不敌魔修，负伤退走"
@@ -1041,7 +1180,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             f"道友{result_text}。\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
             f"贡献上限：{int(MAX_SINGLE_DAMAGE_RATIO * 100)}%\n"
-            f"实际削减真实血条：{number_to(real_damage)}\n"
+            f"实际削减真实血条：{number_to(real_damage)}（{contribution_ratio * 100:.2f}%）\n"
             f"{realm}魔修真实血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}"
         )
 
@@ -1073,22 +1212,20 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     with _state_lock:
         state = _ensure_daily_state()
         preferred_realm = _normalize_realm(user_info.get("level", ""))
-        record_key, record = _find_participant_record(state, user_id, preferred_realm)
-
-        realm = (record or {}).get("realm") or preferred_realm
-        wave = _record_wave(record)
-        reward_ready = _record_reward_ready(state, record)
+        records = _find_user_records(state, user_id, preferred_realm)
+        realms = sorted({record.get("realm") or preferred_realm for _, record in records})
+        realm = "、".join(realms) if realms else preferred_realm
+        damage, raw_contribution, first_wave, last_wave = _sum_reward_contribution(state, records)
+        reward_ready = bool(records) and all(_record_reward_ready(state, record) for _, record in records)
         no_reward_event = state.get("status") not in ("active", "finished")
-        no_contribution = not record or _to_int(record.get("damage"), 0) <= 0
+        no_contribution = not records or damage <= 0
         reward_pending = state.get("status") == "active" and not no_contribution and not reward_ready
 
         claimed = state.setdefault("claimed", {})
-        already_claimed = _has_user_claimed(claimed, user_id, record_key) if not no_reward_event else False
+        claim_key = _claim_key(user_id)
+        already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
 
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
-            reward_base_hp = _record_reward_base_hp(state, record, realm, wave)
-            damage = _to_int(record.get("damage"), 0)
-            raw_contribution = damage / reward_base_hp
             contribution = _reward_contribution(raw_contribution)
             stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
             exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * DEMON_EXP_REWARD_CAP_RATE * contribution)
@@ -1099,11 +1236,11 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 if reward_pool:
                     random_reward = random.choice(reward_pool)
 
-            claimed[record_key] = True
+            claimed[claim_key] = True
             _save_state(state)
 
     if reward_pending:
-        msg = f"你参与的第{wave}波{realm}魔修尚未被击退，暂不能领取奖励。"
+        msg = f"你参与的{realm}魔修尚未被击退，暂不能领取奖励。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="讨伐", v1="讨伐魔修")
         await claim_demon_reward.finish()
     if no_reward_event:
@@ -1115,7 +1252,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
         await claim_demon_reward.finish()
     if already_claimed:
-        msg = f"你已经领取过本期{realm}魔修入侵奖励了。"
+        msg = "你已经领取过本期魔修入侵奖励了。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
         await claim_demon_reward.finish()
 
@@ -1155,11 +1292,17 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     contribution_text = f"{raw_contribution * 100:.2f}%"
     if abs(contribution - raw_contribution) > 1e-12:
         contribution_text += f"（按{contribution * 100:.2f}%结算）"
+    if first_wave <= 0:
+        wave_text = "未知"
+    elif first_wave == last_wave:
+        wave_text = f"第{first_wave}波"
+    else:
+        wave_text = f"第{first_wave}-{last_wave}波"
 
     msg = (
         f"领取魔修入侵奖励成功！\n"
         f"对应境界：{realm}\n"
-        f"对应波次：第{wave}波\n"
+        f"对应波次：{wave_text}\n"
         f"贡献伤害：{number_to(damage)}\n"
         f"贡献占比：{contribution_text}\n"
         f"获得灵石：{number_to(stone_reward)}\n"
