@@ -1,28 +1,32 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="login-shell">
+    <section class="card login-card">
+        <div class="login-brand">
+            <span class="brand-mark"><i class="fas fa-mountain-sun"></i></span>
+            <div>
+                <h1 class="page-title">管理员登录</h1>
+                <p class="page-subtitle">输入 NoneBot 超级用户 ID 进入管理面板。</p>
+            </div>
+        </div>
 
-<div class="card" style="max-width: 400px; margin: 50px auto;">
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
 
-<h2>管理员登录</h2>
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label for="admin_id">管理员 ID</label>
+                <input type="text" id="admin_id" name="admin_id" required autofocus autocomplete="username">
+            </div>
 
-{% if error %}
-    <div class="error">{{ error }}</div>
-{% endif %}
-
-<form method="POST" action="{{ url_for('login') }}">
-    <div class="form-group">
-        <label for="admin_id">管理员ID</label>
-        <input type="text" id="admin_id" name="admin_id" required>
-    </div>
-    
-    <div class="form-actions">
-        <button type="submit" class="btn btn-primary">
-            <i class="fas fa-sign-in-alt"></i> 登录
-        </button>
-    </div>
-</form>
-
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-right-to-bracket"></i> 登录
+                </button>
+            </div>
+        </form>
+    </section>
 </div>
-
 {% endblock %}

@@ -3,74 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>修仙管理面板</title>
+    <title>{% block title %}修仙管理面板{% endblock %}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
-    <!-- 1. 核心修复脚本：阻塞渲染，防止深色模式瞬间闪白 -->
     <script>
         (function() {
             try {
-                const savedTheme = localStorage.getItem('theme') || 'light';
-                document.documentElement.setAttribute('data-theme', savedTheme === 'dark' ? 'dark' : 'light');
+                const savedTheme = localStorage.getItem('theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', savedTheme === 'light' ? 'light' : 'dark');
             } catch (e) {
-                document.documentElement.setAttribute('data-theme', 'light');
+                document.documentElement.setAttribute('data-theme', 'dark');
             }
         })();
     </script>
 </head>
+<body class="app-shell {% if is_active('messages_page') %}messages-layout{% endif %} {% if is_active('login') %}login-layout{% endif %}">
+    <div class="top-progress" id="topProgress" aria-hidden="true"></div>
+    <div class="layout-shell">
+        <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+        <aside class="app-sidebar" id="mainNav" aria-label="主导航">
+            <a href="{{ url_for('home') }}" class="brand" aria-label="返回首页">
+                <span class="brand-mark"><i class="fas fa-mountain-sun"></i></span>
+                <span class="brand-copy">
+                    <strong>修仙管理面板</strong>
+                    <small>NoneBot Xiuxian Console</small>
+                </span>
+            </a>
 
-<body class="{% if is_active('messages_page') %}messages-layout{% endif %}">
-    <!-- 粒子背景容器 -->
-    <div id="particles-js"></div>
-    
-    <header>
-        <a href="{{ url_for('home') }}" class="logo">
-            <div class="logo-icon">
-                <i class="fas fa-mountain"></i>
+            <nav class="app-nav">
+                <div class="nav-section-label">主功能</div>
+                <ul>
+                    <li><a href="{{ url_for('home') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-gauge-high"></i><span>首页</span></a></li>
+                    <li><a href="{{ url_for('database') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active(['database', 'table_view', 'row_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i><span>数据库</span></a></li>
+                    <li><a href="{{ url_for('commands') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-wand-magic-sparkles"></i><span>管理员指令</span></a></li>
+                    <li><a href="{{ url_for('config_management') }}" data-refresh-page="true" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-sliders"></i><span>配置管理</span></a></li>
+                    <li><a href="{{ url_for('messages_page') }}" data-refresh-page="true" {% if is_active('messages_page') %}class="active"{% endif %}><i class="fas fa-comments"></i><span>消息面板</span></a></li>
+                    <li><a href="{{ url_for('economy_logs') }}" data-refresh-page="true" {% if is_active('economy_logs') %}class="active"{% endif %}><i class="fas fa-coins"></i><span>经济流水</span></a></li>
+                </ul>
+
+                <div class="nav-section-label">运维</div>
+                <ul>
+                    <li><a href="{{ url_for('logs') }}" data-refresh-page="true" {% if is_active('logs') %}class="active"{% endif %}><i class="fas fa-file-lines"></i><span>日志查看</span></a></li>
+                    <li><a href="{{ url_for('backups') }}" data-refresh-page="true" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-box-archive"></i><span>备份管理</span></a></li>
+                    <li><a href="{{ url_for('update') }}" data-refresh-page="true" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-rotate"></i><span>检测更新</span></a></li>
+                    <li><a href="{{ url_for('terminal') }}" data-refresh-page="true" {% if is_active('terminal') %}class="active"{% endif %}><i class="fas fa-terminal"></i><span>Web 终端</span></a></li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="{{ url_for('logout') }}" class="logout-link" title="退出登录">
+                    <i class="fas fa-right-from-bracket"></i>
+                    <span>退出登录</span>
+                </a>
             </div>
-            <div class="logo-text">修仙管理面板</div>
-        </a>
-        
-        <button class="menu-toggle" id="menuToggle">
-            <i class="fas fa-bars"></i>
-        </button>
-        
-        <nav id="mainNav">
-            <ul>
-                <li><a href="{{ url_for('home') }}" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-home"></i> <span>首页</span></a></li>
-                <li><a href="{{ url_for('database') }}" {% if is_active(['database', 'table_view', 'row_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i> <span>数据库管理</span></a></li>
-                <li><a href="{{ url_for('commands') }}" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-terminal"></i> <span>管理员指令</span></a></li>
-                <li><a href="{{ url_for('config_management') }}" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-cog"></i> <span>配置管理</span></a></li>
-                <li><a href="{{ url_for('update') }}" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-sync-alt"></i> <span>检测更新</span></a></li>
-                <li><a href="{{ url_for('terminal') }}" class="{% if is_active('terminal') %}active{% endif %}"><i class="fas fa-terminal"></i> 终端</a></li>
-                <li><a href="{{ url_for('backups') }}" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-archive"></i> <span>备份管理</span></a></li>
-                <li><a href="{{ url_for('logs') }}" {% if is_active('logs') %}class="active"{% endif %}><i class="fas fa-file-alt"></i> <span>日志查看</span></a></li>
-                <li><a href="{{ url_for('economy_logs') }}" {% if is_active('economy_logs') %}class="active"{% endif %}><i class="fas fa-coins"></i> <span>经济流水</span></a></li>
-                <li><a href="{{ url_for('messages_page') }}" {% if is_active('messages_page') %}class="active"{% endif %}><i class="fas fa-comments"></i> <span>消息列表</span></a></li>
-                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> <span>退出</span></a></li>
-            </ul>
-            
-            <button class="theme-toggle" id="themeToggle" type="button" title="切换日夜主题">
-                <i class="fas fa-moon"></i>
-                <span>夜间</span>
-            </button>
-        </nav>
-    </header>
-    
-    <div class="container">
-        {% block content %}{% endblock %}
+        </aside>
+
+        <div class="app-main">
+            <header class="app-header">
+                <button class="menu-toggle icon-button" id="menuToggle" type="button" aria-label="打开导航">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="topbar-title">
+                    <strong>修仙管理面板</strong>
+                    <span>后台工作台</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle" type="button" title="切换主题">
+                    <i class="fas fa-moon"></i>
+                    <span>夜间</span>
+                </button>
+            </header>
+
+            <main class="container">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
     </div>
 
-    <!-- 引入粒子库 -->
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-    
     <script>
-        // --- 逻辑变量定义 ---
         const html = document.documentElement;
         const themeToggle = document.getElementById('themeToggle');
         const menuToggle = document.getElementById('menuToggle');
         const mainNav = document.getElementById('mainNav');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        const topProgress = document.getElementById('topProgress');
+        const pageCache = new Map();
+        const DEFAULT_PAGE_CACHE_TTL = 120000;
+        let progressTimer = null;
+        let progressDoneTimer = null;
+        let pageLoadToken = 0;
 
         function readLocalStorage(key, fallback = null) {
             try {
@@ -87,14 +107,6 @@
             } catch (e) {}
         }
 
-        function applyTheme(themeName) {
-            const normalizedTheme = themeName === 'dark' ? 'dark' : 'light';
-            html.setAttribute('data-theme', normalizedTheme);
-            writeLocalStorage('theme', normalizedTheme);
-            updateThemeToggle(normalizedTheme);
-            updateParticles(normalizedTheme);
-        }
-
         function updateThemeToggle(themeName) {
             if (!themeToggle) return;
             const isDark = themeName === 'dark';
@@ -104,18 +116,248 @@
             themeToggle.setAttribute('aria-label', isDark ? '切换到日间主题' : '切换到夜间主题');
         }
 
-        // --- 初始化 UI 状态 (页面加载时执行) ---
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = readLocalStorage('theme', 'light') === 'dark' ? 'dark' : 'light';
-            applyTheme(savedTheme);
+        function applyTheme(themeName) {
+            const normalizedTheme = themeName === 'light' ? 'light' : 'dark';
+            html.setAttribute('data-theme', normalizedTheme);
+            writeLocalStorage('theme', normalizedTheme);
+            updateThemeToggle(normalizedTheme);
+        }
 
-            // 卡片入场动画延迟
-            document.querySelectorAll('.card').forEach((card, index) => {
-                card.style.animationDelay = `${index * 0.1}s`;
+        function startProgress() {
+            if (!topProgress) return;
+            clearInterval(progressTimer);
+            clearTimeout(progressDoneTimer);
+            topProgress.style.transition = 'none';
+            topProgress.style.opacity = '1';
+            topProgress.style.width = '0%';
+            requestAnimationFrame(() => {
+                topProgress.style.transition = 'width 0.22s ease, opacity 0.2s ease';
+                topProgress.style.width = '28%';
             });
+            let width = 28;
+            progressTimer = setInterval(() => {
+                width = Math.min(width + Math.max(1, (88 - width) * 0.18), 88);
+                topProgress.style.width = `${width}%`;
+            }, 180);
+        }
+
+        function finishProgress() {
+            if (!topProgress) return;
+            clearInterval(progressTimer);
+            topProgress.style.width = '100%';
+            progressDoneTimer = window.setTimeout(() => {
+                topProgress.style.opacity = '0';
+                window.setTimeout(() => {
+                    topProgress.style.width = '0%';
+                }, 220);
+            }, 160);
+        }
+
+        function closeSidebar() {
+            if (mainNav) mainNav.classList.remove('active');
+            if (sidebarBackdrop) sidebarBackdrop.hidden = true;
+        }
+
+        function cleanupCurrentPage() {
+            if (typeof window.__xiuxianPageCleanup === 'function') {
+                try {
+                    window.__xiuxianPageCleanup();
+                } catch (e) {}
+            }
+            window.__xiuxianPageCleanup = null;
+        }
+
+        function executePageScripts(container, pageUrl) {
+            container.querySelectorAll('script').forEach(oldScript => {
+                const script = document.createElement('script');
+                Array.from(oldScript.attributes).forEach(attr => {
+                    script.setAttribute(attr.name, attr.value);
+                });
+                script.async = false;
+                script.textContent = oldScript.textContent;
+                oldScript.replaceWith(script);
+            });
+            document.dispatchEvent(new CustomEvent('xiuxian:page-load', {detail: {url: pageUrl}}));
+        }
+
+        function getLinkCacheTtl(link) {
+            const ttl = Number(link?.dataset?.cacheTtl);
+            return Number.isFinite(ttl) && ttl > 0 ? ttl : DEFAULT_PAGE_CACHE_TTL;
+        }
+
+        function getCachedPage(url) {
+            const cached = pageCache.get(url);
+            if (!cached) return null;
+            if (cached.expiresAt && cached.expiresAt < Date.now()) {
+                pageCache.delete(url);
+                return null;
+            }
+            return cached;
+        }
+
+        function setCachedPage(url, pageData, ttl = DEFAULT_PAGE_CACHE_TTL) {
+            pageCache.set(url, {
+                ...pageData,
+                expiresAt: Date.now() + ttl
+            });
+        }
+
+        function invalidatePageCache(match = null) {
+            if (!match) {
+                pageCache.clear();
+                return;
+            }
+
+            for (const key of Array.from(pageCache.keys())) {
+                const cachedUrl = new URL(key);
+                if (typeof match === 'string') {
+                    const target = new URL(match, window.location.origin);
+                    if (cachedUrl.pathname === target.pathname || key === target.toString()) {
+                        pageCache.delete(key);
+                    }
+                } else if (typeof match === 'function' && match(cachedUrl)) {
+                    pageCache.delete(key);
+                }
+            }
+        }
+
+        function findExactNavLinkForUrl(url) {
+            const target = new URL(url, window.location.origin);
+            return Array.from(document.querySelectorAll('.app-sidebar .app-nav a')).find(link => {
+                const linkUrl = new URL(link.href, window.location.origin);
+                return linkUrl.pathname === target.pathname && linkUrl.search === target.search;
+            });
+        }
+
+        function updateActiveNav(url) {
+            const target = new URL(url, window.location.origin);
+            document.querySelectorAll('.app-sidebar .app-nav a').forEach(link => {
+                const linkUrl = new URL(link.href, window.location.origin);
+                const active = linkUrl.pathname === target.pathname
+                    || (target.pathname.startsWith('/table/') && linkUrl.pathname === '/database');
+                link.classList.toggle('active', active);
+            });
+        }
+
+        function setBodyLayoutForUrl(url) {
+            const target = new URL(url, window.location.origin);
+            document.body.classList.toggle('messages-layout', target.pathname === '/messages');
+            document.body.classList.toggle('login-layout', target.pathname === '/login');
+        }
+
+        function applyBodyClass(className) {
+            document.body.className = className || 'app-shell';
+            if (!document.body.classList.contains('app-shell')) {
+                document.body.classList.add('app-shell');
+            }
+        }
+
+        async function requestJson(url, options = {}) {
+            const headers = new Headers(options.headers || {});
+            if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+            if (!headers.has('X-Requested-With')) headers.set('X-Requested-With', 'fetch');
+
+            const response = await fetch(url, {...options, headers});
+            let data;
+            try {
+                data = await response.json();
+            } catch (e) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        }
+
+        function cacheCurrentPage() {
+            const activeLink = findExactNavLinkForUrl(window.location.href);
+            const main = document.querySelector('main.container');
+            if (!activeLink || activeLink.dataset.cachePage !== 'true' || !main) return;
+
+            setCachedPage(window.location.href, {
+                title: document.title,
+                bodyClass: document.body.className,
+                content: main.innerHTML
+            }, getLinkCacheTtl(activeLink));
+        }
+
+        async function loadCachedPage(url, pushState = true, options = {}) {
+            const absoluteUrl = new URL(url, window.location.origin).toString();
+            const main = document.querySelector('main.container');
+            if (!main) {
+                window.location.href = absoluteUrl;
+                return;
+            }
+
+            if (absoluteUrl === window.location.href && pushState) {
+                closeSidebar();
+                return;
+            }
+
+            const token = ++pageLoadToken;
+            startProgress();
+            closeSidebar();
+
+            try {
+                cleanupCurrentPage();
+                let cached = getCachedPage(absoluteUrl);
+
+                if (!cached) {
+                    const response = await fetch(absoluteUrl, {
+                        headers: {
+                            'Accept': 'text/html',
+                            'X-Requested-With': 'fetch'
+                        }
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const htmlText = await response.text();
+                    const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+                    const nextMain = doc.querySelector('main.container');
+                    if (!nextMain) throw new Error('页面结构不完整');
+                    cached = {
+                        title: doc.title || document.title,
+                        bodyClass: doc.body ? doc.body.className : '',
+                        content: nextMain.innerHTML
+                    };
+                    setCachedPage(absoluteUrl, cached, options.cacheTtl || DEFAULT_PAGE_CACHE_TTL);
+                }
+
+                if (token !== pageLoadToken) return;
+
+                document.title = cached.title;
+                main.innerHTML = cached.content;
+                applyBodyClass(cached.bodyClass);
+                setBodyLayoutForUrl(absoluteUrl);
+                executePageScripts(main, absoluteUrl);
+                updateActiveNav(absoluteUrl);
+                if (pushState && absoluteUrl !== window.location.href) {
+                    history.pushState({cachedPage: true}, '', absoluteUrl);
+                }
+                window.scrollTo({top: 0, behavior: 'auto'});
+                finishProgress();
+            } catch (error) {
+                finishProgress();
+                window.location.href = absoluteUrl;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = readLocalStorage('theme', 'dark') === 'light' ? 'light' : 'dark';
+            applyTheme(savedTheme);
+            cacheCurrentPage();
+            const activeLink = findExactNavLinkForUrl(window.location.href);
+            history.replaceState({cachedPage: activeLink?.dataset.cachePage === 'true'}, '', window.location.href);
         });
 
-        // --- 事件监听器 ---
+        window.XiuxianWeb = {
+            requestJson,
+            startProgress,
+            finishProgress,
+            invalidatePageCache,
+            loadPage: loadCachedPage
+        };
 
         if (themeToggle) {
             themeToggle.addEventListener('click', () => {
@@ -124,51 +366,90 @@
             });
         }
 
-        // 移动端菜单切换
         if (menuToggle && mainNav) {
             menuToggle.addEventListener('click', () => {
-                mainNav.classList.toggle('active');
+                const isOpen = mainNav.classList.toggle('active');
+                if (sidebarBackdrop) sidebarBackdrop.hidden = !isOpen;
             });
         }
 
-        // 移动端点击外部关闭导航
-        document.addEventListener('click', (e) => {
+        if (sidebarBackdrop && mainNav) {
+            sidebarBackdrop.addEventListener('click', () => {
+                mainNav.classList.remove('active');
+                sidebarBackdrop.hidden = true;
+            });
+        }
+
+        document.addEventListener('click', (event) => {
             if (!menuToggle || !mainNav) return;
-            if (window.innerWidth <= 768 && mainNav.classList.contains('active')) {
-                if (!mainNav.contains(e.target) && !menuToggle.contains(e.target)) {
-                    mainNav.classList.remove('active');
+            if (window.innerWidth <= 900 && mainNav.classList.contains('active')) {
+                if (!mainNav.contains(event.target) && !menuToggle.contains(event.target)) {
+                    closeSidebar();
                 }
             }
         });
 
-        // --- 粒子系统初始化函数 ---
-        function initParticles(theme) {
-            if (typeof window.particlesJS !== 'function') return;
-            const color = (theme === 'dark') ? "#35c7ff" : "#12b7f5";
-            particlesJS('particles-js', {
-                particles: {
-                    number: { value: 60, density: { enable: true, value_area: 800 } },
-                    color: { value: color },
-                    shape: { type: "circle" },
-                    opacity: { value: 0.5, random: true },
-                    size: { value: 3, random: true },
-                    line_linked: { enable: true, distance: 150, color: color, opacity: 0.4, width: 1 },
-                    move: { enable: true, speed: 2, direction: "none", random: true, out_mode: "out" }
-                },
-                interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "grab" } } },
-                retina_detect: true
-            });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && mainNav && mainNav.classList.contains('active')) {
+                closeSidebar();
+            }
+        });
+
+        function isSamePageHashNavigation(url) {
+            return url.pathname === window.location.pathname
+                && url.search === window.location.search
+                && Boolean(url.hash)
+                && url.hash !== window.location.hash;
         }
 
-        function updateParticles(theme) {
-            if (document.body.classList.contains('messages-layout')) return;
-            if (typeof window.particlesJS !== 'function') return;
-            if (window.pJSDom && window.pJSDom.length > 0) {
-                window.pJSDom[0].pJS.fn.vendors.destroypJS();
-                window.pJSDom = [];
-            }
-            initParticles(theme);
+        function isDownloadLikeNavigation(link, url) {
+            return link.hasAttribute('download')
+                || url.pathname.startsWith('/download/')
+                || url.pathname.startsWith('/download_backup/')
+                || url.pathname === '/economy_logs/export';
         }
+
+        document.addEventListener('click', (event) => {
+            const link = event.target.closest('a[href]');
+            if (!link) return;
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            if (link.target && link.target !== '_self') return;
+
+            const url = new URL(link.getAttribute('href'), window.location.origin);
+            if (!['http:', 'https:'].includes(url.protocol)) return;
+            if (url.origin !== window.location.origin) return;
+            if (isSamePageHashNavigation(url) || isDownloadLikeNavigation(link, url) || link.dataset.noProgress === 'true') return;
+
+            if (link.dataset.cachePage === 'true') {
+                event.preventDefault();
+                loadCachedPage(url.toString(), true, {cacheTtl: getLinkCacheTtl(link)});
+                return;
+            }
+
+            closeSidebar();
+            startProgress();
+        });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+            if (form.target && form.target !== '_self') return;
+            if (form.dataset.noProgress === 'true') return;
+            startProgress();
+        });
+
+        window.addEventListener('popstate', () => {
+            const activeLink = findExactNavLinkForUrl(window.location.href);
+            if (activeLink && activeLink.dataset.cachePage === 'true') {
+                loadCachedPage(window.location.href, false, {cacheTtl: getLinkCacheTtl(activeLink)});
+            } else {
+                startProgress();
+                window.location.reload();
+            }
+        });
+
+        window.addEventListener('pageshow', finishProgress);
+        window.addEventListener('beforeunload', startProgress);
     </script>
 </body>
 </html>

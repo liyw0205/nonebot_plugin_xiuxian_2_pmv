@@ -22,89 +22,65 @@ def _stats_count(sql, params=None):
         return 0
 
 
-@app.route('/get_stats')
-def get_stats():
-    if 'admin_id' not in session:
-        return jsonify({"success": False, "error": "未登录"})
-    
-    try:
-        # 1. 数据库统计信息
-        total_users = _stats_count("SELECT COUNT(*) AS c FROM user_xiuxian")
-        
-        total_sects = _stats_count("SELECT COUNT(*) AS c FROM sects WHERE sect_owner IS NOT NULL")
-        
-        create_date = db_backend.date_expression("create_time")
-        today = datetime.now().strftime('%Y-%m-%d')
-        active_users = _stats_count(
-            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
-            (today,),
-        )
-        
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        yesterday_users = _stats_count(
-            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
-            (yesterday,),
-        )
-        
-        seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
-        seven_days_avg = _stats_count(
-            f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} >= %s",
-            (seven_days_ago,),
-        )
+def _collect_dashboard_stats():
+    """首页聚合统计，供旧接口和新版仪表盘共用。"""
+    total_users = _stats_count("SELECT COUNT(*) AS c FROM user_xiuxian")
+    total_sects = _stats_count("SELECT COUNT(*) AS c FROM sects WHERE sect_owner IS NOT NULL")
 
-        # 2. 实时机器人 (Bot) 状态获取
-        # 通过 NoneBot2 的 get_bots() 跨线程获取实例
-        connected_bots = get_bots()
-        bot_info_list = []
-        
-        # 2. 机器人实时状态
-        bots = get_bots()
-        bot_info_list = []
-        for bid, b in bots.items():
-            adapter = "未知"
-            try: adapter = b.adapter.get_name()
-            except: pass
-            bot_info_list.append({"bot_id": bid, "adapter": adapter})
+    create_date = db_backend.date_expression("create_time")
+    today = datetime.now().strftime('%Y-%m-%d')
+    active_users = _stats_count(
+        f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
+        (today,),
+    )
 
-        # 3. 获取运行时间 (基于当前进程)
-        bot_uptime = "未知"
-        if psutil_available:
-            try:
-                process_create_time = psutil.Process(os.getpid()).create_time()
-                bot_uptime = format_time(time.time() - process_create_time)
-            except:
-                pass
-        
-        recv_count, sent_count = get_message_stats_from_db()
-        
-        return jsonify({
-            "success": True,
-            "total_users": total_users,
-            "total_sects": total_sects,
-            "active_users": active_users,
-            "yesterday_users": yesterday_users,
-            "seven_days_avg": seven_days_avg,
-            # 消息统计
-            "msg_received": recv_count,
-            "msg_sent": sent_count,
-            # Bot 信息
-            "bot_count": len(bot_info_list),
-            "bots": bot_info_list,
-            "bot_uptime": bot_uptime,
-            "nb_version": nb_version
-        })
-        
-    except Exception as e:
-        logger.exception("统计信息获取失败")
-        return jsonify({"success": False, "error": str(e) or e.__class__.__name__})
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday_users = _stats_count(
+        f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} = %s",
+        (yesterday,),
+    )
 
-@app.route('/get_system_info_extended')
-def get_system_info_extended():
-    """获取详细系统信息，对psutil是否可用进行适配"""
-    if 'admin_id' not in session:
-        return jsonify({"success": False, "error": "未登录"})
-    
-    # 系统基本信息 (platform模块不依赖psutil，所以始终可用)
+    seven_days_ago = (datetime.now() - timedelta(days=6)).strftime('%Y-%m-%d')
+    seven_days_users = _stats_count(
+        f"SELECT COUNT(DISTINCT user_id) AS c FROM user_cd WHERE {create_date} >= %s",
+        (seven_days_ago,),
+    )
+
+    bot_info_list = []
+    for bid, bot in get_bots().items():
+        adapter = "未知"
+        try:
+            adapter = bot.adapter.get_name()
+        except Exception:
+            pass
+        bot_info_list.append({"bot_id": bid, "adapter": adapter})
+
+    bot_uptime = "未知"
+    if psutil_available:
+        try:
+            process_create_time = psutil.Process(os.getpid()).create_time()
+            bot_uptime = format_time(time.time() - process_create_time)
+        except Exception:
+            pass
+
+    recv_count, sent_count = get_message_stats_from_db()
+
+    return {
+        "total_users": total_users,
+        "total_sects": total_sects,
+        "active_users": active_users,
+        "yesterday_users": yesterday_users,
+        "seven_days_avg": seven_days_users,
+        "msg_received": recv_count,
+        "msg_sent": sent_count,
+        "bot_count": len(bot_info_list),
+        "bots": bot_info_list,
+        "bot_uptime": bot_uptime,
+        "nb_version": nb_version,
+    }
+
+
+def _collect_system_snapshot():
     system_info = {
         "平台": platform.platform(),
         "系统": platform.system(),
@@ -113,128 +89,136 @@ def get_system_info_extended():
         "处理器": platform.processor(),
         "Python版本": platform.python_version(),
     }
-    
-    # 获取CPU信息
+
     if psutil_available:
         try:
+            cpu_freq = psutil.cpu_freq()
             cpu_info = {
                 "物理核心数": psutil.cpu_count(logical=False),
                 "逻辑核心数": psutil.cpu_count(logical=True),
                 "CPU使用率": f"{psutil.cpu_percent()}%",
-                "CPU频率": f"{psutil.cpu_freq().current:.2f}MHz" if hasattr(psutil, "cpu_freq") and psutil.cpu_freq().current != '未知' else "未知"
+                "CPU频率": f"{cpu_freq.current:.2f}MHz" if cpu_freq and cpu_freq.current else "未知",
             }
         except Exception:
-            cpu_info = {"物理核心数": "获取失败", "逻辑核心数": "获取失败",
-                        "CPU使用率": "获取失败", "CPU频率": "获取失败"}
-    else:
-        cpu_info = {"物理核心数": "psutil未安装", "逻辑核心数": "psutil未安装",
-                    "CPU使用率": "psutil未安装", "CPU频率": "psutil未安装"}
-    
-    # 获取内存信息
-    if psutil_available:
+            cpu_info = {"物理核心数": "获取失败", "逻辑核心数": "获取失败", "CPU使用率": "获取失败", "CPU频率": "获取失败"}
+
         try:
             mem = psutil.virtual_memory()
             mem_info = {
                 "总内存": f"{mem.total / (1024**3):.2f}GB",
                 "已用内存": f"{mem.used / (1024**3):.2f}GB",
-                "内存使用率": f"{mem.percent}%"
+                "内存使用率": f"{mem.percent}%",
             }
         except Exception:
-            mem_info = {"总内存": "获取失败", "已用内存": "获取失败",
-                        "内存使用率": "获取失败"}
-    else:
-        mem_info = {"总内存": "psutil未安装", "已用内存": "psutil未安装",
-                    "内存使用率": "psutil未安装"}
-    
-    # 获取磁盘信息
-    if psutil_available:
+            mem_info = {"总内存": "获取失败", "已用内存": "获取失败", "内存使用率": "获取失败"}
+
         try:
             disk = psutil.disk_usage('/')
             disk_info = {
                 "总磁盘空间": f"{disk.total / (1024**3):.2f}GB",
                 "已用空间": f"{disk.used / (1024**3):.2f}GB",
-                "磁盘使用率": f"{disk.percent}%"
+                "磁盘使用率": f"{disk.percent}%",
             }
         except Exception:
-            disk_info = {"磁盘信息": "获取失败"}
-    else:
-        disk_info = {"总磁盘空间": "psutil未安装", "已用空间": "psutil未安装",
-                     "磁盘使用率": "psutil未安装"}
-    
-    # 获取系统启动时间
-    if psutil_available:
+            disk_info = {"总磁盘空间": "获取失败", "已用空间": "获取失败", "磁盘使用率": "获取失败"}
+
         try:
             boot_time = psutil.boot_time()
-            current_time = time.time()
-            uptime_seconds = current_time - boot_time
-            
             system_uptime_info = {
                 "系统启动时间": f"{datetime.fromtimestamp(boot_time):%Y-%m-%d %H:%M:%S}",
-                "系统运行时间": format_time(uptime_seconds)
+                "系统运行时间": format_time(time.time() - boot_time),
             }
         except Exception:
             system_uptime_info = {"系统启动时间": "获取失败", "系统运行时间": "获取失败"}
     else:
+        cpu_info = {"物理核心数": "psutil未安装", "逻辑核心数": "psutil未安装", "CPU使用率": "psutil未安装", "CPU频率": "psutil未安装"}
+        mem_info = {"总内存": "psutil未安装", "已用内存": "psutil未安装", "内存使用率": "psutil未安装"}
+        disk_info = {"总磁盘空间": "psutil未安装", "已用空间": "psutil未安装", "磁盘使用率": "psutil未安装"}
         system_uptime_info = {"系统启动时间": "psutil未安装", "系统运行时间": "psutil未安装"}
 
-    return jsonify({
-        "success": True,
+    return {
         "system_info": system_info,
         "cpu_info": cpu_info,
         "mem_info": mem_info,
         "disk_info": disk_info,
-        "system_uptime": system_uptime_info
-    })
+        "system_uptime": system_uptime_info,
+    }
+
+
+def _collect_process_snapshot(limit=5):
+    if not psutil_available:
+        return []
+
+    processes = []
+    for proc in psutil.process_iter(['pid', 'name', 'memory_percent', 'create_time']):
+        try:
+            memory_mb = proc.memory_info().rss / 1024 / 1024
+            create_time = datetime.fromtimestamp(proc.create_time())
+            run_time = datetime.now() - create_time
+            processes.append({
+                "pid": proc.pid,
+                "name": proc.name(),
+                "memory": f"{memory_mb:.1f}MB",
+                "memory_mb": round(memory_mb, 1),
+                "time": str(run_time).split('.')[0],
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    processes.sort(key=lambda x: x["memory_mb"], reverse=True)
+    return processes[:limit]
+
+
+@app.route('/get_stats')
+def get_stats():
+    if 'admin_id' not in session:
+        return api_error("未登录")
+
+    try:
+        return api_success(**_collect_dashboard_stats())
+
+    except Exception as e:
+        logger.exception("统计信息获取失败")
+        return api_error(str(e) or e.__class__.__name__)
+
+@app.route('/get_system_info_extended')
+def get_system_info_extended():
+    """获取详细系统信息，对psutil是否可用进行适配"""
+    if 'admin_id' not in session:
+        return api_error("未登录")
+
+    return api_success(**_collect_system_snapshot())
         
 @app.route('/get_process_info')
 def get_process_info():
     """获取进程信息，对psutil是否可用进行适配"""
     if 'admin_id' not in session:
-        return jsonify({"success": False, "error": "未登录"})
+        return api_error("未登录")
     
     if not psutil_available:
-        return jsonify({
-            "success": False, 
-            "error": "psutil未安装，无法获取进程信息",
-            "processes": []
-        })
+        return api_error("psutil未安装，无法获取进程信息", processes=[])
 
     try:
-        processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'memory_percent', 'create_time']):
-            try:
-                memory_mb = proc.memory_info().rss / 1024 / 1024
-                create_time = datetime.fromtimestamp(proc.create_time())
-                run_time = datetime.now() - create_time
-                
-                processes.append({
-                    "name": proc.name(),
-                    "memory": f"{memory_mb:.1f}MB",
-                    "time": str(run_time).split('.')[0]  # 去除毫秒部分
-                })
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        # 按内存使用排序并取前5
-        processes.sort(key=lambda x: float(x['memory'].replace('MB', '')), reverse=True)
-        top_processes = processes[:5]
-        
-        return jsonify({
-            "success": True,
-            "processes": top_processes
-        })
-        
+        return api_success(processes=_collect_process_snapshot(5))
     except Exception as e:
-        return jsonify({"success": False, "error": f"获取进程信息失败: {str(e)}"})
+        return api_error(f"获取进程信息失败: {str(e)}")
 
-def format_time(seconds: float) -> str:
-    """将秒数格式化为 'X天X小时X分X秒'"""
-    if seconds <= 0: # 适配psutil占位符可能导致的0秒
-        return "未知"
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+
+@app.route('/api/dashboard/summary')
+def api_dashboard_summary():
+    if 'admin_id' not in session:
+        return api_error("未登录")
+
+    try:
+        return api_success(
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            stats=_collect_dashboard_stats(),
+            system=_collect_system_snapshot(),
+            processes=_collect_process_snapshot(5),
+        )
+    except Exception as e:
+        logger.exception("仪表盘聚合信息获取失败")
+        return api_error(str(e) or e.__class__.__name__)
 
 @app.route('/search_users')
 def search_users():

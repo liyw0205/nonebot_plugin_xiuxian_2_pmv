@@ -1,314 +1,288 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="card">
-        <h2>{{ table_info.name }} 数据</h2>
-        <p>{{ table_name }}</p>
-        
-        <div style="margin-bottom: 20px;">
-            <a href="{{ url_for('database') }}" class="btn btn-info">
-                <i class="fas fa-arrow-left"></i> 返回
-            </a>
+{% set primary_key_fields = primary_key if primary_key is sequence and primary_key is not string else [primary_key] %}
+
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Table</p>
+        <h1 class="page-title">{{ table_info.name }}</h1>
+        <p class="page-subtitle">{{ table_name }}，共 {{ data.total }} 条记录。</p>
+    </div>
+    <div class="hero-actions">
+        <a href="{{ url_for('database') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 返回数据库
+        </a>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title"><i class="fas fa-magnifying-glass"></i> 查询</h2>
+            <p>支持全字段模糊搜索；指定字段时可选择数值比较。</p>
         </div>
-        
-        <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
-<select name="search_field" id="searchFieldSelect" onchange="handleSearchFieldChange()">
-    <option value="">全字段搜索</option>
-    {% for field in table_info.fields %}
-        <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
-    {% endfor %}
-</select>
+    </div>
 
-<select name="search_condition" id="searchConditionSelect" {% if search_field == '' %}disabled{% endif %}>
-    <option value="=" {% if search_condition == '=' %}selected{% endif %}>=</option>
-    <option value=">" {% if search_condition == '>' %}selected{% endif %}>&gt;</option>
-    <option value="<" {% if search_condition == '<' %}selected{% endif %}>&lt;</option>
-</select>
-
-            <input type="text" name="search_value" placeholder="搜索内容（多个值用空格分隔）" value="{{ search_value or '' }}">
-            <button type="submit" class="btn btn-info">搜索</button>
-            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">重置搜索</a>
-        </form>
-        
-        <!-- 批量操作表单 -->
-        <div class="card" style="margin-top: 20px; background-color: #f8f9fa;">
-            <h3>批量修改</h3>
-<!-- 批量操作表单 -->
-<form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
-    <input type="hidden" name="search_field" value="{{ search_field or '' }}">
-    <input type="hidden" name="search_value" value="{{ search_value or '' }}">
-    <input type="hidden" name="search_condition" value="{{ search_condition }}">  <!-- 添加搜索条件 -->
-
-    <div class="form-group">
-        <label for="batch_field">选择字段</label>
-        <select id="batch_field" name="batch_field" required>
-            <option value="">请选择要修改的字段</option>
+    <form class="search-form" method="get" action="{{ url_for('table_view', table_name=table_name) }}">
+        <select name="search_field" id="searchFieldSelect" onchange="handleSearchFieldChange()" aria-label="搜索字段">
+            <option value="">全字段搜索</option>
             {% for field in table_info.fields %}
-                {% if field != table_info.primary_key %}
-                    <option value="{{ field }}" 
-                            {% if search_field and search_field != '' and search_field == field %}selected{% endif %}>
-                        {{ field }}
-                    </option>
-                {% endif %}
+                <option value="{{ field }}" {% if search_field == field %}selected{% endif %}>{{ field }}</option>
             {% endfor %}
         </select>
-        <small id="batchFieldHelp" class="form-text text-muted">
-            {% if search_field and search_field != '' %}
-                已自动选择搜索字段: <strong>{{ search_field }}</strong>
-            {% else %}
-                请选择要批量修改的字段
-            {% endif %}
-        </small>
-    </div>
 
-    <!-- 其他表单字段保持不变 -->
-    <div class="form-group">
-        <label for="operation">操作类型</label>
-        <select id="operation" name="operation" required>
-            <option value="set">替换为</option>
-            <option value="add">增加</option>
-            <option value="subtract">减少</option>
+        <select name="search_condition" id="searchConditionSelect" {% if not search_field %}disabled{% endif %} aria-label="搜索条件">
+            <option value="=" {% if search_condition == '=' %}selected{% endif %}>=</option>
+            <option value=">" {% if search_condition == '>' %}selected{% endif %}>&gt;</option>
+            <option value="<" {% if search_condition == '<' %}selected{% endif %}>&lt;</option>
         </select>
+
+        <input type="text" name="search_value" placeholder="搜索内容，多个值用空格分隔" value="{{ search_value or '' }}">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> 搜索</button>
+        <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-secondary"><i class="fas fa-rotate-left"></i> 重置</a>
+    </form>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title"><i class="fas fa-pen-to-square"></i> 批量修改</h2>
+            <p>默认作用于当前搜索结果；勾选整张表时会忽略搜索条件。</p>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label for="value">值</label>
-        <input type="text" id="value" name="value" required>
+    <form id="batchForm" method="post" action="{{ url_for('batch_edit', table_name=table_name) }}">
+        <input type="hidden" name="search_field" value="{{ search_field or '' }}">
+        <input type="hidden" name="search_value" value="{{ search_value or '' }}">
+        <input type="hidden" name="search_condition" value="{{ search_condition }}">
+
+        <div class="field-grid">
+            <div class="form-group">
+                <label for="batch_field">选择字段</label>
+                <select id="batch_field" name="batch_field" required>
+                    <option value="">请选择要修改的字段</option>
+                    {% for field in table_info.fields %}
+                        {% if field not in primary_key_fields %}
+                            <option value="{{ field }}" {% if search_field and search_field == field %}selected{% endif %}>{{ field }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <small id="batchFieldHelp">
+                    {% if search_field %}
+                        已自动选择搜索字段: <strong>{{ search_field }}</strong>
+                    {% else %}
+                        请选择要批量修改的字段
+                    {% endif %}
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="operation">操作类型</label>
+                <select id="operation" name="operation" required>
+                    <option value="set">替换为</option>
+                    <option value="add">增加</option>
+                    <option value="subtract">减少</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="value">值</label>
+                <input type="text" id="value" name="value" required>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="apply_to_all" name="apply_to_all">
+                    应用到整张表
+                </label>
+                <small>会忽略当前搜索条件，请谨慎操作。</small>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-check"></i> 执行批量操作
+            </button>
+            <span id="batchResult"></span>
+        </div>
+    </form>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title"><i class="fas fa-table"></i> 数据记录</h2>
+            <p>第 {{ data.page }} / {{ data.total_pages }} 页，每页 {{ data.per_page }} 条。</p>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>
-            <input type="checkbox" id="apply_to_all" name="apply_to_all">
-            应用到整张表（忽略搜索条件）
-        </label>
-    </div>
+    {% if data.get('error') %}
+    <div class="error">{{ data.error }}</div>
+    {% endif %}
 
-    <button type="submit" class="btn btn-success">执行批量操作</button>
-    <span id="batchResult" style="margin-left: 15px;"></span>
-</form>
-</div>
-        
-        <div style="overflow-x: auto; margin-top: 20px;">
-            <table>
-                <thead>
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>操作</th>
+                    {% for field in table_info.fields %}
+                        <th>{{ field }}{% if field in primary_key_fields %} <i class="fas fa-key"></i>{% endif %}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data.data %}
                     <tr>
-                        <th>操作</th>
+                        <td>
+                            {% if table_name == "impart_cards" %}
+                                {% set composite_key = row['user_id'] ~ '_' ~ row['card_name'] %}
+                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary btn-sm">编辑</a>
+                            {% elif table_name == "back" %}
+                                {% set composite_key = row['user_id'] ~ '_' ~ row['goods_id'] %}
+                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary btn-sm">编辑</a>
+                            {% else %}
+                                <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn btn-primary btn-sm">编辑</a>
+                            {% endif %}
+                        </td>
                         {% for field in table_info.fields %}
-                            <th>{{ field }}{% if field == primary_key %} 🔑{% endif %}</th>
+                            <td>{% if field in row %}{{ row[field] }}{% else %}NULL{% endif %}</td>
                         {% endfor %}
                     </tr>
-                </thead>
-                <tbody>
-                    {% for row in data.data %}
-                        <tr>
-                            <td>
-                                {% if table_name == "impart_cards" %}
-                                    {# impart_cards表使用复合主键 #}
-                                    {% set composite_key = row['user_id'] ~ '_' ~ row['card_name'] %}
-                                    <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary">编辑</a>
-                                {% elif table_name == "back" %}
-                                    {# 背包表使用复合主键 #}
-                                    {% set composite_key = row['user_id'] ~ '_' ~ row['goods_id'] %}
-                                    <a href="{{ url_for('row_edit', table_name=table_name, row_id=composite_key) }}" class="btn btn-primary">编辑</a>
-                                {% else %}
-                                    {# 其他表使用普通主键 #}
-                                    <a href="{{ url_for('row_edit', table_name=table_name, row_id=row[primary_key]) }}" class="btn btn-primary">编辑</a>
-                                {% endif %}
-                            </td>
-                            {% for field in table_info.fields %}
-                                <td>
-                                    {% if field in row %}
-                                        {{ row[field] }}
-                                    {% else %}
-                                        NULL
-                                    {% endif %}
-                                </td>
-                            {% endfor %}
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- 分页导航 -->
-        <div class="pagination">
-            {% set current_page = data.page %}
-            {% set total_pages = data.total_pages %}
-            
-            {# 第一页 #}
-            {% if current_page > 1 %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=1, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">1</a>
-            {% endif %}
-            
-            {# 前省略号 #}
-            {% if current_page > 4 %}
-                <span>...</span>
-            {% endif %}
-            
-            {# 当前页的前3页 #}
-            {% for p in range([1, current_page-3]|max, current_page) %}
-                {% if p > 1 %}
-                    <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
-                {% endif %}
-            {% endfor %}
-            
-            {# 当前页 #}
-            <a href="{{ url_for('table_view', table_name=table_name, page=current_page, search_condition=search_condition, search_field=search_field, search_value=search_value) }}" class="active">{{ current_page }}</a>
-            
-            {# 当前页的后3页 #}
-            {% for p in range(current_page+1, [current_page+4, total_pages+1]|min) %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
-            {% endfor %}
-            
-            {# 后省略号 #}
-            {% if total_pages > current_page + 3 %}
-                <span>...</span>
-            {% endif %}
-            
-            {# 最后一页 #}
-            {% if total_pages > 4 and current_page < total_pages -3 and current_page < total_pages %}
-                <a href="{{ url_for('table_view', table_name=table_name, page=total_pages, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ total_pages }}</a>
-            {% endif %}
-        </div>
-        
-        <div style="margin-top: 10px;">
-            显示 {{ (data.page - 1) * data.per_page + 1 }} - {{ [data.page * data.per_page, data.total]|min }} 条，共 {{ data.total }} 条
-        </div>
+                {% else %}
+                    <tr>
+                        <td colspan="{{ table_info.fields|length + 1 }}">暂无记录</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
-    <script>
-        // 批量操作表单提交
-        document.getElementById('batchForm')?.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const applyToAll = document.getElementById('apply_to_all').checked;
-            const batchField = document.getElementById('batch_field').value;
-            const operation = document.getElementById('operation').value;
-            const value = document.getElementById('value').value;
-            
-            let message = `确定要执行批量操作吗？\n字段: ${batchField}\n操作: ${operation}\n值: ${value}`;
-            
-            if (applyToAll) {
-                message += "\n\n⚠️ 警告：此操作将应用到整张表的所有记录！";
-            }
-            
-            if (!confirm(message)) {
-                return;
-            }
-            
-            const formData = new FormData(this);
-            const resultSpan = document.getElementById('batchResult');
-            resultSpan.innerHTML = '<span style="color: blue;">处理中...</span>';
-            
-            fetch(this.action, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    resultSpan.innerHTML = `<span style="color: green;">${data.message}</span>`;
-                    // 刷新页面以显示更新后的数据
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    resultSpan.innerHTML = `<span style="color: red;">错误: ${data.error}</span>`;
-                }
-            })
-            .catch(error => {
-                resultSpan.innerHTML = `<span style="color: red;">请求失败: ${error}</span>`;
-            });
-        });
-        
-        // 当选择应用到整张表时，禁用搜索相关字段
-        document.getElementById('apply_to_all')?.addEventListener('change', function() {
-            const searchField = document.querySelector('input[name="search_field"]');
-            const searchValue = document.querySelector('input[name="search_value"]');
-            
-            if (searchField && searchValue) {
-                searchField.disabled = this.checked;
-                searchValue.disabled = this.checked;
-            }
-        });
+    <div class="pagination">
+        {% set current_page = data.page %}
+        {% set total_pages = data.total_pages %}
 
-// 页面加载时初始化批量修改字段
-document.addEventListener('DOMContentLoaded', function() {
-    const searchField = "{{ search_field or '' }}";
-    const batchFieldSelect = document.getElementById('batch_field');
-    const batchFieldHelp = document.getElementById('batchFieldHelp');
-    
-    // 如果有搜索字段且不是全字段搜索，自动选择对应的批量修改字段
-    if (searchField && searchField !== '') {
-        const option = batchFieldSelect.querySelector(`option[value="${searchField}"]`);
-        if (option) {
-            option.selected = true;
-            batchFieldHelp.innerHTML = `已自动选择搜索字段: <strong>${searchField}</strong>`;
-        }
-    }
-    
-    // 当选择"应用到整张表"时，检查是否需要选择批量修改字段
-    document.getElementById('apply_to_all')?.addEventListener('change', function() {
-        if (this.checked && batchFieldSelect.value === '') {
-            alert('请先选择要批量修改的字段');
-            this.checked = false;
-        }
-    });
-    
-    // 表单提交前的验证
-    document.getElementById('batchForm')?.addEventListener('submit', function(e) {
-        const applyToAll = document.getElementById('apply_to_all').checked;
-        const batchField = document.getElementById('batch_field').value;
-        const searchField = "{{ search_field or '' }}";
-        
-        // 如果是全字段搜索且没有选择批量修改字段，阻止提交
-        if ((!searchField || searchField === '') && batchField === '') {
-            e.preventDefault();
-            alert('全字段搜索时，请选择要批量修改的字段');
-            return false;
-        }
-        
-        // 如果应用到整张表但未选择批量修改字段，阻止提交
-        if (applyToAll && batchField === '') {
-            e.preventDefault();
-            alert('应用到整张表时，请选择要批量修改的字段');
-            return false;
-        }
-    });
-});
+        {% if current_page > 1 %}
+            <a href="{{ url_for('table_view', table_name=table_name, page=1, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">1</a>
+        {% endif %}
 
-// 搜索字段选择变化时更新帮助文本
-document.getElementById('searchFieldSelect')?.addEventListener('change', function() {
-    const batchFieldSelect = document.getElementById('batch_field');
-    const batchFieldHelp = document.getElementById('batchFieldHelp');
-    
-    if (this.value && this.value !== '') {
-        // 自动选择对应的批量修改字段
-        const option = batchFieldSelect.querySelector(`option[value="${this.value}"]`);
-        if (option) {
-            option.selected = true;
-            batchFieldHelp.innerHTML = `已自动选择搜索字段: <strong>${this.value}</strong>`;
-        }
-    } else {
-        // 全字段搜索时重置帮助文本
-        batchFieldHelp.innerHTML = '请选择要批量修改的字段';
-    }
-});
+        {% if current_page > 4 %}
+            <span>...</span>
+        {% endif %}
+
+        {% for p in range([1, current_page-3]|max, current_page) %}
+            {% if p > 1 %}
+                <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+
+        <a href="{{ url_for('table_view', table_name=table_name, page=current_page, search_condition=search_condition, search_field=search_field, search_value=search_value) }}" class="active">{{ current_page }}</a>
+
+        {% for p in range(current_page+1, [current_page+4, total_pages+1]|min) %}
+            <a href="{{ url_for('table_view', table_name=table_name, page=p, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ p }}</a>
+        {% endfor %}
+
+        {% if total_pages > current_page + 3 %}
+            <span>...</span>
+        {% endif %}
+
+        {% if total_pages > 4 and current_page < total_pages - 3 and current_page < total_pages %}
+            <a href="{{ url_for('table_view', table_name=table_name, page=total_pages, search_condition=search_condition, search_field=search_field, search_value=search_value) }}">{{ total_pages }}</a>
+        {% endif %}
+    </div>
+
+    <div class="page-footer-note">
+        显示 {{ (data.page - 1) * data.per_page + 1 if data.total else 0 }} - {{ [data.page * data.per_page, data.total]|min }} 条，共 {{ data.total }} 条
+    </div>
+</section>
+
+<script>
 function handleSearchFieldChange() {
     const searchFieldSelect = document.getElementById('searchFieldSelect');
     const searchConditionSelect = document.getElementById('searchConditionSelect');
-    
+    if (!searchFieldSelect || !searchConditionSelect) return;
+
     if (searchFieldSelect.value === '') {
-        // 全字段搜索
         searchConditionSelect.value = '=';
         searchConditionSelect.disabled = true;
     } else {
-        // 其他字段
         searchConditionSelect.disabled = false;
     }
 }
 
-// 页面加载时初始化
-document.addEventListener('DOMContentLoaded', function() {
-    handleSearchFieldChange(); // 初始化搜索条件选择框的状态
+function syncBatchFieldFromSearch() {
+    const searchFieldSelect = document.getElementById('searchFieldSelect');
+    const batchFieldSelect = document.getElementById('batch_field');
+    const batchFieldHelp = document.getElementById('batchFieldHelp');
+    if (!searchFieldSelect || !batchFieldSelect || !batchFieldHelp) return;
+
+    if (searchFieldSelect.value) {
+        const option = batchFieldSelect.querySelector(`option[value="${searchFieldSelect.value}"]`);
+        if (option) {
+            option.selected = true;
+            batchFieldHelp.innerHTML = `已自动选择搜索字段: <strong>${searchFieldSelect.value}</strong>`;
+        }
+    } else {
+        batchFieldHelp.textContent = '请选择要批量修改的字段';
+    }
+}
+
+document.getElementById('searchFieldSelect')?.addEventListener('change', syncBatchFieldFromSearch);
+
+document.getElementById('apply_to_all')?.addEventListener('change', function() {
+    const batchFieldSelect = document.getElementById('batch_field');
+    if (this.checked && batchFieldSelect && !batchFieldSelect.value) {
+        alert('请先选择要批量修改的字段');
+        this.checked = false;
+    }
 });
-    </script>
+
+document.getElementById('batchForm')?.addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    const applyToAll = document.getElementById('apply_to_all').checked;
+    const batchField = document.getElementById('batch_field').value;
+    const operation = document.getElementById('operation').value;
+    const value = document.getElementById('value').value;
+    const resultSpan = document.getElementById('batchResult');
+
+    if (!batchField) {
+        alert('请选择要批量修改的字段');
+        return;
+    }
+
+    let message = `确定执行批量操作？\n字段: ${batchField}\n操作: ${operation}\n值: ${value}`;
+    if (applyToAll) message += '\n\n此操作将应用到整张表所有记录。';
+    if (!confirm(message)) return;
+
+    resultSpan.innerHTML = '<span class="status-pill">处理中...</span>';
+
+    fetch(this.action, {
+        method: 'POST',
+        body: new FormData(this)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultSpan.innerHTML = `<span class="status-pill">${data.message}</span>`;
+            window.XiuxianWeb?.invalidatePageCache(url => url.pathname === '/' || url.pathname === '/database');
+            setTimeout(() => {
+                window.XiuxianWeb?.startProgress();
+                location.reload();
+            }, 900);
+        } else {
+            resultSpan.innerHTML = `<span class="error">错误: ${data.error}</span>`;
+        }
+    })
+    .catch(error => {
+        resultSpan.innerHTML = `<span class="error">请求失败: ${error}</span>`;
+    });
+});
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', handleSearchFieldChange, {once: true});
+} else {
+    handleSearchFieldChange();
+}
+</script>
 {% endblock %}

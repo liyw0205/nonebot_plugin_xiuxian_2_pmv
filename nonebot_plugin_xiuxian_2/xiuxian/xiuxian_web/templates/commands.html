@@ -1,20 +1,24 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card">
-    <h2>管理员指令</h2>
-    
-    <!-- 标签导航 -->
-    <div class="tab-nav">
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Commands</p>
+        <h1 class="page-title">管理员指令</h1>
+        <p class="page-subtitle">对玩家、物品、修为和全服资源执行管理操作。</p>
+    </div>
+</section>
+
+<section class="command-grid">
+    <div class="tab-nav" aria-label="指令分类">
         {% for cmd_name, cmd_info in commands.items() %}
-        <button class="tab-link {% if loop.first %}active{% endif %}" data-tab="{{ cmd_name }}">
+        <button class="tab-link {% if loop.first %}active{% endif %}" type="button" data-tab="{{ cmd_name }}">
             <i class="{{ get_command_icon(cmd_name) }}"></i>
             {{ cmd_info.name }}
         </button>
         {% endfor %}
     </div>
-    
-    <!-- 指令内容 -->
+
     <div class="tab-content">
         {% for cmd_name, cmd_info in commands.items() %}
         <div id="{{ cmd_name }}" class="tab-pane {% if loop.first %}active{% endif %}">
@@ -28,14 +32,14 @@
                         <p class="command-description">{{ cmd_info.description }}</p>
                     </div>
                 </div>
-                
+
                 <form class="command-execute-form" data-command="{{ cmd_name }}">
-                    {% for param in cmd_info.params %}
-                        {% if param.type == "select" %}
-                            <div class="form-group">
+                    <div class="field-grid">
+                        {% for param in cmd_info.params %}
+                            <div class="form-group" {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
                                 <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
-                                <select id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" class="param-select" 
-                                    {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
+                                {% if param.type == "select" %}
+                                <select id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" class="param-control">
                                     {% for option in param.options %}
                                         {% if param.options is mapping %}
                                             <option value="{{ option }}">{{ param.options[option] }}</option>
@@ -44,112 +48,110 @@
                                         {% endif %}
                                     {% endfor %}
                                 </select>
+                                {% else %}
+                                <input
+                                    type="{{ param.type }}"
+                                    id="{{ cmd_name }}_{{ param.key }}"
+                                    name="{{ param.key }}"
+                                    {% if param.required %}required{% endif %}
+                                    placeholder="{{ param.get('placeholder', '') }}"
+                                    class="param-control"
+                                >
+                                {% endif %}
                             </div>
-                        {% else %}
-                            <div class="form-group" 
-                                {% if param.get('show_if') %}data-show-if="{{ param.show_if|tojson|forceescape }}"{% endif %}>
-                                <label for="{{ cmd_name }}_{{ param.key }}">{{ param.name }}</label>
-                                <input type="{{ param.type }}" id="{{ cmd_name }}_{{ param.key }}" name="{{ param.key }}" 
-                                    {% if param.required %}required{% endif %} placeholder="{{ param.get('placeholder', '') }}">
-                            </div>
-                        {% endif %}
-                    {% endfor %}
-                    
+                        {% endfor %}
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" onclick="executeCommand('{{ cmd_name }}')" class="btn btn-primary">
-                            <i class="fas fa-play-circle"></i> 执行指令
+                            <i class="fas fa-play"></i> 执行指令
                         </button>
                     </div>
                 </form>
-                
-                <div id="{{ cmd_name }}_result" class="command-result" style="display: none;"></div>
+
+                <div id="{{ cmd_name }}_result" class="command-result" hidden></div>
             </div>
         </div>
         {% endfor %}
     </div>
-</div>
+</section>
 
 <script>
-// 标签切换功能
 document.querySelectorAll('.tab-link').forEach(tab => {
     tab.addEventListener('click', function() {
-        // 移除所有活动状态
-        document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-        
-        // 添加当前活动状态
+        document.querySelectorAll('.tab-link').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
         this.classList.add('active');
-        const tabId = this.dataset.tab;
-        document.getElementById(tabId).classList.add('active');
+        document.getElementById(this.dataset.tab)?.classList.add('active');
     });
 });
 
-// 动态显示/隐藏表单字段
-document.querySelectorAll('.param-select').forEach(select => {
-    select.addEventListener('change', function() {
-        const showIf = this.dataset.showIf;
-        if (showIf) {
-            const conditions = JSON.parse(showIf);
-            const parentForm = this.closest('.command-execute-form');
-            
-            Object.keys(conditions).forEach(key => {
-                const value = conditions[key];
-                const shouldShow = this.value === value;
-                
-                parentForm.querySelectorAll(`[data-show-if*="${key}"]`).forEach(el => {
-                    if (el !== this) {
-                        el.style.display = shouldShow ? 'block' : 'none';
-                        if (!shouldShow) {
-                            el.querySelector('input, select').value = '';
-                        }
-                    }
-                });
-            });
+function updateConditionalFields(form) {
+    form.querySelectorAll('[data-show-if]').forEach(field => {
+        let conditions = {};
+        try {
+            conditions = JSON.parse(field.dataset.showIf || '{}');
+        } catch (e) {
+            conditions = {};
         }
+
+        const shouldShow = Object.entries(conditions).every(([key, value]) => {
+            const control = form.querySelector(`[name="${key}"]`);
+            return control && control.value === value;
+        });
+
+        field.style.display = shouldShow ? '' : 'none';
+        field.querySelectorAll('input, select, textarea').forEach(control => {
+            if (!shouldShow) control.value = '';
+            control.disabled = !shouldShow;
+        });
     });
-    
-    // 触发初始状态
-    select.dispatchEvent(new Event('change'));
+}
+
+document.querySelectorAll('.command-execute-form').forEach(form => {
+    form.querySelectorAll('.param-control').forEach(control => {
+        control.addEventListener('change', () => updateConditionalFields(form));
+        control.addEventListener('input', () => updateConditionalFields(form));
+    });
+    updateConditionalFields(form);
 });
 
-// 执行命令
 function executeCommand(cmdName) {
     const form = document.querySelector(`.command-execute-form[data-command="${cmdName}"]`);
     const resultDiv = document.getElementById(`${cmdName}_result`);
+    if (!form || !resultDiv) return;
+
     const formData = new FormData(form);
-    const data = {command_name: cmdName};
-    
+    const payload = {command_name: cmdName};
     formData.forEach((value, key) => {
-        data[key] = value;
+        payload[key] = value;
     });
-    
-    resultDiv.style.display = 'none';
-    
-    // 显示加载状态
+
+    resultDiv.hidden = true;
     const executeBtn = form.querySelector('button');
     const originalText = executeBtn.innerHTML;
     executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行中...';
     executeBtn.disabled = true;
-    
+
     fetch("{{ url_for('execute_command') }}", {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
     })
     .then(response => response.json())
     .then(result => {
-        resultDiv.style.display = 'block';
+        resultDiv.hidden = false;
         if (result.success) {
-            resultDiv.innerHTML = `<div class="success">✅ ${result.message}</div>`;
+            resultDiv.innerHTML = `<div class="success"><i class="fas fa-check-circle"></i> ${result.message}</div>`;
+            window.XiuxianWeb?.invalidatePageCache(url => url.pathname === '/' || url.pathname === '/database');
         } else {
-            resultDiv.innerHTML = `<div class="error">❌ ${result.error}</div>`;
+            resultDiv.innerHTML = `<div class="error"><i class="fas fa-triangle-exclamation"></i> ${result.error}</div>`;
         }
     })
     .catch(error => {
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `<div class="error">❌ 请求失败: ${error}</div>`;
+        resultDiv.hidden = false;
+        resultDiv.innerHTML = `<div class="error"><i class="fas fa-triangle-exclamation"></i> 请求失败: ${error}</div>`;
     })
     .finally(() => {
         executeBtn.innerHTML = originalText;

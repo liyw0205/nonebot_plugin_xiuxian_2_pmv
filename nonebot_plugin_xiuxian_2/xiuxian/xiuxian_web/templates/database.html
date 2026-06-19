@@ -1,243 +1,99 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card animate-in">
-    <div class="card-header">
-        <h2 class="card-title"><i class="fas fa-database"></i> 数据库管理</h2>
-        <p>管理修仙系统的数据库和表格数据</p>
-    </div>
-    
-    <div class="stats-grid">
-        <div class="stat-card animate-in delay-1">
-            <div class="stat-icon" style="background: linear-gradient(45deg, #2196F3, #64B5F6);">
-                <i class="fas fa-database"></i>
-            </div>
-            <div class="stat-content">
-                <h3>{{ tables|length }}</h3>
-                <p>数据库数量</p>
-            </div>
-        </div>
-        
-        {% set total_tables = [] %}
-        {% for db_name, db_info in tables.items() %}
-            {% set _ = total_tables.append(db_info.tables|length) %}
-        {% endfor %}
-        
-        <div class="stat-card animate-in delay-2">
-            <div class="stat-icon" style="background: linear-gradient(45deg, #4CAF50, #81C784);">
-                <i class="fas fa-table"></i>
-            </div>
-            <div class="stat-content">
-                <h3>{{ total_tables|sum }}</h3>
-                <p>数据表总数</p>
-            </div>
-        </div>
-    </div>
+{% set total_tables = [] %}
+{% for db_name, db_info in tables.items() %}
+    {% set _ = total_tables.append(db_info.tables|length) %}
+{% endfor %}
 
-    <div class="database-list">
-        <h3><i class="fas fa-list"></i> 数据库列表</h3>
-        
-        {% for db_name, db_info in tables.items() %}
-        {% set db_id = db_name|replace(' ', '_')|replace('(', '')|replace(')', '')|replace('.', '_') %}
-        {% set table_total = db_info.tables|length %}
-        <div class="database-card card animate-in delay-{{ loop.index + 2 }}">
-            <!-- 数据库头部区域 - 可点击展开/收起 -->
-            <div class="database-header" onclick="toggleDatabase('{{ db_id }}')" style="cursor: pointer;">
-                <div class="database-info">
-                    <h4>
-                        <a href="javascript:void(0)" class="db-toggle">
-                            <i class="fas fa-chevron-right" id="icon_{{ db_id }}"></i> {{ db_name }}
-                        </a>
-                    </h4>
-                    <p class="database-path"><i class="fas fa-folder"></i> {{ db_info.path }}</p>
-                </div>
-                <span class="table-count">{{ db_info.tables|length }} 张表</span>
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Database</p>
+        <h1 class="page-title">数据库管理</h1>
+        <p class="page-subtitle">集中查看修仙系统数据库、动态表和记录编辑入口。</p>
+    </div>
+    <div class="hero-actions">
+        <span class="status-pill"><i class="fas fa-database"></i> {{ tables|length }} 个库</span>
+        <span class="status-pill"><i class="fas fa-table"></i> {{ total_tables|sum }} 张表</span>
+    </div>
+</section>
+
+<section class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--info-color);"><i class="fas fa-database"></i></div>
+        <div class="stat-content">
+            <h3>{{ tables|length }}</h3>
+            <p>数据库数量</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--accent-color);"><i class="fas fa-table"></i></div>
+        <div class="stat-content">
+            <h3>{{ total_tables|sum }}</h3>
+            <p>数据表总数</p>
+        </div>
+    </div>
+</section>
+
+<section class="database-list">
+    {% for db_name, db_info in tables.items() %}
+    {% set db_id = db_name|replace(' ', '_')|replace('(', '')|replace(')', '')|replace('.', '_') %}
+    {% set table_total = db_info.tables|length %}
+    <article class="database-card">
+        <div class="database-header" onclick="toggleDatabase('{{ db_id }}')">
+            <div class="database-info">
+                <h4>
+                    <a href="javascript:void(0)" class="db-toggle">
+                        <i class="fas fa-chevron-right" id="icon_{{ db_id }}"></i>
+                        {{ db_name }}
+                    </a>
+                </h4>
+                <p class="database-path"><i class="fas fa-folder"></i> {{ db_info.path }}</p>
             </div>
-            
-            <!-- 表列表容器 -->
-            <div id="{{ db_id }}_tables" class="database-tables" style="display: none;">
-                {% if table_total > 0 %}
-                <div class="tables-grid {% if table_total <= 9 %}tables-grid--one{% elif table_total <= 18 %}tables-grid--two{% else %}tables-grid--three{% endif %}">
-                    {% for table_name, table_info in db_info.tables.items() %}
-                    <div class="table-card">
-                        <div class="table-icon">
-                            <i class="fas fa-table"></i>
-                        </div>
-                        <div class="table-info">
-                            <h5>{{ table_info.name }}</h5>
-                            <p>{{ table_name }}</p>
-                            {% if table_info.get('is_dynamic') %}
-                            <span class="dynamic-badge" style="background: #FF9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7em;">动态表</span>
-                            {% endif %}
-                        </div>
-                        <div class="table-actions">
-                            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-primary btn-sm">
-                                <i class="fas fa-eye"></i> 查看数据
-                            </a>
-                        </div>
+            <span class="table-count">{{ table_total }} 张表</span>
+        </div>
+
+        <div id="{{ db_id }}_tables" class="database-tables" hidden>
+            {% if table_total > 0 %}
+            <div class="tables-grid {% if table_total <= 9 %}tables-grid--one{% elif table_total <= 18 %}tables-grid--two{% else %}tables-grid--three{% endif %}">
+                {% for table_name, table_info in db_info.tables.items() %}
+                <div class="table-card">
+                    <div class="table-icon"><i class="fas fa-table"></i></div>
+                    <div class="table-info">
+                        <h5>{{ table_info.name }}</h5>
+                        <p>{{ table_name }}</p>
+                        {% if table_info.get('is_dynamic') %}
+                        <span class="dynamic-badge">动态表</span>
+                        {% endif %}
                     </div>
-                    {% endfor %}
+                    <div class="table-actions">
+                        <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye"></i> 查看
+                        </a>
+                    </div>
                 </div>
-                {% else %}
-                <div style="padding: 20px; text-align: center; color: #666;">
-                    <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 10px;"></i>
-                    <p>暂无数据表</p>
-                </div>
-                {% endif %}
+                {% endfor %}
             </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>暂无数据表</p>
+            </div>
+            {% endif %}
         </div>
-        {% endfor %}
-    </div>
-</div>
-
-<style>
-.database-tables .tables-grid {
-    grid-template-columns: minmax(0, 1fr);
-}
-.database-tables .tables-grid.tables-grid--two {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.database-tables .tables-grid.tables-grid--three {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-@media (max-width: 1024px) {
-    .database-tables .tables-grid.tables-grid--three {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-}
-@media (max-width: 640px) {
-    .database-tables .tables-grid {
-        gap: 8px;
-    }
-    .database-tables .table-card {
-        padding: 8px;
-        gap: 6px;
-    }
-    .database-tables .table-icon {
-        display: none;
-    }
-    .database-tables .table-info h5 {
-        font-size: 0.82rem;
-        line-height: 1.25;
-        margin-bottom: 2px;
-        word-break: break-word;
-    }
-    .database-tables .table-info p {
-        font-size: 0.72rem;
-        line-height: 1.2;
-        word-break: break-word;
-    }
-    .database-tables .table-actions {
-        margin-top: 4px;
-    }
-    .database-tables .table-actions .btn {
-        min-height: 30px;
-        padding: 0.36rem 0.4rem;
-        font-size: 0.72rem;
-        white-space: normal;
-        line-height: 1.15;
-    }
-}
-</style>
+    </article>
+    {% endfor %}
+</section>
 
 <script>
-// 数据库展开/收起功能
 function toggleDatabase(dbId) {
     const tableContainer = document.getElementById(dbId + '_tables');
     const toggleIcon = document.getElementById('icon_' + dbId);
-    
-    if (tableContainer.style.display === 'none') {
-        tableContainer.style.display = 'block';
-        toggleIcon.className = 'fas fa-chevron-down';
-        // 添加淡入缩放动画
-        tableContainer.style.animation = 'fadeInUp 0.3s ease-out forwards';
-    } else {
-        tableContainer.style.animation = 'none'; // 重置动画
-        tableContainer.style.display = 'none';
-        toggleIcon.className = 'fas fa-chevron-right';
-    }
+    if (!tableContainer || !toggleIcon) return;
+
+    const willOpen = tableContainer.hidden;
+    tableContainer.hidden = !willOpen;
+    toggleIcon.className = willOpen ? 'fas fa-chevron-down' : 'fas fa-chevron-right';
 }
-
-// 添加悬停效果
-document.querySelectorAll('.database-card').forEach(card => {
-    card.addEventListener('mouseenter', function() {
-        this.style.boxShadow = '0 8px 25px rgba(30, 136, 229, 0.15)';
-    });
-    
-    card.addEventListener('mouseleave', function() {
-        this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-    });
-});
-
-// 页面加载时的动画
-document.addEventListener('DOMContentLoaded', function() {
-    const cards = document.querySelectorAll('.database-card');
-    cards.forEach((card, index) => {
-        card.style.animationDelay = `${index * 0.1}s`;
-    });
-});
-
-// 添加滑动动画样式
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    .dynamic-badge {
-        display: inline-block;
-        margin-top: 5px;
-    }
-    
-    .database-header {
-        transition: all 0.3s ease;
-    }
-    
-    .database-header:hover {
-        background: rgba(179, 224, 255, 0.2);
-        border-radius: 8px;
-    }
-    
-    .db-toggle {
-        text-decoration: none;
-        color: inherit;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .db-toggle:hover {
-        color: var(--accent-color);
-    }
-    
-    .table-card {
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .table-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 4px;
-        height: 100%;
-        background: linear-gradient(180deg, var(--accent-color), #8ecfff);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-    
-    .table-card:hover::before {
-        opacity: 1;
-    }
-`;
-document.head.appendChild(style);
 </script>
 {% endblock %}

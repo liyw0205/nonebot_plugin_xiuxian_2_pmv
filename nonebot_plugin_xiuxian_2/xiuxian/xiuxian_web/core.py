@@ -97,6 +97,22 @@ update_manager = UpdateManager()
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # 用于会话加密
 
+
+def api_success(**payload):
+    data = {"success": True}
+    data.update(payload)
+    return jsonify(data)
+
+
+def api_error(error, status=None, **payload):
+    data = {"success": False, "error": str(error) if error else "请求失败"}
+    data.update(payload)
+    response = jsonify(data)
+    if status is not None:
+        return response, status
+    return response
+
+
 # 配置
 XIUXIANDATA = Path() / "data"
 DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"

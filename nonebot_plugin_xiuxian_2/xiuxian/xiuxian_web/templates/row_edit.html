@@ -1,144 +1,154 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="card">
-        <h2>编辑 {{ table_info.name }} 数据</h2>
-        <button type="button" onclick="exportRowData()" class="btn btn-info">导出</button>
-        <button type="button" onclick="triggerFileInput()" class="btn btn-info">导入</button>        
-        <form id="editForm" method="post">
-            {# 按照预设的字段顺序显示 #}
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Row Editor</p>
+        <h1 class="page-title">编辑 {{ table_info.name }}</h1>
+        <p class="page-subtitle">{{ table_name }} 记录编辑，主键字段只读。</p>
+    </div>
+    <div class="hero-actions">
+        <button type="button" onclick="exportRowData()" class="btn btn-secondary">
+            <i class="fas fa-download"></i> 导出
+        </button>
+        <button type="button" onclick="triggerFileInput()" class="btn btn-secondary">
+            <i class="fas fa-upload"></i> 导入
+        </button>
+        <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 返回
+        </a>
+    </div>
+</section>
+
+<section class="card">
+    <form id="editForm" method="post">
+        <div class="field-grid">
             {% for field in table_info.fields %}
                 <div class="form-group">
-                    <label for="{{ field }}">{{ field }}</label>
-                    {% if field in primary_key_fields %}
-                        {# 主键字段设为只读 #}
-                        <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}" readonly>
-                    {% else %}
-                        <input type="text" id="{{ field }}" name="{{ field }}" value="{{ row_data[field] }}">
-                    {% endif %}
+                    <label for="{{ field }}">
+                        {{ field }}
+                        {% if field in primary_key_fields %}<span class="status-pill"><i class="fas fa-key"></i> 主键</span>{% endif %}
+                    </label>
+                    <input
+                        type="text"
+                        id="{{ field }}"
+                        name="{{ field }}"
+                        value="{{ row_data[field] }}"
+                        {% if field in primary_key_fields %}readonly{% endif %}
+                    >
                 </div>
             {% endfor %}
-            
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button type="button" onclick="submitForm('update')" class="btn btn-success">保存</button>
-                <button type="button" onclick="confirmDelete()" class="btn btn-danger">删除</button>
-                <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-info">返回</a>
-            </div>
-            
-            <input type="hidden" name="action" id="action" value="">
-            
-            <!-- 隐藏的文件输入框 -->
-            <input type="file" id="importFile" accept=".json" style="display: none;">
-        </form>
-    </div>
-    
-    <script>
-        function submitForm(action) {
-            document.getElementById('action').value = action;
-            
-            const formData = new FormData(document.getElementById('editForm'));
-            
-            let url = "{{ url_for('row_edit', table_name=table_name, row_id=request.view_args.row_id) }}";
-            
-            {% if is_composite_key %}
-                // 复合主键处理
-                const compositeKey = {{ primary_key_fields|tojson }}.map(field => {
-                    return document.getElementById(field).value;
-                }).join('_');
-                url = url.replace('{{ request.view_args.row_id }}', compositeKey);
-            {% endif %}
-            
-            fetch(url, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    window.location.href = "{{ url_for('table_view', table_name=table_name) }}";
-                } else {
-                    alert('错误：' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('发生错误');
-            });
+        </div>
+
+        <div class="form-actions">
+            <button type="button" onclick="submitForm('update')" class="btn btn-success">
+                <i class="fas fa-save"></i> 保存
+            </button>
+            <button type="button" onclick="confirmDelete()" class="btn btn-danger">
+                <i class="fas fa-trash"></i> 删除
+            </button>
+            <a href="{{ url_for('table_view', table_name=table_name) }}" class="btn btn-secondary">
+                取消
+            </a>
+        </div>
+
+        <input type="hidden" name="action" id="action" value="">
+        <input type="file" id="importFile" accept=".json" hidden>
+    </form>
+</section>
+
+<script>
+function submitForm(action) {
+    document.getElementById('action').value = action;
+    const formData = new FormData(document.getElementById('editForm'));
+    let url = "{{ url_for('row_edit', table_name=table_name, row_id=request.view_args.row_id) }}";
+
+    {% if is_composite_key %}
+    const compositeKey = {{ primary_key_fields|tojson }}.map(field => {
+        return document.getElementById(field).value;
+    }).join('_');
+    url = url.replace('{{ request.view_args.row_id }}', compositeKey);
+    {% endif %}
+
+    fetch(url, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.XiuxianWeb?.invalidatePageCache(url => url.pathname === '/' || url.pathname === '/database');
+            window.XiuxianWeb?.startProgress();
+            window.location.href = "{{ url_for('table_view', table_name=table_name) }}";
+        } else {
+            alert('错误：' + data.error);
         }
-        
-        function confirmDelete() {
-            if (confirm('确定要删除这条记录吗？此操作不可撤销！')) {
-                submitForm('delete');
-            }
-        }
-        
-        // 导出功能 - 修复版本
-        function exportRowData() {
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('发生错误');
+    });
+}
+
+function confirmDelete() {
+    if (confirm('确定要删除这条记录吗？此操作不可撤销。')) {
+        submitForm('delete');
+    }
+}
+
+function exportRowData() {
+    const jsonData = {};
+    const primaryKeyFields = {{ primary_key_fields|tojson }};
+    const primaryKeyValues = primaryKeyFields.map(field => document.getElementById(field).value);
+
+    {% for field in table_info.fields %}
+        {% if field not in primary_key_fields %}
+            jsonData['{{ field }}'] = document.getElementById('{{ field }}').value;
+        {% endif %}
+    {% endfor %}
+
+    const timestamp = new Date().getTime();
+    const filename = primaryKeyValues.length > 0 && primaryKeyValues.every(Boolean)
+        ? '{{ table_name }}_' + primaryKeyValues.join('_') + '_' + timestamp + '.json'
+        : '{{ table_name }}_export_' + timestamp + '.json';
+
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function triggerFileInput() {
+    document.getElementById('importFile').click();
+}
+
+document.getElementById('importFile').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
             const form = document.getElementById('editForm');
-            const jsonData = {};
-            
-            // 获取主键字段名和值
-            const primaryKeyFields = {{ primary_key_fields|tojson }};
-            const primaryKeyValues = primaryKeyFields.map(field => {
-                return document.getElementById(field).value;
-            });
-
-            // 构建导出的 JSON 数据（排除主键字段）
-            {% for field in table_info.fields %}
-                {% if field not in primary_key_fields %}
-                    jsonData['{{ field }}'] = document.getElementById('{{ field }}').value;
-                {% endif %}
-            {% endfor %}
-
-            // 生成文件名：表名 + 主键值 + 时间戳
-            const timestamp = new Date().getTime();
-            let filename;
-            if (primaryKeyValues.length > 0 && primaryKeyValues.every(v => v)) {
-                filename = '{{ table_name }}_' + primaryKeyValues.join('_') + '_' + timestamp + '.json';
-            } else {
-                filename = '{{ table_name }}_export_' + timestamp + '.json';
+            for (const [key, value] of Object.entries(importedData)) {
+                const input = form.elements[key];
+                if (input && !input.readOnly) {
+                    input.value = value;
+                }
             }
-
-            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            alert('数据已成功导入');
+        } catch (error) {
+            alert('导入失败：' + error.message);
         }
-        
-        // 触发文件输入框点击事件
-        function triggerFileInput() {
-            document.getElementById('importFile').click();
-        }
-        
-        // 处理文件导入
-        document.getElementById('importFile').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const importedData = JSON.parse(e.target.result);
-                        // 填充表单数据（不包括主键）
-                        const form = document.getElementById('editForm');
-                        for (const [key, value] of Object.entries(importedData)) {
-                            const input = form.elements[key];
-                            if (input && !input.readOnly) {
-                                input.value = value;
-                            }
-                        }
-                        alert('数据已成功导入');
-                    } catch (error) {
-                        alert('导入失败：' + error.message);
-                    }
-                };
-                reader.readAsText(file);
-            }
-        });
-    </script>
+    };
+    reader.readAsText(file);
+});
+</script>
 {% endblock %}
