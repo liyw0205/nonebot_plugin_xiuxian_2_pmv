@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Rewards</p>
+        <h1 class="page-title">发放中心</h1>
+        <p class="page-subtitle">统一维护礼包、补偿和兑换码，保存后会写入机器人命令读取的同一份配置。</p>
+    </div>
+    <div class="hero-actions">
+        <span class="status-pill"><i class="fas fa-gift"></i> 礼包</span>
+        <span class="status-pill"><i class="fas fa-ticket"></i> 兑换码</span>
+    </div>
+</section>
+
+<section class="reward-center-layout">
+    <article class="command-card reward-form-panel">
+        <div class="command-header">
+            <div class="command-icon"><i class="fas fa-hand-holding-heart"></i></div>
+            <div>
+                <h3>新增发放</h3>
+                <p class="command-description">编号留空会自动生成。奖励格式示例：灵石x100000,渡厄丹x1</p>
+            </div>
+        </div>
+
+        <form id="rewardForm" data-no-progress="true">
+            <div class="reward-kind-tabs" role="tablist" aria-label="发放类型">
+                {% for key, kind in reward_kinds.items() %}
+                <button class="reward-kind-tab" type="button" data-kind="{{ key }}">
+                    {{ kind.title }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <input id="rewardKind" type="hidden" value="gift">
+
+            <div class="field-grid">
+                <div class="form-group">
+                    <label id="recordIdLabel" for="recordId">编号</label>
+                    <input id="recordId" type="text" placeholder="留空自动生成">
+                </div>
+                <div class="form-group redeem-only" hidden>
+                    <label for="usageLimit">使用上限</label>
+                    <input id="usageLimit" type="number" min="0" step="1" value="0">
+                </div>
+                <div class="form-group normal-only">
+                    <label for="rewardReason">说明</label>
+                    <input id="rewardReason" type="text" placeholder="例如：节日礼包、维护补偿">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="rewardValue">奖励内容</label>
+                <input id="rewardValue" type="text" placeholder="灵石x100000,渡厄丹x1">
+            </div>
+
+            <div class="field-grid">
+                <div class="form-group">
+                    <label for="startTime">生效时间</label>
+                    <div class="reward-time-control">
+                        <input id="startTime" type="datetime-local" step="1">
+                        <label class="reward-time-option">
+                            <input id="startNow" type="checkbox" checked>
+                            立即生效
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="expireTime">过期时间</label>
+                    <div class="reward-time-control">
+                        <input id="expireTime" type="datetime-local" step="1">
+                        <label class="reward-time-option">
+                            <input id="expireUnlimited" type="checkbox" checked>
+                            永久有效
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button id="saveRewardBtn" type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="resetRewardForm()">
+                    <i class="fas fa-rotate-left"></i> 重置
+                </button>
+                <div id="rewardSaveResult" class="command-result" hidden></div>
+            </div>
+        </form>
+    </article>
+
+    <article class="command-card reward-list-panel">
+        <div class="command-header">
+            <div class="command-icon"><i class="fas fa-list-check"></i></div>
+            <div>
+                <h3 id="recordListTitle">礼包列表</h3>
+                <p class="command-description">删除会同步清理对应领取或使用记录。</p>
+            </div>
+        </div>
+
+        <div class="reward-list-toolbar">
+            <button type="button" class="btn btn-info btn-sm" onclick="loadRewardRecords()">
+                <i class="fas fa-rotate"></i> 刷新
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearCurrentRecords()">
+                <i class="fas fa-trash"></i> 清空当前类型
+            </button>
+        </div>
+
+        <div id="rewardRecords" class="reward-record-list"></div>
+    </article>
+</section>
+
+<style>
+.reward-center-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+    gap: 16px;
+}
+
+.reward-kind-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.reward-kind-tab {
+    min-height: 38px;
+    padding: 8px 10px;
+    color: var(--text-secondary);
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.reward-kind-tab.active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-color) 50%, var(--glass-border-muted));
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong));
+}
+
+.reward-time-control {
+    display: grid;
+    gap: 8px;
+}
+
+.reward-time-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.reward-time-option input {
+    margin: 0;
+}
+
+.reward-list-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.reward-record-list {
+    display: grid;
+    gap: 10px;
+}
+
+.reward-record-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.reward-record-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.reward-record-title {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.reward-record-title strong {
+    overflow-wrap: anywhere;
+}
+
+.reward-record-title span,
+.reward-record-meta,
+.reward-empty {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.reward-record-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+}
+
+.reward-record-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: start;
+    justify-content: flex-end;
+}
+
+@media (max-width: 1100px) {
+    .reward-center-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .reward-kind-tabs,
+    .reward-record-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .reward-record-head {
+        display: grid;
+    }
+
+    .reward-record-actions {
+        justify-content: start;
+    }
+}
+</style>
+
+<script>
+(() => {
+const rewardKinds = {{ reward_kinds|tojson }};
+let currentKind = 'gift';
+
+function escapeHtml(value) {
+    return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function escapeAttr(value) {
+    return String(value ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function toDateTimeLocal(value) {
+    const text = String(value ?? '').trim();
+    if (!text || text === '0' || text === '无限') return '';
+    return text.replace(' ', 'T').slice(0, 19);
+}
+
+function currentKindTitle() {
+    return rewardKinds[currentKind]?.title || '发放';
+}
+
+function syncTimeControls() {
+    const startNow = document.getElementById('startNow');
+    const expireUnlimited = document.getElementById('expireUnlimited');
+    const startTime = document.getElementById('startTime');
+    const expireTime = document.getElementById('expireTime');
+    if (startNow && startTime) startTime.disabled = startNow.checked;
+    if (expireUnlimited && expireTime) expireTime.disabled = expireUnlimited.checked;
+}
+
+function setResult(ok, text) {
+    const result = document.getElementById('rewardSaveResult');
+    if (!result) return;
+    result.hidden = false;
+    result.innerHTML = `<div class="${ok ? 'success' : 'error'}"><i class="fas ${ok ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i> ${escapeHtml(text)}</div>`;
+}
+
+function setCurrentKind(kind) {
+    if (!rewardKinds[kind]) return;
+    currentKind = kind;
+    document.getElementById('rewardKind').value = kind;
+    document.querySelectorAll('.reward-kind-tab').forEach(button => {
+        button.classList.toggle('active', button.dataset.kind === kind);
+    });
+    document.querySelectorAll('.redeem-only').forEach(el => {
+        el.hidden = kind !== 'redeem';
+    });
+    document.querySelectorAll('.normal-only').forEach(el => {
+        el.hidden = kind === 'redeem';
+    });
+    document.getElementById('recordIdLabel').textContent = kind === 'redeem' ? '兑换码' : '编号';
+    document.getElementById('recordId').placeholder = kind === 'redeem' ? '留空自动生成，保存后转为大写' : '留空自动生成';
+    document.getElementById('recordListTitle').textContent = `${currentKindTitle()}列表`;
+    resetRewardForm(false);
+    loadRewardRecords();
+}
+
+function resetRewardForm(clearMessage = true) {
+    document.getElementById('recordId').value = '';
+    document.getElementById('usageLimit').value = '0';
+    document.getElementById('rewardReason').value = '';
+    document.getElementById('rewardValue').value = '';
+    document.getElementById('startTime').value = '';
+    document.getElementById('expireTime').value = '';
+    document.getElementById('startNow').checked = true;
+    document.getElementById('expireUnlimited').checked = true;
+    syncTimeControls();
+    if (clearMessage) document.getElementById('rewardSaveResult').hidden = true;
+}
+
+function fillRewardForm(record) {
+    if (!record) return;
+    document.getElementById('recordId').value = record.id || '';
+    document.getElementById('usageLimit').value = record.usage_limit ?? 0;
+    document.getElementById('rewardReason').value = record.reason || '';
+    document.getElementById('rewardValue').value = record.reward_text || '';
+    document.getElementById('startNow').checked = !record.start_time;
+    document.getElementById('expireUnlimited').checked = !record.expire_time || record.expire_time === '无限';
+    document.getElementById('startTime').value = toDateTimeLocal(record.start_time);
+    document.getElementById('expireTime').value = toDateTimeLocal(record.expire_time);
+    syncTimeControls();
+    setResult(true, `已载入${currentKindTitle()}：${record.id || ''}`);
+}
+
+function collectRewardPayload() {
+    return {
+        kind: currentKind,
+        id: document.getElementById('recordId').value,
+        reward: document.getElementById('rewardValue').value,
+        reason: document.getElementById('rewardReason').value,
+        usage_limit: document.getElementById('usageLimit').value,
+        start_time: document.getElementById('startNow').checked ? '0' : document.getElementById('startTime').value,
+        start_special: document.getElementById('startNow').checked,
+        expire_time: document.getElementById('expireUnlimited').checked ? '无限' : document.getElementById('expireTime').value,
+        expire_special: document.getElementById('expireUnlimited').checked
+    };
+}
+
+function renderRecords(records) {
+    const container = document.getElementById('rewardRecords');
+    if (!container) return;
+    if (!Array.isArray(records) || records.length === 0) {
+        container.innerHTML = `<div class="reward-empty">当前没有${escapeHtml(currentKindTitle())}记录。</div>`;
+        return;
+    }
+
+    container.innerHTML = records.map(record => {
+        const isRedeem = currentKind === 'redeem';
+        const usageLimit = Number(record.usage_limit || 0);
+        const usageText = usageLimit === 0 ? `${record.used_count || 0}/无限` : `${record.used_count || 0}/${usageLimit}`;
+        const secondary = isRedeem ? `使用：${usageText}` : `已领：${record.claimed_count || 0}`;
+        const encodedRecord = escapeAttr(JSON.stringify(record));
+        return `
+            <div class="reward-record-card">
+                <div class="reward-record-head">
+                    <div class="reward-record-title">
+                        <strong>${escapeHtml(record.id)}</strong>
+                        <span>${escapeHtml(record.items_text || '无内容')}</span>
+                    </div>
+                    <div class="reward-record-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" data-record="${encodedRecord}" onclick="editRewardRecord(this)">
+                            <i class="fas fa-pen-to-square"></i> 编辑
+                        </button>
+                        <button type="button" class="btn btn-danger btn-sm" data-record-id="${escapeAttr(record.id)}" onclick="deleteRewardRecord(this)">
+                            <i class="fas fa-trash"></i> 删除
+                        </button>
+                    </div>
+                </div>
+                <div class="reward-record-meta">
+                    <span>${isRedeem ? '兑换码' : '说明'}：${escapeHtml(isRedeem ? record.id : (record.reason || '无'))}</span>
+                    <span>${escapeHtml(secondary)}</span>
+                    <span>生效：${escapeHtml(record.start_time || '立即')}</span>
+                    <span>过期：${escapeHtml(record.expire_time || '无限')}</span>
+                    <span>创建：${escapeHtml(record.create_time || '-')}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadRewardRecords() {
+    try {
+        const data = await window.XiuxianWeb.requestJson(`/api/reward-center/records?kind=${encodeURIComponent(currentKind)}`);
+        renderRecords(data.records || []);
+    } catch (error) {
+        renderRecords([]);
+        setResult(false, error.message || String(error));
+    }
+}
+
+async function saveRewardRecord(event) {
+    event?.preventDefault();
+    const button = document.getElementById('saveRewardBtn');
+    const original = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+    try {
+        const data = await window.XiuxianWeb.requestJson('/api/reward-center/records', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(collectRewardPayload())
+        });
+        renderRecords(data.records || []);
+        resetRewardForm(false);
+        setResult(true, data.message || '已保存');
+        window.XiuxianWeb.invalidatePageCache(url => url.pathname === '/reward-center');
+    } catch (error) {
+        setResult(false, error.message || String(error));
+    } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+    }
+}
+
+async function deleteRewardRecord(button) {
+    const recordId = button?.dataset?.recordId;
+    if (!recordId) return;
+    if (!window.confirm(`确认删除${currentKindTitle()} ${recordId}？`)) return;
+    try {
+        const data = await window.XiuxianWeb.requestJson(
+            `/api/reward-center/records/${encodeURIComponent(currentKind)}/${encodeURIComponent(recordId)}`,
+            {method: 'DELETE'}
+        );
+        renderRecords(data.records || []);
+        setResult(true, data.message || '已删除');
+        window.XiuxianWeb.invalidatePageCache(url => url.pathname === '/reward-center');
+    } catch (error) {
+        setResult(false, error.message || String(error));
+    }
+}
+
+function editRewardRecord(button) {
+    try {
+        fillRewardForm(JSON.parse(button?.dataset?.record || '{}'));
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    } catch (error) {
+        setResult(false, '记录数据读取失败');
+    }
+}
+
+async function clearCurrentRecords() {
+    if (!window.confirm(`确认清空全部${currentKindTitle()}？`)) return;
+    try {
+        const data = await window.XiuxianWeb.requestJson(
+            `/api/reward-center/records/${encodeURIComponent(currentKind)}/clear`,
+            {method: 'POST'}
+        );
+        renderRecords(data.records || []);
+        setResult(true, data.message || '已清空');
+        window.XiuxianWeb.invalidatePageCache(url => url.pathname === '/reward-center');
+    } catch (error) {
+        setResult(false, error.message || String(error));
+    }
+}
+
+document.querySelectorAll('.reward-kind-tab').forEach(button => {
+    button.addEventListener('click', () => setCurrentKind(button.dataset.kind));
+});
+
+document.getElementById('rewardForm')?.addEventListener('submit', saveRewardRecord);
+document.getElementById('startNow')?.addEventListener('change', syncTimeControls);
+document.getElementById('expireUnlimited')?.addEventListener('change', syncTimeControls);
+
+window.resetRewardForm = resetRewardForm;
+window.loadRewardRecords = loadRewardRecords;
+window.deleteRewardRecord = deleteRewardRecord;
+window.editRewardRecord = editRewardRecord;
+window.clearCurrentRecords = clearCurrentRecords;
+window.__xiuxianPageCleanup = () => {
+    delete window.resetRewardForm;
+    delete window.loadRewardRecords;
+    delete window.deleteRewardRecord;
+    delete window.editRewardRecord;
+    delete window.clearCurrentRecords;
+};
+
+setCurrentKind(currentKind);
+})();
+</script>
+{% endblock %}

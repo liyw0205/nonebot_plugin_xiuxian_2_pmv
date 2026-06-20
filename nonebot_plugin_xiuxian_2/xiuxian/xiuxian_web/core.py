@@ -257,7 +257,7 @@ ROOTS = {
     "9": "命运道果"
 }
 
-# 管理员指令
+# 指令中心
 ADMIN_COMMANDS = {
     "gm_command": {
         "name": "神秘力量",

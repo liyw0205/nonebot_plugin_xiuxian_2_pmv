@@ -41,8 +41,9 @@
                 <ul>
                     <li><a href="{{ url_for('home') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-gauge-high"></i><span>首页</span></a></li>
                     <li><a href="{{ url_for('database') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active(['database', 'table_view', 'row_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i><span>数据库</span></a></li>
-                    <li><a href="{{ url_for('commands') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-wand-magic-sparkles"></i><span>管理员指令</span></a></li>
+                    <li><a href="{{ url_for('commands') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-wand-magic-sparkles"></i><span>指令中心</span></a></li>
                     <li><a href="{{ url_for('activity_management') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active('activity_management') %}class="active"{% endif %}><i class="fas fa-calendar-check"></i><span>活动管理</span></a></li>
+                    <li><a href="{{ url_for('reward_center') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active('reward_center') %}class="active"{% endif %}><i class="fas fa-hand-holding-heart"></i><span>发放中心</span></a></li>
                     <li><a href="{{ url_for('config_management') }}" data-refresh-page="true" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-sliders"></i><span>配置管理</span></a></li>
                     <li><a href="{{ url_for('messages_page') }}" data-refresh-page="true" {% if is_active('messages_page') %}class="active"{% endif %}><i class="fas fa-comments"></i><span>消息面板</span></a></li>
                     <li><a href="{{ url_for('economy_logs') }}" data-refresh-page="true" {% if is_active('economy_logs') %}class="active"{% endif %}><i class="fas fa-coins"></i><span>经济流水</span></a></li>

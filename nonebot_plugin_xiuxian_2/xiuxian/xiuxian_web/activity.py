@@ -24,9 +24,9 @@ TASK_TEMPLATES = {
     "daily_out_closing": {
         "key": "daily_out_closing",
         "name": "闭关归元",
-        "description": "完成出关或虚神界出关 1 次",
+        "description": "完成出关 1 次",
         "target": 1,
-        "events": ["out_closing", "xu_out_closing"],
+        "events": ["out_closing"],
     },
     "daily_work": {
         "key": "daily_work",
@@ -80,9 +80,9 @@ TASK_TEMPLATES = {
     "weekly_out_closing": {
         "key": "weekly_out_closing",
         "name": "道心不辍",
-        "description": "本周累计修炼、出关或虚神界出关 7200 分钟",
+        "description": "本周累计修炼 7200 分钟",
         "target": 7200,
-        "events": ["cultivation_time", "out_closing", "xu_out_closing"],
+        "events": ["cultivation_time"],
     },
     "weekly_work": {
         "key": "weekly_work",
@@ -115,9 +115,9 @@ TASK_TEMPLATES = {
     "weekly_elixir_or_dongfu": {
         "key": "weekly_elixir_or_dongfu",
         "name": "炼丹不辍",
-        "description": "本周炼丹或洞府收获累计 20 次",
+        "description": "本周炼丹累计 20 次",
         "target": 20,
-        "events": ["dongfu_harvest", "mix_elixir_complete"],
+        "events": ["mix_elixir_complete"],
     },
     "weekly_dungeon_clear": {
         "key": "weekly_dungeon_clear",
@@ -342,10 +342,29 @@ def _validate_time_text(value: str, field_name: str):
     text = _clean_text(value)
     if text in ("", "0", "无限"):
         return
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
         try:
             datetime.strptime(text, fmt)
             return
+        except ValueError:
+            pass
+    raise ValueError(f"{field_name}格式应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS")
+
+
+def _normalize_time_text(value, field_name: str, default: str, *, allow_special: bool = True) -> str:
+    text = _clean_text(value)
+    if not text:
+        if not allow_special:
+            raise ValueError(f"请选择{field_name}")
+        text = default
+    if allow_special and text in ("0", "无限"):
+        return text
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            if fmt == "%Y-%m-%d":
+                return parsed.strftime("%Y-%m-%d")
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
         except ValueError:
             pass
     raise ValueError(f"{field_name}格式应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS")
@@ -411,7 +430,18 @@ def _normalize_events(value, *, strict: bool = True) -> list[str]:
     return events
 
 
-def _normalize_task_rows(rows, cycle_label: str) -> list[dict]:
+def _make_task_key(cycle: str, event: str, seen_keys: set[str]) -> str:
+    base_event = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in (event or "task"))
+    base = f"{cycle}_{base_event or 'task'}"
+    key = base
+    index = 2
+    while key in seen_keys:
+        key = f"{base}_{index}"
+        index += 1
+    return key
+
+
+def _normalize_task_rows(rows, cycle: str, cycle_label: str) -> list[dict]:
     normalized = []
     seen_keys = set()
     for row in rows or []:
@@ -426,10 +456,12 @@ def _normalize_task_rows(rows, cycle_label: str) -> list[dict]:
 
         if not any((key, name, description, reward, events)):
             continue
+        if not events:
+            raise ValueError(f"{cycle_label}任务事件不能为空")
         if not key:
-            raise ValueError(f"{cycle_label}任务ID不能为空")
+            key = _make_task_key(cycle, events[0], seen_keys)
         if key in seen_keys:
-            raise ValueError(f"{cycle_label}任务ID {key} 重复")
+            raise ValueError(f"{cycle_label}任务编号 {key} 重复")
         seen_keys.add(key)
         target = _to_positive_int(raw_target, f"{cycle_label}任务目标")
         if reward:
@@ -529,15 +561,25 @@ def _normalize_activity_config(data: dict) -> dict:
     extensions = dict(extensions)
     extensions["repeat_last_daily_reward"] = _as_bool(extensions.get("repeat_last_daily_reward"), True)
 
-    start_time = _clean_text(data.get("start_time"), "0")
-    end_time = _clean_text(data.get("end_time"), "无限")
+    start_time = _normalize_time_text(
+        data.get("start_time"),
+        "开始时间",
+        "0",
+        allow_special=_as_bool(data.get("start_special"), True),
+    )
+    end_time = _normalize_time_text(
+        data.get("end_time"),
+        "结束时间",
+        "无限",
+        allow_special=_as_bool(data.get("end_special"), True),
+    )
     _validate_time_text(start_time, "开始时间")
     _validate_time_text(end_time, "结束时间")
 
     daily_rewards = _normalize_reward_rows(data.get("daily_rewards"), "day", "第几天")
     milestone_rewards = _normalize_reward_rows(data.get("milestone_rewards"), "days", "累计天数")
-    daily_tasks = _normalize_task_rows(data.get("daily_tasks"), "每日活动")
-    weekly_tasks = _normalize_task_rows(data.get("weekly_tasks"), "周常活动")
+    daily_tasks = _normalize_task_rows(data.get("daily_tasks"), "daily", "每日活动")
+    weekly_tasks = _normalize_task_rows(data.get("weekly_tasks"), "weekly", "周常活动")
     if not daily_rewards:
         raise ValueError("至少需要配置一条每日签到奖励")
 

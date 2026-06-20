@@ -69,11 +69,23 @@
                 </div>
                 <div class="form-group">
                     <label for="startTime">开始时间</label>
-                    <input id="startTime" type="text" value="{{ activity_config.get('start_time', '0') }}" placeholder="0 或 YYYY-MM-DD HH:MM:SS">
+                    <div class="activity-time-control">
+                        <input id="startTime" type="datetime-local" step="1">
+                        <label class="activity-time-option">
+                            <input id="startImmediate" type="checkbox">
+                            立即开始
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="endTime">结束时间</label>
-                    <input id="endTime" type="text" value="{{ activity_config.get('end_time', '无限') }}" placeholder="无限 或 YYYY-MM-DD HH:MM:SS">
+                    <div class="activity-time-control">
+                        <input id="endTime" type="datetime-local" step="1">
+                        <label class="activity-time-option">
+                            <input id="endUnlimited" type="checkbox">
+                            不限结束
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -235,7 +247,7 @@
 
 .activity-task-row {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(180px, 1.5fr) 84px minmax(150px, 1.2fr) minmax(160px, 1.2fr) auto;
+    grid-template-columns: minmax(130px, 1fr) minmax(190px, 1.5fr) 84px minmax(170px, 1.3fr) minmax(160px, 1.2fr) auto;
     gap: 10px;
     align-items: end;
     padding: 12px;
@@ -253,6 +265,12 @@
     margin: 0;
 }
 
+.activity-time-control {
+    display: grid;
+    gap: 8px;
+}
+
+.activity-time-option,
 .activity-event-options {
     display: flex;
     flex-wrap: wrap;
@@ -273,6 +291,17 @@
 }
 
 .activity-event-option input {
+    margin: 0;
+}
+
+.activity-time-option {
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.activity-time-option input {
     margin: 0;
 }
 
@@ -320,6 +349,7 @@
 const activityTemplates = {{ activity_templates|tojson }};
 const activityEventChoices = {{ activity_event_choices|tojson }};
 let activityConfig = {{ activity_config|tojson }};
+let taskRowSeq = 0;
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -331,6 +361,22 @@ function escapeAttr(value) {
 
 function escapeHtml(value) {
     return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function toDateTimeLocal(value) {
+    const text = String(value ?? '').trim();
+    if (!text || text === '0' || text === '无限') return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text}T00:00:00`;
+    return text.replace(' ', 'T').slice(0, 19);
+}
+
+function syncSpecialTimeControls() {
+    const startImmediate = document.getElementById('startImmediate');
+    const endUnlimited = document.getElementById('endUnlimited');
+    const startTime = document.getElementById('startTime');
+    const endTime = document.getElementById('endTime');
+    if (startTime && startImmediate) startTime.disabled = startImmediate.checked;
+    if (endTime && endUnlimited) endTime.disabled = endUnlimited.checked;
 }
 
 function renderRewardRows(containerId, rows, numberKey, numberLabel) {
@@ -376,19 +422,19 @@ function taskEventValue(event) {
     return event?.value || '';
 }
 
-function selectedTaskEvents(row) {
-    return new Set(asArray(row.events).map(taskEventValue).filter(Boolean));
+function selectedTaskEvent(row) {
+    return asArray(row.events).map(taskEventValue).find(Boolean) || '';
 }
 
-function renderTaskEventChoices(selectedEvents) {
+function renderTaskEventChoices(selectedEvent, groupName) {
     return asArray(activityEventChoices).map(choice => {
         const value = String(choice.value || '');
         if (!value) return '';
         const label = choice.label || value;
-        const checked = selectedEvents.has(value) ? 'checked' : '';
+        const checked = selectedEvent === value ? 'checked' : '';
         return `
             <label class="activity-event-option">
-                <input class="task-event" type="checkbox" value="${escapeAttr(value)}" ${checked}>
+                <input class="task-event" type="radio" name="${escapeAttr(groupName)}" value="${escapeAttr(value)}" ${checked}>
                 <span>${escapeHtml(label)}</span>
             </label>
         `;
@@ -397,13 +443,11 @@ function renderTaskEventChoices(selectedEvents) {
 
 function appendTaskRow(container, row = {}) {
     const div = document.createElement('div');
-    const selectedEvents = selectedTaskEvents(row);
+    const selectedEvent = selectedTaskEvent(row);
+    const eventGroupName = `activity-task-event-${++taskRowSeq}`;
     div.className = 'activity-task-row';
     div.innerHTML = `
-        <div class="form-group">
-            <label>任务ID</label>
-            <input class="task-key" type="text" value="${escapeAttr(row.key ?? '')}" placeholder="daily_sign">
-        </div>
+        <input class="task-key" type="hidden" value="${escapeAttr(row.key ?? '')}">
         <div class="form-group">
             <label>名称</label>
             <input class="task-name" type="text" value="${escapeAttr(row.name ?? '')}">
@@ -418,7 +462,7 @@ function appendTaskRow(container, row = {}) {
         </div>
         <div class="form-group">
             <label>事件</label>
-            <div class="activity-event-options">${renderTaskEventChoices(selectedEvents)}</div>
+            <div class="activity-event-options">${renderTaskEventChoices(selectedEvent, eventGroupName)}</div>
         </div>
         <div class="form-group">
             <label>奖励</label>
@@ -484,7 +528,7 @@ function collectTaskRows(containerId) {
         name: row.querySelector('.task-name')?.value || '',
         description: row.querySelector('.task-description')?.value || '',
         target: row.querySelector('.task-target')?.value || '',
-        events: Array.from(row.querySelectorAll('.task-event:checked')).map(input => input.value).filter(Boolean),
+        events: row.querySelector('.task-event:checked')?.value ? [row.querySelector('.task-event:checked').value] : [],
         reward: row.querySelector('.task-reward')?.value || ''
     }));
 }
@@ -497,8 +541,11 @@ function fillActivityForm(config) {
     document.getElementById('festivalName').value = activityConfig.festival_name || 'XX节日';
     document.getElementById('activityName').value = activityConfig.name || 'XX节日签到活动';
     document.getElementById('signCommand').value = activityConfig.sign_command || '活动签到';
-    document.getElementById('startTime').value = activityConfig.start_time || '0';
-    document.getElementById('endTime').value = activityConfig.end_time || '无限';
+    document.getElementById('startImmediate').checked = !activityConfig.start_time || activityConfig.start_time === '0';
+    document.getElementById('endUnlimited').checked = !activityConfig.end_time || activityConfig.end_time === '无限';
+    document.getElementById('startTime').value = toDateTimeLocal(activityConfig.start_time);
+    document.getElementById('endTime').value = toDateTimeLocal(activityConfig.end_time);
+    syncSpecialTimeControls();
     document.getElementById('activityDescription').value = activityConfig.description || '';
     document.getElementById('extraRules').value = asArray(activityConfig.extra_rules).join('\n');
     document.getElementById('repeatLastDailyReward').checked = activityConfig.extensions?.repeat_last_daily_reward !== false;
@@ -517,8 +564,10 @@ function collectActivityConfig() {
         festival_name: document.getElementById('festivalName').value,
         name: document.getElementById('activityName').value,
         description: document.getElementById('activityDescription').value,
-        start_time: document.getElementById('startTime').value,
-        end_time: document.getElementById('endTime').value,
+        start_time: document.getElementById('startImmediate').checked ? '0' : document.getElementById('startTime').value,
+        start_special: document.getElementById('startImmediate').checked,
+        end_time: document.getElementById('endUnlimited').checked ? '无限' : document.getElementById('endTime').value,
+        end_special: document.getElementById('endUnlimited').checked,
         sign_command: document.getElementById('signCommand').value,
         daily_rewards: collectRewardRows('dailyRewards', 'day'),
         milestone_rewards: collectRewardRows('milestoneRewards', 'days'),
@@ -609,6 +658,8 @@ window.__xiuxianPageCleanup = () => {
 };
 
 document.getElementById('activityForm')?.addEventListener('submit', saveActivityConfig);
+document.getElementById('startImmediate')?.addEventListener('change', syncSpecialTimeControls);
+document.getElementById('endUnlimited')?.addEventListener('change', syncSpecialTimeControls);
 fillActivityForm(activityConfig);
 })();
 </script>
