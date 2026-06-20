@@ -1,9 +1,10 @@
 {
   "template_type": "festival_sign",
+  "template_key": "festival_sign",
   "enabled": true,
   "festival_name": "XX节日",
   "name": "XX节日签到活动",
-  "description": "节日期间每日签到领取奖励，累计签到达到指定天数可领取额外奖励。活动玩法细节可在 extensions 中继续补充。",
+  "description": "节日期间每日签到领取奖励，完成活动日常与周常目标可获得额外补给。活动玩法细节可在 extensions 中继续补充。",
   "start_time": "0",
   "end_time": "无限",
   "sign_command": "活动签到",
@@ -54,6 +55,60 @@
       "days": 7,
       "name": "累计七日",
       "reward": "灵石x500000,渡厄丹x1"
+    }
+  ],
+  "daily_tasks": [
+    {
+      "key": "daily_sign",
+      "name": "今日问道",
+      "description": "完成修仙签到 1 次",
+      "target": 1,
+      "events": [
+        "sign_in"
+      ],
+      "reward": "灵石x50000"
+    },
+    {
+      "key": "daily_work",
+      "name": "悬赏历练",
+      "description": "结算悬赏令 1 次",
+      "target": 1,
+      "events": [
+        "work"
+      ],
+      "reward": "灵石x60000"
+    },
+    {
+      "key": "daily_dongfu_harvest",
+      "name": "洞府经营",
+      "description": "完成洞府收获 1 次",
+      "target": 1,
+      "events": [
+        "dongfu_harvest"
+      ],
+      "reward": "灵石x60000"
+    }
+  ],
+  "weekly_tasks": [
+    {
+      "key": "weekly_sign",
+      "name": "七日勤修",
+      "description": "本周完成修仙签到 6 次",
+      "target": 6,
+      "events": [
+        "sign_in"
+      ],
+      "reward": "灵石x200000"
+    },
+    {
+      "key": "weekly_work",
+      "name": "悬赏达人",
+      "description": "本周结算悬赏令 25 次",
+      "target": 25,
+      "events": [
+        "work"
+      ],
+      "reward": "灵石x300000"
     }
   ],
   "extra_rules": [],

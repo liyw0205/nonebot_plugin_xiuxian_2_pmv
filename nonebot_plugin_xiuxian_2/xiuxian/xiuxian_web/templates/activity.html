@@ -5,7 +5,7 @@
     <div>
         <p class="page-kicker">Activity</p>
         <h1 class="page-title">活动管理</h1>
-        <p class="page-subtitle">通过模板创建节日签到活动，维护时间、开关和签到奖励。</p>
+        <p class="page-subtitle">通过模板创建节日签到活动，维护时间、开关、签到奖励和活动任务。</p>
     </div>
     <div class="hero-actions">
         <span id="activityStatePill" class="status-pill">
@@ -115,6 +115,32 @@
                 <div id="milestoneRewards" class="activity-reward-list"></div>
             </section>
 
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>每日活动任务</h4>
+                        <p>参考每日任务事件配置，奖励格式沿用礼包配置，可留空待补。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addDailyTask()">
+                        <i class="fas fa-plus"></i> 添加每日任务
+                    </button>
+                </div>
+                <div id="dailyTasks" class="activity-task-list"></div>
+            </section>
+
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>周常活动任务</h4>
+                        <p>适合配置一周累计目标，事件多个时用英文逗号分隔。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addWeeklyTask()">
+                        <i class="fas fa-plus"></i> 添加周常任务
+                    </button>
+                </div>
+                <div id="weeklyTasks" class="activity-task-list"></div>
+            </section>
+
             <div class="form-group">
                 <label for="extraRules">补充规则</label>
                 <textarea id="extraRules" rows="3" placeholder="一行一条，后续扩展用">{% for rule in activity_config.get('extra_rules', []) %}{{ rule }}{% if not loop.last %}
@@ -142,7 +168,8 @@
 }
 
 .activity-template-list,
-.activity-reward-list {
+.activity-reward-list,
+.activity-task-list {
     display: grid;
     gap: 10px;
 }
@@ -206,6 +233,30 @@
     border-radius: 8px;
 }
 
+.activity-task-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(180px, 1.5fr) 84px minmax(150px, 1.2fr) minmax(160px, 1.2fr) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 12px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.activity-task-row .task-description {
+    min-height: 38px;
+    resize: vertical;
+}
+
+.activity-task-row .form-group {
+    margin: 0;
+}
+
+.activity-task-row > .btn {
+    justify-self: end;
+}
+
 .activity-reward-row .form-group {
     margin: 0;
 }
@@ -222,9 +273,16 @@
     }
 }
 
+@media (max-width: 1320px) {
+    .activity-task-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 720px) {
     .activity-section-header,
-    .activity-reward-row {
+    .activity-reward-row,
+    .activity-task-row {
         grid-template-columns: 1fr;
     }
 
@@ -282,6 +340,48 @@ function appendRewardRow(container, numberKey, numberLabel, row = {}) {
     container.appendChild(div);
 }
 
+function renderTaskRows(containerId, rows) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    asArray(rows).forEach(row => appendTaskRow(container, row));
+}
+
+function appendTaskRow(container, row = {}) {
+    const div = document.createElement('div');
+    div.className = 'activity-task-row';
+    div.innerHTML = `
+        <div class="form-group">
+            <label>任务ID</label>
+            <input class="task-key" type="text" value="${escapeAttr(row.key ?? '')}" placeholder="daily_sign">
+        </div>
+        <div class="form-group">
+            <label>名称</label>
+            <input class="task-name" type="text" value="${escapeAttr(row.name ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>说明</label>
+            <textarea class="task-description" rows="1">${escapeHtml(row.description ?? '')}</textarea>
+        </div>
+        <div class="form-group">
+            <label>目标</label>
+            <input class="task-target" type="number" min="1" step="1" value="${escapeAttr(row.target ?? 1)}">
+        </div>
+        <div class="form-group">
+            <label>事件</label>
+            <input class="task-events" type="text" value="${escapeAttr(asArray(row.events).join(', '))}" placeholder="sign_in">
+        </div>
+        <div class="form-group">
+            <label>奖励</label>
+            <input class="task-reward" type="text" value="${escapeAttr(row.reward ?? '')}" placeholder="灵石x50000">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-task-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
 function nextNumber(containerId, numberKey) {
     const numbers = Array.from(document.querySelectorAll(`#${containerId} .activity-reward-row`))
         .map(row => Number(row.querySelector('.reward-number')?.value || 0))
@@ -307,11 +407,36 @@ function addMilestoneReward(row = null) {
     );
 }
 
+function addDailyTask(row = null) {
+    appendTaskRow(
+        document.getElementById('dailyTasks'),
+        row || {key: '', name: '', description: '', target: 1, events: [], reward: ''}
+    );
+}
+
+function addWeeklyTask(row = null) {
+    appendTaskRow(
+        document.getElementById('weeklyTasks'),
+        row || {key: '', name: '', description: '', target: 1, events: [], reward: ''}
+    );
+}
+
 function collectRewardRows(containerId, numberKey) {
     return Array.from(document.querySelectorAll(`#${containerId} .activity-reward-row`)).map(row => ({
         [numberKey]: row.querySelector('.reward-number')?.value || '',
         name: row.querySelector('.reward-name')?.value || '',
         reward: row.querySelector('.reward-value')?.value || ''
+    }));
+}
+
+function collectTaskRows(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} .activity-task-row`)).map(row => ({
+        key: row.querySelector('.task-key')?.value || '',
+        name: row.querySelector('.task-name')?.value || '',
+        description: row.querySelector('.task-description')?.value || '',
+        target: row.querySelector('.task-target')?.value || '',
+        events: (row.querySelector('.task-events')?.value || '').split(',').map(item => item.trim()).filter(Boolean),
+        reward: row.querySelector('.task-reward')?.value || ''
     }));
 }
 
@@ -330,6 +455,8 @@ function fillActivityForm(config) {
     document.getElementById('repeatLastDailyReward').checked = activityConfig.extensions?.repeat_last_daily_reward !== false;
     renderRewardRows('dailyRewards', activityConfig.daily_rewards, 'day', '第几天');
     renderRewardRows('milestoneRewards', activityConfig.milestone_rewards, 'days', '累计天数');
+    renderTaskRows('dailyTasks', activityConfig.daily_tasks);
+    renderTaskRows('weeklyTasks', activityConfig.weekly_tasks);
     markActiveTemplate();
 }
 
@@ -346,6 +473,8 @@ function collectActivityConfig() {
         sign_command: document.getElementById('signCommand').value,
         daily_rewards: collectRewardRows('dailyRewards', 'day'),
         milestone_rewards: collectRewardRows('milestoneRewards', 'days'),
+        daily_tasks: collectTaskRows('dailyTasks'),
+        weekly_tasks: collectTaskRows('weeklyTasks'),
         extra_rules: document.getElementById('extraRules').value,
         extensions: {
             repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked
@@ -419,10 +548,14 @@ document.querySelectorAll('.activity-template-option').forEach(button => {
 
 window.addDailyReward = addDailyReward;
 window.addMilestoneReward = addMilestoneReward;
+window.addDailyTask = addDailyTask;
+window.addWeeklyTask = addWeeklyTask;
 window.reloadActivityConfig = reloadActivityConfig;
 window.__xiuxianPageCleanup = () => {
     delete window.addDailyReward;
     delete window.addMilestoneReward;
+    delete window.addDailyTask;
+    delete window.addWeeklyTask;
     delete window.reloadActivityConfig;
 };
 

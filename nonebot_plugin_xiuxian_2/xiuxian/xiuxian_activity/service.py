@@ -1,5 +1,6 @@
 import json
 import shutil
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
@@ -98,10 +99,20 @@ def _load_default_config() -> dict:
 
 def _migrate_config(config: dict) -> tuple[dict, bool]:
     if config.get("template_type") == "festival_sign":
-        return config, False
+        default_config = _load_default_config()
+        changed = False
+        for key, default_value in (
+            ("template_key", default_config.get("template_key", "festival_sign")),
+            ("daily_tasks", default_config.get("daily_tasks", [])),
+            ("weekly_tasks", default_config.get("weekly_tasks", [])),
+        ):
+            if key not in config:
+                config[key] = deepcopy(default_value)
+                changed = True
+        return config, changed
 
     default_config = _load_default_config()
-    migrated = dict(default_config)
+    migrated = deepcopy(default_config)
     for key in ("enabled", "start_time", "end_time"):
         if key in config:
             migrated[key] = config[key]
@@ -115,6 +126,8 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
             "sign_command",
             "daily_rewards",
             "milestone_rewards",
+            "daily_tasks",
+            "weekly_tasks",
             "extra_rules",
             "extensions",
         ):
@@ -248,6 +261,16 @@ def _format_reward_result(title: str, reward: str, reward_msg: list[str]) -> str
     if reward_msg:
         return f"{title}：" + "，".join(reward_msg)
     return f"{title}：{reward}"
+
+
+def _format_activity_task(task: dict) -> str:
+    name = str(task.get("name") or task.get("key") or "活动任务")
+    desc = str(task.get("description") or task.get("desc") or "").strip()
+    target = _as_int(task.get("target"), 1)
+    reward = str(task.get("reward") or "奖励待补")
+    if desc:
+        return f"- {name}：{desc}，目标 {target}，奖励：{reward}"
+    return f"- {name}：目标 {target}，奖励：{reward}"
 
 
 def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
@@ -394,6 +417,22 @@ def build_activity_info(user_id: str | None = None) -> str:
             days = _as_int(reward.get("days"))
             name = str(reward.get("name") or f"累计{days}天")
             lines.append(f"- {name}：{reward.get('reward') or '暂无奖励'}")
+
+    daily_tasks = cfg.get("daily_tasks") or []
+    if daily_tasks:
+        lines.append("")
+        lines.append("【每日活动任务】")
+        for task in daily_tasks:
+            if isinstance(task, dict):
+                lines.append(_format_activity_task(task))
+
+    weekly_tasks = cfg.get("weekly_tasks") or []
+    if weekly_tasks:
+        lines.append("")
+        lines.append("【周常活动任务】")
+        for task in weekly_tasks:
+            if isinstance(task, dict):
+                lines.append(_format_activity_task(task))
 
     return "\n".join(lines).strip()
 
