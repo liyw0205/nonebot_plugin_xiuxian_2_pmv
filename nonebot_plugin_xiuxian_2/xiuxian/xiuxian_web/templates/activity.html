@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Activity</p>
+        <h1 class="page-title">活动管理</h1>
+        <p class="page-subtitle">通过模板创建节日签到活动，维护时间、开关和签到奖励。</p>
+    </div>
+    <div class="hero-actions">
+        <span id="activityStatePill" class="status-pill">
+            <i class="fas fa-circle"></i> {{ activity_state.text }}
+        </span>
+        <span class="status-pill"><i class="fas fa-file-lines"></i> {{ activity_config_path }}</span>
+    </div>
+</section>
+
+<section class="activity-layout">
+    <article class="command-card activity-template-panel">
+        <div class="command-header">
+            <div class="command-icon"><i class="fas fa-layer-group"></i></div>
+            <div>
+                <h3>模板</h3>
+                <p class="command-description">选择模板后会填充表单，保存前仍可继续调整。</p>
+            </div>
+        </div>
+        <div class="activity-template-list">
+            {% for key, template in activity_templates.items() %}
+            <button class="activity-template-option" type="button" data-template-key="{{ key }}">
+                <strong>{{ template.name }}</strong>
+                <span>{{ template.description }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="command-card activity-editor-panel">
+        <div class="command-header">
+            <div class="command-icon"><i class="fas fa-pen-to-square"></i></div>
+            <div>
+                <h3>活动配置</h3>
+                <p class="command-description">保存后机器人命令立即读取新配置。</p>
+            </div>
+        </div>
+
+        <form id="activityForm" data-no-progress="true">
+            <input type="hidden" id="templateType" value="{{ activity_config.get('template_type', 'festival_sign') }}">
+            <input type="hidden" id="templateKey" value="{{ activity_config.get('template_key', activity_config.get('template_type', 'festival_sign')) }}">
+
+            <div class="field-grid">
+                <div class="form-group">
+                    <label for="enabled">活动开关</label>
+                    <select id="enabled">
+                        <option value="true" {% if activity_config.get('enabled') %}selected{% endif %}>开启</option>
+                        <option value="false" {% if not activity_config.get('enabled') %}selected{% endif %}>关闭</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="festivalName">节日名称</label>
+                    <input id="festivalName" type="text" value="{{ activity_config.get('festival_name', 'XX节日') }}" placeholder="例如：春节">
+                </div>
+                <div class="form-group">
+                    <label for="activityName">活动名称</label>
+                    <input id="activityName" type="text" value="{{ activity_config.get('name', 'XX节日签到活动') }}">
+                </div>
+                <div class="form-group">
+                    <label for="signCommand">签到命令</label>
+                    <input id="signCommand" type="text" value="{{ activity_config.get('sign_command', '活动签到') }}">
+                </div>
+                <div class="form-group">
+                    <label for="startTime">开始时间</label>
+                    <input id="startTime" type="text" value="{{ activity_config.get('start_time', '0') }}" placeholder="0 或 YYYY-MM-DD HH:MM:SS">
+                </div>
+                <div class="form-group">
+                    <label for="endTime">结束时间</label>
+                    <input id="endTime" type="text" value="{{ activity_config.get('end_time', '无限') }}" placeholder="无限 或 YYYY-MM-DD HH:MM:SS">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="activityDescription">活动说明</label>
+                <textarea id="activityDescription" rows="3">{{ activity_config.get('description', '') }}</textarea>
+            </div>
+
+            <div class="form-group activity-toggle-row">
+                <label>
+                    <input id="repeatLastDailyReward" type="checkbox" {% if activity_config.get('extensions', {}).get('repeat_last_daily_reward', True) %}checked{% endif %}>
+                    超出配置天数后沿用最后一天奖励
+                </label>
+            </div>
+
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>每日签到奖励</h4>
+                        <p>奖励格式沿用礼包配置，例如：灵石x50000,渡厄丹x1</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addDailyReward()">
+                        <i class="fas fa-plus"></i> 添加每日奖励
+                    </button>
+                </div>
+                <div id="dailyRewards" class="activity-reward-list"></div>
+            </section>
+
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>累计签到奖励</h4>
+                        <p>达到指定累计签到天数时额外发放。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addMilestoneReward()">
+                        <i class="fas fa-plus"></i> 添加累计奖励
+                    </button>
+                </div>
+                <div id="milestoneRewards" class="activity-reward-list"></div>
+            </section>
+
+            <div class="form-group">
+                <label for="extraRules">补充规则</label>
+                <textarea id="extraRules" rows="3" placeholder="一行一条，后续扩展用">{% for rule in activity_config.get('extra_rules', []) %}{{ rule }}{% if not loop.last %}
+{% endif %}{% endfor %}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <button id="saveActivityBtn" type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存活动
+                </button>
+                <button type="button" class="btn btn-info" onclick="reloadActivityConfig()">
+                    <i class="fas fa-rotate"></i> 重新载入
+                </button>
+                <div id="activitySaveResult" class="command-result" hidden></div>
+            </div>
+        </form>
+    </article>
+</section>
+
+<style>
+.activity-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 16px;
+}
+
+.activity-template-list,
+.activity-reward-list {
+    display: grid;
+    gap: 10px;
+}
+
+.activity-template-option {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    padding: 12px;
+    text-align: left;
+    color: var(--text-primary);
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.activity-template-option span {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.activity-template-option:hover,
+.activity-template-option.active {
+    border-color: color-mix(in srgb, var(--accent-color) 45%, var(--glass-border-muted));
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong));
+}
+
+.activity-section {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.activity-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.activity-section-header h4 {
+    margin: 0;
+}
+
+.activity-section-header p {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.activity-reward-row {
+    display: grid;
+    grid-template-columns: 110px minmax(150px, 1fr) minmax(220px, 2fr) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 12px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.activity-reward-row .form-group {
+    margin: 0;
+}
+
+.activity-toggle-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 1000px) {
+    .activity-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .activity-section-header,
+    .activity-reward-row {
+        grid-template-columns: 1fr;
+    }
+
+    .activity-section-header {
+        align-items: stretch;
+    }
+}
+</style>
+
+<script>
+(() => {
+const activityTemplates = {{ activity_templates|tojson }};
+let activityConfig = {{ activity_config|tojson }};
+
+function asArray(value) {
+    return Array.isArray(value) ? value : [];
+}
+
+function escapeAttr(value) {
+    return String(value ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function renderRewardRows(containerId, rows, numberKey, numberLabel) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    asArray(rows).forEach(row => appendRewardRow(container, numberKey, numberLabel, row));
+}
+
+function appendRewardRow(container, numberKey, numberLabel, row = {}) {
+    const div = document.createElement('div');
+    div.className = 'activity-reward-row';
+    div.dataset.numberKey = numberKey;
+    div.innerHTML = `
+        <div class="form-group">
+            <label>${numberLabel}</label>
+            <input class="reward-number" type="number" min="1" step="1" value="${escapeAttr(row[numberKey] ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>名称</label>
+            <input class="reward-name" type="text" value="${escapeAttr(row.name ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>奖励</label>
+            <input class="reward-value" type="text" value="${escapeAttr(row.reward ?? '')}" placeholder="灵石x50000,渡厄丹x1">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-reward-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+function nextNumber(containerId, numberKey) {
+    const numbers = Array.from(document.querySelectorAll(`#${containerId} .activity-reward-row`))
+        .map(row => Number(row.querySelector('.reward-number')?.value || 0))
+        .filter(value => Number.isFinite(value));
+    return Math.max(0, ...numbers) + 1;
+}
+
+function addDailyReward(row = null) {
+    appendRewardRow(
+        document.getElementById('dailyRewards'),
+        'day',
+        '第几天',
+        row || {day: nextNumber('dailyRewards', 'day'), name: '', reward: ''}
+    );
+}
+
+function addMilestoneReward(row = null) {
+    appendRewardRow(
+        document.getElementById('milestoneRewards'),
+        'days',
+        '累计天数',
+        row || {days: nextNumber('milestoneRewards', 'days'), name: '', reward: ''}
+    );
+}
+
+function collectRewardRows(containerId, numberKey) {
+    return Array.from(document.querySelectorAll(`#${containerId} .activity-reward-row`)).map(row => ({
+        [numberKey]: row.querySelector('.reward-number')?.value || '',
+        name: row.querySelector('.reward-name')?.value || '',
+        reward: row.querySelector('.reward-value')?.value || ''
+    }));
+}
+
+function fillActivityForm(config) {
+    activityConfig = config || {};
+    document.getElementById('templateType').value = activityConfig.template_type || 'festival_sign';
+    document.getElementById('templateKey').value = activityConfig.template_key || activityConfig.template_type || 'festival_sign';
+    document.getElementById('enabled').value = activityConfig.enabled ? 'true' : 'false';
+    document.getElementById('festivalName').value = activityConfig.festival_name || 'XX节日';
+    document.getElementById('activityName').value = activityConfig.name || 'XX节日签到活动';
+    document.getElementById('signCommand').value = activityConfig.sign_command || '活动签到';
+    document.getElementById('startTime').value = activityConfig.start_time || '0';
+    document.getElementById('endTime').value = activityConfig.end_time || '无限';
+    document.getElementById('activityDescription').value = activityConfig.description || '';
+    document.getElementById('extraRules').value = asArray(activityConfig.extra_rules).join('\n');
+    document.getElementById('repeatLastDailyReward').checked = activityConfig.extensions?.repeat_last_daily_reward !== false;
+    renderRewardRows('dailyRewards', activityConfig.daily_rewards, 'day', '第几天');
+    renderRewardRows('milestoneRewards', activityConfig.milestone_rewards, 'days', '累计天数');
+    markActiveTemplate();
+}
+
+function collectActivityConfig() {
+    return {
+        template_type: document.getElementById('templateType').value || 'festival_sign',
+        template_key: document.getElementById('templateKey').value || 'custom',
+        enabled: document.getElementById('enabled').value === 'true',
+        festival_name: document.getElementById('festivalName').value,
+        name: document.getElementById('activityName').value,
+        description: document.getElementById('activityDescription').value,
+        start_time: document.getElementById('startTime').value,
+        end_time: document.getElementById('endTime').value,
+        sign_command: document.getElementById('signCommand').value,
+        daily_rewards: collectRewardRows('dailyRewards', 'day'),
+        milestone_rewards: collectRewardRows('milestoneRewards', 'days'),
+        extra_rules: document.getElementById('extraRules').value,
+        extensions: {
+            repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked
+        }
+    };
+}
+
+function markActiveTemplate() {
+    const templateKey = document.getElementById('templateKey')?.value || '';
+    document.querySelectorAll('.activity-template-option').forEach(button => {
+        button.classList.toggle('active', button.dataset.templateKey === templateKey);
+    });
+}
+
+function setResult(ok, text) {
+    const result = document.getElementById('activitySaveResult');
+    if (!result) return;
+    result.hidden = false;
+    result.innerHTML = `<div class="${ok ? 'success' : 'error'}"><i class="fas ${ok ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i> ${escapeHtml(text)}</div>`;
+}
+
+function updateStatePill(state) {
+    const pill = document.getElementById('activityStatePill');
+    if (!pill || !state) return;
+    pill.innerHTML = `<i class="fas fa-circle"></i> ${escapeHtml(state.text || '')}`;
+}
+
+async function saveActivityConfig(event) {
+    event?.preventDefault();
+    const button = document.getElementById('saveActivityBtn');
+    const original = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+    try {
+        const data = await window.XiuxianWeb.requestJson('/api/activity/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({config: collectActivityConfig()})
+        });
+        fillActivityForm(data.config);
+        updateStatePill(data.state);
+        setResult(true, data.message || '活动配置已保存');
+        window.XiuxianWeb.invalidatePageCache(url => url.pathname === '/activity' || url.pathname === '/database');
+    } catch (error) {
+        setResult(false, error.message || String(error));
+    } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+    }
+}
+
+async function reloadActivityConfig() {
+    try {
+        const data = await window.XiuxianWeb.requestJson('/api/activity/config');
+        fillActivityForm(data.config);
+        updateStatePill(data.state);
+        setResult(true, '已重新载入活动配置');
+    } catch (error) {
+        setResult(false, error.message || String(error));
+    }
+}
+
+document.querySelectorAll('.activity-template-option').forEach(button => {
+    button.addEventListener('click', () => {
+        const template = activityTemplates[button.dataset.templateKey];
+        if (!template) return;
+        fillActivityForm(JSON.parse(JSON.stringify(template.config)));
+        setResult(true, `已套用模板：${template.name || ''}`);
+    });
+});
+
+window.addDailyReward = addDailyReward;
+window.addMilestoneReward = addMilestoneReward;
+window.reloadActivityConfig = reloadActivityConfig;
+window.__xiuxianPageCleanup = () => {
+    delete window.addDailyReward;
+    delete window.addMilestoneReward;
+    delete window.reloadActivityConfig;
+};
+
+document.getElementById('activityForm')?.addEventListener('submit', saveActivityConfig);
+fillActivityForm(activityConfig);
+})();
+</script>
+{% endblock %}
