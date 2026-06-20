@@ -9,6 +9,7 @@ from .service import build_activity_info, build_rank_text, claim_sign, set_enabl
 
 
 activity_help_cmd = on_command("活动帮助", priority=7, block=True)
+activity_manage_cmd = on_command("活动管理", permission=SUPERUSER, priority=5, block=True)
 activity_info_cmd = on_command("活动", aliases={"活动信息"}, priority=10, block=True)
 activity_sign_cmd = on_command("活动签到", aliases={"节日签到"}, priority=10, block=True)
 activity_rank_cmd = on_command("活动排行", priority=10, block=True)
@@ -35,6 +36,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         v2="活动签到",
         k3="排行",
         v3="活动排行",
+    )
+
+
+@activity_manage_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: MessageEvent):
+    await assign_bot(bot=bot, event=event)
+    await send_help_message(
+        bot,
+        event,
+        ACTIVITY_MANAGE_HELP,
+        k1="开启",
+        v1="开启活动",
+        k2="关闭",
+        v2="关闭活动",
     )
 
 
@@ -91,15 +106,18 @@ async def _(bot: Bot, event: MessageEvent):
 ACTIVITY_HELP = """
 节日签到活动帮助
 ═════════════
-【用户命令】
+【活动指令】
 1. 活动 / 活动信息
 2. 活动签到
 3. 活动排行
+""".strip()
 
-【管理员命令】
+
+ACTIVITY_MANAGE_HELP = """
+节日签到活动管理
+═════════════
+【管理指令】
 1. 开启活动
 2. 关闭活动
-
-活动配置文件：
-data/xiuxian/activity/activity_config.json
+3. 活动后台可维护模板、任务和奖励
 """.strip()

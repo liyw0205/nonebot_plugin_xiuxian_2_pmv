@@ -3,6 +3,8 @@ from datetime import datetime
 
 from .core import *  # noqa: F401,F403
 from ..xiuxian_activity.service import (
+    ACTIVITY_EVENT_CHOICES,
+    ACTIVITY_EVENT_LABELS,
     CONFIG_PATH as ACTIVITY_CONFIG_PATH,
     activity_state,
     load_config as load_activity_config,
@@ -314,6 +316,10 @@ def _serialize_templates():
     }
 
 
+def _serialize_event_choices():
+    return list(ACTIVITY_EVENT_CHOICES)
+
+
 def _clean_text(value, default: str = "") -> str:
     text = str(value if value is not None else "").strip()
     return text or default
@@ -379,7 +385,7 @@ def _normalize_reward_rows(rows, number_key: str, number_label: str) -> list[dic
     return sorted(normalized, key=lambda item: item[number_key])
 
 
-def _normalize_events(value) -> list[str]:
+def _normalize_events(value, *, strict: bool = True) -> list[str]:
     if isinstance(value, str):
         source = value.replace("\n", ",").split(",")
     elif isinstance(value, list):
@@ -390,8 +396,15 @@ def _normalize_events(value) -> list[str]:
     events = []
     seen_events = set()
     for item in source:
-        event = _clean_text(item)
+        if isinstance(item, dict):
+            event = _clean_text(item.get("value"))
+        else:
+            event = _clean_text(item)
         if not event or event in seen_events:
+            continue
+        if strict and event not in ACTIVITY_EVENT_LABELS:
+            raise ValueError(f"不支持的活动事件：{event}")
+        if event not in ACTIVITY_EVENT_LABELS:
             continue
         seen_events.add(event)
         events.append(event)
@@ -464,12 +477,18 @@ def _as_task_rows(value) -> list[dict]:
     for item in value:
         if not isinstance(item, dict):
             continue
+        events = []
+        for event in _normalize_events(item.get("events"), strict=False):
+            events.append({
+                "value": event,
+                "label": ACTIVITY_EVENT_LABELS.get(event, event),
+            })
         rows.append({
             "key": item.get("key", ""),
             "name": item.get("name", ""),
             "description": item.get("description", item.get("desc", "")),
             "target": item.get("target", ""),
-            "events": _normalize_events(item.get("events")),
+            "events": events,
             "reward": item.get("reward", ""),
         })
     return rows
@@ -555,6 +574,7 @@ def activity_management():
         "activity.html",
         activity_config=config,
         activity_templates=_serialize_templates(),
+        activity_event_choices=_serialize_event_choices(),
         activity_state={"ok": ok, "text": "进行中" if ok else reason},
         activity_config_path=str(ACTIVITY_CONFIG_PATH),
     )
@@ -571,6 +591,7 @@ def api_activity_config():
         return api_success(
             config=config,
             templates=_serialize_templates(),
+            event_choices=_serialize_event_choices(),
             state={"ok": ok, "text": "进行中" if ok else reason},
             config_path=str(ACTIVITY_CONFIG_PATH),
         )
