@@ -38,16 +38,20 @@
             </div>
             {% endfor %}
             <div class="activity-template-title">玩法模板</div>
-            {% for key, template in gameplay_templates.items() %}
-            <div class="activity-template-row" data-template-kind="gameplay" data-template-key="{{ key }}">
-                <button class="activity-template-select gameplay-template-select" type="button" data-template-kind="gameplay" data-template-key="{{ key }}">
-                    <strong>{{ template.name }}</strong>
+            <p class="activity-template-hint">按类型分组；首领/积分/组合与集字分开，避免档期玩法雷同。</p>
+            {% for group in gameplay_template_groups %}
+            <div class="activity-template-title activity-template-cat">{{ group.label }}</div>
+            {% for template in group.templates %}
+            <div class="activity-template-row" data-template-kind="gameplay" data-template-key="{{ template.key }}" data-type-tag="{{ template.type_tag }}">
+                <button class="activity-template-select gameplay-template-select" type="button" data-template-kind="gameplay" data-template-key="{{ template.key }}">
+                    <strong>{{ template.name }} <span class="activity-type-pill">{{ template.type_label }}</span></strong>
                     <span>{{ template.description }}</span>
                 </button>
-                <button class="activity-template-add btn btn-secondary btn-sm" type="button" data-template-kind="gameplay" data-template-key="{{ key }}" title="添加一条玩法" aria-label="添加玩法模板">
+                <button class="activity-template-add btn btn-secondary btn-sm" type="button" data-template-kind="gameplay" data-template-key="{{ template.key }}" title="添加一条玩法" aria-label="添加玩法模板">
                     <i class="fas fa-plus"></i>
                 </button>
             </div>
+            {% endfor %}
             {% endfor %}
         </div>
         <div id="activityTemplateDetail" class="activity-template-detail" aria-live="polite">
@@ -330,6 +334,47 @@
     font-weight: 700;
     letter-spacing: 0;
     margin-top: 6px;
+}
+
+.activity-template-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    line-height: 1.45;
+}
+
+.activity-template-cat {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--glass-border-muted);
+}
+
+.activity-type-pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    border-radius: 999px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    color: var(--text-secondary);
+}
+
+.activity-template-row[data-type-tag="activity_boss"] .activity-type-pill {
+    border-color: rgba(220, 80, 80, 0.35);
+    color: #c45c5c;
+}
+
+.activity-template-row[data-type-tag="event_points"] .activity-type-pill {
+    border-color: rgba(80, 140, 220, 0.35);
+    color: #5a8fd4;
+}
+
+.activity-template-row[data-type-tag="bundle"] .activity-type-pill {
+    border-color: rgba(120, 180, 100, 0.4);
+    color: #6a9a58;
 }
 
 .activity-template-row {
@@ -1556,9 +1601,21 @@ function summarizeSignConfig(cfg) {
 }
 
 function summarizeGameplayConfig(cfg) {
+    if (!cfg) return '<li>组合模板：点击添加将依次追加多条玩法</li>';
     const type = cfg?.type || 'collect_words';
     const lines = [];
-    if (type === 'event_points') {
+    if (type === 'activity_boss') {
+        const mode = cfg?.mode || 'cooperative';
+        const modeLabel = { cooperative: '协作讨伐', item_raid: '道具讨伐', both: '协作+道具' }[mode] || mode;
+        lines.push(`类型：全服首领（${escapeHtml(modeLabel)}）· ${escapeHtml(cfg?.boss_name || '首领')}`);
+        const items = asArray(cfg?.items);
+        if (items.length) lines.push(`道具 ${items.length} 种：${escapeHtml(items.slice(0, 4).map(i => i.name).join('、'))}${items.length > 4 ? '…' : ''}`);
+        const ranks = asArray(cfg?.rank_rewards).length;
+        const miles = asArray(cfg?.server_milestones).length;
+        if (ranks) lines.push(`伤害榜奖励 ${ranks} 档`);
+        if (miles) lines.push(`全服进度宝箱 ${miles} 个`);
+        lines.push(`每日讨伐 ${escapeHtml(cfg?.daily_fight_limit ?? 3)} 次，单次伤害上限 ${Math.round(Number(cfg?.hit_hp_cap_ratio || 0.01) * 100)}% 血量`);
+    } else if (type === 'event_points') {
         lines.push(`类型：积分商店（${escapeHtml(cfg?.point_name || '活动积分')}）`);
         const rules = asArray(cfg?.event_rules);
         if (rules.length) {
@@ -1591,12 +1648,22 @@ function renderTemplateDetail(kind, key) {
         return;
     }
     const cfg = meta.config || {};
+    const isBundle = meta.type_tag === 'bundle' || !cfg;
     const actionHint = kind === 'sign'
         ? '点击右侧 <i class="fas fa-plus"></i> 将覆盖当前签到配置（保留已有玩法列表）。'
-        : '点击右侧 <i class="fas fa-plus"></i> 在「玩法」页追加一条玩法（不覆盖其它条目）。';
-    const body = kind === 'sign'
-        ? `<p>${escapeHtml(meta.description || '')}</p><p><strong>预设概要</strong>：${escapeHtml(summarizeSignConfig(cfg))}</p>`
-        : `<p>${escapeHtml(meta.description || cfg.description || '')}</p><ul>${summarizeGameplayConfig(cfg)}</ul>`;
+        : (isBundle
+            ? '点击右侧 <i class="fas fa-plus"></i> 将按组合一次追加多条玩法。'
+            : '点击右侧 <i class="fas fa-plus"></i> 在「玩法」页追加一条玩法（不覆盖其它条目）。');
+    let body;
+    if (kind === 'sign') {
+        body = `<p>${escapeHtml(meta.description || '')}</p><p><strong>预设概要</strong>：${escapeHtml(summarizeSignConfig(cfg))}</p>`;
+    } else if (isBundle) {
+        const keys = asArray(meta.template_keys);
+        const names = keys.map(k => gameplayTemplates[k]?.name || k).join('、');
+        body = `<p>${escapeHtml(meta.description || '')}</p><p><strong>包含</strong>：${escapeHtml(names || '—')}</p>`;
+    } else {
+        body = `<p>${escapeHtml(meta.description || cfg.description || '')}</p><ul>${summarizeGameplayConfig(cfg)}</ul>`;
+    }
     panel.innerHTML = `
         <h4>${escapeHtml(meta.name || key)}</h4>
         ${body}
@@ -1620,6 +1687,23 @@ function applySignTemplate(key) {
 function applyGameplayTemplate(key) {
     const template = gameplayTemplates[key];
     if (!template) return;
+    if (template.type_tag === 'bundle' && asArray(template.template_keys).length) {
+        const names = [];
+        template.template_keys.forEach(tk => {
+            const sub = gameplayTemplates[tk];
+            if (sub?.config) {
+                appendGameplayActivity(JSON.parse(JSON.stringify(sub.config)));
+                names.push(sub.name || tk);
+            }
+        });
+        switchActivityTab('gameplay');
+        setResult(true, `已添加组合（${names.length} 条）：${names.join('、')}`);
+        return;
+    }
+    if (!template.config) {
+        setResult(false, '该模板无配置');
+        return;
+    }
     appendGameplayActivity(JSON.parse(JSON.stringify(template.config)));
     switchActivityTab('gameplay');
     setResult(true, `已添加玩法：${template.name || ''}`);

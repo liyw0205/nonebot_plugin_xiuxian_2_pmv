@@ -710,6 +710,221 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             ],
         },
     },
+    "mid_autumn_moon_boss": {
+        "name": "中秋月魔（双模式首领）",
+        "category": "boss",
+        "type_tag": "activity_boss",
+        "description": "全服共打月魔 + 月饼天灯道具随机伤害；非集字，适合中秋档期。",
+        "config": {
+            "key": "mid_autumn_moon_boss",
+            "template_key": "mid_autumn_moon_boss",
+            "type": "activity_boss",
+            "enabled": False,
+            "name": "中秋月魔讨伐",
+            "description": "全服协力击退月魔：活动讨伐计入伤害，或消耗月饼、天灯造成随机伤害。",
+            "start_time": "0",
+            "end_time": "无限",
+            "boss_name": "蚀月魔尊",
+            "mode": "both",
+            "max_hp": 0,
+            "atk_ratio": 0.1,
+            "hit_hp_cap_ratio": 0.01,
+            "daily_fight_limit": 3,
+            "drop_events": ["sign_in", "dongfu_harvest", "work", "boss"],
+            "items": [
+                {"id": "mooncake", "name": "月饼", "damage_min": 80000, "damage_max": 200000, "cost": 1},
+                {"id": "sky_lantern", "name": "天灯", "damage_min": 150000, "damage_max": 350000, "cost": 1},
+                {"id": "jade_rabbit_charm", "name": "玉兔护符", "damage_min": 400000, "damage_max": 750000, "cost": 1},
+            ],
+            "rank_rewards": [
+                {"rank_min": 1, "rank_max": 1, "name": "逐月魁首", "reward": "灵石x2500000,渡厄丹x3"},
+                {"rank_min": 2, "rank_max": 5, "name": "前五", "reward": "灵石x1400000,渡厄丹x2"},
+                {"rank_min": 6, "rank_max": 15, "name": "十五强", "reward": "灵石x900000,渡厄丹x1"},
+            ],
+            "server_milestones": [
+                {"key": "moon80", "hp_percent": 80, "name": "月蚀初现", "reward": "灵石x180000"},
+                {"key": "moon50", "hp_percent": 50, "name": "桂影摇波", "reward": "灵石x400000"},
+                {"key": "moon20", "hp_percent": 20, "name": "玉兔相助", "reward": "灵石x650000,渡厄丹x1"},
+                {"key": "moon0", "hp_percent": 0, "name": "月圆人圆", "reward": "灵石x1000000,渡厄丹x2"},
+            ],
+        },
+    },
+    "demon_seal_raid": {
+        "name": "封魔令讨伐（符箓道具）",
+        "category": "boss",
+        "type_tag": "activity_boss",
+        "description": "伏魔/副本掉落封魔符，对魔将造成区间伤害；战斗向，与集字无关。",
+        "config": {
+            "key": "demon_seal_raid",
+            "template_key": "demon_seal_raid",
+            "type": "activity_boss",
+            "enabled": False,
+            "name": "封魔令",
+            "description": "悬赏、伏魔、副本有概率获得封魔符与破魔钉，对异界魔将造成随机伤害。",
+            "start_time": "0",
+            "end_time": "无限",
+            "boss_name": "异界魔将",
+            "mode": "item_raid",
+            "max_hp": 0,
+            "atk_ratio": 0.1,
+            "hit_hp_cap_ratio": 0.01,
+            "daily_fight_limit": 5,
+            "drop_events": ["boss", "dungeon_clear", "map_mission_complete", "work"],
+            "items": [
+                {"id": "seal_talisman", "name": "封魔符", "damage_min": 60000, "damage_max": 180000, "cost": 1},
+                {"id": "demon_break_nail", "name": "破魔钉", "damage_min": 200000, "damage_max": 450000, "cost": 1},
+            ],
+            "rank_rewards": [
+                {"rank_min": 1, "rank_max": 3, "name": "封魔前三", "reward": "灵石x1500000,渡厄丹x2"},
+                {"rank_min": 4, "rank_max": 20, "name": "封魔勇士", "reward": "灵石x700000,渡厄丹x1"},
+            ],
+            "server_milestones": [
+                {"key": "seal60", "hp_percent": 60, "name": "魔气渐弱", "reward": "灵石x250000"},
+                {"key": "seal30", "hp_percent": 30, "name": "阵眼将破", "reward": "灵石x500000,渡厄丹x1"},
+                {"key": "seal0", "hp_percent": 0, "name": "魔将陨落", "reward": "灵石x900000,渡厄丹x2"},
+            ],
+        },
+    },
+    "boss_trial_points_shop": {
+        "name": "伏魔积分（首领导向）",
+        "category": "points",
+        "type_tag": "event_points",
+        "description": "积分主要来自世界BOSS与副本，商店换战斗补给；不是集字。",
+        "config": {
+            "key": "boss_trial_points_shop",
+            "template_key": "boss_trial_points_shop",
+            "type": "event_points",
+            "enabled": False,
+            "name": "伏魔积分",
+            "description": "讨伐世界BOSS、通关副本、完成地图委托获得伏魔积分，兑换限量战斗补给。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "伏魔积分",
+            "event_rules": [
+                {"event": "boss", "points": 8, "daily_limit": 160},
+                {"event": "dungeon_clear", "points": 25, "daily_limit": 100},
+                {"event": "map_mission_complete", "points": 12, "daily_limit": 72},
+                {"event": "work", "points": 6, "daily_limit": 60},
+            ],
+            "shop": [
+                {"item_key": "demon_stone", "name": "伏魔灵石", "cost": 120, "reward": "灵石x450000", "limit": 4},
+                {"item_key": "demon_pill", "name": "伏魔丹礼", "cost": 280, "reward": "灵石x700000,渡厄丹x2", "limit": 2},
+                {"item_key": "demon_chest", "name": "封魔宝匣", "cost": 480, "reward": "灵石x1200000,渡厄丹x3", "limit": 1},
+            ],
+        },
+    },
+    "sect_contribution_points": {
+        "name": "宗门贡献积分",
+        "category": "points",
+        "type_tag": "event_points",
+        "description": "宗门任务与悬赏为主积分来源，适合宗门主题周。",
+        "config": {
+            "key": "sect_contribution_points",
+            "template_key": "sect_contribution_points",
+            "type": "event_points",
+            "enabled": False,
+            "name": "宗门贡献",
+            "description": "完成宗门任务、悬赏与洞府经营获得贡献积分，兑换宗门庆典礼包。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "贡献积分",
+            "event_rules": [
+                {"event": "sect_task_complete", "points": 20, "daily_limit": 80},
+                {"event": "work", "points": 10, "daily_limit": 50},
+                {"event": "dongfu_harvest", "points": 12, "daily_limit": 48},
+                {"event": "sign_in", "points": 15, "daily_limit": 15},
+            ],
+            "shop": [
+                {"item_key": "sect_stone", "name": "宗门灵石", "cost": 70, "reward": "灵石x280000", "limit": 5},
+                {"item_key": "sect_gift", "name": "同门礼盒", "cost": 200, "reward": "灵石x550000,渡厄丹x1", "limit": 2},
+            ],
+        },
+    },
+    "alchemy_furnace_points": {
+        "name": "丹炉积分（炼丹洞府）",
+        "category": "points",
+        "type_tag": "event_points",
+        "description": "炼丹、洞府、灵宠游历攒积分；经营向，与集字区分明显。",
+        "config": {
+            "key": "alchemy_furnace_points",
+            "template_key": "alchemy_furnace_points",
+            "type": "event_points",
+            "enabled": False,
+            "name": "丹炉积分",
+            "description": "炼丹、洞府收获与灵宠游历获得丹炉积分，兑换炼丹与经营物资。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "丹炉积分",
+            "event_rules": [
+                {"event": "mix_elixir_complete", "points": 14, "daily_limit": 84},
+                {"event": "dongfu_harvest", "points": 16, "daily_limit": 64},
+                {"event": "pet_travel_claim", "points": 18, "daily_limit": 54},
+                {"event": "sign_in", "points": 20, "daily_limit": 20},
+            ],
+            "shop": [
+                {"item_key": "furnace_herb", "name": "药引礼包", "cost": 100, "reward": "灵石x320000", "limit": 3},
+                {"item_key": "furnace_elixir", "name": "丹成礼", "cost": 240, "reward": "灵石x600000,渡厄丹x2", "limit": 2},
+            ],
+        },
+    },
+}
+
+
+GAMEPLAY_TEMPLATE_CATEGORY_LABELS = {
+    "boss": "首领讨伐",
+    "points": "积分商店",
+    "collect": "集字兑换",
+    "bundle": "组合方案",
+}
+
+GAMEPLAY_TYPE_LABELS = {
+    "activity_boss": "全服首领",
+    "event_points": "积分商店",
+    "collect_words": "集字兑换",
+    "bundle": "一键组合",
+}
+
+
+def _gameplay_template_category(key: str, value: dict) -> str:
+    if value.get("category"):
+        return str(value["category"])
+    cfg = value.get("config") or {}
+    t = cfg.get("type", "collect_words")
+    if t == "activity_boss":
+        return "boss"
+    if t == "event_points":
+        return "points"
+    return "collect"
+
+
+def _gameplay_template_type_tag(value: dict) -> str:
+    if value.get("type_tag"):
+        return str(value["type_tag"])
+    return str((value.get("config") or {}).get("type", "collect_words"))
+
+
+GAMEPLAY_BUNDLE_DEFINITIONS = {
+    "mid_autumn_combo": {
+        "name": "中秋档期组合",
+        "category": "bundle",
+        "type_tag": "bundle",
+        "description": "一次添加：中秋月魔首领 + 伏魔积分商店。",
+        "template_keys": ["mid_autumn_moon_boss", "boss_trial_points_shop"],
+    },
+    "spring_festival_combo": {
+        "name": "春节档期组合",
+        "category": "bundle",
+        "type_tag": "bundle",
+        "description": "一次添加：年兽道具讨伐 + 节日积分商店。",
+        "template_keys": ["nian_beast_raid", "festival_points_shop"],
+    },
+    "demon_week_combo": {
+        "name": "伏魔周组合",
+        "category": "bundle",
+        "type_tag": "bundle",
+        "description": "一次添加：节日全服首领 + 封魔令 + 伏魔积分。",
+        "template_keys": ["festival_world_boss", "demon_seal_raid", "boss_trial_points_shop"],
+    },
 }
 
 
@@ -726,15 +941,55 @@ def _serialize_templates():
 
 
 def _serialize_gameplay_templates():
-    return {
-        key: {
+    items = {}
+    for key, value in GAMEPLAY_TEMPLATE_DEFINITIONS.items():
+        category = _gameplay_template_category(key, value)
+        type_tag = _gameplay_template_type_tag(value)
+        items[key] = {
             "key": key,
             "name": value["name"],
             "description": value["description"],
+            "category": category,
+            "type_tag": type_tag,
+            "type_label": GAMEPLAY_TYPE_LABELS.get(type_tag, type_tag),
+            "category_label": GAMEPLAY_TEMPLATE_CATEGORY_LABELS.get(category, category),
             "config": deepcopy(value["config"]),
         }
-        for key, value in GAMEPLAY_TEMPLATE_DEFINITIONS.items()
-    }
+    for key, value in GAMEPLAY_BUNDLE_DEFINITIONS.items():
+        items[key] = {
+            "key": key,
+            "name": value["name"],
+            "description": value["description"],
+            "category": "bundle",
+            "type_tag": "bundle",
+            "type_label": GAMEPLAY_TYPE_LABELS["bundle"],
+            "category_label": GAMEPLAY_TEMPLATE_CATEGORY_LABELS["bundle"],
+            "template_keys": list(value.get("template_keys") or []),
+            "config": None,
+        }
+    return items
+
+
+def _serialize_gameplay_template_groups():
+    templates = _serialize_gameplay_templates()
+    order = ("boss", "points", "collect", "bundle")
+    groups = {cat: [] for cat in order}
+    for key, meta in templates.items():
+        cat = meta.get("category") or "collect"
+        if cat not in groups:
+            groups[cat] = []
+        groups[cat].append({"key": key, **meta})
+    for cat in groups:
+        groups[cat].sort(key=lambda x: x.get("name") or x.get("key"))
+    return [
+        {
+            "key": cat,
+            "label": GAMEPLAY_TEMPLATE_CATEGORY_LABELS.get(cat, cat),
+            "templates": groups.get(cat) or [],
+        }
+        for cat in order
+        if groups.get(cat)
+    ]
 
 
 def _serialize_event_choices():
@@ -1342,6 +1597,7 @@ def activity_management():
         activity_config=config,
         activity_templates=_serialize_templates(),
         gameplay_templates=_serialize_gameplay_templates(),
+        gameplay_template_groups=_serialize_gameplay_template_groups(),
         activity_event_choices=_serialize_event_choices(),
         activity_state={"ok": ok, "text": "进行中" if ok else reason},
         activity_config_path=str(ACTIVITY_CONFIG_PATH),
@@ -1360,6 +1616,7 @@ def api_activity_config():
             config=config,
             templates=_serialize_templates(),
             gameplay_templates=_serialize_gameplay_templates(),
+            gameplay_template_groups=_serialize_gameplay_template_groups(),
             event_choices=_serialize_event_choices(),
             state={"ok": ok, "text": "进行中" if ok else reason},
             config_path=str(ACTIVITY_CONFIG_PATH),
@@ -1397,6 +1654,9 @@ def api_activity_gameplay_template(template_key):
 
     template = GAMEPLAY_TEMPLATE_DEFINITIONS.get(str(template_key))
     if not template:
+        bundle = GAMEPLAY_BUNDLE_DEFINITIONS.get(str(template_key))
+        if bundle:
+            return api_success(template=_serialize_gameplay_templates()[template_key])
         return api_error("玩法模板不存在")
     return api_success(template=_serialize_gameplay_templates()[template_key])
 
