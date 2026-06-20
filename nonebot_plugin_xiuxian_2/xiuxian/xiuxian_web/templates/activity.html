@@ -21,24 +21,37 @@
             <div class="command-icon"><i class="fas fa-layer-group"></i></div>
             <div>
                 <h3>模板</h3>
-                <p class="command-description">选择模板后会填充表单，保存前仍可继续调整。</p>
+                <p class="command-description">点击模板查看说明，右侧「添加」再写入配置。</p>
             </div>
         </div>
         <div class="activity-template-list">
             <div class="activity-template-title">签到模板</div>
             {% for key, template in activity_templates.items() %}
-            <button class="activity-template-option" type="button" data-template-key="{{ key }}">
-                <strong>{{ template.name }}</strong>
-                <span>{{ template.description }}</span>
-            </button>
+            <div class="activity-template-row" data-template-kind="sign" data-template-key="{{ key }}">
+                <button class="activity-template-select" type="button" data-template-kind="sign" data-template-key="{{ key }}">
+                    <strong>{{ template.name }}</strong>
+                    <span>{{ template.description }}</span>
+                </button>
+                <button class="activity-template-add btn btn-secondary btn-sm" type="button" data-template-kind="sign" data-template-key="{{ key }}" title="套用到活动配置" aria-label="添加签到模板">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
             {% endfor %}
             <div class="activity-template-title">玩法模板</div>
             {% for key, template in gameplay_templates.items() %}
-            <button class="activity-template-option gameplay-template-option" type="button" data-gameplay-template-key="{{ key }}">
-                <strong>{{ template.name }}</strong>
-                <span>{{ template.description }}</span>
-            </button>
+            <div class="activity-template-row" data-template-kind="gameplay" data-template-key="{{ key }}">
+                <button class="activity-template-select gameplay-template-select" type="button" data-template-kind="gameplay" data-template-key="{{ key }}">
+                    <strong>{{ template.name }}</strong>
+                    <span>{{ template.description }}</span>
+                </button>
+                <button class="activity-template-add btn btn-secondary btn-sm" type="button" data-template-kind="gameplay" data-template-key="{{ key }}" title="添加一条玩法" aria-label="添加玩法模板">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
             {% endfor %}
+        </div>
+        <div id="activityTemplateDetail" class="activity-template-detail" aria-live="polite">
+            <p class="activity-template-detail-placeholder">点击模板查看预设内容与说明</p>
         </div>
     </article>
 
@@ -55,6 +68,16 @@
             <input type="hidden" id="templateType" value="{{ activity_config.get('template_type', 'festival_sign') }}">
             <input type="hidden" id="templateKey" value="{{ activity_config.get('template_key', activity_config.get('template_type', 'festival_sign')) }}">
 
+            <nav class="tab-nav activity-editor-tabs" role="tablist" aria-label="活动配置分区">
+                <button type="button" class="tab-link active" data-activity-tab="overview" role="tab">概览</button>
+                <button type="button" class="tab-link" data-activity-tab="rewards" role="tab">签到奖励</button>
+                <button type="button" class="tab-link" data-activity-tab="tasks" role="tab">任务</button>
+                <button type="button" class="tab-link" data-activity-tab="gameplay" role="tab">玩法</button>
+                <button type="button" class="tab-link" data-activity-tab="data" role="tab">数据</button>
+            </nav>
+
+            <div class="activity-tab-panes">
+            <div class="tab-pane active activity-tab-pane" id="activityTab-overview" data-activity-tab-pane="overview" role="tabpanel">
             <div class="field-grid">
                 <div class="form-group">
                     <label for="enabled">活动开关</label>
@@ -109,6 +132,27 @@
                 </label>
             </div>
 
+            <div class="field-grid activity-extension-grid">
+                <div class="form-group">
+                    <label for="activityInfoMode">活动说明展示</label>
+                    <select id="activityInfoMode">
+                        <option value="brief" {% if activity_config.get('extensions', {}).get('activity_info_mode', 'brief') == 'brief' %}selected{% endif %}>简要（推荐）</option>
+                        <option value="full" {% if activity_config.get('extensions', {}).get('activity_info_mode') == 'full' %}selected{% endif %}>完整（兼容旧习惯）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="signReplyMode">签到群聊反馈</label>
+                    <select id="signReplyMode">
+                        <option value="minimal" {% if activity_config.get('extensions', {}).get('sign_reply_mode', 'minimal') == 'minimal' %}selected{% endif %}>简洁（不刷奖励明细）</option>
+                        <option value="normal" {% if activity_config.get('extensions', {}).get('sign_reply_mode') == 'normal' %}selected{% endif %}>仅累计奖励</option>
+                        <option value="verbose" {% if activity_config.get('extensions', {}).get('sign_reply_mode') == 'verbose' %}selected{% endif %}>完整奖励</option>
+                    </select>
+                </div>
+            </div>
+            <p class="activity-tab-hint">机器人：活动（概览）、活动奖励、活动任务、活动玩法 分条查看。</p>
+            </div>
+
+            <div class="tab-pane activity-tab-pane" id="activityTab-rewards" data-activity-tab-pane="rewards" role="tabpanel">
             <section class="activity-section">
                 <div class="activity-section-header">
                     <div>
@@ -134,7 +178,9 @@
                 </div>
                 <div id="milestoneRewards" class="activity-reward-list"></div>
             </section>
+            </div>
 
+            <div class="tab-pane activity-tab-pane" id="activityTab-tasks" data-activity-tab-pane="tasks" role="tabpanel">
             <section class="activity-section">
                 <div class="activity-section-header">
                     <div>
@@ -166,7 +212,9 @@
                 <textarea id="extraRules" rows="3" placeholder="一行一条，后续扩展用">{% for rule in activity_config.get('extra_rules', []) %}{{ rule }}{% if not loop.last %}
 {% endif %}{% endfor %}</textarea>
             </div>
+            </div>
 
+            <div class="tab-pane activity-tab-pane" id="activityTab-gameplay" data-activity-tab-pane="gameplay" role="tabpanel">
             <section class="activity-section">
                 <div class="activity-section-header">
                     <div>
@@ -179,23 +227,14 @@
                 </div>
                 <div id="gameplayActivities" class="activity-gameplay-list"></div>
             </section>
-
-            <div class="form-actions">
-                <button id="saveActivityBtn" type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> 保存活动
-                </button>
-                <button type="button" class="btn btn-info" onclick="reloadActivityConfig()">
-                    <i class="fas fa-rotate"></i> 重新载入
-                </button>
-                <div id="activitySaveResult" class="command-result" hidden></div>
             </div>
-        </form>
 
-        <section class="activity-section activity-data-section">
+            <div class="tab-pane activity-tab-pane" id="activityTab-data" data-activity-tab-pane="data" role="tabpanel">
+            <section class="activity-section activity-data-section">
             <div class="activity-section-header">
                 <div>
                     <h4>活动数据</h4>
-                    <p>查看签到、集字、积分数据，处理活动测试数据和玩家补偿。</p>
+                    <p>查看签到、集字、积分数据；排行展示道号。用户ID 仅用于后台查询与补偿。</p>
                 </div>
                 <button type="button" class="btn btn-info btn-sm" onclick="loadActivityData()">
                     <i class="fas fa-chart-line"></i> 查询数据
@@ -249,7 +288,20 @@
                 </button>
             </div>
             <div id="activityDataResult" class="activity-data-result"></div>
-        </section>
+            </section>
+            </div>
+            </div>
+
+            <div class="form-actions activity-form-actions">
+                <button id="saveActivityBtn" type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存活动
+                </button>
+                <button type="button" class="btn btn-info" onclick="reloadActivityConfig()">
+                    <i class="fas fa-rotate"></i> 重新载入
+                </button>
+                <div id="activitySaveResult" class="command-result" hidden></div>
+            </div>
+        </form>
     </article>
 </section>
 
@@ -280,7 +332,14 @@
     margin-top: 6px;
 }
 
-.activity-template-option {
+.activity-template-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.activity-template-select {
     display: grid;
     gap: 4px;
     width: 100%;
@@ -293,16 +352,62 @@
     cursor: pointer;
 }
 
-.activity-template-option span {
+.activity-template-select span {
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.5;
 }
 
-.activity-template-option:hover,
-.activity-template-option.active {
+.activity-template-select:hover,
+.activity-template-row.selected .activity-template-select {
     border-color: color-mix(in srgb, var(--accent-color) 45%, var(--glass-border-muted));
     background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong));
+}
+
+.activity-template-add {
+    align-self: center;
+    flex-shrink: 0;
+    min-width: 40px;
+}
+
+.activity-template-detail {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border-muted);
+    background: var(--surface-glass-soft);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    max-height: min(42vh, 320px);
+    overflow: auto;
+}
+
+.activity-template-detail h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.activity-template-detail ul {
+    margin: 8px 0 0;
+    padding-left: 1.2em;
+}
+
+.activity-template-detail li {
+    margin: 4px 0;
+}
+
+.activity-template-detail-placeholder {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.activity-template-detail-hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.9;
 }
 
 .activity-section {
@@ -535,6 +640,26 @@
     gap: 8px;
 }
 
+.activity-editor-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.activity-tab-hint {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin: 0 0 12px;
+}
+
+.activity-extension-grid {
+    margin-bottom: 8px;
+}
+
+.activity-form-actions {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--glass-border-muted);
+}
+
 @media (max-width: 1000px) {
     .activity-layout {
         grid-template-columns: 1fr;
@@ -550,6 +675,10 @@
     .activity-data-toolbar,
     .activity-adjust-panel {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .activity-editor-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
@@ -569,6 +698,10 @@
 
     .activity-section-header {
         align-items: stretch;
+    }
+
+    .activity-editor-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 </style>
@@ -1135,6 +1268,10 @@ function compactMapText(value) {
     return entries.map(([key, count]) => `<span>${escapeHtml(key)}x${escapeHtml(count)}</span>`).join('');
 }
 
+function playerDisplayName(row) {
+    return row?.display_name || row?.user_name || row?.user_id || '';
+}
+
 function renderTopUsers(rows, type) {
     const list = asArray(rows);
     if (!list.length) return '<div class="activity-data-list"><span>暂无排行</span></div>';
@@ -1142,7 +1279,7 @@ function renderTopUsers(rows, type) {
         const score = type === 'event_points'
             ? `累计 ${row.total_points || 0}，当前 ${row.points || 0}`
             : `掉落 ${row.drop_count || 0}`;
-        return `<span>${index + 1}. ${escapeHtml(row.user_id || '')} ${escapeHtml(score)}</span>`;
+        return `<span>${index + 1}. ${escapeHtml(playerDisplayName(row))} ${escapeHtml(score)}</span>`;
     }).join('');
     return `<div class="activity-data-list">${items}</div>`;
 }
@@ -1151,7 +1288,7 @@ function renderActivityData(data) {
     const sign = data?.sign || {};
     const userSign = data?.user_sign;
     const signRank = asArray(data?.sign_rank).slice(0, 8).map((row, index) =>
-        `<span>${index + 1}. ${escapeHtml(row.user_id || '')} ${escapeHtml(row.sign_days || 0)}天</span>`
+        `<span>${index + 1}. ${escapeHtml(playerDisplayName(row))} ${escapeHtml(row.sign_days || 0)}天</span>`
     ).join('') || '<span>暂无排行</span>';
     const cards = [
         `<div class="activity-data-card">
@@ -1347,6 +1484,10 @@ function fillActivityForm(config) {
     document.getElementById('activityDescription').value = activityConfig.description || '';
     document.getElementById('extraRules').value = asArray(activityConfig.extra_rules).join('\n');
     document.getElementById('repeatLastDailyReward').checked = activityConfig.extensions?.repeat_last_daily_reward !== false;
+    const infoMode = document.getElementById('activityInfoMode');
+    const signMode = document.getElementById('signReplyMode');
+    if (infoMode) infoMode.value = activityConfig.extensions?.activity_info_mode || 'brief';
+    if (signMode) signMode.value = activityConfig.extensions?.sign_reply_mode || 'minimal';
     renderRewardRows('dailyRewards', activityConfig.daily_rewards, 'day', '第几天');
     renderRewardRows('milestoneRewards', activityConfig.milestone_rewards, 'days', '累计天数');
     renderTaskRows('dailyTasks', activityConfig.daily_tasks);
@@ -1376,15 +1517,130 @@ function collectActivityConfig() {
         gameplay_activities: collectGameplayActivities(),
         extra_rules: document.getElementById('extraRules').value,
         extensions: {
-            repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked
+            repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked,
+            activity_info_mode: document.getElementById('activityInfoMode')?.value || 'brief',
+            sign_reply_mode: document.getElementById('signReplyMode')?.value || 'minimal',
         }
     };
 }
 
 function markActiveTemplate() {
     const templateKey = document.getElementById('templateKey')?.value || '';
-    document.querySelectorAll('.activity-template-option').forEach(button => {
-        button.classList.toggle('active', button.dataset.templateKey === templateKey);
+    document.querySelectorAll('.activity-template-row').forEach(row => row.classList.remove('selected'));
+    if (!templateKey) return;
+    const signRow = document.querySelector(`.activity-template-row[data-template-kind="sign"][data-template-key="${CSS.escape(templateKey)}"]`);
+    if (signRow) signRow.classList.add('selected');
+}
+
+let selectedTemplatePreview = { kind: null, key: null };
+
+function getTemplateMeta(kind, key) {
+    if (kind === 'sign') return activityTemplates[key] || null;
+    if (kind === 'gameplay') return gameplayTemplates[key] || null;
+    return null;
+}
+
+function summarizeSignConfig(cfg) {
+    const daily = asArray(cfg?.daily_rewards).length;
+    const milestone = asArray(cfg?.milestone_rewards).length;
+    const dailyTasks = asArray(cfg?.daily_tasks).length;
+    const weeklyTasks = asArray(cfg?.weekly_tasks).length;
+    const gameplay = asArray(cfg?.gameplay_activities).length;
+    const parts = [];
+    if (daily) parts.push(`每日奖励 ${daily} 档`);
+    if (milestone) parts.push(`累计奖励 ${milestone} 档`);
+    if (dailyTasks) parts.push(`每日任务 ${dailyTasks} 条`);
+    if (weeklyTasks) parts.push(`周常任务 ${weeklyTasks} 条`);
+    if (gameplay) parts.push(`内置玩法 ${gameplay} 个`);
+    return parts.length ? parts.join(' · ') : '无预设奖励/任务（需自行填写）';
+}
+
+function summarizeGameplayConfig(cfg) {
+    const type = cfg?.type || 'collect_words';
+    const lines = [];
+    if (type === 'event_points') {
+        lines.push(`类型：积分商店（${escapeHtml(cfg?.point_name || '活动积分')}）`);
+        const rules = asArray(cfg?.event_rules);
+        if (rules.length) {
+            lines.push(`积分规则 ${rules.length} 条（示例：${escapeHtml(rules.slice(0, 3).map(r => `${r.event}+${r.points}`).join('、'))}${rules.length > 3 ? '…' : ''}）`);
+        }
+        const shop = asArray(cfg?.shop);
+        if (shop.length) {
+            lines.push(`商店 ${shop.length} 件：${escapeHtml(shop.slice(0, 4).map(s => s.name || s.item_key).join('、'))}${shop.length > 4 ? '…' : ''}`);
+        }
+    } else {
+        lines.push('类型：集字兑换');
+        const letters = asArray(cfg?.letters).length;
+        const phrases = asArray(cfg?.phrases).length;
+        const events = asArray(cfg?.drop_events).length;
+        if (letters) lines.push(`字牌 ${letters} 种`);
+        if (phrases) lines.push(`词组 ${phrases} 个：${escapeHtml(asArray(cfg?.phrases).slice(0, 4).map(p => p.name || p.phrase).join('、'))}${phrases > 4 ? '…' : ''}`);
+        if (events) lines.push(`掉落事件 ${events} 类，概率约 ${Math.round(Number(cfg?.drop_rate || 0) * 100)}%，日上限 ${escapeHtml(cfg?.daily_drop_limit ?? '—')}`);
+    }
+    const time = `${cfg?.start_time === '0' ? '立即' : (cfg?.start_time || '—')} ～ ${cfg?.end_time === '无限' ? '不限' : (cfg?.end_time || '—')}`;
+    lines.push(`时间：${escapeHtml(time)}`);
+    return lines.map(t => `<li>${t}</li>`).join('');
+}
+
+function renderTemplateDetail(kind, key) {
+    const panel = document.getElementById('activityTemplateDetail');
+    if (!panel) return;
+    const meta = getTemplateMeta(kind, key);
+    if (!meta) {
+        panel.innerHTML = '<p class="activity-template-detail-placeholder">未找到该模板</p>';
+        return;
+    }
+    const cfg = meta.config || {};
+    const actionHint = kind === 'sign'
+        ? '点击右侧 <i class="fas fa-plus"></i> 将覆盖当前签到配置（保留已有玩法列表）。'
+        : '点击右侧 <i class="fas fa-plus"></i> 在「玩法」页追加一条玩法（不覆盖其它条目）。';
+    const body = kind === 'sign'
+        ? `<p>${escapeHtml(meta.description || '')}</p><p><strong>预设概要</strong>：${escapeHtml(summarizeSignConfig(cfg))}</p>`
+        : `<p>${escapeHtml(meta.description || cfg.description || '')}</p><ul>${summarizeGameplayConfig(cfg)}</ul>`;
+    panel.innerHTML = `
+        <h4>${escapeHtml(meta.name || key)}</h4>
+        ${body}
+        <p class="activity-template-detail-hint">${actionHint}</p>`;
+    selectedTemplatePreview = { kind, key };
+    document.querySelectorAll('.activity-template-row').forEach(row => {
+        row.classList.toggle('selected', row.dataset.templateKind === kind && row.dataset.templateKey === key);
+    });
+}
+
+function applySignTemplate(key) {
+    const template = activityTemplates[key];
+    if (!template) return;
+    const nextConfig = JSON.parse(JSON.stringify(template.config));
+    nextConfig.gameplay_activities = activityConfig.gameplay_activities || [];
+    fillActivityForm(nextConfig);
+    switchActivityTab('overview');
+    setResult(true, `已套用签到模板：${template.name || ''}`);
+}
+
+function applyGameplayTemplate(key) {
+    const template = gameplayTemplates[key];
+    if (!template) return;
+    appendGameplayActivity(JSON.parse(JSON.stringify(template.config)));
+    switchActivityTab('gameplay');
+    setResult(true, `已添加玩法：${template.name || ''}`);
+}
+
+function bindTemplatePanel() {
+    document.querySelectorAll('.activity-template-select').forEach(button => {
+        button.addEventListener('click', () => {
+            const kind = button.dataset.templateKind;
+            const key = button.dataset.templateKey;
+            renderTemplateDetail(kind, key);
+        });
+    });
+    document.querySelectorAll('.activity-template-add').forEach(button => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const kind = button.dataset.templateKind;
+            const key = button.dataset.templateKey;
+            if (kind === 'sign') applySignTemplate(key);
+            else if (kind === 'gameplay') applyGameplayTemplate(key);
+        });
     });
 }
 
@@ -1449,25 +1705,7 @@ async function reloadActivityConfig() {
     }
 }
 
-document.querySelectorAll('.activity-template-option').forEach(button => {
-    button.addEventListener('click', () => {
-        const template = activityTemplates[button.dataset.templateKey];
-        if (!template) return;
-        const nextConfig = JSON.parse(JSON.stringify(template.config));
-        nextConfig.gameplay_activities = activityConfig.gameplay_activities || [];
-        fillActivityForm(nextConfig);
-        setResult(true, `已套用模板：${template.name || ''}`);
-    });
-});
-
-document.querySelectorAll('.gameplay-template-option').forEach(button => {
-    button.addEventListener('click', () => {
-        const template = gameplayTemplates[button.dataset.gameplayTemplateKey];
-        if (!template) return;
-        appendGameplayActivity(JSON.parse(JSON.stringify(template.config)));
-        setResult(true, `已添加玩法模板：${template.name || ''}`);
-    });
-});
+bindTemplatePanel();
 
 window.addDailyReward = addDailyReward;
 window.addMilestoneReward = addMilestoneReward;
@@ -1502,6 +1740,35 @@ document.getElementById('activityForm')?.addEventListener('submit', saveActivity
 document.getElementById('startImmediate')?.addEventListener('change', syncSpecialTimeControls);
 document.getElementById('endUnlimited')?.addEventListener('change', syncSpecialTimeControls);
 document.getElementById('adjustType')?.addEventListener('change', syncAdjustTypeControls);
+
+const ACTIVITY_TAB_STORAGE_KEY = 'activity_admin_tab';
+
+function switchActivityTab(tabKey) {
+    const key = tabKey || 'overview';
+    document.querySelectorAll('.activity-editor-tabs .tab-link').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.activityTab === key);
+    });
+    document.querySelectorAll('.activity-tab-panes > .tab-pane').forEach(pane => {
+        const match = pane.dataset.activityTabPane === key;
+        pane.classList.toggle('active', match);
+    });
+    try {
+        localStorage.setItem(ACTIVITY_TAB_STORAGE_KEY, key);
+    } catch (_) { /* ignore */ }
+}
+
+document.querySelectorAll('.activity-editor-tabs .tab-link').forEach(btn => {
+    btn.addEventListener('click', () => switchActivityTab(btn.dataset.activityTab));
+});
+
+let initialTab = 'overview';
+try {
+    initialTab = localStorage.getItem(ACTIVITY_TAB_STORAGE_KEY) || 'overview';
+} catch (_) { /* ignore */ }
+if (!document.querySelector(`.activity-tab-panes > .tab-pane[data-activity-tab-pane="${initialTab}"]`)) {
+    initialTab = 'overview';
+}
+switchActivityTab(initialTab);
 document.getElementById('adjustActivityKey')?.addEventListener('change', syncAdjustActivityType);
 fillActivityForm(activityConfig);
 syncAdjustTypeControls();

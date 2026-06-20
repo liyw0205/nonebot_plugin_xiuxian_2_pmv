@@ -669,6 +669,14 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         update_statistics_value(user_id, "击败世界BOSS")
     record_task_progress(user_id, "boss")
     try:
+        from ..xiuxian_activity.activity_boss import record_cooperative_boss_hit
+
+        act_lines = record_cooperative_boss_hit(user_id, actual_damage)
+        if act_lines:
+            msg += "\n" + "\n".join(act_lines)
+    except Exception as e:
+        log_message(user_id, f"[活动首领] 世界BOSS伤害计入失败：{e}")
+    try:
         check_and_unlock_titles(user_id)
     except Exception as e:
         log_message(user_id, f"[成就称号] 自动检查失败：{e}")

@@ -7,7 +7,10 @@ from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
 
 from .service import (
+    build_activity_gameplay_text,
     build_activity_info,
+    build_activity_rewards_text,
+    build_activity_tasks_text,
     build_collect_bag_text,
     build_activity_points_text,
     build_activity_shop_text,
@@ -22,6 +25,9 @@ from .service import (
 activity_help_cmd = on_command("活动帮助", priority=7, block=True)
 activity_manage_cmd = on_command("活动管理", permission=SUPERUSER, priority=5, block=True)
 activity_info_cmd = on_command("活动", aliases={"活动信息"}, priority=10, block=True)
+activity_rewards_cmd = on_command("活动奖励", priority=10, block=True)
+activity_tasks_cmd = on_command("活动任务", priority=10, block=True)
+activity_gameplay_cmd = on_command("活动玩法", priority=10, block=True)
 activity_sign_cmd = on_command("活动签到", aliases={"节日签到"}, priority=10, block=True)
 activity_rank_cmd = on_command("活动排行", priority=10, block=True)
 activity_bag_cmd = on_command("活动背包", aliases={"活动字牌", "集字背包"}, priority=10, block=True)
@@ -29,6 +35,10 @@ activity_exchange_cmd = on_command("活动兑换", aliases={"集字兑换"}, pri
 activity_points_cmd = on_command("活动积分", aliases={"积分活动"}, priority=10, block=True)
 activity_shop_cmd = on_command("活动商店", aliases={"积分商店"}, priority=10, block=True)
 activity_buy_cmd = on_command("活动购买", aliases={"活动兑换商品", "活动商城兑换"}, priority=10, block=True)
+activity_boss_cmd = on_command("活动首领", aliases={"活动BOSS", "活动Boss"}, priority=10, block=True)
+activity_boss_rank_cmd = on_command("活动首领排行", aliases={"活动BOSS排行", "首领伤害榜"}, priority=10, block=True)
+activity_boss_atk_cmd = on_command("活动讨伐", aliases={"活动首领攻击", "使用爆竹", "使用烟花"}, priority=10, block=True)
+activity_boss_claim_cmd = on_command("活动首领领奖", aliases={"领取首领奖励", "首领领奖"}, priority=10, block=True)
 
 activity_open_cmd = on_command("开启活动", permission=SUPERUSER, priority=5, block=True)
 activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5, block=True)
@@ -78,6 +88,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     text = build_activity_info(str(user_info["user_id"]))
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=text,
+    )
+
+
+@activity_rewards_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    text = build_activity_rewards_text()
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=text,
+    )
+
+
+@activity_tasks_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    text = build_activity_tasks_text()
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=text,
+    )
+
+
+@activity_gameplay_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    text = build_activity_gameplay_text()
     await handle_send(
         bot,
         event,
@@ -165,6 +214,58 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, text if ok else f"活动购买失败：{text}")
 
 
+@activity_boss_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    from .activity_boss import build_boss_status_text
+
+    await handle_send(bot, event, build_boss_status_text(str(user_info["user_id"])))
+
+
+@activity_boss_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    from .activity_boss import build_boss_rank_text
+
+    await handle_send(bot, event, build_boss_rank_text("", 15))
+
+
+@activity_boss_atk_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    from .activity_boss import fight_cooperative_boss, use_item_on_boss
+
+    raw = args.extract_plain_text().strip()
+    uid = str(user_info["user_id"])
+    if raw:
+        ok, text = use_item_on_boss(uid, raw)
+        await handle_send(bot, event, text)
+        return
+    ok, text = fight_cooperative_boss(uid)
+    await handle_send(bot, event, text)
+
+
+@activity_boss_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    from .activity_boss import claim_boss_rewards
+
+    ok, text = claim_boss_rewards(str(user_info["user_id"]), args.extract_plain_text())
+    await handle_send(bot, event, text if ok else text)
+
+
 @activity_open_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
@@ -183,14 +284,20 @@ ACTIVITY_HELP = """
 活动帮助
 ═════════════
 【活动指令】
-1. 活动 / 活动信息
-2. 活动签到
-3. 活动背包 / 活动字牌
-4. 活动兑换 端午安康
-5. 活动积分
-6. 活动商店
-7. 活动购买 灵石补给
-8. 活动排行
+1. 活动 / 活动信息（概览）
+2. 活动奖励
+3. 活动任务
+4. 活动玩法
+5. 活动签到
+6. 活动背包 / 活动字牌
+7. 活动兑换 端午安康
+8. 活动积分
+9. 活动商店
+10. 活动购买 灵石补给
+11. 活动排行
+12. 活动首领 / 活动首领排行
+13. 活动讨伐（协作首领直接打；或 活动讨伐 爆竹/烟花）
+14. 活动首领领奖 排行 / 进度
 """.strip()
 
 

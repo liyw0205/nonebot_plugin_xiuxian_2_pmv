@@ -641,6 +641,75 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             ],
         },
     },
+    "nian_beast_raid": {
+        "name": "年兽讨伐（道具）",
+        "description": "全服协力击退年兽，可用烟花爆竹等道具造成随机伤害；任务掉落道具。",
+        "config": {
+            "key": "nian_beast_raid",
+            "template_key": "nian_beast_raid",
+            "type": "activity_boss",
+            "enabled": False,
+            "name": "年兽讨伐",
+            "description": "活动期间完成任务可获得烟花爆竹，对年兽造成随机伤害，全服共享血量。",
+            "start_time": "0",
+            "end_time": "无限",
+            "boss_name": "年兽",
+            "mode": "item_raid",
+            "max_hp": 0,
+            "atk_ratio": 0.1,
+            "hit_hp_cap_ratio": 0.01,
+            "daily_fight_limit": 3,
+            "drop_events": ["sign_in", "work", "boss"],
+            "items": [
+                {"id": "firecracker", "name": "爆竹", "damage_min": 50000, "damage_max": 150000, "cost": 1},
+                {"id": "firework", "name": "烟花", "damage_min": 120000, "damage_max": 280000, "cost": 1},
+                {"id": "firework_box", "name": "烟花礼盒", "damage_min": 300000, "damage_max": 600000, "cost": 1},
+            ],
+            "rank_rewards": [
+                {"rank_min": 1, "rank_max": 1, "name": "魁首", "reward": "灵石x2000000,渡厄丹x3"},
+                {"rank_min": 2, "rank_max": 3, "name": "前列", "reward": "灵石x1200000,渡厄丹x2"},
+                {"rank_min": 4, "rank_max": 10, "name": "十强", "reward": "灵石x800000,渡厄丹x1"},
+            ],
+            "server_milestones": [
+                {"key": "hp75", "hp_percent": 75, "name": "年兽受挫", "reward": "灵石x200000"},
+                {"key": "hp50", "hp_percent": 50, "name": "势如破竹", "reward": "灵石x350000"},
+                {"key": "hp25", "hp_percent": 25, "name": "最后一战", "reward": "灵石x500000,渡厄丹x1"},
+                {"key": "hp0", "hp_percent": 0, "name": "年兽击退", "reward": "灵石x800000,渡厄丹x2"},
+            ],
+        },
+    },
+    "festival_world_boss": {
+        "name": "节日全服首领",
+        "description": "全服共打，血量按永恒境；每人每日3次，伤害取攻击力十分之一，单次上限1%血量；讨伐世界BOSS可计入。",
+        "config": {
+            "key": "festival_world_boss",
+            "template_key": "festival_world_boss",
+            "type": "activity_boss",
+            "enabled": False,
+            "name": "节日全服首领",
+            "description": "全服协力讨伐节日首领，按累计伤害排名领取奖励，并解锁全服进度宝箱。",
+            "start_time": "0",
+            "end_time": "无限",
+            "boss_name": "节日魔尊",
+            "mode": "cooperative",
+            "max_hp": 0,
+            "atk_ratio": 0.1,
+            "hit_hp_cap_ratio": 0.01,
+            "daily_fight_limit": 3,
+            "items": [],
+            "rank_rewards": [
+                {"rank_min": 1, "rank_max": 1, "name": "伤害第一", "reward": "灵石x3000000,渡厄丹x4"},
+                {"rank_min": 2, "rank_max": 5, "name": "前五", "reward": "灵石x1500000,渡厄丹x2"},
+                {"rank_min": 6, "rank_max": 20, "name": "前二十", "reward": "灵石x900000,渡厄丹x1"},
+            ],
+            "server_milestones": [
+                {"key": "p90", "hp_percent": 90, "name": "初战告捷", "reward": "灵石x150000"},
+                {"key": "p70", "hp_percent": 70, "name": "鏖战正酣", "reward": "灵石x280000"},
+                {"key": "p50", "hp_percent": 50, "name": "半壁江山", "reward": "灵石x450000"},
+                {"key": "p20", "hp_percent": 20, "name": "穷途末路", "reward": "灵石x700000,渡厄丹x1"},
+            ],
+        },
+    },
 }
 
 
@@ -1094,11 +1163,13 @@ def _normalize_gameplay_activities(value) -> list[dict]:
             row.get("phrases"),
             row.get("event_rules"),
             row.get("shop"),
+            row.get("boss_name"),
+            row.get("items"),
         )):
             continue
         activity_type = _clean_text(row.get("type"), "collect_words")
-        if activity_type not in {"collect_words", "event_points"}:
-            raise ValueError("当前仅支持集字玩法和积分玩法")
+        if activity_type not in {"collect_words", "event_points", "activity_boss"}:
+            raise ValueError("当前支持集字、积分与活动首领玩法")
         key = _normalize_activity_key(row.get("key") or row.get("template_key"), f"{activity_type}_{index}")
         if key in seen_keys:
             raise ValueError(f"玩法活动编号 {key} 重复")
@@ -1116,6 +1187,15 @@ def _normalize_gameplay_activities(value) -> list[dict]:
             "无限",
             allow_special=_as_bool(row.get("end_special"), True),
         )
+        if activity_type == "activity_boss":
+            from ..xiuxian_activity.activity_boss import normalize_activity_boss
+
+            boss_row = dict(row)
+            boss_row["start_time"] = start_time
+            boss_row["end_time"] = end_time
+            boss_row["enabled"] = _as_bool(row.get("enabled"))
+            normalized.append(normalize_activity_boss(boss_row, index, key))
+            continue
         if activity_type == "event_points":
             activity_label = f"玩法活动{index}"
             event_rules = _normalize_point_event_rules(row.get("event_rules"), activity_label)

@@ -10,6 +10,9 @@ from nonebot.log import logger
 
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+
+_sql_message = XiuxianDateManage()
 
 
 BASE_DIR = Path() / "data" / "xiuxian" / "activity"
@@ -193,6 +196,9 @@ def init_db():
                 PRIMARY KEY(activity_key, user_id, item_key)
             )
         """)
+        from .activity_boss import init_boss_tables
+
+        init_boss_tables(conn)
         conn.commit()
     finally:
         conn.close()
@@ -219,6 +225,19 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
         if not isinstance(config.get("gameplay_activities"), list):
             config["gameplay_activities"] = []
             changed = True
+        extensions = config.get("extensions")
+        if not isinstance(extensions, dict):
+            extensions = {}
+            config["extensions"] = extensions
+            changed = True
+        for key, default in (
+            ("repeat_last_daily_reward", True),
+            ("activity_info_mode", "brief"),
+            ("sign_reply_mode", "minimal"),
+        ):
+            if key not in extensions:
+                extensions[key] = default
+                changed = True
         return config, changed
 
     default_config = _load_default_config()
@@ -314,6 +333,77 @@ def _as_float(value, default: float = 0.0) -> float:
 def _get_extensions(config: dict) -> dict:
     extensions = config.get("extensions")
     return extensions if isinstance(extensions, dict) else {}
+
+
+def _sign_reply_mode(config: dict | None = None) -> str:
+    cfg = config if config is not None else load_config()
+    mode = _clean_text(_get_extensions(cfg).get("sign_reply_mode"), "minimal")
+    return mode if mode in ("minimal", "normal", "verbose") else "minimal"
+
+
+def _activity_info_mode(config: dict | None = None) -> str:
+    cfg = config if config is not None else load_config()
+    mode = _clean_text(_get_extensions(cfg).get("activity_info_mode"), "brief")
+    return mode if mode in ("brief", "full") else "brief"
+
+
+def resolve_daohao(user_id: str) -> str:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return "无名修士"
+    try:
+        row = _sql_message.get_user_info_with_id(uid)
+        name = _clean_text(row.get("user_name") if row else "")
+        if name:
+            return name
+    except Exception as e:
+        logger.debug(f"resolve_daohao failed user_id={uid}: {e}")
+    if len(uid) > 6:
+        return f"修士·{uid[-4:]}"
+    return uid
+
+
+def resolve_daohao_batch(user_ids: list[str]) -> dict[str, str]:
+    ids = []
+    seen = set()
+    for raw in user_ids:
+        uid = str(raw or "").strip()
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        ids.append(uid)
+    if not ids:
+        return {}
+    result = {uid: resolve_daohao(uid) for uid in ids}
+    try:
+        placeholders = ",".join(["%s"] * len(ids))
+        rows = _sql_message._read_query(
+            f"SELECT user_id, user_name FROM user_xiuxian WHERE user_id IN ({placeholders})",
+            tuple(ids),
+            dict_row=True,
+        )
+        for row in rows or []:
+            uid = str(row.get("user_id") or "").strip()
+            name = _clean_text(row.get("user_name"))
+            if uid and name:
+                result[uid] = name
+    except Exception as e:
+        logger.debug(f"resolve_daohao_batch query failed: {e}")
+    return result
+
+
+def _attach_display_names(rows: list[dict], id_key: str = "user_id") -> list[dict]:
+    if not rows:
+        return rows
+    name_map = resolve_daohao_batch([str(row.get(id_key) or "") for row in rows])
+    enriched = []
+    for row in rows:
+        item = dict(row)
+        uid = str(item.get(id_key) or "")
+        item["user_name"] = name_map.get(uid) or resolve_daohao(uid)
+        item["display_name"] = item["user_name"]
+        enriched.append(item)
+    return enriched
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -604,12 +694,17 @@ def get_gameplay_activities(config: dict | None = None) -> list[dict]:
             continue
         activity = deepcopy(raw_activity)
         activity_type = _clean_text(activity.get("type"), "collect_words")
-        if activity_type not in {"collect_words", "event_points"}:
+        if activity_type not in {"collect_words", "event_points", "activity_boss"}:
             continue
         key = _normalize_activity_key(activity.get("key") or activity.get("template_key"), f"{activity_type}_{index}")
         if key in seen_keys:
             key = f"{key}_{index}"
         seen_keys.add(key)
+        if activity_type == "activity_boss":
+            from .activity_boss import normalize_activity_boss
+
+            activities.append(normalize_activity_boss(activity, index, key))
+            continue
         if activity_type == "event_points":
             activity.update({
                 "key": key,
@@ -781,6 +876,18 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                     )
                 continue
 
+            if activity.get("type") == "activity_boss":
+                drop_events = activity.get("drop_events") or []
+                if event in drop_events:
+                    items = activity.get("items") or []
+                    if items:
+                        pick = random.choice(items)
+                        from .activity_boss import grant_activity_item
+
+                        grant_activity_item(activity["key"], uid, pick["id"], 1)
+                        messages.append(f"活动掉落：{activity['name']} 获得【{pick['name']}】")
+                continue
+
             if activity.get("type") != "collect_words" or event not in activity.get("drop_events", []):
                 continue
             daily_limit = max(0, _as_int(activity.get("daily_drop_limit"), 8))
@@ -891,7 +998,7 @@ def build_collect_bag_text(user_id: str) -> str:
                 limit_text = "不限" if limit <= 0 else f"{claimed}/{limit}"
                 lines.append(
                     f"- {phrase['name']}：{owned}/{total_need}，已兑换 {limit_text}，"
-                    f"奖励：{phrase.get('reward') or '暂无奖励'}"
+                    f"兑换：活动兑换 {phrase['name']}"
                 )
         return "\n".join(lines).strip()
     finally:
@@ -995,8 +1102,10 @@ def claim_collect_phrase(user_id: str, query: str) -> tuple[bool, str]:
         logger.warning(f"活动集字兑换发奖失败 user_id={uid}, activity={activity['key']}, phrase={phrase['phrase']}: {e}")
         return False, f"兑换已记录，奖励发放失败：{e}"
 
-    reward_text = "，".join(reward_msg) if reward_msg else (phrase.get("reward") or "暂无奖励")
-    return True, f"{activity['name']}兑换成功：{phrase['name']}\n奖励：{reward_text}"
+    reward_text = "，".join(reward_msg) if reward_msg else ""
+    if reward_text:
+        return True, f"{activity['name']}兑换成功：{phrase['name']}\n{reward_text}"
+    return True, f"{activity['name']}兑换成功：{phrase['name']}"
 
 
 def _get_point_balance(cur, activity_key: str, user_id: str) -> dict[str, int]:
@@ -1351,7 +1460,7 @@ def get_activity_data_overview(
             """,
             (row_limit,),
         )
-        sign_rank = [dict(row) for row in cur.fetchall()]
+        sign_rank = _attach_display_names([dict(row) for row in cur.fetchall()])
 
         activity_rows = []
         for activity in activities:
@@ -1377,7 +1486,7 @@ def get_activity_data_overview(
                     """,
                     (activity["key"], row_limit),
                 )
-                row["top_users"] = [dict(item) for item in cur.fetchall()]
+                row["top_users"] = _attach_display_names([dict(item) for item in cur.fetchall()])
                 if uid:
                     row["user"] = {
                         "balance": _get_point_balance(cur, activity["key"], uid),
@@ -1395,7 +1504,7 @@ def get_activity_data_overview(
                     """,
                     (activity["key"], row_limit),
                 )
-                row["top_users"] = [dict(item) for item in cur.fetchall()]
+                row["top_users"] = _attach_display_names([dict(item) for item in cur.fetchall()])
                 if uid:
                     row["user"] = {
                         "inventory": _get_collect_inventory_map(cur, activity["key"], uid),
@@ -1672,20 +1781,152 @@ def claim_sign(user_id: str) -> tuple[bool, str]:
         _finish_sign_log(uid, today, "failed", str(e))
         return False, f"签到已记录，奖励发放失败：{e}"
 
+    reply_mode = _sign_reply_mode(cfg)
     lines = [
         f"{cfg.get('festival_name', '节日')}签到成功",
         f"累计签到：{sign_days} 天",
-        _format_reward_result("今日奖励", daily_reward_text, daily_msg),
     ]
-    if milestone_reward_text or milestone_reward.get("name"):
-        title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
-        lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
+    if reply_mode == "minimal":
+        milestone_name = _clean_text(milestone_reward.get("name"))
+        if milestone_reward_text or milestone_name:
+            lines.append(f"达成：{milestone_name or f'累计{sign_days}天'}")
+    elif reply_mode == "normal":
+        if milestone_reward_text or milestone_reward.get("name"):
+            title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
+            lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
+    else:
+        lines.append(_format_reward_result("今日奖励", daily_reward_text, daily_msg))
+        if milestone_reward_text or milestone_reward.get("name"):
+            title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
+            lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
     try:
         lines.extend(record_activity_event(uid, "sign_in"))
     except Exception as e:
         logger.warning(f"活动签到记录玩法掉落失败 user_id={uid}: {e}")
-    _finish_sign_log(uid, today, "success", "\n".join(lines))
+    log_lines = list(lines)
+    if reply_mode == "minimal":
+        log_lines.append(_format_reward_result("今日奖励", daily_reward_text, daily_msg))
+        if milestone_reward_text or milestone_reward.get("name"):
+            title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
+            log_lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
+    _finish_sign_log(uid, today, "success", "\n".join(log_lines))
     return True, "\n".join(lines)
+
+
+def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> None:
+    gameplay_activities = get_gameplay_activities(cfg)
+    if not gameplay_activities:
+        return
+    lines.append("")
+    lines.append("【玩法活动】")
+    for activity in gameplay_activities:
+        ok, reason = activity_state(activity)
+        status = "进行中" if ok else reason
+        lines.append(f"- {activity.get('name', '集字活动')}：{status}")
+        if not detail:
+            continue
+        if activity.get("description"):
+            lines.append(f"  {activity.get('description')}")
+        if activity.get("type") == "event_points":
+            point_name = activity.get("point_name") or "活动积分"
+            rules = activity.get("event_rules") or []
+            if rules:
+                rule_text = "、".join(
+                    f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('points'))}"
+                    for rule in rules
+                )
+                lines.append(f"  积分来源：{rule_text}")
+            shop = activity.get("shop") or []
+            if shop:
+                shop_text = "、".join(str(item.get("name") or item.get("item_key")) for item in shop)
+                lines.append(f"  {point_name}商店：{shop_text}")
+            continue
+        if activity.get("type") == "activity_boss":
+            mode = activity.get("mode") or "cooperative"
+            lines.append(f"  首领：{activity.get('boss_name', '活动首领')}")
+            if mode in {"item_raid", "both"}:
+                item_names = "、".join(str(it.get("name")) for it in (activity.get("items") or []))
+                lines.append(f"  道具讨伐：{item_names or '未配置'}（随机伤害区间）")
+                lines.append("  命令：活动道具 [首领名] 道具名")
+            if mode in {"cooperative", "both"}:
+                cap_pct = int(_as_float(activity.get("hit_hp_cap_ratio"), 0.01) * 100)
+                lines.append(
+                    f"  全服协作：攻力×{int(_as_float(activity.get('atk_ratio'), 0.1) * 100)}%，"
+                    f"每日{_as_int(activity.get('daily_fight_limit'), 3)}次，单次伤害上限{cap_pct}%血量"
+                )
+                lines.append("  命令：活动讨伐 / 讨伐世界BOSS 也会计入（若开启）")
+            lines.append("  活动首领 / 活动首领排行 / 活动首领奖励 / 活动首领进度")
+            continue
+
+        event_text = _activity_event_text(activity.get("drop_events"))
+        lines.append(
+            f"  掉落来源：{event_text or '未配置'}，"
+            f"每日上限：{_as_int(activity.get('daily_drop_limit'), 0)}，"
+            f"掉落概率：{int(_drop_rate(activity.get('drop_rate'), 0) * 100)}%"
+        )
+        phrases = activity.get("phrases") or []
+        if phrases:
+            phrase_text = "、".join(str(item.get("name") or item.get("phrase")) for item in phrases)
+            lines.append(f"  兑换词组：{phrase_text}")
+
+
+def build_activity_rewards_text() -> str:
+    cfg = load_config()
+    lines = [f"【{cfg.get('name', '节日签到活动')} · 奖励】"]
+    lines.append("")
+    lines.append("【每日签到奖励】")
+    rewards = cfg.get("daily_rewards") or []
+    if rewards:
+        for reward in sorted(rewards, key=lambda item: _as_int(item.get("day"))):
+            day = _as_int(reward.get("day"))
+            name = str(reward.get("name") or f"第{day}天")
+            lines.append(f"- 第{day}天 {name}：{reward.get('reward') or '暂无奖励'}")
+    else:
+        lines.append("暂无每日奖励配置")
+
+    milestones = cfg.get("milestone_rewards") or []
+    if milestones:
+        lines.append("")
+        lines.append("【累计签到奖励】")
+        for reward in sorted(milestones, key=lambda item: _as_int(item.get("days"))):
+            days = _as_int(reward.get("days"))
+            name = str(reward.get("name") or f"累计{days}天")
+            lines.append(f"- {name}：{reward.get('reward') or '暂无奖励'}")
+    return "\n".join(lines).strip()
+
+
+def build_activity_tasks_text() -> str:
+    cfg = load_config()
+    lines = [f"【{cfg.get('name', '节日签到活动')} · 任务】"]
+    daily_tasks = cfg.get("daily_tasks") or []
+    if daily_tasks:
+        lines.append("")
+        lines.append("【每日活动任务】")
+        for task in daily_tasks:
+            if isinstance(task, dict):
+                lines.append(_format_activity_task(task))
+    else:
+        lines.append("")
+        lines.append("暂无每日活动任务")
+
+    weekly_tasks = cfg.get("weekly_tasks") or []
+    if weekly_tasks:
+        lines.append("")
+        lines.append("【周常活动任务】")
+        for task in weekly_tasks:
+            if isinstance(task, dict):
+                lines.append(_format_activity_task(task))
+    return "\n".join(lines).strip()
+
+
+def build_activity_gameplay_text() -> str:
+    cfg = load_config()
+    lines = [f"【{cfg.get('name', '节日签到活动')} · 玩法】"]
+    _append_gameplay_summary(lines, cfg, detail=True)
+    if len(lines) <= 1:
+        lines.append("")
+        lines.append("暂无玩法活动")
+    return "\n".join(lines).strip()
 
 
 def build_activity_info(user_id: str | None = None) -> str:
@@ -1706,77 +1947,53 @@ def build_activity_info(user_id: str | None = None) -> str:
             f"上次签到：{user.get('last_sign_date') or '暂无'}",
         ])
 
-    lines.append("")
-    lines.append("【每日签到奖励】")
-    rewards = cfg.get("daily_rewards") or []
-    if rewards:
-        for reward in sorted(rewards, key=lambda item: _as_int(item.get("day"))):
-            day = _as_int(reward.get("day"))
-            name = str(reward.get("name") or f"第{day}天")
-            lines.append(f"- 第{day}天 {name}：{reward.get('reward') or '暂无奖励'}")
+    if _activity_info_mode(cfg) == "full":
+        lines.append("")
+        lines.append("【每日签到奖励】")
+        rewards = cfg.get("daily_rewards") or []
+        if rewards:
+            for reward in sorted(rewards, key=lambda item: _as_int(item.get("day"))):
+                day = _as_int(reward.get("day"))
+                name = str(reward.get("name") or f"第{day}天")
+                lines.append(f"- 第{day}天 {name}：{reward.get('reward') or '暂无奖励'}")
+        else:
+            lines.append("暂无每日奖励配置")
+
+        milestones = cfg.get("milestone_rewards") or []
+        if milestones:
+            lines.append("")
+            lines.append("【累计签到奖励】")
+            for reward in sorted(milestones, key=lambda item: _as_int(item.get("days"))):
+                days = _as_int(reward.get("days"))
+                name = str(reward.get("name") or f"累计{days}天")
+                lines.append(f"- {name}：{reward.get('reward') or '暂无奖励'}")
+
+        daily_tasks = cfg.get("daily_tasks") or []
+        if daily_tasks:
+            lines.append("")
+            lines.append("【每日活动任务】")
+            for task in daily_tasks:
+                if isinstance(task, dict):
+                    lines.append(_format_activity_task(task))
+
+        weekly_tasks = cfg.get("weekly_tasks") or []
+        if weekly_tasks:
+            lines.append("")
+            lines.append("【周常活动任务】")
+            for task in weekly_tasks:
+                if isinstance(task, dict):
+                    lines.append(_format_activity_task(task))
+
+        _append_gameplay_summary(lines, cfg, detail=True)
     else:
-        lines.append("暂无每日奖励配置")
-
-    milestones = cfg.get("milestone_rewards") or []
-    if milestones:
-        lines.append("")
-        lines.append("【累计签到奖励】")
-        for reward in sorted(milestones, key=lambda item: _as_int(item.get("days"))):
-            days = _as_int(reward.get("days"))
-            name = str(reward.get("name") or f"累计{days}天")
-            lines.append(f"- {name}：{reward.get('reward') or '暂无奖励'}")
-
-    daily_tasks = cfg.get("daily_tasks") or []
-    if daily_tasks:
-        lines.append("")
-        lines.append("【每日活动任务】")
-        for task in daily_tasks:
-            if isinstance(task, dict):
-                lines.append(_format_activity_task(task))
-
-    weekly_tasks = cfg.get("weekly_tasks") or []
-    if weekly_tasks:
-        lines.append("")
-        lines.append("【周常活动任务】")
-        for task in weekly_tasks:
-            if isinstance(task, dict):
-                lines.append(_format_activity_task(task))
-
-    gameplay_activities = get_gameplay_activities(cfg)
-    if gameplay_activities:
-        lines.append("")
-        lines.append("【玩法活动】")
-        for activity in gameplay_activities:
-            ok, reason = activity_state(activity)
-            status = "进行中" if ok else reason
-            lines.append(f"- {activity.get('name', '集字活动')}：{status}")
-            if activity.get("description"):
-                lines.append(f"  {activity.get('description')}")
-            if activity.get("type") == "event_points":
-                point_name = activity.get("point_name") or "活动积分"
-                rules = activity.get("event_rules") or []
-                if rules:
-                    rule_text = "、".join(
-                        f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('points'))}"
-                        for rule in rules
-                    )
-                    lines.append(f"  积分来源：{rule_text}")
-                shop = activity.get("shop") or []
-                if shop:
-                    shop_text = "、".join(str(item.get("name") or item.get("item_key")) for item in shop)
-                    lines.append(f"  {point_name}商店：{shop_text}")
-                continue
-
-            event_text = _activity_event_text(activity.get("drop_events"))
-            lines.append(
-                f"  掉落来源：{event_text or '未配置'}，"
-                f"每日上限：{_as_int(activity.get('daily_drop_limit'), 0)}，"
-                f"掉落概率：{int(_drop_rate(activity.get('drop_rate'), 0) * 100)}%"
-            )
-            phrases = activity.get("phrases") or []
-            if phrases:
-                phrase_text = "、".join(str(item.get("name") or item.get("phrase")) for item in phrases)
-                lines.append(f"  兑换词组：{phrase_text}")
+        lines.extend([
+            "",
+            "查询奖励：活动奖励",
+            "查询任务：活动任务",
+            "玩法说明：活动玩法",
+            "个人进度：活动排行 / 活动背包 / 活动积分",
+        ])
+        _append_gameplay_summary(lines, cfg, detail=False)
 
     return "\n".join(lines).strip()
 
@@ -1796,7 +2013,8 @@ def get_rank(limit: int = 10) -> list[dict]:
             """,
             (int(limit),),
         )
-        return [dict(row) for row in cur.fetchall()]
+        rows = [dict(row) for row in cur.fetchall()]
+        return _attach_display_names(rows)
     finally:
         conn.close()
 
@@ -1810,8 +2028,9 @@ def build_rank_text(limit: int = 10) -> str:
         return "\n".join(lines)
 
     for index, row in enumerate(rows, 1):
+        name = row.get("display_name") or row.get("user_name") or resolve_daohao(str(row.get("user_id") or ""))
         lines.append(
-            f"{index}. {row['user_id']} 累计签到 "
+            f"{index}. {name} 累计签到 "
             f"{int(row.get('sign_days', 0) or 0)} 天"
         )
     return "\n".join(lines)
