@@ -1288,7 +1288,9 @@ class BattleSystem:
         self.play_list = []
         self.round = 0
         self.max_rounds = 30
-        self._speed_tiebreaker = {}
+        self._unit_order = {}
+        for index, unit in enumerate(self.team_a + self.team_b):
+            self._unit_order[id(unit)] = index
 
     def add_message(self, unit, message):
         display_hp = max(0, int(unit.hp))
@@ -1319,9 +1321,9 @@ class BattleSystem:
 
     def _speed_sort_key(self, unit):
         key = id(unit)
-        if key not in self._speed_tiebreaker:
-            self._speed_tiebreaker[key] = random.random()
-        return unit.speed_rate, self._speed_tiebreaker[key]
+        if key not in self._unit_order:
+            self._unit_order[key] = len(self._unit_order)
+        return unit.speed_rate, -unit.team_id, -self._unit_order[key]
 
     def _add_pet_entry_messages(self):
         lines = []
@@ -2326,7 +2328,7 @@ class BattleSystem:
         elif buff_type == BuffType.DAMAGE_REDUCTION_UP:
             value = min(0.35, power * 0.07 * scale)
         elif buff_type == BuffType.EVASION_UP:
-            value = min(30, power * 4 * scale)
+            value = int(min(30, power * 4 * scale))
         elif buff_type == BuffType.SPEED_UP:
             value = min(0.30, power * 0.06 * scale)
         elif buff_type == BuffType.REFLECT_DAMAGE:
@@ -2341,7 +2343,7 @@ class BattleSystem:
             BuffType.LIFESTEAL_UP: f"提升{round(value * 100, 2)}%吸血，持续{duration}回合",
             BuffType.ARMOR_PENETRATION_UP: f"提升{round(value * 100, 2)}%穿透，持续{duration}回合",
             BuffType.DAMAGE_REDUCTION_UP: f"提升{round(value * 100, 2)}%伤害减免，持续{duration}回合",
-            BuffType.EVASION_UP: f"提升{round(value, 2)}点闪避，持续{duration}回合",
+            BuffType.EVASION_UP: f"提升{int(value)}点闪避，持续{duration}回合",
             BuffType.SPEED_UP: f"提升{round(value * 100, 2)}%速度，持续{duration}回合",
             BuffType.REFLECT_DAMAGE: f"获得{round(value * 100, 2)}%反伤，持续{duration}回合",
         }
