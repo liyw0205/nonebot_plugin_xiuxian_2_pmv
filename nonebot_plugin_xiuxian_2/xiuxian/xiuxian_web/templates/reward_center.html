@@ -477,7 +477,15 @@ window.__xiuxianPageCleanup = () => {
     delete window.clearCurrentRecords;
 };
 
-setCurrentKind(currentKind);
+function initializeRewardCenter() {
+    setCurrentKind(currentKind);
+}
+
+if (window.XiuxianWeb?.requestJson) {
+    initializeRewardCenter();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeRewardCenter, {once: true});
+}
 })();
 </script>
 {% endblock %}
