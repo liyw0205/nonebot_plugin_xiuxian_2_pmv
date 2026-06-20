@@ -119,6 +119,7 @@ DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
 IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
 PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db"
 TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db"
+ACTIVITY_DB = XIUXIANDATA / "xiuxian" / "activity" / "activity.db"
 ADMIN_IDS = get_driver().config.superusers
 PORT = XiuConfig().web_port
 HOST = XiuConfig().web_host
@@ -342,6 +343,10 @@ def get_config_tables():
         "交易数据库": { # 新增：交易数据库
             "path": TRADE_DB, # 使用新增的常量
             "tables": get_dynamic_trade_tables()
+        },
+        "活动数据库": {
+            "path": ACTIVITY_DB,
+            "tables": get_dynamic_activity_tables()
         }
     }
     return tables
@@ -431,6 +436,45 @@ def get_dynamic_trade_tables():
 
     except Exception as e:
         logger.error(f"获取 trade.db 表结构失败: {e}")
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_dynamic_activity_tables():
+    """动态获取 activity.db 中所有活动运营表。"""
+    if not db_backend.database_exists(ACTIVITY_DB):
+        return {}
+
+    conn = None
+    try:
+        conn = db_backend.connect(ACTIVITY_DB)
+        table_names = conn.list_tables()
+
+        result = {}
+        for table_name in table_names:
+            fields_info = conn.table_info(table_name)
+            fields = [row[1] for row in fields_info]
+            primary_key = None
+            for row in fields_info:
+                if row[5] == 1:
+                    primary_key = row[1]
+                    break
+            if not primary_key and "id" in fields:
+                primary_key = "id"
+
+            result[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key,
+                "is_dynamic": True
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"获取 activity.db 表结构失败: {e}")
         return {}
     finally:
         if conn:

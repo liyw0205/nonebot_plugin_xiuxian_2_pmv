@@ -1,0 +1,61 @@
+{
+  "template_type": "festival_sign",
+  "enabled": true,
+  "festival_name": "XX节日",
+  "name": "XX节日签到活动",
+  "description": "节日期间每日签到领取奖励，累计签到达到指定天数可领取额外奖励。活动玩法细节可在 extensions 中继续补充。",
+  "start_time": "0",
+  "end_time": "无限",
+  "sign_command": "活动签到",
+  "daily_rewards": [
+    {
+      "day": 1,
+      "name": "首日签到",
+      "reward": "灵石x50000"
+    },
+    {
+      "day": 2,
+      "name": "次日签到",
+      "reward": "灵石x80000"
+    },
+    {
+      "day": 3,
+      "name": "三日签到",
+      "reward": "灵石x100000"
+    },
+    {
+      "day": 4,
+      "name": "四日签到",
+      "reward": "灵石x120000"
+    },
+    {
+      "day": 5,
+      "name": "五日签到",
+      "reward": "灵石x150000"
+    },
+    {
+      "day": 6,
+      "name": "六日签到",
+      "reward": "灵石x180000"
+    },
+    {
+      "day": 7,
+      "name": "七日签到",
+      "reward": "灵石x200000,渡厄丹x1"
+    }
+  ],
+  "milestone_rewards": [
+    {
+      "days": 3,
+      "name": "累计三日",
+      "reward": "灵石x150000"
+    },
+    {
+      "days": 7,
+      "name": "累计七日",
+      "reward": "灵石x500000,渡厄丹x1"
+    }
+  ],
+  "extra_rules": [],
+  "extensions": {}
+}

@@ -3464,3 +3464,801 @@ section.card + section.card {
         transform: translateY(0);
     }
 }
+
+/* --- 16. Frosted Glass Lighting Theme --- */
+:root {
+    --bg-primary: #e9f0f6;
+    --bg-secondary: rgba(255, 255, 255, 0.68);
+    --surface-raised: rgba(255, 255, 255, 0.46);
+    --surface-glass: rgba(255, 255, 255, 0.52);
+    --surface-glass-strong: rgba(255, 255, 255, 0.72);
+    --surface-glass-soft: rgba(255, 255, 255, 0.34);
+    --glass-border: rgba(255, 255, 255, 0.58);
+    --glass-border-muted: rgba(106, 133, 158, 0.24);
+    --glass-highlight: rgba(255, 255, 255, 0.78);
+    --glass-shadow: rgba(35, 53, 76, 0.16);
+    --glass-shadow-deep: rgba(38, 59, 86, 0.22);
+    --light-cyan: rgba(92, 211, 255, 0.48);
+    --light-green: rgba(72, 213, 155, 0.36);
+    --light-gold: rgba(255, 207, 104, 0.30);
+    --light-rose: rgba(255, 119, 148, 0.23);
+    --text-primary: #152333;
+    --text-secondary: #526579;
+    --text-muted: #74859a;
+    --border-color: rgba(106, 133, 158, 0.24);
+    --shadow-color: rgba(35, 53, 76, 0.13);
+    --accent-color: #168f8b;
+    --accent-hover-color: #0f716f;
+    --success-color: #2d9f67;
+    --danger-color: #d95058;
+    --warning-color: #e0a634;
+    --info-color: #2c86c7;
+}
+
+[data-theme='dark'] {
+    --bg-primary: #0b1220;
+    --bg-secondary: rgba(18, 29, 47, 0.66);
+    --surface-raised: rgba(27, 42, 64, 0.52);
+    --surface-glass: rgba(20, 32, 51, 0.56);
+    --surface-glass-strong: rgba(27, 42, 64, 0.74);
+    --surface-glass-soft: rgba(28, 43, 66, 0.36);
+    --glass-border: rgba(168, 203, 230, 0.18);
+    --glass-border-muted: rgba(135, 170, 202, 0.16);
+    --glass-highlight: rgba(255, 255, 255, 0.12);
+    --glass-shadow: rgba(0, 0, 0, 0.26);
+    --glass-shadow-deep: rgba(0, 0, 0, 0.42);
+    --light-cyan: rgba(38, 172, 230, 0.34);
+    --light-green: rgba(50, 211, 151, 0.25);
+    --light-gold: rgba(255, 190, 80, 0.20);
+    --light-rose: rgba(255, 99, 139, 0.18);
+    --text-primary: #f0f6fb;
+    --text-secondary: #b4c2d1;
+    --text-muted: #8798aa;
+    --border-color: rgba(136, 165, 196, 0.18);
+    --shadow-color: rgba(0, 0, 0, 0.28);
+    --accent-color: #45d0b1;
+    --accent-hover-color: #65dec2;
+    --success-color: #67d184;
+    --danger-color: #ff747d;
+    --warning-color: #f0bf62;
+    --info-color: #74bff0;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body.app-shell {
+    position: relative;
+    isolation: isolate;
+    background:
+        radial-gradient(circle at 12% 8%, var(--light-cyan), transparent 30rem),
+        radial-gradient(circle at 82% 10%, var(--light-gold), transparent 28rem),
+        radial-gradient(circle at 72% 86%, var(--light-green), transparent 34rem),
+        linear-gradient(135deg, #edf4f7 0%, #e8eef8 46%, #f6f1e8 100%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+}
+
+[data-theme='dark'] body.app-shell {
+    background:
+        radial-gradient(circle at 10% 8%, var(--light-cyan), transparent 30rem),
+        radial-gradient(circle at 82% 12%, var(--light-rose), transparent 28rem),
+        radial-gradient(circle at 72% 88%, var(--light-green), transparent 34rem),
+        linear-gradient(135deg, #08101c 0%, #101827 48%, #151827 100%);
+}
+
+body.app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(115deg, rgba(255, 255, 255, 0.40), transparent 24%, rgba(255, 255, 255, 0.22) 42%, transparent 66%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.10) 0 1px, transparent 1px 118px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 118px);
+    opacity: 0.62;
+}
+
+[data-theme='dark'] body.app-shell::before {
+    background:
+        linear-gradient(115deg, rgba(255, 255, 255, 0.08), transparent 28%, rgba(90, 211, 255, 0.05) 46%, transparent 70%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 118px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 118px);
+    opacity: 1;
+}
+
+body.app-shell::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(18px) saturate(1.08);
+}
+
+[data-theme='dark'] body.app-shell::after {
+    background: rgba(4, 8, 16, 0.24);
+    backdrop-filter: blur(18px) saturate(1.16);
+}
+
+.ambient-light-field {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.ambient-light {
+    position: absolute;
+    display: block;
+    width: 34rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    filter: blur(48px);
+    opacity: 0.78;
+    mix-blend-mode: screen;
+}
+
+.ambient-light-a {
+    left: -11rem;
+    top: -8rem;
+    background: radial-gradient(circle, var(--light-cyan) 0%, transparent 68%);
+}
+
+.ambient-light-b {
+    right: -8rem;
+    top: 2rem;
+    width: 30rem;
+    background: radial-gradient(circle, var(--light-gold) 0%, transparent 70%);
+}
+
+.ambient-light-c {
+    right: 10%;
+    bottom: -13rem;
+    width: 38rem;
+    background: radial-gradient(circle, var(--light-green) 0%, transparent 70%);
+}
+
+.ambient-light-d {
+    left: 28%;
+    top: 34%;
+    width: 26rem;
+    background: radial-gradient(circle, var(--light-rose) 0%, transparent 72%);
+    opacity: 0.52;
+}
+
+[data-theme='dark'] .ambient-light {
+    opacity: 0.62;
+}
+
+.layout-shell {
+    position: relative;
+    z-index: 1;
+}
+
+.app-sidebar,
+.app-header,
+.card,
+.stat-card,
+.monitor-card,
+.action-card,
+.info-item,
+.database-card,
+.table-card,
+.command-card,
+.backup-card,
+.release-card,
+.metric-card,
+.form-group,
+.tab-nav,
+.modal-content,
+.table-scroll,
+div[style*="overflow-x: auto"],
+.pagination a,
+.pagination span,
+.detail-item,
+.process-box,
+.monitor-details span,
+.monitor-details p,
+.file-info,
+.import-confirm,
+.restore-confirm,
+.backup-item,
+.release-notes,
+.assets-list,
+.cpu-history-chart,
+.process-list,
+.success,
+.error,
+.no-update,
+.update-available,
+.error-message {
+    background: var(--surface-glass);
+    border-color: var(--glass-border-muted);
+    box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 18px 46px var(--glass-shadow);
+    backdrop-filter: blur(22px) saturate(1.28);
+    -webkit-backdrop-filter: blur(22px) saturate(1.28);
+}
+
+.app-sidebar {
+    background:
+        linear-gradient(180deg, var(--surface-glass-strong), var(--surface-glass-soft)),
+        radial-gradient(circle at 15% 0%, rgba(255, 255, 255, 0.28), transparent 15rem);
+    border-right-color: var(--glass-border);
+    box-shadow:
+        inset -1px 0 0 rgba(255, 255, 255, 0.12),
+        18px 0 54px var(--glass-shadow);
+}
+
+[data-theme='dark'] .app-sidebar {
+    background:
+        linear-gradient(180deg, var(--surface-glass-strong), var(--surface-glass-soft)),
+        radial-gradient(circle at 20% 0%, rgba(69, 208, 177, 0.16), transparent 15rem);
+}
+
+.app-header {
+    background:
+        linear-gradient(90deg, var(--surface-glass-strong), var(--surface-glass-soft)),
+        rgba(255, 255, 255, 0.18);
+    border-bottom-color: var(--glass-border);
+    box-shadow:
+        inset 0 -1px 0 rgba(255, 255, 255, 0.16),
+        0 12px 34px rgba(35, 53, 76, 0.08);
+}
+
+.brand-mark,
+.logo-icon,
+.stat-icon,
+.table-icon,
+.command-icon,
+.qq-chat-avatar,
+.session-avatar {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        0 10px 28px color-mix(in srgb, var(--accent-color) 28%, transparent);
+}
+
+.brand-mark,
+.logo-icon {
+    background:
+        radial-gradient(circle at 28% 20%, rgba(255, 255, 255, 0.42), transparent 36%),
+        linear-gradient(135deg, var(--accent-color), var(--info-color));
+}
+
+.page-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 18px;
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, var(--surface-glass-strong), var(--surface-glass-soft)),
+        radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.28), transparent 18rem);
+    box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 20px 56px var(--glass-shadow);
+    backdrop-filter: blur(24px) saturate(1.22);
+    -webkit-backdrop-filter: blur(24px) saturate(1.22);
+}
+
+.page-hero::after,
+.card::before,
+.stat-card::before,
+.database-card::before,
+.command-card::before,
+.backup-card::before,
+.release-card::before,
+.modal-content::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%);
+    opacity: 0.75;
+}
+
+.card,
+.stat-card,
+.monitor-card,
+.action-card,
+.info-item,
+.database-card,
+.table-card,
+.command-card,
+.backup-card,
+.release-card,
+.metric-card,
+.modal-content {
+    position: relative;
+    overflow: hidden;
+    border-color: var(--glass-border-muted);
+}
+
+.card > *,
+.stat-card > *,
+.monitor-card > *,
+.action-card > *,
+.info-item > *,
+.database-card > *,
+.table-card > *,
+.command-card > *,
+.backup-card > *,
+.release-card > *,
+.metric-card > *,
+.modal-content > * {
+    position: relative;
+    z-index: 1;
+}
+
+.card .card,
+.monitor-card,
+.metric-card,
+.table-card,
+.command-card,
+.detail-item,
+.process-box,
+.monitor-details span,
+.monitor-details p,
+.form-group {
+    background: var(--surface-glass-soft);
+}
+
+.card-header,
+.database-header,
+.modal-header,
+.command-header,
+.release-header,
+.backup-header,
+.backup-details,
+.sidebar-footer,
+.app-sidebar .brand {
+    border-color: var(--glass-border-muted);
+}
+
+.card-title i,
+.section-title i,
+.page-kicker,
+.nav-section-label {
+    color: var(--accent-color);
+}
+
+.page-kicker,
+.nav-section-label,
+th {
+    text-transform: uppercase;
+}
+
+.app-sidebar .app-nav a,
+.app-sidebar nav a,
+.sidebar-footer .logout-link,
+.theme-toggle,
+.icon-button,
+.tab-link,
+.btn,
+.pagination a,
+.pagination span,
+.status-pill,
+.table-count,
+.tag,
+.current-badge,
+.dynamic-badge,
+.quick-filter-link,
+.log-mode-tabs button {
+    backdrop-filter: blur(16px) saturate(1.18);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+}
+
+.app-sidebar .app-nav a:hover,
+.app-sidebar nav a:hover,
+.theme-toggle:hover,
+.icon-button:hover,
+.tab-link:hover,
+.pagination a:hover,
+.quick-filter-link:hover {
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong));
+    border-color: color-mix(in srgb, var(--accent-color) 32%, var(--glass-border));
+}
+
+.app-sidebar .app-nav a.active,
+.app-sidebar nav a.active,
+.tab-link.active,
+.pagination a.active,
+.log-mode-tabs button.active,
+.quick-filter-link.active {
+    background:
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.34), transparent 55%),
+        linear-gradient(135deg, var(--accent-color), color-mix(in srgb, var(--accent-color) 62%, var(--info-color)));
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #fff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 12px 30px color-mix(in srgb, var(--accent-color) 28%, transparent);
+}
+
+.btn {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger,
+.btn-secondary {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 10px 24px color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-color), color-mix(in srgb, var(--accent-color) 64%, var(--info-color)));
+}
+
+.btn-info {
+    background: linear-gradient(135deg, var(--info-color), color-mix(in srgb, var(--info-color) 68%, #ffffff));
+}
+
+.btn-success {
+    background: linear-gradient(135deg, var(--success-color), color-mix(in srgb, var(--success-color) 72%, var(--accent-color)));
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, var(--warning-color), #f4d27d);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, var(--danger-color), #ff8d92);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #66778b, #8797a8);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+}
+
+input[type="text"],
+input[type="number"],
+input[type="file"],
+input[type="password"],
+input[type="datetime-local"],
+select,
+textarea {
+    background: rgba(255, 255, 255, 0.46);
+    border-color: var(--glass-border-muted);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
+    backdrop-filter: blur(14px) saturate(1.16);
+    -webkit-backdrop-filter: blur(14px) saturate(1.16);
+}
+
+[data-theme='dark'] input[type="text"],
+[data-theme='dark'] input[type="number"],
+[data-theme='dark'] input[type="file"],
+[data-theme='dark'] input[type="password"],
+[data-theme='dark'] input[type="datetime-local"],
+[data-theme='dark'] select,
+[data-theme='dark'] textarea {
+    background: rgba(10, 18, 31, 0.44);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: color-mix(in srgb, var(--accent-color) 68%, var(--glass-border));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0 0 3px color-mix(in srgb, var(--accent-color) 20%, transparent),
+        0 10px 30px color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+table {
+    background: transparent;
+}
+
+th {
+    background: color-mix(in srgb, var(--surface-glass-strong) 86%, transparent);
+    backdrop-filter: blur(18px) saturate(1.18);
+    -webkit-backdrop-filter: blur(18px) saturate(1.18);
+}
+
+td {
+    border-bottom-color: var(--glass-border-muted);
+}
+
+tr:hover {
+    background: color-mix(in srgb, var(--accent-color) 8%, rgba(255, 255, 255, 0.12));
+}
+
+.table-scroll,
+div[style*="overflow-x: auto"] {
+    background: var(--surface-glass-soft);
+}
+
+.status-pill,
+.table-count,
+.tag,
+.current-badge,
+.dynamic-badge {
+    border: 1px solid color-mix(in srgb, var(--accent-color) 26%, var(--glass-border-muted));
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong));
+    color: var(--accent-color);
+}
+
+.status-pill.offline,
+.error,
+.error-message {
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--glass-border-muted));
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-glass-strong));
+}
+
+.success {
+    border-color: color-mix(in srgb, var(--success-color) 34%, var(--glass-border-muted));
+    background: color-mix(in srgb, var(--success-color) 14%, var(--surface-glass-strong));
+}
+
+.update-available {
+    border-color: color-mix(in srgb, var(--success-color) 34%, var(--glass-border-muted));
+}
+
+.no-update {
+    border-color: color-mix(in srgb, var(--info-color) 26%, var(--glass-border-muted));
+}
+
+.modal {
+    background:
+        radial-gradient(circle at 50% 18%, rgba(125, 219, 255, 0.20), transparent 28rem),
+        rgba(8, 13, 22, 0.48);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.modal-content {
+    background: var(--surface-glass-strong);
+}
+
+.login-layout .container {
+    background: transparent;
+}
+
+.login-card {
+    box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 28px 90px var(--glass-shadow-deep);
+}
+
+.top-progress {
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), var(--info-color), transparent);
+    box-shadow:
+        0 0 18px color-mix(in srgb, var(--accent-color) 70%, transparent),
+        0 0 36px color-mix(in srgb, var(--info-color) 42%, transparent);
+}
+
+.database-tables::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent-color) 34%, rgba(255, 255, 255, 0.28));
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Inline page skins */
+.qq-window,
+.qq-shell,
+.qq-session-pane,
+.qq-chat-pane,
+.qq-chat-header,
+.qq-message-list,
+.qq-composer,
+.qq-side-header,
+.qq-search,
+.broadcast-toggle-row,
+.broadcast-box,
+.broadcast-status-box,
+.message-config-dialog,
+.economy-panel,
+.economy-summary-item,
+.economy-log-filters,
+.economy-log-table-wrap,
+.economy-quick-filter,
+.log-mode-tabs,
+.terminal-container,
+.terminal-header,
+.terminal-toolbar,
+.terminal-input-group,
+.backup-source-switch,
+.backup-source-card,
+.backup-toast,
+.log-user-card {
+    background: var(--surface-glass) !important;
+    border-color: var(--glass-border-muted) !important;
+    box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 18px 46px var(--glass-shadow) !important;
+    backdrop-filter: blur(22px) saturate(1.26) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.26) !important;
+}
+
+.qq-window {
+    overflow: hidden;
+}
+
+.qq-window-titlebar,
+.qq-chat-header,
+.terminal-header {
+    background:
+        linear-gradient(90deg, var(--surface-glass-strong), var(--surface-glass-soft)) !important;
+}
+
+.qq-shell,
+.terminal-container {
+    background: rgba(255, 255, 255, 0.20) !important;
+}
+
+[data-theme='dark'] .qq-shell,
+[data-theme='dark'] .terminal-container {
+    background: rgba(4, 9, 18, 0.20) !important;
+}
+
+.qq-session-pane,
+.qq-message-list,
+.terminal-body {
+    background:
+        radial-gradient(circle at 18% 4%, color-mix(in srgb, var(--light-cyan) 36%, transparent), transparent 24rem),
+        var(--surface-glass-soft) !important;
+}
+
+.qq-chat-pane,
+.terminal-body {
+    color: var(--text-primary);
+}
+
+.msg-bubble,
+.composer-collapsed,
+.media-panel,
+.md-preview-box,
+.reply-bar,
+.mode-toggle-card,
+.media-summary-chip,
+.preview-btn,
+.media-type-row button,
+.upload-btn,
+.icon-btn,
+.qq-header-tools button,
+.message-action-menu,
+.message-toast,
+.backup-source-card .backup-card,
+.economy-mini-table,
+.economy-log-table {
+    background: var(--surface-glass-strong) !important;
+    border-color: var(--glass-border-muted) !important;
+    box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 10px 28px rgba(35, 53, 76, 0.10) !important;
+    backdrop-filter: blur(16px) saturate(1.16);
+    -webkit-backdrop-filter: blur(16px) saturate(1.16);
+}
+
+.msg-row.send .msg-bubble {
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--accent-color) 22%, var(--surface-glass-strong)), color-mix(in srgb, var(--info-color) 16%, var(--surface-glass-strong))) !important;
+}
+
+.session-item:hover,
+.session-item.active {
+    background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-glass-strong)) !important;
+}
+
+.terminal-body {
+    font-family: Consolas, Monaco, monospace;
+    text-shadow: 0 0 12px rgba(116, 191, 240, 0.18);
+}
+
+#terminal-input {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: var(--glass-border-muted) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme='dark'] #terminal-input {
+    background: rgba(6, 13, 24, 0.42) !important;
+}
+
+.log-console {
+    background:
+        radial-gradient(circle at 0% 0%, rgba(116, 191, 240, 0.12), transparent 20rem),
+        rgba(7, 12, 22, 0.76) !important;
+    border-color: rgba(144, 177, 208, 0.20) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        0 18px 46px var(--glass-shadow) !important;
+    backdrop-filter: blur(18px) saturate(1.18);
+    -webkit-backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.economy-log-table,
+.economy-mini-table {
+    background: transparent !important;
+}
+
+.economy-log-table th,
+.economy-mini-table th {
+    background: var(--surface-glass-strong) !important;
+}
+
+.backup-source-card.cloud-source {
+    background:
+        radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--info-color) 18%, transparent), transparent 18rem),
+        var(--surface-glass) !important;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .app-sidebar,
+    .app-header,
+    .card,
+    .stat-card,
+    .monitor-card,
+    .action-card,
+    .info-item,
+    .database-card,
+    .table-card,
+    .command-card,
+    .backup-card,
+    .release-card,
+    .metric-card,
+    .form-group,
+    .modal-content {
+        background: color-mix(in srgb, var(--bg-primary) 18%, var(--surface-glass-strong));
+    }
+}
+
+@media (max-width: 900px) {
+    .ambient-light {
+        width: 24rem;
+        filter: blur(42px);
+    }
+
+    .page-hero {
+        padding: 14px;
+    }
+
+    .app-sidebar {
+        box-shadow:
+            inset -1px 0 0 rgba(255, 255, 255, 0.12),
+            18px 0 60px rgba(8, 13, 22, 0.28);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .container {
+        animation: none;
+    }
+
+    .btn:hover,
+    .stat-card:hover,
+    .monitor-card:hover,
+    .action-card:hover,
+    .database-card:hover,
+    .table-card:hover,
+    .backup-card:hover,
+    .release-card:hover {
+        transform: none;
+    }
+}

@@ -19,6 +19,18 @@ def database():
     all_tables = get_tables()
     return render_template('database.html', tables=all_tables)
 
+
+def _find_dynamic_table(table_name):
+    for db_path, dynamic_tables in (
+        (PLAYER_DB, get_dynamic_player_tables()),
+        (TRADE_DB, get_dynamic_trade_tables()),
+        (ACTIVITY_DB, get_dynamic_activity_tables()),
+    ):
+        if table_name in dynamic_tables:
+            return db_path, dynamic_tables[table_name]
+    return None, None
+
+
 @app.route('/table/<table_name>', methods=['GET'])
 def table_view(table_name):
     if 'admin_id' not in session:
@@ -40,19 +52,7 @@ def table_view(table_name):
             break
     
     if not db_path:
-        # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
-        
-        # 检查 player.db
-        dynamic_player_tables = get_dynamic_player_tables()
-        if table_name in dynamic_player_tables:
-            db_path = PLAYER_DB
-            table_info = dynamic_player_tables[table_name]
-        else:
-            # 检查 trade.db
-            dynamic_trade_tables = get_dynamic_trade_tables()
-            if table_name in dynamic_trade_tables:
-                db_path = TRADE_DB
-                table_info = dynamic_trade_tables[table_name]
+        db_path, table_info = _find_dynamic_table(table_name)
     
     if not db_path:
         return "表不存在", 404
@@ -107,19 +107,8 @@ def row_edit(table_name, row_id):
     
     # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
     if not db_path:
-        # 检查 player.db
-        dynamic_player_tables = get_dynamic_player_tables()
-        if table_name in dynamic_player_tables:
-            db_path = PLAYER_DB
-            table_info = dynamic_player_tables[table_name]
-            is_dynamic_table = True
-        else:
-            # 检查 trade.db
-            dynamic_trade_tables = get_dynamic_trade_tables()
-            if table_name in dynamic_trade_tables:
-                db_path = TRADE_DB
-                table_info = dynamic_trade_tables[table_name]
-                is_dynamic_table = True
+        db_path, table_info = _find_dynamic_table(table_name)
+        is_dynamic_table = bool(db_path)
     
     if not db_path:
         return "表不存在", 404
@@ -263,19 +252,8 @@ def batch_edit(table_name):
     
     # 如果在预设配置中没找到，尝试动态获取 player.db 或 trade.db 中的表
     if not db_path:
-        # 检查 player.db
-        dynamic_player_tables = get_dynamic_player_tables()
-        if table_name in dynamic_player_tables:
-            db_path = PLAYER_DB
-            table_info = dynamic_player_tables[table_name]
-            is_dynamic_table = True
-        else:
-            # 检查 trade.db
-            dynamic_trade_tables = get_dynamic_trade_tables()
-            if table_name in dynamic_trade_tables:
-                db_path = TRADE_DB
-                table_info = dynamic_trade_tables[table_name]
-                is_dynamic_table = True
+        db_path, table_info = _find_dynamic_table(table_name)
+        is_dynamic_table = bool(db_path)
     
     if not db_path:
         return jsonify({"success": False, "error": f"表不存在：{table_name}"})
