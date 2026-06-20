@@ -406,8 +406,15 @@ task_manager = XiuxianTaskManager()
 
 
 def record_task_progress(user_id: str, event_key: str, amount: int = 1) -> list[str]:
+    messages: list[str] = []
     try:
-        return task_manager.record_progress(user_id, event_key, amount)
+        messages.extend(task_manager.record_progress(user_id, event_key, amount))
     except Exception as e:
         logger.warning(f"记录修仙任务进度失败：user_id={user_id}, event={event_key}, error={e}")
-        return []
+    try:
+        from ..xiuxian_activity.service import record_activity_event
+
+        messages.extend(record_activity_event(user_id, event_key, amount))
+    except Exception as e:
+        logger.warning(f"记录活动事件失败：user_id={user_id}, event={event_key}, error={e}")
+    return messages

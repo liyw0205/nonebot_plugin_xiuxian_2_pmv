@@ -1,5 +1,7 @@
 import json
+import random
 import shutil
+from collections import Counter
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +38,28 @@ ACTIVITY_EVENT_LABELS = {
     item["value"]: item["label"]
     for item in ACTIVITY_EVENT_CHOICES
 }
+DEFAULT_COLLECT_DROP_EVENTS = [
+    "sign_in",
+    "work",
+    "boss",
+    "sect_task_complete",
+    "pet_travel_claim",
+    "dongfu_harvest",
+    "map_mission_complete",
+    "mix_elixir_complete",
+    "dungeon_clear",
+]
+DEFAULT_POINT_EVENT_RULES = [
+    {"event": "sign_in", "points": 20, "daily_limit": 20},
+    {"event": "work", "points": 10, "daily_limit": 60},
+    {"event": "boss", "points": 5, "daily_limit": 80},
+    {"event": "sect_task_complete", "points": 12, "daily_limit": 60},
+    {"event": "pet_travel_claim", "points": 10, "daily_limit": 30},
+    {"event": "dongfu_harvest", "points": 10, "daily_limit": 30},
+    {"event": "map_mission_complete", "points": 12, "daily_limit": 60},
+    {"event": "mix_elixir_complete", "points": 8, "daily_limit": 40},
+    {"event": "dungeon_clear", "points": 15, "daily_limit": 60},
+]
 
 
 def now_dt() -> datetime:
@@ -106,6 +130,69 @@ def init_db():
             cur.execute("ALTER TABLE activity_sign_log ADD COLUMN reward_message TEXT DEFAULT ''")
         if "finish_time" not in log_columns:
             cur.execute("ALTER TABLE activity_sign_log ADD COLUMN finish_time TEXT DEFAULT ''")
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_collect_inventory (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                word_char TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, word_char)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_collect_claim (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                phrase TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, phrase)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_collect_drop_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                word_char TEXT NOT NULL,
+                drop_date TEXT DEFAULT '',
+                create_time TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_point_balance (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                points INTEGER NOT NULL DEFAULT 0,
+                total_points INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_point_event_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                points INTEGER NOT NULL DEFAULT 0,
+                record_date TEXT DEFAULT '',
+                create_time TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_point_purchase (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, item_key)
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -124,10 +211,14 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
             ("template_key", default_config.get("template_key", "festival_sign")),
             ("daily_tasks", default_config.get("daily_tasks", [])),
             ("weekly_tasks", default_config.get("weekly_tasks", [])),
+            ("gameplay_activities", default_config.get("gameplay_activities", [])),
         ):
             if key not in config:
                 config[key] = deepcopy(default_value)
                 changed = True
+        if not isinstance(config.get("gameplay_activities"), list):
+            config["gameplay_activities"] = []
+            changed = True
         return config, changed
 
     default_config = _load_default_config()
@@ -149,9 +240,12 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
             "weekly_tasks",
             "extra_rules",
             "extensions",
+            "gameplay_activities",
         ):
             if key in config:
                 migrated[key] = config[key]
+    if not isinstance(migrated.get("gameplay_activities"), list):
+        migrated["gameplay_activities"] = []
     return migrated, True
 
 
@@ -206,6 +300,13 @@ def activity_state(config: dict | None = None) -> tuple[bool, str]:
 def _as_int(value, default: int = 0) -> int:
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return default
 
@@ -316,6 +417,1166 @@ def _format_activity_task(task: dict) -> str:
     return f"- {name}：目标 {target}{suffix}，奖励：{reward}"
 
 
+def _clean_text(value, default: str = "") -> str:
+    text = str(value if value is not None else "").strip()
+    return text or default
+
+
+def _as_bool(value, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "on", "开启"):
+        return True
+    if text in ("false", "0", "no", "off", "关闭"):
+        return False
+    return default
+
+
+def _normalize_activity_key(value, fallback: str) -> str:
+    text = _clean_text(value)
+    if not text:
+        text = fallback
+    cleaned = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in text)
+    return cleaned.strip("_") or fallback
+
+
+def _drop_rate(value, default: float = 0.35) -> float:
+    rate = _as_float(value, default)
+    if rate > 1:
+        rate = rate / 100
+    return min(max(rate, 0.0), 1.0)
+
+
+def _normalize_event_list(value, default: list[str] | None = None) -> list[str]:
+    if isinstance(value, str):
+        source = value.replace("\n", ",").split(",")
+    elif isinstance(value, list):
+        source = value
+    else:
+        source = default or []
+
+    events: list[str] = []
+    seen_events: set[str] = set()
+    for item in source:
+        if isinstance(item, dict):
+            event = _clean_text(item.get("value"))
+        else:
+            event = _clean_text(item)
+        if not event or event in seen_events or event not in ACTIVITY_EVENT_LABELS:
+            continue
+        seen_events.add(event)
+        events.append(event)
+    return events
+
+
+def _collect_phrases(activity: dict) -> list[dict]:
+    rows = activity.get("phrases")
+    if not isinstance(rows, list):
+        return []
+
+    phrases: list[dict] = []
+    seen_phrases: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        phrase = _clean_text(row.get("phrase") or row.get("name"))
+        if not phrase or phrase in seen_phrases:
+            continue
+        seen_phrases.add(phrase)
+        phrases.append({
+            "phrase": phrase,
+            "name": _clean_text(row.get("name"), phrase),
+            "reward": _clean_text(row.get("reward")),
+            "limit": max(0, _as_int(row.get("limit", row.get("limit_per_user", 1)), 1)),
+        })
+    return phrases
+
+
+def _collect_letters(activity: dict, phrases: list[dict] | None = None) -> list[dict]:
+    rows = activity.get("letters")
+    weights: dict[str, int] = {}
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                text = _clean_text(row.get("char") or row.get("word") or row.get("value"))
+                weight = _as_int(row.get("weight"), 10)
+            else:
+                text = _clean_text(row)
+                weight = 10
+            if not text:
+                continue
+            word_char = text[0]
+            weights[word_char] = weights.get(word_char, 0) + max(1, weight)
+
+    for phrase_row in phrases or _collect_phrases(activity):
+        for word_char in str(phrase_row.get("phrase") or ""):
+            if word_char.strip() and word_char not in weights:
+                weights[word_char] = 10
+
+    return [
+        {"char": word_char, "weight": weight}
+        for word_char, weight in weights.items()
+    ]
+
+
+def _point_event_rules(activity: dict) -> list[dict]:
+    rows = activity.get("event_rules")
+    if isinstance(rows, dict):
+        source = [
+            {"event": event, "points": points}
+            for event, points in rows.items()
+        ]
+    elif isinstance(rows, list):
+        source = rows
+    else:
+        source = DEFAULT_POINT_EVENT_RULES
+
+    rules: list[dict] = []
+    seen_events: set[str] = set()
+    for row in source:
+        if isinstance(row, dict):
+            event = _clean_text(row.get("event") or row.get("event_key") or row.get("value"))
+            points = _as_int(row.get("points"), 0)
+            daily_limit = _as_int(row.get("daily_limit"), 0)
+        else:
+            event = _clean_text(row)
+            points = 0
+            daily_limit = 0
+        if not event or event in seen_events or event not in ACTIVITY_EVENT_LABELS:
+            continue
+        points = max(0, points)
+        if points <= 0:
+            continue
+        seen_events.add(event)
+        rules.append({
+            "event": event,
+            "points": points,
+            "daily_limit": max(0, daily_limit),
+        })
+    return rules
+
+
+def _point_shop_items(activity: dict) -> list[dict]:
+    rows = activity.get("shop")
+    if not isinstance(rows, list):
+        return []
+
+    items: list[dict] = []
+    seen_keys: set[str] = set()
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            continue
+        name = _clean_text(row.get("name") or row.get("title"))
+        reward = _clean_text(row.get("reward"))
+        cost = _as_int(row.get("cost"), 0)
+        if not any((name, reward, cost)):
+            continue
+        item_key = _normalize_activity_key(
+            row.get("item_key") or row.get("key") or name,
+            f"item_{index}",
+        )
+        if item_key in seen_keys:
+            item_key = f"{item_key}_{index}"
+        seen_keys.add(item_key)
+        items.append({
+            "item_key": item_key,
+            "name": name or f"商品{index}",
+            "cost": max(0, cost),
+            "reward": reward,
+            "limit": max(0, _as_int(row.get("limit", row.get("limit_per_user", 1)), 1)),
+        })
+    return items
+
+
+def get_gameplay_activities(config: dict | None = None) -> list[dict]:
+    cfg = config or load_config()
+    raw_activities = cfg.get("gameplay_activities")
+    if not isinstance(raw_activities, list):
+        return []
+
+    activities: list[dict] = []
+    seen_keys: set[str] = set()
+    for index, raw_activity in enumerate(raw_activities, 1):
+        if not isinstance(raw_activity, dict):
+            continue
+        activity = deepcopy(raw_activity)
+        activity_type = _clean_text(activity.get("type"), "collect_words")
+        if activity_type not in {"collect_words", "event_points"}:
+            continue
+        key = _normalize_activity_key(activity.get("key") or activity.get("template_key"), f"{activity_type}_{index}")
+        if key in seen_keys:
+            key = f"{key}_{index}"
+        seen_keys.add(key)
+        if activity_type == "event_points":
+            activity.update({
+                "key": key,
+                "type": "event_points",
+                "template_key": _clean_text(activity.get("template_key"), key),
+                "enabled": _as_bool(activity.get("enabled")),
+                "name": _clean_text(activity.get("name"), f"积分活动{index}"),
+                "description": _clean_text(activity.get("description"), "完成活动事件获得积分，可在活动商店兑换奖励。"),
+                "start_time": _clean_text(activity.get("start_time"), "0"),
+                "end_time": _clean_text(activity.get("end_time"), "无限"),
+                "point_name": _clean_text(activity.get("point_name"), "活动积分"),
+                "event_rules": _point_event_rules(activity),
+                "shop": _point_shop_items(activity),
+            })
+            activities.append(activity)
+            continue
+        phrases = _collect_phrases(activity)
+        activity.update({
+            "key": key,
+            "type": "collect_words",
+            "template_key": _clean_text(activity.get("template_key"), key),
+            "enabled": _as_bool(activity.get("enabled")),
+            "name": _clean_text(activity.get("name"), f"集字活动{index}"),
+            "description": _clean_text(activity.get("description"), "完成活动事件有机会获得字牌，集齐词组兑换奖励。"),
+            "start_time": _clean_text(activity.get("start_time"), "0"),
+            "end_time": _clean_text(activity.get("end_time"), "无限"),
+            "drop_events": _normalize_event_list(activity.get("drop_events"), DEFAULT_COLLECT_DROP_EVENTS),
+            "drop_rate": _drop_rate(activity.get("drop_rate"), 0.35),
+            "daily_drop_limit": max(0, _as_int(activity.get("daily_drop_limit"), 8)),
+            "rolls_per_record": max(1, _as_int(activity.get("rolls_per_record"), 1)),
+            "letters": _collect_letters(activity, phrases),
+            "phrases": phrases,
+        })
+        activities.append(activity)
+    return activities
+
+
+def _activity_matches_target(activity: dict, target: str) -> bool:
+    text = _clean_text(target)
+    if not text:
+        return False
+    return text in {
+        _clean_text(activity.get("key")),
+        _clean_text(activity.get("name")),
+        _clean_text(activity.get("template_key")),
+        _clean_text(activity.get("type")),
+    }
+
+
+def _choose_collect_char(activity: dict) -> str:
+    letters = _collect_letters(activity, _collect_phrases(activity))
+    if not letters:
+        return ""
+    total_weight = sum(max(1, _as_int(item.get("weight"), 1)) for item in letters)
+    needle = random.uniform(0, total_weight)
+    current = 0
+    for item in letters:
+        current += max(1, _as_int(item.get("weight"), 1))
+        if needle <= current:
+            return _clean_text(item.get("char"))
+    return _clean_text(letters[-1].get("char"))
+
+
+def _get_collect_inventory_map(cur, activity_key: str, user_id: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT word_char, count
+        FROM activity_collect_inventory
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    return {
+        str(row["word_char"]): max(0, _as_int(row["count"]))
+        for row in cur.fetchall()
+    }
+
+
+def _get_collect_claim_map(cur, activity_key: str, user_id: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT phrase, count
+        FROM activity_collect_claim
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    return {
+        str(row["phrase"]): max(0, _as_int(row["count"]))
+        for row in cur.fetchall()
+    }
+
+
+def _phrase_need_counter(phrase: str) -> Counter:
+    return Counter(word_char for word_char in str(phrase or "") if word_char.strip())
+
+
+def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list[str]:
+    uid = str(user_id)
+    event = str(event_key)
+    times = max(0, _as_int(amount, 1))
+    if times <= 0:
+        return []
+
+    activities = get_gameplay_activities(load_config())
+    if not activities:
+        return []
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    messages: list[str] = []
+    try:
+        cur = conn.cursor()
+        for activity in activities:
+            ok, _ = activity_state(activity)
+            if not ok:
+                continue
+            if activity.get("type") == "event_points":
+                for rule in activity.get("event_rules") or []:
+                    if rule.get("event") != event:
+                        continue
+                    points = max(0, _as_int(rule.get("points"), 0)) * times
+                    if points <= 0:
+                        continue
+                    daily_limit = max(0, _as_int(rule.get("daily_limit"), 0))
+                    if daily_limit > 0:
+                        cur.execute(
+                            """
+                            SELECT COALESCE(SUM(points), 0) AS count
+                            FROM activity_point_event_log
+                            WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
+                            """,
+                            (activity["key"], uid, event, today_str()),
+                        )
+                        row = cur.fetchone()
+                        current_points = _as_int(row["count"] if row else 0)
+                        remaining = daily_limit - current_points
+                        if remaining <= 0:
+                            continue
+                        points = min(points, remaining)
+                    if points <= 0:
+                        continue
+                    ts = now_str()
+                    cur.execute(
+                        """
+                        INSERT INTO activity_point_balance (
+                            activity_key, user_id, points, total_points, update_time
+                        )
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT(activity_key, user_id) DO UPDATE SET
+                            points = activity_point_balance.points + excluded.points,
+                            total_points = activity_point_balance.total_points + excluded.total_points,
+                            update_time = excluded.update_time
+                        """,
+                        (activity["key"], uid, points, points, ts),
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO activity_point_event_log (
+                            activity_key, user_id, event_key, points, record_date, create_time
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (activity["key"], uid, event, points, today_str(), ts),
+                    )
+                    messages.append(
+                        f"活动积分：{activity['name']} 获得{points}{activity.get('point_name', '活动积分')}"
+                    )
+                continue
+
+            if activity.get("type") != "collect_words" or event not in activity.get("drop_events", []):
+                continue
+            daily_limit = max(0, _as_int(activity.get("daily_drop_limit"), 8))
+            if daily_limit <= 0:
+                continue
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM activity_collect_drop_log
+                WHERE activity_key=%s AND user_id=%s AND drop_date=%s
+                """,
+                (activity["key"], uid, today_str()),
+            )
+            row = cur.fetchone()
+            current_count = _as_int(row["count"] if row else 0)
+            remaining = daily_limit - current_count
+            if remaining <= 0:
+                continue
+
+            rolls = min(remaining, max(1, min(times, _as_int(activity.get("rolls_per_record"), 1))))
+            drop_rate = _drop_rate(activity.get("drop_rate"), 0.35)
+            for _ in range(rolls):
+                if random.random() > drop_rate:
+                    continue
+                word_char = _choose_collect_char(activity)
+                if not word_char:
+                    continue
+                cur.execute(
+                    """
+                    INSERT INTO activity_collect_inventory (
+                        activity_key, user_id, word_char, count, update_time
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT(activity_key, user_id, word_char) DO UPDATE SET
+                        count = activity_collect_inventory.count + excluded.count,
+                        update_time = excluded.update_time
+                    """,
+                    (activity["key"], uid, word_char, 1, now_str()),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO activity_collect_drop_log (
+                        activity_key, user_id, event_key, word_char, drop_date, create_time
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (activity["key"], uid, event, word_char, today_str(), now_str()),
+                )
+                messages.append(f"活动掉落：{activity['name']} 获得字牌「{word_char}」")
+        conn.commit()
+        return messages
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_collect_inventory(user_id: str, activity_key: str) -> dict[str, int]:
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        return _get_collect_inventory_map(conn.cursor(), activity_key, str(user_id))
+    finally:
+        conn.close()
+
+
+def build_collect_bag_text(user_id: str) -> str:
+    uid = str(user_id)
+    activities = get_gameplay_activities(load_config())
+    collect_activities = [activity for activity in activities if activity.get("type") == "collect_words"]
+    lines = ["【活动背包】"]
+    if not collect_activities:
+        lines.append("暂无集字活动")
+        return "\n".join(lines)
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        for activity in collect_activities:
+            ok, reason = activity_state(activity)
+            inventory = _get_collect_inventory_map(cur, activity["key"], uid)
+            claims = _get_collect_claim_map(cur, activity["key"], uid)
+            letters = _collect_letters(activity, _collect_phrases(activity))
+            letter_text = "、".join(
+                f"{item['char']}x{inventory.get(item['char'], 0)}"
+                for item in letters
+            ) or "暂无"
+            lines.extend([
+                "",
+                f"【{activity['name']}】{'进行中' if ok else reason}",
+                f"字牌：{letter_text}",
+            ])
+            phrases = _collect_phrases(activity)
+            if not phrases:
+                lines.append("暂无兑换词组")
+                continue
+            lines.append("可兑换词组：")
+            for phrase in phrases:
+                need = _phrase_need_counter(phrase["phrase"])
+                owned = sum(min(inventory.get(word_char, 0), count) for word_char, count in need.items())
+                total_need = sum(need.values())
+                claimed = claims.get(phrase["phrase"], 0)
+                limit = _as_int(phrase.get("limit"), 1)
+                limit_text = "不限" if limit <= 0 else f"{claimed}/{limit}"
+                lines.append(
+                    f"- {phrase['name']}：{owned}/{total_need}，已兑换 {limit_text}，"
+                    f"奖励：{phrase.get('reward') or '暂无奖励'}"
+                )
+        return "\n".join(lines).strip()
+    finally:
+        conn.close()
+
+
+def _find_collect_phrase(config: dict, query: str) -> tuple[dict, dict] | None:
+    text = _clean_text(query)
+    if not text:
+        return None
+    for activity in get_gameplay_activities(config):
+        if activity.get("type") != "collect_words":
+            continue
+        ok, _ = activity_state(activity)
+        if not ok:
+            continue
+        for phrase in _collect_phrases(activity):
+            phrase_text = _clean_text(phrase.get("phrase"))
+            phrase_name = _clean_text(phrase.get("name"))
+            if text in (phrase_text, phrase_name):
+                return activity, phrase
+            if phrase_text and phrase_text in text:
+                return activity, phrase
+            if phrase_name and phrase_name in text:
+                return activity, phrase
+    return None
+
+
+def claim_collect_phrase(user_id: str, query: str) -> tuple[bool, str]:
+    uid = str(user_id)
+    target = _clean_text(query)
+    if not target:
+        return False, "请发送：活动兑换 端午安康"
+
+    cfg = load_config()
+    found = _find_collect_phrase(cfg, target)
+    if not found:
+        return False, "未找到可兑换的活动词组，或活动当前不可兑换"
+
+    activity, phrase = found
+    need = _phrase_need_counter(phrase["phrase"])
+    if not need:
+        return False, "兑换词组配置错误"
+    try:
+        reward_items = parse_reward(phrase.get("reward") or "")
+    except Exception as e:
+        return False, f"兑换奖励配置错误：{e}"
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        inventory = _get_collect_inventory_map(cur, activity["key"], uid)
+        claims = _get_collect_claim_map(cur, activity["key"], uid)
+        missing = [
+            f"{word_char}x{count - inventory.get(word_char, 0)}"
+            for word_char, count in need.items()
+            if inventory.get(word_char, 0) < count
+        ]
+        if missing:
+            return False, "字牌不足，还缺：" + "、".join(missing)
+
+        claimed = claims.get(phrase["phrase"], 0)
+        limit = _as_int(phrase.get("limit"), 1)
+        if limit > 0 and claimed >= limit:
+            return False, "该词组已达到兑换次数上限"
+
+        ts = now_str()
+        for word_char, count in need.items():
+            cur.execute(
+                """
+                UPDATE activity_collect_inventory
+                SET count=count-%s, update_time=%s
+                WHERE activity_key=%s AND user_id=%s AND word_char=%s
+                """,
+                (count, ts, activity["key"], uid, word_char),
+            )
+        cur.execute(
+            """
+            INSERT INTO activity_collect_claim (
+                activity_key, user_id, phrase, count, update_time
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT(activity_key, user_id, phrase) DO UPDATE SET
+                count = activity_collect_claim.count + 1,
+                update_time = excluded.update_time
+            """,
+            (activity["key"], uid, phrase["phrase"], 1, ts),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    try:
+        reward_msg = send_reward_items(uid, reward_items)
+    except Exception as e:
+        logger.warning(f"活动集字兑换发奖失败 user_id={uid}, activity={activity['key']}, phrase={phrase['phrase']}: {e}")
+        return False, f"兑换已记录，奖励发放失败：{e}"
+
+    reward_text = "，".join(reward_msg) if reward_msg else (phrase.get("reward") or "暂无奖励")
+    return True, f"{activity['name']}兑换成功：{phrase['name']}\n奖励：{reward_text}"
+
+
+def _get_point_balance(cur, activity_key: str, user_id: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT points, total_points
+        FROM activity_point_balance
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"points": 0, "total_points": 0}
+    return {
+        "points": max(0, _as_int(row["points"])),
+        "total_points": max(0, _as_int(row["total_points"])),
+    }
+
+
+def _get_point_purchase_map(cur, activity_key: str, user_id: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT item_key, count
+        FROM activity_point_purchase
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    return {
+        str(row["item_key"]): max(0, _as_int(row["count"]))
+        for row in cur.fetchall()
+    }
+
+
+def build_activity_points_text(user_id: str) -> str:
+    uid = str(user_id)
+    activities = [
+        activity
+        for activity in get_gameplay_activities(load_config())
+        if activity.get("type") == "event_points"
+    ]
+    lines = ["【活动积分】"]
+    if not activities:
+        lines.append("暂无积分活动")
+        return "\n".join(lines)
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        for activity in activities:
+            ok, reason = activity_state(activity)
+            balance = _get_point_balance(cur, activity["key"], uid)
+            point_name = activity.get("point_name") or "活动积分"
+            lines.extend([
+                "",
+                f"【{activity['name']}】{'进行中' if ok else reason}",
+                f"当前{point_name}：{balance['points']}，累计获得：{balance['total_points']}",
+            ])
+            rules = activity.get("event_rules") or []
+            if rules:
+                rule_text = "、".join(
+                    f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('points'))}"
+                    for rule in rules
+                )
+                lines.append(f"积分来源：{rule_text}")
+        return "\n".join(lines).strip()
+    finally:
+        conn.close()
+
+
+def build_activity_shop_text(user_id: str) -> str:
+    uid = str(user_id)
+    activities = [
+        activity
+        for activity in get_gameplay_activities(load_config())
+        if activity.get("type") == "event_points"
+    ]
+    lines = ["【活动商店】"]
+    if not activities:
+        lines.append("暂无积分商店")
+        return "\n".join(lines)
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        for activity in activities:
+            ok, reason = activity_state(activity)
+            point_name = activity.get("point_name") or "活动积分"
+            balance = _get_point_balance(cur, activity["key"], uid)
+            purchases = _get_point_purchase_map(cur, activity["key"], uid)
+            lines.extend([
+                "",
+                f"【{activity['name']}】{'进行中' if ok else reason}",
+                f"当前{point_name}：{balance['points']}",
+            ])
+            shop = activity.get("shop") or []
+            if not shop:
+                lines.append("暂无商店商品")
+                continue
+            for item in shop:
+                item_key = str(item.get("item_key") or "")
+                bought = purchases.get(item_key, 0)
+                limit = _as_int(item.get("limit"), 1)
+                limit_text = "不限" if limit <= 0 else f"{bought}/{limit}"
+                lines.append(
+                    f"- {item.get('name') or item_key}：{_as_int(item.get('cost'))}{point_name}，"
+                    f"已兑换 {limit_text}，奖励：{item.get('reward') or '暂无奖励'}"
+                )
+        return "\n".join(lines).strip()
+    finally:
+        conn.close()
+
+
+def _parse_shop_query(query: str) -> tuple[str, int]:
+    text = _clean_text(query)
+    if not text:
+        return "", 1
+    parts = text.split()
+    if len(parts) >= 2:
+        try:
+            quantity = int(parts[-1])
+        except ValueError:
+            return text, 1
+        return " ".join(parts[:-1]).strip(), max(1, quantity)
+    return text, 1
+
+
+def _find_point_shop_item(config: dict, query: str) -> tuple[dict, dict] | None:
+    text = _clean_text(query)
+    if not text:
+        return None
+    fallback: tuple[dict, dict] | None = None
+    for activity in get_gameplay_activities(config):
+        if activity.get("type") != "event_points":
+            continue
+        ok, _ = activity_state(activity)
+        if not ok:
+            continue
+        for item in activity.get("shop") or []:
+            item_key = _clean_text(item.get("item_key"))
+            item_name = _clean_text(item.get("name"))
+            if text in (item_key, item_name):
+                return activity, item
+            if not fallback and ((item_key and text in item_key) or (item_name and text in item_name)):
+                fallback = (activity, item)
+    return fallback
+
+
+def _multiply_reward_items(reward_items: list[dict], quantity: int) -> list[dict]:
+    multiplier = max(1, _as_int(quantity, 1))
+    items = []
+    for item in reward_items:
+        copied = dict(item)
+        copied["quantity"] = max(1, _as_int(copied.get("quantity"), 1)) * multiplier
+        items.append(copied)
+    return items
+
+
+def claim_point_shop_item(user_id: str, query: str) -> tuple[bool, str]:
+    uid = str(user_id)
+    target, quantity = _parse_shop_query(query)
+    if not target:
+        return False, "请发送：活动购买 灵石补给"
+
+    cfg = load_config()
+    found = _find_point_shop_item(cfg, target)
+    if not found:
+        return False, "未找到可兑换的活动商品，或活动当前不可兑换"
+
+    activity, item = found
+    cost = _as_int(item.get("cost"), 0)
+    if cost <= 0:
+        return False, "商品积分价格配置错误"
+    reward_text = _clean_text(item.get("reward"))
+    try:
+        reward_items = _multiply_reward_items(parse_reward(reward_text), quantity)
+    except Exception as e:
+        return False, f"商品奖励配置错误：{e}"
+
+    item_key = _clean_text(item.get("item_key"))
+    point_name = activity.get("point_name") or "活动积分"
+    total_cost = cost * quantity
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        balance = _get_point_balance(cur, activity["key"], uid)
+        if balance["points"] < total_cost:
+            return False, f"{point_name}不足，还缺 {total_cost - balance['points']}"
+        purchases = _get_point_purchase_map(cur, activity["key"], uid)
+        bought = purchases.get(item_key, 0)
+        limit = _as_int(item.get("limit"), 1)
+        if limit > 0 and bought + quantity > limit:
+            return False, f"该商品兑换次数不足，当前已兑换 {bought}/{limit}"
+
+        ts = now_str()
+        cur.execute(
+            """
+            UPDATE activity_point_balance
+            SET points=points-%s, update_time=%s
+            WHERE activity_key=%s AND user_id=%s AND points >= %s
+            """,
+            (total_cost, ts, activity["key"], uid, total_cost),
+        )
+        if cur.rowcount <= 0:
+            conn.rollback()
+            return False, f"{point_name}不足"
+        cur.execute(
+            """
+            INSERT INTO activity_point_purchase (
+                activity_key, user_id, item_key, count, update_time
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT(activity_key, user_id, item_key) DO UPDATE SET
+                count = activity_point_purchase.count + excluded.count,
+                update_time = excluded.update_time
+            """,
+            (activity["key"], uid, item_key, quantity, ts),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    try:
+        reward_msg = send_reward_items(uid, reward_items)
+    except Exception as e:
+        logger.warning(f"活动积分兑换发奖失败 user_id={uid}, activity={activity['key']}, item={item_key}: {e}")
+        return False, f"兑换已记录，奖励发放失败：{e}"
+
+    reward_result = "，".join(reward_msg) if reward_msg else reward_text
+    item_name = item.get("name") or item_key
+    quantity_text = f"x{quantity}" if quantity > 1 else ""
+    return True, f"{activity['name']}兑换成功：{item_name}{quantity_text}\n消耗：{total_cost}{point_name}\n奖励：{reward_result}"
+
+
+def _fetch_count(cur, sql: str, params=()) -> int:
+    cur.execute(sql, params)
+    row = cur.fetchone()
+    if not row:
+        return 0
+    if isinstance(row, dict):
+        return _as_int(next(iter(row.values()), 0))
+    try:
+        return _as_int(row[0])
+    except Exception:
+        return _as_int(row["count"] if "count" in row.keys() else 0)
+
+
+def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
+    if activity_type == "event_points":
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) AS user_count,
+                COALESCE(SUM(points), 0) AS current_points,
+                COALESCE(SUM(total_points), 0) AS total_points
+            FROM activity_point_balance
+            WHERE activity_key=%s
+            """,
+            (activity_key,),
+        )
+        row = cur.fetchone()
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(count), 0) AS count
+            FROM activity_point_purchase
+            WHERE activity_key=%s
+            """,
+            (activity_key,),
+        )
+        purchase_row = cur.fetchone()
+        return {
+            "user_count": _as_int(row["user_count"] if row else 0),
+            "current_points": _as_int(row["current_points"] if row else 0),
+            "total_points": _as_int(row["total_points"] if row else 0),
+            "purchase_count": _as_int(purchase_row["count"] if purchase_row else 0),
+        }
+
+    cur.execute(
+        """
+        SELECT
+            COUNT(DISTINCT user_id) AS user_count,
+            COALESCE(SUM(count), 0) AS inventory_count
+        FROM activity_collect_inventory
+        WHERE activity_key=%s
+        """,
+        (activity_key,),
+    )
+    inventory_row = cur.fetchone()
+    drop_count = _fetch_count(
+        cur,
+        "SELECT COUNT(*) AS count FROM activity_collect_drop_log WHERE activity_key=%s",
+        (activity_key,),
+    )
+    cur.execute(
+        """
+        SELECT COALESCE(SUM(count), 0) AS count
+        FROM activity_collect_claim
+        WHERE activity_key=%s
+        """,
+        (activity_key,),
+    )
+    claim_row = cur.fetchone()
+    return {
+        "user_count": _as_int(inventory_row["user_count"] if inventory_row else 0),
+        "inventory_count": _as_int(inventory_row["inventory_count"] if inventory_row else 0),
+        "drop_count": drop_count,
+        "claim_count": _as_int(claim_row["count"] if claim_row else 0),
+    }
+
+
+def get_activity_data_overview(
+    activity_key: str | None = None,
+    user_id: str | None = None,
+    limit: int = 10,
+) -> dict:
+    cfg = load_config()
+    activities = get_gameplay_activities(cfg)
+    key_filter = _clean_text(activity_key)
+    uid = _clean_text(user_id)
+    row_limit = max(1, min(_as_int(limit, 10), 50))
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        sign_summary = {
+            "user_count": _fetch_count(cur, "SELECT COUNT(*) AS count FROM activity_user"),
+            "today_count": _fetch_count(
+                cur,
+                "SELECT COUNT(*) AS count FROM activity_sign_log WHERE sign_date=%s",
+                (today_str(),),
+            ),
+            "log_count": _fetch_count(cur, "SELECT COUNT(*) AS count FROM activity_sign_log"),
+        }
+        cur.execute(
+            """
+            SELECT user_id, sign_days, total_sign_days, last_sign_date
+            FROM activity_user
+            ORDER BY sign_days DESC, total_sign_days DESC, last_sign_date ASC
+            LIMIT %s
+            """,
+            (row_limit,),
+        )
+        sign_rank = [dict(row) for row in cur.fetchall()]
+
+        activity_rows = []
+        for activity in activities:
+            if key_filter and activity["key"] != key_filter:
+                continue
+            ok, reason = activity_state(activity)
+            row = {
+                "key": activity["key"],
+                "name": activity.get("name", ""),
+                "type": activity.get("type", ""),
+                "enabled": bool(activity.get("enabled")),
+                "state": "进行中" if ok else reason,
+                "counts": _activity_data_counts(cur, activity["key"], activity.get("type", "")),
+            }
+            if activity.get("type") == "event_points":
+                cur.execute(
+                    """
+                    SELECT user_id, points, total_points, update_time
+                    FROM activity_point_balance
+                    WHERE activity_key=%s
+                    ORDER BY total_points DESC, points DESC, update_time ASC
+                    LIMIT %s
+                    """,
+                    (activity["key"], row_limit),
+                )
+                row["top_users"] = [dict(item) for item in cur.fetchall()]
+                if uid:
+                    row["user"] = {
+                        "balance": _get_point_balance(cur, activity["key"], uid),
+                        "purchases": _get_point_purchase_map(cur, activity["key"], uid),
+                    }
+            else:
+                cur.execute(
+                    """
+                    SELECT user_id, COUNT(*) AS drop_count, MAX(create_time) AS last_time
+                    FROM activity_collect_drop_log
+                    WHERE activity_key=%s
+                    GROUP BY user_id
+                    ORDER BY drop_count DESC, last_time ASC
+                    LIMIT %s
+                    """,
+                    (activity["key"], row_limit),
+                )
+                row["top_users"] = [dict(item) for item in cur.fetchall()]
+                if uid:
+                    row["user"] = {
+                        "inventory": _get_collect_inventory_map(cur, activity["key"], uid),
+                        "claims": _get_collect_claim_map(cur, activity["key"], uid),
+                    }
+            activity_rows.append(row)
+
+        user_sign = None
+        if uid:
+            cur.execute("SELECT * FROM activity_user WHERE user_id=%s", (uid,))
+            row = cur.fetchone()
+            if row:
+                user_sign = dict(row)
+                user_sign["sign_days"] = _as_int(user_sign.get("sign_days"))
+                user_sign["total_sign_days"] = _as_int(user_sign.get("total_sign_days"), user_sign["sign_days"])
+            else:
+                user_sign = {
+                    "user_id": uid,
+                    "sign_days": 0,
+                    "last_sign_date": "",
+                    "total_sign_days": 0,
+                }
+        return {
+            "sign": sign_summary,
+            "sign_rank": sign_rank,
+            "activities": activity_rows,
+            "user_id": uid,
+            "user_sign": user_sign,
+        }
+    finally:
+        conn.close()
+
+
+def reset_activity_data(scope: str, activity_key: str | None = None) -> str:
+    target_scope = _clean_text(scope, "activity")
+    key = _clean_text(activity_key)
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        deleted = 0
+        if target_scope in {"sign", "all"}:
+            for table in ("activity_user", "activity_sign_log"):
+                cur.execute(f"DELETE FROM {table}")
+                deleted += max(0, cur.rowcount)
+
+        if target_scope in {"activity", "gameplay", "all"}:
+            if target_scope == "activity" and not key:
+                raise ValueError("请选择要清空的玩法活动")
+            tables = (
+                "activity_collect_inventory",
+                "activity_collect_claim",
+                "activity_collect_drop_log",
+                "activity_point_balance",
+                "activity_point_event_log",
+                "activity_point_purchase",
+            )
+            for table in tables:
+                if key:
+                    cur.execute(f"DELETE FROM {table} WHERE activity_key=%s", (key,))
+                else:
+                    cur.execute(f"DELETE FROM {table}")
+                deleted += max(0, cur.rowcount)
+
+        if target_scope not in {"sign", "activity", "gameplay", "all"}:
+            raise ValueError("清理范围无效")
+        conn.commit()
+        return f"已清理活动数据，影响记录 {deleted} 条"
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def adjust_activity_points(activity_key: str, user_id: str, amount: int) -> dict:
+    key = _clean_text(activity_key)
+    uid = _clean_text(user_id)
+    delta = _as_int(amount, 0)
+    if not key:
+        raise ValueError("请选择积分活动")
+    activity = next(
+        (
+            item
+            for item in get_gameplay_activities(load_config())
+            if item.get("key") == key
+        ),
+        None,
+    )
+    if not activity or activity.get("type") != "event_points":
+        raise ValueError("请选择积分活动")
+    if not uid:
+        raise ValueError("请输入用户ID")
+    if delta == 0:
+        raise ValueError("调整数量不能为 0")
+
+    ts = now_str()
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        balance = _get_point_balance(cur, key, uid)
+        next_points = max(0, balance["points"] + delta)
+        next_total = balance["total_points"] + max(0, delta)
+        cur.execute(
+            """
+            INSERT INTO activity_point_balance (
+                activity_key, user_id, points, total_points, update_time
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT(activity_key, user_id) DO UPDATE SET
+                points = excluded.points,
+                total_points = excluded.total_points,
+                update_time = excluded.update_time
+            """,
+            (key, uid, next_points, next_total, ts),
+        )
+        conn.commit()
+        return {"points": next_points, "total_points": next_total}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def adjust_collect_word(activity_key: str, user_id: str, word_char: str, amount: int) -> dict:
+    key = _clean_text(activity_key)
+    uid = _clean_text(user_id)
+    char = _clean_text(word_char)
+    delta = _as_int(amount, 0)
+    if not key:
+        raise ValueError("请选择集字活动")
+    activity = next(
+        (
+            item
+            for item in get_gameplay_activities(load_config())
+            if item.get("key") == key
+        ),
+        None,
+    )
+    if not activity or activity.get("type") != "collect_words":
+        raise ValueError("请选择集字活动")
+    if not uid:
+        raise ValueError("请输入用户ID")
+    if not char:
+        raise ValueError("请输入字牌")
+    if delta == 0:
+        raise ValueError("调整数量不能为 0")
+    char = char[0]
+
+    ts = now_str()
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        inventory = _get_collect_inventory_map(cur, key, uid)
+        next_count = max(0, inventory.get(char, 0) + delta)
+        cur.execute(
+            """
+            INSERT INTO activity_collect_inventory (
+                activity_key, user_id, word_char, count, update_time
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT(activity_key, user_id, word_char) DO UPDATE SET
+                count = excluded.count,
+                update_time = excluded.update_time
+            """,
+            (key, uid, char, next_count, ts),
+        )
+        conn.commit()
+        return {"word_char": char, "count": next_count}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -419,6 +1680,10 @@ def claim_sign(user_id: str) -> tuple[bool, str]:
     if milestone_reward_text or milestone_reward.get("name"):
         title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
         lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
+    try:
+        lines.extend(record_activity_event(uid, "sign_in"))
+    except Exception as e:
+        logger.warning(f"活动签到记录玩法掉落失败 user_id={uid}: {e}")
     _finish_sign_log(uid, today, "success", "\n".join(lines))
     return True, "\n".join(lines)
 
@@ -477,6 +1742,42 @@ def build_activity_info(user_id: str | None = None) -> str:
             if isinstance(task, dict):
                 lines.append(_format_activity_task(task))
 
+    gameplay_activities = get_gameplay_activities(cfg)
+    if gameplay_activities:
+        lines.append("")
+        lines.append("【玩法活动】")
+        for activity in gameplay_activities:
+            ok, reason = activity_state(activity)
+            status = "进行中" if ok else reason
+            lines.append(f"- {activity.get('name', '集字活动')}：{status}")
+            if activity.get("description"):
+                lines.append(f"  {activity.get('description')}")
+            if activity.get("type") == "event_points":
+                point_name = activity.get("point_name") or "活动积分"
+                rules = activity.get("event_rules") or []
+                if rules:
+                    rule_text = "、".join(
+                        f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('points'))}"
+                        for rule in rules
+                    )
+                    lines.append(f"  积分来源：{rule_text}")
+                shop = activity.get("shop") or []
+                if shop:
+                    shop_text = "、".join(str(item.get("name") or item.get("item_key")) for item in shop)
+                    lines.append(f"  {point_name}商店：{shop_text}")
+                continue
+
+            event_text = _activity_event_text(activity.get("drop_events"))
+            lines.append(
+                f"  掉落来源：{event_text or '未配置'}，"
+                f"每日上限：{_as_int(activity.get('daily_drop_limit'), 0)}，"
+                f"掉落概率：{int(_drop_rate(activity.get('drop_rate'), 0) * 100)}%"
+            )
+            phrases = activity.get("phrases") or []
+            if phrases:
+                phrase_text = "、".join(str(item.get("name") or item.get("phrase")) for item in phrases)
+                lines.append(f"  兑换词组：{phrase_text}")
+
     return "\n".join(lines).strip()
 
 
@@ -516,10 +1817,78 @@ def build_rank_text(limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def set_enabled(enabled: bool):
+def set_enabled(enabled: bool, target: str | None = None) -> str:
     cfg = load_config()
-    cfg["enabled"] = bool(enabled)
+    target_text = _clean_text(target)
+    action_text = "开启" if enabled else "关闭"
+    if not target_text:
+        cfg["enabled"] = bool(enabled)
+        save_config(cfg)
+        return f"已{action_text}签到活动"
+
+    if target_text in {"全部", "所有", "all", "ALL"}:
+        cfg["enabled"] = bool(enabled)
+        for activity in cfg.get("gameplay_activities") or []:
+            if isinstance(activity, dict):
+                activity["enabled"] = bool(enabled)
+        save_config(cfg)
+        return f"已{action_text}全部活动"
+
+    if target_text in {"签到", "节日签到", "签到活动"}:
+        cfg["enabled"] = bool(enabled)
+        save_config(cfg)
+        return f"已{action_text}签到活动"
+
+    if target_text in {"玩法", "玩法活动"}:
+        changed_count = 0
+        for activity in cfg.get("gameplay_activities") or []:
+            if isinstance(activity, dict):
+                activity["enabled"] = bool(enabled)
+                changed_count += 1
+        if changed_count:
+            save_config(cfg)
+            return f"已{action_text}{changed_count}个玩法活动"
+        return "当前没有配置玩法活动"
+
+    type_targets = {
+        "集字": "collect_words",
+        "集字活动": "collect_words",
+        "积分": "event_points",
+        "积分活动": "event_points",
+        "活动积分": "event_points",
+        "活动商店": "event_points",
+    }
+    if target_text in type_targets:
+        target_type = type_targets[target_text]
+        changed_count = 0
+        for activity in cfg.get("gameplay_activities") or []:
+            if isinstance(activity, dict) and _clean_text(activity.get("type"), "collect_words") == target_type:
+                activity["enabled"] = bool(enabled)
+                changed_count += 1
+        if changed_count:
+            save_config(cfg)
+            return f"已{action_text}{changed_count}个{target_text}"
+        return f"当前没有配置{target_text}"
+
+    changed = False
+    for activity in cfg.get("gameplay_activities") or []:
+        if not isinstance(activity, dict):
+            continue
+        names = {
+            _clean_text(activity.get("key")),
+            _clean_text(activity.get("name")),
+            _clean_text(activity.get("template_key")),
+            _clean_text(activity.get("type")),
+        }
+        if target_text in names:
+            activity["enabled"] = bool(enabled)
+            changed = True
+            break
+
+    if not changed:
+        return f"未找到活动：{target_text}"
     save_config(cfg)
+    return f"已{action_text}{target_text}"
 
 
 ensure_activity_files()

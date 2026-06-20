@@ -5,7 +5,7 @@
     <div>
         <p class="page-kicker">Activity</p>
         <h1 class="page-title">活动管理</h1>
-        <p class="page-subtitle">通过模板创建节日签到活动，维护时间、开关、签到奖励和活动任务。</p>
+        <p class="page-subtitle">通过模板创建节日签到和玩法活动，维护时间、开关、奖励、掉落与兑换。</p>
     </div>
     <div class="hero-actions">
         <span id="activityStatePill" class="status-pill">
@@ -25,8 +25,16 @@
             </div>
         </div>
         <div class="activity-template-list">
+            <div class="activity-template-title">签到模板</div>
             {% for key, template in activity_templates.items() %}
             <button class="activity-template-option" type="button" data-template-key="{{ key }}">
+                <strong>{{ template.name }}</strong>
+                <span>{{ template.description }}</span>
+            </button>
+            {% endfor %}
+            <div class="activity-template-title">玩法模板</div>
+            {% for key, template in gameplay_templates.items() %}
+            <button class="activity-template-option gameplay-template-option" type="button" data-gameplay-template-key="{{ key }}">
                 <strong>{{ template.name }}</strong>
                 <span>{{ template.description }}</span>
             </button>
@@ -159,6 +167,19 @@
 {% endif %}{% endfor %}</textarea>
             </div>
 
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>玩法活动</h4>
+                        <p>一次运营通常配置 1-3 个玩法活动，可按需要继续添加；掉落事件从预设项中选择。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addGameplayActivity()">
+                        <i class="fas fa-plus"></i> 添加玩法
+                    </button>
+                </div>
+                <div id="gameplayActivities" class="activity-gameplay-list"></div>
+            </section>
+
             <div class="form-actions">
                 <button id="saveActivityBtn" type="submit" class="btn btn-success">
                     <i class="fas fa-save"></i> 保存活动
@@ -169,6 +190,66 @@
                 <div id="activitySaveResult" class="command-result" hidden></div>
             </div>
         </form>
+
+        <section class="activity-section activity-data-section">
+            <div class="activity-section-header">
+                <div>
+                    <h4>活动数据</h4>
+                    <p>查看签到、集字、积分数据，处理活动测试数据和玩家补偿。</p>
+                </div>
+                <button type="button" class="btn btn-info btn-sm" onclick="loadActivityData()">
+                    <i class="fas fa-chart-line"></i> 查询数据
+                </button>
+            </div>
+            <div class="activity-data-toolbar">
+                <div class="form-group">
+                    <label for="dataActivityKey">玩法活动</label>
+                    <select id="dataActivityKey"></select>
+                </div>
+                <div class="form-group">
+                    <label for="dataUserId">用户ID</label>
+                    <input id="dataUserId" type="text" placeholder="留空查看总览">
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="resetActivityData('activity')">
+                    <i class="fas fa-eraser"></i> 清空当前玩法
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="resetActivityData('gameplay')">
+                    <i class="fas fa-layer-group"></i> 清空全部玩法
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="resetActivityData('sign')">
+                    <i class="fas fa-calendar-xmark"></i> 清空签到
+                </button>
+            </div>
+            <div class="activity-adjust-panel">
+                <div class="form-group">
+                    <label for="adjustActivityKey">调整玩法</label>
+                    <select id="adjustActivityKey"></select>
+                </div>
+                <div class="form-group">
+                    <label for="adjustUserId">用户ID</label>
+                    <input id="adjustUserId" type="text">
+                </div>
+                <div class="form-group">
+                    <label for="adjustType">类型</label>
+                    <select id="adjustType">
+                        <option value="points">积分</option>
+                        <option value="word">字牌</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="adjustWordChar">字牌</label>
+                    <input id="adjustWordChar" type="text" maxlength="1">
+                </div>
+                <div class="form-group">
+                    <label for="adjustAmount">数量</label>
+                    <input id="adjustAmount" type="number" step="1" value="1">
+                </div>
+                <button type="button" class="btn btn-success" onclick="adjustActivityData()">
+                    <i class="fas fa-wand-magic-sparkles"></i> 调整数据
+                </button>
+            </div>
+            <div id="activityDataResult" class="activity-data-result"></div>
+        </section>
     </article>
 </section>
 
@@ -181,9 +262,22 @@
 
 .activity-template-list,
 .activity-reward-list,
-.activity-task-list {
+.activity-task-list,
+.activity-gameplay-list,
+.activity-letter-list,
+.activity-phrase-list,
+.activity-point-rule-list,
+.activity-shop-list {
     display: grid;
     gap: 10px;
+}
+
+.activity-template-title {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin-top: 6px;
 }
 
 .activity-template-option {
@@ -243,6 +337,128 @@
     background: var(--surface-glass-soft);
     border: 1px solid var(--glass-border-muted);
     border-radius: 8px;
+}
+
+.activity-gameplay-row {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.activity-gameplay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.activity-gameplay-title {
+    margin: 0;
+    font-size: 15px;
+}
+
+.activity-gameplay-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.activity-gameplay-wide {
+    grid-column: 1 / -1;
+}
+
+.activity-letter-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.activity-phrase-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 1fr) minmax(110px, 1fr) minmax(180px, 1.5fr) 92px auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.activity-point-rule-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(90px, 1fr) minmax(110px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.activity-shop-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) minmax(90px, 0.7fr) minmax(180px, 1.5fr) 92px auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.activity-subsection {
+    display: grid;
+    gap: 10px;
+}
+
+.activity-subsection-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.activity-subsection-header h5 {
+    margin: 0;
+}
+
+.activity-data-toolbar,
+.activity-adjust-panel {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(160px, 1fr) repeat(3, auto);
+    gap: 10px;
+    align-items: end;
+}
+
+.activity-adjust-panel {
+    grid-template-columns: minmax(150px, 1fr) minmax(160px, 1fr) 110px 90px 90px auto;
+}
+
+.activity-data-result {
+    display: grid;
+    gap: 10px;
+}
+
+.activity-data-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.activity-data-card h5 {
+    margin: 0;
+}
+
+.activity-data-meta,
+.activity-data-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.activity-data-meta span,
+.activity-data-list span {
+    padding: 5px 8px;
+    color: var(--text-secondary);
+    background: var(--surface-glass-strong);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 6px;
+    font-size: 12px;
 }
 
 .activity-task-row {
@@ -326,7 +542,13 @@
 }
 
 @media (max-width: 1320px) {
-    .activity-task-row {
+    .activity-task-row,
+    .activity-gameplay-grid,
+    .activity-phrase-row,
+    .activity-point-rule-row,
+    .activity-shop-row,
+    .activity-data-toolbar,
+    .activity-adjust-panel {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -334,7 +556,14 @@
 @media (max-width: 720px) {
     .activity-section-header,
     .activity-reward-row,
-    .activity-task-row {
+    .activity-task-row,
+    .activity-gameplay-grid,
+    .activity-letter-row,
+    .activity-phrase-row,
+    .activity-point-rule-row,
+    .activity-shop-row,
+    .activity-data-toolbar,
+    .activity-adjust-panel {
         grid-template-columns: 1fr;
     }
 
@@ -347,9 +576,11 @@
 <script>
 (() => {
 const activityTemplates = {{ activity_templates|tojson }};
+const gameplayTemplates = {{ gameplay_templates|tojson }};
 const activityEventChoices = {{ activity_event_choices|tojson }};
 let activityConfig = {{ activity_config|tojson }};
 let taskRowSeq = 0;
+let gameplayRowSeq = 0;
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -426,6 +657,10 @@ function selectedTaskEvent(row) {
     return asArray(row.events).map(taskEventValue).find(Boolean) || '';
 }
 
+function selectedDropEvents(row) {
+    return new Set(asArray(row.drop_events).map(taskEventValue).filter(Boolean));
+}
+
 function renderTaskEventChoices(selectedEvent, groupName) {
     return asArray(activityEventChoices).map(choice => {
         const value = String(choice.value || '');
@@ -435,6 +670,21 @@ function renderTaskEventChoices(selectedEvent, groupName) {
         return `
             <label class="activity-event-option">
                 <input class="task-event" type="radio" name="${escapeAttr(groupName)}" value="${escapeAttr(value)}" ${checked}>
+                <span>${escapeHtml(label)}</span>
+            </label>
+        `;
+    }).join('');
+}
+
+function renderDropEventChoices(selectedEvents) {
+    return asArray(activityEventChoices).map(choice => {
+        const value = String(choice.value || '');
+        if (!value) return '';
+        const label = choice.label || value;
+        const checked = selectedEvents.has(value) ? 'checked' : '';
+        return `
+            <label class="activity-event-option">
+                <input class="gameplay-drop-event" type="checkbox" value="${escapeAttr(value)}" ${checked}>
                 <span>${escapeHtml(label)}</span>
             </label>
         `;
@@ -514,6 +764,512 @@ function addWeeklyTask(row = null) {
     );
 }
 
+function syncGameplayTimeControls(row) {
+    const startSpecial = row.querySelector('.gameplay-start-special');
+    const endSpecial = row.querySelector('.gameplay-end-special');
+    const startTime = row.querySelector('.gameplay-start-time');
+    const endTime = row.querySelector('.gameplay-end-time');
+    if (startTime && startSpecial) startTime.disabled = startSpecial.checked;
+    if (endTime && endSpecial) endTime.disabled = endSpecial.checked;
+}
+
+function appendGameplayLetter(container, row = {}) {
+    const div = document.createElement('div');
+    div.className = 'activity-letter-row';
+    div.innerHTML = `
+        <div class="form-group">
+            <label>字牌</label>
+            <input class="letter-char" type="text" maxlength="1" value="${escapeAttr(row.char ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>权重</label>
+            <input class="letter-weight" type="number" min="1" step="1" value="${escapeAttr(row.weight ?? 10)}">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-letter-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+function appendGameplayPhrase(container, row = {}) {
+    const div = document.createElement('div');
+    div.className = 'activity-phrase-row';
+    div.innerHTML = `
+        <div class="form-group">
+            <label>词组</label>
+            <input class="phrase-value" type="text" value="${escapeAttr(row.phrase ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>名称</label>
+            <input class="phrase-name" type="text" value="${escapeAttr(row.name ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>奖励</label>
+            <input class="phrase-reward" type="text" value="${escapeAttr(row.reward ?? '')}" placeholder="灵石x200000,渡厄丹x1">
+        </div>
+        <div class="form-group">
+            <label>次数</label>
+            <input class="phrase-limit" type="number" min="0" step="1" value="${escapeAttr(row.limit ?? 1)}">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-phrase-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+function pointRuleEventValue(row) {
+    const event = row?.event ?? row?.event_key ?? row?.value ?? '';
+    if (typeof event === 'string') return event;
+    return event?.value || '';
+}
+
+function renderPointRuleEventChoices(selectedEvent, groupName) {
+    return asArray(activityEventChoices).map(choice => {
+        const value = String(choice.value || '');
+        if (!value) return '';
+        const label = choice.label || value;
+        const checked = selectedEvent === value ? 'checked' : '';
+        return `
+            <label class="activity-event-option">
+                <input class="point-rule-event" type="radio" name="${escapeAttr(groupName)}" value="${escapeAttr(value)}" ${checked}>
+                <span>${escapeHtml(label)}</span>
+            </label>
+        `;
+    }).join('');
+}
+
+function appendGameplayPointRule(container, row = {}) {
+    const div = document.createElement('div');
+    const eventGroupName = `activity-point-rule-${++taskRowSeq}`;
+    div.className = 'activity-point-rule-row';
+    div.innerHTML = `
+        <div class="form-group">
+            <label>事件</label>
+            <div class="activity-event-options">${renderPointRuleEventChoices(pointRuleEventValue(row), eventGroupName)}</div>
+        </div>
+        <div class="form-group">
+            <label>积分</label>
+            <input class="point-rule-points" type="number" min="1" step="1" value="${escapeAttr(row.points ?? 10)}">
+        </div>
+        <div class="form-group">
+            <label>每日上限</label>
+            <input class="point-rule-daily-limit" type="number" min="0" step="1" value="${escapeAttr(row.daily_limit ?? 0)}">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-point-rule-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+function appendGameplayShopItem(container, row = {}) {
+    const div = document.createElement('div');
+    div.className = 'activity-shop-row';
+    div.innerHTML = `
+        <input class="shop-item-key" type="hidden" value="${escapeAttr(row.item_key ?? row.key ?? '')}">
+        <div class="form-group">
+            <label>商品</label>
+            <input class="shop-item-name" type="text" value="${escapeAttr(row.name ?? '')}">
+        </div>
+        <div class="form-group">
+            <label>价格</label>
+            <input class="shop-item-cost" type="number" min="1" step="1" value="${escapeAttr(row.cost ?? 100)}">
+        </div>
+        <div class="form-group">
+            <label>奖励</label>
+            <input class="shop-item-reward" type="text" value="${escapeAttr(row.reward ?? '')}" placeholder="灵石x300000,渡厄丹x1">
+        </div>
+        <div class="form-group">
+            <label>次数</label>
+            <input class="shop-item-limit" type="number" min="0" step="1" value="${escapeAttr(row.limit ?? 1)}">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-shop-row').remove()">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+function addGameplayLetter(button, row = null) {
+    const parent = button.closest('.activity-gameplay-row');
+    const container = parent?.querySelector('.activity-letter-list');
+    if (container) appendGameplayLetter(container, row || {char: '', weight: 10});
+}
+
+function addGameplayPhrase(button, row = null) {
+    const parent = button.closest('.activity-gameplay-row');
+    const container = parent?.querySelector('.activity-phrase-list');
+    if (container) appendGameplayPhrase(container, row || {phrase: '', name: '', reward: '', limit: 1});
+}
+
+function addGameplayPointRule(button, row = null) {
+    const parent = button.closest('.activity-gameplay-row');
+    const container = parent?.querySelector('.activity-point-rule-list');
+    if (container) appendGameplayPointRule(container, row || {event: '', points: 10, daily_limit: 0});
+}
+
+function addGameplayShopItem(button, row = null) {
+    const parent = button.closest('.activity-gameplay-row');
+    const container = parent?.querySelector('.activity-shop-list');
+    if (container) appendGameplayShopItem(container, row || {item_key: '', name: '', cost: 100, reward: '', limit: 1});
+}
+
+function appendGameplayActivity(row = {}) {
+    const container = document.getElementById('gameplayActivities');
+    if (!container) return;
+    const index = ++gameplayRowSeq;
+    const type = row.type || 'collect_words';
+    const isPointActivity = type === 'event_points';
+    const selectedEvents = selectedDropEvents(row);
+    const div = document.createElement('div');
+    div.className = 'activity-gameplay-row';
+    const collectControls = isPointActivity ? '' : `
+            <div class="form-group">
+                <label>每日上限</label>
+                <input class="gameplay-daily-limit" type="number" min="0" step="1" value="${escapeAttr(row.daily_drop_limit ?? 8)}">
+            </div>
+            <div class="form-group">
+                <label>掉落概率(%)</label>
+                <input class="gameplay-drop-rate" type="number" min="0" max="100" step="0.1" value="${escapeAttr(Number(row.drop_rate ?? 0.35) > 1 ? row.drop_rate : Number(row.drop_rate ?? 0.35) * 100)}">
+            </div>
+            <div class="form-group">
+                <label>单次判定</label>
+                <input class="gameplay-rolls" type="number" min="1" step="1" value="${escapeAttr(row.rolls_per_record ?? 1)}">
+            </div>`;
+    const pointControls = isPointActivity ? `
+            <div class="form-group">
+                <label>积分名称</label>
+                <input class="gameplay-point-name" type="text" value="${escapeAttr(row.point_name ?? '活动积分')}">
+            </div>` : '';
+    const collectSections = isPointActivity ? '' : `
+        <div class="activity-subsection">
+            <div class="activity-subsection-header">
+                <h5>字牌权重</h5>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addGameplayLetter(this)">
+                    <i class="fas fa-plus"></i> 添加字牌
+                </button>
+            </div>
+            <div class="activity-letter-list"></div>
+        </div>
+        <div class="activity-subsection">
+            <div class="activity-subsection-header">
+                <h5>兑换词组</h5>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addGameplayPhrase(this)">
+                    <i class="fas fa-plus"></i> 添加词组
+                </button>
+            </div>
+            <div class="activity-phrase-list"></div>
+        </div>`;
+    const pointSections = isPointActivity ? `
+        <div class="activity-subsection">
+            <div class="activity-subsection-header">
+                <h5>积分事件</h5>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addGameplayPointRule(this)">
+                    <i class="fas fa-plus"></i> 添加事件
+                </button>
+            </div>
+            <div class="activity-point-rule-list"></div>
+        </div>
+        <div class="activity-subsection">
+            <div class="activity-subsection-header">
+                <h5>积分商店</h5>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addGameplayShopItem(this)">
+                    <i class="fas fa-plus"></i> 添加商品
+                </button>
+            </div>
+            <div class="activity-shop-list"></div>
+        </div>` : '';
+    div.innerHTML = `
+        <input class="gameplay-key" type="hidden" value="${escapeAttr(row.key ?? '')}">
+        <input class="gameplay-template-key" type="hidden" value="${escapeAttr(row.template_key ?? row.key ?? type)}">
+        <input class="gameplay-type" type="hidden" value="${escapeAttr(type)}">
+        <div class="activity-gameplay-header">
+            <h5 class="activity-gameplay-title">玩法活动 ${index} · ${isPointActivity ? '积分' : '集字'}</h5>
+            <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-gameplay-row').remove()">
+                <i class="fas fa-trash"></i> 移除
+            </button>
+        </div>
+        <div class="activity-gameplay-grid">
+            <div class="form-group">
+                <label>开关</label>
+                <select class="gameplay-enabled">
+                    <option value="true" ${row.enabled ? 'selected' : ''}>开启</option>
+                    <option value="false" ${!row.enabled ? 'selected' : ''}>关闭</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>名称</label>
+                <input class="gameplay-name" type="text" value="${escapeAttr(row.name ?? '')}" placeholder="${isPointActivity ? '节日积分商店' : '端午集字'}">
+            </div>
+            ${pointControls}
+            ${collectControls}
+            <div class="form-group">
+                <label>开始时间</label>
+                <div class="activity-time-control">
+                    <input class="gameplay-start-time" type="datetime-local" step="1" value="${escapeAttr(toDateTimeLocal(row.start_time))}">
+                    <label class="activity-time-option">
+                        <input class="gameplay-start-special" type="checkbox" ${!row.start_time || row.start_time === '0' ? 'checked' : ''}>
+                        立即开始
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>结束时间</label>
+                <div class="activity-time-control">
+                    <input class="gameplay-end-time" type="datetime-local" step="1" value="${escapeAttr(toDateTimeLocal(row.end_time))}">
+                    <label class="activity-time-option">
+                        <input class="gameplay-end-special" type="checkbox" ${!row.end_time || row.end_time === '无限' ? 'checked' : ''}>
+                        不限结束
+                    </label>
+                </div>
+            </div>
+            <div class="form-group activity-gameplay-wide">
+                <label>说明</label>
+                <textarea class="gameplay-description" rows="2">${escapeHtml(row.description ?? '')}</textarea>
+            </div>
+            <div class="form-group activity-gameplay-wide" ${isPointActivity ? 'hidden' : ''}>
+                <label>掉落事件</label>
+                <div class="activity-event-options">${renderDropEventChoices(selectedEvents)}</div>
+            </div>
+        </div>
+        ${collectSections}
+        ${pointSections}
+    `;
+    container.appendChild(div);
+    if (isPointActivity) {
+        const rules = div.querySelector('.activity-point-rule-list');
+        const shop = div.querySelector('.activity-shop-list');
+        asArray(row.event_rules).forEach(item => appendGameplayPointRule(rules, item));
+        asArray(row.shop).forEach(item => appendGameplayShopItem(shop, item));
+    } else {
+        const letters = div.querySelector('.activity-letter-list');
+        const phrases = div.querySelector('.activity-phrase-list');
+        asArray(row.letters).forEach(item => appendGameplayLetter(letters, item));
+        asArray(row.phrases).forEach(item => appendGameplayPhrase(phrases, item));
+    }
+    div.querySelector('.gameplay-start-special')?.addEventListener('change', () => syncGameplayTimeControls(div));
+    div.querySelector('.gameplay-end-special')?.addEventListener('change', () => syncGameplayTimeControls(div));
+    syncGameplayTimeControls(div);
+}
+
+function addGameplayActivity(row = null) {
+    appendGameplayActivity(row || {
+        key: '',
+        template_key: 'collect_words',
+        type: 'collect_words',
+        enabled: false,
+        name: '',
+        description: '',
+        start_time: '0',
+        end_time: '无限',
+        drop_events: [],
+        drop_rate: 0.35,
+        daily_drop_limit: 8,
+        rolls_per_record: 1,
+        letters: [],
+        phrases: []
+    });
+}
+
+function renderGameplayActivities(rows) {
+    const container = document.getElementById('gameplayActivities');
+    if (!container) return;
+    container.innerHTML = '';
+    gameplayRowSeq = 0;
+    asArray(rows).forEach(row => appendGameplayActivity(row));
+}
+
+function gameplayTypeLabel(type) {
+    return type === 'event_points' ? '积分' : '集字';
+}
+
+function renderActivityDataSelectors() {
+    const dataSelect = document.getElementById('dataActivityKey');
+    const adjustSelect = document.getElementById('adjustActivityKey');
+    const rows = asArray(activityConfig.gameplay_activities);
+    const dataSelected = dataSelect?.value || '';
+    const adjustSelected = adjustSelect?.value || '';
+    const optionHtml = rows.map(row => {
+        const key = String(row.key || row.template_key || '');
+        if (!key) return '';
+        const text = `${row.name || key}（${gameplayTypeLabel(row.type)}）`;
+        return `<option value="${escapeAttr(key)}" data-type="${escapeAttr(row.type || 'collect_words')}">${escapeHtml(text)}</option>`;
+    }).join('');
+    if (dataSelect) {
+        dataSelect.innerHTML = `<option value="">全部玩法</option>${optionHtml}`;
+        dataSelect.value = rows.some(row => (row.key || row.template_key) === dataSelected) ? dataSelected : '';
+    }
+    if (adjustSelect) {
+        adjustSelect.innerHTML = optionHtml || '<option value="">暂无玩法</option>';
+        adjustSelect.value = rows.some(row => (row.key || row.template_key) === adjustSelected) ? adjustSelected : (rows[0]?.key || '');
+    }
+    syncAdjustActivityType();
+}
+
+function syncAdjustTypeControls() {
+    const type = document.getElementById('adjustType')?.value || 'points';
+    const wordInput = document.getElementById('adjustWordChar');
+    if (wordInput) wordInput.disabled = type !== 'word';
+}
+
+function syncAdjustActivityType() {
+    const select = document.getElementById('adjustActivityKey');
+    const typeSelect = document.getElementById('adjustType');
+    const activityType = select?.selectedOptions?.[0]?.dataset?.type || '';
+    if (typeSelect && activityType) {
+        typeSelect.value = activityType === 'event_points' ? 'points' : 'word';
+    }
+    syncAdjustTypeControls();
+}
+
+function setActivityDataResult(html) {
+    const result = document.getElementById('activityDataResult');
+    if (result) result.innerHTML = html;
+}
+
+function compactMapText(value) {
+    const entries = Object.entries(value || {}).filter(([, count]) => Number(count || 0) !== 0);
+    if (!entries.length) return '<span>暂无</span>';
+    return entries.map(([key, count]) => `<span>${escapeHtml(key)}x${escapeHtml(count)}</span>`).join('');
+}
+
+function renderTopUsers(rows, type) {
+    const list = asArray(rows);
+    if (!list.length) return '<div class="activity-data-list"><span>暂无排行</span></div>';
+    const items = list.map((row, index) => {
+        const score = type === 'event_points'
+            ? `累计 ${row.total_points || 0}，当前 ${row.points || 0}`
+            : `掉落 ${row.drop_count || 0}`;
+        return `<span>${index + 1}. ${escapeHtml(row.user_id || '')} ${escapeHtml(score)}</span>`;
+    }).join('');
+    return `<div class="activity-data-list">${items}</div>`;
+}
+
+function renderActivityData(data) {
+    const sign = data?.sign || {};
+    const userSign = data?.user_sign;
+    const signRank = asArray(data?.sign_rank).slice(0, 8).map((row, index) =>
+        `<span>${index + 1}. ${escapeHtml(row.user_id || '')} ${escapeHtml(row.sign_days || 0)}天</span>`
+    ).join('') || '<span>暂无排行</span>';
+    const cards = [
+        `<div class="activity-data-card">
+            <h5>签到数据</h5>
+            <div class="activity-data-meta">
+                <span>签到人数：${escapeHtml(sign.user_count || 0)}</span>
+                <span>今日签到：${escapeHtml(sign.today_count || 0)}</span>
+                <span>签到记录：${escapeHtml(sign.log_count || 0)}</span>
+                ${userSign ? `<span>当前用户累计：${escapeHtml(userSign.sign_days || 0)}天</span>` : ''}
+            </div>
+            <div class="activity-data-list">${signRank}</div>
+        </div>`
+    ];
+
+    asArray(data?.activities).forEach(activity => {
+        const counts = activity.counts || {};
+        const type = activity.type || 'collect_words';
+        const meta = type === 'event_points'
+            ? `
+                <span>参与人数：${escapeHtml(counts.user_count || 0)}</span>
+                <span>当前积分：${escapeHtml(counts.current_points || 0)}</span>
+                <span>累计积分：${escapeHtml(counts.total_points || 0)}</span>
+                <span>兑换次数：${escapeHtml(counts.purchase_count || 0)}</span>`
+            : `
+                <span>参与人数：${escapeHtml(counts.user_count || 0)}</span>
+                <span>库存字牌：${escapeHtml(counts.inventory_count || 0)}</span>
+                <span>掉落次数：${escapeHtml(counts.drop_count || 0)}</span>
+                <span>兑换次数：${escapeHtml(counts.claim_count || 0)}</span>`;
+        const userBlock = activity.user
+            ? (type === 'event_points'
+                ? `<div class="activity-data-list">
+                    <span>用户当前积分：${escapeHtml(activity.user.balance?.points || 0)}</span>
+                    <span>用户累计积分：${escapeHtml(activity.user.balance?.total_points || 0)}</span>
+                    ${compactMapText(activity.user.purchases)}
+                </div>`
+                : `<div class="activity-data-list">
+                    ${compactMapText(activity.user.inventory)}
+                    ${compactMapText(activity.user.claims)}
+                </div>`)
+            : '';
+        cards.push(`
+            <div class="activity-data-card">
+                <h5>${escapeHtml(activity.name || activity.key)} · ${escapeHtml(gameplayTypeLabel(type))}</h5>
+                <div class="activity-data-meta">
+                    <span>${escapeHtml(activity.state || '')}</span>
+                    ${meta}
+                </div>
+                ${renderTopUsers(activity.top_users, type)}
+                ${userBlock}
+            </div>
+        `);
+    });
+    setActivityDataResult(cards.join(''));
+}
+
+async function loadActivityData() {
+    try {
+        const params = new URLSearchParams();
+        const activityKey = document.getElementById('dataActivityKey')?.value || '';
+        const userId = document.getElementById('dataUserId')?.value || '';
+        if (activityKey) params.set('activity_key', activityKey);
+        if (userId) params.set('user_id', userId);
+        params.set('limit', '10');
+        const data = await getXiuxianWeb().requestJson(`/api/activity/data?${params.toString()}`);
+        renderActivityData(data.data);
+    } catch (error) {
+        setActivityDataResult(`<div class="activity-data-card"><div class="error">${escapeHtml(error.message || String(error))}</div></div>`);
+    }
+}
+
+async function resetActivityData(scope) {
+    const activityKey = document.getElementById('dataActivityKey')?.value || '';
+    if (scope === 'activity' && !activityKey) {
+        setActivityDataResult('<div class="activity-data-card"><div class="error">请先选择要清空的玩法活动</div></div>');
+        return;
+    }
+    const confirmText = scope === 'activity'
+        ? '确认清空当前玩法活动数据？'
+        : scope === 'gameplay'
+            ? '确认清空全部玩法活动数据？'
+            : '确认清空签到数据？';
+    if (!window.confirm(confirmText)) return;
+    try {
+        const data = await getXiuxianWeb().requestJson('/api/activity/data/reset', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({scope, activity_key: activityKey})
+        });
+        setActivityDataResult(`<div class="activity-data-card"><div class="success">${escapeHtml(data.message || '活动数据已清理')}</div></div>`);
+        await loadActivityData();
+    } catch (error) {
+        setActivityDataResult(`<div class="activity-data-card"><div class="error">${escapeHtml(error.message || String(error))}</div></div>`);
+    }
+}
+
+async function adjustActivityData() {
+    try {
+        const payload = {
+            activity_key: document.getElementById('adjustActivityKey')?.value || '',
+            user_id: document.getElementById('adjustUserId')?.value || '',
+            type: document.getElementById('adjustType')?.value || 'points',
+            word_char: document.getElementById('adjustWordChar')?.value || '',
+            amount: document.getElementById('adjustAmount')?.value || ''
+        };
+        const data = await getXiuxianWeb().requestJson('/api/activity/data/adjust', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        setActivityDataResult(`<div class="activity-data-card"><div class="success">${escapeHtml(data.message || '活动数据已调整')}</div></div>`);
+        document.getElementById('dataActivityKey').value = payload.activity_key;
+        document.getElementById('dataUserId').value = payload.user_id;
+        await loadActivityData();
+    } catch (error) {
+        setActivityDataResult(`<div class="activity-data-card"><div class="error">${escapeHtml(error.message || String(error))}</div></div>`);
+    }
+}
+
 function collectRewardRows(containerId, numberKey) {
     return Array.from(document.querySelectorAll(`#${containerId} .activity-reward-row`)).map(row => ({
         [numberKey]: row.querySelector('.reward-number')?.value || '',
@@ -530,6 +1286,48 @@ function collectTaskRows(containerId) {
         target: row.querySelector('.task-target')?.value || '',
         events: row.querySelector('.task-event:checked')?.value ? [row.querySelector('.task-event:checked').value] : [],
         reward: row.querySelector('.task-reward')?.value || ''
+    }));
+}
+
+function collectGameplayActivities() {
+    return Array.from(document.querySelectorAll('#gameplayActivities .activity-gameplay-row')).map(row => ({
+        key: row.querySelector('.gameplay-key')?.value || '',
+        template_key: row.querySelector('.gameplay-template-key')?.value || '',
+        type: row.querySelector('.gameplay-type')?.value || 'collect_words',
+        enabled: row.querySelector('.gameplay-enabled')?.value === 'true',
+        name: row.querySelector('.gameplay-name')?.value || '',
+        description: row.querySelector('.gameplay-description')?.value || '',
+        start_time: row.querySelector('.gameplay-start-special')?.checked ? '0' : row.querySelector('.gameplay-start-time')?.value || '',
+        start_special: Boolean(row.querySelector('.gameplay-start-special')?.checked),
+        end_time: row.querySelector('.gameplay-end-special')?.checked ? '无限' : row.querySelector('.gameplay-end-time')?.value || '',
+        end_special: Boolean(row.querySelector('.gameplay-end-special')?.checked),
+        drop_events: Array.from(row.querySelectorAll('.gameplay-drop-event:checked')).map(input => input.value),
+        drop_rate: Number(row.querySelector('.gameplay-drop-rate')?.value || 0) / 100,
+        daily_drop_limit: row.querySelector('.gameplay-daily-limit')?.value || '',
+        rolls_per_record: row.querySelector('.gameplay-rolls')?.value || '',
+        letters: Array.from(row.querySelectorAll('.activity-letter-row')).map(item => ({
+            char: item.querySelector('.letter-char')?.value || '',
+            weight: item.querySelector('.letter-weight')?.value || ''
+        })),
+        phrases: Array.from(row.querySelectorAll('.activity-phrase-row')).map(item => ({
+            phrase: item.querySelector('.phrase-value')?.value || '',
+            name: item.querySelector('.phrase-name')?.value || '',
+            reward: item.querySelector('.phrase-reward')?.value || '',
+            limit: item.querySelector('.phrase-limit')?.value || ''
+        })),
+        point_name: row.querySelector('.gameplay-point-name')?.value || '',
+        event_rules: Array.from(row.querySelectorAll('.activity-point-rule-row')).map(item => ({
+            event: item.querySelector('.point-rule-event:checked')?.value || '',
+            points: item.querySelector('.point-rule-points')?.value || '',
+            daily_limit: item.querySelector('.point-rule-daily-limit')?.value || ''
+        })),
+        shop: Array.from(row.querySelectorAll('.activity-shop-row')).map(item => ({
+            item_key: item.querySelector('.shop-item-key')?.value || '',
+            name: item.querySelector('.shop-item-name')?.value || '',
+            cost: item.querySelector('.shop-item-cost')?.value || '',
+            reward: item.querySelector('.shop-item-reward')?.value || '',
+            limit: item.querySelector('.shop-item-limit')?.value || ''
+        }))
     }));
 }
 
@@ -553,6 +1351,8 @@ function fillActivityForm(config) {
     renderRewardRows('milestoneRewards', activityConfig.milestone_rewards, 'days', '累计天数');
     renderTaskRows('dailyTasks', activityConfig.daily_tasks);
     renderTaskRows('weeklyTasks', activityConfig.weekly_tasks);
+    renderGameplayActivities(activityConfig.gameplay_activities);
+    renderActivityDataSelectors();
     markActiveTemplate();
 }
 
@@ -573,6 +1373,7 @@ function collectActivityConfig() {
         milestone_rewards: collectRewardRows('milestoneRewards', 'days'),
         daily_tasks: collectTaskRows('dailyTasks'),
         weekly_tasks: collectTaskRows('weeklyTasks'),
+        gameplay_activities: collectGameplayActivities(),
         extra_rules: document.getElementById('extraRules').value,
         extensions: {
             repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked
@@ -600,6 +1401,18 @@ function updateStatePill(state) {
     pill.innerHTML = `<i class="fas fa-circle"></i> ${escapeHtml(state.text || '')}`;
 }
 
+function getXiuxianWeb() {
+    if (window.XiuxianWeb?.requestJson) {
+        return window.XiuxianWeb;
+    }
+    return {
+        requestJson: async () => {
+            throw new Error('页面脚本尚未就绪，请刷新后重试');
+        },
+        invalidatePageCache: () => {}
+    };
+}
+
 async function saveActivityConfig(event) {
     event?.preventDefault();
     const button = document.getElementById('saveActivityBtn');
@@ -607,7 +1420,8 @@ async function saveActivityConfig(event) {
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
     try {
-        const data = await window.XiuxianWeb.requestJson('/api/activity/config', {
+        const xiuxianWeb = getXiuxianWeb();
+        const data = await xiuxianWeb.requestJson('/api/activity/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({config: collectActivityConfig()})
@@ -615,7 +1429,7 @@ async function saveActivityConfig(event) {
         fillActivityForm(data.config);
         updateStatePill(data.state);
         setResult(true, data.message || '活动配置已保存');
-        window.XiuxianWeb.invalidatePageCache(url => url.pathname === '/activity' || url.pathname === '/database');
+        xiuxianWeb.invalidatePageCache(url => url.pathname === '/activity' || url.pathname === '/database');
     } catch (error) {
         setResult(false, error.message || String(error));
     } finally {
@@ -626,7 +1440,7 @@ async function saveActivityConfig(event) {
 
 async function reloadActivityConfig() {
     try {
-        const data = await window.XiuxianWeb.requestJson('/api/activity/config');
+        const data = await getXiuxianWeb().requestJson('/api/activity/config');
         fillActivityForm(data.config);
         updateStatePill(data.state);
         setResult(true, '已重新载入活动配置');
@@ -639,8 +1453,19 @@ document.querySelectorAll('.activity-template-option').forEach(button => {
     button.addEventListener('click', () => {
         const template = activityTemplates[button.dataset.templateKey];
         if (!template) return;
-        fillActivityForm(JSON.parse(JSON.stringify(template.config)));
+        const nextConfig = JSON.parse(JSON.stringify(template.config));
+        nextConfig.gameplay_activities = activityConfig.gameplay_activities || [];
+        fillActivityForm(nextConfig);
         setResult(true, `已套用模板：${template.name || ''}`);
+    });
+});
+
+document.querySelectorAll('.gameplay-template-option').forEach(button => {
+    button.addEventListener('click', () => {
+        const template = gameplayTemplates[button.dataset.gameplayTemplateKey];
+        if (!template) return;
+        appendGameplayActivity(JSON.parse(JSON.stringify(template.config)));
+        setResult(true, `已添加玩法模板：${template.name || ''}`);
     });
 });
 
@@ -648,19 +1473,38 @@ window.addDailyReward = addDailyReward;
 window.addMilestoneReward = addMilestoneReward;
 window.addDailyTask = addDailyTask;
 window.addWeeklyTask = addWeeklyTask;
+window.addGameplayActivity = addGameplayActivity;
+window.addGameplayLetter = addGameplayLetter;
+window.addGameplayPhrase = addGameplayPhrase;
+window.addGameplayPointRule = addGameplayPointRule;
+window.addGameplayShopItem = addGameplayShopItem;
 window.reloadActivityConfig = reloadActivityConfig;
+window.loadActivityData = loadActivityData;
+window.resetActivityData = resetActivityData;
+window.adjustActivityData = adjustActivityData;
 window.__xiuxianPageCleanup = () => {
     delete window.addDailyReward;
     delete window.addMilestoneReward;
     delete window.addDailyTask;
     delete window.addWeeklyTask;
+    delete window.addGameplayActivity;
+    delete window.addGameplayLetter;
+    delete window.addGameplayPhrase;
+    delete window.addGameplayPointRule;
+    delete window.addGameplayShopItem;
     delete window.reloadActivityConfig;
+    delete window.loadActivityData;
+    delete window.resetActivityData;
+    delete window.adjustActivityData;
 };
 
 document.getElementById('activityForm')?.addEventListener('submit', saveActivityConfig);
 document.getElementById('startImmediate')?.addEventListener('change', syncSpecialTimeControls);
 document.getElementById('endUnlimited')?.addEventListener('change', syncSpecialTimeControls);
+document.getElementById('adjustType')?.addEventListener('change', syncAdjustTypeControls);
+document.getElementById('adjustActivityKey')?.addEventListener('change', syncAdjustActivityType);
 fillActivityForm(activityConfig);
+syncAdjustTypeControls();
 })();
 </script>
 {% endblock %}

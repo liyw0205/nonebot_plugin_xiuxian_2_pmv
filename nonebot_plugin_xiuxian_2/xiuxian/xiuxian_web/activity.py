@@ -6,9 +6,15 @@ from ..xiuxian_activity.service import (
     ACTIVITY_EVENT_CHOICES,
     ACTIVITY_EVENT_LABELS,
     CONFIG_PATH as ACTIVITY_CONFIG_PATH,
+    DEFAULT_COLLECT_DROP_EVENTS,
+    DEFAULT_POINT_EVENT_RULES,
+    adjust_activity_points,
+    adjust_collect_word,
     activity_state,
+    get_activity_data_overview,
     load_config as load_activity_config,
     parse_reward,
+    reset_activity_data,
     save_config as save_activity_config,
 )
 
@@ -304,6 +310,340 @@ ACTIVITY_TEMPLATE_DEFINITIONS = {
 }
 
 
+GAMEPLAY_TEMPLATE_DEFINITIONS = {
+    "duanwu_collect_words": {
+        "name": "端午集字",
+        "description": "做任务随机获得字牌，集齐端午安康等词组兑换奖励。",
+        "config": {
+            "key": "duanwu_collect_words",
+            "template_key": "duanwu_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "端午集字",
+            "description": "活动期间完成指定玩法有机会获得字牌，集齐祝福词组可兑换奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": DEFAULT_COLLECT_DROP_EVENTS,
+            "drop_rate": 0.35,
+            "daily_drop_limit": 8,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "端", "weight": 30},
+                {"char": "午", "weight": 30},
+                {"char": "安", "weight": 26},
+                {"char": "康", "weight": 22},
+                {"char": "平", "weight": 18},
+                {"char": "喜", "weight": 16},
+                {"char": "乐", "weight": 16},
+                {"char": "吉", "weight": 14},
+                {"char": "祥", "weight": 14},
+                {"char": "高", "weight": 12},
+                {"char": "照", "weight": 12},
+                {"char": "万", "weight": 10},
+                {"char": "事", "weight": 10},
+                {"char": "顺", "weight": 8},
+                {"char": "遂", "weight": 8},
+            ],
+            "phrases": [
+                {"phrase": "端午安康", "name": "端午安康", "reward": "灵石x200000,渡厄丹x1", "limit": 1},
+                {"phrase": "平安喜乐", "name": "平安喜乐", "reward": "灵石x180000", "limit": 2},
+                {"phrase": "吉祥高照", "name": "吉祥高照", "reward": "灵石x250000", "limit": 1},
+                {"phrase": "万事顺遂", "name": "万事顺遂", "reward": "灵石x300000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "guoqing_collect_words": {
+        "name": "国庆集字",
+        "description": "适合国庆、中秋等长周期活动，词组偏祝福和庆典。",
+        "config": {
+            "key": "guoqing_collect_words",
+            "template_key": "guoqing_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "国庆集字",
+            "description": "活动期间完成指定玩法有机会获得字牌，集齐国庆词组可兑换奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": DEFAULT_COLLECT_DROP_EVENTS,
+            "drop_rate": 0.32,
+            "daily_drop_limit": 8,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "祖", "weight": 28},
+                {"char": "国", "weight": 28},
+                {"char": "万", "weight": 24},
+                {"char": "岁", "weight": 20},
+                {"char": "山", "weight": 18},
+                {"char": "河", "weight": 18},
+                {"char": "锦", "weight": 14},
+                {"char": "绣", "weight": 14},
+                {"char": "泰", "weight": 12},
+                {"char": "民", "weight": 12},
+                {"char": "安", "weight": 12},
+                {"char": "普", "weight": 10},
+                {"char": "天", "weight": 10},
+                {"char": "同", "weight": 8},
+                {"char": "庆", "weight": 8},
+            ],
+            "phrases": [
+                {"phrase": "祖国万岁", "name": "祖国万岁", "reward": "灵石x220000", "limit": 2},
+                {"phrase": "山河锦绣", "name": "山河锦绣", "reward": "灵石x260000,渡厄丹x1", "limit": 1},
+                {"phrase": "国泰民安", "name": "国泰民安", "reward": "灵石x300000", "limit": 1},
+                {"phrase": "普天同庆", "name": "普天同庆", "reward": "灵石x360000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "blessing_collect_words": {
+        "name": "通用祝福集字",
+        "description": "用于任意节日或版本活动，字牌、词组、奖励都可调整。",
+        "config": {
+            "key": "blessing_collect_words",
+            "template_key": "blessing_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "祝福集字",
+            "description": "完成指定玩法随机获得字牌，集齐祝福词组后兑换活动奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": DEFAULT_COLLECT_DROP_EVENTS,
+            "drop_rate": 0.3,
+            "daily_drop_limit": 8,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "福", "weight": 24},
+                {"char": "运", "weight": 22},
+                {"char": "绵", "weight": 18},
+                {"char": "长", "weight": 18},
+                {"char": "仙", "weight": 16},
+                {"char": "途", "weight": 16},
+                {"char": "顺", "weight": 14},
+                {"char": "遂", "weight": 14},
+                {"char": "道", "weight": 12},
+                {"char": "心", "weight": 12},
+                {"char": "明", "weight": 10},
+                {"char": "万", "weight": 10},
+                {"char": "象", "weight": 8},
+                {"char": "更", "weight": 8},
+                {"char": "新", "weight": 8},
+            ],
+            "phrases": [
+                {"phrase": "福运绵长", "name": "福运绵长", "reward": "灵石x180000", "limit": 2},
+                {"phrase": "仙途顺遂", "name": "仙途顺遂", "reward": "灵石x220000", "limit": 2},
+                {"phrase": "道心长明", "name": "道心长明", "reward": "灵石x300000,渡厄丹x1", "limit": 1},
+                {"phrase": "万象更新", "name": "万象更新", "reward": "灵石x350000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "lucky_bag_collect_words": {
+        "name": "福袋祈愿",
+        "description": "完成活动来源获得祈愿字牌，集齐福袋祝词兑换节日奖励。",
+        "config": {
+            "key": "lucky_bag_collect_words",
+            "template_key": "lucky_bag_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "福袋祈愿",
+            "description": "活动期间完成指定玩法有机会获得祈愿字牌，集齐祝词可兑换福袋奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": DEFAULT_COLLECT_DROP_EVENTS,
+            "drop_rate": 0.28,
+            "daily_drop_limit": 10,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "福", "weight": 24},
+                {"char": "袋", "weight": 20},
+                {"char": "临", "weight": 16},
+                {"char": "门", "weight": 16},
+                {"char": "金", "weight": 14},
+                {"char": "玉", "weight": 14},
+                {"char": "满", "weight": 12},
+                {"char": "堂", "weight": 12},
+                {"char": "瑞", "weight": 10},
+                {"char": "气", "weight": 10},
+                {"char": "盈", "weight": 8},
+                {"char": "鸿", "weight": 8},
+                {"char": "运", "weight": 8},
+                {"char": "当", "weight": 8},
+                {"char": "头", "weight": 8},
+            ],
+            "phrases": [
+                {"phrase": "福袋临门", "name": "福袋临门", "reward": "灵石x220000", "limit": 2},
+                {"phrase": "金玉满堂", "name": "金玉满堂", "reward": "灵石x300000,渡厄丹x1", "limit": 1},
+                {"phrase": "瑞气盈门", "name": "瑞气盈门", "reward": "灵石x260000", "limit": 1},
+                {"phrase": "鸿运当头", "name": "鸿运当头", "reward": "灵石x360000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "treasure_map_collect_words": {
+        "name": "秘境寻宝",
+        "description": "用地图、悬赏、宗门等事件掉落寻宝线索，集齐线索兑换宝藏。",
+        "config": {
+            "key": "treasure_map_collect_words",
+            "template_key": "treasure_map_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "秘境寻宝",
+            "description": "完成地图委托、悬赏令、宗门任务等玩法有机会获得寻宝线索，集齐线索兑换宝藏。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": [
+                "work",
+                "sect_task_complete",
+                "map_mission_complete",
+                "dungeon_clear",
+                "boss",
+                "pet_travel_claim",
+            ],
+            "drop_rate": 0.3,
+            "daily_drop_limit": 9,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "东", "weight": 20},
+                {"char": "海", "weight": 18},
+                {"char": "寻", "weight": 18},
+                {"char": "珠", "weight": 14},
+                {"char": "南", "weight": 18},
+                {"char": "岭", "weight": 16},
+                {"char": "采", "weight": 14},
+                {"char": "药", "weight": 14},
+                {"char": "西", "weight": 16},
+                {"char": "荒", "weight": 14},
+                {"char": "探", "weight": 12},
+                {"char": "宝", "weight": 12},
+                {"char": "北", "weight": 12},
+                {"char": "境", "weight": 10},
+                {"char": "访", "weight": 10},
+                {"char": "仙", "weight": 10},
+            ],
+            "phrases": [
+                {"phrase": "东海寻珠", "name": "东海寻珠", "reward": "灵石x260000", "limit": 2},
+                {"phrase": "南岭采药", "name": "南岭采药", "reward": "灵石x260000", "limit": 2},
+                {"phrase": "西荒探宝", "name": "西荒探宝", "reward": "灵石x350000,渡厄丹x1", "limit": 1},
+                {"phrase": "北境访仙", "name": "北境访仙", "reward": "灵石x420000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "firework_collect_words": {
+        "name": "烟火庆典",
+        "description": "节庆活动中收集烟火字牌，兑换庆典补给。",
+        "config": {
+            "key": "firework_collect_words",
+            "template_key": "firework_collect_words",
+            "type": "collect_words",
+            "enabled": False,
+            "name": "烟火庆典",
+            "description": "活动期间完成指定玩法有机会获得烟火字牌，集齐庆典词组兑换奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "drop_events": DEFAULT_COLLECT_DROP_EVENTS,
+            "drop_rate": 0.34,
+            "daily_drop_limit": 8,
+            "rolls_per_record": 1,
+            "letters": [
+                {"char": "烟", "weight": 24},
+                {"char": "火", "weight": 24},
+                {"char": "满", "weight": 20},
+                {"char": "天", "weight": 18},
+                {"char": "星", "weight": 16},
+                {"char": "河", "weight": 16},
+                {"char": "长", "weight": 14},
+                {"char": "明", "weight": 14},
+                {"char": "灯", "weight": 12},
+                {"char": "影", "weight": 12},
+                {"char": "成", "weight": 10},
+                {"char": "双", "weight": 10},
+                {"char": "良", "weight": 8},
+                {"char": "宵", "weight": 8},
+                {"char": "同", "weight": 8},
+                {"char": "庆", "weight": 8},
+            ],
+            "phrases": [
+                {"phrase": "烟火满天", "name": "烟火满天", "reward": "灵石x220000", "limit": 2},
+                {"phrase": "星河长明", "name": "星河长明", "reward": "灵石x260000", "limit": 2},
+                {"phrase": "灯影成双", "name": "灯影成双", "reward": "灵石x320000,渡厄丹x1", "limit": 1},
+                {"phrase": "良宵同庆", "name": "良宵同庆", "reward": "灵石x380000,渡厄丹x1", "limit": 1},
+            ],
+        },
+    },
+    "festival_points_shop": {
+        "name": "节日积分商店",
+        "description": "完成活动事件获得节日积分，用积分兑换限量补给。",
+        "config": {
+            "key": "festival_points_shop",
+            "template_key": "festival_points_shop",
+            "type": "event_points",
+            "enabled": False,
+            "name": "节日积分商店",
+            "description": "活动期间完成签到、悬赏、宗门、洞府等玩法获得节日积分，可在活动商店兑换奖励。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "节日积分",
+            "event_rules": DEFAULT_POINT_EVENT_RULES,
+            "shop": [
+                {"item_key": "stone_pack", "name": "灵石补给", "cost": 80, "reward": "灵石x300000", "limit": 3},
+                {"item_key": "practice_pack", "name": "修炼补给", "cost": 160, "reward": "灵石x500000,渡厄丹x1", "limit": 2},
+                {"item_key": "festival_box", "name": "节日礼盒", "cost": 260, "reward": "灵石x800000,渡厄丹x2", "limit": 1},
+            ],
+        },
+    },
+    "trial_points_shop": {
+        "name": "试炼积分商店",
+        "description": "偏战斗和副本的积分玩法，适合搭配冲榜或周常活动。",
+        "config": {
+            "key": "trial_points_shop",
+            "template_key": "trial_points_shop",
+            "type": "event_points",
+            "enabled": False,
+            "name": "试炼积分商店",
+            "description": "活动期间参与世界BOSS、副本通关、地图委托和悬赏令获得试炼积分，积分可兑换试炼补给。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "试炼积分",
+            "event_rules": [
+                {"event": "work", "points": 12, "daily_limit": 80},
+                {"event": "boss", "points": 6, "daily_limit": 120},
+                {"event": "map_mission_complete", "points": 15, "daily_limit": 90},
+                {"event": "dungeon_clear", "points": 20, "daily_limit": 100},
+                {"event": "sect_task_complete", "points": 12, "daily_limit": 60},
+            ],
+            "shop": [
+                {"item_key": "trial_stone", "name": "试炼灵石", "cost": 100, "reward": "灵石x400000", "limit": 3},
+                {"item_key": "trial_pill", "name": "试炼丹礼", "cost": 220, "reward": "灵石x600000,渡厄丹x1", "limit": 2},
+                {"item_key": "trial_box", "name": "试炼宝匣", "cost": 360, "reward": "灵石x1000000,渡厄丹x2", "limit": 1},
+            ],
+        },
+    },
+    "harvest_points_shop": {
+        "name": "洞府收获商店",
+        "description": "偏轻量日常的积分玩法，适合和签到一起开启。",
+        "config": {
+            "key": "harvest_points_shop",
+            "template_key": "harvest_points_shop",
+            "type": "event_points",
+            "enabled": False,
+            "name": "洞府收获商店",
+            "description": "活动期间通过签到、洞府收获、宠物游历和炼丹获得丰收积分，积分可兑换经营补给。",
+            "start_time": "0",
+            "end_time": "无限",
+            "point_name": "丰收积分",
+            "event_rules": [
+                {"event": "sign_in", "points": 30, "daily_limit": 30},
+                {"event": "dongfu_harvest", "points": 18, "daily_limit": 72},
+                {"event": "pet_travel_claim", "points": 16, "daily_limit": 48},
+                {"event": "mix_elixir_complete", "points": 10, "daily_limit": 60},
+                {"event": "sect_task_complete", "points": 12, "daily_limit": 48},
+            ],
+            "shop": [
+                {"item_key": "harvest_stone", "name": "丰收灵石", "cost": 90, "reward": "灵石x350000", "limit": 3},
+                {"item_key": "harvest_supply", "name": "洞府补给", "cost": 180, "reward": "灵石x600000,渡厄丹x1", "limit": 2},
+                {"item_key": "harvest_box", "name": "丰收礼盒", "cost": 300, "reward": "灵石x900000,渡厄丹x2", "limit": 1},
+            ],
+        },
+    },
+}
+
+
 def _serialize_templates():
     return {
         key: {
@@ -313,6 +653,18 @@ def _serialize_templates():
             "config": deepcopy(value["config"]),
         }
         for key, value in ACTIVITY_TEMPLATE_DEFINITIONS.items()
+    }
+
+
+def _serialize_gameplay_templates():
+    return {
+        key: {
+            "key": key,
+            "name": value["name"],
+            "description": value["description"],
+            "config": deepcopy(value["config"]),
+        }
+        for key, value in GAMEPLAY_TEMPLATE_DEFINITIONS.items()
     }
 
 
@@ -526,6 +878,296 @@ def _as_task_rows(value) -> list[dict]:
     return rows
 
 
+def _to_non_negative_int(value, field_name: str) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name}必须是非负整数")
+    if number < 0:
+        raise ValueError(f"{field_name}必须是非负整数")
+    return number
+
+
+def _normalize_rate(value, field_name: str) -> float:
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name}必须是数字")
+    if rate > 1:
+        rate = rate / 100
+    if rate < 0 or rate > 1:
+        raise ValueError(f"{field_name}必须在 0 到 1 之间")
+    return round(rate, 4)
+
+
+def _normalize_activity_key(value, fallback: str) -> str:
+    text = _clean_text(value, fallback)
+    key = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in text)
+    return key.strip("_") or fallback
+
+
+def _normalize_collect_letters(rows, phrases: list[dict]) -> list[dict]:
+    weights: dict[str, int] = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        char = _clean_text(row.get("char"))
+        if not char:
+            continue
+        if len(char) != 1:
+            raise ValueError("字牌只能填写单个字")
+        weight = _to_positive_int(row.get("weight"), f"字牌{char}权重")
+        weights[char] = weights.get(char, 0) + weight
+
+    for phrase in phrases:
+        for char in str(phrase.get("phrase") or ""):
+            if char.strip() and char not in weights:
+                weights[char] = 10
+
+    return [{"char": char, "weight": weight} for char, weight in weights.items()]
+
+
+def _normalize_collect_phrases(rows) -> list[dict]:
+    phrases = []
+    seen = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        phrase = _clean_text(row.get("phrase"))
+        name = _clean_text(row.get("name"), phrase)
+        reward = _clean_text(row.get("reward"))
+        if not any((phrase, name, reward)):
+            continue
+        if not phrase:
+            raise ValueError("兑换词组不能为空")
+        if phrase in seen:
+            raise ValueError(f"兑换词组 {phrase} 重复")
+        seen.add(phrase)
+        if reward:
+            parse_reward(reward)
+        phrases.append({
+            "phrase": phrase,
+            "name": name or phrase,
+            "reward": reward,
+            "limit": _to_non_negative_int(row.get("limit", 1), f"{phrase}兑换次数"),
+        })
+    return phrases
+
+
+def _as_point_rule_rows(value) -> list[dict]:
+    rows = []
+    source = value if isinstance(value, list) else []
+    for item in source:
+        if not isinstance(item, dict):
+            continue
+        event = _clean_text(item.get("event") or item.get("event_key") or item.get("value"))
+        rows.append({
+            "event": event,
+            "label": ACTIVITY_EVENT_LABELS.get(event, event),
+            "points": item.get("points", ""),
+            "daily_limit": item.get("daily_limit", 0),
+        })
+    return rows
+
+
+def _as_point_shop_rows(value) -> list[dict]:
+    rows = []
+    source = value if isinstance(value, list) else []
+    for item in source:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "item_key": item.get("item_key", item.get("key", "")),
+            "name": item.get("name", ""),
+            "cost": item.get("cost", ""),
+            "reward": item.get("reward", ""),
+            "limit": item.get("limit", 1),
+        })
+    return rows
+
+
+def _as_gameplay_rows(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    rows = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        events = []
+        for event in _normalize_events(item.get("drop_events"), strict=False):
+            events.append({
+                "value": event,
+                "label": ACTIVITY_EVENT_LABELS.get(event, event),
+            })
+        rows.append({
+            "key": item.get("key", ""),
+            "template_key": item.get("template_key", item.get("key", "")),
+            "type": item.get("type", "collect_words"),
+            "enabled": _as_bool(item.get("enabled")),
+            "name": item.get("name", ""),
+            "description": item.get("description", ""),
+            "start_time": item.get("start_time", "0"),
+            "end_time": item.get("end_time", "无限"),
+            "drop_events": events,
+            "drop_rate": item.get("drop_rate", 0.35),
+            "daily_drop_limit": item.get("daily_drop_limit", 8),
+            "rolls_per_record": item.get("rolls_per_record", 1),
+            "letters": item.get("letters") if isinstance(item.get("letters"), list) else [],
+            "phrases": item.get("phrases") if isinstance(item.get("phrases"), list) else [],
+            "point_name": item.get("point_name", "活动积分"),
+            "event_rules": _as_point_rule_rows(item.get("event_rules")),
+            "shop": _as_point_shop_rows(item.get("shop")),
+        })
+    return rows
+
+
+def _normalize_point_event_rules(rows, activity_label: str) -> list[dict]:
+    normalized = []
+    seen_events = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        event = _clean_text(row.get("event") or row.get("event_key") or row.get("value"))
+        points_value = row.get("points")
+        daily_limit_value = row.get("daily_limit", 0)
+        if not any((event, points_value not in (None, ""), daily_limit_value not in (None, ""))):
+            continue
+        if not event:
+            raise ValueError(f"{activity_label}积分事件不能为空")
+        if event not in ACTIVITY_EVENT_LABELS:
+            raise ValueError(f"不支持的活动事件：{event}")
+        if event in seen_events:
+            raise ValueError(f"{activity_label}积分事件 {ACTIVITY_EVENT_LABELS.get(event, event)} 重复")
+        seen_events.add(event)
+        normalized.append({
+            "event": event,
+            "points": _to_positive_int(points_value, f"{activity_label}积分数量"),
+            "daily_limit": _to_non_negative_int(daily_limit_value, f"{activity_label}每日积分上限"),
+        })
+    return normalized
+
+
+def _normalize_point_shop_items(rows, activity_label: str) -> list[dict]:
+    normalized = []
+    seen_keys = set()
+    for index, row in enumerate(rows or [], 1):
+        if not isinstance(row, dict):
+            continue
+        name = _clean_text(row.get("name"))
+        reward = _clean_text(row.get("reward"))
+        cost_value = row.get("cost")
+        limit_value = row.get("limit", 1)
+        if not any((name, reward, cost_value not in (None, ""), limit_value not in (None, ""))):
+            continue
+        if not name:
+            raise ValueError(f"{activity_label}商店商品名称不能为空")
+        item_key = _normalize_activity_key(row.get("item_key") or row.get("key") or name, f"item_{index}")
+        if item_key in seen_keys:
+            raise ValueError(f"{activity_label}商店商品编号 {item_key} 重复")
+        seen_keys.add(item_key)
+        if reward:
+            parse_reward(reward)
+        else:
+            raise ValueError(f"{activity_label}商店商品 {name} 奖励不能为空")
+        normalized.append({
+            "item_key": item_key,
+            "name": name,
+            "cost": _to_positive_int(cost_value, f"{activity_label}商店商品 {name} 价格"),
+            "reward": reward,
+            "limit": _to_non_negative_int(limit_value, f"{activity_label}商店商品 {name} 兑换次数"),
+        })
+    return normalized
+
+
+def _normalize_gameplay_activities(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    seen_keys = set()
+    for index, row in enumerate(value, 1):
+        if not isinstance(row, dict):
+            continue
+        if not any((
+            _clean_text(row.get("name")),
+            _clean_text(row.get("description")),
+            row.get("letters"),
+            row.get("phrases"),
+            row.get("event_rules"),
+            row.get("shop"),
+        )):
+            continue
+        activity_type = _clean_text(row.get("type"), "collect_words")
+        if activity_type not in {"collect_words", "event_points"}:
+            raise ValueError("当前仅支持集字玩法和积分玩法")
+        key = _normalize_activity_key(row.get("key") or row.get("template_key"), f"{activity_type}_{index}")
+        if key in seen_keys:
+            raise ValueError(f"玩法活动编号 {key} 重复")
+        seen_keys.add(key)
+
+        start_time = _normalize_time_text(
+            row.get("start_time"),
+            f"玩法活动{index}开始时间",
+            "0",
+            allow_special=_as_bool(row.get("start_special"), True),
+        )
+        end_time = _normalize_time_text(
+            row.get("end_time"),
+            f"玩法活动{index}结束时间",
+            "无限",
+            allow_special=_as_bool(row.get("end_special"), True),
+        )
+        if activity_type == "event_points":
+            activity_label = f"玩法活动{index}"
+            event_rules = _normalize_point_event_rules(row.get("event_rules"), activity_label)
+            if not event_rules:
+                raise ValueError(f"{activity_label}至少配置一个积分事件")
+            shop = _normalize_point_shop_items(row.get("shop"), activity_label)
+            if not shop:
+                raise ValueError(f"{activity_label}至少配置一个商店商品")
+            normalized.append({
+                "key": key,
+                "template_key": _clean_text(row.get("template_key"), key),
+                "type": activity_type,
+                "enabled": _as_bool(row.get("enabled")),
+                "name": _clean_text(row.get("name"), f"积分活动{index}"),
+                "description": _clean_text(row.get("description")),
+                "start_time": start_time,
+                "end_time": end_time,
+                "point_name": _clean_text(row.get("point_name"), "活动积分"),
+                "event_rules": event_rules,
+                "shop": shop,
+            })
+            continue
+
+        drop_events = _normalize_events(row.get("drop_events"))
+        if not drop_events:
+            raise ValueError(f"玩法活动{index}至少选择一个掉落事件")
+        phrases = _normalize_collect_phrases(row.get("phrases"))
+        if not phrases:
+            raise ValueError(f"玩法活动{index}至少配置一个兑换词组")
+        letters = _normalize_collect_letters(row.get("letters"), phrases)
+        if not letters:
+            raise ValueError(f"玩法活动{index}至少配置一个字牌")
+
+        normalized.append({
+            "key": key,
+            "template_key": _clean_text(row.get("template_key"), key),
+            "type": activity_type,
+            "enabled": _as_bool(row.get("enabled")),
+            "name": _clean_text(row.get("name"), f"集字活动{index}"),
+            "description": _clean_text(row.get("description")),
+            "start_time": start_time,
+            "end_time": end_time,
+            "drop_events": drop_events,
+            "drop_rate": _normalize_rate(row.get("drop_rate"), f"玩法活动{index}掉落概率"),
+            "daily_drop_limit": _to_non_negative_int(row.get("daily_drop_limit", 8), f"玩法活动{index}每日上限"),
+            "rolls_per_record": _to_positive_int(row.get("rolls_per_record", 1), f"玩法活动{index}单次判定"),
+            "letters": letters,
+            "phrases": phrases,
+        })
+    return normalized
+
+
 def _prepare_activity_config(config: dict) -> dict:
     if not isinstance(config, dict):
         config = {}
@@ -546,6 +1188,7 @@ def _prepare_activity_config(config: dict) -> dict:
         "daily_tasks": _as_task_rows(config.get("daily_tasks")),
         "weekly_tasks": _as_task_rows(config.get("weekly_tasks")),
         "extra_rules": _normalize_extra_rules(config.get("extra_rules")),
+        "gameplay_activities": _as_gameplay_rows(config.get("gameplay_activities")),
         "extensions": {
             "repeat_last_daily_reward": _as_bool(extensions.get("repeat_last_daily_reward"), True),
         },
@@ -580,6 +1223,7 @@ def _normalize_activity_config(data: dict) -> dict:
     milestone_rewards = _normalize_reward_rows(data.get("milestone_rewards"), "days", "累计天数")
     daily_tasks = _normalize_task_rows(data.get("daily_tasks"), "daily", "每日活动")
     weekly_tasks = _normalize_task_rows(data.get("weekly_tasks"), "weekly", "周常活动")
+    gameplay_activities = _normalize_gameplay_activities(data.get("gameplay_activities"))
     if not daily_rewards:
         raise ValueError("至少需要配置一条每日签到奖励")
 
@@ -601,6 +1245,7 @@ def _normalize_activity_config(data: dict) -> dict:
         "daily_tasks": daily_tasks,
         "weekly_tasks": weekly_tasks,
         "extra_rules": _normalize_extra_rules(data.get("extra_rules")),
+        "gameplay_activities": gameplay_activities,
         "extensions": extensions,
     }
 
@@ -616,6 +1261,7 @@ def activity_management():
         "activity.html",
         activity_config=config,
         activity_templates=_serialize_templates(),
+        gameplay_templates=_serialize_gameplay_templates(),
         activity_event_choices=_serialize_event_choices(),
         activity_state={"ok": ok, "text": "进行中" if ok else reason},
         activity_config_path=str(ACTIVITY_CONFIG_PATH),
@@ -633,6 +1279,7 @@ def api_activity_config():
         return api_success(
             config=config,
             templates=_serialize_templates(),
+            gameplay_templates=_serialize_gameplay_templates(),
             event_choices=_serialize_event_choices(),
             state={"ok": ok, "text": "进行中" if ok else reason},
             config_path=str(ACTIVITY_CONFIG_PATH),
@@ -661,3 +1308,71 @@ def api_activity_template(template_key):
     if not template:
         return api_error("活动模板不存在")
     return api_success(template=_serialize_templates()[template_key])
+
+
+@app.route("/api/activity/gameplay-template/<template_key>")
+def api_activity_gameplay_template(template_key):
+    if "admin_id" not in session:
+        return api_error("未登录")
+
+    template = GAMEPLAY_TEMPLATE_DEFINITIONS.get(str(template_key))
+    if not template:
+        return api_error("玩法模板不存在")
+    return api_success(template=_serialize_gameplay_templates()[template_key])
+
+
+@app.route("/api/activity/data")
+def api_activity_data():
+    if "admin_id" not in session:
+        return api_error("未登录")
+
+    try:
+        data = get_activity_data_overview(
+            activity_key=request.args.get("activity_key"),
+            user_id=request.args.get("user_id"),
+            limit=request.args.get("limit", 10),
+        )
+        return api_success(data=data)
+    except Exception as e:
+        return api_error(str(e))
+
+
+@app.route("/api/activity/data/reset", methods=["POST"])
+def api_activity_data_reset():
+    if "admin_id" not in session:
+        return api_error("未登录")
+
+    try:
+        payload = request.get_json() or {}
+        message = reset_activity_data(payload.get("scope"), payload.get("activity_key"))
+        return api_success(message=message)
+    except Exception as e:
+        return api_error(str(e))
+
+
+@app.route("/api/activity/data/adjust", methods=["POST"])
+def api_activity_data_adjust():
+    if "admin_id" not in session:
+        return api_error("未登录")
+
+    try:
+        payload = request.get_json() or {}
+        adjust_type = _clean_text(payload.get("type"))
+        if adjust_type == "points":
+            result = adjust_activity_points(
+                payload.get("activity_key"),
+                payload.get("user_id"),
+                payload.get("amount"),
+            )
+        elif adjust_type == "word":
+            result = adjust_collect_word(
+                payload.get("activity_key"),
+                payload.get("user_id"),
+                payload.get("word_char"),
+                payload.get("amount"),
+            )
+        else:
+            raise ValueError("调整类型无效")
+        return api_success(message="活动数据已调整", result=result)
+    except Exception as e:
+        return api_error(str(e))
