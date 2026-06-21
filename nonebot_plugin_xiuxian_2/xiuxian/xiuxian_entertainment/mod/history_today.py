@@ -40,9 +40,8 @@ async def history_today_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await history_today_cmd.finish()
 
     text_msg = (
-        f"📅 历史上的今天\n"
         f"时间：{time_text}\n"
-        f"内容：\n{content or msg}"
+        f"{content or msg}"
     )
 
     await handle_send(

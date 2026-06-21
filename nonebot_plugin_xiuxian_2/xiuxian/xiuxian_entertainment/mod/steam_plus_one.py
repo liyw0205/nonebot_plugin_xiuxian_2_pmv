@@ -57,7 +57,6 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     # ===== 普通文本内容 =====
     text_lines = [
-        f"🎮 Steam喜加一",
         f"时间：{time_text}",
         f"数量：{count}",
         ""
@@ -93,7 +92,7 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if config.markdown_status and config.markdown_id:
         try:
             # 标题部分
-            title_value = f"🎮 Steam喜加一\r时间：{time_text}\r数量：{count}"
+            title_value = f"时间：{time_text}\\r数量：{count}"
 
             # 内容部分放到 s1
             shell_lines = []
@@ -162,7 +161,6 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if config.markdown_status and not is_channel_event(event):
         try:
             md_lines = [
-                "## 🎮 Steam喜加一",
                 f"时间：{time_text}",
                 f"数量：{count}",
                 ""

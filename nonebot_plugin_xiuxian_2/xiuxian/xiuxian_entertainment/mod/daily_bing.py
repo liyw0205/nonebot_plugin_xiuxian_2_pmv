@@ -22,7 +22,7 @@ async def daily_bing_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
         await daily_bing_cmd.finish()
 
-    text_msg = "🌄 每日Bing图"
+    text_msg = ""
 
     if config.markdown_status:
         if config.markdown_id:
@@ -30,9 +30,9 @@ async def daily_bing_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 msg_param = {
                     "key": "t1",
                     "values": [
-                        "点击刷新](mqqapi://aio/inlinecmd?command=每日Bing图&enter=false&reply=false)\r![",
+                        "[点击刷新](mqqapi://aio/inlinecmd?command=每日Bing图&enter=false&reply=false)\r![",
                         f"img #1280px #720px]({image_url})\r",
-                        "🌄 [每日Bing图",
+                        "[每日Bing图",
                     ]
                 }
                 await handle_send_md(
@@ -50,7 +50,6 @@ async def daily_bing_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         elif not is_channel_event(event):
             try:
                 md_msg = (
-                    f"## 🌄 每日Bing图\r"
                     f"![img #1280px #720px]({image_url})\r"
                     f"[刷新](mqqapi://aio/inlinecmd?command=每日Bing图&enter=false&reply=false)"
                 )

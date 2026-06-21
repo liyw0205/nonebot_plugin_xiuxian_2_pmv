@@ -1,0 +1,7 @@
+{
+    "default_platform": "netease",
+    "song_limit": 30,
+    "select_timeout": 45,
+    "api_base": "https://music.txqq.pro/",
+    "page_size": 10
+}

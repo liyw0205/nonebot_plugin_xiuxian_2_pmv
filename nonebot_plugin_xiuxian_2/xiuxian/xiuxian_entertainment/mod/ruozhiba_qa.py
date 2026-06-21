@@ -42,7 +42,6 @@ async def ruozhiba_qa_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await ruozhiba_qa_cmd.finish()
 
     text_msg = (
-        f"🤪 弱智吧问答\n"
         f"问题：{instruction or '暂无问题'}\n"
         f"回答：{output or '暂无回答'}"
     )

@@ -6,6 +6,7 @@ wcwidth
 pathlib
 asyncio
 aiohttp
+cryptography
 pydantic
 aiofiles
 psutil

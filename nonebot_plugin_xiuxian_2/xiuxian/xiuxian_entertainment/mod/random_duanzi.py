@@ -36,7 +36,7 @@ async def random_duanzi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await random_duanzi_cmd.finish()
 
-    text_msg = f"😂 搞笑段子\n{duanzi or msg}"
+    text_msg = duanzi or msg
 
     await handle_send(
         bot, event,

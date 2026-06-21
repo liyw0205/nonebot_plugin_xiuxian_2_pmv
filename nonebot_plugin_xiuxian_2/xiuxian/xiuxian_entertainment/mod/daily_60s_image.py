@@ -27,7 +27,7 @@ async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         await daily_60s_image_cmd.finish()
 
-    title = "📰 每日60S图片"
+    title = ""
 
     if config.markdown_status:
         if config.markdown_id:
@@ -37,7 +37,7 @@ async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     "values": [
                         "[点击刷新](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)\r![",
                         f"img #1080px #1920px]({image_url})\r",
-                        "📰 [每日60S图片"
+                        "[每日60S图片"
                     ]
                 }
                 await handle_send_md(
@@ -55,7 +55,6 @@ async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         elif not is_channel_event(event):
             try:
                 md_msg = (
-                    f"## 📰 每日60S图片\r"
                     f"![img #1080px #1920px]({image_url})\r"
                     f"[刷新](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)"
                 )

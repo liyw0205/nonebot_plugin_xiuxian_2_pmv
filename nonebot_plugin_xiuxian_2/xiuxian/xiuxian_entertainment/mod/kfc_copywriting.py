@@ -36,7 +36,7 @@ async def kfc_copywriting_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         await kfc_copywriting_cmd.finish()
 
-    text_msg = f"🍗 肯德基疯狂星期四文案\n{text or msg}"
+    text_msg = text or msg
 
     await handle_send(
         bot, event,

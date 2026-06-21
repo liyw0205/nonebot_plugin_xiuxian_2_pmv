@@ -32,7 +32,7 @@ async def hitokoto_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         await hitokoto_cmd.finish()
 
-    msg = f"💬 随机一言\n{text}"
+    msg = text
 
     await handle_send(
         bot, event, msg,

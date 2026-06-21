@@ -16,11 +16,10 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     raw_msg = str(event.message)
     rank_type = "baidu"
-    title = "🖼️ 百度热榜图片"
+    title = ""
 
     if "微博热榜图片" in raw_msg:
         rank_type = "weibo"
-        title = "🖼️ 微博热榜图片"
 
     try:
         image_url = await get_media_url_api(api_url, params={"type": rank_type}, timeout=20)
@@ -43,7 +42,7 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     "values": [
                         "[点击刷新](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false)\r![",
                         f"img #1080px #1920px]({image_url})\r",
-                        f"[{title}"
+                        "[热榜图片"
                     ]
                 }
                 await handle_send_md(
@@ -60,7 +59,6 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         elif not is_channel_event(event):
             try:
                 md_msg = (
-                    f"## {title}\r"
                     f"![img #1080px #1920px]({image_url})\r"
                     f"[刷新](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false)"
                 )

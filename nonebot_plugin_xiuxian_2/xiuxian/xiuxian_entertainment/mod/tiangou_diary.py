@@ -32,7 +32,7 @@ async def tiangou_diary_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await tiangou_diary_cmd.finish()
 
-    msg = f"🐶 舔狗日记\n{text}"
+    msg = text
 
     await handle_send(
         bot, event, msg,

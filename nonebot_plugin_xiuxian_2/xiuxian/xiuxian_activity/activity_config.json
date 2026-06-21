@@ -113,5 +113,9 @@
   ],
   "extra_rules": [],
   "gameplay_activities": [],
-  "extensions": {}
+  "extensions": {
+    "repeat_last_daily_reward": true,
+    "activity_info_mode": "brief",
+    "sign_reply_mode": "minimal"
+  }
 }

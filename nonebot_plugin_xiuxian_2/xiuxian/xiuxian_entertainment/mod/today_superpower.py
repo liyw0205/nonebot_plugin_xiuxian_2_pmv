@@ -40,7 +40,6 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
     image_url = data.get("image_url")
 
     text_msg = (
-        f"🦸 今日超能力 🦸\n"
         f"超能力：{superpower}\n"
         f"但是：{disadvantage}"
     )
@@ -54,14 +53,14 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
                         "values": [
                             "](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)\r![",
                             "img #800px #800px](" + image_url + ")\r",
-                            f"🦸 今日超能力：[{superpower}\r但是：{disadvantage}"
+                            f"超能力：{superpower}\\r但是：{disadvantage}"
                         ]
                     }
                 else:
                     msg_param = {
                         "key": "t1",
                         "values": [
-                            f"🦸 今日超能力：[{superpower}\r但是：{disadvantage}"
+                            f"超能力：{superpower}\\r但是：{disadvantage}"
                         ]
                     }
 
@@ -90,17 +89,15 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
                 try:
                     if image_url:
                         md_msg = (
-                            f"## 🦸 今日超能力\r"
-                            f"![img #800px #800px]({image_url})\r"
-                            f"超能力：{superpower}\r"
-                            f"但是：{disadvantage}\r\r"
+                            f"![img #800px #800px]({image_url})\\r"
+                            f"超能力：{superpower}\\r"
+                            f"但是：{disadvantage}\\r\\r"
                             f"[再来一次](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)"
                         )
                     else:
                         md_msg = (
-                            f"## 🦸 今日超能力\r"
-                            f"超能力：{superpower}\r"
-                            f"但是：{disadvantage}\r\r"
+                            f"超能力：{superpower}\\r"
+                            f"但是：{disadvantage}\\r\\r"
                             f"[再来一次](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)"
                         )
 

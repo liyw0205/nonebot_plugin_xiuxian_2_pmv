@@ -1,10 +1,16 @@
 import json
+import re
 import asyncio
+import time
 import requests
 import random
+from typing import Any, Tuple
 from urllib.parse import quote
+
 from nonebot.log import logger
-from ..on_compat import on_command
+from nonebot.params import CommandArg, RegexGroup
+
+from ..on_compat import on_command, on_regex
 from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import (
@@ -27,6 +33,185 @@ from ..xiuxian_utils.utils import (
 
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown
+
+from .media_parser.config import get_fun_media_parser_config
+from .media_parser.service import extract_links, run_parse_and_build_messages, dedupe_media_urls_preserve_order
+
+# ---------- 流媒体链接解析（娱乐）----------
+
+FUN_MEDIA_PARSE_CMDS: tuple[str, ...] = (
+    "链接解析",
+    "视频解析",
+    "解析视频",
+    "解析链接",
+    "流媒体解析",
+)
+
+# 内嵌短链/长链：整段消息任意位置出现即可（前后可有文案，勿用 ^ $ 绑死整条）
+# 例：菲比https://v.kuaishou.com/Kc9DxGU3 菲比啾比！……
+_FUN_MEDIA_URL_PATH = r"[^\s\u200b\u00a0<>\"'，。！？、；：（）【】《》]+"
+_FUN_MEDIA_SHARE_HOSTS = (
+    r"v\.douyin\.com|"
+    r"www\.iesdouyin\.com|"
+    r"b23\.tv|"
+    r"bili2233\.cn|"
+    r"www\.bilibili\.com|"
+    r"m\.bilibili\.com|"
+    r"xhslink\.com|"
+    r"www\.xiaohongshu\.com|"
+    r"v\.kuaishou\.com|"
+    r"www\.kuaishou\.com|"
+    r"weibo\.com|"
+    r"weibo\.cn|"
+    r"t\.cn|"
+    r"www\.toutiao\.com|"
+    r"www\.xiaoheihe\.cn|"
+    r"x\.com|"
+    r"twitter\.com|"
+    r"www\.instagram\.com|"
+    r"www\.goofish\.com"
+)
+
+FUN_MEDIA_SHARE_URL_RE = re.compile(
+    rf"https?://(?:{_FUN_MEDIA_SHARE_HOSTS})/{_FUN_MEDIA_URL_PATH}",
+    re.I,
+)
+
+# on_regex 用：表示「消息中含有」分享域名的 http 链接（非整句只能是链接）
+FUN_MEDIA_EMBEDDED_SHARE_MATCH_RE = re.compile(
+    rf".*(https?://(?:{_FUN_MEDIA_SHARE_HOSTS})/{_FUN_MEDIA_URL_PATH}).*",
+    re.I | re.S,
+)
+
+# 可选解析指令 + 任意 http(s) 链接（指令后整段可再跟其它字，链接用 search 取）
+FUN_MEDIA_CMD_WITH_URL_RE = re.compile(
+    r"(?:链接解析|视频解析|解析视频|解析链接|流媒体解析)\s+"
+    rf"(https?://(?:{_FUN_MEDIA_SHARE_HOSTS})/{_FUN_MEDIA_URL_PATH}|https?://\S+)",
+    re.I,
+)
+
+FUN_MEDIA_ANY_HTTP_RE = re.compile(
+    rf"https?://\S+",
+    re.I,
+)
+
+_FUN_MEDIA_URL_TRAIL_TRIM = re.compile(
+    r"[\s\u200b\u00a0<>\"'，。！？、；：（）【】《》]+$",
+)
+
+
+def fun_media_trim_url(url: str) -> str:
+    u = (url or "").strip()
+    return _FUN_MEDIA_URL_TRAIL_TRIM.sub("", u)
+
+
+def fun_media_plain_for_parse(event: GroupMessageEvent | PrivateMessageEvent) -> str:
+    """优先整条纯文本，便于从中间抽出短链。"""
+    text = fun_media_message_plain(event)
+    if text:
+        return text
+    try:
+        return event.get_message().extract_plain_text() or ""
+    except Exception:
+        return ""
+
+
+def fun_media_message_has_embedded_share_url(text: str) -> bool:
+    """文案中间含分享短链即可，不要求消息只有链接。"""
+    if not text:
+        return False
+    return FUN_MEDIA_SHARE_URL_RE.search(text) is not None
+
+
+def strip_fun_media_parse_command_prefix(text: str) -> str:
+    plain = (text or "").strip()
+    for prefix in FUN_MEDIA_PARSE_CMDS:
+        if plain.startswith(prefix):
+            return plain[len(prefix) :].strip()
+    return plain
+
+
+def fun_media_message_plain(event: GroupMessageEvent | PrivateMessageEvent) -> str:
+    return event.get_plaintext() or ""
+
+
+def fun_media_quick_has_share_url(text: str) -> bool:
+    if not text:
+        return False
+    if fun_media_message_has_embedded_share_url(text):
+        return True
+    return FUN_MEDIA_ANY_HTTP_RE.search(text) is not None
+
+
+async def fun_media_has_supported_link(text: str) -> bool:
+    if not fun_media_quick_has_share_url(text):
+        return False
+    try:
+        links = await extract_links(text)
+    except Exception:
+        return False
+    return len(links) > 0
+
+
+# 同一条群消息只解析发送一次（防止多个 on_regex 或重复投递）
+_fun_media_parsed_message_ids: dict[str, float] = {}
+_FUN_MEDIA_PARSE_DEDUP_SEC = 90.0
+
+
+def _fun_media_event_dedupe_key(event: GroupMessageEvent | PrivateMessageEvent) -> str:
+    mid = getattr(event, "message_id", None)
+    if mid is not None:
+        return f"mid:{mid}"
+    return f"uid:{event.get_user_id()}:ts:{getattr(event, 'time', 0)}"
+
+
+def fun_media_should_skip_duplicate_event(
+    event: GroupMessageEvent | PrivateMessageEvent,
+) -> bool:
+    key = _fun_media_event_dedupe_key(event)
+    now = time.time()
+    expired = [k for k, t in _fun_media_parsed_message_ids.items() if now - t > _FUN_MEDIA_PARSE_DEDUP_SEC]
+    for k in expired:
+        _fun_media_parsed_message_ids.pop(k, None)
+    if key in _fun_media_parsed_message_ids:
+        return True
+    _fun_media_parsed_message_ids[key] = now
+    return False
+
+
+async def fun_media_send_parse_result(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    source_text: str,
+) -> None:
+    if fun_media_should_skip_duplicate_event(event):
+        logger.debug(f"娱乐媒体解析：跳过重复消息 {_fun_media_event_dedupe_key(event)}")
+        return
+    texts, images, videos = await run_parse_and_build_messages(source_text)
+    images = dedupe_media_urls_preserve_order(images)
+    videos = dedupe_media_urls_preserve_order(videos)
+    body = "\n\n".join(texts)
+    if body:
+        await handle_send(
+            bot,
+            event,
+            body,
+            md_type="娱乐",
+            k1="娱乐帮助",
+            v1="娱乐帮助",
+            k2="链接解析",
+            v2="链接解析",
+        )
+    for img in images:
+        try:
+            await bot.send(event=event, message=MessageSegment.image(bot, img))
+        except Exception as e:
+            logger.debug(f"发送解析图片失败 {img[:80]}: {e}")
+    for vid in videos:
+        try:
+            await bot.send(event=event, message=MessageSegment.video(bot, vid))
+        except Exception as e:
+            logger.debug(f"发送解析视频失败 {vid[:80]}: {e}")
 
 
 def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:

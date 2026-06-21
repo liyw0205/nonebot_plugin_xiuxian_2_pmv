@@ -59,7 +59,6 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await today_wife_cmd.finish()
 
     text_msg = (
-        f"💕 今日老婆 💕\n"
         f"名字：{role_name}\n"
         f"尺寸：{width} × {height}"
     )
@@ -70,9 +69,9 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 msg_param = {
                     "key": "t1",
                     "values": [
-                        "](mqqapi://aio/inlinecmd?command=今日老婆&enter=false&reply=false)\r![",
-                        f"img #{width}px #{height}px]({image_url})\r",
-                        f"💕 今日老婆：[{role_name}"
+                        "](mqqapi://aio/inlinecmd?command=今日老婆&enter=false&reply=false)\\r![",
+                        f"img #{width}px #{height}px]({image_url})\\r",
+                        f"名字：{role_name}"
                     ]
                 }
 
@@ -100,10 +99,9 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             if not is_channel_event(event):
                 try:
                     md_msg = (
-                        f"## 💕 今日老婆\r"
-                        f"![img #{width}px #{height}px]({image_url})\r"
-                        f"名字：{role_name}\r"
-                        f"尺寸：{width} × {height}\r\r"
+                        f"![img #{width}px #{height}px]({image_url})\\r"
+                        f"名字：{role_name}\\r"
+                        f"尺寸：{width} × {height}\\r\\r"
                         f"[再来一张](mqqapi://aio/inlinecmd?command=今日老婆&enter=false&reply=false) | "
                         f"[查看原图](mqqapi://aio/inlinecmd?command={image_url}&enter=false&reply=false)"
                     )

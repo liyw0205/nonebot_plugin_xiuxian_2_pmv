@@ -1,0 +1,1 @@
+"""娱乐流媒体解析（上游 core 来自 astrbot_plugin_media_parser）。"""

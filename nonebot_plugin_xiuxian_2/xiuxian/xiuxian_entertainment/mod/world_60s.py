@@ -49,7 +49,7 @@ async def world_60s_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     else:
         content = str(data)
 
-    text_msg = f"📰 60S读世界\n{content}"
+    text_msg = content
     if api_source:
         text_msg += f"\n\n来源：{api_source}"
 
