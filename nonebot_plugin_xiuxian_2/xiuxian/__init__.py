@@ -4,6 +4,7 @@ import time
 from collections import deque
 
 from .xiuxian_utils.download_xiuxian_data import download_xiuxian_data
+from .xiuxian_utils.ensure_dependencies import ensure_plugin_dependencies
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
 from nonebot.message import event_preprocessor, IgnoredException
@@ -33,6 +34,11 @@ except Exception as e:
     logger.opt(colors=True).info(f"<red>缺少超级用户配置文件，{e}!</red>")
     logger.opt(colors=True).info(f"<red>请去.env.dev文件中设置超级用户QQ号以及nickname!</red>")
     NICKNAME = 'bot'
+
+try:
+    ensure_plugin_dependencies()
+except Exception as e:
+    logger.opt(colors=True).warning(f"<yellow>修仙插件依赖自检异常（将继续尝试加载）：{e}</yellow>")
 
 try:
     download_xiuxian_data()
