@@ -4508,8 +4508,7 @@ function toggleAutoRefresh(force = null) {
     const btn = document.getElementById('autoRefreshBtn');
 
     if (autoRefresh) {
-        btn.style.background = 'var(--success-color)';
-        btn.style.color = '#fff';
+        btn?.classList.add('auto-refresh-on');
 
         if (autoRefreshTimer) clearInterval(autoRefreshTimer);
 
@@ -4520,8 +4519,7 @@ function toggleAutoRefresh(force = null) {
             }
         }, 1500);
     } else {
-        btn.style.background = '';
-        btn.style.color = '';
+        btn?.classList.remove('auto-refresh-on');
 
         if (autoRefreshTimer) {
             clearInterval(autoRefreshTimer);
