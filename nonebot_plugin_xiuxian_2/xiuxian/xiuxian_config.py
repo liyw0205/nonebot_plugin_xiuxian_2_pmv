@@ -109,6 +109,15 @@ class XiuConfig:
         self.webdav_delete_days = 0
         # 删除云端多少天前备份；0或空表示不删
 
+        self.custom_proxy_enabled = False
+        # 是否启用自定义代理（访问 Bangumi 等境外 API）
+        self.custom_proxy = ""
+        # 代理地址，自动识别协议；示例：
+        # socks5://127.0.0.1:1080
+        # socks5h://user:pass@host:1080
+        # http://127.0.0.1:7890
+        # 仅 host:port 时默认按 socks5 处理
+
         self.merge_forward_send = 4
         # 使用消息合并转发
         # 1是合并转发的内容转换成长文本发送

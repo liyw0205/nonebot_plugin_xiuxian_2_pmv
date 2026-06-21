@@ -12,5 +12,6 @@ aiofiles
 psutil
 flask
 requests
+PySocks
 nonebot_plugin_apscheduler 
  

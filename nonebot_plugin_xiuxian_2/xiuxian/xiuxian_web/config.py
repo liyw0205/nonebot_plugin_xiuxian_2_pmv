@@ -517,6 +517,18 @@ CONFIG_EDITABLE_FIELDS = {
         "description": "删除云端多少天之前的旧备份。0 表示永不删除",
         "type": "int",
         "category": "云备份设置"
+    },
+    "custom_proxy_enabled": {
+        "name": "启用自定义代理",
+        "description": "开启后，番剧等需代理的 HTTP 请求经下方地址转发",
+        "type": "bool",
+        "category": "网络代理"
+    },
+    "custom_proxy": {
+        "name": "自定义代理地址",
+        "description": "支持 socks5/socks5h/http/https；无协议时默认 socks5。例：socks5://127.0.0.1:1080 或 http://127.0.0.1:7890",
+        "type": "str",
+        "category": "网络代理"
     }
 }
 
