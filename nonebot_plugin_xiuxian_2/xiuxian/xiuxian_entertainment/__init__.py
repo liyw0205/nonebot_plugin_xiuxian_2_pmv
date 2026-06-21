@@ -31,6 +31,7 @@ from .mod.minesweeper import *
 from .mod.guess_number import *
 from .mod.random_girl_video import *
 from .mod.media_parse_link import *
+from .mod.bangumi_calendar import *
 
 
 fun_menu_cmd = on_command("娱乐帮助", aliases={"娱乐菜单", "娱乐功能"}, priority=5, block=True)
@@ -51,6 +52,7 @@ __FUN_HELP__ = """【娱乐帮助】
 
 图片与资讯：
 - 每日Bing图
+- 番剧（Bangumi）：今日番剧 / 番剧周表（别名：每日番剧、番剧日历、每周番剧、番剧总表）
 - 热榜图片
 - 60S读世界
 - 每日60S图片
@@ -113,6 +115,7 @@ async def fun_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         total_pages,
         extras=[
             ("舔狗日记", "舔狗日记"),
+            ("今日番剧", "今日番剧"),
             ("随机小姐姐", "随机小姐姐"),
             ("链接解析", "链接解析"),
             ("小游戏", "小游戏帮助"),
