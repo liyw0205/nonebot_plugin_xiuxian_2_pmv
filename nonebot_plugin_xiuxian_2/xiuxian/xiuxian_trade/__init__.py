@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from nonebot import require
+from .. import DRIVER
 from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
@@ -191,6 +192,18 @@ def set_auction_status(active: bool, start_time: Optional[datetime] = None, end_
         "items_count": items_count
     }
     auction_config.set_auction_config_value("auction_status", status)
+    auction_config.persist_auction_status(status)
+
+
+def _restore_auction_status_from_disk() -> bool:
+    """启动时把落盘场次写回内存（不再写盘）。"""
+    persisted = auction_config.load_persisted_auction_status()
+    if not persisted:
+        return False
+    cfg = auction_config.get_auction_config()
+    cfg["auction_status"] = persisted
+    auction_config.save_config(cfg)
+    return True
 
 
 def _safe_auction_int(value: Any, default: int = 0) -> int:
@@ -596,8 +609,56 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     trade_manager.clear_current_auction() # 清空当前拍卖表
     # 更新拍卖状态为不活跃，时间置空
     set_auction_status(active=False, start_time=None, end_time=None, last_display_refresh_time=None, items_count=0)
+    auction_config.clear_persisted_auction_status()
     logger.info("拍卖已结束，结算完成！")
     return auction_results
+
+
+async def reconcile_auction_after_restart() -> None:
+    """
+    重启后对账：有落盘场次且未到结束时间 → 继续本场；否则库内遗留拍品 → 收尾结算。
+    不向群里发公告。
+    """
+    current_auctions = trade_manager.get_current_auction()
+    if not current_auctions:
+        return
+
+    _restore_auction_status_from_disk()
+    status = get_auction_status()
+    now_dt = datetime.now()
+    item_count = len(current_auctions)
+    end_dt = status["end_time"]
+    start_dt = status["start_time"]
+    active = status["active"]
+
+    if active and end_dt is not None:
+        if now_dt >= end_dt:
+            logger.info(
+                f"拍卖重启后对账：已过结束时间（{end_dt.strftime('%m-%d %H:%M')}），"
+                f"开始收尾，拍品 {item_count} 件。"
+            )
+            await end_auction_process(None)
+            return
+        refresh = status.get("last_display_refresh_time") or start_dt
+        set_auction_status(
+            active=True,
+            start_time=start_dt,
+            end_time=end_dt,
+            last_display_refresh_time=refresh,
+            items_count=item_count,
+        )
+        left_min = max(int((end_dt - now_dt).total_seconds()) // 60, 0)
+        logger.info(
+            f"拍卖重启后继续本场，预计 {end_dt.strftime('%H:%M')} 结束，"
+            f"剩余约 {left_min} 分钟，拍品 {item_count} 件。"
+        )
+        return
+
+    logger.warning(
+        f"拍卖库里有 {item_count} 件未收尾拍品，场次记录对不上，按遗留数据结算。"
+    )
+    await end_auction_process(None)
+
 
 async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: str, bid_price: int):
     """
@@ -3481,7 +3542,8 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await auction_end.finish()
     
     auction_current_status = get_auction_status()
-    if not auction_current_status["active"]:
+    pending_items = trade_manager.get_current_auction()
+    if not auction_current_status["active"] and not pending_items:
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
@@ -3571,28 +3633,42 @@ async def auto_start_auction_job():
 
 @scheduler.scheduled_job("interval", minutes=5, id="check_auction_end")
 async def check_auction_end_job():
-    """
-    定期检查拍卖是否应结束。
-    当当前时间超过拍卖结束时间时，结束拍卖。
-    """
-    auction_current_status = get_auction_status()
-    
-    if not auction_current_status["active"]:
-        return  # 拍卖未开启，无需处理
-    
-    now_dt = datetime.now()
-    end_time_dt = auction_current_status["end_time"]
-    
-    if end_time_dt is None:
-        logger.warning("拍卖结束时间缺失，无法判断是否应结束。")
+    """每 5 分钟看一场是否该收尾。"""
+    current_auctions = trade_manager.get_current_auction()
+    if not current_auctions:
         return
-    
-    if now_dt >= end_time_dt:
-        await end_auction_process(None)  # 传入None表示不需要Bot实例
-    else:
-        # 计算剩余时间
-        remaining_seconds = int((end_time_dt - now_dt).total_seconds())
-        if remaining_seconds % 300 == 0 or remaining_seconds < 300 and remaining_seconds > 0:  # 每5分钟（300秒）记录一次日志，或剩余不足5分钟时也记录
-            hours, remainder = divmod(remaining_seconds, 3600)
-            minutes, _ = divmod(remainder, 60)
-            logger.info(f"拍卖进行中，剩余 {hours}小时{minutes}分钟")
+
+    status = get_auction_status()
+    now_dt = datetime.now()
+    end_dt = status["end_time"]
+    active = status["active"]
+    n = len(current_auctions)
+
+    if active and end_dt is not None and now_dt >= end_dt:
+        logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")
+        await end_auction_process(None)
+        return
+
+    if not active:
+        logger.warning(f"拍卖定时检查：库内还有 {n} 件拍品，场次未开启，按遗留数据结算。")
+        await end_auction_process(None)
+        return
+
+    if active and end_dt is None:
+        logger.warning(f"拍卖定时检查：场次开着但没有结束时间，拍品 {n} 件，收尾结算。")
+        await end_auction_process(None)
+        return
+
+    if end_dt is not None:
+        remaining_seconds = int((end_dt - now_dt).total_seconds())
+        remaining_minutes = remaining_seconds // 60
+        if remaining_minutes > 0 and remaining_minutes % 30 == 0:
+            logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
+
+
+@DRIVER.on_startup
+async def recover_orphan_auction_on_startup():
+    try:
+        await reconcile_auction_after_restart()
+    except Exception as e:
+        logger.opt(colors=True).error(f"<red>拍卖重启对账失败：{e}</red>")

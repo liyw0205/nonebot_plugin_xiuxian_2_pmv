@@ -1,5 +1,14 @@
 from copy import deepcopy
+from pathlib import Path
 from typing import Dict, Any, Optional
+import json
+
+try:
+    from ..xiuxian_config import DATABASE as XIUXIAN_DATABASE
+except ImportError:
+    XIUXIAN_DATABASE = Path() / "data" / "xiuxian"
+
+AUCTION_SESSION_FILE = XIUXIAN_DATABASE / "auction_session.json"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "schedule": {
@@ -167,6 +176,45 @@ def get_auction_activity_config() -> Dict[str, Any]:
 
 def get_auction_status_from_config_file() -> Dict[str, Any]:
     return get_auction_status_config()
+
+
+def load_persisted_auction_status() -> Optional[Dict[str, Any]]:
+    """读取上次落盘的场次状态（与 trade.db 拍品配套）。"""
+    if not AUCTION_SESSION_FILE.is_file():
+        return None
+    try:
+        raw = json.loads(AUCTION_SESSION_FILE.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return None
+        merged = _deep_merge({"auction_status": raw}, DEFAULT_CONFIG)["auction_status"]
+        return _normalize_config({"auction_status": merged})["auction_status"]
+    except Exception:
+        return None
+
+
+def persist_auction_status(status: Dict[str, Any]) -> None:
+    """把当前场次状态写到 data/xiuxian/auction_session.json。"""
+    try:
+        XIUXIAN_DATABASE.mkdir(parents=True, exist_ok=True)
+        normalized = _normalize_config({"auction_status": status})["auction_status"]
+        if not normalized.get("active"):
+            if AUCTION_SESSION_FILE.is_file():
+                AUCTION_SESSION_FILE.unlink(missing_ok=True)
+            return
+        AUCTION_SESSION_FILE.write_text(
+            json.dumps(normalized, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def clear_persisted_auction_status() -> None:
+    try:
+        if AUCTION_SESSION_FILE.is_file():
+            AUCTION_SESSION_FILE.unlink()
+    except Exception:
+        pass
 
 
 def set_auction_config_value(key: str, value: Any, sub_key: Optional[str] = None) -> None:
