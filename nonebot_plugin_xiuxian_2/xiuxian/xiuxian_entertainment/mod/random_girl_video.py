@@ -81,9 +81,9 @@ async def _send_random_girl_video(bot: Bot, event, video_url: str):
                 msg_param = {
                     "key": "t1",
                     "values": [
-                        "](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\\r",
+                        "](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\r",
                         "[",
-                        "再来一个](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\\r",
+                        "再来一个](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\r",
                     ],
                 }
                 await handle_send_md(

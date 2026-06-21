@@ -246,7 +246,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
                     "values": [
                         "](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r![",
                         f"img #300px #300px]({cover_url})\r",
-                        f"歌名：{song_name}\\r歌手：{artists}\\r\\r[",
+                        f"歌名：{song_name}\r歌手：{artists}\r\r[",
                         "点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r",
                         "[再点一首"
                     ]
@@ -255,7 +255,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
                 msg_param = {
                     "key": "t1",
                     "values": [
-                        f"歌名：{song_name}\\r歌手：{artists}\\r\\r[点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)"
+                        f"歌名：{song_name}\r歌手：{artists}\r\r[点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)"
                     ]
                 }
 
@@ -281,15 +281,15 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
         try:
             if cover_url:
                 md_msg = (
-                    f"![img #300px #300px]({cover_url})\\r"
-                    f"歌名：{song_name}\\r"
-                    f"歌手：{artists}\\r\\r"
+                    f"![img #300px #300px]({cover_url})\r"
+                    f"歌名：{song_name}\r"
+                    f"歌手：{artists}\r\r"
                     f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"
                 )
             else:
                 md_msg = (
-                    f"歌名：{song_name}\\r"
-                    f"歌手：{artists}\\r\\r"
+                    f"歌名：{song_name}\r"
+                    f"歌手：{artists}\r\r"
                     f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"
                 )
 

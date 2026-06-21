@@ -92,7 +92,7 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if config.markdown_status and config.markdown_id:
         try:
             # 标题部分
-            title_value = f"时间：{time_text}\\r数量：{count}"
+            title_value = f"时间：{time_text}\r数量：{count}"
 
             # 内容部分放到 s1
             shell_lines = []
