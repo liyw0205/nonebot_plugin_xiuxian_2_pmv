@@ -232,6 +232,49 @@ def collect_command_list_rows(
     return rows
 
 
+def collect_command_list_groups(
+    raw_filter: str = "",
+    *,
+    only_disabled: bool = False,
+) -> list[dict[str, Any]]:
+    """按子模块分组，供 Web 指令管理页折叠展示。"""
+    rows = collect_command_list_rows(raw_filter, only_disabled=only_disabled)
+    groups: list[dict[str, Any]] = []
+    current_mod: str | None = None
+    bucket: list[dict[str, Any]] = []
+
+    def flush(mod_key: str) -> None:
+        nonlocal bucket
+        if not bucket:
+            return
+        disabled_n = sum(1 for c in bucket if c["disabled"])
+        groups.append(
+            {
+                "module": mod_key,
+                "label": mod_key or "（未归类）",
+                "commands": bucket,
+                "total": len(bucket),
+                "disabled_count": disabled_n,
+            }
+        )
+        bucket = []
+
+    for name, mod, status in rows:
+        mod_key = mod or ""
+        if mod_key != current_mod:
+            flush(current_mod if current_mod is not None else "")
+            current_mod = mod_key
+        bucket.append(
+            {
+                "name": name,
+                "disabled": status == "禁用",
+            }
+        )
+    if current_mod is not None or bucket:
+        flush(current_mod if current_mod is not None else "")
+    return groups
+
+
 def format_command_list_page(
     raw_filter: str = "",
     *,

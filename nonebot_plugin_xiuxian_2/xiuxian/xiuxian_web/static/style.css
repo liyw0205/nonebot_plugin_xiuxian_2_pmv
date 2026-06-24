@@ -2936,11 +2936,11 @@ tr:hover {
     left: 0;
     z-index: 3000;
     width: 0%;
-    height: 2px;
+    height: 3px;
     opacity: 0;
     pointer-events: none;
-    background: linear-gradient(90deg, var(--accent-color), var(--info-color));
-    box-shadow: 0 0 16px color-mix(in srgb, var(--accent-color) 65%, transparent);
+    background: linear-gradient(90deg, var(--success-color), var(--info-color), var(--accent-color));
+    box-shadow: 0 0 18px color-mix(in srgb, var(--success-color) 70%, transparent);
 }
 
 .sidebar-backdrop {
@@ -4038,9 +4038,9 @@ div[style*="overflow-x: auto"] {
 
 .top-progress {
     height: 3px;
-    background: linear-gradient(90deg, transparent, var(--accent-color), var(--info-color), transparent);
+    background: linear-gradient(90deg, var(--success-color), var(--info-color), var(--accent-color));
     box-shadow:
-        0 0 18px color-mix(in srgb, var(--accent-color) 70%, transparent),
+        0 0 18px color-mix(in srgb, var(--success-color) 70%, transparent),
         0 0 36px color-mix(in srgb, var(--info-color) 42%, transparent);
 }
 
@@ -4339,5 +4339,211 @@ div[style*="overflow-x: auto"] {
     .backup-card:hover,
     .release-card:hover {
         transform: none;
+    }
+}
+
+/* --- 指令管理页 --- */
+.command-registry-card {
+    margin-top: 1.25rem;
+}
+
+.command-registry-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--glass-border-muted, rgba(255, 255, 255, 0.08));
+}
+
+.command-registry-filters .form-group {
+    margin: 0;
+    min-width: 12rem;
+    flex: 1 1 14rem;
+}
+
+.command-registry-filters .form-group-check {
+    flex: 0 0 auto;
+    min-width: auto;
+    padding-bottom: 0.35rem;
+}
+
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.command-registry-toast {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-md, 10px);
+    font-size: 0.9rem;
+    background: color-mix(in srgb, var(--success-color, #3ecf8e) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--success-color, #3ecf8e) 35%, transparent);
+}
+
+.command-registry-toast.is-error {
+    background: color-mix(in srgb, var(--danger-color, #f07178) 18%, transparent);
+    border-color: color-mix(in srgb, var(--danger-color, #f07178) 35%, transparent);
+}
+
+.command-registry-empty {
+    padding: 2rem 0;
+    text-align: center;
+}
+
+.command-registry-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.cmd-mod-group {
+    border: 1px solid var(--glass-border-muted, rgba(255, 255, 255, 0.1));
+    border-radius: var(--radius-md, 12px);
+    background: color-mix(in srgb, var(--bg-secondary, #12101a) 88%, transparent);
+    overflow: hidden;
+}
+
+.cmd-mod-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.cmd-mod-summary::-webkit-details-marker {
+    display: none;
+}
+
+.cmd-mod-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.cmd-mod-chevron {
+    font-size: 0.75rem;
+    opacity: 0.65;
+    transition: transform 0.2s ease;
+}
+
+.cmd-mod-group[open] .cmd-mod-chevron {
+    transform: rotate(90deg);
+}
+
+.cmd-mod-meta {
+    font-size: 0.82rem;
+    color: var(--text-muted, #9a94a8);
+    font-weight: normal;
+}
+
+.cmd-mod-bulk {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.cmd-mod-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 1rem 0.75rem;
+    border-top: 1px solid var(--glass-border-muted, rgba(255, 255, 255, 0.06));
+}
+
+.cmd-mod-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--glass-border-muted, #fff) 6%, transparent);
+}
+
+.cmd-mod-row:last-child {
+    border-bottom: none;
+}
+
+.cmd-mod-row.is-disabled .cmd-mod-name {
+    opacity: 0.55;
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+
+.cmd-mod-name {
+    font-family: var(--font-mono, "IBM Plex Mono", monospace);
+    font-size: 0.88rem;
+    word-break: break-all;
+}
+
+.cmd-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.cmd-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.cmd-toggle-track {
+    width: 2.4rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-muted) 35%, var(--bg-primary));
+    position: relative;
+    transition: background 0.2s ease;
+}
+
+.cmd-toggle-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(1.35rem - 4px);
+    height: calc(1.35rem - 4px);
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+}
+
+.cmd-toggle-input:checked + .cmd-toggle-track {
+    background: color-mix(in srgb, var(--accent-color, #f0b429) 75%, #2a2418);
+}
+
+.cmd-toggle-input:checked + .cmd-toggle-track::after {
+    transform: translateX(1.05rem);
+}
+
+.cmd-toggle-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    min-width: 2.2em;
+}
+
+@media (max-width: 640px) {
+    .cmd-mod-summary {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .cmd-mod-bulk {
+        width: 100%;
+        justify-content: flex-end;
     }
 }

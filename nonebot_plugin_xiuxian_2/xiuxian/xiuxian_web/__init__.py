@@ -21,6 +21,7 @@ from . import messages as _messages_routes  # noqa: F401,E402
 from . import economy_logs as _economy_logs_routes  # noqa: F401,E402
 from . import activity as _activity_routes  # noqa: F401,E402
 from . import reward_center as _reward_center_routes  # noqa: F401,E402
+from . import command_registry_web as _command_registry_routes  # noqa: F401,E402
 
 
 def run_flask():

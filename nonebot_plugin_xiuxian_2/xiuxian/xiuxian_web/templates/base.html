@@ -28,7 +28,7 @@
     <div class="layout-shell">
         <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
         <aside class="app-sidebar" id="mainNav" aria-label="主导航">
-            <a href="{{ url_for('home') }}" class="brand" aria-label="返回首页">
+            <a href="{{ url_for('home') }}" class="brand" data-cache-page="true" data-cache-ttl="300000" aria-label="返回首页">
                 <span class="brand-mark"><i class="fas fa-mountain-sun"></i></span>
                 <span class="brand-copy">
                     <strong>修仙管理面板</strong>
@@ -42,6 +42,7 @@
                     <li><a href="{{ url_for('home') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('home') %}class="active"{% endif %}><i class="fas fa-gauge-high"></i><span>首页</span></a></li>
                     <li><a href="{{ url_for('database') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active(['database', 'table_view', 'row_edit']) %}class="active"{% endif %}><i class="fas fa-database"></i><span>数据库</span></a></li>
                     <li><a href="{{ url_for('commands') }}" data-cache-page="true" data-cache-ttl="300000" {% if is_active('commands') %}class="active"{% endif %}><i class="fas fa-wand-magic-sparkles"></i><span>指令中心</span></a></li>
+                    <li><a href="{{ url_for('command_registry') }}" data-refresh-page="true" {% if is_active('command_registry') %}class="active"{% endif %}><i class="fas fa-list-check"></i><span>指令管理</span></a></li>
                     <li><a href="{{ url_for('activity_management') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active('activity_management') %}class="active"{% endif %}><i class="fas fa-calendar-check"></i><span>活动管理</span></a></li>
                     <li><a href="{{ url_for('reward_center') }}" data-cache-page="true" data-cache-ttl="60000" {% if is_active('reward_center') %}class="active"{% endif %}><i class="fas fa-hand-holding-heart"></i><span>发放中心</span></a></li>
                     <li><a href="{{ url_for('config_management') }}" data-refresh-page="true" {% if is_active('config_management') %}class="active"{% endif %}><i class="fas fa-sliders"></i><span>配置管理</span></a></li>
@@ -308,9 +309,11 @@
             startProgress();
             closeSidebar();
 
+            const bypassCache = options.bypassCache === true;
+
             try {
                 cleanupCurrentPage();
-                let cached = getCachedPage(absoluteUrl);
+                let cached = bypassCache ? null : getCachedPage(absoluteUrl);
 
                 if (!cached) {
                     const response = await fetch(absoluteUrl, {
@@ -329,7 +332,9 @@
                         bodyClass: doc.body ? doc.body.className : '',
                         content: nextMain.innerHTML
                     };
-                    setCachedPage(absoluteUrl, cached, options.cacheTtl || DEFAULT_PAGE_CACHE_TTL);
+                    if (!bypassCache) {
+                        setCachedPage(absoluteUrl, cached, options.cacheTtl || DEFAULT_PAGE_CACHE_TTL);
+                    }
                 }
 
                 if (token !== pageLoadToken) return;
@@ -341,7 +346,7 @@
                 executePageScripts(main, absoluteUrl);
                 updateActiveNav(absoluteUrl);
                 if (pushState && absoluteUrl !== window.location.href) {
-                    history.pushState({cachedPage: true}, '', absoluteUrl);
+                    history.pushState({spaPage: true}, '', absoluteUrl);
                 }
                 window.scrollTo({top: 0, behavior: 'auto'});
                 finishProgress();
@@ -349,6 +354,23 @@
                 finishProgress();
                 window.location.href = absoluteUrl;
             }
+        }
+
+        async function loadFreshPage(url, pushState = true) {
+            invalidatePageCache(url);
+            return loadCachedPage(url, pushState, {bypassCache: true});
+        }
+
+        function shouldSpaNavigate(link, url) {
+            if (!link || !url) return false;
+            if (link.classList.contains('logout-link')) return false;
+            if (isDownloadLikeNavigation(link, url)) return false;
+            if (link.dataset.fullReload === 'true') return false;
+            if (link.dataset.cachePage === 'true') return true;
+            if (link.dataset.refreshPage === 'true') return true;
+            if (link.closest('.app-sidebar .app-nav')) return true;
+            if (link.closest('main.container')) return true;
+            return false;
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -364,7 +386,8 @@
             startProgress,
             finishProgress,
             invalidatePageCache,
-            loadPage: loadCachedPage
+            loadPage: loadCachedPage,
+            loadFreshPage
         };
 
         if (themeToggle) {
@@ -428,9 +451,13 @@
             if (url.origin !== window.location.origin) return;
             if (isSamePageHashNavigation(url) || isDownloadLikeNavigation(link, url) || link.dataset.noProgress === 'true') return;
 
-            if (link.dataset.cachePage === 'true') {
+            if (shouldSpaNavigate(link, url)) {
                 event.preventDefault();
-                loadCachedPage(url.toString(), true, {cacheTtl: getLinkCacheTtl(link)});
+                if (link.dataset.cachePage === 'true') {
+                    loadCachedPage(url.toString(), true, {cacheTtl: getLinkCacheTtl(link)});
+                } else {
+                    loadFreshPage(url.toString(), true);
+                }
                 return;
             }
 
@@ -442,22 +469,51 @@
             const form = event.target;
             if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
             if (form.target && form.target !== '_self') return;
-            if (form.dataset.noProgress === 'true') return;
+            if (form.dataset.noProgress === 'true' || form.dataset.fullReload === 'true') return;
+
+            const method = (form.getAttribute('method') || 'get').toLowerCase();
+            if (method === 'get' && form.closest('main.container')) {
+                event.preventDefault();
+                const action = form.getAttribute('action') || window.location.pathname;
+                const url = new URL(action, window.location.origin);
+                const formData = new FormData(form);
+                formData.forEach((value, key) => {
+                    url.searchParams.set(key, value);
+                });
+                form.querySelectorAll('input[type="checkbox"][name]').forEach((el) => {
+                    if (!el.checked) url.searchParams.delete(el.name);
+                });
+                loadFreshPage(url.toString(), true);
+                return;
+            }
+
             startProgress();
         });
 
         window.addEventListener('popstate', () => {
-            const activeLink = findExactNavLinkForUrl(window.location.href);
+            const href = window.location.href;
+            const activeLink = findExactNavLinkForUrl(href);
             if (activeLink && activeLink.dataset.cachePage === 'true') {
-                loadCachedPage(window.location.href, false, {cacheTtl: getLinkCacheTtl(activeLink)});
-            } else {
-                startProgress();
-                window.location.reload();
+                loadCachedPage(href, false, {cacheTtl: getLinkCacheTtl(activeLink)});
+                return;
             }
+            if (activeLink && shouldSpaNavigate(activeLink, new URL(href))) {
+                loadFreshPage(href, false);
+                return;
+            }
+            const path = window.location.pathname;
+            if (path.startsWith('/table/')) {
+                loadFreshPage(href, false);
+                return;
+            }
+            startProgress();
+            window.location.reload();
         });
 
-        window.addEventListener('pageshow', finishProgress);
-        window.addEventListener('beforeunload', startProgress);
+        window.addEventListener('pageshow', (event) => {
+            finishProgress();
+            if (event.persisted) return;
+        });
     </script>
 </body>
 </html>

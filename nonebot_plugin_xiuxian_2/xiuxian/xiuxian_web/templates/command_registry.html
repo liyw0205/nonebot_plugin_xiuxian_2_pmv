@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-hero">
+    <div>
+        <p class="page-kicker">Command Registry</p>
+        <h1 class="page-title">指令管理</h1>
+        <p class="page-subtitle">按子模块查看已登记主指令，切换启用/禁用后立即写入 command_disable.json，与群内「指令禁用」一致。</p>
+    </div>
+    <div class="hero-actions">
+        <span class="status-pill"><i class="fas fa-layer-group"></i> {{ stats.modules }} 个子模块</span>
+        <span class="status-pill"><i class="fas fa-terminal"></i> {{ stats.total }} 条指令</span>
+        <span class="status-pill"><i class="fas fa-ban"></i> 已禁用 {{ stats.disabled }}</span>
+    </div>
+</section>
+
+<div class="card command-registry-card">
+    <form class="command-registry-filters" method="get" action="{{ url_for('command_registry') }}">
+        <div class="form-group">
+            <label for="cmdFilterQ">筛选</label>
+            <input id="cmdFilterQ" name="q" type="search" value="{{ filters.q }}" placeholder="指令名或子模块，如 xiuxian_arena、存档">
+        </div>
+        <div class="form-group form-group-check">
+            <label class="checkbox-label">
+                <input type="checkbox" name="only_disabled" value="1" {% if filters.only_disabled %}checked{% endif %}>
+                仅显示已禁用
+            </label>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> 应用</button>
+        <a class="btn btn-secondary" href="{{ url_for('command_registry') }}">重置</a>
+    </form>
+
+    <p id="commandRegistryToast" class="command-registry-toast" role="status" hidden></p>
+
+    {% if not groups %}
+    <p class="muted-text command-registry-empty">无匹配指令。可重载插件后刷新，或清空筛选条件。</p>
+    {% else %}
+    <div class="command-registry-accordion">
+        {% for group in groups %}
+        <details class="cmd-mod-group">
+            <summary class="cmd-mod-summary">
+                <span class="cmd-mod-title">
+                    <i class="fas fa-chevron-right cmd-mod-chevron" aria-hidden="true"></i>
+                    <strong>{{ group.label }}</strong>
+                    <span class="cmd-mod-meta">{{ group.total }} 条{% if group.disabled_count %} · 禁用 {{ group.disabled_count }}{% endif %}</span>
+                </span>
+                <span class="cmd-mod-bulk" data-no-progress="true">
+                    {% if group.module %}
+                    <button type="button" class="btn btn-secondary btn-sm cmd-bulk-enable" data-module="{{ group.module|e }}" title="启用本子模块全部指令">全开</button>
+                    <button type="button" class="btn btn-secondary btn-sm cmd-bulk-disable" data-module="{{ group.module|e }}" title="禁用本子模块全部指令">全禁</button>
+                    {% endif %}
+                </span>
+            </summary>
+            <ul class="cmd-mod-list">
+                {% for cmd in group.commands %}
+                <li class="cmd-mod-row {% if cmd.disabled %}is-disabled{% endif %}" data-cmd-name="{{ cmd.name|e }}">
+                    <span class="cmd-mod-name">{{ cmd.name }}</span>
+                    <label class="cmd-toggle" title="{% if cmd.disabled %}点击启用{% else %}点击禁用{% endif %}">
+                        <input type="checkbox" class="cmd-toggle-input" data-name="{{ cmd.name|e }}" {% if not cmd.disabled %}checked{% endif %}>
+                        <span class="cmd-toggle-track" aria-hidden="true"></span>
+                        <span class="cmd-toggle-label">{% if cmd.disabled %}禁用{% else %}启用{% endif %}</span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+    const toast = document.getElementById('commandRegistryToast');
+    let toastTimer = null;
+
+    function showToast(text, ok) {
+        if (!toast) return;
+        toast.hidden = false;
+        toast.textContent = text;
+        toast.classList.toggle('is-error', !ok);
+        toast.classList.toggle('is-ok', !!ok);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.hidden = true; }, 3200);
+    }
+
+    async function postJson(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return res.json();
+    }
+
+    document.querySelectorAll('.cmd-toggle-input').forEach(function (input) {
+        input.addEventListener('change', async function () {
+            const name = input.dataset.name;
+            const enabled = input.checked;
+            const row = input.closest('.cmd-mod-row');
+            const label = input.closest('.cmd-toggle')?.querySelector('.cmd-toggle-label');
+            input.disabled = true;
+            try {
+                const data = await postJson('{{ url_for("api_command_registry_toggle") }}', {
+                    name: name,
+                    disabled: !enabled,
+                });
+                if (!data.success) {
+                    input.checked = !enabled;
+                    showToast(data.error || '操作失败', false);
+                    return;
+                }
+                if (row) row.classList.toggle('is-disabled', !enabled);
+                if (label) label.textContent = enabled ? '启用' : '禁用';
+                showToast((enabled ? '已启用：' : '已禁用：') + name, true);
+            } catch (e) {
+                input.checked = !enabled;
+                showToast('网络错误', false);
+            } finally {
+                input.disabled = false;
+            }
+        });
+    });
+
+    function bindBulk(selector, disabled) {
+        document.querySelectorAll(selector).forEach(function (btn) {
+            btn.addEventListener('click', async function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const module = btn.dataset.module;
+                const verb = disabled ? '禁用' : '启用';
+                if (!confirm('确定' + verb + '子模块「' + (module || '（未归类）') + '」下全部已登记指令？')) return;
+                btn.disabled = true;
+                try {
+                    const data = await postJson('{{ url_for("api_command_registry_bulk_toggle") }}', {
+                        module: module,
+                        disabled: disabled,
+                    });
+                    if (!data.success) {
+                        showToast(data.error || '操作失败', false);
+                        return;
+                    }
+                    showToast(verb + ' ' + data.count + ' 条指令', true);
+                    if (window.XiuxianWeb && typeof window.XiuxianWeb.loadFreshPage === 'function') {
+                        window.XiuxianWeb.loadFreshPage(window.location.href, false);
+                    } else {
+                        window.location.reload();
+                    }
+                } catch (e) {
+                    showToast('网络错误', false);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+    }
+
+    bindBulk('.cmd-bulk-disable', true);
+    bindBulk('.cmd-bulk-enable', false);
+
+    document.querySelectorAll('.cmd-mod-bulk').forEach(function (el) {
+        el.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    });
+})();
+</script>
+{% endblock %}

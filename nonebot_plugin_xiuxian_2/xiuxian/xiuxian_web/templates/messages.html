@@ -105,40 +105,47 @@
 
         <!-- 右侧聊天 -->
         <section id="chatPane" class="qq-chat-pane">
-            <div class="qq-chat-header">
-                <button class="mobile-back" onclick="backToSessions()">
+            <div id="chatHeader" class="qq-chat-header">
+                <button class="mobile-back" onclick="backToSessions()" type="button">
                     <i class="fas fa-chevron-left"></i>
                 </button>
 
                 <div id="chatAvatar" class="qq-chat-avatar">?</div>
 
                 <div class="qq-chat-title-wrap">
-                    <div id="chatTitle" class="qq-chat-title">请选择一个会话</div>
-                    <div id="chatSubTitle" class="qq-chat-subtitle">左侧选择群聊或私聊后查看消息</div>
+                    <div class="qq-chat-title-line">
+                        <div id="chatTitle" class="qq-chat-title">请选择一个会话</div>
+                        <button id="chatHeaderCollapseBtn" class="chat-header-fold-btn" type="button" onclick="toggleChatHeaderCollapsed()" title="展开顶栏" aria-expanded="false">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="chatHeaderDetails" class="chat-header-details">
+                        <div id="chatSubTitle" class="qq-chat-subtitle">左侧选择群聊或私聊后查看消息</div>
 
-                    <div class="chat-date-row">
-                        <select id="dateSelect" onchange="onDateChange()" disabled>
-                            <option value="">今天</option>
-                        </select>
+                        <div class="chat-date-row">
+                            <select id="dateSelect" onchange="onDateChange()" disabled>
+                                <option value="">今天</option>
+                            </select>
 
-                        <div class="qq-header-tools">
-                            <button onclick="scrollMessagesToTop()" title="最旧消息" type="button">
-                                <i class="fas fa-angles-up"></i>
-                            </button>
-                            <button onclick="scrollMessagesToBottom()" title="最新消息" type="button">
-                                <i class="fas fa-angles-down"></i>
-                            </button>
-                            <button onclick="jumpPrevMessage()" title="上一条消息" type="button">
-                                <i class="fas fa-arrow-up"></i>
-                            </button>
-                            <button onclick="jumpNextMessage()" title="下一条消息" type="button">
-                                <i class="fas fa-arrow-down"></i>
-                            </button>
+                            <div class="qq-header-tools">
+                                <button onclick="scrollMessagesToTop()" title="最旧消息" type="button">
+                                    <i class="fas fa-angles-up"></i>
+                                </button>
+                                <button onclick="scrollMessagesToBottom()" title="最新消息" type="button">
+                                    <i class="fas fa-angles-down"></i>
+                                </button>
+                                <button onclick="jumpPrevMessage()" title="上一条消息" type="button">
+                                    <i class="fas fa-arrow-up"></i>
+                                </button>
+                                <button onclick="jumpNextMessage()" title="下一条消息" type="button">
+                                    <i class="fas fa-arrow-down"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <button id="autoRefreshBtn" class="icon-btn" onclick="toggleAutoRefresh()" title="自动刷新">
+                <button id="autoRefreshBtn" class="icon-btn" onclick="toggleAutoRefresh()" title="自动刷新" type="button">
                     <i class="fas fa-bolt"></i>
                 </button>
             </div>
@@ -162,13 +169,21 @@
                     </button>
                 </div>
 
-                <div class="composer-collapsed" id="composerCollapsed" onclick="expandComposer()">
-                    <i class="fas fa-comment-dots"></i>
-                    <span>输入消息...</span>
-                    <button id="mediaToggleBtn" class="media-toggle-btn" type="button" onclick="event.stopPropagation(); toggleMediaPanel()" title="发送媒体">
-                        <i class="fas fa-plus"></i>
-                        <span id="mediaCountBadge" class="media-count-badge hidden">0</span>
-                    </button>
+                <div class="composer-collapsed" id="composerCollapsed">
+                    <div class="composer-collapsed-main" onclick="expandComposer()" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')expandComposer()">
+                        <i class="fas fa-comment-dots"></i>
+                        <span>输入消息...</span>
+                    </div>
+                    <div class="composer-collapsed-actions">
+                        <button id="mediaOpenBtn" class="composer-mini-btn media-label-btn" type="button" onclick="openMediaPanel()" title="媒体">
+                            <i class="fas fa-paperclip"></i>
+                            <span>媒体</span>
+                            <span id="mediaCountBadgeCollapsed" class="media-count-badge media-count-badge--inline hidden">0</span>
+                        </button>
+                        <button id="mediaToggleBtn" class="composer-mini-btn media-plus-btn" type="button" onclick="openMediaPanel()" title="更多">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="composer-expanded hidden" id="composerExpanded">
@@ -183,12 +198,6 @@
                                 <i class="fas fa-bolt"></i>
                                 <span>主动</span>
                             </button>
-
-                            <button id="mediaSummaryChip" class="media-summary-chip hidden" onclick="toggleMediaPanel()" type="button" title="查看已选媒体">
-                                <i class="fas fa-paperclip"></i>
-                                <span>媒体</span>
-                                <strong id="mediaSummaryCount">0</strong>
-                            </button>
                         </div>
                     
                         <button id="mdPreviewBtn" class="preview-btn" onclick="toggleMarkdownPreview()" type="button">
@@ -201,11 +210,17 @@
                     <textarea id="messageInput" placeholder="输入消息..." rows="2"></textarea>
 
                     <div class="composer-actions">
-                        <button class="btn btn-secondary btn-sm" onclick="collapseComposer()" type="button">
-                            收起
-                        </button>
+                        <div class="composer-actions-left">
+                            <button class="btn btn-secondary btn-sm" onclick="collapseComposer()" type="button">
+                                收起
+                            </button>
+                            <button id="mediaOpenBtnExpanded" class="btn btn-secondary btn-sm composer-media-btn" type="button" onclick="openMediaPanel()" title="媒体">
+                                <i class="fas fa-paperclip"></i> 媒体
+                                <span id="mediaCountBadgeExpanded" class="media-count-badge media-count-badge--btn hidden">0</span>
+                            </button>
+                        </div>
 
-                        <div>
+                        <div class="composer-actions-right">
                             <button class="btn btn-secondary btn-sm" onclick="clearInput()" type="button">
                                 清空
                             </button>
@@ -216,50 +231,64 @@
                     </div>
                 </div>
 
-                <div id="mediaPanel" class="media-panel hidden">
-                    <input type="hidden" id="mediaType" value="">
-
-                    <div class="media-type-row">
-                        <button onclick="chooseMediaType('image')" type="button">
-                            <i class="fas fa-image"></i>
-                            图片
-                        </button>
-                        <button onclick="chooseMediaType('audio')" type="button">
-                            <i class="fas fa-microphone"></i>
-                            语音
-                        </button>
-                        <button onclick="chooseMediaType('video')" type="button">
-                            <i class="fas fa-video"></i>
-                            视频
-                        </button>
-                        <button onclick="chooseMediaType('file')" type="button">
-                            <i class="fas fa-file"></i>
-                            文件
-                        </button>
-                    </div>
-
-                    <div id="mediaInputBox" class="media-input-box hidden">
-                        <div class="media-current">
-                            当前媒体：<strong id="mediaCurrentText">未选择</strong>
-                            <button onclick="clearMedia()" type="button">清除</button>
-                        </div>
-
-                        <input id="mediaUrl" type="text" placeholder="媒体链接，可留空" oninput="updateMediaBadge()">
-
-                        <label class="upload-btn">
-                            <i class="fas fa-paperclip"></i>
-                            <input id="mediaFile" type="file" hidden onchange="onFileChosen()">
-                            <span id="fileNameText">选择文件</span>
-                        </label>
-
-                        <button id="sendMediaBtn" class="btn btn-success btn-sm" onclick="sendMessage()" disabled type="button">
-                            <i class="fas fa-paper-plane"></i> 发送媒体
-                        </button>
-                    </div>
-                </div>
-
                 <span id="sendHint">未选择会话</span>
             </div>
+
+            <div id="mediaOverlay" class="media-overlay hidden" aria-hidden="true" onclick="minimizeMediaPanel()"></div>
+            <div id="mediaPanel" class="media-panel hidden" role="dialog" aria-label="发送媒体" onclick="event.stopPropagation()">
+                <div class="media-panel-head">
+                    <strong>发送媒体</strong>
+                    <button type="button" class="media-panel-close" onclick="dismissMediaPanel()" title="关闭并隐藏图标">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="media-type-row">
+                    <button type="button" onclick="chooseMediaType('image')">
+                        <i class="fas fa-image"></i>
+                        图片
+                    </button>
+                    <button type="button" onclick="chooseMediaType('audio')">
+                        <i class="fas fa-microphone"></i>
+                        语音
+                    </button>
+                    <button type="button" onclick="chooseMediaType('video')">
+                        <i class="fas fa-video"></i>
+                        视频
+                    </button>
+                    <button type="button" onclick="chooseMediaType('file')">
+                        <i class="fas fa-file"></i>
+                        文件
+                    </button>
+                </div>
+
+                <div id="mediaDraftBox" class="media-draft-box">
+                    <input id="mediaUrl" type="text" placeholder="媒体链接" onkeydown="if(event.key==='Enter'){event.preventDefault();addMediaUrlDraft();}">
+                    <label class="upload-btn">
+                        <i class="fas fa-paperclip"></i>
+                        <input id="mediaFile" type="file" multiple hidden onchange="onMediaFilePicked()">
+                        <span id="fileNameText">选择文件</span>
+                    </label>
+                </div>
+
+                <div id="mediaQueueSection" class="media-queue-section hidden">
+                    <div class="media-queue-head">
+                        <span>已选 <strong id="mediaQueueCount">0</strong> 项</span>
+                        <button type="button" class="media-queue-clear" onclick="clearMediaQueue()">清空列表</button>
+                    </div>
+                    <ul id="mediaQueueList" class="media-queue-list"></ul>
+                </div>
+
+                <div class="media-panel-foot">
+                    <button id="sendMediaBtn" class="btn btn-success btn-sm" onclick="sendMessage()" disabled type="button">
+                        <i class="fas fa-paper-plane"></i> 发送媒体
+                    </button>
+                </div>
+            </div>
+            <button id="mediaFab" class="media-fab hidden" type="button" onclick="restoreMediaPanel()" title="媒体">
+                <i class="fas fa-paperclip"></i>
+                <span id="mediaCountBadgeFab" class="media-count-badge hidden">0</span>
+            </button>
         </section>
         </div>
     </div>
@@ -614,6 +643,49 @@
     min-width: 0;
 }
 
+.qq-chat-title-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.qq-chat-title-line .qq-chat-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-header-fold-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+}
+
+.chat-header-details {
+    overflow: hidden;
+    transition: max-height 0.2s ease, opacity 0.18s ease;
+}
+
+.qq-chat-header.header-collapsed .chat-header-details {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    margin: 0;
+}
+
+.qq-chat-header.header-collapsed .chat-header-fold-btn i {
+    transform: rotate(180deg);
+}
+
 .qq-chat-title {
     font-weight: 800;
     color: var(--text-primary);
@@ -944,25 +1016,71 @@
     border: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 10px;
-    cursor: text;
+    gap: 6px;
+    padding: 0 6px 0 10px;
 }
 
-.composer-collapsed > span {
+.composer-collapsed-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: text;
+    padding: 6px 0;
+}
+
+.composer-collapsed-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.composer-mini-btn {
+    position: relative;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--accent-color);
+    color: #fff;
+}
+
+.composer-mini-btn.media-label-btn {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+    color: var(--accent-color);
+    border: 1px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+}
+
+.composer-mini-btn.media-plus-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+
+.composer-collapsed-main > span {
     flex: 1;
     color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
-.composer-collapsed button {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent-color);
-    color: white;
-    cursor: pointer;
+.media-count-badge--inline {
+    position: static;
+    min-width: 15px;
+    height: 15px;
+    font-size: 0.55rem;
+    line-height: 11px;
+    border-width: 1px;
+    margin-left: 2px;
 }
 
 .media-toggle-btn {
@@ -1201,11 +1319,233 @@
 }
 
 .media-panel {
-    margin-top: 8px;
+    display: none;
+    margin-top: 0;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 10px;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 12px 40px var(--shadow-color);
+}
+
+.media-panel:not(.hidden) {
+    display: block;
+}
+
+.media-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.media-panel-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.media-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.media-overlay:not(.hidden) {
+    display: block;
+}
+
+.media-fab {
+    display: none;
+    position: absolute;
+    right: 12px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index: 45;
+    width: 46px;
+    height: 46px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-color), var(--success-color));
+    color: #fff;
+    box-shadow: 0 4px 14px var(--shadow-color);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+}
+
+.media-fab:not(.hidden) {
+    display: inline-flex;
+}
+
+.media-fab .media-count-badge {
+    top: -2px;
+    right: -2px;
+}
+
+.qq-chat-pane.media-panel-open .media-panel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    z-index: 50;
+    width: min(92vw, 400px);
+    max-height: min(72vh, 480px);
+    overflow-y: auto;
+    margin-top: 0;
+}
+
+.qq-chat-pane.media-panel-open .media-panel-head {
+    display: flex;
+}
+
+.media-draft-box {
+    margin-top: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.media-draft-hint {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
+.media-draft-box input[type="text"] {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.media-queue-section {
+    margin-top: 10px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 8px;
+}
+
+.media-queue-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.media-queue-clear {
+    border: none;
+    background: transparent;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.media-queue-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.media-queue-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    font-size: 0.8rem;
+}
+
+.media-queue-item-type {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--accent-color);
+    min-width: 2.2em;
+}
+
+.media-queue-item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.media-queue-item-remove {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.media-queue-item-remove:hover {
+    color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+}
+
+.media-panel-foot {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.media-type-row button.media-type-active {
+    outline: 2px solid var(--accent-color);
+    background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-secondary));
+}
+
+.composer-actions-left,
+.composer-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.composer-media-btn {
+    position: relative;
+}
+
+.media-count-badge--btn {
+    position: static;
+    margin-left: 4px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 0.65rem;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--accent-color);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.media-count-badge--btn.hidden {
+    display: none;
 }
 
 .media-type-row {
@@ -1457,18 +1797,28 @@
     }
 
     .composer-collapsed {
-        min-height: 36px;
-        gap: 6px;
-        padding: 0 8px;
+        min-height: 30px;
+        gap: 4px;
+        padding: 0 5px 0 8px;
     }
 
-    .composer-collapsed > span {
-        font-size: 0.82rem;
+    .composer-collapsed-main {
+        padding: 4px 0;
     }
 
-    .composer-collapsed button {
-        width: 28px;
-        height: 28px;
+    .composer-collapsed-main > span {
+        font-size: 0.8rem;
+    }
+
+    .composer-mini-btn.media-label-btn {
+        height: 26px;
+        padding: 0 7px;
+        font-size: 0.68rem;
+    }
+
+    .composer-mini-btn.media-plus-btn {
+        width: 26px;
+        height: 26px;
     }
 
     .media-count-badge {
@@ -1504,29 +1854,13 @@
         font-size: 0.85rem;
     }
 
-    .media-panel {
-        margin-top: 5px;
-        padding: 7px;
-        border-radius: 8px;
-    }
-
-    .media-type-row {
-        gap: 5px;
-    }
-
-    .media-type-row button {
-        padding: 7px 4px;
-        gap: 3px;
-        font-size: 0.74rem;
-    }
-
-    .media-input-box {
+    .media-draft-box {
         margin-top: 7px;
         gap: 6px;
     }
 
-    .media-current {
-        font-size: 0.74rem;
+    .media-queue-list {
+        max-height: 140px;
     }
 
     .upload-btn {
@@ -2281,6 +2615,20 @@ body.messages-layout[data-theme='dark'] header {
         gap: 7px;
     }
 
+    .qq-chat-header.header-collapsed {
+        min-height: 38px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+    }
+
+    .chat-header-fold-btn {
+        display: inline-flex;
+    }
+
+    .chat-header-details {
+        max-height: 120px;
+    }
+
     .mobile-back {
         display: inline-flex;
         align-items: center;
@@ -2368,7 +2716,11 @@ body.messages-layout[data-theme='dark'] header {
     }
 
     .composer-collapsed {
-        min-height: 36px;
+        min-height: 30px;
+    }
+
+    .qq-chat-pane.media-panel-open .media-fab {
+        bottom: calc(64px + env(safe-area-inset-bottom));
     }
 
     .composer-toolbar {
@@ -2395,6 +2747,11 @@ body.messages-layout[data-theme='dark'] header {
     .media-input-box {
         grid-template-columns: 1fr;
         gap: 6px;
+    }
+
+    .qq-chat-pane.media-panel-open .media-panel {
+        width: min(94vw, 380px);
+        max-height: min(78vh, 520px);
     }
 
     .composer-actions {
@@ -2430,7 +2787,17 @@ let selectedReplyMessageId = '';
 let selectedReplyRowId = '';
 let composerExpanded = false;
 let mediaPanelOpen = false;
+let mediaFabVisible = false;
 let mediaSendType = '';
+let mediaQueue = [];
+let mediaQueueIdSeq = 0;
+
+const MEDIA_TYPE_LABELS = {
+    image: '图片',
+    audio: '语音',
+    video: '视频',
+    file: '文件'
+};
 let currentLastRowId = 0;
 let currentOldestRowId = 0;
 let hasMoreHistory = false;
@@ -2572,43 +2939,265 @@ function preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight) {
 }
 
 function getSelectedMediaCount() {
-    const type = document.getElementById('mediaType')?.value || mediaSendType;
-    const url = document.getElementById('mediaUrl')?.value.trim() || '';
-    const file = document.getElementById('mediaFile')?.files?.[0];
+    return mediaQueue.length;
+}
 
-    return type && (url || file) ? 1 : 0;
+function syncMediaTypeButtons() {
+    document.querySelectorAll('.media-type-row button').forEach(btn => {
+        const onclick = btn.getAttribute('onclick') || '';
+        const m = onclick.match(/chooseMediaType\('([^']+)'\)/);
+        const t = m ? m[1] : '';
+        btn.classList.toggle('media-type-active', !!mediaSendType && t === mediaSendType);
+    });
+}
+
+function resetMediaDraftInputs() {
+    const urlEl = document.getElementById('mediaUrl');
+    const fileEl = document.getElementById('mediaFile');
+    const nameEl = document.getElementById('fileNameText');
+    if (urlEl) urlEl.value = '';
+    if (fileEl) fileEl.value = '';
+    if (nameEl) nameEl.innerText = '选择文件';
+}
+
+function renderMediaQueue() {
+    const section = document.getElementById('mediaQueueSection');
+    const list = document.getElementById('mediaQueueList');
+    const countEl = document.getElementById('mediaQueueCount');
+    const n = mediaQueue.length;
+
+    if (countEl) countEl.innerText = String(n);
+    if (section) section.classList.toggle('hidden', n < 1);
+    if (!list) return;
+
+    list.innerHTML = mediaQueue.map(item => {
+        const typeLabel = MEDIA_TYPE_LABELS[item.type] || item.type;
+        const label = escapeHtml(item.label || '');
+        return `<li class="media-queue-item" data-id="${item.id}">
+            <span class="media-queue-item-type">${escapeHtml(typeLabel)}</span>
+            <span class="media-queue-item-label" title="${label}">${label}</span>
+            <button type="button" class="media-queue-item-remove" onclick="removeMediaQueueItem(${item.id})" title="移除此项">
+                <i class="fas fa-times"></i>
+            </button>
+        </li>`;
+    }).join('');
 }
 
 function updateMediaBadge() {
     const count = getSelectedMediaCount();
-    const badge = document.getElementById('mediaCountBadge');
-    const chip = document.getElementById('mediaSummaryChip');
-    const summaryCount = document.getElementById('mediaSummaryCount');
+    const badgeCollapsed = document.getElementById('mediaCountBadgeCollapsed');
+    const badgeFab = document.getElementById('mediaCountBadgeFab');
+    const badgeExpanded = document.getElementById('mediaCountBadgeExpanded');
     const toggleBtn = document.getElementById('mediaToggleBtn');
+    const mediaOpenBtn = document.getElementById('mediaOpenBtn');
+    const mediaOpenBtnExpanded = document.getElementById('mediaOpenBtnExpanded');
 
-    if (badge) {
+    [badgeCollapsed, badgeFab, badgeExpanded].forEach(badge => {
+        if (!badge) return;
         badge.innerText = String(count);
         badge.classList.toggle('hidden', count < 1);
+    });
+
+    const title = count > 0 ? `已选 ${count} 个媒体` : '媒体';
+    if (toggleBtn) toggleBtn.title = title;
+    if (mediaOpenBtn) mediaOpenBtn.title = title;
+    if (mediaOpenBtnExpanded) mediaOpenBtnExpanded.title = title;
+
+    renderMediaQueue();
+
+    const mediaBtn = document.getElementById('sendMediaBtn');
+    const canSendMedia = !!currentSession && count > 0;
+    if (mediaBtn) mediaBtn.disabled = !canSendMedia;
+}
+
+function removeMediaQueueItem(id) {
+    mediaQueue = mediaQueue.filter(x => x.id !== id);
+    updateMediaBadge();
+}
+
+function clearMediaQueue() {
+    mediaQueue = [];
+    resetMediaDraftInputs();
+    updateMediaBadge();
+}
+
+function addMediaUrlDraft() {
+    if (!mediaSendType) {
+        alert('请先选择媒体类型');
+        return;
     }
 
-    if (chip) {
-        chip.classList.toggle('hidden', count < 1);
+    const urlEl = document.getElementById('mediaUrl');
+    const url = (urlEl?.value || '').trim();
+    if (!url) {
+        return;
     }
 
-    if (summaryCount) {
-        summaryCount.innerText = String(count);
+    mediaQueue.push({
+        id: ++mediaQueueIdSeq,
+        type: mediaSendType,
+        url,
+        file: null,
+        label: url
+    });
+
+    resetMediaDraftInputs();
+    updateMediaBadge();
+}
+
+function applyMediaFileInputAttrs() {
+    const fileEl = document.getElementById('mediaFile');
+    if (!fileEl) return;
+    fileEl.multiple = true;
+    const acceptMap = {
+        image: 'image/*',
+        audio: 'audio/*',
+        video: 'video/*',
+        file: ''
+    };
+    fileEl.accept = acceptMap[mediaSendType] ?? '';
+}
+
+function enqueueMediaFile(file) {
+    if (!file || !mediaSendType) return false;
+    mediaQueue.push({
+        id: ++mediaQueueIdSeq,
+        type: mediaSendType,
+        url: '',
+        file,
+        label: file.name
+    });
+    return true;
+}
+
+function onMediaFilePicked() {
+    const fileEl = document.getElementById('mediaFile');
+    const nameEl = document.getElementById('fileNameText');
+    const files = fileEl?.files ? Array.from(fileEl.files) : [];
+
+    if (!files.length) {
+        if (nameEl) nameEl.innerText = '选择文件';
+        return;
     }
 
-    if (toggleBtn) {
-        toggleBtn.title = count > 0 ? `已选 ${count} 个媒体` : '发送媒体';
+    if (!mediaSendType) {
+        alert('请先选择媒体类型');
+        if (fileEl) fileEl.value = '';
+        if (nameEl) nameEl.innerText = '选择文件';
+        return;
+    }
+
+    for (const f of files) {
+        enqueueMediaFile(f);
+    }
+
+    if (fileEl) fileEl.value = '';
+    if (nameEl) nameEl.innerText = '选择文件';
+    updateMediaBadge();
+}
+
+function setMediaFabVisible(visible) {
+    mediaFabVisible = !!visible;
+    const fab = document.getElementById('mediaFab');
+    if (fab) {
+        fab.classList.toggle('hidden', !mediaFabVisible);
     }
 }
 
-function setMediaPanelOpen(open) {
-    mediaPanelOpen = !!open;
+function setMediaPanelOpen(open, options = {}) {
+    const wantOpen = !!open;
+    const minimizeToFab = options.minimizeToFab === true;
+    const hideFab = options.hideFab === true;
+
+    mediaPanelOpen = wantOpen;
     const panel = document.getElementById('mediaPanel');
+    const overlay = document.getElementById('mediaOverlay');
+    const chatPane = document.getElementById('chatPane');
+
     if (panel) {
         panel.classList.toggle('hidden', !mediaPanelOpen);
+    }
+    if (overlay) {
+        overlay.classList.toggle('hidden', !mediaPanelOpen);
+        overlay.setAttribute('aria-hidden', mediaPanelOpen ? 'false' : 'true');
+    }
+    if (chatPane) {
+        chatPane.classList.toggle('media-panel-open', mediaPanelOpen);
+    }
+
+    if (!wantOpen) {
+        if (hideFab) {
+            setMediaFabVisible(false);
+        } else if (minimizeToFab) {
+            setMediaFabVisible(true);
+        }
+    } else {
+        setMediaFabVisible(false);
+    }
+}
+
+function isMobileChatLayout() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function syncChatHeaderCollapseUi(collapsed) {
+    const header = document.getElementById('chatHeader');
+    const btn = document.getElementById('chatHeaderCollapseBtn');
+    if (!header) return;
+    header.classList.toggle('header-collapsed', !!collapsed);
+    if (btn) {
+        btn.title = collapsed ? '展开顶栏' : '折叠顶栏';
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+}
+
+function toggleChatHeaderCollapsed() {
+    const header = document.getElementById('chatHeader');
+    if (!header) return;
+
+    const collapsed = !header.classList.contains('header-collapsed');
+    setStoredValue('webMessageChatHeaderCollapsed', collapsed ? '1' : '0');
+    syncChatHeaderCollapseUi(collapsed);
+}
+
+function applyChatHeaderCollapsedFromStorage() {
+    if (!isMobileChatLayout()) return;
+    const stored = getStoredValue('webMessageChatHeaderCollapsed', '');
+    const collapsed = stored !== '0';
+    syncChatHeaderCollapseUi(collapsed);
+}
+
+function openMediaPanel() {
+    setMediaPanelOpen(true);
+    syncMediaTypeButtons();
+    updateMediaBadge();
+    setTimeout(() => {
+        const mediaUrl = document.getElementById('mediaUrl');
+        if (mediaSendType && mediaUrl) mediaUrl.focus();
+    }, 30);
+}
+
+function minimizeMediaPanel() {
+    if (!mediaPanelOpen) return;
+    const minimizeToFab = isMobileChatLayout();
+    setMediaPanelOpen(false, { minimizeToFab, hideFab: !minimizeToFab });
+    updateMediaBadge();
+}
+
+function dismissMediaPanel() {
+    setMediaPanelOpen(false, { hideFab: true });
+    updateMediaBadge();
+}
+
+function restoreMediaPanel() {
+    openMediaPanel();
+}
+
+function toggleMediaPanel() {
+    if (mediaPanelOpen) {
+        minimizeMediaPanel();
+    } else {
+        openMediaPanel();
     }
 }
 
@@ -3357,7 +3946,6 @@ function toggleMarkdownPreview(forceOff = false) {
 
 function expandComposer() {
     composerExpanded = true;
-    setMediaPanelOpen(false);
     updateMediaBadge();
     document.getElementById('composerCollapsed').classList.add('hidden');
     document.getElementById('composerExpanded').classList.remove('hidden');
@@ -3375,55 +3963,21 @@ function collapseComposer() {
     if (mdPreviewing) toggleMarkdownPreview(true);
 }
 
-function toggleMediaPanel() {
-    const shouldOpen = !mediaPanelOpen;
-    if (shouldOpen && composerExpanded) {
-        collapseComposer();
-    }
-
-    setMediaPanelOpen(shouldOpen);
-    updateMediaBadge();
-
-    if (shouldOpen) {
-        setTimeout(() => {
-            const mediaUrl = document.getElementById('mediaUrl');
-            if (mediaSendType && mediaUrl) mediaUrl.focus();
-        }, 30);
-    }
-}
-
 function chooseMediaType(type) {
     mediaSendType = type;
-    document.getElementById('mediaType').value = type;
-
-    const textMap = {
-        image: '图片',
-        audio: '语音',
-        video: '视频',
-        file: '文件'
-    };
-
-    document.getElementById('mediaCurrentText').innerText = textMap[type] || type;
-    document.getElementById('mediaInputBox').classList.remove('hidden');
+    applyMediaFileInputAttrs();
+    syncMediaTypeButtons();
     updateMediaBadge();
 }
 
 function clearMedia(closePanel = false) {
     mediaSendType = '';
-    document.getElementById('mediaType').value = '';
-    document.getElementById('mediaUrl').value = '';
-    document.getElementById('mediaFile').value = '';
-    document.getElementById('fileNameText').innerText = '选择文件';
-    document.getElementById('mediaInputBox').classList.add('hidden');
+    mediaQueue = [];
+    resetMediaDraftInputs();
+    syncMediaTypeButtons();
     if (closePanel) {
-        setMediaPanelOpen(false);
+        dismissMediaPanel();
     }
-    updateMediaBadge();
-}
-
-function onFileChosen() {
-    const f = document.getElementById('mediaFile').files[0];
-    document.getElementById('fileNameText').innerText = f ? f.name.slice(0, 12) : '选择文件';
     updateMediaBadge();
 }
 
@@ -3636,7 +4190,7 @@ function selectSession(index) {
         `${currentSession.adapter || '全部适配器'} ｜ ${SCENE_LABELS[currentSession.scene] || currentSession.scene} ｜ ${currentSession.target_id}`;
 
     document.getElementById('sendBtn').disabled = false;
-    document.getElementById('sendMediaBtn').disabled = false;
+    updateMediaBadge();
     updateSendHint();
 
     const shell = getQqShell();
@@ -4205,7 +4759,7 @@ function resetChatPanel() {
     document.getElementById('chatTitle').innerText = '请选择一个会话';
     document.getElementById('chatSubTitle').innerText = '左侧选择群聊或私聊后查看消息';
     document.getElementById('sendBtn').disabled = true;
-    document.getElementById('sendMediaBtn').disabled = true;
+    updateMediaBadge();
     updateSendHint();
 
     const dateSelect = document.getElementById('dateSelect');
@@ -4364,6 +4918,26 @@ function updateSendHint() {
     hint.innerText = `发送到：${currentSession.title}（${adapter}${activeText}）`;
 }
 
+async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaFile) {
+    const fd = new FormData();
+    fd.append('adapter', adapter);
+    fd.append('scene', currentSession.scene);
+    fd.append('target_id', currentSession.target_id);
+    fd.append('content', content || '');
+    fd.append('send_mode', sendMode);
+    fd.append('active_send', activeSend ? '1' : '0');
+    fd.append('media_type', mediaType || '');
+    fd.append('media_url', mediaUrl || '');
+    fd.append('reply_message_id', selectedReplyMessageId || '');
+    fd.append('quote_message_id', selectedReplyMessageId || '');
+    if (mediaFile) {
+        fd.append('file', mediaFile);
+    }
+
+    const res = await fetch('/api/messages/send', { method: 'POST', body: fd });
+    return res.json();
+}
+
 async function sendMessage() {
     if (!currentSession) {
         alert('请先选择会话');
@@ -4372,12 +4946,15 @@ async function sendMessage() {
 
     const input = document.getElementById('messageInput');
     const content = input.value;
-    const mediaType = document.getElementById('mediaType').value;
-    const mediaUrl = document.getElementById('mediaUrl').value.trim();
-    const mediaFile = document.getElementById('mediaFile').files[0];
+    const queue = mediaQueue.slice();
 
-    if (!content.trim() && !mediaUrl && !mediaFile) {
+    if (!content.trim() && queue.length < 1) {
         alert('消息不能为空');
+        return;
+    }
+
+    if (sendMode === 'markdown' && queue.length > 0) {
+        alert('Markdown 模式暂不支持与媒体队列同时发送，请先清空媒体列表或改用普通消息');
         return;
     }
 
@@ -4390,42 +4967,47 @@ async function sendMessage() {
     const btn = document.getElementById('sendBtn');
     const mediaBtn = document.getElementById('sendMediaBtn');
     const old = btn.innerHTML;
-    const oldMedia = mediaBtn.innerHTML;
+    const oldMedia = mediaBtn ? mediaBtn.innerHTML : '';
 
     btn.disabled = true;
-    mediaBtn.disabled = true;
+    if (mediaBtn) mediaBtn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
-    mediaBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
+    if (mediaBtn) mediaBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
 
     try {
-        const fd = new FormData();
-        fd.append('adapter', adapter);
-        fd.append('scene', currentSession.scene);
-        fd.append('target_id', currentSession.target_id);
-        fd.append('content', content);
-        fd.append('send_mode', sendMode);
-        fd.append('active_send', activeSend ? '1' : '0');
-        fd.append('media_type', mediaType);
-        fd.append('media_url', mediaUrl);
-        fd.append('reply_message_id', selectedReplyMessageId || '');
-        fd.append('quote_message_id', selectedReplyMessageId || '');
+        let allOk = true;
+        let lastError = '';
 
-        if (mediaFile) {
-            fd.append('file', mediaFile);
+        if (queue.length > 0) {
+            for (let i = 0; i < queue.length; i++) {
+                const item = queue[i];
+                const pieceContent = i === 0 ? content : '';
+                const data = await postOutboundMessage(
+                    adapter,
+                    pieceContent,
+                    item.type,
+                    item.url,
+                    item.file
+                );
+                if (!data.success) {
+                    allOk = false;
+                    lastError = data.error || '未知错误';
+                    break;
+                }
+            }
+        } else {
+            const data = await postOutboundMessage(adapter, content, '', '', null);
+            if (!data.success) {
+                allOk = false;
+                lastError = data.error || '未知错误';
+            }
         }
 
-        const res = await fetch('/api/messages/send', {
-            method: 'POST',
-            body: fd
-        });
-
-        const data = await res.json();
-
-                if (data.success) {
+        if (allOk) {
             clearInput();
             clearReplyTarget();
             lastRenderedMessageKeys = [];
-        
+
             setTimeout(async () => {
                 try {
                     await loadMessages(true, false);
@@ -4435,17 +5017,16 @@ async function sendMessage() {
                     console.error('发送后刷新失败:', e);
                 }
             }, 100);
-        
         } else {
-            alert('发送失败：' + (data.error || '未知错误'));
+            alert('发送失败：' + lastError);
         }
     } catch (e) {
         alert('发送异常：' + e);
     } finally {
         btn.disabled = false;
-        mediaBtn.disabled = false;
         btn.innerHTML = old;
-        mediaBtn.innerHTML = oldMedia;
+        updateMediaBadge();
+        if (mediaBtn) mediaBtn.innerHTML = oldMedia;
     }
 }
 
@@ -4641,11 +5222,18 @@ window.addEventListener('beforeunload', () => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     syncMobileViewportHeight();
+    applyChatHeaderCollapsedFromStorage();
     setSendMode(sendMode);
     setActiveSend(activeSend);
     updateMediaBadge();
+    applyMediaFileInputAttrs();
+    document.getElementById('mediaOverlay')?.addEventListener('click', () => {
+        minimizeMediaPanel();
+    });
     document.getElementById('messageInput')?.addEventListener('focus', () => {
-        setMediaPanelOpen(false);
+        if (mediaPanelOpen) {
+            minimizeMediaPanel();
+        }
         updateMediaBadge();
     });
     document.getElementById('messageList')?.addEventListener('scroll', onMessageListScroll, { passive: true });
@@ -4654,9 +5242,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (menu && !menu.contains(event.target)) {
             closeMessageActionMenu();
         }
+        if (mediaPanelOpen) {
+            const panel = document.getElementById('mediaPanel');
+            const inPanel = panel && panel.contains(event.target);
+            const isMediaTrigger = event.target.closest(
+                '#mediaOpenBtn, #mediaOpenBtnExpanded, #mediaToggleBtn, #mediaFab, .media-fab, .composer-media-btn'
+            );
+            if (!inPanel && !isMediaTrigger) {
+                minimizeMediaPanel();
+            }
+        }
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+            if (mediaPanelOpen) {
+                minimizeMediaPanel();
+                return;
+            }
             closeMessageConfigPanel();
         }
     });
