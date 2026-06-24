@@ -18,7 +18,8 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from nonebot.params import CommandArg, EventPlainText
 from nonebot import require, get_bot
-from ..on_compat import on_command, on_message
+from ..on_compat import on_command, on_message, rebuild_on_compat_index
+from ..command_disable import apply_disable_targets, format_command_list_page
 from nonebot.rule import Rule
 from nonebot.matcher import Matcher
 from nonebot.adapters import Event as BaseEvent
@@ -116,6 +117,9 @@ group_broadcast_cmd = on_command("群聊广播", permission=SUPERUSER, priority=
 private_broadcast_cmd = on_command("私聊广播", permission=SUPERUSER, priority=5, block=True)
 global_broadcast_cmd = on_command("全局广播", permission=SUPERUSER, priority=5, block=True)
 all_apply_cmd = on_command("全量申请", priority=5, block=True)
+cmd_disable = on_command("指令禁用", permission=SUPERUSER, priority=5, block=True)
+cmd_enable = on_command("指令解禁", permission=SUPERUSER, priority=5, block=True)
+cmd_list = on_command("指令列表", permission=SUPERUSER, priority=5, block=True)
 
 view_broadcast_cmd = on_command(
     "查看广播",
@@ -1393,6 +1397,9 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 背包检测 - 检测背包数量、物品名和已装备物品异常并修复
 → 重载items - 重新加载物品数据
 → 启用修仙功能 / 禁用修仙功能 - 群修仙功能开关
+→ 指令禁用 [指令/子模块,...] - 禁用指令（可批量；xiuxian_admin 不可禁）
+→ 指令解禁 [指令/子模块,...] - 解禁指令
+→ 指令列表 [页码] - 按来源分页查看（每页30条）；指令列表 禁用 [页码] 仅看禁用；可加关键词筛选
 → 启用私聊功能 / 禁用私聊功能 - 私聊修仙功能开关
 → 开启自动灵根 / 关闭自动灵根 - 自动选择灵根开关
 → 启用自动宗名 / 禁用自动宗名 - 自动随机宗门名开关
@@ -2890,6 +2897,91 @@ OB11支持主动发送。
         k2="取消", v2="取消广播",
         k3="清空", v3="清空广播"
     )
+
+@cmd_disable.handle(parameterless=[Cooldown(cd_time=0)])
+async def cmd_disable_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    raw = args.extract_plain_text().strip()
+    changed, errors = apply_disable_targets(raw, disabled=True)
+    rebuild_on_compat_index()
+    lines: list[str] = []
+    if changed:
+        lines.append(f"已禁用：{', '.join(changed)}")
+    if errors:
+        lines.append("未处理：" + "；".join(errors))
+    if not lines:
+        lines.append("用法：指令禁用 测试,灵石,xiuxian_arena")
+    await handle_send(bot, event, "\n".join(lines))
+    await cmd_disable.finish()
+
+
+@cmd_enable.handle(parameterless=[Cooldown(cd_time=0)])
+async def cmd_enable_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    raw = args.extract_plain_text().strip()
+    changed, errors = apply_disable_targets(raw, disabled=False)
+    rebuild_on_compat_index()
+    lines: list[str] = []
+    if changed:
+        lines.append(f"已解禁：{', '.join(changed)}")
+    if errors:
+        lines.append("未处理：" + "；".join(errors))
+    if not lines:
+        lines.append("用法：指令解禁 测试,灵石,xiuxian_arena")
+    await handle_send(bot, event, "\n".join(lines))
+    await cmd_enable.finish()
+
+
+def _parse_command_list_args(raw: str) -> tuple[bool, int, str]:
+    text = (raw or "").strip()
+    if not text:
+        return False, 1, ""
+    tokens = text.split()
+    only_disabled = False
+    page = 1
+    filter_parts: list[str] = []
+    for token in tokens:
+        if token == "禁用":
+            only_disabled = True
+            continue
+        if re.fullmatch(r"\d+", token):
+            page = max(int(token), 1)
+            continue
+        filter_parts.append(token)
+    raw_filter = " ".join(filter_parts).replace(" ", ",")
+    return only_disabled, page, raw_filter
+
+
+@cmd_list.handle(parameterless=[Cooldown(cd_time=0)])
+async def cmd_list_(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    args: Message = CommandArg(),
+):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    raw = args.extract_plain_text().strip()
+    only_disabled, page, raw_filter = _parse_command_list_args(raw)
+    msg, page, total_pages = format_command_list_page(
+        raw_filter,
+        only_disabled=only_disabled,
+        page=page,
+        per_page=30,
+    )
+    list_cmd = "指令列表 禁用" if only_disabled else "指令列表"
+    if raw_filter.strip():
+        list_cmd = f"{list_cmd} {raw_filter.strip().replace(',', ' ')}"
+    button_kwargs = build_pagination_buttons(list_cmd, page, total_pages)
+    await send_help_message(bot, event, msg, **button_kwargs)
+    await cmd_list.finish()
+
 
 @all_apply_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def all_apply_cmd_(
