@@ -526,7 +526,7 @@ CONFIG_EDITABLE_FIELDS = {
     },
     "custom_proxy": {
         "name": "自定义代理地址",
-        "description": "支持 socks5/socks5h/http/https；无协议时默认 socks5。例：socks5://127.0.0.1:1080 或 http://127.0.0.1:7890",
+        "description": "HTTP/SOCKS 代理地址，如 socks5://127.0.0.1:1080",
         "type": "str",
         "category": "网络代理"
     }

@@ -124,7 +124,7 @@ self.layout_bot_dict = {
 | `web_host` | `0.0.0.0` | 管理面板监听地址 |
 | `web_port` | `5888` | 管理面板端口，默认 `http://<服务器IP>:5888` |
 | `custom_proxy_enabled` | `False` | 是否启用自定义代理（Bangumi 等境外 API） |
-| `custom_proxy` | `""` | 代理地址，支持 `socks5://`、`http://` 或 `host:port`（默认按 socks5） |
+| `custom_proxy` | `""` | 代理地址 |
 
 也可在 **Web 面板 → 配置管理** 中在线修改上述项（保存后需重启 NoneBot 生效）。
 
@@ -627,7 +627,7 @@ Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `i
 |:-----|:-----|
 | `修仙帮助` | 查看功能列表 |
 | `修仙手册` | 查看管理员指令 |
-| `娱乐帮助` | 娱乐模块总览（别名：`娱乐菜单` / `娱乐功能`）；番剧、点歌、链接解析、小游戏等见该帮助，支持 `娱乐帮助 页码` 翻页 |
+| `娱乐帮助` | 娱乐模块总览（别名：`娱乐菜单` / `娱乐功能`）；番剧、点歌、NewAPI、链接解析、小游戏等见该帮助，支持 `娱乐帮助 页码` 翻页 |
 | `小游戏帮助` | 五子棋 / 扫雷 / 十点半 / 猜数字等 |
 
 ### 娱乐 · 番剧（Bangumi）
@@ -638,6 +638,23 @@ Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `i
 |:-----|:---------|:-----|
 | `今日番剧` | `每日番剧`、`番剧日历` | 当日放送列表 |
 | `番剧周表` | `每周番剧`、`番剧总表` | 一周番剧表（可 `番剧周表 页码` 翻页） |
+
+### 娱乐 · NewAPI
+
+按 QQ 隔离绑定多个 NewAPI 站点账号（Token 或 Cookie），支持签到与用户信息查询。
+
+| 指令 | 别名示例 | 说明 |
+|:-----|:---------|:-----|
+| `newapi帮助` | `newapi`、`NewAPI帮助` | 绑定与签到说明 |
+| `newapi绑定` | — | `newapi绑定 站点用户ID#令牌#接口`；Cookie：`newapi绑定 cookie 站点用户ID#session#接口`（字段用 `#` 分隔） |
+| `newapi查看` | `newapi列表`、`newapi绑定列表` | 本 QQ 已绑定账号（序号、是否自动签到） |
+| `newapi签到` | — | 默认全部账号；可 `newapi签到 1` / `1,3` / `2-4`（记入历史，最多 3 条） |
+| `newapi签到历史` | `newapi签到记录` | 最近签到记录 |
+| `newapi自动签到` | — | `newapi自动签到 序号` 切换开/关；开启后每日 **12:30** 自动签到 |
+| `newapi信息` | — | 拉取站点用户信息，序号规则同签到 |
+| `newapi删除` | `newapi解绑` | 须写序号（如 `1`、`1,3`）或 `全部` |
+
+绑定数据：`xiuxian_entertainment/mod/data/newapi_bindings/<QQ>.json`；签到历史：`.../newapi_checkin_history/<QQ>.json`。
 
 🌐 体验群：[144795954](https://qun.qq.com/universal-share/share?ac=1&authKey=JcaNbcnyFbgcjfffkakYujFwpYFJewe2mSFUtSNWi1mA6qap%2FHBQNsCl0D9olm4I&busi_data=eyJncm91cENvZGUiOiIxNDQ3OTU5NTQiLCJ0b2tlbiI6ImZKYXpKOVM3Z0pwek80ZlUzLzhzbWN1Y1daY0JIQy9BYXZFUlZGd1lGREJQUXJXWERLNlJCcFNjSjVGc3JZVWsiLCJ1aW4iOiIyNjUwMTE1MzE3In0%3D&data=5w52a2CkyEIX_t_INqS29fA4Sxl8eozGazmL-EIUo6ehG7ESdNgxtDnVmgXoLlLfaVeZ2SbPMW-1SJ4I9o7IeQ&svctype=4&tempid=h5_group_info)
 

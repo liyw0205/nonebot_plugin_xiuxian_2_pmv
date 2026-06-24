@@ -7,7 +7,7 @@ from typing import Any
 from nonebot.params import CommandArg
 
 from ..command import *
-from ...xiuxian_utils.http_proxy import requests_get
+from ...xiuxian_utils.http_proxy import requests_get, describe_proxy_request_error
 from ...xiuxian_utils.utils import (
     parse_page_arg,
     paginate_text_blocks,
@@ -17,7 +17,13 @@ from ...xiuxian_utils.utils import (
 
 _BGM_CALENDAR = "https://api.bgm.tv/calendar"
 _WEEKDAY_CN = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-_UA = {"User-Agent": "xiuxian-entertainment-bangumi/1.0"}
+_UA = {
+    "User-Agent": (
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
 
 
 def _today_weekday_index() -> int:
@@ -145,7 +151,7 @@ async def today_bangumi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(
             bot,
             event,
-            f"获取番剧失败：{e}",
+            f"获取番剧失败：{describe_proxy_request_error(e)}",
             md_type="娱乐",
             k1="重试",
             v1="今日番剧",
@@ -182,7 +188,7 @@ async def week_bangumi_(
         await handle_send(
             bot,
             event,
-            f"获取番剧周表失败：{e}",
+            f"获取番剧周表失败：{describe_proxy_request_error(e)}",
             md_type="娱乐",
             k1="重试",
             v1="番剧周表",

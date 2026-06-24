@@ -32,6 +32,8 @@ from .mod.guess_number import *
 from .mod.random_girl_video import *
 from .mod.media_parse_link import *
 from .mod.bangumi_calendar import *
+from .mod.newapi_commands import *
+from .mod.newapi_scheduler import *  # noqa: F401 — 注册 12:30 自动签到
 
 
 fun_menu_cmd = on_command("娱乐帮助", aliases={"娱乐菜单", "娱乐功能"}, priority=5, block=True)
@@ -66,6 +68,7 @@ __FUN_HELP__ = """【娱乐帮助】
 
 其他：
 - Steam喜加一
+- NewAPI：newapi帮助 / newapi绑定 / newapi查看 / newapi签到 / newapi签到历史 / newapi自动签到 / newapi信息 / newapi删除
 - 链接解析（视频解析 / 解析链接）
 - 发含分享链接的消息可自动解析
 
@@ -118,6 +121,7 @@ async def fun_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             ("今日番剧", "今日番剧"),
             ("随机小姐姐", "随机小姐姐"),
             ("链接解析", "链接解析"),
+            ("NewAPI", "newapi帮助"),
             ("小游戏", "小游戏帮助"),
             ("点歌", "点歌帮助"),
         ],

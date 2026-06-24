@@ -1,4 +1,3 @@
-"""根据 XiuConfig 为 requests 组装代理（HTTP/HTTPS/SOCKS5 自动识别）。"""
 from __future__ import annotations
 
 import re
@@ -6,7 +5,10 @@ from typing import Any
 
 from ..xiuxian_config import XiuConfig
 
-_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+_PROXY_IN_TEXT_RE = re.compile(
+    r"(?i)(?:socks5h?|socks4|https?)://[^\s\"']+|"
+    r"(?:\d{1,3}\.){3}\d{1,5}:\d{1,5}"
+)
 
 
 def _strip_wrapping_quotes(s: str) -> str:
@@ -16,51 +18,86 @@ def _strip_wrapping_quotes(s: str) -> str:
     return s
 
 
-def normalize_proxy_url(raw: str) -> str:
-    """
-    将用户配置规范为 requests 可用的代理 URL。
-
-    支持示例：
-    - socks5://127.0.0.1:1080
-    - socks5h://user:pass@host:1080  （DNS 也走代理）
-    - http://127.0.0.1:7890
-    - https://host:443
-    - 127.0.0.1:1080 → 默认 socks5://
-    - user:pass@host:1080 → 默认 socks5://
-    """
-    raw = _strip_wrapping_quotes(str(raw or ""))
-    if not raw:
+def _clean_proxy_string(raw: str) -> str:
+    s = _strip_wrapping_quotes(str(raw or ""))
+    if not s:
         return ""
-
-    lower = raw.lower()
-    if lower in ("none", "off", "false", "0", "直连", "direct"):
+    if s.lower() in ("none", "off", "false", "0", "直连", "direct"):
         return ""
+    return s
 
-    if _SCHEME_RE.match(raw):
-        scheme = lower.split(":", 1)[0]
-        if scheme in ("socks5", "socks5h", "socks4", "http", "https"):
-            return raw
-        if scheme == "socket5":  # 常见拼写
-            return "socks5://" + raw.split("://", 1)[1]
-        return raw
 
-    # 无协议：番剧等场景默认 SOCKS5
-    return f"socks5://{raw}"
+def _ensure_socks_support(proxy_url: str) -> None:
+    scheme = (proxy_url.split(":", 1)[0] or "").lower()
+    if scheme not in ("socks5", "socks5h", "socks4"):
+        return
+    try:
+        import socks  # noqa: F401
+    except ImportError as e:
+        raise RuntimeError(
+            "已配置 SOCKS 代理但未安装 PySocks，请执行: pip install PySocks"
+        ) from e
 
 
 def get_custom_proxy_url() -> str:
     cfg = XiuConfig()
     if not getattr(cfg, "custom_proxy_enabled", False):
         return ""
-    return normalize_proxy_url(getattr(cfg, "custom_proxy", "") or "")
+    return _clean_proxy_string(getattr(cfg, "custom_proxy", "") or "")
 
 
 def build_requests_proxies(proxy_url: str | None = None) -> dict[str, str] | None:
-    """返回 requests 的 proxies 参数字典，未启用时返回 None。"""
-    url = normalize_proxy_url(proxy_url) if proxy_url is not None else get_custom_proxy_url()
+    if proxy_url is not None:
+        url = _clean_proxy_string(proxy_url)
+    else:
+        url = get_custom_proxy_url()
     if not url:
         return None
+    _ensure_socks_support(url)
     return {"http": url, "https": url}
+
+
+def _redact_sensitive_from_message(text: str) -> str:
+    if not text:
+        return text
+    out = _PROXY_IN_TEXT_RE.sub("[已隐藏]", text)
+    out = re.sub(r"proxies\s*=\s*\{[^}]*\}", "proxies={...}", out, flags=re.I)
+    return out.strip()
+
+
+def describe_proxy_request_error(exc: BaseException) -> str:
+    text = _redact_sensitive_from_message(str(exc).strip())
+    errno = getattr(exc, "errno", None)
+    if errno is None and exc.__cause__ is not None:
+        errno = getattr(exc.__cause__, "errno", None)
+
+    hints: list[str] = []
+    if errno == 104 or "Errno 104" in text or "Connection reset by peer" in text:
+        hints.append("连接被对端重置，请检查代理是否可用、地址与端口是否正确")
+    if "Missing dependencies for SOCKS" in text or "SOCKS support" in text:
+        hints.append("SOCKS 代理需安装 PySocks: pip install PySocks")
+    if "Connection refused" in text or errno == 111:
+        hints.append("连接被拒绝，请检查代理是否在监听、IP 是否可达")
+    if "timed out" in text.lower() or "timeout" in text.lower():
+        hints.append("请求超时，请检查网络或代理")
+
+    base = text or type(exc).__name__
+    if hints:
+        return f"{base}\n" + "\n".join(f"· {h}" for h in hints)
+    return base
+
+
+def _requests_call(
+    method: str,
+    url: str,
+    req_kwargs: dict[str, Any],
+    proxies: dict[str, str] | None,
+):
+    import requests
+
+    with requests.Session() as session:
+        session.trust_env = False
+        return session.request(method, url, proxies=proxies, **req_kwargs)
 
 
 def requests_get(
@@ -75,9 +112,6 @@ def requests_get(
     use_config_proxy: bool = True,
     **kwargs: Any,
 ):
-    """带修仙自定义代理的 GET（与 requests.get 参数兼容）。"""
-    import requests
-
     proxies = None
     if use_config_proxy:
         proxies = build_requests_proxies(proxy_url)
@@ -88,10 +122,8 @@ def requests_get(
         "allow_redirects": allow_redirects,
         "stream": stream,
     }
-    if proxies:
-        req_kwargs["proxies"] = proxies
     req_kwargs.update(kwargs)
-    return requests.get(url, **req_kwargs)
+    return _requests_call("GET", url, req_kwargs, proxies)
 
 
 def requests_post(
@@ -105,8 +137,6 @@ def requests_post(
     use_config_proxy: bool = True,
     **kwargs: Any,
 ):
-    import requests
-
     proxies = None
     if use_config_proxy:
         proxies = build_requests_proxies(proxy_url)
@@ -116,7 +146,5 @@ def requests_post(
         "data": data,
         "json": json,
     }
-    if proxies:
-        req_kwargs["proxies"] = proxies
     req_kwargs.update(kwargs)
-    return requests.post(url, **req_kwargs)
+    return _requests_call("POST", url, req_kwargs, proxies)
