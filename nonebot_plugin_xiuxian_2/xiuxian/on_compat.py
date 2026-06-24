@@ -25,6 +25,15 @@ from nonebot.plugin.on import (
 )
 from nonebot.rule import TrieRule
 
+from .command_disable import (
+    disabled_command_keys_for_route,
+    is_command_disabled,
+    load_command_disable_memory,
+    rebuild_alias_index,
+    resolve_primary_name,
+    sync_command_registry,
+)
+
 if TYPE_CHECKING:
     from nonebot.adapters import Event
     from nonebot.matcher import Matcher
@@ -40,6 +49,8 @@ _CURRENT_EVENT: ContextVar[object | None] = ContextVar(
 )
 _INSTALLED = False
 _MATCHER_ROUTES: dict[type["Matcher"], "_RouteMeta"] = {}
+_PRIMARY_COMMAND_NAMES: dict[type["Matcher"], str] = {}
+_COMMAND_SUBMODULES: dict[type["Matcher"], str] = {}
 
 
 class _RouteMeta:
@@ -157,10 +168,146 @@ def _literal_regex_prefix(pattern: str) -> str:
     return "".join(chars)
 
 
-def _register_route(matcher: type["Matcher"], meta: _RouteMeta) -> type["Matcher"]:
+def _register_route(
+    matcher: type["Matcher"],
+    meta: _RouteMeta,
+    *,
+    primary_name: str | None = None,
+) -> type["Matcher"]:
     if _should_route_matcher(matcher):
         _MATCHER_ROUTES[matcher] = meta
+        if primary_name:
+            stripped = primary_name.strip()
+            if stripped:
+                _PRIMARY_COMMAND_NAMES[matcher] = stripped
+                _COMMAND_SUBMODULES[matcher] = _xiuxian_submodule_from_matcher(matcher)
     return matcher
+
+
+_COMMAND_DISABLE_EXEMPT_SUBMODULE = "xiuxian_admin"
+
+
+def _matcher_exempt_command_disable(matcher: type["Matcher"]) -> bool:
+    mod = _COMMAND_SUBMODULES.get(matcher) or _xiuxian_submodule_from_matcher(matcher)
+    return mod == _COMMAND_DISABLE_EXEMPT_SUBMODULE
+
+
+def _xiuxian_submodule_from_matcher(matcher: type["Matcher"]) -> str:
+    mod = getattr(matcher, "module_name", None) or ""
+    if not mod:
+        return ""
+    if mod.endswith(".__init__"):
+        mod = mod[: -len(".__init__")]
+    for part in mod.split("."):
+        if part.startswith("xiuxian_"):
+            return part
+    parts = mod.split(".")
+    return parts[-1] if parts else mod
+
+
+def _primary_command_name(cmd: CommandInput) -> str:
+    if isinstance(cmd, (list, set)):
+        raw = list(cmd)
+        if not raw:
+            raise ValueError("on_command requires at least one command")
+        primary = raw[0]
+    else:
+        primary = cmd
+    if isinstance(primary, str):
+        return primary
+    return " ".join(primary)
+
+
+def _primary_text_name(msg: TextValue) -> str:
+    if isinstance(msg, str):
+        return msg
+    return " ".join(str(part) for part in msg)
+
+
+def _collect_registered_command_registry() -> dict[str, str]:
+    registry: dict[str, str] = {}
+    for matcher, primary in _PRIMARY_COMMAND_NAMES.items():
+        if not primary or primary in registry:
+            continue
+        if _matcher_exempt_command_disable(matcher):
+            continue
+        registry[primary] = _COMMAND_SUBMODULES.get(matcher) or _xiuxian_submodule_from_matcher(
+            matcher
+        )
+    return registry
+
+
+def _collect_alias_to_primary_map() -> dict[str, str]:
+    alias: dict[str, str] = {}
+    for matcher, meta in _MATCHER_ROUTES.items():
+        primary = _PRIMARY_COMMAND_NAMES.get(matcher)
+        if not primary:
+            continue
+        alias[primary] = primary
+        for command in meta.commands:
+            for part in command:
+                alias[part] = primary
+        for value in meta.fullmatches:
+            alias[value] = primary
+        for prefix in meta.prefixes:
+            alias[prefix] = primary
+    return alias
+
+
+def _collect_registered_command_names() -> set[str]:
+    return set(_collect_registered_command_registry().keys())
+
+
+def _matcher_is_disabled(
+    matcher: type["Matcher"],
+    disabled_primaries: set[str],
+) -> bool:
+    if _matcher_exempt_command_disable(matcher):
+        return False
+    primary = _PRIMARY_COMMAND_NAMES.get(matcher)
+    if primary and primary in disabled_primaries:
+        return True
+    meta = _MATCHER_ROUTES.get(matcher)
+    if meta is None:
+        return False
+    for command in meta.commands:
+        for part in command:
+            if resolve_primary_name(part) in disabled_primaries:
+                return True
+    for value in meta.fullmatches:
+        if resolve_primary_name(value) in disabled_primaries:
+            return True
+    for prefix in meta.prefixes:
+        if resolve_primary_name(prefix) in disabled_primaries:
+            return True
+    return False
+
+
+def _filter_disabled_matchers(
+    candidates: list[type["Matcher"]],
+    selected: set[type["Matcher"]],
+    command: tuple[str, ...] | None,
+    text: str,
+) -> list[type["Matcher"]]:
+    keys = disabled_command_keys_for_route(command, text)
+    disabled_primaries = {p for p in keys if p and is_command_disabled(p)}
+    if not disabled_primaries:
+        return candidates
+
+    blocked = {
+        matcher
+        for matcher in selected
+        if _matcher_is_disabled(matcher, disabled_primaries)
+    }
+    if blocked:
+        label = (
+            next(iter(disabled_primaries))
+            if len(disabled_primaries) == 1
+            else "、".join(sorted(disabled_primaries))
+        )
+        logger.info("[修仙 指令禁用] {} 指令已禁用", label)
+
+    return [matcher for matcher in candidates if matcher not in blocked]
 
 
 def _get_plain_text(event: "Event") -> str:
@@ -285,6 +432,7 @@ class XiuxianOnCompatProvider(MatcherProvider):
                 for matcher in matcher_list
                 if matcher not in routed or matcher in selected
             ]
+        filtered = _filter_disabled_matchers(filtered, selected, command, text)
         return _FilteredMatcherList(matcher_list, filtered)
 
     def __setitem__(self, priority: int, matcher_list: list[type["Matcher"]]) -> None:
@@ -380,6 +528,9 @@ class XiuxianOnCompatProvider(MatcherProvider):
 
 
 def rebuild_on_compat_index() -> None:
+    load_command_disable_memory()
+    rebuild_alias_index(_collect_alias_to_primary_map())
+    sync_command_registry(_collect_registered_command_registry())
     provider = getattr(matchers, "provider", None)
     if isinstance(provider, XiuxianOnCompatProvider):
         provider.rebuild()
@@ -469,7 +620,11 @@ def on_command(
         _depth=_depth + 1,
         **kwargs,
     )
-    return _register_route(matcher, _RouteMeta(commands=commands))
+    return _register_route(
+        matcher,
+        _RouteMeta(commands=commands),
+        primary_name=_primary_command_name(cmd),
+    )
 
 
 def on_shell_command(
@@ -490,7 +645,11 @@ def on_shell_command(
         _depth=_depth + 1,
         **kwargs,
     )
-    return _register_route(matcher, _RouteMeta(commands=commands))
+    return _register_route(
+        matcher,
+        _RouteMeta(commands=commands),
+        primary_name=_primary_command_name(cmd),
+    )
 
 
 def on_regex(
@@ -508,7 +667,11 @@ def on_regex(
 
     prefix = _literal_regex_prefix(pattern)
     if prefix:
-        return _register_route(matcher, _RouteMeta(prefixes={prefix}))
+        return _register_route(
+            matcher,
+            _RouteMeta(prefixes={prefix}),
+            primary_name=prefix,
+        )
     return _register_route(matcher, _RouteMeta(generic=True))
 
 
@@ -530,7 +693,11 @@ def on_startswith(
     if ignorecase:
         return _register_route(matcher, _RouteMeta(generic=True))
 
-    return _register_route(matcher, _RouteMeta(prefixes=_normal_text_values(msg)))
+    return _register_route(
+        matcher,
+        _RouteMeta(prefixes=_normal_text_values(msg)),
+        primary_name=_primary_text_name(msg),
+    )
 
 
 def on_fullmatch(
@@ -551,7 +718,11 @@ def on_fullmatch(
     if ignorecase:
         return _register_route(matcher, _RouteMeta(generic=True))
 
-    return _register_route(matcher, _RouteMeta(fullmatches=_normal_text_values(msg)))
+    return _register_route(
+        matcher,
+        _RouteMeta(fullmatches=_normal_text_values(msg)),
+        primary_name=_primary_text_name(msg),
+    )
 
 
 def on_endswith(
