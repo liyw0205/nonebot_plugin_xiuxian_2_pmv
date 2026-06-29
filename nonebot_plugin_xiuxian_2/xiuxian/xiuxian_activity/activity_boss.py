@@ -382,7 +382,7 @@ def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
         return False, "当前没有可挑战的活动首领，或请指定首领名称"
     mode = activity.get("mode", "cooperative")
     if mode not in {"cooperative", "both"}:
-        return False, "该首领请使用活动道具讨伐"
+        return False, "该首领请使用活动讨伐 道具名"
 
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -416,7 +416,7 @@ def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
 def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
     text = _clean_text(query)
     if not text:
-        return False, "请发送：活动道具 爆竹 或 活动道具 年兽 爆竹"
+        return False, "请发送：活动讨伐 爆竹 或 活动讨伐 年兽 爆竹"
 
     parts = text.split()
     item_query = parts[-1] if len(parts) >= 2 else parts[0]

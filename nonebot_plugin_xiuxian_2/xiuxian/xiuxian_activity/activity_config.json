@@ -2,9 +2,9 @@
   "template_type": "festival_sign",
   "template_key": "festival_sign",
   "enabled": true,
-  "festival_name": "XX节日",
-  "name": "XX节日签到活动",
-  "description": "节日期间每日签到领取奖励，完成活动日常与周常目标可获得额外补给。活动玩法细节可在 extensions 中继续补充。",
+  "festival_name": "节日庆典",
+  "name": "节日活动季",
+  "description": "节日期间每日签到领取奖励，完成日常、周常和战令目标积累活跃；参与集字、积分商店与全服首领获得额外补给。",
   "start_time": "0",
   "end_time": "无限",
   "sign_command": "活动签到",
@@ -87,6 +87,16 @@
         "dongfu_harvest"
       ],
       "reward": "灵石x60000"
+    },
+    {
+      "key": "daily_boss",
+      "name": "今日伏魔",
+      "description": "讨伐世界BOSS 1 次",
+      "target": 1,
+      "events": [
+        "boss"
+      ],
+      "reward": "灵石x80000"
     }
   ],
   "weekly_tasks": [
@@ -109,13 +119,324 @@
         "work"
       ],
       "reward": "灵石x300000"
+    },
+    {
+      "key": "weekly_dungeon_clear",
+      "name": "组队试炼",
+      "description": "本周完成副本 10 次",
+      "target": 10,
+      "events": [
+        "dungeon_clear"
+      ],
+      "reward": "灵石x500000,渡厄丹x1"
     }
   ],
   "extra_rules": [],
-  "gameplay_activities": [],
+  "gameplay_activities": [
+    {
+      "key": "festival_collect_words",
+      "template_key": "festival_collect_words",
+      "type": "collect_words",
+      "enabled": true,
+      "name": "庆典集字",
+      "description": "完成活动来源随机获得字牌，集齐祝福词组兑换奖励。",
+      "start_time": "0",
+      "end_time": "无限",
+      "drop_events": [
+        "sign_in",
+        "work",
+        "boss",
+        "sect_task_complete",
+        "pet_travel_claim",
+        "dongfu_harvest",
+        "map_mission_complete",
+        "mix_elixir_complete",
+        "dungeon_clear"
+      ],
+      "drop_rate": 0.35,
+      "daily_drop_limit": 8,
+      "rolls_per_record": 1,
+      "letters": [
+        {
+          "char": "福",
+          "weight": 24
+        },
+        {
+          "char": "运",
+          "weight": 22
+        },
+        {
+          "char": "绵",
+          "weight": 18
+        },
+        {
+          "char": "长",
+          "weight": 18
+        },
+        {
+          "char": "仙",
+          "weight": 16
+        },
+        {
+          "char": "途",
+          "weight": 16
+        },
+        {
+          "char": "顺",
+          "weight": 14
+        },
+        {
+          "char": "遂",
+          "weight": 14
+        },
+        {
+          "char": "道",
+          "weight": 12
+        },
+        {
+          "char": "心",
+          "weight": 12
+        },
+        {
+          "char": "明",
+          "weight": 10
+        }
+      ],
+      "phrases": [
+        {
+          "phrase": "福运绵长",
+          "name": "福运绵长",
+          "reward": "灵石x180000",
+          "limit": 2
+        },
+        {
+          "phrase": "仙途顺遂",
+          "name": "仙途顺遂",
+          "reward": "灵石x220000",
+          "limit": 2
+        },
+        {
+          "phrase": "道心长明",
+          "name": "道心长明",
+          "reward": "灵石x300000,渡厄丹x1",
+          "limit": 1
+        }
+      ]
+    },
+    {
+      "key": "festival_points_shop",
+      "template_key": "festival_points_shop",
+      "type": "event_points",
+      "enabled": true,
+      "name": "庆典积分商店",
+      "description": "完成活动来源获得庆典积分，用积分兑换限量补给。",
+      "start_time": "0",
+      "end_time": "无限",
+      "point_name": "庆典积分",
+      "event_rules": [
+        {
+          "event": "sign_in",
+          "points": 20,
+          "daily_limit": 20
+        },
+        {
+          "event": "work",
+          "points": 10,
+          "daily_limit": 60
+        },
+        {
+          "event": "boss",
+          "points": 5,
+          "daily_limit": 80
+        },
+        {
+          "event": "sect_task_complete",
+          "points": 12,
+          "daily_limit": 60
+        },
+        {
+          "event": "dongfu_harvest",
+          "points": 10,
+          "daily_limit": 30
+        },
+        {
+          "event": "dungeon_clear",
+          "points": 15,
+          "daily_limit": 60
+        }
+      ],
+      "shop": [
+        {
+          "item_key": "stone_pack",
+          "name": "灵石补给",
+          "cost": 80,
+          "reward": "灵石x300000",
+          "limit": 3
+        },
+        {
+          "item_key": "practice_pack",
+          "name": "修炼补给",
+          "cost": 160,
+          "reward": "灵石x500000,渡厄丹x1",
+          "limit": 2
+        },
+        {
+          "item_key": "festival_box",
+          "name": "庆典礼盒",
+          "cost": 260,
+          "reward": "灵石x800000,渡厄丹x2",
+          "limit": 1
+        }
+      ]
+    },
+    {
+      "key": "festival_world_boss",
+      "template_key": "festival_world_boss",
+      "type": "activity_boss",
+      "enabled": true,
+      "name": "庆典全服首领",
+      "description": "全服协力讨伐庆典首领，按累计伤害排名领取奖励，并解锁全服进度宝箱。",
+      "start_time": "0",
+      "end_time": "无限",
+      "boss_name": "庆典魔尊",
+      "mode": "cooperative",
+      "max_hp": 0,
+      "atk_ratio": 0.1,
+      "hit_hp_cap_ratio": 0.01,
+      "daily_fight_limit": 3,
+      "items": [],
+      "rank_rewards": [
+        {
+          "rank_min": 1,
+          "rank_max": 1,
+          "name": "伤害第一",
+          "reward": "灵石x3000000,渡厄丹x4"
+        },
+        {
+          "rank_min": 2,
+          "rank_max": 5,
+          "name": "前五",
+          "reward": "灵石x1500000,渡厄丹x2"
+        },
+        {
+          "rank_min": 6,
+          "rank_max": 20,
+          "name": "前二十",
+          "reward": "灵石x900000,渡厄丹x1"
+        }
+      ],
+      "server_milestones": [
+        {
+          "key": "p90",
+          "hp_percent": 90,
+          "name": "初战告捷",
+          "reward": "灵石x150000"
+        },
+        {
+          "key": "p70",
+          "hp_percent": 70,
+          "name": "鏖战正酣",
+          "reward": "灵石x280000"
+        },
+        {
+          "key": "p50",
+          "hp_percent": 50,
+          "name": "半壁江山",
+          "reward": "灵石x450000"
+        },
+        {
+          "key": "p20",
+          "hp_percent": 20,
+          "name": "穷途末路",
+          "reward": "灵石x700000,渡厄丹x1"
+        }
+      ]
+    }
+  ],
   "extensions": {
     "repeat_last_daily_reward": true,
     "activity_info_mode": "brief",
-    "sign_reply_mode": "minimal"
+    "sign_reply_mode": "minimal",
+    "activity_pass": {
+      "enabled": true,
+      "name": "庆典战令",
+      "exp_name": "活跃值",
+      "level_exp": 100,
+      "max_level": 12,
+      "event_rules": [
+        {
+          "event": "sign_in",
+          "exp": 30,
+          "daily_limit": 30
+        },
+        {
+          "event": "work",
+          "exp": 12,
+          "daily_limit": 72
+        },
+        {
+          "event": "boss",
+          "exp": 6,
+          "daily_limit": 120
+        },
+        {
+          "event": "sect_task_complete",
+          "exp": 14,
+          "daily_limit": 70
+        },
+        {
+          "event": "dongfu_harvest",
+          "exp": 12,
+          "daily_limit": 36
+        },
+        {
+          "event": "dungeon_clear",
+          "exp": 24,
+          "daily_limit": 96
+        }
+      ],
+      "level_rewards": [
+        {
+          "level": 1,
+          "name": "初入庆典",
+          "reward": "灵石x80000"
+        },
+        {
+          "level": 2,
+          "name": "勤修补给",
+          "reward": "灵石x120000"
+        },
+        {
+          "level": 3,
+          "name": "历练补给",
+          "reward": "灵石x160000"
+        },
+        {
+          "level": 4,
+          "name": "伏魔补给",
+          "reward": "灵石x220000"
+        },
+        {
+          "level": 5,
+          "name": "小成礼盒",
+          "reward": "灵石x300000,渡厄丹x1"
+        },
+        {
+          "level": 8,
+          "name": "秘境馈赠",
+          "reward": "灵石x500000,渡厄丹x1"
+        },
+        {
+          "level": 10,
+          "name": "十阶大礼",
+          "reward": "灵石x800000,渡厄丹x2"
+        },
+        {
+          "level": 12,
+          "name": "圆满庆典",
+          "reward": "灵石x1200000,渡厄丹x3"
+        }
+      ]
+    }
   }
 }

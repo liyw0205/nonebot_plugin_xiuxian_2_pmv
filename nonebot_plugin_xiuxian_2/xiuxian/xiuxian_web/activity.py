@@ -7,6 +7,7 @@ from ..xiuxian_activity.service import (
     ACTIVITY_EVENT_LABELS,
     CONFIG_PATH as ACTIVITY_CONFIG_PATH,
     DEFAULT_COLLECT_DROP_EVENTS,
+    DEFAULT_ACTIVITY_PASS,
     DEFAULT_POINT_EVENT_RULES,
     adjust_activity_points,
     adjust_collect_word,
@@ -1341,6 +1342,17 @@ def _as_gameplay_rows(value) -> list[dict]:
             "point_name": item.get("point_name", "活动积分"),
             "event_rules": _as_point_rule_rows(item.get("event_rules")),
             "shop": _as_point_shop_rows(item.get("shop")),
+            "boss_name": item.get("boss_name", ""),
+            "mode": item.get("mode", "cooperative"),
+            "max_hp": item.get("max_hp", 0),
+            "atk_ratio": item.get("atk_ratio", 0.1),
+            "hit_hp_cap_ratio": item.get("hit_hp_cap_ratio", 0.01),
+            "daily_fight_limit": item.get("daily_fight_limit", 3),
+            "items": item.get("items") if isinstance(item.get("items"), list) else [],
+            "rank_rewards": item.get("rank_rewards") if isinstance(item.get("rank_rewards"), list) else [],
+            "server_milestones": (
+                item.get("server_milestones") if isinstance(item.get("server_milestones"), list) else []
+            ),
         })
     return rows
 
@@ -1507,7 +1519,12 @@ def _prepare_activity_config(config: dict) -> dict:
     if not isinstance(config, dict):
         config = {}
 
-    extensions = config.get("extensions") if isinstance(config.get("extensions"), dict) else {}
+    extensions = dict(config.get("extensions")) if isinstance(config.get("extensions"), dict) else {}
+    extensions["repeat_last_daily_reward"] = _as_bool(extensions.get("repeat_last_daily_reward"), True)
+    extensions["activity_info_mode"] = _clean_text(extensions.get("activity_info_mode"), "brief")
+    extensions["sign_reply_mode"] = _clean_text(extensions.get("sign_reply_mode"), "minimal")
+    if not isinstance(extensions.get("activity_pass"), dict):
+        extensions["activity_pass"] = deepcopy(DEFAULT_ACTIVITY_PASS)
     prepared = {
         "template_type": _clean_text(config.get("template_type"), "festival_sign"),
         "template_key": _clean_text(config.get("template_key"), config.get("template_type") or "festival_sign"),
@@ -1524,9 +1541,7 @@ def _prepare_activity_config(config: dict) -> dict:
         "weekly_tasks": _as_task_rows(config.get("weekly_tasks")),
         "extra_rules": _normalize_extra_rules(config.get("extra_rules")),
         "gameplay_activities": _as_gameplay_rows(config.get("gameplay_activities")),
-        "extensions": {
-            "repeat_last_daily_reward": _as_bool(extensions.get("repeat_last_daily_reward"), True),
-        },
+        "extensions": extensions,
     }
     return prepared
 
@@ -1538,6 +1553,10 @@ def _normalize_activity_config(data: dict) -> dict:
     extensions = data.get("extensions") if isinstance(data.get("extensions"), dict) else {}
     extensions = dict(extensions)
     extensions["repeat_last_daily_reward"] = _as_bool(extensions.get("repeat_last_daily_reward"), True)
+    extensions["activity_info_mode"] = _clean_text(extensions.get("activity_info_mode"), "brief")
+    extensions["sign_reply_mode"] = _clean_text(extensions.get("sign_reply_mode"), "minimal")
+    if not isinstance(extensions.get("activity_pass"), dict):
+        extensions["activity_pass"] = deepcopy(DEFAULT_ACTIVITY_PASS)
 
     start_time = _normalize_time_text(
         data.get("start_time"),

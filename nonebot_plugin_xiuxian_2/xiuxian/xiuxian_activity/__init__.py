@@ -9,12 +9,17 @@ from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
 from .service import (
     build_activity_gameplay_text,
     build_activity_info,
+    build_activity_pass_text,
+    build_activity_task_progress_text,
     build_activity_rewards_text,
     build_activity_tasks_text,
     build_collect_bag_text,
     build_activity_points_text,
     build_activity_shop_text,
     build_rank_text,
+    claim_activity_rewards,
+    claim_activity_pass_rewards,
+    claim_activity_tasks,
     claim_collect_phrase,
     claim_point_shop_item,
     claim_sign,
@@ -24,9 +29,13 @@ from .service import (
 
 activity_help_cmd = on_command("活动帮助", priority=7, block=True)
 activity_manage_cmd = on_command("活动管理", permission=SUPERUSER, priority=5, block=True)
-activity_info_cmd = on_command("活动", aliases={"活动信息"}, priority=10, block=True)
+activity_info_cmd = on_command("活动", aliases={"活动信息", "活动进度", "活动日程"}, priority=10, block=True)
+activity_claim_cmd = on_command("活动领取", aliases={"活动一键领取", "领取活动奖励", "活动领奖"}, priority=10, block=True)
 activity_rewards_cmd = on_command("活动奖励", priority=10, block=True)
-activity_tasks_cmd = on_command("活动任务", priority=10, block=True)
+activity_tasks_cmd = on_command("活动任务", aliases={"活动目标", "活动日常"}, priority=10, block=True)
+activity_task_claim_cmd = on_command("活动任务领取", aliases={"领取活动任务"}, priority=10, block=True)
+activity_pass_cmd = on_command("活动战令", aliases={"活动通行证", "活动活跃"}, priority=10, block=True)
+activity_pass_claim_cmd = on_command("活动战令领取", aliases={"领取活动战令", "领取活动通行证"}, priority=10, block=True)
 activity_gameplay_cmd = on_command("活动玩法", priority=10, block=True)
 activity_sign_cmd = on_command("活动签到", aliases={"节日签到"}, priority=10, block=True)
 activity_rank_cmd = on_command("活动排行", priority=10, block=True)
@@ -110,10 +119,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
+@activity_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    ok, text = claim_activity_rewards(str(user_info["user_id"]))
+    await handle_send(bot, event, text if ok else f"活动领取失败：{text}")
+
+
 @activity_tasks_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    text = build_activity_tasks_text()
+    is_user, user_info, msg = await _ensure_user(event)
+    if is_user:
+        text = build_activity_task_progress_text(str(user_info["user_id"]))
+    else:
+        text = build_activity_tasks_text()
     await handle_send(
         bot,
         event,
@@ -121,6 +146,42 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         native_markdown=True,
         fallback_msg=text,
     )
+
+
+@activity_task_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    ok, text = claim_activity_tasks(str(user_info["user_id"]), args.extract_plain_text())
+    await handle_send(bot, event, text if ok else f"活动任务领取失败：{text}")
+
+
+@activity_pass_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    text = build_activity_pass_text(str(user_info["user_id"]))
+    await handle_send(bot, event, text)
+
+
+@activity_pass_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    ok, text = claim_activity_pass_rewards(str(user_info["user_id"]), args.extract_plain_text())
+    await handle_send(bot, event, text if ok else f"活动战令领取失败：{text}")
 
 
 @activity_gameplay_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -286,18 +347,20 @@ ACTIVITY_HELP = """
 【活动指令】
 1. 活动 / 活动信息（概览）
 2. 活动奖励
-3. 活动任务
-4. 活动玩法
-5. 活动签到
-6. 活动背包 / 活动字牌
-7. 活动兑换 端午安康
-8. 活动积分
-9. 活动商店
-10. 活动购买 灵石补给
-11. 活动排行
-12. 活动首领 / 活动首领排行
-13. 活动讨伐（协作首领直接打；或 活动讨伐 爆竹/烟花）
-14. 活动首领领奖 排行 / 进度
+3. 活动领取（任务、战令、首领奖励一键领取）
+4. 活动任务 / 活动任务领取
+5. 活动玩法
+6. 活动签到
+7. 活动背包 / 活动字牌
+8. 活动兑换 端午安康
+9. 活动积分
+10. 活动商店
+11. 活动购买 灵石补给
+12. 活动战令 / 活动战令领取
+13. 活动排行
+14. 活动首领 / 活动首领排行
+15. 活动讨伐（协作首领直接打；或 活动讨伐 爆竹/烟花）
+16. 活动首领领奖 排行 / 进度
 """.strip()
 
 
@@ -311,6 +374,8 @@ ACTIVITY_MANAGE_HELP = """
 4. 关闭活动 集字
 5. 开启活动 积分
 6. 关闭活动 积分
-7. 开启活动 全部 / 关闭活动 全部
-8. 活动后台可维护模板、任务、玩法和奖励
+7. 开启活动 首领 / 关闭活动 首领
+8. 开启活动 战令 / 关闭活动 战令
+9. 开启活动 全部 / 关闭活动 全部
+10. 活动后台可维护模板、任务、玩法和奖励
 """.strip()

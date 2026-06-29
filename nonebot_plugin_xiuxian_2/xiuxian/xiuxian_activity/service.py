@@ -63,6 +63,39 @@ DEFAULT_POINT_EVENT_RULES = [
     {"event": "mix_elixir_complete", "points": 8, "daily_limit": 40},
     {"event": "dungeon_clear", "points": 15, "daily_limit": 60},
 ]
+DEFAULT_PASS_EVENT_RULES = [
+    {"event": "sign_in", "exp": 30, "daily_limit": 30},
+    {"event": "work", "exp": 12, "daily_limit": 72},
+    {"event": "boss", "exp": 6, "daily_limit": 120},
+    {"event": "sect_task_complete", "exp": 14, "daily_limit": 70},
+    {"event": "pet_travel_claim", "exp": 12, "daily_limit": 36},
+    {"event": "dongfu_harvest", "exp": 12, "daily_limit": 36},
+    {"event": "map_mission_complete", "exp": 16, "daily_limit": 80},
+    {"event": "mix_elixir_complete", "exp": 10, "daily_limit": 60},
+    {"event": "dungeon_clear", "exp": 24, "daily_limit": 96},
+]
+DEFAULT_ACTIVITY_PASS = {
+    "enabled": True,
+    "name": "节日战令",
+    "exp_name": "活跃值",
+    "level_exp": 100,
+    "max_level": 12,
+    "event_rules": DEFAULT_PASS_EVENT_RULES,
+    "level_rewards": [
+        {"level": 1, "name": "初入庆典", "reward": "灵石x80000"},
+        {"level": 2, "name": "勤修补给", "reward": "灵石x120000"},
+        {"level": 3, "name": "历练补给", "reward": "灵石x160000"},
+        {"level": 4, "name": "伏魔补给", "reward": "灵石x220000"},
+        {"level": 5, "name": "小成礼盒", "reward": "灵石x300000,渡厄丹x1"},
+        {"level": 6, "name": "进阶补给", "reward": "灵石x360000"},
+        {"level": 7, "name": "宗门馈赠", "reward": "灵石x420000"},
+        {"level": 8, "name": "秘境馈赠", "reward": "灵石x500000,渡厄丹x1"},
+        {"level": 9, "name": "庆典宝匣", "reward": "灵石x650000"},
+        {"level": 10, "name": "十阶大礼", "reward": "灵石x800000,渡厄丹x2"},
+        {"level": 11, "name": "巅峰补给", "reward": "灵石x1000000"},
+        {"level": 12, "name": "圆满庆典", "reward": "灵石x1200000,渡厄丹x3"},
+    ],
+}
 
 
 def now_dt() -> datetime:
@@ -196,6 +229,64 @@ def init_db():
                 PRIMARY KEY(activity_key, user_id, item_key)
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_task_progress (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_key TEXT NOT NULL,
+                task_key TEXT NOT NULL,
+                progress INTEGER NOT NULL DEFAULT 0,
+                target INTEGER NOT NULL DEFAULT 1,
+                claimed INTEGER NOT NULL DEFAULT 0,
+                claim_time TEXT DEFAULT '',
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, scope_type, scope_key, task_key)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_task_claim_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_key TEXT NOT NULL,
+                task_key TEXT NOT NULL,
+                reward TEXT DEFAULT '',
+                create_time TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_pass_balance (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                exp INTEGER NOT NULL DEFAULT 0,
+                total_exp INTEGER NOT NULL DEFAULT 0,
+                level INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_pass_event_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                exp INTEGER NOT NULL DEFAULT 0,
+                record_date TEXT DEFAULT '',
+                create_time TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_pass_reward_claim (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                level INTEGER NOT NULL,
+                create_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, level)
+            )
+        """)
         from .activity_boss import init_boss_tables
 
         init_boss_tables(conn)
@@ -234,6 +325,7 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
             ("repeat_last_daily_reward", True),
             ("activity_info_mode", "brief"),
             ("sign_reply_mode", "minimal"),
+            ("activity_pass", deepcopy(DEFAULT_ACTIVITY_PASS)),
         ):
             if key not in extensions:
                 extensions[key] = default
@@ -333,6 +425,14 @@ def _as_float(value, default: float = 0.0) -> float:
 def _get_extensions(config: dict) -> dict:
     extensions = config.get("extensions")
     return extensions if isinstance(extensions, dict) else {}
+
+
+def _activity_config_key(config: dict | None = None) -> str:
+    cfg = config if config is not None else load_config()
+    return _normalize_activity_key(
+        cfg.get("template_key") or cfg.get("name") or "festival_sign",
+        "festival_sign",
+    )
 
 
 def _sign_reply_mode(config: dict | None = None) -> str:
@@ -649,6 +749,134 @@ def _point_event_rules(activity: dict) -> list[dict]:
     return rules
 
 
+def _normalize_activity_task_rows(rows, scope_type: str) -> list[dict]:
+    if not isinstance(rows, list):
+        return []
+
+    tasks: list[dict] = []
+    seen_keys: set[str] = set()
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            continue
+        target = max(1, _as_int(row.get("target"), 1))
+        events = _normalize_event_list(row.get("events"))
+        if not events:
+            continue
+        task_key = _normalize_activity_key(
+            row.get("key") or row.get("name") or f"{scope_type}_{index}",
+            f"{scope_type}_{index}",
+        )
+        if task_key in seen_keys:
+            task_key = f"{task_key}_{index}"
+        seen_keys.add(task_key)
+        tasks.append({
+            "key": task_key,
+            "name": _clean_text(row.get("name"), f"活动任务{index}"),
+            "description": _clean_text(row.get("description") or row.get("desc")),
+            "target": target,
+            "events": events,
+            "reward": _clean_text(row.get("reward")),
+            "scope_type": scope_type,
+        })
+    return tasks
+
+
+def get_activity_tasks(config: dict | None = None, scope_type: str | None = None) -> list[dict]:
+    cfg = config or load_config()
+    tasks = []
+    if scope_type in (None, "daily"):
+        tasks.extend(_normalize_activity_task_rows(cfg.get("daily_tasks"), "daily"))
+    if scope_type in (None, "weekly"):
+        tasks.extend(_normalize_activity_task_rows(cfg.get("weekly_tasks"), "weekly"))
+    return tasks
+
+
+def _week_key() -> str:
+    year, week, _ = now_dt().isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _task_scope_key(scope_type: str) -> str:
+    return today_str() if scope_type == "daily" else _week_key()
+
+
+def _activity_pass_config(config: dict | None = None) -> dict:
+    cfg = config if config is not None else load_config()
+    raw = _get_extensions(cfg).get("activity_pass")
+    if not isinstance(raw, dict):
+        raw = {}
+    merged = deepcopy(DEFAULT_ACTIVITY_PASS)
+    merged.update(raw)
+    merged["enabled"] = _as_bool(merged.get("enabled"), True)
+    merged["name"] = _clean_text(merged.get("name"), "节日战令")
+    merged["exp_name"] = _clean_text(merged.get("exp_name"), "活跃值")
+    merged["level_exp"] = max(1, _as_int(merged.get("level_exp"), 100))
+    merged["max_level"] = max(1, _as_int(merged.get("max_level"), 12))
+    merged["event_rules"] = _pass_event_rules(merged)
+    merged["level_rewards"] = _pass_level_rewards(merged)
+    return merged
+
+
+def _pass_event_rules(pass_cfg: dict) -> list[dict]:
+    rows = pass_cfg.get("event_rules")
+    if isinstance(rows, dict):
+        source = [
+            {"event": event, "exp": exp}
+            for event, exp in rows.items()
+        ]
+    elif isinstance(rows, list):
+        source = rows
+    else:
+        source = DEFAULT_PASS_EVENT_RULES
+
+    rules: list[dict] = []
+    seen_events: set[str] = set()
+    for row in source:
+        if isinstance(row, dict):
+            event = _clean_text(row.get("event") or row.get("event_key") or row.get("value"))
+            exp = _as_int(row.get("exp", row.get("points")), 0)
+            daily_limit = _as_int(row.get("daily_limit"), 0)
+        else:
+            event = _clean_text(row)
+            exp = 0
+            daily_limit = 0
+        if not event or event in seen_events or event not in ACTIVITY_EVENT_LABELS:
+            continue
+        exp = max(0, exp)
+        if exp <= 0:
+            continue
+        seen_events.add(event)
+        rules.append({
+            "event": event,
+            "exp": exp,
+            "daily_limit": max(0, daily_limit),
+        })
+    return rules
+
+
+def _pass_level_rewards(pass_cfg: dict) -> list[dict]:
+    rows = pass_cfg.get("level_rewards")
+    if not isinstance(rows, list):
+        rows = DEFAULT_ACTIVITY_PASS["level_rewards"]
+    rewards: list[dict] = []
+    seen_levels: set[int] = set()
+    max_level = max(1, _as_int(pass_cfg.get("max_level"), 12))
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        level = _as_int(row.get("level"), 0)
+        if level <= 0 or level > max_level or level in seen_levels:
+            continue
+        seen_levels.add(level)
+        rewards.append({
+            "level": level,
+            "name": _clean_text(row.get("name"), f"{level}级奖励"),
+            "reward": _clean_text(row.get("reward")),
+        })
+    rewards.sort(key=lambda item: item["level"])
+    return rewards
+
+
 def _point_shop_items(activity: dict) -> list[dict]:
     rows = activity.get("shop")
     if not isinstance(rows, list):
@@ -802,6 +1030,207 @@ def _phrase_need_counter(phrase: str) -> Counter:
     return Counter(word_char for word_char in str(phrase or "") if word_char.strip())
 
 
+def _get_task_progress_map(cur, activity_key: str, user_id: str) -> dict[tuple[str, str, str], dict]:
+    cur.execute(
+        """
+        SELECT scope_type, scope_key, task_key, progress, target, claimed, claim_time
+        FROM activity_task_progress
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    result: dict[tuple[str, str, str], dict] = {}
+    for row in cur.fetchall():
+        key = (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"]))
+        result[key] = {
+            "progress": max(0, _as_int(row["progress"])),
+            "target": max(1, _as_int(row["target"], 1)),
+            "claimed": bool(_as_int(row["claimed"], 0)),
+            "claim_time": _clean_text(row["claim_time"]),
+        }
+    return result
+
+
+def _record_activity_task_progress(
+    cur,
+    config: dict,
+    user_id: str,
+    event_key: str,
+    amount: int,
+    messages: list[str],
+) -> None:
+    ok, _ = activity_state(config)
+    if not ok:
+        return
+    activity_key = _activity_config_key(config)
+    for task in get_activity_tasks(config):
+        if event_key not in task.get("events", []):
+            continue
+        scope_type = task["scope_type"]
+        scope_key = _task_scope_key(scope_type)
+        task_key = task["key"]
+        target = max(1, _as_int(task.get("target"), 1))
+        cur.execute(
+            """
+            SELECT progress, claimed FROM activity_task_progress
+            WHERE activity_key=%s AND user_id=%s AND scope_type=%s AND scope_key=%s AND task_key=%s
+            """,
+            (activity_key, user_id, scope_type, scope_key, task_key),
+        )
+        row = cur.fetchone()
+        old_progress = max(0, _as_int(row["progress"] if row else 0))
+        claimed = bool(_as_int(row["claimed"] if row else 0))
+        if claimed:
+            continue
+        new_progress = min(target, old_progress + max(1, amount))
+        if new_progress <= old_progress and row:
+            continue
+        ts = now_str()
+        cur.execute(
+            """
+            INSERT INTO activity_task_progress (
+                activity_key, user_id, scope_type, scope_key, task_key,
+                progress, target, claimed, update_time
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)
+            ON CONFLICT(activity_key, user_id, scope_type, scope_key, task_key) DO UPDATE SET
+                progress = excluded.progress,
+                target = excluded.target,
+                update_time = excluded.update_time
+            """,
+            (activity_key, user_id, scope_type, scope_key, task_key, new_progress, target, ts),
+        )
+        if old_progress < target <= new_progress:
+            messages.append(f"活动任务完成：{task['name']}，发送 活动任务领取")
+
+
+def _calc_pass_level(total_exp: int, level_exp: int, max_level: int) -> int:
+    return min(max(0, _as_int(total_exp, 0)) // max(1, level_exp), max(1, max_level))
+
+
+def _pass_current_exp(total_exp: int, level: int, level_exp: int, max_level: int) -> int:
+    if level >= max_level:
+        return level_exp
+    return max(0, total_exp - level * level_exp)
+
+
+def _get_pass_balance(cur, activity_key: str, user_id: str, pass_cfg: dict | None = None) -> dict:
+    cfg = pass_cfg or _activity_pass_config()
+    level_exp = max(1, _as_int(cfg.get("level_exp"), 100))
+    max_level = max(1, _as_int(cfg.get("max_level"), 12))
+    cur.execute(
+        """
+        SELECT exp, total_exp, level
+        FROM activity_pass_balance
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    row = cur.fetchone()
+    total_exp = max(0, _as_int(row["total_exp"] if row else 0))
+    level = _calc_pass_level(total_exp, level_exp, max_level)
+    current_exp = _pass_current_exp(total_exp, level, level_exp, max_level)
+    return {
+        "exp": current_exp,
+        "total_exp": total_exp,
+        "level": level,
+        "level_exp": level_exp,
+        "max_level": max_level,
+    }
+
+
+def _grant_pass_exp(cur, activity_key: str, user_id: str, pass_cfg: dict, gained_exp: int) -> tuple[dict, dict]:
+    before = _get_pass_balance(cur, activity_key, user_id, pass_cfg)
+    total_exp = before["total_exp"] + max(0, _as_int(gained_exp, 0))
+    level_exp = before["level_exp"]
+    max_level = before["max_level"]
+    level = _calc_pass_level(total_exp, level_exp, max_level)
+    current_exp = _pass_current_exp(total_exp, level, level_exp, max_level)
+    ts = now_str()
+    cur.execute(
+        """
+        INSERT INTO activity_pass_balance (
+            activity_key, user_id, exp, total_exp, level, update_time
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT(activity_key, user_id) DO UPDATE SET
+            exp = excluded.exp,
+            total_exp = excluded.total_exp,
+            level = excluded.level,
+            update_time = excluded.update_time
+        """,
+        (activity_key, user_id, current_exp, total_exp, level, ts),
+    )
+    return before, {
+        "exp": current_exp,
+        "total_exp": total_exp,
+        "level": level,
+        "level_exp": level_exp,
+        "max_level": max_level,
+    }
+
+
+def _record_activity_pass_progress(
+    cur,
+    config: dict,
+    user_id: str,
+    event_key: str,
+    amount: int,
+    messages: list[str],
+) -> None:
+    ok, _ = activity_state(config)
+    if not ok:
+        return
+    pass_cfg = _activity_pass_config(config)
+    if not pass_cfg.get("enabled"):
+        return
+    activity_key = _activity_config_key(config)
+    exp_name = pass_cfg.get("exp_name") or "活跃值"
+    for rule in pass_cfg.get("event_rules") or []:
+        if rule.get("event") != event_key:
+            continue
+        exp = max(0, _as_int(rule.get("exp"), 0)) * max(1, amount)
+        if exp <= 0:
+            continue
+        daily_limit = max(0, _as_int(rule.get("daily_limit"), 0))
+        if daily_limit > 0:
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(exp), 0) AS count
+                FROM activity_pass_event_log
+                WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
+                """,
+                (activity_key, user_id, event_key, today_str()),
+            )
+            row = cur.fetchone()
+            current_exp = _as_int(row["count"] if row else 0)
+            remaining = daily_limit - current_exp
+            if remaining <= 0:
+                continue
+            exp = min(exp, remaining)
+        if exp <= 0:
+            continue
+        ts = now_str()
+        cur.execute(
+            """
+            INSERT INTO activity_pass_event_log (
+                activity_key, user_id, event_key, exp, record_date, create_time
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (activity_key, user_id, event_key, exp, today_str(), ts),
+        )
+        before, after = _grant_pass_exp(cur, activity_key, user_id, pass_cfg, exp)
+        if after["level"] > before["level"]:
+            messages.append(
+                f"活动战令：获得{exp}{exp_name}，提升至{after['level']}级，发送 活动战令领取 领奖"
+            )
+        else:
+            messages.append(
+                f"活动战令：获得{exp}{exp_name}（{after['exp']}/{after['level_exp']}）"
+            )
+
+
 def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list[str]:
     uid = str(user_id)
     event = str(event_key)
@@ -809,8 +1238,9 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
     if times <= 0:
         return []
 
-    activities = get_gameplay_activities(load_config())
-    if not activities:
+    cfg = load_config()
+    activities = get_gameplay_activities(cfg)
+    if not activities and not get_activity_tasks(cfg) and not _activity_pass_config(cfg).get("enabled"):
         return []
 
     ensure_activity_files()
@@ -819,6 +1249,8 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
     messages: list[str] = []
     try:
         cur = conn.cursor()
+        _record_activity_task_progress(cur, cfg, uid, event, times, messages)
+        _record_activity_pass_progress(cur, cfg, uid, event, times, messages)
         for activity in activities:
             ok, _ = activity_state(activity)
             if not ok:
@@ -882,9 +1314,16 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                     items = activity.get("items") or []
                     if items:
                         pick = random.choice(items)
-                        from .activity_boss import grant_activity_item
-
-                        grant_activity_item(activity["key"], uid, pick["id"], 1)
+                        cur.execute(
+                            """
+                            INSERT INTO activity_item_inventory (activity_key, user_id, item_id, count, update_time)
+                            VALUES (%s, %s, %s, %s, %s)
+                            ON CONFLICT(activity_key, user_id, item_id) DO UPDATE SET
+                                count = activity_item_inventory.count + excluded.count,
+                                update_time = excluded.update_time
+                            """,
+                            (activity["key"], uid, pick["id"], 1, now_str()),
+                        )
                         messages.append(f"活动掉落：{activity['name']} 获得【{pick['name']}】")
                 continue
 
@@ -1224,6 +1663,342 @@ def build_activity_shop_text(user_id: str) -> str:
         conn.close()
 
 
+def _scope_label(scope_type: str) -> str:
+    return "每日" if scope_type == "daily" else "周常"
+
+
+def _task_status_text(progress: int, target: int, claimed: bool) -> str:
+    if claimed:
+        return "已领取"
+    if progress >= target:
+        return "可领取"
+    return f"{progress}/{target}"
+
+
+def build_activity_task_progress_text(user_id: str) -> str:
+    cfg = load_config()
+    activity_key = _activity_config_key(cfg)
+    tasks = get_activity_tasks(cfg)
+    lines = [f"【{cfg.get('name', '节日签到活动')} · 活动任务】"]
+    if not tasks:
+        lines.append("暂无活动任务")
+        return "\n".join(lines)
+
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        progress_map = _get_task_progress_map(cur, activity_key, str(user_id))
+        for scope_type in ("daily", "weekly"):
+            scope_tasks = [task for task in tasks if task.get("scope_type") == scope_type]
+            if not scope_tasks:
+                continue
+            scope_key = _task_scope_key(scope_type)
+            lines.append("")
+            lines.append(f"【{_scope_label(scope_type)}目标】")
+            for task in scope_tasks:
+                key = (scope_type, scope_key, task["key"])
+                state = progress_map.get(key, {})
+                target = max(1, _as_int(task.get("target"), 1))
+                progress = min(target, max(0, _as_int(state.get("progress"), 0)))
+                claimed = bool(state.get("claimed"))
+                event_text = _activity_event_text(task.get("events"))
+                desc = _clean_text(task.get("description"))
+                if not desc:
+                    desc = f"{event_text} {target} 次" if event_text else f"目标 {target}"
+                lines.append(
+                    f"- {task['name']}：{_task_status_text(progress, target, claimed)}，"
+                    f"{desc}，奖励：{task.get('reward') or '暂无奖励'}"
+                )
+        lines.append("")
+        lines.append("领奖：活动任务领取（自动领取全部可领任务）")
+        return "\n".join(lines).strip()
+    finally:
+        conn.close()
+
+
+def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") -> list[tuple[dict, str, str, int]]:
+    activity_key = _activity_config_key(config)
+    target_text = _clean_text(query)
+    tasks = get_activity_tasks(config)
+    selected: list[tuple[dict, str, str, int]] = []
+    for task in tasks:
+        scope_type = task["scope_type"]
+        scope_key = _task_scope_key(scope_type)
+        if target_text and target_text not in {
+            task["key"],
+            task["name"],
+            scope_type,
+            _scope_label(scope_type),
+        } and target_text not in task["name"]:
+            continue
+        cur.execute(
+            """
+            SELECT progress, target, claimed
+            FROM activity_task_progress
+            WHERE activity_key=%s AND user_id=%s AND scope_type=%s AND scope_key=%s AND task_key=%s
+            """,
+            (activity_key, user_id, scope_type, scope_key, task["key"]),
+        )
+        row = cur.fetchone()
+        progress = max(0, _as_int(row["progress"] if row else 0))
+        target = max(1, _as_int(row["target"] if row else task.get("target"), task.get("target", 1)))
+        claimed = bool(_as_int(row["claimed"] if row else 0))
+        if claimed or progress < target:
+            continue
+        selected.append((task, scope_type, scope_key, target))
+    return selected
+
+
+def claim_activity_tasks(user_id: str, query: str = "") -> tuple[bool, str]:
+    cfg = load_config()
+    ok, reason = activity_state(cfg)
+    if not ok:
+        return False, reason
+    uid = str(user_id)
+    activity_key = _activity_config_key(cfg)
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    reward_jobs: list[tuple[dict, list[dict]]] = []
+    try:
+        cur = conn.cursor()
+        claimable = _select_claimable_tasks(cur, cfg, uid, query)
+        if not claimable:
+            return False, "当前没有可领取的活动任务奖励"
+        for task, scope_type, scope_key, target in claimable:
+            reward_text = _clean_text(task.get("reward"))
+            try:
+                reward_items = parse_reward(reward_text)
+            except Exception as e:
+                conn.rollback()
+                return False, f"任务【{task['name']}】奖励配置错误：{e}"
+            ts = now_str()
+            cur.execute(
+                """
+                UPDATE activity_task_progress
+                SET claimed=1, claim_time=%s, update_time=%s, target=%s
+                WHERE activity_key=%s AND user_id=%s AND scope_type=%s AND scope_key=%s AND task_key=%s
+                    AND claimed=0 AND progress>=%s
+                """,
+                (ts, ts, target, activity_key, uid, scope_type, scope_key, task["key"], target),
+            )
+            if cur.rowcount <= 0:
+                continue
+            cur.execute(
+                """
+                INSERT INTO activity_task_claim_log (
+                    activity_key, user_id, scope_type, scope_key, task_key, reward, create_time
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (activity_key, uid, scope_type, scope_key, task["key"], reward_text, ts),
+            )
+            reward_jobs.append((task, reward_items))
+        if not reward_jobs:
+            conn.rollback()
+            return False, "当前没有可领取的活动任务奖励"
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    lines = ["活动任务奖励领取成功："]
+    for task, reward_items in reward_jobs:
+        try:
+            reward_msg = send_reward_items(uid, reward_items)
+            reward_text = "，".join(reward_msg) if reward_msg else _clean_text(task.get("reward"), "暂无奖励")
+        except Exception as e:
+            logger.warning(f"活动任务发奖失败 user_id={uid}, task={task.get('key')}: {e}")
+            reward_text = f"奖励发放失败：{e}"
+        lines.append(f"- {task['name']}：{reward_text}")
+    return True, "\n".join(lines)
+
+
+def build_activity_pass_text(user_id: str) -> str:
+    cfg = load_config()
+    pass_cfg = _activity_pass_config(cfg)
+    lines = [f"【{pass_cfg['name']}】"]
+    if not pass_cfg.get("enabled"):
+        lines.append("活动战令未开启")
+        return "\n".join(lines)
+    activity_key = _activity_config_key(cfg)
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        balance = _get_pass_balance(cur, activity_key, str(user_id), pass_cfg)
+        cur.execute(
+            """
+            SELECT level FROM activity_pass_reward_claim
+            WHERE activity_key=%s AND user_id=%s
+            """,
+            (activity_key, str(user_id)),
+        )
+        claimed = {max(0, _as_int(row["level"])) for row in cur.fetchall()}
+        exp_name = pass_cfg.get("exp_name") or "活跃值"
+        lines.extend([
+            f"等级：{balance['level']}/{balance['max_level']}",
+            f"{exp_name}：{balance['exp']}/{balance['level_exp']}（累计 {balance['total_exp']}）",
+        ])
+        rules = pass_cfg.get("event_rules") or []
+        if rules:
+            rule_text = "、".join(
+                f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('exp'))}"
+                for rule in rules
+            )
+            lines.append(f"获取来源：{rule_text}")
+        rewards = pass_cfg.get("level_rewards") or []
+        if rewards:
+            lines.append("")
+            lines.append("【等级奖励】")
+            for reward in rewards:
+                level = _as_int(reward.get("level"), 0)
+                if level <= 0:
+                    continue
+                if level in claimed:
+                    status = "已领取"
+                elif balance["level"] >= level:
+                    status = "可领取"
+                else:
+                    status = "未达成"
+                lines.append(
+                    f"- Lv.{level} {reward.get('name') or '等级奖励'}：{status}，"
+                    f"{reward.get('reward') or '暂无奖励'}"
+                )
+        lines.append("")
+        lines.append("领奖：活动战令领取（自动领取全部可领等级奖励）")
+        return "\n".join(lines).strip()
+    finally:
+        conn.close()
+
+
+def claim_activity_pass_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
+    cfg = load_config()
+    ok, reason = activity_state(cfg)
+    if not ok:
+        return False, reason
+    pass_cfg = _activity_pass_config(cfg)
+    if not pass_cfg.get("enabled"):
+        return False, "活动战令未开启"
+    uid = str(user_id)
+    activity_key = _activity_config_key(cfg)
+    target_text = _clean_text(query)
+    target_level = _as_int(target_text, 0) if target_text.isdigit() else 0
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    reward_jobs: list[tuple[dict, list[dict]]] = []
+    try:
+        cur = conn.cursor()
+        balance = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+        cur.execute(
+            """
+            SELECT level FROM activity_pass_reward_claim
+            WHERE activity_key=%s AND user_id=%s
+            """,
+            (activity_key, uid),
+        )
+        claimed = {max(0, _as_int(row["level"])) for row in cur.fetchall()}
+        for reward in pass_cfg.get("level_rewards") or []:
+            level = _as_int(reward.get("level"), 0)
+            if level <= 0 or level in claimed or balance["level"] < level:
+                continue
+            if target_level and target_level != level:
+                continue
+            if target_text and not target_level and target_text not in {
+                _clean_text(reward.get("name")),
+                f"Lv.{level}",
+                f"lv.{level}",
+                str(level),
+            } and target_text not in _clean_text(reward.get("name")):
+                continue
+            reward_text = _clean_text(reward.get("reward"))
+            try:
+                reward_items = parse_reward(reward_text)
+            except Exception as e:
+                conn.rollback()
+                return False, f"战令Lv.{level}奖励配置错误：{e}"
+            ts = now_str()
+            cur.execute(
+                """
+                INSERT INTO activity_pass_reward_claim (activity_key, user_id, level, create_time)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (activity_key, uid, level, ts),
+            )
+            reward_jobs.append((reward, reward_items))
+        if not reward_jobs:
+            return False, "当前没有可领取的活动战令奖励"
+        conn.commit()
+    except db_backend.IntegrityError:
+        conn.rollback()
+        return False, "活动战令奖励已领取"
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    lines = ["活动战令奖励领取成功："]
+    for reward, reward_items in reward_jobs:
+        level = _as_int(reward.get("level"), 0)
+        try:
+            reward_msg = send_reward_items(uid, reward_items)
+            reward_text = "，".join(reward_msg) if reward_msg else _clean_text(reward.get("reward"), "暂无奖励")
+        except Exception as e:
+            logger.warning(f"活动战令发奖失败 user_id={uid}, level={level}: {e}")
+            reward_text = f"奖励发放失败：{e}"
+        lines.append(f"- Lv.{level} {reward.get('name') or '等级奖励'}：{reward_text}")
+    return True, "\n".join(lines)
+
+
+def claim_activity_rewards(user_id: str) -> tuple[bool, str]:
+    uid = str(user_id)
+    successes: list[str] = []
+    misses: list[str] = []
+
+    try:
+        ok, text = claim_activity_tasks(uid)
+        if ok:
+            successes.append(text)
+        else:
+            misses.append(f"任务：{text}")
+    except Exception as e:
+        logger.warning(f"活动总领奖任务奖励检查失败 user_id={uid}: {e}")
+        misses.append(f"任务：{e}")
+
+    try:
+        ok, text = claim_activity_pass_rewards(uid)
+        if ok:
+            successes.append(text)
+        else:
+            misses.append(f"战令：{text}")
+    except Exception as e:
+        logger.warning(f"活动总领奖战令奖励检查失败 user_id={uid}: {e}")
+        misses.append(f"战令：{e}")
+
+    try:
+        from .activity_boss import claim_boss_rewards
+
+        ok, text = claim_boss_rewards(uid)
+        if ok:
+            successes.append(text)
+        else:
+            misses.append(f"首领：{text}")
+    except Exception as e:
+        logger.warning(f"活动总领奖首领奖励检查失败 user_id={uid}: {e}")
+        misses.append(f"首领：{e}")
+
+    if successes:
+        return True, "\n\n".join(successes)
+    return False, "暂无可领取奖励\n" + "\n".join(misses)
+
+
 def _parse_shop_query(query: str) -> tuple[str, int]:
     text = _clean_text(query)
     if not text:
@@ -1393,6 +2168,52 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
             "purchase_count": _as_int(purchase_row["count"] if purchase_row else 0),
         }
 
+    if activity_type == "activity_boss":
+        cur.execute(
+            """
+            SELECT hp_left, max_hp
+            FROM activity_boss_state
+            WHERE activity_key=%s
+            """,
+            (activity_key,),
+        )
+        hp_row = cur.fetchone()
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) AS user_count,
+                COALESCE(SUM(total_damage), 0) AS total_damage
+            FROM activity_boss_damage
+            WHERE activity_key=%s
+            """,
+            (activity_key,),
+        )
+        damage_row = cur.fetchone()
+        fight_count = _fetch_count(
+            cur,
+            "SELECT COUNT(*) AS count FROM activity_boss_fight_log WHERE activity_key=%s",
+            (activity_key,),
+        )
+        milestone_count = _fetch_count(
+            cur,
+            "SELECT COUNT(*) AS count FROM activity_boss_milestone WHERE activity_key=%s",
+            (activity_key,),
+        )
+        item_count = _fetch_count(
+            cur,
+            "SELECT COALESCE(SUM(count), 0) AS count FROM activity_item_inventory WHERE activity_key=%s",
+            (activity_key,),
+        )
+        return {
+            "user_count": _as_int(damage_row["user_count"] if damage_row else 0),
+            "total_damage": _as_int(damage_row["total_damage"] if damage_row else 0),
+            "fight_count": fight_count,
+            "item_count": item_count,
+            "milestone_count": milestone_count,
+            "hp_left": _as_int(hp_row["hp_left"] if hp_row else 0),
+            "max_hp": _as_int(hp_row["max_hp"] if hp_row else 0),
+        }
+
     cur.execute(
         """
         SELECT
@@ -1424,6 +2245,97 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
         "drop_count": drop_count,
         "claim_count": _as_int(claim_row["count"] if claim_row else 0),
     }
+
+
+def _activity_task_data_overview(cur, config: dict, uid: str = "") -> dict:
+    activity_key = _activity_config_key(config)
+    tasks = get_activity_tasks(config)
+    daily_key = _task_scope_key("daily")
+    weekly_key = _task_scope_key("weekly")
+    cur.execute(
+        """
+        SELECT
+            COUNT(DISTINCT user_id) AS user_count,
+            COALESCE(SUM(CASE WHEN progress >= target THEN 1 ELSE 0 END), 0) AS complete_count,
+            COALESCE(SUM(claimed), 0) AS claim_count
+        FROM activity_task_progress
+        WHERE activity_key=%s AND scope_key IN (%s, %s)
+        """,
+        (activity_key, daily_key, weekly_key),
+    )
+    row = cur.fetchone()
+    overview = {
+        "activity_key": activity_key,
+        "daily_task_count": len([task for task in tasks if task.get("scope_type") == "daily"]),
+        "weekly_task_count": len([task for task in tasks if task.get("scope_type") == "weekly"]),
+        "user_count": _as_int(row["user_count"] if row else 0),
+        "complete_count": _as_int(row["complete_count"] if row else 0),
+        "claim_count": _as_int(row["claim_count"] if row else 0),
+    }
+    if uid:
+        progress_map = _get_task_progress_map(cur, activity_key, uid)
+        user_rows = []
+        for task in tasks:
+            scope_type = task["scope_type"]
+            scope_key = _task_scope_key(scope_type)
+            state = progress_map.get((scope_type, scope_key, task["key"]), {})
+            target = max(1, _as_int(task.get("target"), 1))
+            progress = min(target, max(0, _as_int(state.get("progress"), 0)))
+            user_rows.append({
+                "task_key": task["key"],
+                "name": task["name"],
+                "scope_type": scope_type,
+                "scope_key": scope_key,
+                "progress": progress,
+                "target": target,
+                "claimed": bool(state.get("claimed")),
+            })
+        overview["user"] = user_rows
+    return overview
+
+
+def _activity_pass_data_overview(cur, config: dict, uid: str = "", limit: int = 10) -> dict:
+    activity_key = _activity_config_key(config)
+    pass_cfg = _activity_pass_config(config)
+    if not pass_cfg.get("enabled"):
+        return {"enabled": False, "activity_key": activity_key}
+    cur.execute(
+        """
+        SELECT
+            COUNT(*) AS user_count,
+            COALESCE(SUM(total_exp), 0) AS total_exp,
+            COALESCE(MAX(level), 0) AS max_level
+        FROM activity_pass_balance
+        WHERE activity_key=%s
+        """,
+        (activity_key,),
+    )
+    row = cur.fetchone()
+    cur.execute(
+        """
+        SELECT user_id, total_exp, level, update_time
+        FROM activity_pass_balance
+        WHERE activity_key=%s
+        ORDER BY level DESC, total_exp DESC, update_time ASC
+        LIMIT %s
+        """,
+        (activity_key, max(1, min(_as_int(limit, 10), 50))),
+    )
+    overview = {
+        "enabled": True,
+        "activity_key": activity_key,
+        "name": pass_cfg.get("name"),
+        "exp_name": pass_cfg.get("exp_name"),
+        "level_exp": pass_cfg.get("level_exp"),
+        "max_level": pass_cfg.get("max_level"),
+        "user_count": _as_int(row["user_count"] if row else 0),
+        "total_exp": _as_int(row["total_exp"] if row else 0),
+        "highest_level": _as_int(row["max_level"] if row else 0),
+        "top_users": _attach_display_names([dict(item) for item in cur.fetchall()]),
+    }
+    if uid:
+        overview["user"] = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+    return overview
 
 
 def get_activity_data_overview(
@@ -1492,6 +2404,51 @@ def get_activity_data_overview(
                         "balance": _get_point_balance(cur, activity["key"], uid),
                         "purchases": _get_point_purchase_map(cur, activity["key"], uid),
                     }
+            elif activity.get("type") == "activity_boss":
+                cur.execute(
+                    """
+                    SELECT user_id, total_damage, update_time
+                    FROM activity_boss_damage
+                    WHERE activity_key=%s AND total_damage>0
+                    ORDER BY total_damage DESC, update_time ASC
+                    LIMIT %s
+                    """,
+                    (activity["key"], row_limit),
+                )
+                row["top_users"] = _attach_display_names([dict(item) for item in cur.fetchall()])
+                if uid:
+                    cur.execute(
+                        """
+                        SELECT total_damage, update_time
+                        FROM activity_boss_damage
+                        WHERE activity_key=%s AND user_id=%s
+                        """,
+                        (activity["key"], uid),
+                    )
+                    damage_row = cur.fetchone()
+                    cur.execute(
+                        """
+                        SELECT item_id, count
+                        FROM activity_item_inventory
+                        WHERE activity_key=%s AND user_id=%s
+                        """,
+                        (activity["key"], uid),
+                    )
+                    row["user"] = {
+                        "damage": dict(damage_row) if damage_row else {"total_damage": 0, "update_time": ""},
+                        "items": {
+                            str(item["item_id"]): max(0, _as_int(item["count"]))
+                            for item in cur.fetchall()
+                        },
+                        "today_fight_count": _fetch_count(
+                            cur,
+                            """
+                            SELECT COUNT(*) AS count FROM activity_boss_fight_log
+                            WHERE activity_key=%s AND user_id=%s AND fight_date=%s
+                            """,
+                            (activity["key"], uid, today_str()),
+                        ),
+                    }
             else:
                 cur.execute(
                     """
@@ -1531,6 +2488,8 @@ def get_activity_data_overview(
             "sign": sign_summary,
             "sign_rank": sign_rank,
             "activities": activity_rows,
+            "tasks": _activity_task_data_overview(cur, cfg, uid),
+            "activity_pass": _activity_pass_data_overview(cur, cfg, uid, row_limit),
             "user_id": uid,
             "user_sign": user_sign,
         }
@@ -1561,6 +2520,13 @@ def reset_activity_data(scope: str, activity_key: str | None = None) -> str:
                 "activity_point_balance",
                 "activity_point_event_log",
                 "activity_point_purchase",
+                "activity_item_inventory",
+                "activity_boss_state",
+                "activity_boss_damage",
+                "activity_boss_fight_log",
+                "activity_boss_milestone",
+                "activity_boss_milestone_claim",
+                "activity_boss_rank_claim",
             )
             for table in tables:
                 if key:
@@ -1569,7 +2535,25 @@ def reset_activity_data(scope: str, activity_key: str | None = None) -> str:
                     cur.execute(f"DELETE FROM {table}")
                 deleted += max(0, cur.rowcount)
 
-        if target_scope not in {"sign", "activity", "gameplay", "all"}:
+        if target_scope in {"task", "tasks", "pass", "activity_pass", "all"}:
+            activity_key_for_main = _activity_config_key(load_config())
+            task_pass_tables = (
+                "activity_task_progress",
+                "activity_task_claim_log",
+                "activity_pass_balance",
+                "activity_pass_event_log",
+                "activity_pass_reward_claim",
+            )
+            for table in task_pass_tables:
+                if key:
+                    cur.execute(f"DELETE FROM {table} WHERE activity_key=%s", (key,))
+                elif target_scope != "all":
+                    cur.execute(f"DELETE FROM {table} WHERE activity_key=%s", (activity_key_for_main,))
+                else:
+                    cur.execute(f"DELETE FROM {table}")
+                deleted += max(0, cur.rowcount)
+
+        if target_scope not in {"sign", "activity", "gameplay", "task", "tasks", "pass", "activity_pass", "all"}:
             raise ValueError("清理范围无效")
         conn.commit()
         return f"已清理活动数据，影响记录 {deleted} 条"
@@ -1847,7 +2831,7 @@ def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> No
             if mode in {"item_raid", "both"}:
                 item_names = "、".join(str(it.get("name")) for it in (activity.get("items") or []))
                 lines.append(f"  道具讨伐：{item_names or '未配置'}（随机伤害区间）")
-                lines.append("  命令：活动道具 [首领名] 道具名")
+                lines.append("  命令：活动讨伐 [首领名] 道具名")
             if mode in {"cooperative", "both"}:
                 cap_pct = int(_as_float(activity.get("hit_hp_cap_ratio"), 0.01) * 100)
                 lines.append(
@@ -1855,7 +2839,7 @@ def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> No
                     f"每日{_as_int(activity.get('daily_fight_limit'), 3)}次，单次伤害上限{cap_pct}%血量"
                 )
                 lines.append("  命令：活动讨伐 / 讨伐世界BOSS 也会计入（若开启）")
-            lines.append("  活动首领 / 活动首领排行 / 活动首领奖励 / 活动首领进度")
+            lines.append("  活动首领 / 活动首领排行 / 活动首领领奖")
             continue
 
         event_text = _activity_event_text(activity.get("drop_events"))
@@ -1868,6 +2852,98 @@ def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> No
         if phrases:
             phrase_text = "、".join(str(item.get("name") or item.get("phrase")) for item in phrases)
             lines.append(f"  兑换词组：{phrase_text}")
+
+
+def _append_pass_summary(lines: list[str], cfg: dict, user_id: str | None = None, *, detail: bool = False) -> None:
+    pass_cfg = _activity_pass_config(cfg)
+    if not pass_cfg.get("enabled"):
+        return
+    lines.append("")
+    lines.append(f"【{pass_cfg['name']}】")
+    if user_id:
+        ensure_activity_files()
+        conn = db_backend.connect(DB_PATH)
+        conn.row_factory = db_backend.Row
+        try:
+            balance = _get_pass_balance(conn.cursor(), _activity_config_key(cfg), str(user_id), pass_cfg)
+        finally:
+            conn.close()
+        lines.append(
+            f"等级 {balance['level']}/{balance['max_level']}，"
+            f"{pass_cfg['exp_name']} {balance['exp']}/{balance['level_exp']}"
+        )
+    else:
+        lines.append(f"每 {pass_cfg['level_exp']}{pass_cfg['exp_name']} 提升 1 级")
+    if detail:
+        rules = pass_cfg.get("event_rules") or []
+        if rules:
+            rule_text = "、".join(
+                f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+{_as_int(rule.get('exp'))}"
+                for rule in rules
+            )
+            lines.append(f"来源：{rule_text}")
+    lines.append("命令：活动战令 / 活动战令领取")
+
+
+def _append_task_summary(lines: list[str], cfg: dict, user_id: str | None = None, *, detail: bool = False) -> None:
+    tasks = get_activity_tasks(cfg)
+    if not tasks:
+        return
+    lines.append("")
+    lines.append("【活动目标】")
+    if not user_id:
+        daily_count = len([task for task in tasks if task.get("scope_type") == "daily"])
+        weekly_count = len([task for task in tasks if task.get("scope_type") == "weekly"])
+        lines.append(f"每日 {daily_count} 项，周常 {weekly_count} 项")
+        lines.append("命令：活动任务 / 活动任务领取")
+        return
+
+    activity_key = _activity_config_key(cfg)
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        progress_map = _get_task_progress_map(conn.cursor(), activity_key, str(user_id))
+    finally:
+        conn.close()
+    for scope_type in ("daily", "weekly"):
+        scope_tasks = [task for task in tasks if task.get("scope_type") == scope_type]
+        if not scope_tasks:
+            continue
+        scope_key = _task_scope_key(scope_type)
+        finished = 0
+        claimable = 0
+        for task in scope_tasks:
+            state = progress_map.get((scope_type, scope_key, task["key"]), {})
+            target = max(1, _as_int(task.get("target"), 1))
+            progress = min(target, max(0, _as_int(state.get("progress"), 0)))
+            claimed = bool(state.get("claimed"))
+            if claimed:
+                finished += 1
+            elif progress >= target:
+                claimable += 1
+        label = _scope_label(scope_type)
+        lines.append(f"{label}：已领 {finished}/{len(scope_tasks)}，可领 {claimable}")
+    daily_tips = []
+    daily_key = _task_scope_key("daily")
+    for task in [task for task in tasks if task.get("scope_type") == "daily"]:
+        state = progress_map.get(("daily", daily_key, task["key"]), {})
+        target = max(1, _as_int(task.get("target"), 1))
+        progress = min(target, max(0, _as_int(state.get("progress"), 0)))
+        claimed = bool(state.get("claimed"))
+        if claimed:
+            continue
+        if progress >= target:
+            daily_tips.append(f"{task['name']}可领")
+        else:
+            daily_tips.append(f"{task['name']} {progress}/{target}")
+        if len(daily_tips) >= 3:
+            break
+    if daily_tips:
+        lines.append("今日建议：" + "、".join(daily_tips))
+    if detail:
+        lines.append("查看明细：活动任务")
+    lines.append("领奖：活动任务领取")
 
 
 def build_activity_rewards_text() -> str:
@@ -1916,6 +2992,7 @@ def build_activity_tasks_text() -> str:
         for task in weekly_tasks:
             if isinstance(task, dict):
                 lines.append(_format_activity_task(task))
+    _append_pass_summary(lines, cfg, detail=True)
     return "\n".join(lines).strip()
 
 
@@ -1985,14 +3062,20 @@ def build_activity_info(user_id: str | None = None) -> str:
                     lines.append(_format_activity_task(task))
 
         _append_gameplay_summary(lines, cfg, detail=True)
+        _append_task_summary(lines, cfg, user_id, detail=True)
+        _append_pass_summary(lines, cfg, user_id, detail=True)
     else:
         lines.extend([
             "",
             "查询奖励：活动奖励",
             "查询任务：活动任务",
+            "领取任务：活动任务领取",
+            "活动战令：活动战令 / 活动战令领取",
             "玩法说明：活动玩法",
             "个人进度：活动排行 / 活动背包 / 活动积分",
         ])
+        _append_task_summary(lines, cfg, user_id, detail=False)
+        _append_pass_summary(lines, cfg, user_id, detail=False)
         _append_gameplay_summary(lines, cfg, detail=False)
 
     return "\n".join(lines).strip()
@@ -2050,6 +3133,11 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
         for activity in cfg.get("gameplay_activities") or []:
             if isinstance(activity, dict):
                 activity["enabled"] = bool(enabled)
+        extensions = cfg.setdefault("extensions", {})
+        if isinstance(extensions, dict):
+            activity_pass = extensions.setdefault("activity_pass", deepcopy(DEFAULT_ACTIVITY_PASS))
+            if isinstance(activity_pass, dict):
+                activity_pass["enabled"] = bool(enabled)
         save_config(cfg)
         return f"已{action_text}全部活动"
 
@@ -2069,6 +3157,19 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
             return f"已{action_text}{changed_count}个玩法活动"
         return "当前没有配置玩法活动"
 
+    if target_text in {"战令", "活动战令", "通行证", "活动通行证", "活跃"}:
+        extensions = cfg.setdefault("extensions", {})
+        if not isinstance(extensions, dict):
+            extensions = {}
+            cfg["extensions"] = extensions
+        activity_pass = extensions.setdefault("activity_pass", deepcopy(DEFAULT_ACTIVITY_PASS))
+        if not isinstance(activity_pass, dict):
+            activity_pass = deepcopy(DEFAULT_ACTIVITY_PASS)
+            extensions["activity_pass"] = activity_pass
+        activity_pass["enabled"] = bool(enabled)
+        save_config(cfg)
+        return f"已{action_text}活动战令"
+
     type_targets = {
         "集字": "collect_words",
         "集字活动": "collect_words",
@@ -2076,6 +3177,10 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
         "积分活动": "event_points",
         "活动积分": "event_points",
         "活动商店": "event_points",
+        "首领": "activity_boss",
+        "活动首领": "activity_boss",
+        "BOSS": "activity_boss",
+        "boss": "activity_boss",
     }
     if target_text in type_targets:
         target_type = type_targets[target_text]
