@@ -9,7 +9,7 @@
     </div>
     <div class="hero-actions">
         <span id="activityStatePill" class="status-pill">
-            <i class="fas fa-circle"></i> {{ activity_state.text }}
+            <i class="fas fa-circle"></i> {{ activity_state.text }}{% if activity_state.ok and activity_state.runtime and activity_state.runtime.stage_name %} · {{ activity_state.runtime.stage_name }}{% endif %}
         </span>
         <span class="status-pill"><i class="fas fa-file-lines"></i> {{ activity_config_path }}</span>
     </div>
@@ -74,6 +74,7 @@
 
             <nav class="tab-nav activity-editor-tabs" role="tablist" aria-label="活动配置分区">
                 <button type="button" class="tab-link active" data-activity-tab="overview" role="tab">概览</button>
+                <button type="button" class="tab-link" data-activity-tab="stages" role="tab">阶段</button>
                 <button type="button" class="tab-link" data-activity-tab="rewards" role="tab">签到奖励</button>
                 <button type="button" class="tab-link" data-activity-tab="tasks" role="tab">任务</button>
                 <button type="button" class="tab-link" data-activity-tab="gameplay" role="tab">玩法</button>
@@ -154,6 +155,26 @@
                 </div>
             </div>
             <p class="activity-tab-hint">机器人：活动（概览）、活动奖励、活动任务、活动玩法 分条查看。</p>
+            </div>
+
+            <div class="tab-pane activity-tab-pane" id="activityTab-stages" data-activity-tab-pane="stages" role="tabpanel">
+            <section class="activity-section">
+                <div class="activity-section-header">
+                    <div>
+                        <h4>活动阶段</h4>
+                        <p>按档期控制签到、任务、战令、积分、集字、首领、商店、领奖和兑换。</p>
+                    </div>
+                    <div class="activity-section-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="applyStagePreset()">
+                            <i class="fas fa-calendar-plus"></i> 生成四阶段
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addActivityStage()">
+                            <i class="fas fa-plus"></i> 添加阶段
+                        </button>
+                    </div>
+                </div>
+                <div id="activityStages" class="activity-stage-list"></div>
+            </section>
             </div>
 
             <div class="tab-pane activity-tab-pane" id="activityTab-rewards" data-activity-tab-pane="rewards" role="tabpanel">
@@ -238,7 +259,7 @@
             <div class="activity-section-header">
                 <div>
                     <h4>活动数据</h4>
-                    <p>查看签到、集字、积分数据；排行展示道号。用户ID 仅用于后台查询与补偿。</p>
+                    <p>查看签到、集字、积分和战令数据；用户ID 仅用于后台查询与补偿。</p>
                 </div>
                 <button type="button" class="btn btn-info btn-sm" onclick="loadActivityData()">
                     <i class="fas fa-chart-line"></i> 查询数据
@@ -277,6 +298,7 @@
                     <select id="adjustType">
                         <option value="points">积分</option>
                         <option value="word">字牌</option>
+                        <option value="pass_exp">战令经验</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -320,6 +342,7 @@
 .activity-reward-list,
 .activity-task-list,
 .activity-gameplay-list,
+.activity-stage-list,
 .activity-letter-list,
 .activity-phrase-list,
 .activity-point-rule-list,
@@ -498,6 +521,32 @@
     border-radius: 8px;
 }
 
+.activity-stage-row {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    background: var(--surface-glass-soft);
+    border: 1px solid var(--glass-border-muted);
+    border-radius: 8px;
+}
+
+.activity-stage-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.activity-stage-wide {
+    grid-column: 1 / -1;
+}
+
+.activity-section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 .activity-gameplay-header {
     display: flex;
     align-items: center;
@@ -543,7 +592,7 @@
 
 .activity-shop-row {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) minmax(90px, 0.7fr) minmax(180px, 1.5fr) 92px auto;
+    grid-template-columns: minmax(120px, 1fr) minmax(90px, 0.7fr) minmax(180px, 1.5fr) 92px 92px auto;
     gap: 10px;
     align-items: end;
 }
@@ -686,7 +735,7 @@
 }
 
 .activity-editor-tabs {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .activity-tab-hint {
@@ -731,6 +780,7 @@
     .activity-section-header,
     .activity-reward-row,
     .activity-task-row,
+    .activity-stage-grid,
     .activity-gameplay-grid,
     .activity-letter-row,
     .activity-phrase-row,
@@ -756,9 +806,32 @@
 const activityTemplates = {{ activity_templates|tojson }};
 const gameplayTemplates = {{ gameplay_templates|tojson }};
 const activityEventChoices = {{ activity_event_choices|tojson }};
+const stageTypeChoices = [
+    ['warmup', '预热期'],
+    ['open', '正式期'],
+    ['boss', '攻坚期'],
+    ['settlement', '结算期'],
+    ['closed', '关闭期']
+];
+const stageFeatureChoices = [
+    ['sign', '签到'],
+    ['task', '任务'],
+    ['pass', '战令'],
+    ['points', '积分'],
+    ['collect', '集字'],
+    ['boss', '首领'],
+    ['shop', '商店'],
+    ['claim', '领奖'],
+    ['exchange', '兑换']
+];
+const stageFeatureLabels = {};
+stageFeatureChoices.forEach(([value, label]) => {
+    stageFeatureLabels[value] = label;
+});
 let activityConfig = {{ activity_config|tojson }};
 let taskRowSeq = 0;
 let gameplayRowSeq = 0;
+let stageRowSeq = 0;
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -786,6 +859,220 @@ function syncSpecialTimeControls() {
     const endTime = document.getElementById('endTime');
     if (startTime && startImmediate) startTime.disabled = startImmediate.checked;
     if (endTime && endUnlimited) endTime.disabled = endUnlimited.checked;
+}
+
+function stageDefaultFeatures(type) {
+    if (type === 'warmup') return ['sign', 'claim'];
+    if (type === 'settlement') return ['shop', 'claim', 'exchange'];
+    if (type === 'closed') return [];
+    return ['sign', 'task', 'pass', 'points', 'collect', 'boss', 'shop', 'claim', 'exchange'];
+}
+
+function stageFeatureSet(row = {}) {
+    let raw = Object.prototype.hasOwnProperty.call(row, 'features')
+        ? row.features
+        : stageDefaultFeatures(row.stage_type || row.type || 'open');
+    if (typeof raw === 'string') raw = raw.replaceAll('\n', ',').split(',');
+    const allowed = new Set(stageFeatureChoices.map(([value]) => value));
+    return new Set(asArray(raw).map(item => {
+        if (item && typeof item === 'object') return String(item.value || '').trim();
+        return String(item || '').trim();
+    }).filter(value => allowed.has(value)));
+}
+
+function renderStageTypeOptions(selectedType) {
+    return stageTypeChoices.map(([value, label]) =>
+        `<option value="${escapeAttr(value)}" ${selectedType === value ? 'selected' : ''}>${escapeHtml(label)}</option>`
+    ).join('');
+}
+
+function renderStageFeatureChoices(selectedFeatures) {
+    return stageFeatureChoices.map(([value, label]) => `
+        <label class="activity-event-option">
+            <input class="stage-feature" type="checkbox" value="${escapeAttr(value)}" ${selectedFeatures.has(value) ? 'checked' : ''}>
+            <span>${escapeHtml(label)}</span>
+        </label>
+    `).join('');
+}
+
+function syncActivityStageTimeControls(row) {
+    const startSpecial = row.querySelector('.stage-start-special');
+    const endSpecial = row.querySelector('.stage-end-special');
+    const startTime = row.querySelector('.stage-start-time');
+    const endTime = row.querySelector('.stage-end-time');
+    if (startTime && startSpecial) startTime.disabled = startSpecial.checked;
+    if (endTime && endSpecial) endTime.disabled = endSpecial.checked;
+}
+
+function appendActivityStage(row = {}) {
+    const container = document.getElementById('activityStages');
+    if (!container) return;
+    const index = ++stageRowSeq;
+    const type = row.stage_type || row.type || 'open';
+    const selectedFeatures = stageFeatureSet(row);
+    const div = document.createElement('div');
+    div.className = 'activity-stage-row';
+    div.innerHTML = `
+        <div class="activity-gameplay-header">
+            <h5 class="activity-gameplay-title">阶段 ${index}</h5>
+            <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-stage-row').remove()">
+                <i class="fas fa-trash"></i> 移除
+            </button>
+        </div>
+        <div class="activity-stage-grid">
+            <div class="form-group">
+                <label>编号</label>
+                <input class="stage-key" type="text" value="${escapeAttr(row.key || `${type}_${index}`)}">
+            </div>
+            <div class="form-group">
+                <label>名称</label>
+                <input class="stage-name" type="text" value="${escapeAttr(row.name || '')}" placeholder="例如：正式期">
+            </div>
+            <div class="form-group">
+                <label>类型</label>
+                <select class="stage-type">${renderStageTypeOptions(type)}</select>
+            </div>
+            <div class="form-group">
+                <label>开始时间</label>
+                <div class="activity-time-control">
+                    <input class="stage-start-time" type="datetime-local" step="1" value="${escapeAttr(toDateTimeLocal(row.start_time))}">
+                    <label class="activity-time-option">
+                        <input class="stage-start-special" type="checkbox" ${!row.start_time || row.start_time === '0' ? 'checked' : ''}>
+                        立即开始
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>结束时间</label>
+                <div class="activity-time-control">
+                    <input class="stage-end-time" type="datetime-local" step="1" value="${escapeAttr(toDateTimeLocal(row.end_time))}">
+                    <label class="activity-time-option">
+                        <input class="stage-end-special" type="checkbox" ${!row.end_time || row.end_time === '无限' ? 'checked' : ''}>
+                        不限结束
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>产出倍率</label>
+                <input class="stage-multiplier" type="number" min="0" step="0.1" value="${escapeAttr(row.multiplier ?? 1)}">
+            </div>
+            <div class="form-group activity-stage-wide">
+                <label>开放内容</label>
+                <div class="activity-event-options">${renderStageFeatureChoices(selectedFeatures)}</div>
+            </div>
+            <div class="form-group activity-stage-wide">
+                <label>说明</label>
+                <textarea class="stage-description" rows="2">${escapeHtml(row.description || '')}</textarea>
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+    div.querySelector('.stage-start-special')?.addEventListener('change', () => syncActivityStageTimeControls(div));
+    div.querySelector('.stage-end-special')?.addEventListener('change', () => syncActivityStageTimeControls(div));
+    div.querySelector('.stage-type')?.addEventListener('change', event => {
+        if (div.querySelectorAll('.stage-feature:checked').length) return;
+        const defaults = new Set(stageDefaultFeatures(event.target.value));
+        div.querySelectorAll('.stage-feature').forEach(input => {
+            input.checked = defaults.has(input.value);
+        });
+    });
+    syncActivityStageTimeControls(div);
+}
+
+function addActivityStage(row = null) {
+    appendActivityStage(row || {
+        key: '',
+        name: '',
+        stage_type: 'open',
+        start_time: '0',
+        end_time: '无限',
+        features: stageDefaultFeatures('open'),
+        multiplier: 1,
+        description: ''
+    });
+}
+
+function renderActivityStages(rows) {
+    const container = document.getElementById('activityStages');
+    if (!container) return;
+    container.innerHTML = '';
+    stageRowSeq = 0;
+    asArray(rows).forEach(row => appendActivityStage(row));
+}
+
+function formatPresetTime(date) {
+    const pad = value => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function addDays(date, days, secondsOffset = 0) {
+    const next = new Date(date.getTime());
+    next.setDate(next.getDate() + days);
+    next.setSeconds(next.getSeconds() + secondsOffset);
+    return next;
+}
+
+function presetStartDate() {
+    const startInput = document.getElementById('startTime')?.value || '';
+    if (!document.getElementById('startImmediate')?.checked && startInput) {
+        const parsed = new Date(startInput);
+        if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    const now = new Date();
+    now.setMilliseconds(0);
+    return now;
+}
+
+function applyStagePreset() {
+    const start = presetStartDate();
+    const openStart = addDays(start, 1);
+    const bossStart = addDays(start, 7);
+    const settlementStart = addDays(start, 8);
+    const settlementEnd = addDays(start, 10, -1);
+    renderActivityStages([
+        {
+            key: 'warmup',
+            name: '预热期',
+            stage_type: 'warmup',
+            start_time: formatPresetTime(start),
+            end_time: formatPresetTime(addDays(openStart, 0, -1)),
+            features: stageDefaultFeatures('warmup'),
+            multiplier: 1,
+            description: '展示活动规则，保留签到和领奖。'
+        },
+        {
+            key: 'open',
+            name: '正式期',
+            stage_type: 'open',
+            start_time: formatPresetTime(openStart),
+            end_time: formatPresetTime(addDays(bossStart, 0, -1)),
+            features: ['sign', 'task', 'pass', 'points', 'collect', 'shop', 'claim', 'exchange'],
+            multiplier: 1,
+            description: '主要产出期，开放日常目标、战令、积分、集字和商店。'
+        },
+        {
+            key: 'boss',
+            name: '攻坚期',
+            stage_type: 'boss',
+            start_time: formatPresetTime(bossStart),
+            end_time: formatPresetTime(addDays(settlementStart, 0, -1)),
+            features: stageDefaultFeatures('boss'),
+            multiplier: 1.5,
+            description: '首领攻坚强化，首领伤害和活动产出按阶段倍率结算。'
+        },
+        {
+            key: 'settlement',
+            name: '结算期',
+            stage_type: 'settlement',
+            start_time: formatPresetTime(settlementStart),
+            end_time: formatPresetTime(settlementEnd),
+            features: stageDefaultFeatures('settlement'),
+            multiplier: 0,
+            description: '停止新增产出，只开放领奖、兑换和商店。'
+        }
+    ]);
+    switchActivityTab('stages');
+    setResult(true, '已生成预热1天、正式6天、攻坚1天、结算2天阶段');
 }
 
 function renderRewardRows(containerId, rows, numberKey, numberLabel) {
@@ -1063,6 +1350,10 @@ function appendGameplayShopItem(container, row = {}) {
             <label>次数</label>
             <input class="shop-item-limit" type="number" min="0" step="1" value="${escapeAttr(row.limit ?? 1)}">
         </div>
+        <div class="form-group">
+            <label>全服库存</label>
+            <input class="shop-item-stock-limit" type="number" min="0" step="1" value="${escapeAttr(row.stock_limit ?? row.total_limit ?? 0)}">
+        </div>
         <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.activity-shop-row').remove()">
             <i class="fas fa-trash"></i>
         </button>
@@ -1115,6 +1406,10 @@ function appendGameplayActivity(row = {}) {
             <div class="form-group">
                 <label>单次判定</label>
                 <input class="gameplay-rolls" type="number" min="1" step="1" value="${escapeAttr(row.rolls_per_record ?? 1)}">
+            </div>
+            <div class="form-group">
+                <label>保底次数</label>
+                <input class="gameplay-pity-threshold" type="number" min="0" step="1" value="${escapeAttr(row.pity_threshold ?? 0)}">
             </div>`;
     const pointControls = isPointActivity ? `
             <div class="form-group">
@@ -1246,6 +1541,7 @@ function addGameplayActivity(row = null) {
         drop_rate: 0.35,
         daily_drop_limit: 8,
         rolls_per_record: 1,
+        pity_threshold: 0,
         letters: [],
         phrases: []
     });
@@ -1289,14 +1585,16 @@ function renderActivityDataSelectors() {
 function syncAdjustTypeControls() {
     const type = document.getElementById('adjustType')?.value || 'points';
     const wordInput = document.getElementById('adjustWordChar');
+    const activitySelect = document.getElementById('adjustActivityKey');
     if (wordInput) wordInput.disabled = type !== 'word';
+    if (activitySelect) activitySelect.disabled = type === 'pass_exp';
 }
 
 function syncAdjustActivityType() {
     const select = document.getElementById('adjustActivityKey');
     const typeSelect = document.getElementById('adjustType');
     const activityType = select?.selectedOptions?.[0]?.dataset?.type || '';
-    if (typeSelect && activityType) {
+    if (typeSelect && activityType && typeSelect.value !== 'pass_exp') {
         typeSelect.value = activityType === 'event_points' ? 'points' : 'word';
     }
     syncAdjustTypeControls();
@@ -1335,7 +1633,27 @@ function renderActivityData(data) {
     const signRank = asArray(data?.sign_rank).slice(0, 8).map((row, index) =>
         `<span>${index + 1}. ${escapeHtml(playerDisplayName(row))} ${escapeHtml(row.sign_days || 0)}天</span>`
     ).join('') || '<span>暂无排行</span>';
-    const cards = [
+    const cards = [];
+    const runtime = data?.runtime;
+    if (runtime) {
+        const features = asArray(runtime.features).map(key => stageFeatureLabels[key] || key).join('、') || '暂无开放玩法';
+        const nextStage = runtime.next_stage
+            ? `<span>下一阶段：${escapeHtml(runtime.next_stage.name || runtime.next_stage.key || '活动阶段')}</span>`
+            : '';
+        cards.push(`
+            <div class="activity-data-card">
+                <h5>阶段状态</h5>
+                <div class="activity-data-meta">
+                    <span>${runtime.ok ? '进行中' : '未开放'}</span>
+                    <span>${escapeHtml(runtime.stage_name || '')}</span>
+                    <span>倍率 ${escapeHtml(runtime.multiplier ?? 1)}x</span>
+                    <span>${escapeHtml(features)}</span>
+                    ${nextStage}
+                </div>
+            </div>
+        `);
+    }
+    cards.push(
         `<div class="activity-data-card">
             <h5>签到数据</h5>
             <div class="activity-data-meta">
@@ -1346,7 +1664,35 @@ function renderActivityData(data) {
             </div>
             <div class="activity-data-list">${signRank}</div>
         </div>`
-    ];
+    );
+    const pass = data?.activity_pass;
+    if (pass?.enabled) {
+        const catchup = pass.user_catchup;
+        const catchupText = catchup
+            ? (catchup.active
+                ? `追赶已触发 ${catchup.catchup_multiplier}x，落后 ${catchup.gap} 级`
+                : `追赶未触发：第${catchup.start_day}天后且落后${catchup.level_gap}级`)
+            : '';
+        const passUser = pass.user
+            ? `<span>当前用户：Lv.${escapeHtml(pass.user.level || 0)}，累计 ${escapeHtml(pass.user.total_exp || 0)}</span>`
+            : '';
+        const passRank = asArray(pass.top_users).slice(0, 8).map((row, index) =>
+            `<span>${index + 1}. ${escapeHtml(playerDisplayName(row))} Lv.${escapeHtml(row.level || 0)} ${escapeHtml(row.total_exp || 0)}</span>`
+        ).join('') || '<span>暂无排行</span>';
+        cards.push(`
+            <div class="activity-data-card">
+                <h5>${escapeHtml(pass.name || '活动战令')}</h5>
+                <div class="activity-data-meta">
+                    <span>参与人数：${escapeHtml(pass.user_count || 0)}</span>
+                    <span>最高等级：${escapeHtml(pass.highest_level || 0)}</span>
+                    <span>累计活跃：${escapeHtml(pass.total_exp || 0)}</span>
+                    ${passUser}
+                    ${catchupText ? `<span>${escapeHtml(catchupText)}</span>` : ''}
+                </div>
+                <div class="activity-data-list">${passRank}</div>
+            </div>
+        `);
+    }
 
     asArray(data?.activities).forEach(activity => {
         const counts = activity.counts || {};
@@ -1372,6 +1718,7 @@ function renderActivityData(data) {
                 : `<div class="activity-data-list">
                     ${compactMapText(activity.user.inventory)}
                     ${compactMapText(activity.user.claims)}
+                    ${compactMapText(activity.user.pity)}
                 </div>`)
             : '';
         cards.push(`
@@ -1487,6 +1834,7 @@ function collectGameplayActivities() {
         drop_rate: Number(row.querySelector('.gameplay-drop-rate')?.value || 0) / 100,
         daily_drop_limit: row.querySelector('.gameplay-daily-limit')?.value || '',
         rolls_per_record: row.querySelector('.gameplay-rolls')?.value || '',
+        pity_threshold: row.querySelector('.gameplay-pity-threshold')?.value || 0,
         letters: Array.from(row.querySelectorAll('.activity-letter-row')).map(item => ({
             char: item.querySelector('.letter-char')?.value || '',
             weight: item.querySelector('.letter-weight')?.value || ''
@@ -1508,8 +1856,24 @@ function collectGameplayActivities() {
             name: item.querySelector('.shop-item-name')?.value || '',
             cost: item.querySelector('.shop-item-cost')?.value || '',
             reward: item.querySelector('.shop-item-reward')?.value || '',
-            limit: item.querySelector('.shop-item-limit')?.value || ''
+            limit: item.querySelector('.shop-item-limit')?.value || '',
+            stock_limit: item.querySelector('.shop-item-stock-limit')?.value || 0
         }))
+    }));
+}
+
+function collectActivityStages() {
+    return Array.from(document.querySelectorAll('#activityStages .activity-stage-row')).map(row => ({
+        key: row.querySelector('.stage-key')?.value || '',
+        name: row.querySelector('.stage-name')?.value || '',
+        stage_type: row.querySelector('.stage-type')?.value || 'open',
+        start_time: row.querySelector('.stage-start-special')?.checked ? '0' : row.querySelector('.stage-start-time')?.value || '',
+        start_special: Boolean(row.querySelector('.stage-start-special')?.checked),
+        end_time: row.querySelector('.stage-end-special')?.checked ? '无限' : row.querySelector('.stage-end-time')?.value || '',
+        end_special: Boolean(row.querySelector('.stage-end-special')?.checked),
+        features: Array.from(row.querySelectorAll('.stage-feature:checked')).map(input => input.value),
+        multiplier: row.querySelector('.stage-multiplier')?.value || 1,
+        description: row.querySelector('.stage-description')?.value || ''
     }));
 }
 
@@ -1533,6 +1897,7 @@ function fillActivityForm(config) {
     const signMode = document.getElementById('signReplyMode');
     if (infoMode) infoMode.value = activityConfig.extensions?.activity_info_mode || 'brief';
     if (signMode) signMode.value = activityConfig.extensions?.sign_reply_mode || 'minimal';
+    renderActivityStages(activityConfig.extensions?.stages);
     renderRewardRows('dailyRewards', activityConfig.daily_rewards, 'day', '第几天');
     renderRewardRows('milestoneRewards', activityConfig.milestone_rewards, 'days', '累计天数');
     renderTaskRows('dailyTasks', activityConfig.daily_tasks);
@@ -1543,6 +1908,9 @@ function fillActivityForm(config) {
 }
 
 function collectActivityConfig() {
+    const currentExtensions = activityConfig.extensions && typeof activityConfig.extensions === 'object'
+        ? activityConfig.extensions
+        : {};
     return {
         template_type: document.getElementById('templateType').value || 'festival_sign',
         template_key: document.getElementById('templateKey').value || 'custom',
@@ -1562,9 +1930,11 @@ function collectActivityConfig() {
         gameplay_activities: collectGameplayActivities(),
         extra_rules: document.getElementById('extraRules').value,
         extensions: {
+            ...currentExtensions,
             repeat_last_daily_reward: document.getElementById('repeatLastDailyReward').checked,
             activity_info_mode: document.getElementById('activityInfoMode')?.value || 'brief',
             sign_reply_mode: document.getElementById('signReplyMode')?.value || 'minimal',
+            stages: collectActivityStages(),
         }
     };
 }
@@ -1632,7 +2002,7 @@ function summarizeGameplayConfig(cfg) {
         const events = asArray(cfg?.drop_events).length;
         if (letters) lines.push(`字牌 ${letters} 种`);
         if (phrases) lines.push(`词组 ${phrases} 个：${escapeHtml(asArray(cfg?.phrases).slice(0, 4).map(p => p.name || p.phrase).join('、'))}${phrases > 4 ? '…' : ''}`);
-        if (events) lines.push(`掉落事件 ${events} 类，概率约 ${Math.round(Number(cfg?.drop_rate || 0) * 100)}%，日上限 ${escapeHtml(cfg?.daily_drop_limit ?? '—')}`);
+        if (events) lines.push(`掉落事件 ${events} 类，概率约 ${Math.round(Number(cfg?.drop_rate || 0) * 100)}%，日上限 ${escapeHtml(cfg?.daily_drop_limit ?? '—')}，保底 ${escapeHtml(cfg?.pity_threshold || 0)} 次`);
     }
     const time = `${cfg?.start_time === '0' ? '立即' : (cfg?.start_time || '—')} ～ ${cfg?.end_time === '无限' ? '不限' : (cfg?.end_time || '—')}`;
     lines.push(`时间：${escapeHtml(time)}`);
@@ -1679,6 +2049,18 @@ function applySignTemplate(key) {
     if (!template) return;
     const nextConfig = JSON.parse(JSON.stringify(template.config));
     nextConfig.gameplay_activities = activityConfig.gameplay_activities || [];
+    const previousExtensions = activityConfig.extensions && typeof activityConfig.extensions === 'object'
+        ? activityConfig.extensions
+        : {};
+    const templateExtensions = nextConfig.extensions && typeof nextConfig.extensions === 'object'
+        ? nextConfig.extensions
+        : {};
+    nextConfig.extensions = {
+        ...previousExtensions,
+        ...templateExtensions,
+        activity_pass: previousExtensions.activity_pass || templateExtensions.activity_pass,
+        stages: previousExtensions.stages || templateExtensions.stages
+    };
     fillActivityForm(nextConfig);
     switchActivityTab('overview');
     setResult(true, `已套用签到模板：${template.name || ''}`);
@@ -1738,7 +2120,9 @@ function setResult(ok, text) {
 function updateStatePill(state) {
     const pill = document.getElementById('activityStatePill');
     if (!pill || !state) return;
-    pill.innerHTML = `<i class="fas fa-circle"></i> ${escapeHtml(state.text || '')}`;
+    const runtime = state.runtime || {};
+    const stageText = state.ok && runtime.stage_name ? ` · ${runtime.stage_name}` : '';
+    pill.innerHTML = `<i class="fas fa-circle"></i> ${escapeHtml(state.text || '')}${escapeHtml(stageText)}`;
 }
 
 function getXiuxianWeb() {
@@ -1795,6 +2179,8 @@ window.addDailyReward = addDailyReward;
 window.addMilestoneReward = addMilestoneReward;
 window.addDailyTask = addDailyTask;
 window.addWeeklyTask = addWeeklyTask;
+window.addActivityStage = addActivityStage;
+window.applyStagePreset = applyStagePreset;
 window.addGameplayActivity = addGameplayActivity;
 window.addGameplayLetter = addGameplayLetter;
 window.addGameplayPhrase = addGameplayPhrase;
@@ -1809,6 +2195,8 @@ window.__xiuxianPageCleanup = () => {
     delete window.addMilestoneReward;
     delete window.addDailyTask;
     delete window.addWeeklyTask;
+    delete window.addActivityStage;
+    delete window.applyStagePreset;
     delete window.addGameplayActivity;
     delete window.addGameplayLetter;
     delete window.addGameplayPhrase;

@@ -156,6 +156,7 @@
       "drop_rate": 0.35,
       "daily_drop_limit": 8,
       "rolls_per_record": 1,
+      "pity_threshold": 6,
       "letters": [
         {
           "char": "福",
@@ -271,21 +272,24 @@
           "name": "灵石补给",
           "cost": 80,
           "reward": "灵石x300000",
-          "limit": 3
+          "limit": 3,
+          "stock_limit": 0
         },
         {
           "item_key": "practice_pack",
           "name": "修炼补给",
           "cost": 160,
           "reward": "灵石x500000,渡厄丹x1",
-          "limit": 2
+          "limit": 2,
+          "stock_limit": 0
         },
         {
           "item_key": "festival_box",
           "name": "庆典礼盒",
           "cost": 260,
           "reward": "灵石x800000,渡厄丹x2",
-          "limit": 1
+          "limit": 1,
+          "stock_limit": 80
         }
       ]
     },
@@ -357,12 +361,37 @@
     "repeat_last_daily_reward": true,
     "activity_info_mode": "brief",
     "sign_reply_mode": "minimal",
+    "stages": [
+      {
+        "key": "open",
+        "name": "正式期",
+        "stage_type": "open",
+        "start_time": "0",
+        "end_time": "无限",
+        "features": [
+          "sign",
+          "task",
+          "pass",
+          "points",
+          "collect",
+          "boss",
+          "shop",
+          "claim",
+          "exchange"
+        ],
+        "multiplier": 1.0
+      }
+    ],
     "activity_pass": {
       "enabled": true,
       "name": "庆典战令",
       "exp_name": "活跃值",
       "level_exp": 100,
       "max_level": 12,
+      "catchup_enabled": true,
+      "catchup_start_day": 5,
+      "catchup_level_gap": 3,
+      "catchup_multiplier": 1.5,
       "event_rules": [
         {
           "event": "sign_in",

@@ -16,6 +16,8 @@ from .service import (
     _as_int,
     _clean_text,
     _sql_message,
+    STAGE_FEATURES,
+    activity_runtime_state,
     ensure_activity_files,
     get_gameplay_activities,
     load_config,
@@ -26,6 +28,15 @@ from .service import (
 )
 
 BOSS_MODES = {"item_raid", "cooperative", "both"}
+
+
+def _runtime_gate(feature: str) -> tuple[bool, str, float]:
+    runtime = activity_runtime_state(load_config())
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放", 0.0
+    if feature not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放{STAGE_FEATURES.get(feature, feature)}", 0.0
+    return True, "", max(0.0, _as_float(runtime.get("multiplier"), 1.0))
 
 
 def _eternal_boss_max_hp() -> int:
@@ -346,6 +357,9 @@ def calc_coop_damage(activity: dict, user_id: str) -> int:
 
 def record_cooperative_boss_hit(user_id: str, raw_damage: int | None = None) -> list[str]:
     messages: list[str] = []
+    allowed, _, multiplier = _runtime_gate("boss")
+    if not allowed:
+        return messages
     acts = _active_boss_activities()
     if not acts:
         return messages
@@ -362,6 +376,7 @@ def record_cooperative_boss_hit(user_id: str, raw_damage: int | None = None) -> 
             if _today_fight_count(cur, activity["key"], str(user_id)) >= activity["daily_fight_limit"]:
                 continue
             damage = raw_damage if raw_damage is not None else calc_coop_damage(activity, user_id)
+            damage = int(damage * multiplier)
             cap = int(activity["max_hp"] * float(activity.get("hit_hp_cap_ratio", 0.01)))
             damage = min(max(1, int(damage)), cap)
             actual, hp_left, max_hp = _apply_damage(cur, activity, str(user_id), damage, "world_boss")
@@ -377,6 +392,9 @@ def record_cooperative_boss_hit(user_id: str, raw_damage: int | None = None) -> 
 
 
 def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
+    allowed, reason, multiplier = _runtime_gate("boss")
+    if not allowed:
+        return False, reason
     activity = _find_boss_activity(query)
     if not activity:
         return False, "当前没有可挑战的活动首领，或请指定首领名称"
@@ -394,7 +412,7 @@ def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
         if used >= limit:
             return False, f"今日挑战次数已用完（{limit}次）"
 
-        damage = calc_coop_damage(activity, user_id)
+        damage = max(1, int(calc_coop_damage(activity, user_id) * multiplier))
         actual, hp_left, max_hp = _apply_damage(cur, activity, str(user_id), damage, "coop")
         conn.commit()
         name = resolve_daohao(user_id)
@@ -414,6 +432,9 @@ def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
 
 
 def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
+    allowed, reason, multiplier = _runtime_gate("boss")
+    if not allowed:
+        return False, reason
     text = _clean_text(query)
     if not text:
         return False, "请发送：活动讨伐 爆竹 或 活动讨伐 年兽 爆竹"
@@ -455,7 +476,7 @@ def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
         if have < need:
             return False, f"【{item_def['name']}】不足（需要{need}，持有{have}）"
 
-        dmg = random.randint(item_def["damage_min"], item_def["damage_max"])
+        dmg = max(1, int(random.randint(item_def["damage_min"], item_def["damage_max"]) * multiplier))
         cur.execute(
             """
             UPDATE activity_item_inventory
@@ -589,6 +610,9 @@ def _send_parsed_reward(user_id: str, reward_text: str) -> tuple[bool, str]:
 
 
 def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, str]:
+    allowed, reason, _ = _runtime_gate("claim")
+    if not allowed:
+        return False, reason
     activity = _find_boss_activity(query)
     if not activity:
         return False, "未找到活动首领"
@@ -639,6 +663,9 @@ def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, st
 
 
 def claim_boss_rank_reward(user_id: str, query: str = "") -> tuple[bool, str]:
+    allowed, reason, _ = _runtime_gate("claim")
+    if not allowed:
+        return False, reason
     activity = _find_boss_activity(query)
     if not activity:
         return False, "未找到活动首领"

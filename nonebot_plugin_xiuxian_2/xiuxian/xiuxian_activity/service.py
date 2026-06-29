@@ -80,6 +80,10 @@ DEFAULT_ACTIVITY_PASS = {
     "exp_name": "活跃值",
     "level_exp": 100,
     "max_level": 12,
+    "catchup_enabled": True,
+    "catchup_start_day": 5,
+    "catchup_level_gap": 3,
+    "catchup_multiplier": 1.5,
     "event_rules": DEFAULT_PASS_EVENT_RULES,
     "level_rewards": [
         {"level": 1, "name": "初入庆典", "reward": "灵石x80000"},
@@ -96,6 +100,35 @@ DEFAULT_ACTIVITY_PASS = {
         {"level": 12, "name": "圆满庆典", "reward": "灵石x1200000,渡厄丹x3"},
     ],
 }
+STAGE_TYPE_LABELS = {
+    "warmup": "预热期",
+    "open": "正式期",
+    "boss": "攻坚期",
+    "settlement": "结算期",
+    "closed": "关闭期",
+}
+STAGE_FEATURES = {
+    "sign": "签到",
+    "task": "任务",
+    "pass": "战令",
+    "points": "积分",
+    "collect": "集字",
+    "boss": "首领",
+    "shop": "商店",
+    "claim": "领奖",
+    "exchange": "兑换",
+}
+DEFAULT_ACTIVITY_STAGES = [
+    {
+        "key": "open",
+        "name": "正式期",
+        "stage_type": "open",
+        "start_time": "0",
+        "end_time": "无限",
+        "features": ["sign", "task", "pass", "points", "collect", "boss", "shop", "claim", "exchange"],
+        "multiplier": 1.0,
+    },
+]
 
 
 def now_dt() -> datetime:
@@ -196,6 +229,16 @@ def init_db():
                 word_char TEXT NOT NULL,
                 drop_date TEXT DEFAULT '',
                 create_time TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS activity_collect_pity_state (
+                activity_key TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                miss_count INTEGER NOT NULL DEFAULT 0,
+                update_time TEXT DEFAULT '',
+                PRIMARY KEY(activity_key, user_id, event_key)
             )
         """)
         cur.execute("""
@@ -326,6 +369,7 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
             ("activity_info_mode", "brief"),
             ("sign_reply_mode", "minimal"),
             ("activity_pass", deepcopy(DEFAULT_ACTIVITY_PASS)),
+            ("stages", deepcopy(DEFAULT_ACTIVITY_STAGES)),
         ):
             if key not in extensions:
                 extensions[key] = default
@@ -406,6 +450,182 @@ def activity_state(config: dict | None = None) -> tuple[bool, str]:
     if end_time and now > end_time:
         return False, f"活动已结束，结束时间：{end_time.strftime(TIME_FMT)}"
     return True, ""
+
+
+def _activity_elapsed_days(config: dict, at_time: datetime | None = None) -> int:
+    start_time = parse_time(config.get("start_time"), is_start=True)
+    if not start_time:
+        return 1
+    now = at_time or now_dt()
+    if now < start_time:
+        return 0
+    return max(1, (now.date() - start_time.date()).days + 1)
+
+
+def _normalize_stage_features(value, default: list[str] | None = None) -> list[str]:
+    if isinstance(value, str):
+        source = value.replace("\n", ",").split(",")
+    elif isinstance(value, list):
+        source = value
+    else:
+        source = default or []
+
+    features: list[str] = []
+    seen: set[str] = set()
+    for item in source:
+        feature = _clean_text(item.get("value") if isinstance(item, dict) else item)
+        if not feature:
+            continue
+        alias_map = {
+            "activity": "task",
+            "tasks": "task",
+            "activity_pass": "pass",
+            "event_points": "points",
+            "collect_words": "collect",
+            "activity_boss": "boss",
+            "reward": "claim",
+            "rewards": "claim",
+            "buy": "shop",
+        }
+        feature = alias_map.get(feature, feature)
+        if feature not in STAGE_FEATURES or feature in seen:
+            continue
+        seen.add(feature)
+        features.append(feature)
+    return features
+
+
+def _default_stage_features(stage_type: str) -> list[str]:
+    if stage_type == "warmup":
+        return ["sign", "claim"]
+    if stage_type == "settlement":
+        return ["shop", "claim", "exchange"]
+    if stage_type == "closed":
+        return []
+    return ["sign", "task", "pass", "points", "collect", "boss", "shop", "claim", "exchange"]
+
+
+def _activity_stages_config(config: dict | None = None) -> list[dict]:
+    cfg = config if config is not None else load_config()
+    raw = _get_extensions(cfg).get("stages")
+    if not isinstance(raw, list):
+        raw = DEFAULT_ACTIVITY_STAGES
+
+    stages: list[dict] = []
+    seen_keys: set[str] = set()
+    for index, row in enumerate(raw, 1):
+        if not isinstance(row, dict):
+            continue
+        stage_type = _clean_text(row.get("stage_type") or row.get("type"), "open")
+        if stage_type not in STAGE_TYPE_LABELS:
+            stage_type = "open"
+        key = _normalize_activity_key(row.get("key") or stage_type or f"stage_{index}", f"stage_{index}")
+        if key in seen_keys:
+            key = f"{key}_{index}"
+        seen_keys.add(key)
+        features = _normalize_stage_features(row.get("features"), _default_stage_features(stage_type))
+        start_text = _clean_text(row.get("start_time"), "0")
+        end_text = _clean_text(row.get("end_time"), "无限")
+        stages.append({
+            "key": key,
+            "name": _clean_text(row.get("name"), STAGE_TYPE_LABELS.get(stage_type, "活动阶段")),
+            "stage_type": stage_type,
+            "start_time": start_text,
+            "end_time": end_text,
+            "features": features,
+            "multiplier": max(0.0, _as_float(row.get("multiplier"), 1.0)),
+            "description": _clean_text(row.get("description")),
+        })
+    return stages
+
+
+def activity_runtime_state(config: dict | None = None, at_time: datetime | None = None) -> dict:
+    cfg = config or load_config()
+    ok, reason = activity_state(cfg)
+    if not ok:
+        return {
+            "ok": False,
+            "reason": reason,
+            "stage": None,
+            "stage_key": "",
+            "stage_name": reason,
+            "stage_type": "closed",
+            "features": [],
+            "multiplier": 0.0,
+            "next_stage": None,
+            "can_produce": False,
+        }
+
+    now = at_time or now_dt()
+    stages = _activity_stages_config(cfg)
+    active_stage = None
+    future_stages = []
+    for stage in stages:
+        start_time = parse_time(stage.get("start_time"), is_start=True)
+        end_time = parse_time(stage.get("end_time"), is_start=False)
+        if start_time and now < start_time:
+            future_stages.append((start_time, stage))
+            continue
+        if end_time and now > end_time:
+            continue
+        active_stage = stage
+        break
+
+    if not active_stage:
+        if stages:
+            stage = {
+                "key": "closed",
+                "name": "关闭期",
+                "stage_type": "closed",
+                "features": [],
+                "multiplier": 0.0,
+            }
+        else:
+            stage = {
+                "key": "open",
+                "name": "进行中",
+                "stage_type": "open",
+                "features": _default_stage_features("open"),
+                "multiplier": 1.0,
+            }
+        next_stage = min(future_stages, key=lambda item: item[0])[1] if future_stages else None
+        return {
+            "ok": bool(stage["features"]),
+            "reason": "" if stage["features"] else "当前不在活动开放阶段",
+            "stage": stage,
+            "stage_key": stage["key"],
+            "stage_name": stage["name"],
+            "stage_type": stage["stage_type"],
+            "features": list(stage["features"]),
+            "multiplier": stage["multiplier"],
+            "next_stage": next_stage,
+            "can_produce": bool({"task", "pass", "points", "collect", "boss"} & set(stage["features"])),
+        }
+
+    next_candidates = []
+    for stage in stages:
+        start_time = parse_time(stage.get("start_time"), is_start=True)
+        if start_time and start_time > now:
+            next_candidates.append((start_time, stage))
+    next_stage = min(next_candidates, key=lambda item: item[0])[1] if next_candidates else None
+    features = list(active_stage.get("features") or [])
+    return {
+        "ok": True,
+        "reason": "",
+        "stage": active_stage,
+        "stage_key": active_stage.get("key", ""),
+        "stage_name": active_stage.get("name", "进行中"),
+        "stage_type": active_stage.get("stage_type", "open"),
+        "features": features,
+        "multiplier": max(0.0, _as_float(active_stage.get("multiplier"), 1.0)),
+        "next_stage": next_stage,
+        "can_produce": bool({"task", "pass", "points", "collect", "boss"} & set(features)),
+    }
+
+
+def _runtime_allows(config: dict, feature: str) -> bool:
+    runtime = activity_runtime_state(config)
+    return runtime.get("ok", False) and feature in set(runtime.get("features") or [])
 
 
 def _as_int(value, default: int = 0) -> int:
@@ -812,6 +1032,10 @@ def _activity_pass_config(config: dict | None = None) -> dict:
     merged["exp_name"] = _clean_text(merged.get("exp_name"), "活跃值")
     merged["level_exp"] = max(1, _as_int(merged.get("level_exp"), 100))
     merged["max_level"] = max(1, _as_int(merged.get("max_level"), 12))
+    merged["catchup_enabled"] = _as_bool(merged.get("catchup_enabled"), True)
+    merged["catchup_start_day"] = max(1, _as_int(merged.get("catchup_start_day"), 5))
+    merged["catchup_level_gap"] = max(1, _as_int(merged.get("catchup_level_gap"), 3))
+    merged["catchup_multiplier"] = max(1.0, _as_float(merged.get("catchup_multiplier"), 1.5))
     merged["event_rules"] = _pass_event_rules(merged)
     merged["level_rewards"] = _pass_level_rewards(merged)
     return merged
@@ -905,6 +1129,7 @@ def _point_shop_items(activity: dict) -> list[dict]:
             "cost": max(0, cost),
             "reward": reward,
             "limit": max(0, _as_int(row.get("limit", row.get("limit_per_user", 1)), 1)),
+            "stock_limit": max(0, _as_int(row.get("stock_limit", row.get("total_limit", 0)), 0)),
         })
     return items
 
@@ -963,6 +1188,7 @@ def get_gameplay_activities(config: dict | None = None) -> list[dict]:
             "drop_rate": _drop_rate(activity.get("drop_rate"), 0.35),
             "daily_drop_limit": max(0, _as_int(activity.get("daily_drop_limit"), 8)),
             "rolls_per_record": max(1, _as_int(activity.get("rolls_per_record"), 1)),
+            "pity_threshold": max(0, _as_int(activity.get("pity_threshold"), 0)),
             "letters": _collect_letters(activity, phrases),
             "phrases": phrases,
         })
@@ -994,6 +1220,49 @@ def _choose_collect_char(activity: dict) -> str:
         if needle <= current:
             return _clean_text(item.get("char"))
     return _clean_text(letters[-1].get("char"))
+
+
+def _get_collect_pity_count(cur, activity_key: str, user_id: str, event_key: str) -> int:
+    cur.execute(
+        """
+        SELECT miss_count
+        FROM activity_collect_pity_state
+        WHERE activity_key=%s AND user_id=%s AND event_key=%s
+        """,
+        (str(activity_key), str(user_id), str(event_key)),
+    )
+    row = cur.fetchone()
+    return max(0, _as_int(row["miss_count"] if row else 0))
+
+
+def _set_collect_pity_count(cur, activity_key: str, user_id: str, event_key: str, miss_count: int) -> None:
+    cur.execute(
+        """
+        INSERT INTO activity_collect_pity_state (
+            activity_key, user_id, event_key, miss_count, update_time
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT(activity_key, user_id, event_key) DO UPDATE SET
+            miss_count = excluded.miss_count,
+            update_time = excluded.update_time
+        """,
+        (str(activity_key), str(user_id), str(event_key), max(0, _as_int(miss_count)), now_str()),
+    )
+
+
+def _collect_pity_progress_map(cur, activity_key: str, user_id: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT event_key, miss_count
+        FROM activity_collect_pity_state
+        WHERE activity_key=%s AND user_id=%s
+        """,
+        (str(activity_key), str(user_id)),
+    )
+    return {
+        str(row["event_key"]): max(0, _as_int(row["miss_count"]))
+        for row in cur.fetchall()
+    }
 
 
 def _get_collect_inventory_map(cur, activity_key: str, user_id: str) -> dict[str, int]:
@@ -1059,8 +1328,8 @@ def _record_activity_task_progress(
     amount: int,
     messages: list[str],
 ) -> None:
-    ok, _ = activity_state(config)
-    if not ok:
+    runtime = activity_runtime_state(config)
+    if not runtime.get("ok") or "task" not in set(runtime.get("features") or []):
         return
     activity_key = _activity_config_key(config)
     for task in get_activity_tasks(config):
@@ -1170,6 +1439,39 @@ def _grant_pass_exp(cur, activity_key: str, user_id: str, pass_cfg: dict, gained
     }
 
 
+def _pass_catchup_state(cur, config: dict, activity_key: str, user_id: str, pass_cfg: dict) -> dict:
+    enabled = bool(pass_cfg.get("catchup_enabled"))
+    start_day = max(1, _as_int(pass_cfg.get("catchup_start_day"), 5))
+    level_gap = max(1, _as_int(pass_cfg.get("catchup_level_gap"), 3))
+    catchup_multiplier = max(1.0, _as_float(pass_cfg.get("catchup_multiplier"), 1.5))
+    elapsed_day = _activity_elapsed_days(config)
+    balance = _get_pass_balance(cur, activity_key, user_id, pass_cfg)
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(level), 0) AS level
+        FROM activity_pass_balance
+        WHERE activity_key=%s
+        """,
+        (activity_key,),
+    )
+    row = cur.fetchone()
+    highest_level = max(0, _as_int(row["level"] if row else 0))
+    gap = max(0, highest_level - balance["level"])
+    active = enabled and elapsed_day >= start_day and gap >= level_gap and catchup_multiplier > 1.0
+    return {
+        "enabled": enabled,
+        "active": active,
+        "elapsed_day": elapsed_day,
+        "start_day": start_day,
+        "level_gap": level_gap,
+        "catchup_multiplier": catchup_multiplier,
+        "highest_level": highest_level,
+        "user_level": balance["level"],
+        "gap": gap,
+        "multiplier": catchup_multiplier if active else 1.0,
+    }
+
+
 def _record_activity_pass_progress(
     cur,
     config: dict,
@@ -1178,18 +1480,21 @@ def _record_activity_pass_progress(
     amount: int,
     messages: list[str],
 ) -> None:
-    ok, _ = activity_state(config)
-    if not ok:
+    runtime = activity_runtime_state(config)
+    if not runtime.get("ok") or "pass" not in set(runtime.get("features") or []):
         return
     pass_cfg = _activity_pass_config(config)
     if not pass_cfg.get("enabled"):
         return
     activity_key = _activity_config_key(config)
     exp_name = pass_cfg.get("exp_name") or "活跃值"
+    multiplier = max(0.0, _as_float(runtime.get("multiplier"), 1.0))
+    catchup = _pass_catchup_state(cur, config, activity_key, user_id, pass_cfg)
+    multiplier *= max(1.0, _as_float(catchup.get("multiplier"), 1.0))
     for rule in pass_cfg.get("event_rules") or []:
         if rule.get("event") != event_key:
             continue
-        exp = max(0, _as_int(rule.get("exp"), 0)) * max(1, amount)
+        exp = int(max(0, _as_int(rule.get("exp"), 0)) * max(1, amount) * multiplier)
         if exp <= 0:
             continue
         daily_limit = max(0, _as_int(rule.get("daily_limit"), 0))
@@ -1221,13 +1526,14 @@ def _record_activity_pass_progress(
             (activity_key, user_id, event_key, exp, today_str(), ts),
         )
         before, after = _grant_pass_exp(cur, activity_key, user_id, pass_cfg, exp)
+        catchup_text = "（追赶加成）" if catchup.get("active") else ""
         if after["level"] > before["level"]:
             messages.append(
-                f"活动战令：获得{exp}{exp_name}，提升至{after['level']}级，发送 活动战令领取 领奖"
+                f"活动战令：获得{exp}{exp_name}{catchup_text}，提升至{after['level']}级，发送 活动战令领取 领奖"
             )
         else:
             messages.append(
-                f"活动战令：获得{exp}{exp_name}（{after['exp']}/{after['level_exp']}）"
+                f"活动战令：获得{exp}{exp_name}{catchup_text}（{after['exp']}/{after['level_exp']}）"
             )
 
 
@@ -1242,6 +1548,11 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
     activities = get_gameplay_activities(cfg)
     if not activities and not get_activity_tasks(cfg) and not _activity_pass_config(cfg).get("enabled"):
         return []
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok") or not runtime.get("can_produce"):
+        return []
+    features = set(runtime.get("features") or [])
+    multiplier = max(0.0, _as_float(runtime.get("multiplier"), 1.0))
 
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -1256,10 +1567,12 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
             if not ok:
                 continue
             if activity.get("type") == "event_points":
+                if "points" not in features:
+                    continue
                 for rule in activity.get("event_rules") or []:
                     if rule.get("event") != event:
                         continue
-                    points = max(0, _as_int(rule.get("points"), 0)) * times
+                    points = int(max(0, _as_int(rule.get("points"), 0)) * times * multiplier)
                     if points <= 0:
                         continue
                     daily_limit = max(0, _as_int(rule.get("daily_limit"), 0))
@@ -1309,6 +1622,8 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                 continue
 
             if activity.get("type") == "activity_boss":
+                if "boss" not in features:
+                    continue
                 drop_events = activity.get("drop_events") or []
                 if event in drop_events:
                     items = activity.get("items") or []
@@ -1329,6 +1644,8 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
 
             if activity.get("type") != "collect_words" or event not in activity.get("drop_events", []):
                 continue
+            if "collect" not in features:
+                continue
             daily_limit = max(0, _as_int(activity.get("daily_drop_limit"), 8))
             if daily_limit <= 0:
                 continue
@@ -1347,13 +1664,26 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                 continue
 
             rolls = min(remaining, max(1, min(times, _as_int(activity.get("rolls_per_record"), 1))))
-            drop_rate = _drop_rate(activity.get("drop_rate"), 0.35)
+            drop_rate = min(_drop_rate(activity.get("drop_rate"), 0.35) * multiplier, 1.0)
+            pity_threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
+            pity_count = (
+                _get_collect_pity_count(cur, activity["key"], uid, event)
+                if pity_threshold > 0 else 0
+            )
+            pity_changed = False
             for _ in range(rolls):
-                if random.random() > drop_rate:
+                guaranteed = pity_threshold > 0 and pity_count + 1 >= pity_threshold
+                if not guaranteed and random.random() > drop_rate:
+                    if pity_threshold > 0:
+                        pity_count += 1
+                        pity_changed = True
                     continue
                 word_char = _choose_collect_char(activity)
                 if not word_char:
                     continue
+                if pity_threshold > 0:
+                    pity_count = 0
+                    pity_changed = True
                 cur.execute(
                     """
                     INSERT INTO activity_collect_inventory (
@@ -1375,7 +1705,10 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                     """,
                     (activity["key"], uid, event, word_char, today_str(), now_str()),
                 )
-                messages.append(f"活动掉落：{activity['name']} 获得字牌「{word_char}」")
+                drop_label = "活动保底" if guaranteed else "活动掉落"
+                messages.append(f"{drop_label}：{activity['name']} 获得字牌「{word_char}」")
+            if pity_changed:
+                _set_collect_pity_count(cur, activity["key"], uid, event, pity_count)
         conn.commit()
         return messages
     except Exception:
@@ -1423,6 +1756,17 @@ def build_collect_bag_text(user_id: str) -> str:
                 f"【{activity['name']}】{'进行中' if ok else reason}",
                 f"字牌：{letter_text}",
             ])
+            pity_threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
+            if pity_threshold > 0:
+                pity_map = _collect_pity_progress_map(cur, activity["key"], uid)
+                pity_parts = []
+                for event_key in activity.get("drop_events") or []:
+                    label = ACTIVITY_EVENT_LABELS.get(event_key, event_key)
+                    pity_parts.append(
+                        f"{label} {min(pity_threshold, pity_map.get(event_key, 0))}/{pity_threshold}"
+                    )
+                if pity_parts:
+                    lines.append("保底进度：" + "、".join(pity_parts))
             phrases = _collect_phrases(activity)
             if not phrases:
                 lines.append("暂无兑换词组")
@@ -1473,6 +1817,11 @@ def claim_collect_phrase(user_id: str, query: str) -> tuple[bool, str]:
         return False, "请发送：活动兑换 端午安康"
 
     cfg = load_config()
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放"
+    if "exchange" not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放集字兑换"
     found = _find_collect_phrase(cfg, target)
     if not found:
         return False, "未找到可兑换的活动词组，或活动当前不可兑换"
@@ -1580,6 +1929,19 @@ def _get_point_purchase_map(cur, activity_key: str, user_id: str) -> dict[str, i
     }
 
 
+def _get_point_shop_total_purchase(cur, activity_key: str, item_key: str) -> int:
+    cur.execute(
+        """
+        SELECT COALESCE(SUM(count), 0) AS count
+        FROM activity_point_purchase
+        WHERE activity_key=%s AND item_key=%s
+        """,
+        (str(activity_key), str(item_key)),
+    )
+    row = cur.fetchone()
+    return max(0, _as_int(row["count"] if row else 0))
+
+
 def build_activity_points_text(user_id: str) -> str:
     uid = str(user_id)
     activities = [
@@ -1654,9 +2016,14 @@ def build_activity_shop_text(user_id: str) -> str:
                 bought = purchases.get(item_key, 0)
                 limit = _as_int(item.get("limit"), 1)
                 limit_text = "不限" if limit <= 0 else f"{bought}/{limit}"
+                stock_limit = _as_int(item.get("stock_limit"), 0)
+                stock_text = ""
+                if stock_limit > 0:
+                    sold = _get_point_shop_total_purchase(cur, activity["key"], item_key)
+                    stock_text = f"，全服库存 {sold}/{stock_limit}"
                 lines.append(
                     f"- {item.get('name') or item_key}：{_as_int(item.get('cost'))}{point_name}，"
-                    f"已兑换 {limit_text}，奖励：{item.get('reward') or '暂无奖励'}"
+                    f"已兑换 {limit_text}{stock_text}，奖励：{item.get('reward') or '暂无奖励'}"
                 )
         return "\n".join(lines).strip()
     finally:
@@ -1753,9 +2120,11 @@ def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") ->
 
 def claim_activity_tasks(user_id: str, query: str = "") -> tuple[bool, str]:
     cfg = load_config()
-    ok, reason = activity_state(cfg)
-    if not ok:
-        return False, reason
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放"
+    if "claim" not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
     uid = str(user_id)
     activity_key = _activity_config_key(cfg)
     ensure_activity_files()
@@ -1845,6 +2214,17 @@ def build_activity_pass_text(user_id: str) -> str:
             f"等级：{balance['level']}/{balance['max_level']}",
             f"{exp_name}：{balance['exp']}/{balance['level_exp']}（累计 {balance['total_exp']}）",
         ])
+        catchup = _pass_catchup_state(cur, cfg, activity_key, str(user_id), pass_cfg)
+        if catchup.get("enabled"):
+            if catchup.get("active"):
+                lines.append(
+                    f"追赶加成：已触发 {catchup['catchup_multiplier']:.2f}x，"
+                    f"当前落后最高等级 {catchup['gap']} 级"
+                )
+            else:
+                lines.append(
+                    f"追赶加成：第{catchup['start_day']}天后、落后{catchup['level_gap']}级时触发"
+                )
         rules = pass_cfg.get("event_rules") or []
         if rules:
             rule_text = "、".join(
@@ -1879,9 +2259,11 @@ def build_activity_pass_text(user_id: str) -> str:
 
 def claim_activity_pass_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
     cfg = load_config()
-    ok, reason = activity_state(cfg)
-    if not ok:
-        return False, reason
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放"
+    if "claim" not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
     pass_cfg = _activity_pass_config(cfg)
     if not pass_cfg.get("enabled"):
         return False, "活动战令未开启"
@@ -2051,6 +2433,11 @@ def claim_point_shop_item(user_id: str, query: str) -> tuple[bool, str]:
         return False, "请发送：活动购买 灵石补给"
 
     cfg = load_config()
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放"
+    if "shop" not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动商店"
     found = _find_point_shop_item(cfg, target)
     if not found:
         return False, "未找到可兑换的活动商品，或活动当前不可兑换"
@@ -2081,6 +2468,11 @@ def claim_point_shop_item(user_id: str, query: str) -> tuple[bool, str]:
         limit = _as_int(item.get("limit"), 1)
         if limit > 0 and bought + quantity > limit:
             return False, f"该商品兑换次数不足，当前已兑换 {bought}/{limit}"
+        stock_limit = _as_int(item.get("stock_limit"), 0)
+        if stock_limit > 0:
+            sold = _get_point_shop_total_purchase(cur, activity["key"], item_key)
+            if sold + quantity > stock_limit:
+                return False, f"该商品全服库存不足，当前已兑换 {sold}/{stock_limit}"
 
         ts = now_str()
         cur.execute(
@@ -2328,6 +2720,12 @@ def _activity_pass_data_overview(cur, config: dict, uid: str = "", limit: int = 
         "exp_name": pass_cfg.get("exp_name"),
         "level_exp": pass_cfg.get("level_exp"),
         "max_level": pass_cfg.get("max_level"),
+        "catchup": {
+            "enabled": bool(pass_cfg.get("catchup_enabled")),
+            "start_day": pass_cfg.get("catchup_start_day"),
+            "level_gap": pass_cfg.get("catchup_level_gap"),
+            "multiplier": pass_cfg.get("catchup_multiplier"),
+        },
         "user_count": _as_int(row["user_count"] if row else 0),
         "total_exp": _as_int(row["total_exp"] if row else 0),
         "highest_level": _as_int(row["max_level"] if row else 0),
@@ -2335,6 +2733,7 @@ def _activity_pass_data_overview(cur, config: dict, uid: str = "", limit: int = 
     }
     if uid:
         overview["user"] = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+        overview["user_catchup"] = _pass_catchup_state(cur, config, activity_key, uid, pass_cfg)
     return overview
 
 
@@ -2466,6 +2865,7 @@ def get_activity_data_overview(
                     row["user"] = {
                         "inventory": _get_collect_inventory_map(cur, activity["key"], uid),
                         "claims": _get_collect_claim_map(cur, activity["key"], uid),
+                        "pity": _collect_pity_progress_map(cur, activity["key"], uid),
                     }
             activity_rows.append(row)
 
@@ -2490,6 +2890,7 @@ def get_activity_data_overview(
             "activities": activity_rows,
             "tasks": _activity_task_data_overview(cur, cfg, uid),
             "activity_pass": _activity_pass_data_overview(cur, cfg, uid, row_limit),
+            "runtime": activity_runtime_state(cfg),
             "user_id": uid,
             "user_sign": user_sign,
         }
@@ -2517,6 +2918,7 @@ def reset_activity_data(scope: str, activity_key: str | None = None) -> str:
                 "activity_collect_inventory",
                 "activity_collect_claim",
                 "activity_collect_drop_log",
+                "activity_collect_pity_state",
                 "activity_point_balance",
                 "activity_point_event_log",
                 "activity_point_purchase",
@@ -2670,6 +3072,63 @@ def adjust_collect_word(activity_key: str, user_id: str, word_char: str, amount:
         conn.close()
 
 
+def adjust_activity_pass_exp(user_id: str, amount: int) -> dict:
+    uid = _clean_text(user_id)
+    delta = _as_int(amount, 0)
+    if not uid:
+        raise ValueError("请输入用户ID")
+    if delta == 0:
+        raise ValueError("调整数量不能为 0")
+
+    cfg = load_config()
+    pass_cfg = _activity_pass_config(cfg)
+    if not pass_cfg.get("enabled"):
+        raise ValueError("活动战令未开启")
+    activity_key = _activity_config_key(cfg)
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        before = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+        if delta > 0:
+            _, after = _grant_pass_exp(cur, activity_key, uid, pass_cfg, delta)
+        else:
+            next_total = max(0, before["total_exp"] + delta)
+            level_exp = max(1, _as_int(pass_cfg.get("level_exp"), 100))
+            max_level = max(1, _as_int(pass_cfg.get("max_level"), 12))
+            level = _calc_pass_level(next_total, level_exp, max_level)
+            current_exp = _pass_current_exp(next_total, level, level_exp, max_level)
+            cur.execute(
+                """
+                INSERT INTO activity_pass_balance (
+                    activity_key, user_id, exp, total_exp, level, update_time
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT(activity_key, user_id) DO UPDATE SET
+                    exp = excluded.exp,
+                    total_exp = excluded.total_exp,
+                    level = excluded.level,
+                    update_time = excluded.update_time
+                """,
+                (activity_key, uid, current_exp, next_total, level, now_str()),
+            )
+            after = {
+                "exp": current_exp,
+                "total_exp": next_total,
+                "level": level,
+                "level_exp": level_exp,
+                "max_level": max_level,
+            }
+        conn.commit()
+        return after
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -2690,9 +3149,11 @@ def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
 
 def claim_sign(user_id: str) -> tuple[bool, str]:
     cfg = load_config()
-    ok, reason = activity_state(cfg)
-    if not ok:
-        return False, reason
+    runtime = activity_runtime_state(cfg)
+    if not runtime.get("ok"):
+        return False, runtime.get("reason") or "活动未开放"
+    if "sign" not in set(runtime.get("features") or []):
+        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动签到"
 
     uid = str(user_id)
     today = today_str()
@@ -2854,6 +3315,39 @@ def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> No
             lines.append(f"  兑换词组：{phrase_text}")
 
 
+def _stage_feature_text(features: list[str]) -> str:
+    return "、".join(STAGE_FEATURES.get(feature, feature) for feature in features) or "暂无开放玩法"
+
+
+def _stage_time_text(stage: dict | None) -> str:
+    if not stage:
+        return ""
+    return f"{stage.get('start_time', '0')} 至 {stage.get('end_time', '无限')}"
+
+
+def _append_stage_summary(lines: list[str], cfg: dict, *, detail: bool = False) -> None:
+    runtime = activity_runtime_state(cfg)
+    stage = runtime.get("stage") or {}
+    lines.append("")
+    lines.append("【活动阶段】")
+    lines.append(f"当前：{runtime.get('stage_name') or '未开放'}")
+    if stage:
+        time_text = _stage_time_text(stage)
+        if time_text:
+            lines.append(f"阶段时间：{time_text}")
+    lines.append("开放内容：" + _stage_feature_text(list(runtime.get("features") or [])))
+    multiplier = _as_float(runtime.get("multiplier"), 1.0)
+    if detail or abs(multiplier - 1.0) > 0.001:
+        lines.append(f"阶段倍率：{multiplier:.2f}x")
+    next_stage = runtime.get("next_stage")
+    if next_stage:
+        lines.append(
+            f"下一阶段：{next_stage.get('name', '活动阶段')}（{_stage_time_text(next_stage)}）"
+        )
+    if not runtime.get("can_produce") and "claim" in set(runtime.get("features") or []):
+        lines.append("当前阶段主要用于领奖、兑换和结算，不再产出活动积分、字牌或战令经验。")
+
+
 def _append_pass_summary(lines: list[str], cfg: dict, user_id: str | None = None, *, detail: bool = False) -> None:
     pass_cfg = _activity_pass_config(cfg)
     if not pass_cfg.get("enabled"):
@@ -2946,6 +3440,70 @@ def _append_task_summary(lines: list[str], cfg: dict, user_id: str | None = None
     lines.append("领奖：活动任务领取")
 
 
+def _append_action_summary(lines: list[str], cfg: dict, user_id: str | None = None) -> None:
+    if not user_id:
+        return
+    uid = str(user_id)
+    activity_key = _activity_config_key(cfg)
+    tips: list[str] = []
+    ensure_activity_files()
+    conn = db_backend.connect(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        cur = conn.cursor()
+        claimable_tasks = len(_select_claimable_tasks(cur, cfg, uid))
+        if claimable_tasks:
+            tips.append(f"{claimable_tasks}个任务奖励可领")
+
+        pass_cfg = _activity_pass_config(cfg)
+        if pass_cfg.get("enabled"):
+            balance = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+            cur.execute(
+                """
+                SELECT level FROM activity_pass_reward_claim
+                WHERE activity_key=%s AND user_id=%s
+                """,
+                (activity_key, uid),
+            )
+            claimed = {max(0, _as_int(row["level"])) for row in cur.fetchall()}
+            pass_claimable = [
+                reward for reward in pass_cfg.get("level_rewards") or []
+                if _as_int(reward.get("level"), 0) > 0
+                and _as_int(reward.get("level"), 0) <= balance["level"]
+                and _as_int(reward.get("level"), 0) not in claimed
+            ]
+            if pass_claimable:
+                tips.append(f"{len(pass_claimable)}档战令奖励可领")
+            catchup = _pass_catchup_state(cur, cfg, activity_key, uid, pass_cfg)
+            if catchup.get("active"):
+                tips.append(f"战令追赶{catchup['catchup_multiplier']:.2f}x生效")
+
+        for activity in get_gameplay_activities(cfg):
+            if activity.get("type") != "collect_words":
+                continue
+            pity_threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
+            if pity_threshold <= 0:
+                continue
+            pity_map = _collect_pity_progress_map(cur, activity["key"], uid)
+            near_events = [
+                ACTIVITY_EVENT_LABELS.get(event_key, event_key)
+                for event_key in activity.get("drop_events") or []
+                if pity_map.get(event_key, 0) >= max(1, pity_threshold - 1)
+            ]
+            if near_events:
+                tips.append(f"{activity['name']}接近保底：{near_events[0]}")
+                break
+    finally:
+        conn.close()
+
+    if not tips:
+        return
+    lines.append("")
+    lines.append("【行动建议】")
+    lines.append("；".join(tips[:4]))
+    lines.append("一键领取：活动领取")
+
+
 def build_activity_rewards_text() -> str:
     cfg = load_config()
     lines = [f"【{cfg.get('name', '节日签到活动')} · 奖励】"]
@@ -2999,6 +3557,7 @@ def build_activity_tasks_text() -> str:
 def build_activity_gameplay_text() -> str:
     cfg = load_config()
     lines = [f"【{cfg.get('name', '节日签到活动')} · 玩法】"]
+    _append_stage_summary(lines, cfg, detail=True)
     _append_gameplay_summary(lines, cfg, detail=True)
     if len(lines) <= 1:
         lines.append("")
@@ -3025,6 +3584,7 @@ def build_activity_info(user_id: str | None = None) -> str:
         ])
 
     if _activity_info_mode(cfg) == "full":
+        _append_stage_summary(lines, cfg, detail=True)
         lines.append("")
         lines.append("【每日签到奖励】")
         rewards = cfg.get("daily_rewards") or []
@@ -3064,6 +3624,7 @@ def build_activity_info(user_id: str | None = None) -> str:
         _append_gameplay_summary(lines, cfg, detail=True)
         _append_task_summary(lines, cfg, user_id, detail=True)
         _append_pass_summary(lines, cfg, user_id, detail=True)
+        _append_action_summary(lines, cfg, user_id)
     else:
         lines.extend([
             "",
@@ -3074,6 +3635,8 @@ def build_activity_info(user_id: str | None = None) -> str:
             "玩法说明：活动玩法",
             "个人进度：活动排行 / 活动背包 / 活动积分",
         ])
+        _append_action_summary(lines, cfg, user_id)
+        _append_stage_summary(lines, cfg, detail=False)
         _append_task_summary(lines, cfg, user_id, detail=False)
         _append_pass_summary(lines, cfg, user_id, detail=False)
         _append_gameplay_summary(lines, cfg, detail=False)

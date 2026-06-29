@@ -8,9 +8,14 @@ from ..xiuxian_activity.service import (
     CONFIG_PATH as ACTIVITY_CONFIG_PATH,
     DEFAULT_COLLECT_DROP_EVENTS,
     DEFAULT_ACTIVITY_PASS,
+    DEFAULT_ACTIVITY_STAGES,
     DEFAULT_POINT_EVENT_RULES,
+    STAGE_FEATURES,
+    STAGE_TYPE_LABELS,
     adjust_activity_points,
+    adjust_activity_pass_exp,
     adjust_collect_word,
+    activity_runtime_state,
     activity_state,
     get_activity_data_overview,
     load_config as load_activity_config,
@@ -328,6 +333,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.35,
             "daily_drop_limit": 8,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "端", "weight": 30},
                 {"char": "午", "weight": 30},
@@ -369,6 +375,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.32,
             "daily_drop_limit": 8,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "祖", "weight": 28},
                 {"char": "国", "weight": 28},
@@ -410,6 +417,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.3,
             "daily_drop_limit": 8,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "福", "weight": 24},
                 {"char": "运", "weight": 22},
@@ -451,6 +459,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.28,
             "daily_drop_limit": 10,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "福", "weight": 24},
                 {"char": "袋", "weight": 20},
@@ -499,6 +508,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.3,
             "daily_drop_limit": 9,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "东", "weight": 20},
                 {"char": "海", "weight": 18},
@@ -541,6 +551,7 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "drop_rate": 0.34,
             "daily_drop_limit": 8,
             "rolls_per_record": 1,
+            "pity_threshold": 6,
             "letters": [
                 {"char": "烟", "weight": 24},
                 {"char": "火", "weight": 24},
@@ -582,9 +593,9 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
             "point_name": "节日积分",
             "event_rules": DEFAULT_POINT_EVENT_RULES,
             "shop": [
-                {"item_key": "stone_pack", "name": "灵石补给", "cost": 80, "reward": "灵石x300000", "limit": 3},
-                {"item_key": "practice_pack", "name": "修炼补给", "cost": 160, "reward": "灵石x500000,渡厄丹x1", "limit": 2},
-                {"item_key": "festival_box", "name": "节日礼盒", "cost": 260, "reward": "灵石x800000,渡厄丹x2", "limit": 1},
+                {"item_key": "stone_pack", "name": "灵石补给", "cost": 80, "reward": "灵石x300000", "limit": 3, "stock_limit": 0},
+                {"item_key": "practice_pack", "name": "修炼补给", "cost": 160, "reward": "灵石x500000,渡厄丹x1", "limit": 2, "stock_limit": 0},
+                {"item_key": "festival_box", "name": "节日礼盒", "cost": 260, "reward": "灵石x800000,渡厄丹x2", "limit": 1, "stock_limit": 80},
             ],
         },
     },
@@ -609,9 +620,9 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
                 {"event": "sect_task_complete", "points": 12, "daily_limit": 60},
             ],
             "shop": [
-                {"item_key": "trial_stone", "name": "试炼灵石", "cost": 100, "reward": "灵石x400000", "limit": 3},
-                {"item_key": "trial_pill", "name": "试炼丹礼", "cost": 220, "reward": "灵石x600000,渡厄丹x1", "limit": 2},
-                {"item_key": "trial_box", "name": "试炼宝匣", "cost": 360, "reward": "灵石x1000000,渡厄丹x2", "limit": 1},
+                {"item_key": "trial_stone", "name": "试炼灵石", "cost": 100, "reward": "灵石x400000", "limit": 3, "stock_limit": 0},
+                {"item_key": "trial_pill", "name": "试炼丹礼", "cost": 220, "reward": "灵石x600000,渡厄丹x1", "limit": 2, "stock_limit": 0},
+                {"item_key": "trial_box", "name": "试炼宝匣", "cost": 360, "reward": "灵石x1000000,渡厄丹x2", "limit": 1, "stock_limit": 60},
             ],
         },
     },
@@ -636,9 +647,9 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
                 {"event": "sect_task_complete", "points": 12, "daily_limit": 48},
             ],
             "shop": [
-                {"item_key": "harvest_stone", "name": "丰收灵石", "cost": 90, "reward": "灵石x350000", "limit": 3},
-                {"item_key": "harvest_supply", "name": "洞府补给", "cost": 180, "reward": "灵石x600000,渡厄丹x1", "limit": 2},
-                {"item_key": "harvest_box", "name": "丰收礼盒", "cost": 300, "reward": "灵石x900000,渡厄丹x2", "limit": 1},
+                {"item_key": "harvest_stone", "name": "丰收灵石", "cost": 90, "reward": "灵石x350000", "limit": 3, "stock_limit": 0},
+                {"item_key": "harvest_supply", "name": "洞府补给", "cost": 180, "reward": "灵石x600000,渡厄丹x1", "limit": 2, "stock_limit": 0},
+                {"item_key": "harvest_box", "name": "丰收礼盒", "cost": 300, "reward": "灵石x900000,渡厄丹x2", "limit": 1, "stock_limit": 80},
             ],
         },
     },
@@ -808,9 +819,9 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
                 {"event": "work", "points": 6, "daily_limit": 60},
             ],
             "shop": [
-                {"item_key": "demon_stone", "name": "伏魔灵石", "cost": 120, "reward": "灵石x450000", "limit": 4},
-                {"item_key": "demon_pill", "name": "伏魔丹礼", "cost": 280, "reward": "灵石x700000,渡厄丹x2", "limit": 2},
-                {"item_key": "demon_chest", "name": "封魔宝匣", "cost": 480, "reward": "灵石x1200000,渡厄丹x3", "limit": 1},
+                {"item_key": "demon_stone", "name": "伏魔灵石", "cost": 120, "reward": "灵石x450000", "limit": 4, "stock_limit": 0},
+                {"item_key": "demon_pill", "name": "伏魔丹礼", "cost": 280, "reward": "灵石x700000,渡厄丹x2", "limit": 2, "stock_limit": 80},
+                {"item_key": "demon_chest", "name": "封魔宝匣", "cost": 480, "reward": "灵石x1200000,渡厄丹x3", "limit": 1, "stock_limit": 40},
             ],
         },
     },
@@ -836,8 +847,8 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
                 {"event": "sign_in", "points": 15, "daily_limit": 15},
             ],
             "shop": [
-                {"item_key": "sect_stone", "name": "宗门灵石", "cost": 70, "reward": "灵石x280000", "limit": 5},
-                {"item_key": "sect_gift", "name": "同门礼盒", "cost": 200, "reward": "灵石x550000,渡厄丹x1", "limit": 2},
+                {"item_key": "sect_stone", "name": "宗门灵石", "cost": 70, "reward": "灵石x280000", "limit": 5, "stock_limit": 0},
+                {"item_key": "sect_gift", "name": "同门礼盒", "cost": 200, "reward": "灵石x550000,渡厄丹x1", "limit": 2, "stock_limit": 100},
             ],
         },
     },
@@ -863,8 +874,8 @@ GAMEPLAY_TEMPLATE_DEFINITIONS = {
                 {"event": "sign_in", "points": 20, "daily_limit": 20},
             ],
             "shop": [
-                {"item_key": "furnace_herb", "name": "药引礼包", "cost": 100, "reward": "灵石x320000", "limit": 3},
-                {"item_key": "furnace_elixir", "name": "丹成礼", "cost": 240, "reward": "灵石x600000,渡厄丹x2", "limit": 2},
+                {"item_key": "furnace_herb", "name": "药引礼包", "cost": 100, "reward": "灵石x320000", "limit": 3, "stock_limit": 0},
+                {"item_key": "furnace_elixir", "name": "丹成礼", "cost": 240, "reward": "灵石x600000,渡厄丹x2", "limit": 2, "stock_limit": 80},
             ],
         },
     },
@@ -1307,6 +1318,7 @@ def _as_point_shop_rows(value) -> list[dict]:
             "cost": item.get("cost", ""),
             "reward": item.get("reward", ""),
             "limit": item.get("limit", 1),
+            "stock_limit": item.get("stock_limit", item.get("total_limit", 0)),
         })
     return rows
 
@@ -1337,6 +1349,7 @@ def _as_gameplay_rows(value) -> list[dict]:
             "drop_rate": item.get("drop_rate", 0.35),
             "daily_drop_limit": item.get("daily_drop_limit", 8),
             "rolls_per_record": item.get("rolls_per_record", 1),
+            "pity_threshold": item.get("pity_threshold", 0),
             "letters": item.get("letters") if isinstance(item.get("letters"), list) else [],
             "phrases": item.get("phrases") if isinstance(item.get("phrases"), list) else [],
             "point_name": item.get("point_name", "活动积分"),
@@ -1411,6 +1424,7 @@ def _normalize_point_shop_items(rows, activity_label: str) -> list[dict]:
             "cost": _to_positive_int(cost_value, f"{activity_label}商店商品 {name} 价格"),
             "reward": reward,
             "limit": _to_non_negative_int(limit_value, f"{activity_label}商店商品 {name} 兑换次数"),
+            "stock_limit": _to_non_negative_int(row.get("stock_limit", row.get("total_limit", 0)) or 0, f"{activity_label}商店商品 {name} 全服库存"),
         })
     return normalized
 
@@ -1509,10 +1523,139 @@ def _normalize_gameplay_activities(value) -> list[dict]:
             "drop_rate": _normalize_rate(row.get("drop_rate"), f"玩法活动{index}掉落概率"),
             "daily_drop_limit": _to_non_negative_int(row.get("daily_drop_limit", 8), f"玩法活动{index}每日上限"),
             "rolls_per_record": _to_positive_int(row.get("rolls_per_record", 1), f"玩法活动{index}单次判定"),
+            "pity_threshold": _to_non_negative_int(row.get("pity_threshold", 0) or 0, f"玩法活动{index}保底次数"),
             "letters": letters,
             "phrases": phrases,
         })
     return normalized
+
+
+def _default_stage_features(stage_type: str) -> list[str]:
+    if stage_type == "warmup":
+        return ["sign", "claim"]
+    if stage_type == "settlement":
+        return ["shop", "claim", "exchange"]
+    if stage_type == "closed":
+        return []
+    return ["sign", "task", "pass", "points", "collect", "boss", "shop", "claim", "exchange"]
+
+
+def _normalize_stage_features(value, stage_type: str, stage_label: str) -> list[str]:
+    if isinstance(value, str):
+        source = value.replace("\n", ",").split(",")
+    elif isinstance(value, list):
+        source = value
+    else:
+        return _default_stage_features(stage_type)
+
+    features = []
+    seen = set()
+    alias_map = {
+        "activity": "task",
+        "tasks": "task",
+        "activity_pass": "pass",
+        "event_points": "points",
+        "collect_words": "collect",
+        "activity_boss": "boss",
+        "reward": "claim",
+        "rewards": "claim",
+        "buy": "shop",
+    }
+    for item in source:
+        feature = _clean_text(item.get("value") if isinstance(item, dict) else item)
+        if not feature:
+            continue
+        feature = alias_map.get(feature, feature)
+        if feature not in STAGE_FEATURES:
+            raise ValueError(f"{stage_label}不支持的玩法开关：{feature}")
+        if feature in seen:
+            continue
+        seen.add(feature)
+        features.append(feature)
+    return features
+
+
+def _normalize_activity_stages(value) -> list[dict]:
+    if not isinstance(value, list):
+        value = deepcopy(DEFAULT_ACTIVITY_STAGES)
+
+    normalized = []
+    seen_keys = set()
+    for index, row in enumerate(value, 1):
+        if not isinstance(row, dict):
+            continue
+        stage_label = f"活动阶段{index}"
+        stage_type = _clean_text(row.get("stage_type") or row.get("type"), "open")
+        if stage_type not in STAGE_TYPE_LABELS:
+            raise ValueError(f"{stage_label}类型无效：{stage_type}")
+        key = _normalize_activity_key(row.get("key") or stage_type, f"stage_{index}")
+        if key in seen_keys:
+            raise ValueError(f"{stage_label}编号 {key} 重复")
+        seen_keys.add(key)
+        start_time = _normalize_time_text(
+            row.get("start_time"),
+            f"{stage_label}开始时间",
+            "0",
+            allow_special=_as_bool(row.get("start_special"), True),
+        )
+        end_time = _normalize_time_text(
+            row.get("end_time"),
+            f"{stage_label}结束时间",
+            "无限",
+            allow_special=_as_bool(row.get("end_special"), True),
+        )
+        try:
+            multiplier = float(row.get("multiplier", 1.0))
+        except (TypeError, ValueError):
+            raise ValueError(f"{stage_label}倍率必须是数字")
+        if multiplier < 0:
+            raise ValueError(f"{stage_label}倍率必须大于等于 0")
+        normalized.append({
+            "key": key,
+            "name": _clean_text(row.get("name"), STAGE_TYPE_LABELS.get(stage_type, "活动阶段")),
+            "stage_type": stage_type,
+            "start_time": start_time,
+            "end_time": end_time,
+            "features": _normalize_stage_features(row.get("features"), stage_type, stage_label),
+            "multiplier": round(multiplier, 4),
+            "description": _clean_text(row.get("description")),
+        })
+    return normalized
+
+
+def _pass_config_int(value, default: int, field_name: str, *, strict: bool) -> int:
+    try:
+        return _to_non_negative_int(value, field_name)
+    except ValueError:
+        if strict:
+            raise
+        return default
+
+
+def _prepare_activity_pass_config(value, *, strict: bool = False) -> dict:
+    raw = value if isinstance(value, dict) else {}
+    merged = deepcopy(DEFAULT_ACTIVITY_PASS)
+    merged.update(raw)
+    merged["enabled"] = _as_bool(merged.get("enabled"), True)
+    merged["name"] = _clean_text(merged.get("name"), "节日战令")
+    merged["exp_name"] = _clean_text(merged.get("exp_name"), "活跃值")
+    merged["level_exp"] = max(1, _pass_config_int(merged.get("level_exp", 100), 100, "战令升级所需活跃", strict=strict))
+    merged["max_level"] = max(1, _pass_config_int(merged.get("max_level", 12), 12, "战令最高等级", strict=strict))
+    merged["catchup_enabled"] = _as_bool(merged.get("catchup_enabled"), True)
+    merged["catchup_start_day"] = max(1, _pass_config_int(merged.get("catchup_start_day", 5), 5, "战令追赶开始天数", strict=strict))
+    merged["catchup_level_gap"] = max(1, _pass_config_int(merged.get("catchup_level_gap", 3), 3, "战令追赶等级差", strict=strict))
+    try:
+        catchup_multiplier = float(merged.get("catchup_multiplier", 1.5))
+    except (TypeError, ValueError):
+        if strict:
+            raise ValueError("战令追赶倍率必须是数字")
+        catchup_multiplier = 1.5
+    if catchup_multiplier < 1:
+        if strict:
+            raise ValueError("战令追赶倍率必须大于等于 1")
+        catchup_multiplier = 1.5
+    merged["catchup_multiplier"] = round(catchup_multiplier, 4)
+    return merged
 
 
 def _prepare_activity_config(config: dict) -> dict:
@@ -1523,8 +1666,9 @@ def _prepare_activity_config(config: dict) -> dict:
     extensions["repeat_last_daily_reward"] = _as_bool(extensions.get("repeat_last_daily_reward"), True)
     extensions["activity_info_mode"] = _clean_text(extensions.get("activity_info_mode"), "brief")
     extensions["sign_reply_mode"] = _clean_text(extensions.get("sign_reply_mode"), "minimal")
-    if not isinstance(extensions.get("activity_pass"), dict):
-        extensions["activity_pass"] = deepcopy(DEFAULT_ACTIVITY_PASS)
+    extensions["activity_pass"] = _prepare_activity_pass_config(extensions.get("activity_pass"))
+    if not isinstance(extensions.get("stages"), list):
+        extensions["stages"] = deepcopy(DEFAULT_ACTIVITY_STAGES)
     prepared = {
         "template_type": _clean_text(config.get("template_type"), "festival_sign"),
         "template_key": _clean_text(config.get("template_key"), config.get("template_type") or "festival_sign"),
@@ -1555,8 +1699,10 @@ def _normalize_activity_config(data: dict) -> dict:
     extensions["repeat_last_daily_reward"] = _as_bool(extensions.get("repeat_last_daily_reward"), True)
     extensions["activity_info_mode"] = _clean_text(extensions.get("activity_info_mode"), "brief")
     extensions["sign_reply_mode"] = _clean_text(extensions.get("sign_reply_mode"), "minimal")
-    if not isinstance(extensions.get("activity_pass"), dict):
-        extensions["activity_pass"] = deepcopy(DEFAULT_ACTIVITY_PASS)
+    extensions["activity_pass"] = _prepare_activity_pass_config(extensions.get("activity_pass"), strict=True)
+    if not isinstance(extensions.get("stages"), list):
+        extensions["stages"] = deepcopy(DEFAULT_ACTIVITY_STAGES)
+    extensions["stages"] = _normalize_activity_stages(extensions.get("stages"))
 
     start_time = _normalize_time_text(
         data.get("start_time"),
@@ -1611,6 +1757,7 @@ def activity_management():
 
     config = _prepare_activity_config(load_activity_config())
     ok, reason = activity_state(config)
+    runtime = activity_runtime_state(config)
     return render_template(
         "activity.html",
         activity_config=config,
@@ -1618,7 +1765,7 @@ def activity_management():
         gameplay_templates=_serialize_gameplay_templates(),
         gameplay_template_groups=_serialize_gameplay_template_groups(),
         activity_event_choices=_serialize_event_choices(),
-        activity_state={"ok": ok, "text": "进行中" if ok else reason},
+        activity_state={"ok": ok, "text": "进行中" if ok else reason, "runtime": runtime},
         activity_config_path=str(ACTIVITY_CONFIG_PATH),
     )
 
@@ -1631,13 +1778,14 @@ def api_activity_config():
     if request.method == "GET":
         config = _prepare_activity_config(load_activity_config())
         ok, reason = activity_state(config)
+        runtime = activity_runtime_state(config)
         return api_success(
             config=config,
             templates=_serialize_templates(),
             gameplay_templates=_serialize_gameplay_templates(),
             gameplay_template_groups=_serialize_gameplay_template_groups(),
             event_choices=_serialize_event_choices(),
-            state={"ok": ok, "text": "进行中" if ok else reason},
+            state={"ok": ok, "text": "进行中" if ok else reason, "runtime": runtime},
             config_path=str(ACTIVITY_CONFIG_PATH),
         )
 
@@ -1646,10 +1794,11 @@ def api_activity_config():
         config = _normalize_activity_config(payload.get("config", payload))
         save_activity_config(config)
         ok, reason = activity_state(config)
+        runtime = activity_runtime_state(config)
         return api_success(
             message="活动配置已保存",
             config=config,
-            state={"ok": ok, "text": "进行中" if ok else reason},
+            state={"ok": ok, "text": "进行中" if ok else reason, "runtime": runtime},
         )
     except Exception as e:
         return api_error(str(e))
@@ -1728,6 +1877,11 @@ def api_activity_data_adjust():
                 payload.get("activity_key"),
                 payload.get("user_id"),
                 payload.get("word_char"),
+                payload.get("amount"),
+            )
+        elif adjust_type == "pass_exp":
+            result = adjust_activity_pass_exp(
+                payload.get("user_id"),
                 payload.get("amount"),
             )
         else:
