@@ -9,9 +9,11 @@ from ..xiuxian_utils.utils import (
 )
 from .mod.today_wife import *
 from .mod.today_superpower import *
+from .mod.answer_book import *
 from .mod.click_music import *
 from .mod.random_voice import *
 from .mod.daily_bing import *
+from .mod.moyu_calendar import *
 from .mod.tiangou_diary import *
 from .mod.hitokoto import *
 from .mod.history_today import *
@@ -29,7 +31,9 @@ from .mod.half_ten import *
 from .mod.gomoku import *
 from .mod.minesweeper import *
 from .mod.guess_number import *
+from .mod.guess_number_puzzle import *
 from .mod.random_girl_video import *
+from .mod.anime_reaction import *
 from .mod.media_parse_link import *
 from .mod.bangumi_calendar import *
 from .mod.newapi_commands import *
@@ -44,6 +48,7 @@ __FUN_HELP__ = """【娱乐帮助】
 日常趣味：
 - 今日老婆
 - 今日超能力
+- 答案之书
 - 舔狗日记
 - 随机一言
 - 历史上的今天
@@ -54,6 +59,8 @@ __FUN_HELP__ = """【娱乐帮助】
 
 图片与资讯：
 - 每日Bing图
+- 摸鱼日报
+- 随机二次元 / 随机猫娘 / 抱抱 / 贴贴 / 摸摸
 - 番剧（Bangumi）：今日番剧 / 番剧周表（别名：每日番剧、番剧日历、每周番剧、番剧总表）
 - 热榜图片
 - 60S读世界
@@ -74,7 +81,7 @@ __FUN_HELP__ = """【娱乐帮助】
 
 小游戏：
 - 小游戏帮助
-- 五子棋帮助 / 扫雷帮助 / 十点半帮助 / 猜数字帮助
+- 五子棋帮助 / 扫雷帮助 / 十点半帮助 / 猜数字帮助 / 猜数谜帮助
 """.strip()
 
 
@@ -104,6 +111,12 @@ __GAME_HELP__ = """【小游戏帮助】
 - 猜 50
 - 猜数字信息
 - 结束猜数字
+
+猜数谜：
+- 开始猜数谜 [简单|普通|困难]
+- 猜数谜 2223
+- 猜数谜 状态
+- 猜数谜 答案 / 猜数谜 结束
 """.strip()
 
 
@@ -118,8 +131,10 @@ async def fun_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         total_pages,
         extras=[
             ("舔狗日记", "舔狗日记"),
+            ("答案之书", "答案之书"),
+            ("摸鱼日报", "摸鱼日报"),
+            ("二次元", "二次元帮助"),
             ("今日番剧", "今日番剧"),
-            ("随机小姐姐", "随机小姐姐"),
             ("链接解析", "链接解析"),
             ("NewAPI", "newapi帮助"),
             ("小游戏", "小游戏帮助"),
@@ -150,7 +165,7 @@ async def game_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         v2="扫雷帮助",
         k3="猜数字帮助",
         v3="猜数字帮助",
-        k4="娱乐帮助",
-        v4="娱乐帮助",
+        k4="猜数谜帮助",
+        v4="猜数谜帮助",
     )
     await game_menu_cmd.finish()
