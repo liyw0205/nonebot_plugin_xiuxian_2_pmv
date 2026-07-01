@@ -83,7 +83,7 @@ __FUN_HELP__ = """【娱乐帮助】
 其他：
 - Steam喜加一
 - NewAPI：newapi帮助 / newapi绑定 / newapi查看 / newapi签到 / newapi签到历史 / newapi自动签到 / newapi信息 / newapi删除
-- AList/OpenList：alist帮助 / alist绑定 / alist查看 / alist列表 / alist信息 / alist链接 / alist删除
+- WebDAV：webdav帮助 / webdav查看 / webdav列表 / webdav信息 / webdav链接；绑定和删除仅管理员可用
 - 链接解析（视频解析 / 解析链接）
 - 发含分享链接的消息可自动解析
 
@@ -146,7 +146,7 @@ async def fun_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             ("宝可梦", "宝可梦盲盒"),
             ("番剧盲盒", "番剧盲盒"),
             ("今日番剧", "今日番剧"),
-            ("AList", "alist帮助"),
+            ("WebDAV", "webdav帮助"),
             ("链接解析", "链接解析"),
             ("NewAPI", "newapi帮助"),
             ("小游戏", "小游戏帮助"),
