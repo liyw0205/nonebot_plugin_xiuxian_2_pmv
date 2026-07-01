@@ -644,6 +644,20 @@ Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `i
 | `宝可梦图鉴 <名称/编号>` | `宝可梦`、`精灵图鉴` | 查询宝可梦图鉴；支持少量中文名、英文名和编号 |
 | `番剧盲盒` | `随机番剧`、`动漫盲盒` | 随机抽取番剧并展示封面、评分和简介 |
 
+### 娱乐 · AList / OpenList WebDAV
+
+OpenList 是 AList 分支，WebDAV 常用接口兼容；绑定数据按 QQ 隔离保存在本地。
+
+| 指令 | 别名示例 | 说明 |
+|:-----|:---------|:-----|
+| `alist帮助` | `openlist帮助`、`网盘帮助` | 查看 WebDAV 用法 |
+| `alist绑定 备注#https://站点/dav#用户名#密码` | `openlist绑定`、`网盘绑定` | 绑定 WebDAV 账号并验证可用性 |
+| `alist查看` | `openlist查看` | 查看当前 QQ 的绑定列表 |
+| `alist列表 [序号] [路径]` | `openlist列表` | 列出 WebDAV 目录，默认第 1 个绑定和根目录 |
+| `alist信息 [序号] <路径>` | `openlist信息` | 查看文件或目录信息 |
+| `alist链接 [序号] <路径>` | `openlist链接` | 生成 WebDAV 地址，访问仍需用户名和密码 |
+| `alist删除 序号\|全部` | `openlist删除`、`alist解绑` | 删除绑定 |
+
 ### 娱乐 · 番剧（Bangumi）
 
 属 **娱乐模块** 子功能，指令触发、无定时推送。数据来自 Bangumi 放送日历；访问不畅时在 `xiuxian_config` 或 **Web 面板 → 配置管理 → 网络代理** 开启自定义代理（需 `PySocks`）。
