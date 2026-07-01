@@ -2,11 +2,13 @@
 
 本文档对应 `nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py`，说明本项目在 OneBot v11 与 QQ 官方适配器之间使用的统一接口。
 
+兼容层只负责适配器差异：类型别名、消息段构造、事件字段补齐、会话语义和统一发送入口。消息记录、撤回调度、Web 面板消息接口、广播等功能放在独立模块中，避免后续新增适配器时继续扩大 `adapter_compat.py`。
+
 项目内大量模块直接依赖该兼容层：业务代码主要使用统一导出的 `Bot`、`Message`、`MessageSegment`、`GroupMessageEvent`、`PrivateMessageEvent`、`MessageEvent`，避免在每个功能模块里重复判断适配器类型。
 
 ## 支持范围
 
-- OneBot v11：普通群聊、普通私聊、主动发送、撤回、消息记录。
+- OneBot v11：普通群聊、普通私聊、主动发送、统一撤回入口、消息记录钩子。
 - QQ 官方适配器：普通群、C2C 私聊、频道公域消息、频道私信、Markdown、自定义键盘、媒体上传、消息序列重试。
 - 频道公域消息在业务语义中归入“群聊”，频道私信归入“私聊”。
 - 未安装某个适配器时，兼容层会回退到可用类型，不阻塞插件加载。
@@ -140,18 +142,41 @@ QQ 官方适配器：
 - `bot.delete_msg(...)` 提供统一撤回入口。
 - 内置 `msg_seq` 分配与 `40054005` 去重冲突重试。
 
+## 模块边界
+
+当前相关模块按职责拆分：
+
+- `adapter_compat.py`：跨适配器核心兼容层，业务 handler 优先从这里导入 `Bot`、`MessageSegment`、事件类型、`patch_context` 等。
+- `adapter_message_records.py`：消息展示文本抽取、`message.db` 收发记录、Web 主动发送记录、回复计数、`bot_id` 和发送结果消息 ID 提取。
+- `adapter_message_actions.py`：通用撤回和定时撤回调度。
+- `broadcast_manager.py`：广播任务生命周期、广播目标记忆、不同适配器的广播发送策略。
+
+`adapter_compat.py` 仍 re-export 部分旧接口，兼容历史 import；新增代码应直接依赖对应专职模块。
+
 ## 消息记录
 
-兼容层内置 Web 面板使用的消息记录能力：
+消息记录能力位于 `adapter_message_records.py`：
 
 - 默认逻辑库：本地 SQLite 文件 `message.db`。
 - 接收消息：`patch_event_inplace` 后会记录 recv。
 - 发送消息：包装后的发送接口会记录 send。
 - Web 主动发送：使用 `record_web_send_message(...)`。
 - 回复计数：使用 `increase_recv_reply_used_count(...)`。
-- 撤回：使用 `delete_message_compat(...)` 或 `schedule_delete_message(...)`。
 
-导出的 Web 公共接口：
+常用公共接口：
+
+```python
+from .adapter_message_records import (
+    extract_result_message_id,
+    get_bot_id,
+    get_message_db_path,
+    increase_recv_reply_used_count,
+    init_message_db,
+    record_web_send_message,
+)
+```
+
+历史兼容导出仍可从 `adapter_compat.py` 访问：
 
 ```python
 init_message_db()
@@ -168,9 +193,19 @@ increase_recv_reply_used_count(...)
 - `message_group_keep_days`
 - `message_private_keep_days`
 
+## 撤回调度
+
+撤回能力位于 `adapter_message_actions.py`：
+
+```python
+from .adapter_message_actions import delete_message_compat, schedule_delete_message
+```
+
+`delete_message_compat(...)` 根据 `scene` 调用 OneBot v11 或 QQ 官方适配器对应的撤回接口；`schedule_delete_message(...)` 只负责按 `revoke_time` 延迟调用撤回。
+
 ## Web 与广播
 
-`xiuxian_web/messages.py` 和 `broadcast_manager.py` 会复用本兼容层：
+`xiuxian_web/messages.py`、`adapter_message_records.py`、`adapter_message_actions.py` 和 `broadcast_manager.py` 会复用兼容层的适配器语义：
 
 - Web 消息列表按 `adapter`、`bot_id`、`scene`、`group_id`、`user_id` 记录会话。
 - OneBot v11 广播可直接主动发送。
@@ -211,3 +246,4 @@ async def _(bot, event):
 3. QQ `msg_seq` 冲突会自动重试，但业务侧仍应避免短时间大量重复发送。
 4. `patch_bot_inplace` 会替换或包装 bot 的发送方法；如果外部也包装发送接口，需要注意加载顺序。
 5. `adapter_compat.py` 属于运行时代码，本文档只记录项目约定，实际行为以源码为准。
+6. 新增 Web、广播、统计、审计类功能时优先新增独立模块，不要把业务功能继续塞入 `adapter_compat.py`。

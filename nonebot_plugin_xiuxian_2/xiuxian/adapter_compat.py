@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import random
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from io import BytesIO
@@ -17,12 +15,17 @@ from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
 from nonebot.permission import Permission
 
-from .xiuxian_utils.message_db import (
+from .adapter_message_actions import delete_message_compat, schedule_delete_message
+from .adapter_message_records import (
+    extract_result_message_id as _extract_result_message_id,
+    extract_text_from_message_obj as _extract_text_from_message_obj,
+    get_bot_id as _get_bot_id,
     get_message_db_path as _get_message_db_path,
     increase_recv_reply_used_count as _increase_recv_reply_used_count,
     init_message_db as _init_message_db,
-    insert_message_record as _insert_message_record,
-    record_group_user_nickname as _record_group_user_nickname,
+    record_recv_message as _record_recv_message,
+    record_send_message as _record_send_message,
+    record_web_send_message as _record_web_send_message,
 )
 
 # =========================
@@ -135,149 +138,6 @@ class CompatSender:
     def __iter__(self) -> Iterator[tuple[str, Any]]:
         yield from asdict(self).items()
 
-
-def _normalize_logged_http_url(url: str) -> str:
-    return re.sub(r"\s+", "", str(url or "").strip())
-
-
-def _extract_attachment_url_from_repr_data(data_body: str) -> str:
-    data_body = str(data_body or "")
-
-    try:
-        data = json.loads(data_body.replace("'", '"'))
-        if isinstance(data, dict):
-            for key in ("url", "file", "path", "src"):
-                value = data.get(key)
-                if isinstance(value, str) and value.startswith(("http://", "https://")):
-                    return _normalize_logged_http_url(value)
-    except Exception:
-        pass
-
-    m = re.search(
-        r"['\"](?:url|file|path|src)['\"]\s*:\s*(['\"])(?P<url>https?://[\s\S]*?)\1",
-        data_body,
-        re.S,
-    )
-    return _normalize_logged_http_url(m.group("url")) if m else ""
-
-
-def _normalize_attachment_repr_text(text: str) -> str:
-    def replace_attachment(match):
-        media_type = str(match.group("type") or "attachment").strip().lower()
-        if media_type in ("record", "voice"):
-            media_type = "audio"
-
-        url = _extract_attachment_url_from_repr_data(match.group("data"))
-        return f"<attachment[{media_type}]:{url}>" if url else match.group(0)
-
-    return re.sub(
-        r"Attachment\(\s*type=['\"](?P<type>[^'\"]+)['\"]\s*,\s*data=(?P<data>\{[\s\S]*?\})\s*\)",
-        replace_attachment,
-        str(text or ""),
-        flags=re.S,
-    )
-
-
-def _extract_text_from_message_obj(message: Any) -> str:
-    """
-    提取消息展示内容：
-    - 文本正常保留
-    - QQ Attachment 转成统一标记：
-      <attachment[image]:url>
-      <attachment[audio]:url>
-      <attachment[video]:url>
-      <attachment[file]:url>
-    - 图文混合时保留文本 + 图片标记，避免 extract_plain_text 丢图
-    """
-    try:
-        if message is None:
-            return ""
-
-        if isinstance(message, str):
-            return message
-
-        parts: list[str] = []
-
-        # nonebot Message 通常可迭代，每个 seg 有 type/data
-        try:
-            for seg in message:
-                seg_type = str(getattr(seg, "type", "") or "")
-                data = getattr(seg, "data", {}) or {}
-
-                # 兼容 data 不是 dict 的情况
-                if not isinstance(data, dict):
-                    try:
-                        data = dict(data)
-                    except Exception:
-                        data = {}
-
-                if seg_type == "text":
-                    text = data.get("text", "")
-                    if text:
-                        parts.append(str(text))
-
-                elif seg_type in ("image", "audio", "record", "voice", "video", "file", "attachment"):
-                    url = (
-                        data.get("url")
-                        or data.get("file")
-                        or data.get("path")
-                        or data.get("src")
-                        or ""
-                    )
-
-                    # QQ 官方适配器 Attachment 可能 type=attachment，data 里带 url
-                    media_type = seg_type
-                    if seg_type == "record" or seg_type == "voice":
-                        media_type = "audio"
-
-                    # 尝试从字符串里识别 attachment[image]
-                    seg_str = str(seg)
-                    m = None
-                    try:
-                        import re
-                        m = re.search(r"<attachment\[(?P<t>[^\]]+)\]:(?P<u>https?://[^>]+)>", seg_str)
-                    except Exception:
-                        m = None
-
-                    if m:
-                        media_type = m.group("t")
-                        url = m.group("u")
-
-                    if url:
-                        parts.append(f"<attachment[{media_type}]:{_normalize_logged_http_url(url)}>")
-                    else:
-                        parts.append(_normalize_attachment_repr_text(seg_str))
-
-                else:
-                    # 兜底：保留非文本段字符串，避免信息丢失
-                    seg_str = _normalize_attachment_repr_text(str(seg))
-                    if seg_str:
-                        parts.append(seg_str)
-
-            if parts:
-                return "".join(parts)
-
-        except TypeError:
-            # 不可迭代，继续走下面兜底
-            pass
-        except Exception:
-            pass
-
-        # 兜底：如果能提取纯文本就用纯文本
-        if hasattr(message, "extract_plain_text"):
-            text = message.extract_plain_text()
-            if text:
-                return str(text)
-
-        if hasattr(message, "extract_content"):
-            text = message.extract_content()
-            if text:
-                return str(text)
-
-        return _normalize_attachment_repr_text(str(message))
-
-    except Exception:
-        return ""
 
 def _get_event_plaintext(event: BaseEvent, fallback: str = "") -> str:
     try:
@@ -419,317 +279,6 @@ def _get_qq_message_ref_id(event: BaseEvent) -> Optional[str]:
         pass
 
     return _to_nonempty_str(getattr(event, "msg_idx", None))
-
-
-def _get_adapter_name(bot: Any) -> str:
-    try:
-        return str(bot.adapter.get_name())
-    except Exception:
-        return ""
-
-
-def _get_bot_id(bot: Any) -> str:
-    try:
-        return str(bot.self_id)
-    except Exception:
-        return ""
-
-
-def _extract_result_message_id(result: Any) -> str:
-    try:
-        if result is None:
-            return ""
-
-        if isinstance(result, dict):
-            return str(
-                result.get("message_id")
-                or result.get("msg_id")
-                or result.get("id")
-                or ""
-            )
-
-        return str(
-            getattr(result, "message_id", "")
-            or getattr(result, "msg_id", "")
-            or getattr(result, "id", "")
-            or ""
-        )
-    except Exception:
-        return ""
-
-
-def _get_author_username_avatar(event: BaseEvent) -> tuple[str, str]:
-    username = ""
-    avatar = ""
-
-    try:
-        author = getattr(event, "author", None)
-        if author is not None:
-            username = str(getattr(author, "username", "") or "")
-            avatar = str(getattr(author, "avatar", "") or "")
-    except Exception:
-        pass
-
-    return username, avatar
-
-def _record_recv_message(bot: Any, event: BaseEvent):
-    """记录收到的消息"""
-    try:
-        if getattr(event, "__message_db_recv_recorded__", False):
-            return
-
-        if event.get_type() != "message":
-            return
-
-        scene = get_chat_scene(event)
-        adapter = _get_adapter_name(bot) if bot is not None else ""
-        bot_id = _get_bot_id(bot) if bot is not None else ""
-
-        message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "")
-        user_id = str(getattr(event, "user_id", "") or get_user_id(event) or "")
-        group_id = str(getattr(event, "group_id", "") or get_group_id(event) or "")
-
-        raw_message = str(
-            getattr(event, "raw_message", "")
-            or getattr(event, "content", "")
-            or ""
-        )
-
-        content = raw_message
-        try:
-            msg = event.get_message()
-            content = _extract_text_from_message_obj(msg) or raw_message
-        except Exception:
-            pass
-
-        sender = getattr(event, "sender", None)
-        nickname = ""
-        username = ""
-        avatar = ""
-
-        if sender is not None:
-            nickname = str(getattr(sender, "nickname", "") or "")
-            username = str(getattr(sender, "card", "") or nickname or "")
-
-        author_username, author_avatar = _get_author_username_avatar(event)
-        username = author_username or username
-        avatar = author_avatar or avatar
-
-        group_name = str(getattr(event, "group_name", "") or "")
-
-        _insert_message_record(
-            adapter=adapter,
-            bot_id=bot_id,
-            direction="recv",
-            scene=scene,
-            message_id=message_id,
-            group_id=group_id,
-            group_name=group_name,
-            user_id=user_id,
-            username=username,
-            nickname=nickname,
-            avatar=avatar,
-            content=content,
-        )
-        
-        _record_group_user_nickname(
-            adapter=adapter,
-            bot_id=bot_id,
-            scene=scene,
-            group_id=group_id,
-            user_id=user_id,
-            username=username,
-        )
-
-        setattr(event, "__message_db_recv_recorded__", True)
-    except Exception as e:
-        logger.warning(f"[message.db] 记录接收消息失败: {e}")
-
-
-def _record_send_message(
-    bot: Any,
-    *,
-    scene: str,
-    message: Any,
-    message_id: str = "",
-    source_message_id: str = "",
-    group_id: str = "",
-    user_id: str = "",
-    raw_result: Any = None,
-):
-    """
-    记录发送消息。
-
-    注意：
-    - message_id：本次发送出去的消息ID
-    - source_message_id：被回复的 recv.message_id
-    - 如果 source_message_id 存在，说明这次发送消耗了一次被回复消息的回复次数，
-      需要更新对应 recv 记录的 reply_used_count。
-    """
-    try:
-        adapter = _get_adapter_name(bot)
-        bot_id = _get_bot_id(bot)
-        content = _extract_text_from_message_obj(message)
-
-        _insert_message_record(
-            adapter=adapter,
-            bot_id=bot_id,
-            direction="send",
-            scene=scene,
-            message_id=str(message_id or ""),
-            source_message_id=str(source_message_id or ""),
-            group_id=str(group_id or ""),
-            user_id=str(user_id or ""),
-            username="Bot",
-            nickname="Bot",
-            content=content,
-        )
-
-        if source_message_id:
-            _increase_recv_reply_used_count(
-                source_message_id=str(source_message_id),
-                adapter=adapter,
-                bot_id=bot_id,
-                scene=scene,
-                group_id=str(group_id or ""),
-                user_id=str(user_id or ""),
-            )
-
-    except Exception as e:
-        logger.warning(f"[message.db] 记录发送消息失败: {e}")
-
-async def delete_message_compat(
-    bot: Any,
-    *,
-    scene: str,
-    message_id: str,
-    group_id: str = "",
-    user_id: str = "",
-):
-    """
-    跨适配器通用撤回接口。
-
-    scene:
-    - group
-    - private
-    - channel_group
-    - channel_private
-    """
-    if not message_id:
-        raise ValueError("message_id 不能为空")
-
-    adapter = _get_adapter_name(bot)
-
-    # =========================
-    # OneBot V11
-    # =========================
-    if HAS_OB11 and OB11Bot is not None and isinstance(bot, OB11Bot):
-        mid = int(message_id) if str(message_id).isdigit() else message_id
-
-        if hasattr(bot, "delete_msg"):
-            return await bot.delete_msg(message_id=mid)
-
-        return await bot.call_api("delete_msg", message_id=mid)
-
-    # =========================
-    # QQ 官方适配器
-    # =========================
-    if HAS_QQ and QQBot is not None and isinstance(bot, QQBot):
-        if scene == "group":
-            if not group_id:
-                raise ValueError("QQ 群聊撤回需要 group_id/group_openid")
-
-            return await bot.delete_group_message(
-                group_openid=str(group_id),
-                message_id=str(message_id),
-            )
-
-        if scene == "private":
-            if not user_id:
-                raise ValueError("QQ 私聊撤回需要 user_id/openid")
-
-            return await bot.delete_c2c_message(
-                openid=str(user_id),
-                message_id=str(message_id),
-            )
-
-        if scene == "channel_group":
-            if not group_id:
-                raise ValueError("QQ 频道群聊撤回需要 channel_id")
-
-            return await bot.delete_message(
-                channel_id=str(group_id),
-                message_id=str(message_id),
-            )
-
-        if scene == "channel_private":
-            guild_id = group_id or user_id
-            if not guild_id:
-                raise ValueError("QQ 频道私信撤回需要 guild_id")
-
-            return await bot.delete_dms_message(
-                guild_id=str(guild_id),
-                message_id=str(message_id),
-            )
-
-    raise RuntimeError(f"当前适配器不支持通用撤回: {adapter}")
-
-
-def schedule_delete_message(
-    bot: Any,
-    *,
-    scene: str,
-    message_id: str,
-    group_id: str = "",
-    user_id: str = "",
-    revoke_time: int | float = 0,
-):
-    """
-    定时撤回消息。
-
-    revoke_time:
-    - <= 0 不撤回
-    - > 0 按秒延迟撤回
-    """
-    try:
-        revoke_time = float(revoke_time or 0)
-    except Exception:
-        revoke_time = 0
-
-    if revoke_time <= 0 or not message_id:
-        return
-
-    async def _job():
-        try:
-            await asyncio.sleep(revoke_time)
-
-            await delete_message_compat(
-                bot,
-                scene=scene,
-                message_id=message_id,
-                group_id=group_id,
-                user_id=user_id,
-            )
-
-            logger.info(
-                f"[自动撤回] 已撤回消息 scene={scene}, message_id={message_id}, "
-                f"group_id={group_id}, user_id={user_id}"
-            )
-
-        except Exception as e:
-            logger.warning(
-                f"[自动撤回] 撤回失败 scene={scene}, message_id={message_id}, "
-                f"group_id={group_id}, user_id={user_id}: {e}"
-            )
-
-    try:
-        asyncio.create_task(_job())
-    except RuntimeError:
-        try:
-            loop = asyncio.get_event_loop()
-            loop.create_task(_job())
-        except Exception as e:
-            logger.warning(f"[自动撤回] 创建撤回任务失败: {e}")
 
 
 # =========================
@@ -2542,7 +2091,7 @@ def patch_context(bot: BaseBot, event: BaseEvent) -> tuple[BaseBot, BaseEvent]:
     return bot, event
 
 # =========================
-# 对 Web 管理面板开放的公共接口
+# 历史兼容导出：新增代码优先从 adapter_message_records/actions 导入。
 # =========================
 
 def init_message_db():
@@ -2583,7 +2132,7 @@ def record_web_send_message(
     - 写入 messages 表 direction='send'
     - 如果 source_message_id 存在，增加对应 recv.reply_used_count
     """
-    return _record_send_message(
+    return _record_web_send_message(
         bot,
         scene=scene,
         message=message,

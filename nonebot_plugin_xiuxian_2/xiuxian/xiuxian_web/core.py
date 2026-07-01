@@ -37,12 +37,12 @@ from nonebot import get_driver, get_bots, __version__ as nb_version
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
-from ..adapter_compat import (
-    MessageSegment,
+from ..adapter_compat import MessageSegment
+from ..adapter_message_actions import delete_message_compat
+from ..adapter_message_records import (
     extract_result_message_id,
     get_bot_id,
     record_web_send_message,
-    delete_message_compat,
 )
 from ..xiuxian_utils.message_db import connect_message_db
 from typing import Any
