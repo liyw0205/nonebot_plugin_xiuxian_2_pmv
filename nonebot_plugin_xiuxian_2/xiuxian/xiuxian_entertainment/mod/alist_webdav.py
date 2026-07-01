@@ -1,5 +1,7 @@
 import json
+import posixpath
 import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
@@ -18,7 +20,10 @@ WEBDAV_BINDINGS_FILE = WEBDAV_DATA_DIR / "bindings.json"
 
 DAV_NS = {"d": "DAV:"}
 LIST_LIMIT = 30
+LINK_CACHE_TTL = 300
 _LIST_CACHE: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+_TOKEN_CACHE: dict[tuple[str, str], str] = {}
+_LINK_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
 
 def _load_bindings() -> list[dict[str, Any]]:
@@ -94,6 +99,46 @@ def _join_dav_url(base_url: str, dav_path: str) -> str:
     return urlunsplit((split.scheme, split.netloc, full_path or "/", "", ""))
 
 
+def _normalize_openlist_path(path_text: str) -> str:
+    path = _format_dav_path(path_text)
+    normalized = posixpath.normpath(path)
+    if normalized in {"", "."}:
+        return "/"
+    if not normalized.startswith("/"):
+        normalized = "/" + normalized
+    return normalized
+
+
+def _api_base_from_dav_url(dav_url: str) -> str:
+    split = urlsplit(_normalize_dav_url(dav_url))
+    parts = [part for part in split.path.split("/") if part]
+    dav_index = next((i for i, part in enumerate(parts) if part.lower() == "dav"), None)
+    api_path = "/" + "/".join(parts[:dav_index]) if dav_index is not None and parts[:dav_index] else ""
+    return urlunsplit((split.scheme, split.netloc, api_path.rstrip("/"), "", "")).rstrip("/")
+
+
+def _openlist_download_path(binding: dict[str, Any], dav_path: str) -> str:
+    split = urlsplit(_normalize_dav_url(str(binding.get("dav_url") or "")))
+    parts = [unquote(part) for part in split.path.split("/") if part]
+    dav_index = next((i for i, part in enumerate(parts) if part.lower() == "dav"), None)
+    base_parts = parts[dav_index + 1 :] if dav_index is not None else []
+    path = _normalize_openlist_path(dav_path)
+    if not base_parts:
+        return path
+
+    base_path = _normalize_openlist_path("/" + "/".join(base_parts))
+    if path == base_path or path.startswith(base_path.rstrip("/") + "/"):
+        return path
+    return _normalize_openlist_path(f"{base_path.rstrip('/')}/{path.lstrip('/')}")
+
+
+def _binding_api_prefix(binding: dict[str, Any]) -> tuple[str, str]:
+    return (
+        _api_base_from_dav_url(str(binding.get("dav_url") or "")),
+        str(binding.get("username") or ""),
+    )
+
+
 def _href_to_dav_path(base_url: str, href: str) -> str:
     href_path = unquote(urlsplit(href or "").path or "/")
     base_path = unquote(urlsplit(_normalize_dav_url(base_url)).path or "").rstrip("/")
@@ -125,10 +170,16 @@ def _list_cache_key(binding: dict[str, Any], dav_path: str, depth: str) -> tuple
 def _clear_binding_cache(binding: dict[str, Any] | None = None) -> None:
     if binding is None:
         _LIST_CACHE.clear()
+        _TOKEN_CACHE.clear()
+        _LINK_CACHE.clear()
         return
     prefix = _binding_cache_prefix(binding)
     for key in [key for key in _LIST_CACHE if key[:2] == prefix]:
         _LIST_CACHE.pop(key, None)
+    api_prefix = _binding_api_prefix(binding)
+    _TOKEN_CACHE.pop(api_prefix, None)
+    for key in [key for key in _LINK_CACHE if key[:2] == api_prefix]:
+        _LINK_CACHE.pop(key, None)
 
 
 def _parse_target_and_path(text: str, need_path: bool = False) -> tuple[dict[str, Any] | None, int, str, str | None]:
@@ -274,6 +325,179 @@ def _cached_propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list
     entries = _propfind(binding, dav_path, depth)
     _LIST_CACHE[key] = entries
     return entries
+
+
+def _openlist_url(api_base: str, api_path: str) -> str:
+    return f"{api_base.rstrip('/')}/{api_path.lstrip('/')}"
+
+
+def _absolute_url(api_base: str, url: str) -> str:
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    if re.match(r"^https?://", value, re.I):
+        return value
+    if value.startswith("/"):
+        return api_base.rstrip("/") + value
+    return value
+
+
+def _openlist_token(binding: dict[str, Any], *, refresh: bool = False) -> str:
+    key = _binding_api_prefix(binding)
+    api_base, username = key
+    if not api_base or not username:
+        return ""
+    if not refresh and key in _TOKEN_CACHE:
+        return _TOKEN_CACHE[key]
+
+    resp = requests.post(
+        _openlist_url(api_base, "/api/auth/login"),
+        json={
+            "username": username,
+            "password": str(binding.get("password") or ""),
+        },
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        raise ValueError(f"登录接口返回 {resp.status_code}")
+    try:
+        result = resp.json()
+    except Exception as e:
+        raise ValueError("登录接口响应不是 JSON") from e
+    if result.get("code") != 200:
+        raise ValueError(str(result.get("message") or "登录失败"))
+
+    token = str((result.get("data") or {}).get("token") or "")
+    if not token:
+        raise ValueError("登录接口未返回 token")
+    _TOKEN_CACHE[key] = token
+    return token
+
+
+def _openlist_post(
+    binding: dict[str, Any],
+    api_path: str,
+    payload: dict[str, Any],
+    *,
+    retry_auth: bool = True,
+) -> dict[str, Any]:
+    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
+    if not api_base:
+        raise ValueError("无法识别站点地址")
+
+    headers = {}
+    token = ""
+    try:
+        token = _openlist_token(binding)
+    except Exception:
+        token = ""
+    if token:
+        headers["Authorization"] = token
+
+    resp = requests.post(
+        _openlist_url(api_base, api_path),
+        json=payload,
+        headers=headers,
+        timeout=18,
+    )
+    if resp.status_code in {401, 403} and token and retry_auth:
+        _TOKEN_CACHE.pop(_binding_api_prefix(binding), None)
+        refreshed = _openlist_token(binding, refresh=True)
+        headers["Authorization"] = refreshed
+        resp = requests.post(
+            _openlist_url(api_base, api_path),
+            json=payload,
+            headers=headers,
+            timeout=18,
+        )
+    if resp.status_code != 200:
+        raise ValueError(f"接口返回 {resp.status_code}")
+
+    try:
+        result = resp.json()
+    except Exception as e:
+        raise ValueError("接口响应不是 JSON") from e
+    if result.get("code") in {401, 403} and token and retry_auth:
+        _TOKEN_CACHE.pop(_binding_api_prefix(binding), None)
+        refreshed = _openlist_token(binding, refresh=True)
+        return _openlist_post(
+            binding,
+            api_path,
+            payload,
+            retry_auth=False,
+        ) if refreshed else {}
+    if result.get("code") != 200:
+        raise ValueError(str(result.get("message") or "接口调用失败"))
+    data = result.get("data") or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _openlist_file_info(binding: dict[str, Any], dav_path: str) -> dict[str, Any]:
+    return _openlist_post(
+        binding,
+        "/api/fs/get",
+        {"path": _openlist_download_path(binding, dav_path), "password": ""},
+    )
+
+
+def _openlist_signed_download_url(binding: dict[str, Any], dav_path: str) -> str:
+    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
+    file_info = _openlist_file_info(binding, dav_path)
+    if file_info.get("is_dir", True):
+        return ""
+
+    raw_url = _absolute_url(api_base, str(file_info.get("raw_url") or ""))
+    if raw_url:
+        return raw_url
+
+    download_path = _openlist_download_path(binding, dav_path)
+    url = f"{api_base.rstrip('/')}/d{quote(download_path, safe='/')}"
+    sign = str(file_info.get("sign") or "")
+    if sign:
+        url += f"?sign={quote(sign, safe='')}"
+    return url
+
+
+def _openlist_direct_download_link(binding: dict[str, Any], dav_path: str) -> str:
+    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
+    download_path = _openlist_download_path(binding, dav_path)
+    data = _openlist_post(binding, "/api/fs/link", {"path": download_path})
+    return _absolute_url(api_base, str(data.get("url") or ""))
+
+
+def _download_link_cache_key(binding: dict[str, Any], dav_path: str) -> tuple[str, str, str]:
+    api_base, username = _binding_api_prefix(binding)
+    return api_base, username, _openlist_download_path(binding, dav_path)
+
+
+def _get_download_link(binding: dict[str, Any], dav_path: str) -> dict[str, Any]:
+    key = _download_link_cache_key(binding, dav_path)
+    now = time.time()
+    cached = _LINK_CACHE.get(key)
+    if cached and cached[0] > now:
+        return cached[1]
+
+    try:
+        url = _openlist_direct_download_link(binding, dav_path)
+        if url:
+            result = {"kind": "direct", "url": url}
+            _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
+            return result
+    except Exception:
+        pass
+
+    try:
+        url = _openlist_signed_download_url(binding, dav_path)
+        if url:
+            result = {"kind": "direct", "url": url}
+            _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
+            return result
+    except Exception:
+        pass
+
+    result = {"kind": "webdav", "url": _join_dav_url(str(binding.get("dav_url") or ""), dav_path)}
+    _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
+    return result
 
 
 def _test_binding(binding: dict[str, Any]) -> None:
@@ -438,7 +662,7 @@ __WEBDAV_HELP__ = """【WebDAV 帮助】
 - webdav链接 [序号] <路径>
 - webdav文件 [序号] <路径>
 
-说明：AList 和 OpenList 都支持常用 WebDAV 接口；列表里的目录可点击进入，文件可点击获取链接，链接访问仍需要对应用户名和密码。"""
+说明：AList 和 OpenList 都支持常用 WebDAV 接口；列表里的目录可点击进入，文件可点击获取链接。文件链接会优先使用站点接口获取下载地址，失败时返回 WebDAV 地址。"""
 
 
 async def _is_webdav_admin(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> bool:
@@ -446,12 +670,20 @@ async def _is_webdav_admin(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 
 def _format_link_message(binding: dict[str, Any], idx: int, dav_path: str) -> str:
-    url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
+    link = _get_download_link(binding, dav_path)
+    url = str(link.get("url") or "")
+    if link.get("kind") == "direct":
+        return (
+            f"【WebDAV 文件链接】账号 {idx}\n"
+            f"路径：{dav_path}\n"
+            f"地址：{url}\n\n"
+            "复制链接到浏览器或下载工具即可使用。"
+        )
     return (
         f"【WebDAV 链接】账号 {idx}\n"
         f"路径：{dav_path}\n"
         f"地址：{url}\n\n"
-        "该地址需要 WebDAV 用户名和密码访问。"
+        "暂未获取到直链，已返回 WebDAV 地址。该地址需要 WebDAV 用户名和密码访问。"
     )
 
 
