@@ -14,6 +14,7 @@ from .mod.click_music import *
 from .mod.random_voice import *
 from .mod.daily_bing import *
 from .mod.moyu_calendar import *
+from .mod.cat_picture import *
 from .mod.tiangou_diary import *
 from .mod.hitokoto import *
 from .mod.history_today import *
@@ -34,6 +35,8 @@ from .mod.guess_number import *
 from .mod.guess_number_puzzle import *
 from .mod.random_girl_video import *
 from .mod.anime_reaction import *
+from .mod.pokemon_box import *
+from .mod.random_anime_box import *
 from .mod.media_parse_link import *
 from .mod.bangumi_calendar import *
 from .mod.newapi_commands import *
@@ -60,8 +63,11 @@ __FUN_HELP__ = """【娱乐帮助】
 图片与资讯：
 - 每日Bing图
 - 摸鱼日报
+- 随机猫猫 / 猫猫说 / 猫猫帮助
 - 随机二次元 / 随机猫娘 / 抱抱 / 贴贴 / 摸摸
 - 番剧（Bangumi）：今日番剧 / 番剧周表（别名：每日番剧、番剧日历、每周番剧、番剧总表）
+- 番剧盲盒 / 随机番剧
+- 宝可梦盲盒 / 宝可梦图鉴
 - 热榜图片
 - 60S读世界
 - 每日60S图片
@@ -133,7 +139,10 @@ async def fun_menu_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             ("舔狗日记", "舔狗日记"),
             ("答案之书", "答案之书"),
             ("摸鱼日报", "摸鱼日报"),
+            ("猫猫", "随机猫猫"),
             ("二次元", "二次元帮助"),
+            ("宝可梦", "宝可梦盲盒"),
+            ("番剧盲盒", "番剧盲盒"),
             ("今日番剧", "今日番剧"),
             ("链接解析", "链接解析"),
             ("NewAPI", "newapi帮助"),
