@@ -1,8 +1,5 @@
-import asyncio
 import json
-import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
@@ -18,12 +15,10 @@ from ...xiuxian_utils.utils import build_md_command_link
 WEBDAV_DATA_DIR = Path(__file__).resolve().parent / "data" / "alist_webdav_bindings"
 WEBDAV_DATA_DIR.mkdir(parents=True, exist_ok=True)
 WEBDAV_BINDINGS_FILE = WEBDAV_DATA_DIR / "bindings.json"
-WEBDAV_TMP_DIR = WEBDAV_DATA_DIR / "tmp"
-WEBDAV_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 DAV_NS = {"d": "DAV:"}
 LIST_LIMIT = 30
-MAX_SEND_FILE_BYTES = 50 * 1024 * 1024
+_LIST_CACHE: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
 
 
 def _load_bindings() -> list[dict[str, Any]]:
@@ -113,6 +108,27 @@ def _display_url(base_url: str) -> str:
     split = urlsplit(_normalize_dav_url(base_url))
     path = split.path or "/"
     return f"{split.scheme}://{split.netloc}{path}"
+
+
+def _binding_cache_prefix(binding: dict[str, Any]) -> tuple[str, str]:
+    return (
+        _normalize_dav_url(str(binding.get("dav_url") or "")),
+        str(binding.get("username") or ""),
+    )
+
+
+def _list_cache_key(binding: dict[str, Any], dav_path: str, depth: str) -> tuple[str, str, str, str]:
+    url, username = _binding_cache_prefix(binding)
+    return url, username, _path_key(dav_path), str(depth)
+
+
+def _clear_binding_cache(binding: dict[str, Any] | None = None) -> None:
+    if binding is None:
+        _LIST_CACHE.clear()
+        return
+    prefix = _binding_cache_prefix(binding)
+    for key in [key for key in _LIST_CACHE if key[:2] == prefix]:
+        _LIST_CACHE.pop(key, None)
 
 
 def _parse_target_and_path(text: str, need_path: bool = False) -> tuple[dict[str, Any] | None, int, str, str | None]:
@@ -215,14 +231,6 @@ def _md_list_line(binding_idx: int, binding: dict[str, Any], item: dict[str, Any
     return f"{mark} {build_md_command_link(name, cmd)}{size}"
 
 
-def _safe_filename(name: str) -> str:
-    value = re.sub(r'[\\/:*?"<>|\r\n]+', "_", str(name or "").strip())
-    value = value.strip(" .")
-    if not value:
-        return "webdav_file"
-    return value[:120]
-
-
 def _propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[str, Any]]:
     url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
     headers = {
@@ -256,6 +264,16 @@ def _propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[s
 
     root = ET.fromstring(resp.content)
     return [_entry_from_response(item) for item in root.findall("d:response", DAV_NS)]
+
+
+def _cached_propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[str, Any]]:
+    key = _list_cache_key(binding, dav_path, depth)
+    cached = _LIST_CACHE.get(key)
+    if cached is not None:
+        return cached
+    entries = _propfind(binding, dav_path, depth)
+    _LIST_CACHE[key] = entries
+    return entries
 
 
 def _test_binding(binding: dict[str, Any]) -> None:
@@ -295,6 +313,7 @@ def _delete_bindings(text: str) -> tuple[bool, str]:
     if value in {"全部", "所有", "all", "*"}:
         count = len(rows)
         _save_bindings([])
+        _clear_binding_cache()
         return True, f"已删除全部 {count} 个 WebDAV 绑定"
     if not value.isdigit():
         return False, "删除用法：webdav删除 序号 或 webdav删除 全部"
@@ -303,6 +322,7 @@ def _delete_bindings(text: str) -> tuple[bool, str]:
         return False, f"序号 {idx} 超出范围（1～{len(rows)}）"
     removed = rows.pop(idx - 1)
     _save_bindings(rows)
+    _clear_binding_cache(removed)
     return True, f"已删除绑定 {idx}：{removed.get('label') or _display_url(removed.get('dav_url') or '')}"
 
 
@@ -418,97 +438,21 @@ __WEBDAV_HELP__ = """【WebDAV 帮助】
 - webdav链接 [序号] <路径>
 - webdav文件 [序号] <路径>
 
-说明：AList 和 OpenList 都支持常用 WebDAV 接口；列表里的目录可点击进入，文件可点击发送，链接访问仍需要对应用户名和密码。"""
+说明：AList 和 OpenList 都支持常用 WebDAV 接口；列表里的目录可点击进入，文件可点击获取链接，链接访问仍需要对应用户名和密码。"""
 
 
 async def _is_webdav_admin(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> bool:
     return bool(await SUPERUSER(bot, event))
 
 
-def _download_webdav_file(binding: dict[str, Any], dav_path: str) -> tuple[Path, str]:
-    entries = _propfind(binding, dav_path, "0")
-    item = entries[0] if entries else {}
-    if item.get("is_dir"):
-        raise ValueError("这是目录，请使用 webdav列表 进入")
-
-    size_text = str(item.get("size") or "0")
-    try:
-        size = int(size_text)
-    except Exception:
-        size = 0
-    if size > MAX_SEND_FILE_BYTES:
-        raise ValueError(f"文件超过发送上限（{_format_size(str(MAX_SEND_FILE_BYTES))}）")
-
+def _format_link_message(binding: dict[str, Any], idx: int, dav_path: str) -> str:
     url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
-    filename = _safe_filename(Path(_format_dav_path(dav_path)).name or _entry_display_name(item) or "webdav_file")
-    fd, tmp_name = tempfile.mkstemp(prefix="webdav_", suffix=f"_{filename}", dir=WEBDAV_TMP_DIR)
-    os.close(fd)
-    tmp_path = Path(tmp_name)
-    try:
-        with requests.get(
-            url,
-            stream=True,
-            auth=(str(binding.get("username") or ""), str(binding.get("password") or "")),
-            timeout=60,
-        ) as resp:
-            if resp.status_code in {401, 403}:
-                raise ValueError("认证失败，请检查用户名和密码")
-            if resp.status_code == 404:
-                raise ValueError("文件不存在")
-            resp.raise_for_status()
-
-            total = 0
-            with open(tmp_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=1024 * 256):
-                    if not chunk:
-                        continue
-                    total += len(chunk)
-                    if total > MAX_SEND_FILE_BYTES:
-                        raise ValueError(f"文件超过发送上限（{_format_size(str(MAX_SEND_FILE_BYTES))}）")
-                    f.write(chunk)
-        return tmp_path, filename
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-
-
-async def _send_local_file(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, path: Path, filename: str) -> None:
-    call_api = getattr(bot, "call_api", None)
-    if callable(call_api):
-        group_id = getattr(event, "group_id", None)
-        if group_id is not None:
-            try:
-                await call_api("upload_group_file", group_id=group_id, file=str(path), name=filename)
-                return
-            except Exception:
-                pass
-        try:
-            await call_api("upload_private_file", user_id=event.get_user_id(), file=str(path), name=filename)
-            return
-        except Exception:
-            pass
-
-    await bot.send(event=event, message=MessageSegment.file(bot, path))
-
-
-async def _send_webdav_file(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, binding: dict[str, Any], idx: int, dav_path: str) -> None:
-    tmp_path: Path | None = None
-    try:
-        tmp_path, filename = await asyncio.to_thread(_download_webdav_file, binding, dav_path)
-        await _send_local_file(bot, event, tmp_path, filename)
-    except Exception as e:
-        url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
-        msg = (
-            f"发送文件失败：{e}\n\n"
-            f"【WebDAV 链接】账号 {idx}\n"
-            f"路径：{dav_path}\n"
-            f"地址：{url}\n\n"
-            "该地址需要 WebDAV 用户名和密码访问。"
-        )
-        await handle_send(bot, event, msg, **_DAV_KW)
-    finally:
-        if tmp_path is not None:
-            tmp_path.unlink(missing_ok=True)
+    return (
+        f"【WebDAV 链接】账号 {idx}\n"
+        f"路径：{dav_path}\n"
+        f"地址：{url}\n\n"
+        "该地址需要 WebDAV 用户名和密码访问。"
+    )
 
 
 @webdav_help_cmd.handle(parameterless=[Cooldown(cd_time=2)])
@@ -561,24 +505,23 @@ async def webdav_ls_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_ls_cmd.finish()
     try:
-        entries = _propfind(binding, dav_path, "1")
-        msg = _format_list(binding, idx, dav_path, entries, markdown=True)
-        fallback = _format_list(binding, idx, dav_path, entries, markdown=False)
-        await handle_send(
-            bot,
-            event,
-            msg,
-            native_markdown=True,
-            fallback_msg=fallback,
-            keyboard_rows=[
-                [("查看绑定", "webdav查看"), ("根目录", f"webdav列表 {idx} /"), ("帮助", "webdav帮助")]
-            ],
-            at_msg=True,
-        )
-        await webdav_ls_cmd.finish()
+        entries = _cached_propfind(binding, dav_path, "1")
     except Exception as e:
-        msg = f"读取 WebDAV 目录失败：{e}"
-    await handle_send(bot, event, msg, **_DAV_KW)
+        await handle_send(bot, event, f"读取 WebDAV 目录失败：{e}", **_DAV_KW)
+        await webdav_ls_cmd.finish()
+    msg = _format_list(binding, idx, dav_path, entries, markdown=True)
+    fallback = _format_list(binding, idx, dav_path, entries, markdown=False)
+    await handle_send(
+        bot,
+        event,
+        msg,
+        native_markdown=True,
+        fallback_msg=fallback,
+        keyboard_rows=[
+            [("查看绑定", "webdav查看"), ("根目录", f"webdav列表 {idx} /"), ("帮助", "webdav帮助")]
+        ],
+        at_msg=True,
+    )
     await webdav_ls_cmd.finish()
 
 
@@ -603,14 +546,7 @@ async def webdav_link_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if err or not binding:
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_link_cmd.finish()
-    url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
-    msg = (
-        f"【WebDAV 链接】账号 {idx}\n"
-        f"路径：{dav_path}\n"
-        f"地址：{url}\n\n"
-        "该地址需要 WebDAV 用户名和密码访问。"
-    )
-    await handle_send(bot, event, msg, **_DAV_KW)
+    await handle_send(bot, event, _format_link_message(binding, idx, dav_path), **_DAV_KW)
     await webdav_link_cmd.finish()
 
 
@@ -620,7 +556,7 @@ async def webdav_file_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if err or not binding:
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_file_cmd.finish()
-    await _send_webdav_file(bot, event, binding, idx, dav_path)
+    await handle_send(bot, event, _format_link_message(binding, idx, dav_path), **_DAV_KW)
     await webdav_file_cmd.finish()
 
 

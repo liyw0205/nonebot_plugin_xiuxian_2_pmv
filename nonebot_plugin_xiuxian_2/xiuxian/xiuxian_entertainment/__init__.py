@@ -83,7 +83,7 @@ __FUN_HELP__ = """【娱乐帮助】
 其他：
 - Steam喜加一
 - NewAPI：newapi帮助 / newapi绑定 / newapi查看 / newapi签到 / newapi签到历史 / newapi自动签到 / newapi信息 / newapi删除
-- WebDAV：webdav帮助 / webdav查看 / webdav列表 / webdav信息 / webdav链接；绑定和删除仅管理员可用
+- WebDAV：webdav帮助 / webdav查看 / webdav列表 / webdav信息 / webdav链接 / webdav文件；绑定和删除仅管理员可用
 - 链接解析（视频解析 / 解析链接）
 - 发含分享链接的消息可自动解析
 
