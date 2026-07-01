@@ -7,6 +7,7 @@ from nonebot.log import logger
 
 from ...adapter_compat import Bot, MessageSegment, is_channel_event
 from ...xiuxian_config import XiuConfig
+from ...xiuxian_utils.utils import build_md_command_link
 
 
 # =========================
@@ -195,7 +196,14 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
 # =========================
 # 列表文案
 # =========================
-def build_song_list_page_text(platform_name: str, songs: list[dict], page: int, page_size: int) -> tuple[str, int]:
+def build_song_list_page_text(
+    platform_name: str,
+    songs: list[dict],
+    page: int,
+    page_size: int,
+    *,
+    markdown: bool = False,
+) -> tuple[str, int]:
     total = len(songs)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = max(1, min(page, total_pages))
@@ -207,11 +215,22 @@ def build_song_list_page_text(platform_name: str, songs: list[dict], page: int, 
     lines = [f"【{platform_name}】搜索结果（第 {page}/{total_pages} 页）"]
     for i, song in enumerate(page_songs, start=1):
         global_index = start + i
-        lines.append(f"{global_index}. {song.get('name', '未知')} - {song.get('artists', '未知')}")
+        index_text = (
+            build_md_command_link(str(global_index), f"选歌 {global_index}")
+            if markdown
+            else str(global_index)
+        )
+        lines.append(f"{index_text}. {song.get('name', '未知')} - {song.get('artists', '未知')}")
 
     lines.append("------------")
-    lines.append("发送【选歌 序号】进行选择（序号按全列表编号）")
-    lines.append("翻页：点歌上一页 / 点歌下一页 / 点歌第N页")
+    if markdown:
+        prev_page = build_md_command_link("点歌上一页", "点歌上一页")
+        next_page = build_md_command_link("点歌下一页", "点歌下一页")
+        lines.append("点击蓝色序号或发送【选歌 序号】进行选择（序号按全列表编号）")
+        lines.append(f"翻页：{prev_page} / {next_page} / 点歌第N页")
+    else:
+        lines.append("发送【选歌 序号】进行选择（序号按全列表编号）")
+        lines.append("翻页：点歌上一页 / 点歌下一页 / 点歌第N页")
     return "\n".join(lines), total_pages
 
 

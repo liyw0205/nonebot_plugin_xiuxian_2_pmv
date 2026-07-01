@@ -152,15 +152,21 @@ async def music_search_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         page_size=page_size
     )
 
-    text_msg, _ = build_song_list_page_text(platform_name, songs, page=1, page_size=page_size)
+    text_msg, _ = build_song_list_page_text(
+        platform_name, songs, page=1, page_size=page_size, markdown=True
+    )
+    fallback_msg, _ = build_song_list_page_text(
+        platform_name, songs, page=1, page_size=page_size, markdown=False
+    )
 
     await handle_send(
         bot, event,
         text_msg,
-        md_type="娱乐",
-        k1="选歌1", v1=quote("选歌 1", safe=""),
-        k2="下一页", v2=quote("点歌下一页", safe=""),
-        k3="点歌帮助", v3=quote("点歌帮助", safe="")
+        native_markdown=True,
+        fallback_msg=fallback_msg,
+        keyboard_rows=[
+            [("选歌1", "选歌 1"), ("下一页", "点歌下一页"), ("点歌帮助", "点歌帮助")]
+        ],
     )
     await music_search_cmd.finish()
 
@@ -203,17 +209,22 @@ async def music_page_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     page = max(1, min(page, total_pages))
     session_data["page"] = page
 
+    platform_name = get_platform_display_name(platform)
     text_msg, _ = build_song_list_page_text(
-        get_platform_display_name(platform), songs, page, page_size
+        platform_name, songs, page, page_size, markdown=True
+    )
+    fallback_msg, _ = build_song_list_page_text(
+        platform_name, songs, page, page_size, markdown=False
     )
 
     await handle_send(
         bot, event,
         text_msg,
-        md_type="娱乐",
-        k1="上一页", v1=quote("点歌上一页", safe=""),
-        k2="下一页", v2=quote("点歌下一页", safe=""),
-        k3="点歌帮助", v3=quote("点歌帮助", safe="")
+        native_markdown=True,
+        fallback_msg=fallback_msg,
+        keyboard_rows=[
+            [("上一页", "点歌上一页"), ("下一页", "点歌下一页"), ("点歌帮助", "点歌帮助")]
+        ],
     )
     await music_page_cmd.finish()
 
