@@ -410,7 +410,8 @@ async def create_reward_record(
 
     items_msg = create_item_message(reward_items)
 
-    msg = f"成功新增{config['type_key']}：{record_id}\n"
+    msg = f"{config['type_key']}已创建\n"
+    msg += f"ID：{record_id}\n"
     msg += f"内容：{', '.join(items_msg)}\n"
 
     if is_redeem_code:
@@ -469,7 +470,9 @@ async def claim_normal_reward(
     await handle_send(
         bot,
         event,
-        f"成功领取{config['type_key']} {record_id}：\n" + "\n".join(reward_msg),
+        f"{config['type_key']}领取成功\n"
+        f"ID：{record_id}\n"
+        f"奖励：\n" + "\n".join(f"- {line}" for line in reward_msg),
     )
 
 
@@ -528,12 +531,13 @@ async def list_normal_rewards(
             valid.append((record_id, info))
 
     lines = [
-        f"📋 {config['type_key']}列表",
-        "====================",
+        f"{config['type_key']}列表",
+        f"更新时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}",
     ]
 
     def append_records(title: str, records: list):
-        lines.append(f"\n【{title}】")
+        lines.append("")
+        lines.append(f"【{title}】")
 
         if not records:
             lines.append("暂无")
@@ -543,19 +547,16 @@ async def list_normal_rewards(
             item_msg = create_item_message(info["items"])
 
             lines.extend([
-                f"ID：{record_id}",
+                f"- ID：{record_id}",
                 f"原因：{info.get('reason', '无')}",
                 f"内容：{', '.join(item_msg)}",
                 f"有效期至：{info.get('expire_time')}",
                 f"生效时间：{info.get('start_time')}",
-                "------------------",
             ])
 
     append_records("有效", valid)
     append_records("尚未生效", not_started)
     append_records("过期", expired)
-
-    lines.append(f"\n时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     await send_msg_handler(
         bot,

@@ -751,15 +751,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(
         bot, event,
-        "五子棋帮助：\n"
-        "开始五子棋 [房间号]\n"
-        "开始单人五子棋 [房间号]\n"
-        "加入五子棋 <房间号>\n"
-        "落子 <坐标>（如 A1）\n"
-        "认输\n"
-        "棋局信息 [房间号]\n"
-        "退出五子棋\n"
-        f"规则：{BOARD_SIZE}x{BOARD_SIZE}，黑先，五连胜；房间超时{ROOM_TIMEOUT}s，落子超时{MOVE_TIMEOUT}s。",
+        "**五子棋帮助**\n\n"
+        "**开局与加入**\n"
+        "- 开始五子棋 [房间号]\n"
+        "- 开始单人五子棋 [房间号]\n"
+        "- 加入五子棋 <房间号>\n\n"
+        "**对局指令**\n"
+        "- 落子 <坐标>，如：落子 A1\n"
+        "- 认输\n"
+        "- 棋局信息 [房间号]\n"
+        "- 退出五子棋\n\n"
+        f"> 规则：{BOARD_SIZE}x{BOARD_SIZE}，黑先，五连胜；房间超时 {ROOM_TIMEOUT}s，落子超时 {MOVE_TIMEOUT}s。",
         k1="开始", v1="开始五子棋",
         k2="单人", v2="开始单人五子棋",
         k3="游戏", v3="小游戏帮助"

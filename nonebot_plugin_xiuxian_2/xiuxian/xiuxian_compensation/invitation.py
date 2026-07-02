@@ -239,7 +239,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             available.append(threshold_str)
 
     msg = [
-        "☆------我的邀请信息------☆",
+        "我的邀请信息",
         f"邀请人数：{count}人",
         f"可领取奖励：{', '.join(available) if available else '无'}",
     ]
@@ -306,7 +306,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "没有可领取的邀请奖励")
         return
 
-    await handle_send(bot, event, "成功领取以下奖励：\n" + "\n".join(claimed_msgs))
+    await handle_send(
+        bot,
+        event,
+        "邀请奖励领取成功\n" + "\n".join(f"- {line}" for line in claimed_msgs),
+    )
 
 
 @invitation_set_reward_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -355,17 +359,14 @@ async def _(bot: Bot, event: MessageEvent):
         await handle_send(bot, event, "当前没有设置邀请奖励")
         return
 
-    lines = [
-        "🎁 邀请奖励列表 🎁",
-        "====================",
-    ]
+    lines = ["邀请奖励列表"]
 
     for threshold in sorted([int(k) for k in rewards.keys()]):
         reward_items = rewards[str(threshold)]
         lines.extend([
-            f"门槛：邀请{threshold}人",
+            "",
+            f"- 门槛：邀请{threshold}人",
             f"奖励：{', '.join(create_item_message(reward_items))}",
-            "------------------",
         ])
     
     await send_msg_handler(
@@ -401,26 +402,28 @@ async def _(bot: Bot, event: MessageEvent):
 
 
 INVITATION_HELP = """
-🤝 邀请系统帮助 🤝
-═════════════
-1. 邀请码 [邀请人ID]
-2. 邀请人
-3. 我的邀请
-4. 邀请奖励列表
-5. 邀请奖励领取 [门槛]
+邀请系统帮助
 
-规则：
+用户命令
+- 邀请码 [邀请人ID]
+- 邀请人
+- 我的邀请
+- 邀请奖励列表
+- 邀请奖励领取 [门槛]
+
+规则
 - 邀请码只能填写一次。
 - 不填门槛时，会尝试领取所有可领取奖励。
 """.strip()
 
 
 INVITATION_ADMIN_HELP = """
-👑 邀请系统管理帮助 👑
-═════════════
-1. 邀请奖励设置 [门槛人数] [奖励物品]
-   示例：
-   邀请奖励设置 5 渡厄丹x5,灵石x10000000
+邀请系统管理帮助
 
-2. 邀请奖励列表
+管理指令
+- 邀请奖励设置 [门槛人数] [奖励物品]
+- 邀请奖励列表
+
+示例
+邀请奖励设置 5 渡厄丹x5,灵石x10000000
 """.strip()

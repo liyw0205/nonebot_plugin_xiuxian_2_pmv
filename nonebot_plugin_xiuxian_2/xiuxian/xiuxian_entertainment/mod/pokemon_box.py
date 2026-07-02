@@ -223,13 +223,13 @@ async def _send_pokemon_help(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await send_help_message(
         bot,
         event,
-        "【宝可梦盲盒】\n"
-        "用法：\n"
+        "**宝可梦盲盒**\n\n"
+        "**用法**\n"
         "- 宝可梦盲盒\n"
         "- 宝可梦图鉴 皮卡丘\n"
         "- 宝可梦图鉴 25\n"
         "- 宝可梦图鉴 pikachu\n\n"
-        "中文名只内置了少量常见宝可梦；其他可用英文名或编号。",
+        "> 中文名只内置了少量常见宝可梦；其他可用英文名或编号。",
         k1="盲盒",
         v1="宝可梦盲盒",
         k2="皮卡丘",

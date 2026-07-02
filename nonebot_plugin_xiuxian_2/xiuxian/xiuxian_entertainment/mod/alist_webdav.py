@@ -648,14 +648,14 @@ webdav_file_cmd = on_command("webdav文件", aliases={"网盘文件"}, priority=
 webdav_del_cmd = on_command("webdav删除", aliases={"webdav解绑", "网盘删除", "网盘解绑"}, priority=5, block=True)
 
 
-__WEBDAV_HELP__ = """【WebDAV 帮助】
+__WEBDAV_HELP__ = """WebDAV 帮助
 
-管理员：
+【管理员】
 - webdav绑定 备注#https://站点/dav#用户名#密码
 - webdav绑定 https://站点/dav#用户名#密码
 - webdav删除 序号|全部
 
-查询：
+【查询】
 - webdav查看
 - webdav列表 [序号] [路径]
 - webdav信息 [序号] <路径>

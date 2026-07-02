@@ -32,9 +32,10 @@ fusion_help = on_command("合成帮助", priority=15, block=True)
 available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=24, block=True)
 
 fusion_help_text = f"""
-合成帮助:
-1.合成 物品名:合成指定的物品。
-2.查看可合成物品 [物品名可选] 可以查看当前可合成的所有物品以及相关信息。
+**合成帮助**
+---
+- 合成 物品名：合成指定物品。
+- 查看可合成物品 [物品名可选]：查看当前可合成物品及相关信息。
 """.strip()
 
 @fusion_help.handle(parameterless=[Cooldown(cd_time=0)])

@@ -482,7 +482,7 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 link = await call_upload_api_async(img_res)
                 if link:
                     # 原生MD - 称号显示在标题中
-                    title_display = f"#### {equipped_title_name}\r" if equipped_title_name else ""
+                    title_display = f"**{equipped_title_name}**\r" if equipped_title_name else ""
                     img_data = f"{title_display}![img #1100px #2680px]({link})"
                     await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
                     await xiuxian_message_img.finish()

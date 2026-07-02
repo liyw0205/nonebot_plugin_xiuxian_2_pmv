@@ -58,15 +58,15 @@ music_page_cmd = on_command(
 @music_help_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def music_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = (
-        "🎵 点歌帮助\n"
-        "1) 点歌 歌名\n"
-        "   例：点歌 稻香\n"
-        "2) 指定平台点歌\n"
-        "   例：网易点歌 晴天 / QQ点歌 夜曲\n"
-        "3) 选歌\n"
-        "   例：选歌 1\n"
-        "4) 翻页\n"
-        "   例：点歌下一页 / 点歌上一页 / 点歌第3页"
+        "**点歌帮助**\n\n"
+        "**基础用法**\n"
+        "- 点歌 歌名\n"
+        "- 选歌 序号\n"
+        "- 点歌下一页 / 点歌上一页 / 点歌第3页\n\n"
+        "**平台点歌**\n"
+        "- 网易点歌 晴天\n"
+        "- QQ点歌 夜曲\n\n"
+        "> 搜索到多首歌时，先返回列表，再用“选歌 1”播放。"
     )
     await send_help_message(
         bot, event,
@@ -308,7 +308,7 @@ async def music_config_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(parts) == 1 or (len(parts) >= 2 and parts[1] == "查看"):
         cfg = load_music_config()
         msg = (
-            "🎵 点歌配置\n"
+            "点歌配置\n"
             f"default_platform: {cfg['default_platform']}\n"
             f"song_limit: {cfg['song_limit']}\n"
             f"select_timeout: {cfg['select_timeout']}\n"

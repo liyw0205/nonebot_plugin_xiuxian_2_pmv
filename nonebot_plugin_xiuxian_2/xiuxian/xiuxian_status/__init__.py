@@ -163,7 +163,7 @@ async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     results = await asyncio.gather(*tasks)
 
     # 组装消息
-    msg = "\n☆------网络延迟测试------☆\n"
+    msg = "网络延迟测试\n"
 
     # 国内站点（前4个）
     msg += "\n【国内站点】\n"
@@ -220,12 +220,12 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         "修仙插件版本": current_version
     }
     
-    msg = "\n☆------Bot信息------☆\n"
-    msg += "\n【🤖 Bot信息】\n"
+    msg = "Bot信息\n"
+    msg += "\n【Bot信息】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_info.items())
-    msg += "\n\n【⏱ 运行时间】\n"
+    msg += "\n\n【运行时间】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_uptime.items())
-    msg += "\n\n【🧘 修仙数据】\n"
+    msg += "\n\n【修仙数据】\n"
     msg += f"全部用户：{all_users}"
     msg += f"\n活跃用户：{active_users}"
     msg += f"\n昨日活跃：{yesterday_active_users}"
@@ -323,13 +323,13 @@ async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         system_uptime_info = {"系统启动时间": "psutil未安装", "系统运行时间": "psutil未安装"}
     
     # 组装系统信息
-    msg = "\n☆------系统信息------☆\n"
+    msg = "系统信息\n"
     info_sections = [
-        ("⏱ 运行时间", system_uptime_info),
-        ("💻 系统信息", system_info),
-        ("⚡ CPU信息", cpu_info),
-        ("🧠 内存信息", mem_info),
-        ("💾 磁盘信息", disk_info)
+        ("运行时间", system_uptime_info),
+        ("系统信息", system_info),
+        ("CPU信息", cpu_info),
+        ("内存信息", mem_info),
+        ("磁盘信息", disk_info)
     ]
     
     for section, data in info_sections:
@@ -363,24 +363,35 @@ async def handle_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 @status_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    msg = f"""
-更新日志 - 获取版本日志
+    msg = """
+插件帮助
 
-版本更新 - 指定版本号更新/latest：更新最新版本
+版本管理
+- 更新日志：获取版本日志
+- 版本查询：获取最近发布的版本
+- 检测更新：检测是否需要更新
+- 版本更新 版本号/latest：指定版本或最新版本
 
-版本查询 - 获取最近发布的版本
+状态查询
+- bot信息：获取机器人和修仙数据
+- 系统信息：获取系统信息
+- ping测试：测试网络延迟
 
-检测更新 - 检测是否需要更新
-
-bot信息 - 获取机器人和修仙数据
-
-系统信息 - 获取系统信息
-
-ping测试 - 测试网络延迟
-
-→ GitHub - liyw0205/nonebot_plugin_xiuxian_2_pmv
-"""
-    await handle_send(bot, event, msg)
+GitHub：liyw0205/nonebot_plugin_xiuxian_2_pmv
+""".strip()
+    await send_help_message(
+        bot,
+        event,
+        msg,
+        k1="版本查询",
+        v1="版本查询",
+        k2="检测更新",
+        v2="检测更新",
+        k3="bot信息",
+        v3="bot信息",
+        k4="系统信息",
+        v4="系统信息",
+    )
 
 def utc_time(published_at):
     utc_time_str = published_at.replace('Z', '+00:00')
@@ -398,11 +409,11 @@ async def handle_version_query(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, "无法获取版本信息。")
         return
 
-    msg = "\n☆------版本查询------☆\n"
+    msg = "版本查询\n"
     msg += "最近发布的版本：\n\n"
     for release in recent_releases:
-        msg += f"版本号: {release['tag_name']}\n"
-        msg += f"发布时间: {utc_time(release['published_at'])}\n\n"
+        msg += f"- 版本号：{release['tag_name']}\n"
+        msg += f"  发布时间：{utc_time(release['published_at'])}\n"
     msg += "通过【更新日志】查看详情"
     await handle_send(bot, event, msg)
 
@@ -412,7 +423,13 @@ async def handle_check_update(bot: Bot, event: GroupMessageEvent | PrivateMessag
     latest_release, message = await asyncio.to_thread(update_manager.check_update)
     if latest_release:
         release_tag = latest_release['tag_name']
-        await handle_send(bot, event, f"发现新版本 {release_tag}\n当前版本 {update_manager.get_current_version()}\n建议【查看日志】后更新")
+        await handle_send(
+            bot,
+            event,
+            f"发现新版本：{release_tag}\n"
+            f"当前版本：{update_manager.get_current_version()}\n"
+            f"建议先查看更新日志，再执行版本更新。",
+        )
     else:
         await handle_send(bot, event, f"当前已是最新版本：{update_manager.get_current_version()}")
 
@@ -421,7 +438,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
     """版本更新命令"""
     args = args.extract_plain_text().split()
     if len(args) != 1:
-        await handle_send(bot, event, "用法：版本更新 <版本号|latest>")
+        await handle_send(bot, event, "用法：版本更新 版本号/latest")
         return
 
     action = str(args[0])
@@ -442,7 +459,12 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
             return
         release_tags = [release['tag_name'] for release in recent_releases]
         if release_tag not in release_tags:
-            await handle_send(bot, event, f"输入的版本号{release_tag}不正确\n请通过【版本查询】\n获取最近的发布版本")
+            await handle_send(
+                bot,
+                event,
+                f"输入的版本号 {release_tag} 不正确\n"
+                f"请通过【版本查询】获取最近的发布版本。",
+            )
             return
 
     await handle_send(bot, event, f"更新版本 {release_tag}，开始更新...")

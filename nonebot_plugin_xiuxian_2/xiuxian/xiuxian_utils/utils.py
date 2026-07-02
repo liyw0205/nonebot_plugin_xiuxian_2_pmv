@@ -831,8 +831,33 @@ def build_md_command_link(text, command=None):
 
 
 def strip_md_command_links(msg: str) -> str:
-    """原生 Markdown 不可用时，将命令链接降级为纯文本。"""
-    return re.sub(r"\[([^\]]+)\]\(mqqapi://aio/inlinecmd\?[^)]+\)", r"\1", str(msg or " "))
+    """原生 Markdown 不可用时，将常见展示语法降级为纯文本。"""
+    text = str(msg or " ")
+    text = text.replace("\r", "\n")
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\(mqqapi://aio/inlinecmd\?[^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    lines = []
+    in_code = False
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+            continue
+
+        line = raw_line.rstrip()
+        if not in_code:
+            if stripped == "---":
+                line = "----------"
+            line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+            line = re.sub(r"^\s{0,3}>\s?", "  ", line)
+            line = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", line)
+            line = re.sub(r"__([^_\n]+)__", r"\1", line)
+            line = re.sub(r"`([^`\n]+)`", r"\1", line)
+        lines.append(line)
+
+    return "\n".join(lines).strip() or " "
 
 
 _EXTRA_HELP_COMMANDS = {
@@ -1616,10 +1641,10 @@ async def handle_send_markdown(
 ):
     """发送原生md消息（仅普通群/私聊），失败降级普通消息"""
     if not _allow_native_markdown(event):
-        await handle_send2(bot, event, msg or " ")
+        await handle_send2(bot, event, strip_md_command_links(msg or " "))
         return
 
-    raw_plain = msg or " "
+    raw_plain = strip_md_command_links(msg or " ")
     msg = optimize_md(msg) if msg else " "
     title = optimize_md(title) if title else " "
     page_param = optimize_md(page_param) if page_param else " "
@@ -1724,7 +1749,7 @@ async def handle_send_native_markdown(
     与 handle_send_markdown 不同，这里不会调用 optimize_md，
     避免破坏 [文本](链接)、图片等原生 Markdown 语法。
     """
-    raw_plain = fallback_msg if fallback_msg is not None else (msg or " ")
+    raw_plain = strip_md_command_links(fallback_msg if fallback_msg is not None else (msg or " "))
     if not _allow_native_markdown(event):
         await handle_send2(bot, event, raw_plain)
         return

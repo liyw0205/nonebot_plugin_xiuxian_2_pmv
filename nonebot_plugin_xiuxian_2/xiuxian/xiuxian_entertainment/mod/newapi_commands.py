@@ -206,13 +206,13 @@ newapi_del_cmd = on_command("newapi删除", aliases={"newapi解绑"}, priority=5
 newapi_history_cmd = on_command("newapi签到历史", aliases={"newapi签到记录"}, priority=5, block=True)
 newapi_auto_cmd = on_command("newapi自动签到", priority=5, block=True)
 
-__NEWAPI_HELP__ = """【NewAPI 帮助】
+__NEWAPI_HELP__ = """NewAPI 帮助
 
-绑定（可多个，字段用 # 分隔）：
+【绑定】
 - newapi绑定 站点用户ID#令牌#接口地址
 - newapi绑定 cookie 站点用户ID#session或完整Cookie#接口地址
 
-查询与管理：
+【查询与管理】
 - newapi查看 — 本 QQ 已绑定的全部账号（带序号）
 - newapi签到 [序号] — 默认全部；序号示例 1 或 1,3 或 2-4（会记入签到历史，保留最近 3 次）
 - newapi签到历史 — 查看最近签到记录

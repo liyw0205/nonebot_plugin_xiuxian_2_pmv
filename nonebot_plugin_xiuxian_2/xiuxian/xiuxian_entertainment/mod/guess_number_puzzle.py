@@ -148,14 +148,14 @@ async def _send_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -
     await send_help_message(
         bot,
         event,
-        "【猜数谜帮助】\n"
-        "指令：\n"
+        "**猜数谜帮助**\n\n"
+        "**指令**\n"
         "- 开始猜数谜 [简单|普通|困难]\n"
         "- 猜数谜 2223\n"
         "- 猜数谜 状态\n"
         "- 猜数谜 答案 / 猜数谜 结束\n\n"
-        f"难度：{_difficulty_hint()}。\n"
-        "规则：系统生成对应位数的随机数。每次猜测后，只告诉你猜对了几位；"
+        f"**难度**\n{_difficulty_hint()}。\n\n"
+        "> 规则：系统生成对应位数的随机数。每次猜测后，只告诉你猜对了几位；"
         "不会告诉具体位置，也不会告诉具体数字。全部猜对后自动结束。",
         k1="简单",
         v1="开始猜数谜 简单",

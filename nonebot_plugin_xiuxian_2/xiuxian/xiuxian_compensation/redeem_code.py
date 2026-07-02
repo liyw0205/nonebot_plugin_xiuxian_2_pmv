@@ -144,7 +144,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(
         bot,
         event,
-        f"成功兑换 {code}：\n" + "\n".join(reward_msg),
+        f"兑换成功\n"
+        f"兑换码：{code}\n"
+        f"奖励：\n" + "\n".join(f"- {line}" for line in reward_msg),
     )
 
 
@@ -192,12 +194,13 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
             valid.append((code, info))
 
     lines = [
-        "🎟 兑换码列表 🎟",
-        "====================",
+        "兑换码列表",
+        f"更新时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}",
     ]
 
     def append_codes(title: str, codes: list):
-        lines.append(f"\n【{title}】")
+        lines.append("")
+        lines.append(f"【{title}】")
 
         if not codes:
             lines.append("暂无")
@@ -211,20 +214,17 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
             usage_text = "无限次" if usage_limit == 0 else f"{usage_limit}次"
 
             lines.extend([
-                f"兑换码：{code}",
+                f"- 兑换码：{code}",
                 f"内容：{', '.join(item_msg)}",
                 f"使用情况：{used_count}/{usage_text}",
                 f"有效期至：{info.get('expire_time')}",
                 f"生效时间：{info.get('start_time')}",
                 f"创建时间：{info.get('create_time')}",
-                "------------------",
             ])
 
     append_codes("有效", valid)
     append_codes("尚未生效", not_started)
     append_codes("过期", expired)
-
-    lines.append(f"\n时间：{current_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     await send_msg_handler(
         bot,
@@ -237,12 +237,12 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
 
 
 REDEEM_HELP = """
-🎟️ 兑换码系统帮助 🎟️
-═════════════
-【用户命令】
-兑换 [兑换码]
+兑换码系统帮助
 
-规则：
+用户命令
+- 兑换 [兑换码]
+
+规则
 - 兑换码只能通过“兑换”命令使用。
 - 每个用户对同一个兑换码只能使用一次。
 - 兑换码可能存在使用次数、生效时间和过期时间限制。
@@ -250,20 +250,18 @@ REDEEM_HELP = """
 
 
 REDEEM_ADMIN_HELP = """
-👑 兑换码管理帮助 👑
-═════════════
-【管理指令】
-1. 新增兑换码 [兑换码] [物品数据] [使用上限] [有效期] [生效期]
-   示例：
-   新增兑换码 XMAS2024 灵石x1000000,渡厄丹x1 100 30天 0
+兑换码管理帮助
 
-2. 删除兑换码 [兑换码]
+管理指令
+- 新增兑换码 [兑换码] [物品数据] [使用上限] [有效期] [生效期]
+- 删除兑换码 [兑换码]
+- 清空兑换码
+- 兑换码列表
 
-3. 清空兑换码
+示例
+新增兑换码 XMAS2024 灵石x1000000,渡厄丹x1 100 30天 0
 
-4. 兑换码列表
-
-规则：
+规则
 - 使用上限为 0 表示无限次。
 - 兑换码列表只有管理员可以查看。
 - 普通用户不能领取兑换码，只能使用：兑换 [兑换码]

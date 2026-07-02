@@ -177,7 +177,7 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 source = item.get("source", "未知来源")
                 url = item.get("url", "")
 
-                md_lines.append(f"### {idx}. {name}")
+                md_lines.append(f"**{idx}. {name}**")
                 md_lines.append(f"类型：{game_type}")
                 md_lines.append(f"开始：{starttime}")
                 md_lines.append(f"结束：{endtime}")

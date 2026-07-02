@@ -893,7 +893,7 @@ async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg = (
         "═══  ✨ 今日副本 ✨  ═══\n"
         f"{dungeon_data['name']}\n"
-        f"\n> {dungeon_data['description']}\n\n"
+        f"\n副本简介：{dungeon_data['description']}\n\n"
         f"副本类型：{dungeon_data.get('type', 'explore')}\n"
         f"总层数：{dungeon_data['total_layers']}层\n"
         f"副本日期：{dungeon_data['date']}\n"

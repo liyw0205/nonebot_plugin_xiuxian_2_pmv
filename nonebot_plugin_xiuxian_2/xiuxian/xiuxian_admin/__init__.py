@@ -1329,11 +1329,11 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
     help_msg = """
-【修仙管理手册】⚡⚡⚡
-======================
-🌟 管理员专用指令
+**修仙管理手册**
 
-⚡ 资源管理：
+> 管理员专用指令
+
+**资源管理**
 → 神秘力量 [数量] all - 全服发放或扣除灵石
 → 神秘力量 [数量] [道号] - 给指定用户发放或扣除灵石
 → 传承力量 [数量] all - 全服发放或扣除思恋结晶
@@ -1348,7 +1348,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 赠送称号 [称号] [道号] - 给指定用户赠送称号
 注：数量可以为负数。
 
-⚡ 境界管理：
+**境界管理**
 → 造化力量 [境界] [道号] - 修改用户境界
 → 轮回力量 [1-9] [道号] - 修改用户灵根
    (1混沌 2融合 3超 4龙 5天 6千世 7万世 8永恒 9命运)
@@ -1356,7 +1356,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 修为调整 [道号] [修为数] - 给指定用户发修为
 注：修为数可以为负数。
 
-⚡ 世界BOSS管理：
+**世界BOSS管理**
 → 世界BOSS生成 [数量] - 生成随机境界BOSS
 → 世界BOSS指定生成 [境界] [名称] - 生成指定BOSS
 → 世界BOSS全部生成 - 一键生成所有境界BOSS
@@ -1364,33 +1364,33 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 世界BOSS全部天罚 / 天罚全部世界BOSS - 清空所有BOSS
 → 重置世界BOSS - 重置玩家世界BOSS额度
 
-⚡ 补偿系统管理：
+**补偿系统管理**
 → 新增补偿 [ID] [物品] [原因] [有效期] [生效期] - 创建新补偿
    示例：新增补偿 0 灵石x100000,渡厄丹x5 维护补偿 30天 0
 → 删除补偿 [ID] - 删除指定补偿
 → 补偿列表 - 查看所有补偿
 → 清空补偿 - 清空所有补偿数据
 
-⚡ 礼包系统管理：
+**礼包系统管理**
 → 新增礼包 [ID] [物品] [原因] [有效期] [生效期] - 创建新礼包
    示例：新增礼包 0 灵石x100000,渡厄丹x1 新人礼包 无限 0
 → 删除礼包 [ID] - 删除指定礼包
 → 礼包列表 - 查看所有礼包
 → 清空礼包 - 清空所有礼包数据
 
-⚡ 兑换码系统管理：
+**兑换码系统管理**
 → 新增兑换码 [兑换码] [物品] [使用上限] [有效期] [生效期] - 创建新兑换码
    示例：新增兑换码 XMAS2024 灵石x1000000,渡厄丹x1 100 30天 0
 → 删除兑换码 [兑换码] - 删除指定兑换码
 → 兑换码列表 - 查看所有兑换码
 → 清空兑换码 - 清空所有兑换码数据
 
-⚡ 邀请系统管理：
+**邀请系统管理**
 → 邀请奖励设置 [门槛] [物品] - 设置邀请奖励
    示例：邀请奖励设置 5 渡厄丹x5,灵石x10000000
 → 邀请奖励列表 - 查看所有邀请奖励设置
 
-⚡ 系统管理：
+**系统管理**
 → 重置状态 - 重置所有用户状态
 → 重置状态 [道号] - 重置指定用户状态
 → 修仙适配 - 适配修仙2的境界到修仙2魔改版
@@ -1404,14 +1404,14 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 开启自动灵根 / 关闭自动灵根 - 自动选择灵根开关
 → 启用自动宗名 / 禁用自动宗名 - 自动随机宗门名开关
 
-⚡ 用户管控：
+**用户管控**
 → 小黑屋 [目标] - 封禁指定修仙用户
 → 解除小黑屋 [目标] - 解除封禁
 → 查看小黑屋 / 小黑屋列表 - 查看封禁名单
 → 用户伪装 [目标] - 伪装成指定用户
 → 用户伪装 取消 - 取消当前伪装
 
-⚡ 交易管理：
+**交易管理**
 → 系统仙肆上架 [物品名称] [价格] [数量] - 不带数量为无限
 → 系统仙肆下架 [物品仙肆ID] - 下架系统仙肆物品
 → 清空仙肆 - 清空所有仙肆上架并退回
@@ -1421,7 +1421,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 封闭拍卖 - 禁止自动开启拍卖
 → 解封拍卖 - 取消禁止
 
-⚡ 功能管理：
+**功能管理**
 → 清空仙缘 - 清除所有未领取仙缘
 → 生成秘境 - 生成新秘境
 → 开启魔修入侵 - 手动开启本期魔修入侵
@@ -1437,7 +1437,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 清空幻境 - 仅清空幻境玩家数据
 → 重置新手礼包 - 重置新手礼包领取状态
 
-⚡ 数据维护：
+**数据维护**
 → 转换QQID - 将数据库中的QQ ID迁移为真实ID
 → ID更新 [旧ID] [新ID] - 手动迁移数据库中的单个用户ID
 → ID交换 [ID1] [ID2] - 交换数据库中的两个用户ID
@@ -1445,7 +1445,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 同步灵庄 - 迁移灵庄数据
 → 同步鉴石 - 迁移鉴石数据
 
-⚡ 调试工具：
+**调试工具**
 → 消息信息 - 查看当前事件信息
 → dm [Markdown内容] - 直接发送原生Markdown
 → md模板 [模板参数] - 测试自定义Markdown模板
@@ -1455,7 +1455,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 点歌配置 设置 default_platform netease - 设置默认点歌平台
 → 点歌配置 设置 page_size 5 - 设置点歌列表分页数量
 
-⚡ 广播管理：
+**广播管理**
 → 群聊广播 [时间] [内容] - 向群聊广播，每群一次
 → 私聊广播 [时间] [内容] - 向私聊广播，每人一次
 → 全局广播 [时间] [内容] - 群聊+私聊全局广播
@@ -1465,7 +1465,7 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 取消广播 [广播ID] - 取消指定广播
 → 清空广播 [群聊/私聊/全局/全部] - 清空指定类型广播任务
 
-⚡ 状态与更新：
+**状态与更新**
 → 插件帮助 - 查看插件状态帮助
 → bot信息 - 获取机器人和修仙数据
 → 系统信息 - 获取系统信息
@@ -1475,9 +1475,9 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 版本更新 [版本] - 指定版本或更新最新版本
 → 检测更新 - 检测是否需要更新
 
-======================
-注：[]表示必填参数，()表示可选参数
-※ GitHub 项目：liyw0205/nonebot_plugin_xiuxian_2_pmv
+---
+> [] 表示必填参数，() 表示可选参数。
+> GitHub 项目：liyw0205/nonebot_plugin_xiuxian_2_pmv
     """.strip()
 
     page = parse_page_arg(args.extract_plain_text())
@@ -2031,7 +2031,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: M
         elif not is_channel_event(event):
             try:
                 md_msg = (
-                    f"## 提示\r"
+                    f"**提示**\r"
                     f"![img #1280px #720px]({image_url})\r"
                     f"{text_msg}"
                 )
@@ -2445,11 +2445,11 @@ async def _send_event_info_by_config(
         try:
             # 使用 \r 确保在手机端渲染时，代码块能够正常换行且保持缩进
             plain = (
-                f"### 消息基本信息\r"
+                f"**消息基本信息**\r"
                 f"```text\r"
                 f"{safe_basic}\r"
                 f"```\r"
-                f"### 原始数据 (Event JSON)\r"
+                f"**原始数据 (Event JSON)**\r"
                 f"```json\r"
                 f"{safe_raw}\r"
                 f"```"
@@ -2574,7 +2574,7 @@ async def group_broadcast_cmd_(
             bot,
             event,
             "用法：群聊广播 [时间] 广播内容\n"
-            "示例：\n"
+            "\n示例：\n"
             "群聊广播 广播测试\n"
             "群聊广播 1天 广播测试\n"
             "群聊广播 1小时 广播测试\n"
@@ -2608,7 +2608,7 @@ async def private_broadcast_cmd_(
             bot,
             event,
             "用法：私聊广播 [时间] 广播内容\n"
-            "示例：\n"
+            "\n示例：\n"
             "私聊广播 广播测试\n"
             "私聊广播 1天 广播测试\n"
             "私聊广播 1小时 广播测试\n"
@@ -2642,7 +2642,7 @@ async def global_broadcast_cmd_(
             bot,
             event,
             "用法：全局广播 [时间] 广播内容\n"
-            "示例：\n"
+            "\n示例：\n"
             "全局广播 广播测试\n"
             "全局广播 1天 广播测试\n"
             "全局广播 1小时 广播测试\n"
@@ -2703,11 +2703,11 @@ async def broadcast_help_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     msg = """
-【广播系统帮助】
+**广播系统帮助**
 
-一、创建广播
+**创建广播**
 
-1. 群聊广播
+**群聊广播**
 指令：
 群聊广播 [时间] 广播内容
 
@@ -2724,7 +2724,7 @@ async def broadcast_help_cmd_(
 群聊广播 1天1小时10分钟 长时间广播测试。
 
 
-2. 私聊广播
+**私聊广播**
 指令：
 私聊广播 [时间] 广播内容
 
@@ -2738,7 +2738,7 @@ async def broadcast_help_cmd_(
 私聊广播 1小时 今日活动已开启，记得上线领取奖励。
 
 
-3. 全局广播
+**全局广播**
 指令：
 全局广播 [时间] 广播内容
 
@@ -2755,7 +2755,7 @@ async def broadcast_help_cmd_(
 今日更新已完成，祝各位道友修仙愉快。
 
 
-二、广播时间格式
+**广播时间格式**
 
 时间格式：
 x天/x小时/x分钟
@@ -2781,7 +2781,7 @@ x天/x小时/x分钟
 则不会解析时间，默认有效期 1 天，整段都是广播内容。
 
 
-三、查看广播
+**查看广播**
 
 指令：
 查看广播
@@ -2805,7 +2805,7 @@ x天/x小时/x分钟
 - 内容预览
 
 
-四、取消广播
+**取消广播**
 
 指令：
 取消广播 广播ID
@@ -2818,7 +2818,7 @@ x天/x小时/x分钟
 已发送过的群/用户不会撤回。
 
 
-五、清空广播
+**清空广播**
 
 指令：
 清空广播 [类型]
@@ -2842,7 +2842,7 @@ x天/x小时/x分钟
 不填写类型时，默认清空全部广播任务。
 
 
-六、发送机制说明
+**发送机制说明**
 
 【QQ适配器】
 QQ官方适配器无法完全主动发送广播。
@@ -2861,7 +2861,7 @@ OB11支持主动发送。
 - 广播过期后不再补发。
 
 
-七、Markdown说明
+**Markdown说明**
 
 如果配置中 markdown_status = True：
 - QQ适配器：使用原生Markdown发送。
@@ -2871,7 +2871,7 @@ OB11支持主动发送。
 - 使用普通文本消息发送。
 
 
-八、注意事项
+**注意事项**
 
 1. 广播任务只保存在内存中。
    机器人重启后，广播任务会自动丢失。
@@ -3026,8 +3026,8 @@ async def all_apply_cmd_(
     # 拼接 Markdown 文本
     md_text = (
         "请群主点击下方按钮授权\n"
-        "**需要更新QQ到最新版(9.2.90及以上)**\n"
-        "![图片#1080px#888px](https://qqbot.ugcimg.cn/102133698/ab2eae432c06686d06a2cffda2b5ca51d4ad2e4f/c7f24f5aeadfb1908561622d43de3169)"
+        "【提示】需要更新QQ到最新版(9.2.90及以上)\n"
+        "![img #1080px #888px](https://qqbot.ugcimg.cn/102133698/ab2eae432c06686d06a2cffda2b5ca51d4ad2e4f/c7f24f5aeadfb1908561622d43de3169)"
     )
 
     # 准备 QQ 官方适配器的自定义按钮行

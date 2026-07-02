@@ -217,11 +217,11 @@ async def anime_reaction_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateM
     await send_help_message(
         bot,
         event,
-        "【二次元图片与互动】\n"
-        "随机图片：\n"
+        "**二次元图片与互动**\n\n"
+        "**随机图片**\n"
         "- 随机二次元\n"
         "- 随机猫娘 / 随机老婆 / 随机狐娘 / 随机老公\n\n"
-        "动作 GIF：\n"
+        "**动作 GIF**\n"
         "- 抱抱 / 贴贴 / 摸摸 / 拍头\n"
         "- 亲亲 / 戳戳 / 击掌 / 挥手",
         k1="随机二次元",

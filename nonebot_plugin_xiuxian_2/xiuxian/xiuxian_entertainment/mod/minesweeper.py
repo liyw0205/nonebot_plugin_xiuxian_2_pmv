@@ -142,7 +142,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     opened = sum(1 for yy in range(g.height) for xx in range(g.width) if g.revealed[yy][xx])
     flags = sum(1 for yy in range(g.height) for xx in range(g.width) if g.flagged[yy][xx])
-    await handle_send(bot, event, f"扫雷信息：{g.width}x{g.height} 雷{g.mines}\n已翻开：{opened}\n旗子：{flags}")
+    await handle_send(
+        bot,
+        event,
+        f"扫雷信息\n"
+        f"棋盘：{g.width}x{g.height}\n"
+        f"雷数：{g.mines}\n"
+        f"已翻开：{opened}\n"
+        f"旗子：{flags}",
+    )
     await handle_pic_send(bot, event, render_game(g))
 
 
@@ -163,12 +171,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(
         bot, event,
-        "扫雷帮助：\n"
-        "开始扫雷 [初级|中级|高级|自定义 宽 高 雷数]\n"
-        "翻开 A1\n"
-        "标记 B2\n"
-        "扫雷信息\n"
-        "结束扫雷",
+        "**扫雷帮助**\n\n"
+        "**开局**\n"
+        "- 开始扫雷 [初级|中级|高级]\n"
+        "- 开始扫雷 自定义 宽 高 雷数\n\n"
+        "**操作**\n"
+        "- 翻开 A1\n"
+        "- 标记 B2\n"
+        "- 扫雷信息\n"
+        "- 结束扫雷",
         k1="开始", v1="开始扫雷",
         k2="信息", v2="扫雷信息",
         k3="游戏", v3="小游戏帮助"

@@ -942,13 +942,50 @@ def _build_accessory_md_text(
 
     return "\r".join(lines)
 
+
+def _build_accessory_plain_text(
+    title: str,
+    sections: list[tuple[str, list[dict]]],
+    current_page: int,
+    total_pages: int,
+    next_cmd: str = "",
+    capacity_text: str = "",
+) -> str:
+    lines = [f"☆------{title}------☆"]
+    if capacity_text:
+        lines.append(capacity_text)
+
+    for sec_title, rows in sections:
+        if not rows:
+            continue
+
+        lines.extend(["", f"【{sec_title}】"])
+        for row in rows:
+            eq_flag = "【已装备】" if row.get("is_equipped") else ""
+            q = int(row.get("quality", 1))
+            lines.append(
+                f"- {eq_flag}{row.get('name', '未知饰品')}"
+                f" | {row.get('part', '')}"
+                f" | {row.get('set_type', '未知')}"
+                f" | {quality_to_cn(q)}"
+                f" | UID:{row.get('uid', '')}"
+            )
+
+    lines.extend(["", f"第 {current_page}/{total_pages} 页"])
+    if current_page < total_pages and next_cmd:
+        lines.append(f"输入 {next_cmd} 查看下一页")
+    lines.append("可用命令：查看饰品 UID / 装备饰品 UID / 饰品洗练 UID / 饰品分解 UID")
+
+    return "\n".join(lines)
+
+
 # ========== 命令 ==========
 @accessory_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【饰品系统帮助】
+**饰品系统帮助**
 
-分支帮助：
+---
 
 1.  **基础操作**：饰品基础帮助
     > 查看、背包、详情、装备、卸下
@@ -975,28 +1012,30 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_basic_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【饰品基础帮助】
+**饰品基础帮助**
 
-1）查看已装备饰品：
+---
+
+**查看已装备饰品**
    发送：我的饰品
 
-2）查看饰品背包：
+**查看饰品背包**
    发送：饰品背包 [页码]
    例如：饰品背包 2
 
-3）查看单件饰品详情：
+**查看单件饰品详情**
    发送：查看饰品 饰品UID
    例如：查看饰品 acc_1730000000000_1234
 
-4）查看套装图鉴：
+**查看套装图鉴**
    发送：饰品图鉴 [套装名]
    例如：饰品图鉴 烈阳
 
-5）装备饰品：
+**装备饰品**
    发送：装备饰品 饰品UID
    例如：装备饰品 acc_1730000000000_1234
 
-6）卸下饰品：
+**卸下饰品**
    发送：卸下饰品 部位
    可用部位：手镯 / 戒指 / 手环 / 项链
 """.strip()
@@ -1013,9 +1052,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【饰品成长帮助】
+**饰品成长帮助**
 
-1）洗练饰品：
+---
+
+**洗练饰品**
    发送：饰品洗练 饰品UID
    - 消耗【洗练石】随品阶增加
    - 一至三阶饰品2条词条，四至五阶饰品3条词条
@@ -1024,13 +1065,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    - 每件饰品独立洗练次数
    - 150次保底：词条值固定上限，仅词条类型变化
 
-2）锁定/解锁词条：
+**锁定 / 解锁词条**
    发送：饰品锁定 饰品UID 词条序号
    例如：饰品锁定 acc_1730000000000_1234 1 2
    发送：饰品解锁 饰品UID 词条序号
    发送：饰品解锁 饰品UID 全部
 
-3）饰品升阶：
+**饰品升阶**
    发送：饰品升阶 部位 材料UID1 [材料UID2 ...]
    例如：饰品升阶 项链 UID1 UID2
    规则：
@@ -1058,26 +1099,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_manage_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【饰品整理帮助】
+**饰品整理帮助**
 
-1）单件分解：
+---
+
+**单件分解**
    命令：饰品分解 饰品UID
    限制：已装备饰品不能直接分解，请先卸下
 
-2）快速分解：
+**快速分解**
    命令：快速分解饰品 类型 品阶
    类型：全部 / 烈阳 / 玄渊 / 天衡 / 星痕 / 龙魄 / 手镯 / 戒指 / 手环 / 项链
    品阶：全部 / 1~5 / 一阶~五阶
    安全规则：
    - 当“类型=全部”或“品阶=全部”时，自动忽略4/5阶
 
-3）饰品预设：
+**饰品预设**
    发送：饰品预设 1/2/3
    - 保存当前已装备饰品到对应预设位
    - 若原有记录存在，则自动覆盖
    - 直接发送【饰品预设】可查看所有预设
 
-4）快速装备饰品：
+**快速装备饰品**
    发送：快速装备饰品 1/2/3
    - 一键装备对应预设中的饰品
    - 若预设中某个UID已不存在，会自动清理该失效记录
@@ -1230,11 +1273,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             next_cmd=f"饰品背包 {current_page + 1}",
             capacity_text=capacity_text,
         )
+        fallback_text = _build_accessory_plain_text(
+            title=f"{user_info.get('user_name', '道友')}的饰品背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            next_cmd=f"饰品背包 {current_page + 1}",
+            capacity_text=capacity_text,
+        )
 
         try:
             await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
         except Exception:
-            await handle_send(bot, event, md_text)
+            await handle_send(bot, event, fallback_text)
         return
 
     sections = _build_accessory_sections_for_md(user_id)

@@ -455,12 +455,51 @@ def _build_pet_bag_md_text(
     return "\r".join(lines), current_page, total_pages
 
 
+def _build_pet_bag_plain_text(
+    title: str,
+    data: dict,
+    current_page: int,
+    per_page: int = 15,
+) -> str:
+    rows = get_pet_bag_rows(data)
+    total_pages = max(1, (len(rows) + per_page - 1) // per_page)
+    current_page = max(1, min(int(current_page), total_pages))
+    start = (current_page - 1) * per_page
+    end = start + per_page
+
+    lines = [
+        f"☆------{title}------☆",
+        f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}",
+        "",
+    ]
+
+    for pet in rows[start:end]:
+        active_flag = "【出战中】" if pet.get("is_active") else ""
+        lines.append(
+            f"- {active_flag}{pet.get('form_name', pet.get('name', '未知宠物'))}"
+            f" | {pet.get('rarity', '常见')}"
+            f" | {pet.get('type', '攻击')}"
+            f" | {format_stars(pet.get('stars', 1))}"
+            f" | UID:{pet.get('uid', '')}"
+        )
+
+    lines.extend([
+        "",
+        f"第 {current_page}/{total_pages} 页",
+    ])
+    if current_page < total_pages:
+        lines.append(f"输入 宠物背包 {current_page + 1} 查看下一页")
+    lines.append("可用命令：查看宠物 UID / 出战宠物 UID / 放生宠物 UID / 一键放生 稀有度或宠物名称")
+
+    return "\n".join(lines)
+
+
 @pet_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-【宠物系统帮助】
+**宠物系统帮助**
 
-分支帮助：
+---
 
 1.  **入门获取**：宠物入门帮助
     > 砸蛋、宠物蛋、查看宠物、切换出战
@@ -496,9 +535,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_intro_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-【宠物入门帮助】
+**宠物入门帮助**
 
-1）砸蛋：
+---
+
+**砸蛋**
    发送：砸蛋 [数量]
    数量范围：1-10
    消耗：{number_to(EGG_COST)}灵石
@@ -506,7 +547,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    保底：累计砸蛋{EGG_PITY_THRESHOLD}次自动额外抽取1只卓越/传说/神话宠物（{_format_egg_pity_weight_text()}），连续9次保底未出神话则第10次保底必出神话。
    宠物蛋：发送【道具使用 宠物蛋名 [数量]】可孵化指定稀有度宠物。
 
-2）查看宠物：
+**查看宠物**
    发送：我的宠物（查看当前出战宠物）
    发送：宠物背包 [页码]（查看所有宠物，出战宠物排在最前，其余按品阶从高到低排序）
    发送：查看宠物 宠物UID
@@ -514,7 +555,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    满足条件的专属技能不会直接生效，只会在启明或整★领悟时概率随机出现。
    技能效果包含直伤、多段、持续伤害、控制、破盾、增益、护盾、净化、反伤等。
 
-3）切换出战：
+**切换出战**
    发送：出战宠物 宠物UID
 """.strip()
 
@@ -536,9 +577,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【宠物成长帮助】
+**宠物成长帮助**
 
-1）喂食升级：
+---
+
+**喂食升级**
    发送：宠物喂食 材料名 [数量]
    例如：宠物喂食 恒心草 10
    可喂食：药材 / 一至五阶天地灵髓
@@ -546,12 +589,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    规则：☆主要通过喂食经验提升；当前品阶达到四个☆时需先喂满经验，再使用宠物融合突破为★。
    每五个☆折算为一个★，天地灵髓只能喂食对应★级及以下宠物。
 
-2）宠物启明：
+**宠物启明**
    发送：宠物启明 [宠物UID]
    消耗：启明石 x1
    作用：为指定宠物重新随机获得1个技能，不填UID时默认当前出战宠物。
 
-3）融合突破：
+**融合突破**
    发送：宠物融合 本体UID [本体UID...] [破阶UID]
    例如：宠物融合 UID1 UID2 UID3
    规则：
@@ -567,7 +610,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    - 神话破入★★★★/★★★★★时额外消耗1只满★卓越宠物
    - 每提升到整★时会随机领悟候选技能，可选择是否替换；满足条件时专属技能有概率进入候选
 
-4）技能替换：
+**技能替换**
    发送：替换宠物技能
    发送：保留宠物技能
    规则：只在启明或突破产生候选技能后有效。
@@ -591,21 +634,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_bag_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-【宠物背包帮助】
+**宠物背包帮助**
 
-1）宠物背包：
+---
+
+**宠物背包**
    发送：宠物背包 [页码]
    作用：查看所有宠物，出战宠物排在最前，其余按品阶从高到低排序。
 
-2）查看详情：
+**查看详情**
    发送：查看宠物 宠物UID
 
-3）放生：
+**放生**
    发送：放生宠物 宠物UID
    不填UID时默认放生当前出战宠物
    按累计宠物经验的80%返还一阶天地灵髓，不足1个时不返还
 
-4）一键放生：
+**一键放生**
    发送：一键放生 稀有度/宠物名称
    例如：一键放生 常见
    例如：一键放生 山灵犬
@@ -630,23 +675,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_travel_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-【宠物游历帮助】
+**宠物游历帮助**
 
-1）开始游历：
+---
+
+**开始游历**
    发送：宠物游历 [地点] [小时]
    例如：宠物游历 灵草谷 4
    时长范围：{PET_TRAVEL_MIN_HOURS}-{PET_TRAVEL_MAX_HOURS}小时
    不填地点默认灵草谷，不填小时默认4小时。
    当前仅派遣出战宠物，同一时间只能有1只宠物游历。
 
-2）查看和领取：
+**查看和领取**
    发送：宠物游历状态
    发送：领取宠物游历
 
-3）游历地点：
+**游历地点**
 {_format_travel_scenes()}
 
-4）收益规则：
+**收益规则**
    游历时长越长，奖励次数越多。
    宠物稀有度、品阶和形态会提高材料收益。
    有低概率带回宠物资源，宠物蛋概率参考地图奖励池。
@@ -835,10 +882,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             data=data,
             current_page=current_page,
         )
+        fallback_text = _build_pet_bag_plain_text(
+            title=f"{user_info.get('user_name', '道友')}的宠物背包",
+            data=data,
+            current_page=current_page,
+        )
         try:
             await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
         except Exception:
-            await handle_send(bot, event, md_text)
+            await handle_send(bot, event, fallback_text)
         return
 
     await handle_send(

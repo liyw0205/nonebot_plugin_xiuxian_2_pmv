@@ -548,13 +548,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(
         bot, event,
-        "十点半帮助：\n"
-        "开始十点半 [房间号]\n"
-        "加入十点半 <房间号>\n"
-        "结算十点半（仅房主）\n"
-        "退出十点半\n"
-        "十点半信息 [房间号]\n\n"
-        "规则：每人3张牌，A=1，2-10按点，J/Q/K=0.5；10.5最大，其次点数大者胜；同分按入场顺序。",
+        "**十点半帮助**\n\n"
+        "**房间指令**\n"
+        "- 开始十点半 [房间号]\n"
+        "- 加入十点半 <房间号>\n"
+        "- 结算十点半（仅房主）\n"
+        "- 退出十点半\n"
+        "- 十点半信息 [房间号]\n\n"
+        "> 规则：每人 3 张牌，A=1，2-10 按点，J/Q/K=0.5；10.5 最大，其次点数大者胜；同分按入场顺序。",
         k1="开始", v1="开始十点半",
         k2="信息", v2="十点半信息",
         k3="游戏", v3="小游戏帮助"

@@ -41,14 +41,16 @@ reset_past_life_cmd = on_command("重置前尘", permission=SUPERUSER, priority=
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = (
-        "\n═══  前尘往事  ═════\n"
-        "【前尘往事】- 查看/开启前世回忆\n"
-        "【投胎】- 定下并锁定本轮先天资质\n"
-        "【前尘选择 1/2/3】- 在剧情中做出选择\n"
-        "【前尘回忆】- 查看过往前世记录\n"
-        "【前尘排行】- 查看前世评分排行\n"
-        "═════════════\n"
-        "规则：\n"
+        "**前尘往事**\n"
+        "---\n"
+        "**指令**\n"
+        "- 前尘往事：查看/开启前世回忆\n"
+        "- 投胎：定下并锁定本轮先天资质\n"
+        "- 前尘选择 1/2/3：在剧情中做出选择\n"
+        "- 前尘回忆：查看过往前世记录\n"
+        "- 前尘排行：查看前世评分排行\n"
+        "\n"
+        "**规则**\n"
         "1. 投胎后五项先天资质即刻定下，本轮不可重抽\n"
         "   初始资质总和15~20随机，单项不低于3，也可能偏科极高\n"
         "2. 经历十幕人生，每幕做出抉择\n"
@@ -56,8 +58,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "4. 前世评分为百分制：抉择50、最终资质30、完成幕数20\n"
         "5. 不同结局获得不同奖励\n"
         "6. 每日00:00与12:00刷新，每个刷新段可完成一次\n"
-        "═════════════\n"
-        "十九种结局等你解锁！"
+        "\n"
+        "> 十九种结局等你解锁。"
     )
     await send_help_message(bot, event, msg, k1="开始", v1="前尘往事", k2="回忆", v2="前尘回忆", k3="排行", v3="前尘排行")
     await past_help_cmd.finish()

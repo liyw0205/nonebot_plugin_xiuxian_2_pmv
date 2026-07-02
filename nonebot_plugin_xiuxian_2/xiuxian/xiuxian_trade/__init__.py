@@ -830,71 +830,72 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 帮助内容分块，方便根据关键词选择
     help_sections = {
         "仙肆": """
-【仙肆帮助】（全服交易）
-🔸 仙肆查看 [类型] [页码] - 查看全服仙肆
-  ▶ 支持类型：技能|装备|丹药|药材
-🔸 仙肆上架 物品 金额 [数量] - 上架物品
-  ▶ 最低金额60万灵石，手续费10-30%
-🔸 仙肆快速上架 物品 [金额] - 快速上架10个物品
-  ▶ 自动匹配最低价，数量固定10个（或全部）
-🔸 仙肆快速购买 物品 - 快速购买物品
-  ▶ 自动匹配最低价，可快速购买5种物品
-🔸 仙肆自动上架 类型 品阶 [数量] - 批量上架
-  ▶ 示例：仙肆自动上架 装备 通天
-🔸 仙肆购买 编号 [数量] - 购买物品
-🔸 仙肆下架 物品名 [数量] - 下架自己的物品（默认1个；同名多档按单价从低到高）
-🔸 我的仙肆 [页码] - 查看自己上架的物品
+**仙肆帮助（全服交易）**
+---
+**查看与购买**
+- 仙肆查看 [类型] [页码]：查看全服仙肆
+  支持类型：技能|装备|丹药|药材
+- 仙肆购买 编号 [数量]：购买物品
+- 仙肆快速购买 物品：自动匹配最低价，可快速购买5种物品
+
+**上架与管理**
+- 仙肆上架 物品 金额 [数量]：上架物品
+  最低金额60万灵石，手续费10-30%
+- 仙肆快速上架 物品 [金额]：快速上架10个物品
+  自动匹配最低价，数量固定10个（或全部）
+- 仙肆自动上架 类型 品阶 [数量]：批量上架
+  示例：仙肆自动上架 装备 通天
+- 仙肆下架 物品名 [数量]：下架自己的物品（默认1个；同名多档按单价从低到高）
+- 我的仙肆 [页码]：查看自己上架的物品
 """.strip(),
         "鬼市": """
-【鬼市帮助】
-👻 鬼市存灵石 数量 - 存入灵石到鬼市账户
-👻 鬼市取灵石 数量 - 取出灵石（收取动态暂存费）
-👻 鬼市信息 - 查看鬼市账户和交易信息
-👻 鬼市求购 物品 价格 [数量] - 发布求购订单
-👻 鬼市摆摊 物品 价格 [数量] - 摆摊出售物品
-👻 鬼市收摊 收摊并退还物品
+**鬼市帮助**
+---
+- 鬼市存灵石 数量：存入灵石到鬼市账户
+- 鬼市取灵石 数量：取出灵石（收取动态暂存费）
+- 鬼市信息：查看鬼市账户和交易信息
+- 鬼市求购 物品 价格 [数量]：发布求购订单
+- 鬼市摆摊 物品 价格 [数量]：摆摊出售物品
+- 鬼市收摊：收摊并退还物品
 """.strip(),
         "拍卖": f"""
-【拍卖帮助】🎫
-🔹 拍卖查看 [ID] - 查看拍卖品
-  ▶ 无参数：查看当前拍卖列表
-  ▶ 加ID：查看指定拍卖品详情
+**拍卖帮助**
+---
+**查看**
+- 拍卖查看 [ID]：查看拍卖品
+  无参数查看当前拍卖列表；加ID查看指定拍卖品详情
 
-🔹 拍卖竞拍 ID 价格 - 参与竞拍
-  ▶ 每次加价不得少于{number_to(auction_config.get_auction_rules()['min_bid_increment'])}灵石
-  ▶ 示例：拍卖竞拍 123456 5000000
+**竞拍**
+- 拍卖竞拍 ID 价格：参与竞拍
+  每次加价不得少于{number_to(auction_config.get_auction_rules()['min_bid_increment'])}灵石
+  示例：拍卖竞拍 123456 5000000
 
-🔹 拍卖上架 物品名 底价 - 提交拍卖品
-  ▶ 最低底价：{number_to(auction_config.get_auction_rules()['min_price'])}灵石
-  ▶ 每人最多上架{auction_config.get_auction_rules()['max_user_items']}件 (仅限非拍卖期间)
+**上架**
+- 拍卖上架 物品名 底价：提交拍卖品
+  最低底价：{number_to(auction_config.get_auction_rules()['min_price'])}灵石
+  每人最多上架{auction_config.get_auction_rules()['max_user_items']}件（仅限非拍卖期间）
+- 拍卖下架 物品名：撤回拍卖品（仅在非拍卖期间可操作）
+- 我的拍卖：查看已上架物品（等待拍卖）
 
-🔹 拍卖下架 物品名 - 撤回拍卖品
-  ▶ 仅在非拍卖期间可操作
+**状态**
+- 拍卖活动：查看当前拍卖活动规则和限时交易状态
+- 拍卖信息：查看开启时间、当前状态等信息
 
-🔹 我的拍卖 - 查看已上架物品 (等待拍卖)
-  
-🔹 拍卖活动 - 查看当前拍卖活动规则和限时交易状态
-
-🔹 拍卖信息 - 查看拍卖状态
-  ▶ 包含开启时间、当前状态等信息
-
-⏰ 自动拍卖时间：每日{auction_config.get_auction_schedule()['start_hour']}点{auction_config.get_auction_schedule()['start_minute']}分
-⏳ 持续时间：{auction_config.get_auction_schedule()['duration_hours']}小时
-💼 手续费：{int(auction_config.get_auction_rules()['fee_rate'] * 100)}%
+**规则**
+> 自动拍卖时间：每日{auction_config.get_auction_schedule()['start_hour']}点{auction_config.get_auction_schedule()['start_minute']}分
+> 持续时间：{auction_config.get_auction_schedule()['duration_hours']}小时
+> 手续费：{int(auction_config.get_auction_rules()['fee_rate'] * 100)}%
 """.strip(),
         "交易": """
-【交易系统总览】
-分类帮助：
-🔹 仙肆帮助 - 全服交易市场
-🔹 鬼市帮助 - 黑市功能
-🔹 拍卖帮助 - 拍卖行功能
+**交易系统总览**
+---
+**分类帮助**
+- 仙肆帮助：全服交易市场
+- 鬼市帮助：黑市功能
+- 拍卖帮助：拍卖行功能
 
-【系统规则】
-💰 仙肆手续费规则：
-  - 500万以下：10%
-  - 500-1000万：15%
-  - 1000-2000万：20%
-  - 2000万以上：30%
+**系统规则**
+> 仙肆手续费：500万以下10%，500-1000万15%，1000-2000万20%，2000万以上30%。
 """.strip()
     }
     
@@ -1776,8 +1777,21 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
 
         md_text = "\r".join(lines)  # QQ md更建议 \r
-        msg = MessageSegment.markdown(bot, md_text)
-        await bot.send(event=event, message=msg)
+        fallback_lines = [f"☆------仙肆 {item_type}------☆", ""]
+        for item in paged_items:
+            price_str = number_to(item['price'])
+            fallback_line = f"- {item['name']} {price_str}灵石\n  ID:{item['id']}"
+            if item['quantity'] == -1:
+                fallback_line += " 不限量"
+            elif item['quantity'] > 1:
+                fallback_line += f" 剩余:{item['quantity']}"
+            fallback_lines.append(fallback_line)
+        fallback_lines.append("")
+        fallback_lines.append(f"第 {current_page}/{total_pages} 页")
+        if current_page < total_pages:
+            fallback_lines.append(f"下一页：仙肆查看{item_type} {current_page + 1}")
+        fallback_text = "\n".join(fallback_lines)
+        await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await xiuxian_shop_view.finish()
 
     title = f"☆------仙肆 {item_type}------☆"

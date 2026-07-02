@@ -81,60 +81,60 @@ view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", 
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
-【灵根体系】🌿
-════════════
-🌌 至高道果：
-   ▪ 命运道果
-   ▪ 永恒道果
-   ▪ 轮回道果
-   ▪ 异界道果
+**灵根体系**
+---
+**至高道果**
+- 命运道果
+- 永恒道果
+- 轮回道果
+- 异界道果
 
-⚡ 特殊灵根：
-   ▪ 机械灵根
-   ▪ 混沌灵根
-   ▪ 融合灵根
+**特殊灵根**
+- 机械灵根
+- 混沌灵根
+- 融合灵根
 
-✨ 普通灵根：
-   ▪ 超品灵根
-   ▪ 龙灵根
-   ▪ 天灵根
-   ▪ 异灵根
-   ▪ 真灵根
-   ▪ 伪灵根
+**普通灵根**
+- 超品灵根
+- 龙灵根
+- 天灵根
+- 异灵根
+- 真灵根
+- 伪灵根
 
-注：灵根品质影响修炼速度
+> 灵根品质影响修炼速度。
 """.strip()
 
 
 __level1_help__ = """
-【功法与法器品阶】📜⚔
-════════════
-🌟 功法品阶体系：
-   ▪ 至高：无上
-   ▪ 仙阶：极品 / 上品 / 下品
-   ▪ 天阶：上品 / 下品
-   ▪ 地阶：上品 / 下品
-   ▪ 玄阶：上品 / 下品
-   ▪ 黄阶：上品 / 下品
-   ▪ 人阶：上品 / 下品
+**功法与法器品阶**
+---
+**功法品阶体系**
+- 至高：无上
+- 仙阶：极品 / 上品 / 下品
+- 天阶：上品 / 下品
+- 地阶：上品 / 下品
+- 玄阶：上品 / 下品
+- 黄阶：上品 / 下品
+- 人阶：上品 / 下品
 
-✨ 法器品阶体系：
-   ▪ 至高：无上
-   ▪ 仙器：极品 / 上品 / 下品
-   ▪ 通天：上品 / 下品
-   ▪ 纯阳：上品 / 下品
-   ▪ 玄器：上品 / 下品
-   ▪ 法器：上品 / 下品
-   ▪ 符器：上品 / 下品
-════════════
-注：品阶越高，效果越强
+**法器品阶体系**
+- 至高：无上
+- 仙器：极品 / 上品 / 下品
+- 通天：上品 / 下品
+- 纯阳：上品 / 下品
+- 玄器：上品 / 下品
+- 法器：上品 / 下品
+- 符器：上品 / 下品
+
+> 品阶越高，效果越强。
 """.strip()
 
 __level2_help__ = f"""
-详情:
-            --境界帮助--            
-                江湖人
-                  ↓
+**境界帮助**
+---
+江湖人
+↓
 感气境 → 练气境 → 筑基境
 结丹境 → 金丹境 → 元神境 
 化神境 → 炼神境 → 返虚境
@@ -143,10 +143,10 @@ __level2_help__ = f"""
 星芒境 → 月华境 → 耀日境
 祭道境 → 自在境 → 破虚境 
 无界境 → 混元境 → 造化境
-                  ↓
-                永恒境
-                  ↓          
-                 至高
+↓
+永恒境
+↓
+至高
 """.strip()
 
 _SEASON_MODE_ALIASES = {
@@ -872,7 +872,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
         p_rank = sql_message.realm_top()
-        msg = f"\n> ✨位面境界排行榜 前五十✨\n"
+        msg = f"\n✨位面境界排行榜 前五十✨\n"
         num = 0
         for i in p_rank:
             num += 1
@@ -883,7 +883,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "灵石排行榜":
         a_rank = sql_message.stone_top()
-        msg = f"\n> ✨位面灵石排行榜 前五十✨\n"
+        msg = f"\n✨位面灵石排行榜 前五十✨\n"
         num = 0
         for i in a_rank:
             num += 1
@@ -894,7 +894,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "战力排行榜":
         c_rank = sql_message.power_top()
-        msg = f"\n> ✨位面战力排行榜 前五十✨\n"
+        msg = f"\n✨位面战力排行榜 前五十✨\n"
         num = 0
         for i in c_rank:
             num += 1
@@ -905,7 +905,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
         s_rank = sql_message.scale_top()
-        msg = f"\n> ✨位面宗门建设排行榜 前五十✨\n"
+        msg = f"\n✨位面宗门建设排行榜 前五十✨\n"
         num = 0
         for i in s_rank:
             num += 1
@@ -916,7 +916,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await rank.finish()
     elif message == "轮回排行榜":
         r_rank = sql_message.root_top()
-        msg = f"\n> ✨轮回排行榜 前五十✨\n"
+        msg = f"\n✨轮回排行榜 前五十✨\n"
         num = 0
         for i in r_rank:
             num += 1

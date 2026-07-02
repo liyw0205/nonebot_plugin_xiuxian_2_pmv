@@ -260,11 +260,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-    await handle_send(
-        bot, event,
-        f"🎯 猜数字信息\n"
-        f"玩家：{game['user_name']}\n"
-        f"范围：{_build_range_text(game['low'], game['high'])}\n"
+        await handle_send(
+            bot, event,
+            f"猜数字信息\n"
+            f"玩家：{game['user_name']}\n"
+            f"范围：{_build_range_text(game['low'], game['high'])}\n"
         f"已猜次数：{game['tries']}\n"
         f"创建时间：{game['create_time']}\n"
         f"最后操作：{game['last_action_time']}",
@@ -311,12 +311,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(
         bot, event,
-        "猜数字帮助：\n"
-        "1）开始猜数字\n"
-        "2）猜 50（在 1~100 中猜）\n"
-        "3）猜数字信息（查看当前范围与次数）\n"
-        "4）结束猜数字\n\n"
-        f"规则：系统随机一个 {GUESS_MIN}~{GUESS_MAX} 的整数，"
+        "**猜数字帮助**\n\n"
+        "**指令**\n"
+        "- 开始猜数字\n"
+        f"- 猜 50（在 {GUESS_MIN}~{GUESS_MAX} 中猜）\n"
+        "- 猜数字信息\n"
+        "- 结束猜数字\n\n"
+        f"> 规则：系统随机一个 {GUESS_MIN}~{GUESS_MAX} 的整数，"
         "你根据“猜大了/猜小了”提示逐步逼近答案。",
         k1="开始猜数字", v1="开始猜数字",
         k2="示例猜测", v2="猜 50",

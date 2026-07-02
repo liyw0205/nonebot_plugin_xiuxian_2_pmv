@@ -252,21 +252,27 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
     msg = """
-【背包帮助】
-🔹 我的背包 [页码] - 查看背包物品
-🔹 药材背包 [页码] - 查看药材类物品
-🔹 丹药背包 [页码] - 查看丹药类物品
-🔹 饰品帮助 - 查看饰品系统全部命令
-🔹 我的装备 [页码] - 查看背包装备
-🔹 使用+物品名 [数量] - 使用物品
-🔹 换装/卸装+装备名 - 卸下装备
-🔹 炼金+物品名 [数量] - 将物品转化为灵石
-🔹 快速炼金 类型 品阶 - 批量炼金指定类型物品
-🔹 查看修仙界物品+类型 [页码] - 查看物品图鉴
-🔹 查看效果+物品名 - 查看物品详情
-🔹 灵石 - 查看当前灵石数量
-🔹 快速对比 [物品1] [物品2] - 对比装备或者功法的属性
-"""
+**背包帮助**
+---
+**查看**
+- 我的背包 [页码]：查看背包物品
+- 药材背包 [页码]：查看药材类物品
+- 丹药背包 [页码]：查看丹药类物品
+- 我的装备 [页码]：查看背包装备
+- 查看修仙界物品+类型 [页码]：查看物品图鉴
+- 查看效果+物品名：查看物品详情
+- 灵石：查看当前灵石数量
+
+**使用与整理**
+- 使用+物品名 [数量]：使用物品
+- 换装/卸装+装备名：卸下装备
+- 炼金+物品名 [数量]：将物品转化为灵石
+- 快速炼金 类型 品阶：批量炼金指定类型物品
+- 快速对比 [物品1] [物品2]：对比装备或者功法的属性
+
+**其他入口**
+- 饰品帮助：查看饰品系统全部命令
+""".strip()
 
     await send_help_message(
         bot, event, msg,
@@ -1561,6 +1567,38 @@ def _build_backpack_md_with_sections(
 
     return "\r".join(lines)
 
+
+def _build_backpack_fallback_with_sections(
+    title: str,
+    sections: list[tuple[str, list[dict]]],
+    current_page: int,
+    total_pages: int,
+    show_use_btn: bool = True,
+    next_cmd: str = ""
+) -> str:
+    lines = [f"☆------{title}------☆", ""]
+
+    for sec_title, rows in sections:
+        if not rows:
+            continue
+        lines.append(f"【{sec_title}】")
+        for row in rows:
+            name = row["name"]
+            count = row.get("count", 0)
+            bind = row.get("bind", 0)
+            equipped_flag = " ※已装备※" if row.get("is_equipped") else ""
+            line = f"- {name} 数量:{count} 绑定:{bind}{equipped_flag}"
+            if show_use_btn:
+                use_cmd = f"道具使用 {name}" if row.get("goods_type") == "特殊道具" else f"使用 {name}"
+                line += f"\n  使用：{use_cmd}"
+            lines.append(line)
+        lines.append("")
+
+    lines.append(f"第 {current_page}/{total_pages} 页")
+    if current_page < total_pages and next_cmd:
+        lines.append(f"下一页：{next_cmd}")
+    return "\n".join(lines).strip()
+
 def _paginate_sections(
     sections: list[tuple[str, list[dict]]],
     current_page: int,
@@ -1820,7 +1858,15 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             show_use_btn=True,
             next_cmd=f"我的背包 {current_page + 1}"
         )
-        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        fallback_text = _build_backpack_fallback_with_sections(
+            title=f"{user_info['user_name']}的背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=True,
+            next_cmd=f"我的背包 {current_page + 1}"
+        )
+        await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await main_back.finish()
 
     # 非 markdown 逻辑保持原有
@@ -1886,7 +1932,15 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             show_use_btn=True,
             next_cmd=f"丹药背包 {current_page + 1}"
         )
-        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        fallback_text = _build_backpack_fallback_with_sections(
+            title=f"{user_info['user_name']}的丹药背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=True,
+            next_cmd=f"丹药背包 {current_page + 1}"
+        )
+        await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await danyao_back.finish()
 
     # 非 markdown 逻辑保持原有
@@ -1952,7 +2006,15 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             show_use_btn=False,  # 药材不显示“使用”
             next_cmd=f"药材背包 {current_page + 1}"
         )
-        await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+        fallback_text = _build_backpack_fallback_with_sections(
+            title=f"{user_info['user_name']}的药材背包",
+            sections=page_sections,
+            current_page=current_page,
+            total_pages=total_pages,
+            show_use_btn=False,
+            next_cmd=f"药材背包 {current_page + 1}"
+        )
+        await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await yaocai_back.finish()
 
     # 非 markdown 逻辑保持原有

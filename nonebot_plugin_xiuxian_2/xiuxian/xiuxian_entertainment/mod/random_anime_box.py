@@ -119,11 +119,11 @@ async def anime_box_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     await send_help_message(
         bot,
         event,
-        "【番剧盲盒】\n"
-        "用法：\n"
+        "**番剧盲盒**\n\n"
+        "**用法**\n"
         "- 番剧盲盒\n"
         "- 随机番剧\n\n"
-        "随机抽取一部番剧，展示封面、标题、评分、题材和简介。",
+        "> 随机抽取一部番剧，展示封面、标题、评分、题材和简介。",
         k1="抽一部",
         v1="番剧盲盒",
         k2="今日番剧",

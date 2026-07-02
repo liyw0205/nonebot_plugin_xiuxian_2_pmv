@@ -1591,11 +1591,12 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             # ===== 原生MD模式 =====
             if XiuConfig().markdown_status and not is_channel_event(event):
                 md_lines = []
-                md_lines.append(f"# 【{sect_info['sect_name']}】成员信息")
+                md_lines.append(f"**【{sect_info['sect_name']}】成员信息**")
                 md_lines.append(f"> 第 {current_page}/{total_pages} 页")
 
                 if current_page == 1:
-                    md_lines.append("## 宗门职位统计")
+                    md_lines.append("")
+                    md_lines.append("**宗门职位统计**")
                     position_count = {}
                     for u in sorted_users:
                         p = u['sect_position']
@@ -1608,7 +1609,8 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                         count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
                         md_lines.append(f"- {pos_title}：{count_info}")
 
-                md_lines.append("## 成员列表")
+                md_lines.append("")
+                md_lines.append("**成员列表**")
                 for idx, u in enumerate(current_msgs, start_idx + 1):
                     uname = u['user_name']
                     upos_num = int(u['sect_position'])
