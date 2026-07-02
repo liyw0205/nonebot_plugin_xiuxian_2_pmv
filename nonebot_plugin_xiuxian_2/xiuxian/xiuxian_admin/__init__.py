@@ -5,7 +5,6 @@ except ImportError:
 import re
 import os
 import random
-import requests
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -16,13 +15,10 @@ from datetime import datetime, timedelta
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
-from nonebot.params import CommandArg, EventPlainText
+from nonebot.params import CommandArg
 from nonebot import require, get_bot
-from ..on_compat import on_command, on_message, rebuild_on_compat_index
+from ..on_compat import on_command, rebuild_on_compat_index
 from ..command_disable import apply_disable_targets, format_command_list_page
-from nonebot.rule import Rule
-from nonebot.matcher import Matcher
-from nonebot.adapters import Event as BaseEvent
 
 from ..adapter_compat import (
     Bot,
@@ -32,7 +28,6 @@ from ..adapter_compat import (
     GroupMessageEvent,
     PrivateMessageEvent,
     MessageSegment,
-    is_channel_event,
     get_chat_scene,
     get_group_id,
     get_user_id,
@@ -59,11 +54,12 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, number_to, get_msg_pic, handle_send, send_msg_handler,
-    generate_command, _impersonating_users, handle_pic_msg_send, handle_send_md, send_help_message,
+    generate_command, _impersonating_users, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import add_accessory_to_bag
+from . import empty_fallback as _empty_fallback  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -1944,117 +1940,6 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await handle_send(bot, event, msg)
     await swap_id_cmd.finish()
 
-def get_random_acg_pic_url(timeout: int = 5) -> str | None:
-    """
-    获取随机二次元图片地址
-    成功返回图片URL，失败返回 None
-    """
-    api_url = "https://v2.xxapi.cn/api/randomAcgPic"
-    params = {
-        "type": "pc",
-        "return": "json",
-    }
-
-    try:
-        resp = requests.get(api_url, params=params, timeout=timeout)
-        resp.raise_for_status()
-
-        data = resp.json()
-        if not isinstance(data, dict):
-            logger.warning("默认回复图片接口返回格式异常：不是 JSON 对象")
-            return None
-
-        if str(data.get("code")) != "200":
-            logger.warning(
-                f"默认回复图片接口请求失败: code={data.get('code')} msg={data.get('msg')}"
-            )
-            return None
-
-        image_url = data.get("data")
-        if image_url and isinstance(image_url, str):
-            return image_url.strip()
-
-        logger.warning("默认回复图片接口未返回有效图片地址")
-        return None
-
-    except Exception as e:
-        logger.warning(f"获取默认回复随机图片失败: {e}")
-        return None
-
-
-async def get_random_acg_pic_url_async(timeout: int = 3) -> str | None:
-    return await asyncio.to_thread(get_random_acg_pic_url, timeout)
-
-def _fallback_rule() -> Rule:
-    async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
-        if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
-            return False
-        return isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
-    return Rule(_checker)
-
-empty_fallback = on_message(priority=999, block=False, rule=_fallback_rule())
-
-
-@empty_fallback.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, matcher: Matcher):
-    config = XiuConfig()
-    text_msg = config.empty_msg
-
-    # 先尝试获取随机图片
-    image_url = await get_random_acg_pic_url_async(timeout=3)
-
-    # 1. 开启 Markdown
-    if config.markdown_status and image_url:
-        # 1.1 有模板ID -> 走模板MD
-        if config.markdown_id:
-            try:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "](mqqapi://aio/inlinecmd?command=修仙帮助&enter=false&reply=false)\r![",
-                        f"img #1280px #720px]({image_url})\r",
-                        f"{text_msg}\r\r时间：[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                    ]
-                }
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None,
-                )
-            except Exception as e:
-                logger.warning(f"默认回复模板Markdown发送失败，准备降级: {e}")
-            await matcher.finish()
-        # 1.2 无模板ID -> 走原生MD
-        elif not is_channel_event(event):
-            try:
-                md_msg = (
-                    f"**提示**\r"
-                    f"![img #1280px #720px]({image_url})\r"
-                    f"{text_msg}"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-                return
-            except Exception as e:
-                logger.warning(f"默认回复原生Markdown发送失败，准备降级: {e}")
-            await matcher.finish()
-    # 2. 未开启 Markdown -> 走图文
-    if not config.markdown_status and image_url:
-        try:
-            await handle_pic_msg_send(bot, event, image_url, text_msg)
-        except Exception as e:
-            logger.warning(f"默认回复图文发送失败，准备降级纯文字: {e}")
-        await matcher.finish()
-    # 3. 最终兜底：纯文字
-    try:
-        await handle_send(bot, event, text_msg)
-    except Exception as e:
-        logger.warning(f"默认回复纯文字发送失败: {e}")
-
-    await matcher.finish()
-
 @parse_event_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def parse_event_cmd_(
     bot: Bot,
@@ -3023,11 +2908,11 @@ async def all_apply_cmd_(
     # 生成完整的授权跳转 URL
     target_url = f"https://club.vip.qq.com/transfer?open_kuikly_info={encoded_info}"
 
-    # 拼接 Markdown 文本
+    # 拼接 Markdown 文本。避免在 QQ Markdown 里嵌入图片尺寸语法，防止渲染异常。
     md_text = (
-        "请群主点击下方按钮授权\n"
-        "【提示】需要更新QQ到最新版(9.2.90及以上)\n"
-        "![img #1080px #888px](https://qqbot.ugcimg.cn/102133698/ab2eae432c06686d06a2cffda2b5ca51d4ad2e4f/c7f24f5aeadfb1908561622d43de3169)"
+        "**全量申请授权**\n"
+        "> 请群主点击下方按钮授权\n"
+        "> 需要更新 QQ 到最新版（9.2.90 及以上）"
     )
 
     # 准备 QQ 官方适配器的自定义按钮行
@@ -3055,8 +2940,9 @@ async def all_apply_cmd_(
             logger.error(f"全量申请：Markdown 发送失败，降级纯文本: {e2}")
             # 3. 极速降级：发送纯文本及纯链接
             fallback_msg = (
-                "请群主进行授权：\n"
-                "需要更新QQ到最新版(9.2.90及以上)\n"
+                "全量申请授权\n"
+                "请群主点击下方链接完成授权。\n"
+                "提示：需要更新 QQ 到最新版（9.2.90 及以上）。\n"
                 f"授权链接：{target_url}"
             )
             await handle_send(bot, event, fallback_msg)

@@ -1,0 +1,90 @@
+import asyncio
+
+import requests
+from nonebot.adapters import Event as BaseEvent
+from nonebot.log import logger
+from nonebot.matcher import Matcher
+from nonebot.params import EventPlainText
+from nonebot.rule import Rule
+
+from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent
+from ..on_compat import on_message
+from ..xiuxian_config import XiuConfig
+from ..xiuxian_utils.lay_out import Cooldown
+from ..xiuxian_utils.utils import handle_pic_msg_send, handle_send
+
+
+def get_random_acg_pic_url(timeout: int = 5) -> str | None:
+    """获取默认回复随机图片地址。"""
+    api_url = "https://v2.xxapi.cn/api/randomAcgPic"
+    params = {
+        "type": "pc",
+        "return": "json",
+    }
+
+    try:
+        resp = requests.get(api_url, params=params, timeout=timeout)
+        resp.raise_for_status()
+
+        data = resp.json()
+        if not isinstance(data, dict):
+            logger.warning("默认回复图片接口返回格式异常：不是 JSON 对象")
+            return None
+
+        if str(data.get("code")) != "200":
+            logger.warning(
+                f"默认回复图片接口请求失败: code={data.get('code')} msg={data.get('msg')}"
+            )
+            return None
+
+        image_url = data.get("data")
+        if image_url and isinstance(image_url, str):
+            return image_url.strip()
+
+        logger.warning("默认回复图片接口未返回有效图片地址")
+        return None
+
+    except Exception as e:
+        logger.warning(f"获取默认回复随机图片失败: {e}")
+        return None
+
+
+async def get_random_acg_pic_url_async(timeout: int = 3) -> str | None:
+    return await asyncio.to_thread(get_random_acg_pic_url, timeout)
+
+
+def _fallback_rule() -> Rule:
+    async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
+        if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
+            return False
+        return isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
+
+    return Rule(_checker)
+
+
+empty_fallback = on_message(priority=999, block=False, rule=_fallback_rule())
+
+
+@empty_fallback.handle(parameterless=[Cooldown(cd_time=0)])
+async def handle_empty_fallback(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    matcher: Matcher,
+):
+    config = XiuConfig()
+    text_msg = config.empty_msg
+    image_url = await get_random_acg_pic_url_async(timeout=3)
+
+    if image_url:
+        try:
+            await handle_pic_msg_send(bot, event, image_url, text_msg)
+            await matcher.finish()
+        except Exception as e:
+            logger.warning(f"默认回复图文发送失败，准备降级纯文字: {e}")
+
+    try:
+        await handle_send(bot, event, text_msg)
+    except Exception as e:
+        logger.warning(f"默认回复纯文字发送失败: {e}")
+
+    await matcher.finish()

@@ -5,7 +5,7 @@ from typing import Any, Optional
 import requests
 from nonebot.log import logger
 
-from ...adapter_compat import Bot, MessageSegment
+from ...adapter_compat import Bot
 from ...xiuxian_config import XiuConfig
 from ...xiuxian_utils.utils import build_md_command_link, escape_markdown_text
 
@@ -260,14 +260,14 @@ def build_song_markdown_text(song_name: str, artists: str) -> str:
 
 
 # =========================
-# 发送（原生MD / 普通图文）
+# 发送（图文 / 原生MD / 普通文本）
 # =========================
 async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     """
     发送顺序：
-    1) 原生MD文字（若开启，频道会自动降级普通文本）
-    2) 封面图片独立发送，避免QQ Markdown图片语法误解析
-    3) 普通图文
+    1) 有封面时优先普通图文混合，保证封面和文本在同一条消息
+    2) 无封面时原生MD文字（若开启，频道会自动降级普通文本）
+    3) 普通文本
     每条文本后补发音频（若有）
     """
     from ..command import handle_audio_send
@@ -281,7 +281,24 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
 
     text_msg = build_song_plain_text(song_name, artists)
 
-    # ===== 1) Markdown文字 + 独立封面 =====
+    # ===== 1) 封面 + 文本同条发送 =====
+    if cover_url:
+        try:
+            await handle_pic_msg_send(bot, event, cover_url, text_msg)
+
+            if audio_url:
+                try:
+                    await handle_audio_send(bot, event, audio_url)
+                    return True, "发送成功"
+                except Exception as e:
+                    logger.warning(f"点歌音频发送失败：{e}")
+                    return False, f"【{song_name} - {artists}】音频发送失败：{e}"
+            return False, f"【{song_name} - {artists}】无可用音频链接"
+
+        except Exception as e:
+            logger.warning(f"点歌图文发送失败，准备降级文本：{e}")
+
+    # ===== 2) 无封面或图文失败时，Markdown文字 =====
     if config.markdown_status:
         try:
             await handle_send(
@@ -296,12 +313,6 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
                 at_msg=False,
             )
 
-            if cover_url:
-                try:
-                    await bot.send(event=event, message=MessageSegment.image(bot, cover_url))
-                except Exception as e:
-                    logger.warning(f"点歌封面发送失败：{e}")
-
             if audio_url:
                 try:
                     await handle_audio_send(bot, event, audio_url)
@@ -314,12 +325,9 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
         except Exception as e:
             logger.warning(f"点歌 Markdown发送失败：{e}")
 
-    # ===== 2) 普通图文 =====
+    # ===== 3) 普通文本 =====
     try:
-        if cover_url:
-            await handle_pic_msg_send(bot, event, cover_url, text_msg)
-        else:
-            await bot.send(event=event, message=text_msg)
+        await bot.send(event=event, message=text_msg)
 
         if audio_url:
             await handle_audio_send(bot, event, audio_url)

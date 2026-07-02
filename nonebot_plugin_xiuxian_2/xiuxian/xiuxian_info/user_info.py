@@ -7,13 +7,10 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     is_channel_event,
     is_group_event,
-    MessageSegment
 )
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, handle_send, number_to,
-    handle_pic_send, handle_pic_msg_send, handle_send_md,
-    call_upload_api_async,
-    optimize_md
+    handle_pic_send, handle_pic_msg_send,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate, get_base_attributes, get_final_attributes
@@ -290,7 +287,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
         return _md_cmd_link(value, click_command)
 
-    def _build_native_md_info(title_url: str = "") -> str:
+    def _build_native_md_info() -> str:
         """
         构造“我的修仙信息”原生 Markdown。
         """
@@ -298,9 +295,6 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         title_name = detail_map.get("称号", "无")
 
         md_lines = []
-
-        if title_url:
-            md_lines.append(f"![img #256px #64px]({title_url})")
 
         md_lines.extend([
             f"道号: {_md_cmd_link(user_name, '修仙改名')}",
@@ -355,63 +349,15 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     # ==================================================
     # 有称号图片
     # ==================================================
-    if title_url:
-        # ------------------------------
-        # 1. 开启 Markdown 且设置了模板 ID：走原模板逻辑
-        # ------------------------------
-        if config.markdown_status and config.markdown_id and not is_channel:
-            try:
-                optimized_msg = optimize_md(text_msg)
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        f"](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r![",
-                        f"img #256px #64px]({title_url})\r",
-                        f"{optimized_msg}\r\r---\r\r[",
-                        f"图片版](mqqapi://aio/inlinecmd?command=我的修仙信息图片版&enter=false&reply=false) | [",
-                        f"我的修为](mqqapi://aio/inlinecmd?command=我的修为&enter=false&reply=false) | [",
-                        f"我的状态](mqqapi://aio/inlinecmd?command=我的状态&enter=false&reply=false)\r",
-                    ]
-                }
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-            except Exception as e:
-                logger.warning(f"存档称号模板MD发送失败，降级处理: {e}")
-            await xiuxian_message.finish()
-
-        # ------------------------------
-        # 2. 开启 Markdown 但没有模板 ID：走原生 Markdown 蓝字
-        # ------------------------------
-        if config.markdown_status and not config.markdown_id and not config.markdown_id2 and not is_channel:
-            try:
-                md_msg = _build_native_md_info(title_url=title_url)
-                await handle_send(
-                    bot,
-                    event,
-                    md_msg,
-                    native_markdown=True,
-                    fallback_msg=text_msg,
-                    at_msg=False,
-                )
-                await xiuxian_message.finish()
-            except Exception as e:
-                logger.warning(f"存档称号原生MD蓝字发送失败，降级普通图文: {e}")
-
-        # ------------------------------
-        # 3. 未开启 Markdown：普通图文模式
-        # ------------------------------
-        if not config.markdown_status:
-            try:
-                pic_text = f"🏅 称号：{title_name}\n{text_msg}"
-                await handle_pic_msg_send(bot, event, title_url, pic_text)
-            except Exception as e:
-                logger.warning(f"存档称号图文发送失败，降级普通文本: {e}")
+    if title_url and not config.markdown_status:
+        sent_title_pic = False
+        try:
+            pic_text = f"称号：{title_name}\n{text_msg}"
+            await handle_pic_msg_send(bot, event, title_url, pic_text)
+            sent_title_pic = True
+        except Exception as e:
+            logger.warning(f"存档称号图文发送失败，降级普通文本: {e}")
+        if sent_title_pic:
             await xiuxian_message.finish()
 
     if config.markdown_status and not config.markdown_id and not config.markdown_id2 and not is_channel:
@@ -463,29 +409,15 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
     
-    if XiuConfig().markdown_status:
-        if XiuConfig().markdown_id and XiuConfig().web_link:
-            # 模板MD - 称号显示在标题中
-            title_display = f"🏅{equipped_title_name}\r" if equipped_title_name else ""
-            msg_param = {
-                "key": "t1",
-                "values": [
-                    f"](mqqapi://aio/inlinecmd?command=我的修仙信息&enter=false&reply=false)\r",
-                    f"![img #1100px #2680px]({XiuConfig().web_link}/download/user_xiuxian_info_{user_info['user_id']}.png)\r",
-                    f"{title_display}道号：[{user_info['user_name']}"
-                ]
-            }
-            await handle_send_md(bot, event, " ", markdown_id=XiuConfig().markdown_id, msg_param=msg_param, at_msg=None)
+    if equipped_title_name:
+        sent_info_pic = False
+        try:
+            await handle_pic_msg_send(bot, event, img_res, f"称号：{equipped_title_name}")
+            sent_info_pic = True
+        except Exception as e:
+            logger.warning(f"修仙信息图片版图文发送失败，降级纯图片: {e}")
+        if sent_info_pic:
             await xiuxian_message_img.finish()
-        else:
-            if not is_channel_event(event):
-                link = await call_upload_api_async(img_res)
-                if link:
-                    # 原生MD - 称号显示在标题中
-                    title_display = f"**{equipped_title_name}**\r" if equipped_title_name else ""
-                    img_data = f"{title_display}![img #1100px #2680px]({link})"
-                    await bot.send(event=event, message=MessageSegment.markdown(bot, img_data))
-                    await xiuxian_message_img.finish()
-    
+
     await handle_pic_send(bot, event, img_res)
     await xiuxian_message_img.finish()
