@@ -27,6 +27,20 @@ from ..xiuxian_utils.xiuxian2_handle import (
     save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
+from .relation_utils import (
+    _config_rate,
+    _format_seconds,
+    _is_none_like,
+    _normalize_dict,
+    _normalize_history,
+    _normalize_id_list,
+    _parse_datetime,
+    _rank_value,
+    get_mentor_required_gap,
+    get_realm_gap,
+    is_wujie_or_above,
+    safe_int,
+)
 from .two_exp_cd import two_exp_cd
 
 invite_cache = {}
@@ -1207,26 +1221,6 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await my_partner.finish()
 
 # 加载和保存道侣数据的函数
-def _is_none_like(value):
-    """
-    兼容历史脏数据：
-    None / "" / "None" / "null" / "NULL" 都视为无值。
-    """
-    if value is None:
-        return True
-    if isinstance(value, str) and value.strip().lower() in ["", "none", "null"]:
-        return True
-    return False
-
-
-def safe_int(value, default=0):
-    try:
-        if _is_none_like(value):
-            return default
-        return int(value)
-    except (ValueError, TypeError):
-        return default
-
 def load_partner(user_id):
     """
     加载用户自己的道侣数据。
@@ -1300,53 +1294,6 @@ def save_partner(user_id, data):
     player_data_manager.update_or_write_data(
         str(user_id), "partner", "affection", affection, data_type="INTEGER"
     )
-
-
-def _normalize_id_list(value):
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(v) for v in value if not _is_none_like(v)]
-    if isinstance(value, str):
-        if _is_none_like(value):
-            return []
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return [str(v) for v in parsed if not _is_none_like(v)]
-        except (json.JSONDecodeError, TypeError):
-            return [v.strip() for v in value.split(",") if v.strip()]
-    return []
-
-
-def _normalize_dict(value):
-    if value is None or _is_none_like(value):
-        return {}
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, dict):
-                return parsed
-        except (json.JSONDecodeError, TypeError):
-            return {}
-    return {}
-
-
-def _normalize_history(value):
-    if value is None or _is_none_like(value):
-        return []
-    if isinstance(value, list):
-        return [record for record in value if isinstance(record, dict)]
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return [record for record in parsed if isinstance(record, dict)]
-        except (json.JSONDecodeError, TypeError):
-            return []
-    return []
 
 
 def load_mentor(user_id):
@@ -1507,30 +1454,6 @@ def save_mentor(user_id, data):
     player_data_manager.update_or_write_data(
         str(user_id), "mentor", "breakthrough_reward_count", breakthrough_reward_count, data_type="INTEGER"
     )
-
-
-def _parse_datetime(value):
-    if _is_none_like(value):
-        return None
-    try:
-        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
-    except (ValueError, TypeError):
-        return None
-
-
-def _format_seconds(seconds):
-    seconds = max(0, int(seconds))
-    days, rem = divmod(seconds, 86400)
-    hours, rem = divmod(rem, 3600)
-    minutes, _ = divmod(rem, 60)
-    parts = []
-    if days:
-        parts.append(f"{days}天")
-    if hours:
-        parts.append(f"{hours}小时")
-    if minutes or not parts:
-        parts.append(f"{minutes}分钟")
-    return "".join(parts)
 
 
 def _get_mentor_apply_remaining(apprentice_id):
@@ -1796,29 +1719,6 @@ def _resolve_user_id_from_args(args: Message):
             return str(target_info["user_id"])
 
     return None
-
-
-def _rank_value(level_name):
-    rank, _ = convert_rank(level_name)
-    return rank
-
-
-def is_wujie_or_above(level_name):
-    rank = _rank_value(level_name)
-    wujie_rank = _rank_value("无界境初期")
-    return rank is not None and wujie_rank is not None and rank <= wujie_rank
-
-
-def get_mentor_required_gap(mentor_level):
-    return 3 if is_wujie_or_above(mentor_level) else 6
-
-
-def get_realm_gap(mentor_level, apprentice_level):
-    mentor_rank = _rank_value(mentor_level)
-    apprentice_rank = _rank_value(apprentice_level)
-    if mentor_rank is None or apprentice_rank is None:
-        return 0
-    return apprentice_rank - mentor_rank
 
 
 def get_valid_apprentices(mentor_id):
@@ -2632,13 +2532,6 @@ def trigger_partner_exp_share(user_id, new_level):
                 log_message(partner_id, f"道侣突破{new_level}，获得共享修为：{number_to(give_exp)}")
                 return f"\n道侣{partner_name}感受到你的突破，获得{number_to(give_exp)}修为！"
     return ""
-
-
-def _config_rate(value, default):
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        return default
 
 
 def _mentor_breakthrough_reward_rate(apprentice_level):
