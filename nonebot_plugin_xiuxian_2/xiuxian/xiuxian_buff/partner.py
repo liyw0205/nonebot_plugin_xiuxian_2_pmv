@@ -27,6 +27,14 @@ from ..xiuxian_utils.xiuxian2_handle import (
     save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
+from .partner_storage import (
+    PLAYERSDATA,
+    bind_partner_storage,
+    load_mentor,
+    load_partner,
+    save_mentor,
+    save_partner,
+)
 from .relation_utils import (
     _config_rate,
     _format_seconds,
@@ -82,9 +90,13 @@ MENTOR_TITLE_IDS = {
     "transmission_100": "30120",
     "receive_transmission_50": "30121",
 }
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
 TITLE_JSONPATH = Path() / "data" / "xiuxian" / "修炼物品" / "称号.json"
 _mentor_title_cache = None
+bind_partner_storage(
+    player_data_manager,
+    mentor_history_limit=MENTOR_HISTORY_LIMIT,
+    mentor_breakthrough_reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT,
+)
 
 two_exp_invite = on_command("双修", priority=6, block=True)
 two_exp_accept = on_command("同意双修", priority=5, block=True)
@@ -1219,241 +1231,6 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 亲密度：{affection}（{affection_level}）"""
     await handle_send(bot, event, msg)
     await my_partner.finish()
-
-# 加载和保存道侣数据的函数
-def load_partner(user_id):
-    """
-    加载用户自己的道侣数据。
-
-    修复点：
-    1. 不再读取对方的 partner 表，避免亲密度、绑定时间读错。
-    2. 兼容历史 "None" / "null" / "" 脏数据。
-    """
-    info = player_data_manager.get_fields(str(user_id), "partner")
-
-    if not info:
-        return {
-            "partner_id": None,
-            "bind_time": None,
-            "affection": 0
-        }
-
-    partner_id = info.get("partner_id")
-    bind_time = info.get("bind_time")
-    affection = info.get("affection")
-
-    if _is_none_like(partner_id):
-        partner_id = None
-    else:
-        partner_id = str(partner_id)
-
-    if _is_none_like(bind_time):
-        bind_time = None
-    else:
-        bind_time = str(bind_time)
-
-    affection = safe_int(affection, 0)
-
-    return {
-        "partner_id": partner_id,
-        "bind_time": bind_time,
-        "affection": affection
-    }
-
-
-def save_partner(user_id, data):
-    """
-    保存用户道侣数据。
-
-    注意：
-    如果你已经修复 PlayerDataManager.update_or_write_data，使 None 写入 SQL NULL，
-    这里可以直接传 None。
-    """
-    partner_id = data.get("partner_id")
-    bind_time = data.get("bind_time")
-    affection = data.get("affection")
-
-    if _is_none_like(partner_id):
-        partner_id = None
-    else:
-        partner_id = str(partner_id)
-
-    if _is_none_like(bind_time):
-        bind_time = None
-    else:
-        bind_time = str(bind_time)
-
-    affection = safe_int(affection, 0)
-
-    player_data_manager.update_or_write_data(
-        str(user_id), "partner", "partner_id", partner_id, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "partner", "bind_time", bind_time, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "partner", "affection", affection, data_type="INTEGER"
-    )
-
-
-def load_mentor(user_id):
-    """加载用户师徒数据。"""
-    info = player_data_manager.get_fields(str(user_id), "mentor")
-
-    if not info:
-        return {
-            "mentor_id": None,
-            "apprentice_ids": [],
-            "bind_time": None,
-            "mentor_cd_until": None,
-            "apprentice_cd_until": None,
-            "mentor_rebind_cd": {},
-            "mentor_history": [],
-            "mentor_protect": "off",
-            "mentor_apply_time": None,
-            "mentor_apply_target": None,
-            "breakthrough_reward_count": 0,
-        }
-
-    mentor_id = info.get("mentor_id")
-    if _is_none_like(mentor_id):
-        mentor_id = None
-    else:
-        mentor_id = str(mentor_id)
-
-    bind_time = info.get("bind_time")
-    if _is_none_like(bind_time):
-        bind_time = None
-    else:
-        bind_time = str(bind_time)
-
-    mentor_cd_until = info.get("mentor_cd_until")
-    if _is_none_like(mentor_cd_until):
-        mentor_cd_until = None
-    else:
-        mentor_cd_until = str(mentor_cd_until)
-
-    apprentice_cd_until = info.get("apprentice_cd_until")
-    if _is_none_like(apprentice_cd_until):
-        apprentice_cd_until = None
-    else:
-        apprentice_cd_until = str(apprentice_cd_until)
-
-    mentor_protect = str(info.get("mentor_protect") or "off").strip().lower()
-    if mentor_protect not in ["on", "off"]:
-        mentor_protect = "off"
-
-    mentor_apply_time = info.get("mentor_apply_time")
-    if _is_none_like(mentor_apply_time):
-        mentor_apply_time = None
-    else:
-        mentor_apply_time = str(mentor_apply_time)
-
-    mentor_apply_target = info.get("mentor_apply_target")
-    if _is_none_like(mentor_apply_target):
-        mentor_apply_target = None
-    else:
-        mentor_apply_target = str(mentor_apply_target)
-
-    return {
-        "mentor_id": mentor_id,
-        "apprentice_ids": _normalize_id_list(info.get("apprentice_ids")),
-        "bind_time": bind_time,
-        "mentor_cd_until": mentor_cd_until,
-        "apprentice_cd_until": apprentice_cd_until,
-        "mentor_rebind_cd": _normalize_dict(info.get("mentor_rebind_cd")),
-        "mentor_history": _normalize_history(info.get("mentor_history")),
-        "mentor_protect": mentor_protect,
-        "mentor_apply_time": mentor_apply_time,
-        "mentor_apply_target": mentor_apply_target,
-        "breakthrough_reward_count": safe_int(info.get("breakthrough_reward_count"), 0),
-    }
-
-
-def save_mentor(user_id, data):
-    """保存用户师徒数据。"""
-    mentor_id = data.get("mentor_id")
-    if _is_none_like(mentor_id):
-        mentor_id = None
-    else:
-        mentor_id = str(mentor_id)
-
-    apprentice_ids = _normalize_id_list(data.get("apprentice_ids"))
-
-    bind_time = data.get("bind_time")
-    if _is_none_like(bind_time):
-        bind_time = None
-    else:
-        bind_time = str(bind_time)
-
-    mentor_cd_until = data.get("mentor_cd_until")
-    if _is_none_like(mentor_cd_until):
-        mentor_cd_until = None
-    else:
-        mentor_cd_until = str(mentor_cd_until)
-
-    apprentice_cd_until = data.get("apprentice_cd_until")
-    if _is_none_like(apprentice_cd_until):
-        apprentice_cd_until = None
-    else:
-        apprentice_cd_until = str(apprentice_cd_until)
-
-    mentor_protect = str(data.get("mentor_protect") or "off").strip().lower()
-    if mentor_protect not in ["on", "off"]:
-        mentor_protect = "off"
-
-    mentor_apply_time = data.get("mentor_apply_time")
-    if _is_none_like(mentor_apply_time):
-        mentor_apply_time = None
-    else:
-        mentor_apply_time = str(mentor_apply_time)
-
-    mentor_apply_target = data.get("mentor_apply_target")
-    if _is_none_like(mentor_apply_target):
-        mentor_apply_target = None
-    else:
-        mentor_apply_target = str(mentor_apply_target)
-
-    mentor_rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
-    mentor_history = _normalize_history(data.get("mentor_history"))[-MENTOR_HISTORY_LIMIT:]
-    breakthrough_reward_count = min(
-        max(safe_int(data.get("breakthrough_reward_count"), 0), 0),
-        MENTOR_BREAKTHROUGH_REWARD_LIMIT,
-    )
-
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_id", mentor_id, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "apprentice_ids", apprentice_ids, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "bind_time", bind_time, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_cd_until", mentor_cd_until, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "apprentice_cd_until", apprentice_cd_until, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_rebind_cd", mentor_rebind_cd, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_history", mentor_history, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_protect", mentor_protect, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_apply_time", mentor_apply_time, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "mentor_apply_target", mentor_apply_target, data_type="TEXT"
-    )
-    player_data_manager.update_or_write_data(
-        str(user_id), "mentor", "breakthrough_reward_count", breakthrough_reward_count, data_type="INTEGER"
-    )
 
 
 def _get_mentor_apply_remaining(apprentice_id):
