@@ -251,11 +251,10 @@ async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     title = f"【我的成就】{unlocked_count}/{total_count}"
     if filter_text:
         title += f"｜筛选：{filter_text}"
-    lines = [title, f"第{page}/{total_page}页", "═════════════"]
+    lines = [title, f"第{page}/{total_page}页"]
     if newly_unlocked:
         lines.append("本次新解锁：")
         lines.extend(f"【{title_data['name']}】{title_data['desc']}" for title_data in newly_unlocked)
-        lines.append("═════════════")
 
     if show_records:
         lines.extend(_format_achievement_record(record) for record in show_records)
@@ -322,12 +321,10 @@ async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     title_data = get_title_by_id(title_id)
     msg_text = (
-        f"🏅 称号详情\n"
-        f"═════════════\n"
+        f"【称号详情】\n"
         f"名称：{title_data['name']}\n"
         f"描述：{title_data['desc']}\n"
-        f"获取条件：{title_data.get('condition', '无')}\n"
-        f"═════════════"
+        f"获取条件：{title_data.get('condition', '无')}"
     )
 
     await handle_send(bot, event, msg_text, md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2=f"装备称号 {title_data['name']}", k3="帮助", v3="称号帮助")

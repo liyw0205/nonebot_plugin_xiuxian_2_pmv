@@ -799,7 +799,7 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     
     # 构造返回消息
     msg_list = [
-        f"\n☆------竞拍成功------☆",
+        f"【竞拍成功】",
         f"物品: {item['name']}",
         f"出价: {number_to(bid_price)}灵石",
         f"当前最高价: {number_to(bid_price)}灵石"
@@ -1496,7 +1496,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         {"仙肆上架次数": 1, "仙肆上架数量": successful_items_count, "仙肆手续费消耗": actual_fees_to_charge}
     )
     
-    await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg_lines, title=f"☆------仙肆自动上架 {item_type} {rank_name}------☆", page_param=msg)
+    await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg_lines, title=f"【仙肆自动上架 {item_type} {rank_name}】", page_param=msg)
     await xianshi_auto_add.finish()
 
 @xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=10)])
@@ -1751,7 +1751,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 构建消息内容
     if XiuConfig().markdown_status:
         # 构建 markdown 文本
-        lines = [f"☆------仙肆 {item_type}------☆", ""]
+        lines = [f"【仙肆 {item_type}】", ""]
 
         for item in paged_items:
             price_str = number_to(item['price'])
@@ -1777,7 +1777,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
 
         md_text = "\r".join(lines)  # QQ md更建议 \r
-        fallback_lines = [f"☆------仙肆 {item_type}------☆", ""]
+        fallback_lines = [f"【仙肆 {item_type}】", ""]
         for item in paged_items:
             price_str = number_to(item['price'])
             fallback_line = f"- {item['name']} {price_str}灵石\n  ID:{item['id']}"
@@ -1794,7 +1794,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await xiuxian_shop_view.finish()
 
-    title = f"☆------仙肆 {item_type}------☆"
+    title = f"【仙肆 {item_type}】"
     msg_list = []
     for item in paged_items:
         price_str = number_to(item['price'])
@@ -1852,7 +1852,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     end_idx = start_idx + per_page
     paged_items = user_items[start_idx:end_idx]
     
-    title = f"☆------{user_info['user_name']}的仙肆物品------☆"
+    title = f"【{user_info['user_name']}的仙肆物品】"
     msg_list = []
     for item in paged_items:
         price_str = number_to(item['price'])
@@ -2826,11 +2826,11 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     stored_stone = trade_manager.get_stored_stone(user_id)
     stored_items = trade_manager.get_stored_items(user_id)
     
-    msg_parts = [f"☆------鬼市账户信息------☆\n"]    
+    msg_parts = [f"【鬼市账户信息】\n"]
     msg_parts.append(f"账户余额：{number_to(stored_stone)}\n")
     
     if stored_items:
-        msg_parts.append(f"\n☆------暂存物品------☆\n")
+        msg_parts.append(f"\n【暂存物品】\n")
         for item_id_str, quantity in stored_items.items():
             item_info = items.get_data_by_item_id(int(item_id_str)) # key是字符串，需要转回int
             if item_info:
@@ -3110,7 +3110,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if item: # 如果在当前拍卖中找到
             # 构造详情消息
             msg_list = [
-                f"\n☆------拍卖品详情------☆",
+                f"【拍卖品详情】",
                 f"编号: {item['id']}",
                 f"物品: {item['name']}",
                 f"起拍价: {number_to(item['start_price'])}灵石",
@@ -3142,7 +3142,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if history_record_list:
                 record = history_record_list[0] # 取最新的一条
                 msg_list = [
-                    f"\n☆------拍卖历史详情------☆",
+                    f"【拍卖历史详情】",
                     f"编号: {record['auction_id']}",
                     f"物品: {record['item_name']}",
                     f"状态: {record['status']}"
@@ -3185,7 +3185,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     current_auctions_list.sort(key=lambda x: x["current_price"], reverse=True)
     display_items = current_auctions_list[:20]
     
-    title = f"\n☆------拍卖物品列表------☆"
+    title = f"【拍卖物品列表】"
     msg_list = []
     for item in display_items:
         msg_list.append(
@@ -3435,7 +3435,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
         await my_auction.finish()
     
-    msg_list = [f"\n☆------我的拍卖等待区物品------☆"]
+    msg_list = [f"【我的拍卖等待区物品】"]
     for item in player_auction_items:
         msg_list.append(f"\n物品: {item['item_name']}") # item_name是玩家上架时的名称
         msg_list.append(f"起拍价: {number_to(item['start_price'])}灵石")
@@ -3462,7 +3462,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     auction_history_count = len(trade_manager.get_auction_history())
     
     msg_list = [
-        "\n☆------拍卖信息------☆",
+        "【拍卖信息】",
         f"当前状态: {'运行中' if auction_current_status['active'] else '未运行'}",
         f"自动开启: {'开启' if schedule['enabled'] else '关闭'}",
         f"自动拍卖时间: 每日{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
@@ -3506,7 +3506,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     recent_deals_limit = _safe_auction_int(activity_config.get("recent_deals_limit"), 5)
 
     msg_list = [
-        "\n☆------拍卖活动------☆",
+        "【拍卖活动】",
         f"活动状态: {'进行中' if auction_current_status['active'] else '未开启'}",
         f"计划开启: {'每日' if schedule['enabled'] else '已暂停'}{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
         f"持续时间: {schedule['duration_hours']}小时",

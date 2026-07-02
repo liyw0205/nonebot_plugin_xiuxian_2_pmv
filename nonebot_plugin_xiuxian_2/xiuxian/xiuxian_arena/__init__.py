@@ -405,8 +405,7 @@ async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"名称：{item_info['name']}\n"
             f"要求段位：{rank_requirement}\n" 
             f"价格：{item_data['cost']}荣誉值\n"
-            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
-            f"════════════"
+            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
         )
     
     msg_list.append(f"提示：发送 竞技场商店+页码 查看其他页（共{total_pages}页）")

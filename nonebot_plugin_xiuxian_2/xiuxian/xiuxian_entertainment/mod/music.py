@@ -60,13 +60,13 @@ async def music_help_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg = (
         "**点歌帮助**\n\n"
         "**基础用法**\n"
-        "- 点歌 歌名\n"
-        "- 选歌 序号\n"
-        "- 点歌下一页 / 点歌上一页 / 点歌第3页\n\n"
+        "- `点歌 歌名`\n"
+        "- `选歌 序号`\n"
+        "- `点歌下一页` / `点歌上一页` / `点歌翻页 第3页`\n\n"
         "**平台点歌**\n"
-        "- 网易点歌 晴天\n"
-        "- QQ点歌 夜曲\n\n"
-        "> 搜索到多首歌时，先返回列表，再用“选歌 1”播放。"
+        "- `网易点歌 晴天`\n"
+        "- `QQ点歌 夜曲`\n\n"
+        "> 搜索到多首歌时，先返回列表，再用 `选歌 1` 播放。"
     )
     await send_help_message(
         bot, event,
@@ -90,7 +90,9 @@ async def music_search_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(parts) < 2 or not parts[1].strip():
         await handle_send(
             bot, event,
-            "用法：点歌 歌名\n例如：点歌 稻香",
+            "【点歌】\n"
+            "用法：点歌 歌名\n"
+            "例如：点歌 稻香",
             md_type="娱乐",
             k1="示例1", v1=quote("点歌 稻香", safe=""),
             k2="示例2", v2=quote("网易点歌 晴天", safe=""),
@@ -237,7 +239,9 @@ async def music_select_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(parts) < 2 or not parts[1].strip():
         await handle_send(
             bot, event,
-            "用法：选歌 序号\n例如：选歌 1",
+            "【选歌】\n"
+            "用法：选歌 序号\n"
+            "例如：选歌 1",
             md_type="娱乐",
             k1="示例", v1=quote("选歌 1", safe=""),
             k2="重新点歌", v2=quote("点歌 稻香", safe=""),
@@ -262,7 +266,9 @@ async def music_select_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if not arg.isdigit():
         await handle_send(
             bot, event,
-            "格式错误，用法：选歌 序号\n例如：选歌 1",
+            "【选歌】\n"
+            "格式错误，请发送：选歌 序号\n"
+            "例如：选歌 1",
             md_type="娱乐",
             k1="示例", v1=quote("选歌 1", safe=""),
             k2="点歌帮助", v2=quote("点歌帮助", safe=""),
@@ -308,7 +314,7 @@ async def music_config_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(parts) == 1 or (len(parts) >= 2 and parts[1] == "查看"):
         cfg = load_music_config()
         msg = (
-            "点歌配置\n"
+            "【点歌配置】\n"
             f"default_platform: {cfg['default_platform']}\n"
             f"song_limit: {cfg['song_limit']}\n"
             f"select_timeout: {cfg['select_timeout']}\n"
@@ -341,11 +347,11 @@ async def music_config_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     await handle_send(
         bot, event,
-        "用法：\n"
-        "点歌配置 查看\n"
-        "点歌配置 设置 song_limit 10\n"
-        "点歌配置 设置 default_platform netease\n"
-        "点歌配置 设置 page_size 5",
+        "【点歌配置用法】\n"
+        "1. 点歌配置 查看\n"
+        "2. 点歌配置 设置 song_limit 10\n"
+        "3. 点歌配置 设置 default_platform netease\n"
+        "4. 点歌配置 设置 page_size 5",
         md_type="娱乐",
         k1="查看", v1=quote("点歌配置 查看", safe=""),
         k2="设置示例", v2=quote("点歌配置 设置 song_limit 10", safe=""),

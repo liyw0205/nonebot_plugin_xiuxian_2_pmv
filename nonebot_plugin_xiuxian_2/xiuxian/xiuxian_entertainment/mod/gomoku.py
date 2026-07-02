@@ -203,7 +203,7 @@ class GomokuRoomManager:
             return False, "游戏进行中不能直接退出，请使用【认输】。"
 
         self.delete_room(room_id)
-        return True, f"已退出房间 {room_id}。"
+        return True, f"【五子棋】\n已退出房间：{room_id}"
 
 
 room_manager = GomokuRoomManager()
@@ -450,7 +450,7 @@ async def start_room_timeout(bot, event, room_id: str):
         if not g or g.status != "waiting":
             return
         room_manager.delete_room(room_id)
-        await handle_send(bot, event, f"房间 {room_id} 超时无人加入，已自动关闭。")
+        await handle_send(bot, event, f"【五子棋房间关闭】\n房间：{room_id}\n原因：超时无人加入")
 
     room_timeout_tasks[room_id] = asyncio.create_task(_task())
 
@@ -475,7 +475,15 @@ async def start_move_timeout(bot, event, room_id: str):
         winner_name = g.player_names.get(winner, winner)
 
         img = create_board_image(g)
-        await handle_pic_msg_send(bot, event, img, f"{loser_name} 超时未落子，判负！\n🎉 {winner_name} 获胜。")
+        await handle_pic_msg_send(
+            bot,
+            event,
+            img,
+            f"【五子棋结束】\n"
+            f"负方：{loser_name}\n"
+            f"原因：超时未落子\n"
+            f"胜者：{winner_name}",
+        )
         room_manager.delete_room(room_id)
 
     move_timeout_tasks[room_id] = asyncio.create_task(_task())
@@ -505,7 +513,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     arg = args.extract_plain_text().strip()
 
     if room_manager.get_user_room(user_id):
-        await handle_send(bot, event, "你已在其它棋局中，请先退出。")
+        await handle_send(bot, event, "你已在其它棋局中，请先退出或认输后再开新局。")
         return
 
     room_id = arg if arg else _random_room_id()
@@ -514,13 +522,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     g = room_manager.create_room(room_id, user_id, user_name)
     if not g:
-        await handle_send(bot, event, "创建失败（可能房间号重复或你已在其它房间）。")
+        await handle_send(bot, event, "创建五子棋房间失败：房间号重复，或你已在其它房间中。")
         return
 
     user_room_status[user_id] = room_id
     await handle_pic_msg_send(
         bot, event, create_board_image(g),
-        f"房间 {room_id} 创建成功！\n你是黑棋，等待对手加入。\n命令：加入五子棋 {room_id}"
+        f"【五子棋房间】\n"
+        f"房间：{room_id}\n"
+        f"黑棋：{user_name}\n"
+        f"状态：等待对手加入\n"
+        f"加入：加入五子棋 {room_id}\n"
+        f"> 黑棋先手，落子示例：落子 A1"
     )
     await start_room_timeout(bot, event, room_id)
 
@@ -532,7 +545,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     arg = args.extract_plain_text().strip()
 
     if room_manager.get_user_room(user_id):
-        await handle_send(bot, event, "你已在其它棋局中，请先退出。")
+        await handle_send(bot, event, "你已在其它棋局中，请先退出或认输后再开新局。")
         return
 
     room_id = arg if arg else f"S{_random_room_id()}"
@@ -541,7 +554,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     g = room_manager.create_room(room_id, user_id, user_name)
     if not g:
-        await handle_send(bot, event, "创建失败。")
+        await handle_send(bot, event, "创建单人五子棋失败。")
         return
 
     g.player_white = "__AI__"
@@ -553,7 +566,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_room_status[user_id] = room_id
     await handle_pic_msg_send(
         bot, event, create_board_image(g),
-        f"单人五子棋已开始（房间 {room_id}）n黑先AI执白。\n命令：落子 A1"
+        f"【单人五子棋】\n"
+        f"房间：{room_id}\n"
+        f"黑棋：{user_name}\n"
+        f"白棋：AI\n"
+        f"当前回合：你先手\n"
+        f"落子示例：落子 A1"
     )
 
 
@@ -564,16 +582,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     room_id = args.extract_plain_text().strip()
 
     if not room_id:
-        await handle_send(bot, event, "请带房间号：加入五子棋 1234")
+        await handle_send(bot, event, "请带房间号。\n示例：加入五子棋 1234")
         return
 
     if room_manager.get_user_room(user_id):
-        await handle_send(bot, event, "你已在其它棋局中，请先退出。")
+        await handle_send(bot, event, "你已在其它棋局中，请先退出或认输后再加入。")
         return
 
     ok = room_manager.join_room(room_id, user_id, user_name)
     if not ok:
-        await handle_send(bot, event, "加入失败（房间不存在/已开始/已满）。")
+        await handle_send(bot, event, "加入五子棋失败：房间不存在、已开始或已满。")
         return
 
     user_room_status[user_id] = room_id
@@ -587,7 +605,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     wname = g.player_names.get(g.player_white, g.player_white)
     await handle_pic_msg_send(
         bot, event, create_board_image(g),
-        f"加入成功！房间 {room_id}\n黑棋：{bname}\n白棋：{wname}\n游戏开始，黑棋先手。"
+        f"【五子棋开局】\n"
+        f"房间：{room_id}\n"
+        f"黑棋：{bname}\n"
+        f"白棋：{wname}\n"
+        f"当前回合：黑棋先手"
     )
     await start_move_timeout(bot, event, room_id)
 
@@ -599,7 +621,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     room_id = room_manager.get_user_room(user_id)
     if not room_id:
-        await handle_send(bot, event, "你当前不在棋局中。")
+        await handle_send(bot, event, "你当前不在五子棋棋局中。")
         return
 
     g = room_manager.get_room(room_id)
@@ -609,7 +631,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     pos = coordinate_to_position(ptxt)
     if not pos:
-        await handle_send(bot, event, "坐标格式错误，如：落子 A1")
+        await handle_send(bot, event, "坐标格式错误。\n示例：落子 A1")
         return
     x, y = pos
 
@@ -634,7 +656,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         room_manager.save_room(room_id)
 
         win_name = g.player_names.get(user_id, user_id)
-        await handle_pic_msg_send(bot, event, create_board_image(g), f"🎉 {win_name} 五子连珠，获胜！")
+        await handle_pic_msg_send(
+            bot,
+            event,
+            create_board_image(g),
+            f"【五子棋结束】\n胜者：{win_name}\n结果：五子连珠",
+        )
         room_manager.delete_room(room_id)
         return
 
@@ -651,7 +678,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 g.status = "finished"
                 g.winner = "__AI__"
                 room_manager.save_room(room_id)
-                await handle_pic_msg_send(bot, event, create_board_image(g), f"AI 落子 {position_to_coordinate(ax, ay)}，AI 获胜。")
+                await handle_pic_msg_send(
+                    bot,
+                    event,
+                    create_board_image(g),
+                    f"【五子棋结束】\nAI落子：{position_to_coordinate(ax, ay)}\n胜者：AI",
+                )
                 room_manager.delete_room(room_id)
                 return
 
@@ -659,20 +691,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             room_manager.save_room(room_id)
             await handle_pic_msg_send(
                 bot, event, create_board_image(g),
-                f"你落子 {position_to_coordinate(x, y)}\nAI 落子 {position_to_coordinate(ax, ay)}\n轮到你。"
+                f"【五子棋】\n"
+                f"你落子：{position_to_coordinate(x, y)}\n"
+                f"AI落子：{position_to_coordinate(ax, ay)}\n"
+                f"当前回合：轮到你"
             )
         else:
             # 理论不会到这里
             g.current_player = g.player_black
             room_manager.save_room(room_id)
-            await handle_pic_msg_send(bot, event, create_board_image(g), "AI无有效落子，轮到你。")
+            await handle_pic_msg_send(bot, event, create_board_image(g), "【五子棋】\nAI无有效落子，轮到你。")
         return
 
     # 双人模式切换回合
     g.current_player = g.player_white if user_id == g.player_black else g.player_black
     next_name = g.player_names.get(g.current_player, g.current_player)
     room_manager.save_room(room_id)
-    await handle_pic_msg_send(bot, event, create_board_image(g), f"落子成功：{position_to_coordinate(x, y)}\n轮到 {next_name}")
+    await handle_pic_msg_send(
+        bot,
+        event,
+        create_board_image(g),
+        f"【五子棋】\n落子：{position_to_coordinate(x, y)}\n当前回合：{next_name}",
+    )
     await start_move_timeout(bot, event, room_id)
 
 
@@ -681,7 +721,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = str(event.get_user_id())
     room_id = room_manager.get_user_room(user_id)
     if not room_id:
-        await handle_send(bot, event, "你当前不在棋局中。")
+        await handle_send(bot, event, "你当前不在五子棋棋局中。")
         return
 
     g = room_manager.get_room(room_id)
@@ -696,7 +736,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     winner = g.player_white if user_id == g.player_black else g.player_black
     loser_name = g.player_names.get(user_id, user_id)
     winner_name = g.player_names.get(winner, winner)
-    await handle_pic_msg_send(bot, event, create_board_image(g), f"{loser_name} 认输。\n🎉 {winner_name} 获胜！")
+    await handle_pic_msg_send(
+        bot,
+        event,
+        create_board_image(g),
+        f"【五子棋结束】\n负方：{loser_name}\n原因：认输\n胜者：{winner_name}",
+    )
     room_manager.delete_room(room_id)
 
 
@@ -711,7 +756,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         room_id = room_manager.get_user_room(user_id)
 
     if not room_id:
-        await handle_send(bot, event, "你当前没有棋局。")
+        await handle_send(bot, event, "你当前没有五子棋棋局。")
         return
 
     g = room_manager.get_room(room_id)
@@ -724,6 +769,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     s = {"waiting": "等待中", "playing": "进行中", "finished": "已结束"}.get(g.status, g.status)
 
     msg = (
+        "【棋局信息】\n"
         f"房间：{g.room_id}\n"
         f"状态：{s}\n"
         f"黑棋：{bname}\n"
@@ -753,14 +799,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event,
         "**五子棋帮助**\n\n"
         "**开局与加入**\n"
-        "- 开始五子棋 [房间号]\n"
-        "- 开始单人五子棋 [房间号]\n"
-        "- 加入五子棋 <房间号>\n\n"
+        "- `开始五子棋 [房间号]`\n"
+        "- `开始单人五子棋 [房间号]`\n"
+        "- `加入五子棋 <房间号>`\n\n"
         "**对局指令**\n"
-        "- 落子 <坐标>，如：落子 A1\n"
-        "- 认输\n"
-        "- 棋局信息 [房间号]\n"
-        "- 退出五子棋\n\n"
+        "- `落子 <坐标>`（如：`落子 A1`）\n"
+        "- `认输`\n"
+        "- `棋局信息 [房间号]`\n"
+        "- `退出五子棋`\n\n"
         f"> 规则：{BOARD_SIZE}x{BOARD_SIZE}，黑先，五连胜；房间超时 {ROOM_TIMEOUT}s，落子超时 {MOVE_TIMEOUT}s。",
         k1="开始", v1="开始五子棋",
         k2="单人", v2="开始单人五子棋",

@@ -65,9 +65,10 @@ async def _start_guess_timeout(bot: Bot, event, user_id: str):
 
         await handle_send(
             bot, event,
-            f"⏰ 猜数字超时（{GUESS_TIMEOUT}秒无操作），本局已结束。\n"
-            f"答案是：{answer}\n"
-            f"你共猜了：{tries} 次",
+            f"【猜数字超时】\n"
+            f"{GUESS_TIMEOUT} 秒无操作，本局已结束。\n"
+            f"答案：{answer}\n"
+            f"猜测次数：{tries} 次",
             md_type="娱乐",
             k1="再来一局", v1="开始猜数字",
             k2="小游戏帮助", v2="小游戏帮助",
@@ -97,10 +98,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if old and old.get("status") == "playing":
         await handle_send(
             bot, event,
-            f"你已经有一局猜数字在进行中啦！\n"
+            f"【猜数字进行中】\n"
             f"当前范围：{_build_range_text(old['low'], old['high'])}\n"
             f"已猜次数：{old['tries']}\n"
-            f"请继续发送：猜 数字（如：猜 50）",
+            f"继续发送：猜 数字（如：猜 50）",
             md_type="娱乐",
             k1="猜数字信息", v1="猜数字信息",
             k2="结束本局", v2="结束猜数字",
@@ -125,9 +126,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(
         bot, event,
-        f"🎯 猜数字开始！\n"
-        f"我已经想好了一个 {GUESS_MIN}~{GUESS_MAX} 的整数。\n"
-        f"请发送：猜 数字（例如：猜 50）",
+        f"【猜数字开始】\n"
+        f"范围：{GUESS_MIN}~{GUESS_MAX} 的整数\n"
+        f"操作：猜 数字（例如：猜 50）",
         md_type="娱乐",
         k1="猜 50", v1="猜 50",
         k2="猜数字信息", v2="猜数字信息",
@@ -143,7 +144,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not game or game.get("status") != "playing":
         await handle_send(
             bot, event,
-            "你当前没有进行中的猜数字游戏。\n发送【开始猜数字】即可开始。",
+            "你当前没有进行中的猜数字游戏。\n发送：开始猜数字",
             md_type="娱乐",
             k1="开始猜数字", v1="开始猜数字",
             k2="猜数字帮助", v2="猜数字帮助",
@@ -155,7 +156,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not raw:
         await handle_send(
             bot, event,
-            "请输入要猜的数字，例如：猜 66",
+            "请输入要猜的数字。\n示例：猜 66",
             md_type="娱乐",
             k1="示例", v1="猜 66",
             k2="猜数字信息", v2="猜数字信息",
@@ -169,7 +170,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not token.lstrip("-").isdigit():
         await handle_send(
             bot, event,
-            "格式错误，请发送：猜 数字（例如：猜 66）",
+            "格式错误。\n请发送：猜 数字（例如：猜 66）",
             md_type="娱乐",
             k1="示例", v1="猜 66",
             k2="猜数字帮助", v2="猜数字帮助",
@@ -181,7 +182,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if num < GUESS_MIN or num > GUESS_MAX:
         await handle_send(
             bot, event,
-            f"你输入的数字超出范围，请输入 {GUESS_MIN}~{GUESS_MAX} 之间的整数。",
+            f"你输入的数字超出范围。\n范围：{GUESS_MIN}~{GUESS_MAX}",
             md_type="娱乐",
             k1="猜 50", v1="猜 50",
             k2="猜数字信息", v2="猜数字信息",
@@ -202,7 +203,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
         await handle_send(
             bot, event,
-            f"🎉 恭喜你猜对了！答案就是 {ans}\n"
+            f"【猜数字结束】\n"
+            f"结果：猜对了\n"
+            f"答案：{ans}\n"
             f"总猜测次数：{tries} 次",
             md_type="娱乐",
             k1="再来一局", v1="开始猜数字",
@@ -218,7 +221,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
         await handle_send(
             bot, event,
-            f"📉 猜小了！\n"
+            f"【猜数字提示】\n"
+            f"结果：猜小了\n"
             f"当前有效范围：{_build_range_text(game['low'], game['high'])}\n"
             f"已猜次数：{game['tries']}",
             md_type="娱乐",
@@ -234,7 +238,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await handle_send(
         bot, event,
-        f"📈 猜大了！\n"
+        f"【猜数字提示】\n"
+        f"结果：猜大了\n"
         f"当前有效范围：{_build_range_text(game['low'], game['high'])}\n"
         f"已猜次数：{game['tries']}",
         md_type="娱乐",
@@ -252,7 +257,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not game or game.get("status") != "playing":
         await handle_send(
             bot, event,
-            "你当前没有进行中的猜数字游戏。",
+            "你当前没有进行中的猜数字游戏。\n发送：开始猜数字",
             md_type="娱乐",
             k1="开始猜数字", v1="开始猜数字",
             k2="猜数字帮助", v2="猜数字帮助",
@@ -260,11 +265,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-        await handle_send(
-            bot, event,
-            f"猜数字信息\n"
-            f"玩家：{game['user_name']}\n"
-            f"范围：{_build_range_text(game['low'], game['high'])}\n"
+    await handle_send(
+        bot, event,
+        f"【猜数字信息】\n"
+        f"玩家：{game['user_name']}\n"
+        f"范围：{_build_range_text(game['low'], game['high'])}\n"
         f"已猜次数：{game['tries']}\n"
         f"创建时间：{game['create_time']}\n"
         f"最后操作：{game['last_action_time']}",
@@ -283,7 +288,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not game or game.get("status") != "playing":
         await handle_send(
             bot, event,
-            "你当前没有进行中的猜数字游戏。",
+            "你当前没有进行中的猜数字游戏。\n发送：开始猜数字",
             md_type="娱乐",
             k1="开始猜数字", v1="开始猜数字",
             k2="猜数字帮助", v2="猜数字帮助",
@@ -297,9 +302,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(
         bot, event,
-        f"已结束当前猜数字。\n"
-        f"答案是：{answer}\n"
-        f"你共猜了：{tries} 次",
+        f"【猜数字结束】\n"
+        f"答案：{answer}\n"
+        f"猜测次数：{tries} 次",
         md_type="娱乐",
         k1="再来一局", v1="开始猜数字",
         k2="小游戏帮助", v2="小游戏帮助",
@@ -313,10 +318,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event,
         "**猜数字帮助**\n\n"
         "**指令**\n"
-        "- 开始猜数字\n"
-        f"- 猜 50（在 {GUESS_MIN}~{GUESS_MAX} 中猜）\n"
-        "- 猜数字信息\n"
-        "- 结束猜数字\n\n"
+        "- `开始猜数字`\n"
+        f"- `猜 50`（在 {GUESS_MIN}~{GUESS_MAX} 中猜）\n"
+        "- `猜数字信息`\n"
+        "- `结束猜数字`\n\n"
         f"> 规则：系统随机一个 {GUESS_MIN}~{GUESS_MAX} 的整数，"
         "你根据“猜大了/猜小了”提示逐步逼近答案。",
         k1="开始猜数字", v1="开始猜数字",

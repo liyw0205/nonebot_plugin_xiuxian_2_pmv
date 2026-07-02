@@ -389,9 +389,8 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     stone_limit.update_xiangyuan_receive_count(user_id)
     
     # 构建消息
-    msg = f"🎉【仙缘 #{gift_id}】🎉\n"
+    msg = f"【仙缘 {gift_id}】\n"
     msg += f"（由【{gift['giver_name']}】送出）\n"
-    msg += "═════════════\n"
     
     if reward > 0:
         if is_single_gift:
@@ -409,7 +408,6 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     if received_items:
         msg += f"🎁 获得物品：{', '.join(received_items)}\n"
     
-    msg += "═════════════\n"
     msg += f"今日剩余抢仙缘次数：{XIANGYUAN_RECEIVE_LIMIT - receive_count - 1}次"
     
     await handle_send(bot, event, msg, md_type="修仙", k1="送仙缘", v1="送仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
@@ -433,7 +431,7 @@ async def xiangyuan_list_(bot: Bot, event: GroupMessageEvent):
         await xiangyuan_list.finish()
     
     # 构建消息
-    msg_parts = ["✨【本群仙缘列表】✨\n═════════════"]
+    msg_parts = ["【本群仙缘列表】"]
     
     active_count = 0
     for gift_id, gift in xiangyuan_data["gifts"].items():

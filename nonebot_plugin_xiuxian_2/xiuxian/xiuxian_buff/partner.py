@@ -1194,7 +1194,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bound_days = (datetime.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
     affection_level = get_affection_level(affection)
     partner_user_info = sql_message.get_user_info_with_id(partner_user_id)
-    msg = f"""☆------我的道侣------☆
+    msg = f"""【我的道侣】
 道侣：{partner_info['user_name']}
 境界：{partner_user_info['level']}
 修为：{number_to(partner_user_info['exp'])}
@@ -2222,7 +2222,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
     command_name = str(command[0]) if command else "我的师徒"
 
     if command_name in {"我的师父", "我的师傅"}:
-        msg = f"""☆------我的师父------☆
+        msg = f"""【我的师父】
 师父：{mentor_line}
 
 今日剩余传功次数：{remain}/{mentor_transmission_limit}
@@ -2232,7 +2232,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
         await my_mentor.finish()
 
     if command_name == "我的徒弟":
-        msg = f"""☆------我的徒弟------☆
+        msg = f"""【我的徒弟】
 徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）：
 {apprentice_msg}
 
@@ -2245,7 +2245,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
         await handle_send(bot, event, msg, md_type="buff", k1="师徒", v1="我的师徒", k2="传功", v2="师徒传功", k3="师父", v3="我的师父", k4="保护", v4="拜师保护 状态")
         await my_mentor.finish()
 
-    msg = f"""☆------我的师徒------☆
+    msg = f"""【我的师徒】
 师父：{mentor_line}
 
 徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）：
@@ -2277,7 +2277,7 @@ async def mentor_record_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "暂无师徒记录。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
         await mentor_record.finish()
 
-    lines = ["☆------师徒记录------☆"]
+    lines = ["【师徒记录】"]
     for record in history[:10]:
         lines.append(
             f"- {record.get('time', '未知时间')} | {record.get('description', '未知事件')}"
@@ -2337,7 +2337,7 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "暂无师徒榜数据。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
         await mentor_rank.finish()
 
-    lines = ["☆------师徒排行榜------☆"]
+    lines = ["【师徒排行榜】"]
     for idx, row in enumerate(rank_rows[:20], start=1):
         lines.append(
             f"{idx}. {row['user_name']}（{row['level']}）\n"
@@ -2581,7 +2581,7 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     sorted_integral = sorted(all_user_integral, key=lambda x: safe_int(x[1]), reverse=True)
     
     # 生成排行榜
-    rank_lines = ["☆------道侣排行榜------☆"]
+    rank_lines = ["【道侣排行榜】"]
     for i, (user_id, affection) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")

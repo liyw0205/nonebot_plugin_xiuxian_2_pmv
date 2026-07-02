@@ -1071,7 +1071,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 构建消息
     title = f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"
     l_msg = []
-    l_msg.append(f"════════════\n【世界积分商店】第{page}/{total_pages}页")
+    l_msg.append(f"【世界积分商店】第{page}/{total_pages}页")
     
     if boss_integral_shop != {}:
         # 计算当前页的商品范围
@@ -1089,8 +1089,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             msg += f"名字：{item_data['name']}\n"
             msg += f"描述：{item_data.get('desc', '暂无描述')}\n"
             msg += f"所需世界积分：{item_info['cost']}点\n"
-            msg += f"每周限购：{weekly_limit - already_purchased}/{weekly_limit}个\n"
-            msg += f"════════════"
+            msg += f"每周限购：{weekly_limit - already_purchased}/{weekly_limit}个"
             l_msg.append(msg)
     else:
         l_msg.append(f"世界积分商店内空空如也！")
@@ -1123,16 +1122,14 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     battle_count = 30
     
     # 构建消息
-    msg = f"""
-════════════
-当前世界积分：{user_boss_fight_info['boss_integral']}点
-════════════
-今日已获积分：{today_integral}/{integral_limit}点
-今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚
-今日讨伐次数：{today_battle_count}/{battle_count}次
-════════════
-提示：每日0点重置获取上限
-""".strip()
+    msg = (
+        "【世界BOSS积分】\n"
+        f"当前世界积分：{user_boss_fight_info['boss_integral']}点\n"
+        f"今日已获积分：{today_integral}/{integral_limit}点\n"
+        f"今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚\n"
+        f"今日讨伐次数：{today_battle_count}/{battle_count}次\n"
+        "提示：每日0点重置获取上限"
+    )
     
     await handle_send(bot, event, msg, md_type="世界BOSS", k1="商店", v1="世界BOSS商店", k2="查询", v2="查询世界BOSS", k3="列表", v3="世界BOSS列表")
     await boss_integral_info.finish()
@@ -1226,8 +1223,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
     # 生成排行榜
-    rank_msg = "✨【世界BOSS积分排行榜】✨\n"
-    rank_msg += "-----------------------------------\n"
+    rank_msg = "【世界BOSS积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"

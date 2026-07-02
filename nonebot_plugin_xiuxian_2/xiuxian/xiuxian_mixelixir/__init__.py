@@ -209,7 +209,7 @@ async def my_mix_elixir_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await my_mix_elixir_info.finish()
     user_id = user_info['user_id']
     mix_elixir_info = get_player_info(user_id, 'mix_elixir_info')
-    title = f"☆------道友的炼丹信息------☆"
+    title = "【道友的炼丹信息】"
     l_msg = []
     msg = f"药材收取等级：{mix_elixir_info['收取等级']}\n"
     msg += f"丹药控火等级：{mix_elixir_info['丹药控火']}\n"
@@ -343,7 +343,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             msg += f"名字：{goods_info['name']}\n"
             msg += f"效果：{goods_info['desc']}\n"
             msg += f"配方：{mix_elixir_msg['配方简写']}丹炉{ldl_name}"
-            msg += f"\n☆------药材清单------☆\n"
+            msg += f"\n【药材清单】\n"
             msg += f"主药：{mix_elixir_msg['主药']},{mix_elixir_msg['主药_level']}，数量：{mix_elixir_msg['主药_num']}\n"
             msg += f"药引：{mix_elixir_msg['药引']},{mix_elixir_msg['药引_level']}，数量：{mix_elixir_msg['药引_num']}\n"
             if mix_elixir_msg['辅药_num'] != 0:

@@ -212,7 +212,7 @@ def build_song_list_page_text(
     end = start + page_size
     page_songs = songs[start:end]
 
-    lines = [f"【{platform_name}】搜索结果（第 {page}/{total_pages} 页）"]
+    lines = [f"【搜索结果】{platform_name}（第 {page}/{total_pages} 页）", ""]
     for i, song in enumerate(page_songs, start=1):
         global_index = start + i
         index_text = (
@@ -222,15 +222,15 @@ def build_song_list_page_text(
         )
         lines.append(f"{index_text}. {song.get('name', '未知')} - {song.get('artists', '未知')}")
 
-    lines.append("------------")
+    lines.append("")
     if markdown:
         prev_page = build_md_command_link("点歌上一页", "点歌上一页")
         next_page = build_md_command_link("点歌下一页", "点歌下一页")
-        lines.append("点击蓝色序号或发送【选歌 序号】进行选择（序号按全列表编号）")
-        lines.append(f"翻页：{prev_page} / {next_page} / 点歌第N页")
+        lines.append("> 点击蓝色序号或发送 `选歌 序号` 进行选择。")
+        lines.append(f"翻页：{prev_page} / {next_page} / `点歌翻页 第N页`")
     else:
-        lines.append("发送【选歌 序号】进行选择（序号按全列表编号）")
-        lines.append("翻页：点歌上一页 / 点歌下一页 / 点歌第N页")
+        lines.append("操作：发送【选歌 序号】进行选择。")
+        lines.append("翻页：点歌上一页 / 点歌下一页 / 点歌翻页 第N页")
     return "\n".join(lines), total_pages
 
 
@@ -254,7 +254,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     cover_url = song.get("cover_url")
     audio_url = song.get("audio_url")
 
-    text_msg = f"歌名：{song_name}\n歌手：{artists}"
+    text_msg = f"【点歌】\n歌名：{song_name}\n歌手：{artists}"
 
     # ===== 1) 模板Markdown =====
     if config.markdown_status and config.markdown_id:
@@ -264,8 +264,8 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
                     "key": "t1",
                     "values": [
                         "](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r![",
-                        f"img #300px #300px]({cover_url})\r",
-                        f"歌名：{song_name}\r歌手：{artists}\r\r[",
+                        f"img]({cover_url})\r",
+                        f"【点歌】\r歌名：{song_name}\r歌手：{artists}\r\r[",
                         "点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r",
                         "[再点一首"
                     ]
@@ -274,7 +274,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
                 msg_param = {
                     "key": "t1",
                     "values": [
-                        f"歌名：{song_name}\r歌手：{artists}\r\r[点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)"
+                        f"【点歌】\r歌名：{song_name}\r歌手：{artists}\r\r[点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)"
                     ]
                 }
 
@@ -300,13 +300,15 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
         try:
             if cover_url:
                 md_msg = (
-                    f"![img #300px #300px]({cover_url})\r"
+                    f"![img]({cover_url})\r"
+                    "【点歌】\r"
                     f"歌名：{song_name}\r"
                     f"歌手：{artists}\r\r"
                     f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"
                 )
             else:
                 md_msg = (
+                    "【点歌】\r"
                     f"歌名：{song_name}\r"
                     f"歌手：{artists}\r\r"
                     f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"

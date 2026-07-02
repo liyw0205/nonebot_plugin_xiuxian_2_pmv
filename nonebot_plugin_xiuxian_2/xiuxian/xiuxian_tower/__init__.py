@@ -61,13 +61,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     boss_info = tower_battle.generate_tower_boss(next_floor)
     
     msg = (
-        f"════════════\n"
+        f"【通天塔预览】\n"
         f"下一层：{next_floor}\n"        
         f"境界：{boss_info['jj']}\n"
         f"气血：{number_to(boss_info['气血'])}\n"
         f"真元：{number_to(boss_info['真元'])}\n"
         f"攻击：{number_to(boss_info['攻击'])}\n"
-        f"════════════\n"
         f"当前层数：{current_floor}\n"
         f"输入【挑战通天塔】开始挑战！"
     )
@@ -202,11 +201,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     tower_info_data = tower_limit.get_user_tower_info(user_id)
     
     msg = (
-        f"\n═══  通天塔信息  ════\n"
+        f"【通天塔信息】\n"
         f"当前层数：{tower_info_data['current_floor']}\n"
         f"历史最高：{tower_info_data['max_floor']}\n"
         f"累计积分：{tower_info_data['score']}\n"
-        f"════════════\n"
         f"输入【挑战通天塔】挑战下一层\n"
         f"输入【速通通天塔】连续挑战10层"
     )
@@ -261,8 +259,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 f"名称：{item_info['name']}\n"
                 f"描述：{item_info.get('desc', '暂无描述')}\n"
                 f"价格：{item_data['cost']}积分\n"
-                f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
-                f"════════════"
+                f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
             )
     
     msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
@@ -359,8 +356,7 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
     # 生成排行榜
-    rank_msg = "✨【通天塔排行榜】✨\n"
-    rank_msg += "-----------------------------------\n"
+    rank_msg = "【通天塔排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
@@ -384,8 +380,7 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
     # 生成排行榜
-    rank_msg = "✨【通天塔积分排行榜】✨\n"
-    rank_msg += "-----------------------------------\n"
+    rank_msg = "【通天塔积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"

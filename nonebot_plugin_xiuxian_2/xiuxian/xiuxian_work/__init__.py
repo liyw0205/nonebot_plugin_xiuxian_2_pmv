@@ -192,7 +192,7 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         remaining_minutes, _, _ = calculate_remaining_time(work_data["refresh_time"])
         
         work_list = []
-        work_msg_f = f"\n══  道友的悬赏令   ═══\n剩余时间：{remaining_minutes}分钟\n════════════\n"
+        work_msg_f = f"【道友的悬赏令】\n剩余时间：{remaining_minutes}分钟\n"
         tasks = list(work_data["tasks"].items())
         for n, (task_name, task_data) in enumerate(tasks, 1):
             item_msg = format_reward_item(task_data["item_id"])
@@ -203,8 +203,7 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
                 f"完成概率：{task_data['rate']}%\n"
                 f"基础报酬：{number_to(task_data['award'])}修为\n"
                 f"预计耗时：{task_data['time']}分钟\n"
-                f"额外奖励：{item_msg}\n"
-                "════════════\n"
+                f"额外奖励：{item_msg}\n\n"
             )
         work_msg_f += "请输入【悬赏令接取+编号】接取悬赏"
         return work_msg_f
@@ -286,10 +285,9 @@ def generate_work_message(work_list: list, freenum: int) -> str:
     remaining_minutes, _, _ = calculate_remaining_time(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     work_msg_f = (
-        f"\n══  道友的悬赏令   ═══\n"
+        f"【道友的悬赏令】\n"
         f"剩余刷新次数：{freenum}次\n"
         f"悬赏令剩余时间：{remaining_minutes}分钟\n"
-        f"════════════\n"
     )
     
     for n, i in enumerate(work_list, 1):
@@ -307,8 +305,7 @@ def get_work_msg(work_):
         f"完成概率：{work_[1]}%\n"
         f"基础报酬：{number_to(work_[2])}修为\n"
         f"预计耗时：{work_[3]}分钟\n"
-        f"额外奖励：{item_msg}\n"
-        "════════════\n"
+        f"额外奖励：{item_msg}\n\n"
     )
 
 # 重置悬赏令刷新次数

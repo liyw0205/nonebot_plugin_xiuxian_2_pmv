@@ -440,7 +440,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         # 构建结果消息
         msg = [
-            f"\n☆------快速炼金结果------☆",
+            f"【快速炼金结果】",
             f"类型：回血丹",
             *results,
             f"总计获得：{number_to(total_stone)}灵石"
@@ -547,7 +547,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # 构建结果消息
     msg = [
-        f"\n☆------快速炼金结果------☆",
+        f"【快速炼金结果】",
         f"类型：{item_type}",
         f"品阶：{rank_name}",
         *result_msg,
@@ -1265,11 +1265,9 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     # 构造消息
     lines = [
-        f"☆── 灵石福袋 ×{num} ──☆",
+        f"【灵石福袋 ×{num}】",
         f"累计获得：{number_to(total_stone)} 灵石",
-        "──────────────",
         *results,
-        "──────────────",
         "祝道友财源滚滚～"
     ]
 
@@ -1311,11 +1309,9 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
 
     # 构造消息
     lines = [
-        f"☆── 天机灵石引 ×{num} ──☆",
+        f"【天机灵石引 ×{num}】",
         f"累计获得：{number_to(total_stone)} 灵石",
-        "──────────────",
         *results,
-        "──────────────",
         "天机莫测，道友保重～"
     ]
 
@@ -1395,7 +1391,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
 
     # 提示语
     msg_lines = [
-        f"☆── 使用 三转玄丹 ×{num} ──☆",
+        f"【使用 三转玄丹 ×{num}】",
         f"获得：{number_to(real_gain)}修为{result_msg[0]}{result_msg[1]}"
     ]
 
@@ -1403,7 +1399,6 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
         msg_lines.append("（已达当前境界上限，剩余修为溢出）")
 
     msg_lines.extend([
-        "──────────────",
         "玄丹入腹，灵气暴涨，道友修为精进！"
     ])
 
@@ -1523,7 +1518,7 @@ def _build_backpack_md_with_sections(
       ...
     ]
     """
-    lines = [f"☆------{title}------☆", ""]
+    lines = [f"【{title}】", ""]
 
     for sec_title, rows in sections:
         if not rows:
@@ -1576,7 +1571,7 @@ def _build_backpack_fallback_with_sections(
     show_use_btn: bool = True,
     next_cmd: str = ""
 ) -> str:
-    lines = [f"☆------{title}------☆", ""]
+    lines = [f"【{title}】", ""]
 
     for sec_title, rows in sections:
         if not rows:
@@ -1885,7 +1880,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
 
-    title_display = f"\n☆------{title}------☆"
+    title_display = f"【{title}】"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
@@ -1959,7 +1954,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
 
-    title_display = f"\n☆------{title}------☆"
+    title_display = f"【{title}】"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
@@ -2033,7 +2028,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
 
-    title_display = f"\n☆------{title}------☆"
+    title_display = f"【{title}】"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
@@ -2078,7 +2073,7 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    title_display = f"\n☆------{title}------☆"
+    title_display = f"【{title}】"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
@@ -2123,7 +2118,7 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     end_idx = start_idx + per_page
     paged_items = msg_list[start_idx:end_idx]
     
-    title_display = f"\n☆------{title}------☆"
+    title_display = f"【{title}】"
     final_msg = []
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
@@ -2221,14 +2216,14 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                 fixed_equipment_count += 1
 
     result_msg = [
-        "☆------背包检测完成------☆",
+        "【背包检测完成】",
         f"背包数量/名称检测结果：\n{quantity_name_result}",
         f"已检查用户数：{checked_users}",
         f"已装备物品修复数：{fixed_equipment_count}",
     ]
 
     if equipment_problems:
-        result_msg.append("\n☆------已装备修复详情------☆")
+        result_msg.append("【已装备修复详情】")
         result_msg.extend(equipment_problems[:10])
         if len(equipment_problems) > 10:
             result_msg.append(f"...等共{len(equipment_problems)}个已装备问题")
@@ -2338,7 +2333,6 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
     if item_type == '功法':
         basic_info = [
             f"📜 【功法信息】",
-            f"═════════════",
             f"【{item_name1}】",
             f"• 品阶：{item1_info.get('level', '未知')}",
             f"• 类型：{item1_info.get('item_type', '未知')}",
@@ -2350,13 +2344,12 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
             f"• 类型：{item2_info.get('item_type', '未知')}",
             f"• 境界：{item2_required_rank_name}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
-            f"═════════════"
+            f""
         ]
     
     elif item_type in ['法器', '防具']:
         basic_info = [
             f"⚔️ 【{item_type}信息】",
-            f"═════════════",
             f"【{item_name1}】",
             f"• 品阶：{item1_info.get('level', '未知')}",
             f"• 境界：{item1_required_rank_name}",
@@ -2366,7 +2359,7 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
             f"• 品阶：{item2_info.get('level', '未知')}",
             f"• 境界：{item2_required_rank_name}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
-            f"═════════════"
+            f""
         ]
     
     elif item_type == '神通':
@@ -2377,7 +2370,6 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
         
         basic_info = [
             f"✨ 【神通信息】",
-            f"═════════════",
             f"【{item_name1}】",
             f"• 品阶：{item1_info.get('level', '未知')}",
             f"• 类型：{skill_desc1}",
@@ -2387,12 +2379,11 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
             f"• 品阶：{item2_info.get('level', '未知')}",
             f"• 类型：{skill_desc2}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
-            f"═════════════"
+            f""
         ]
     else: # 其他物品类型暂时只显示通用信息
         basic_info = [
             f"【物品信息】",
-            f"═════════════",
             f"【{item_name1}】",
             f"• 品阶：{item1_info.get('level', '未知')}",
             f"• 类型：{item1_info.get('type', '未知')}",
@@ -2402,7 +2393,7 @@ def format_basic_info(item_name1: str, item1_info: dict, item_name2: str, item2_
             f"• 品阶：{item2_info.get('level', '未知')}",
             f"• 类型：{item2_info.get('type', '未知')}",
             f"• 描述：{item2_info.get('desc', '暂无描述')}",
-            f"═════════════"
+            f""
         ]
     
     return "\n".join(basic_info)
@@ -2439,8 +2430,7 @@ def format_difference(diff: Any, multiply_hundred: bool = True) -> str:
 def compare_main(item_name1: str, item1_info: dict, item_name2: str, item2_info: dict) -> str:
     """对比两个主功法的属性"""
     comparison = [
-        f"\n🎯 【{item_name1} ↔ {item_name2}】", 
-        f"═════════════"
+        f"\n🎯 【{item_name1} ↔ {item_name2}】"
     ]
     skill_params = {
         'hpbuff': '气血',
@@ -2492,15 +2482,12 @@ def compare_main(item_name1: str, item1_info: dict, item_name2: str, item2_info:
     
     if not has_comparison:
         comparison.append("• 两个物品在可对比的属性上均无特殊效果")
-    
-    comparison.append("═════════════")
     return "\n".join(comparison)
 
 def compare_equipment(item_name1: str, item1_info: dict, item_name2: str, item2_info: dict) -> str:
     """对比两个装备的属性"""
     comparison = [
-        f"\n⚔️ 【{item_name1} ↔ {item_name2}】", 
-        f"═════════════"
+        f"\n⚔️ 【{item_name1} ↔ {item_name2}】"
     ]
     equipment_params = {
         'atk_buff': '攻击',
@@ -2536,8 +2523,6 @@ def compare_equipment(item_name1: str, item1_info: dict, item_name2: str, item2_
     
     if not has_comparison:
         comparison.append("• 两个装备在可对比的属性上均无特殊加成")
-    
-    comparison.append("═════════════")
     return "\n".join(comparison)
 
 def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: dict) -> str:
@@ -2551,7 +2536,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
     if skill_type1 == skill_type2: # 只有同类型神通才能进行细致对比
         if skill_type1 == 1:  # 伤害类神通
             comparison.append(f"🔥【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             
             # 处理伤害值，支持列表（多段伤害）
             atkvalue1 = skill1.get('atkvalue', [0])
@@ -2609,7 +2593,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 2:  # 增强类神通
             comparison.append(f"💪【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             enhance_params = {
                 'atkvalue': ('攻击力提升', True),
                 'def_buff': ('减伤提升', True),
@@ -2644,7 +2627,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 3:  # 持续伤害类神通
             comparison.append(f"🔄【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             continuous_params = {
                 'atkvalue': ('伤害倍率', True), # 修正为atkvalue表示伤害倍率
                 'turncost': ('持续回合', False),
@@ -2678,7 +2660,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 6:  # 叠加伤害类神通 (之前是stack，现在是叠加伤害)
             comparison.append(f"📈【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             stack_params = {
                 'buffvalue': ('每回合伤害倍率', True), # buffvalue表示每回合伤害倍率
                 'turncost': ('持续回合', False),
@@ -2712,7 +2693,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 5:  # 随机伤害类神通
             comparison.append(f"🌊【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             wave_params = {
                 'atkvalue': ('最小伤害倍率', True),
                 'atkvalue2': ('最大伤害倍率', True),
@@ -2747,7 +2727,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 4:  # 封印类神通
             comparison.append(f"🔒【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             seal_params = {
                 'success': ('命中成功率', False), # success表示命中率
                 'turncost': ('持续回合', False),
@@ -2781,7 +2760,6 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         
         elif skill_type1 == 7: # 变化神通，效果特殊，暂不进行数值对比
             comparison.append(f"🎭【{item_name1} ↔ {item_name2}】")
-            comparison.append(f"═════════════")
             comparison.append(f"• 变化神通效果特殊，暂无法进行数值对比，请查看其详细描述。")
         else:
             comparison.append("🤔 【未知类型神通】")
@@ -2790,6 +2768,4 @@ def compare_skill_types(item_name1: str, skill1: dict, item_name2: str, skill2: 
         comparison.append("⚠️ 【类型不匹配】")
         comparison.append(f"• {item_name1}类型: {skill_desc1}，{item_name2}类型: {skill_desc2}")
         comparison.append("• 不同类型的神通无法进行对比！")
-    
-    comparison.append("═════════════")
     return "\n".join(comparison)

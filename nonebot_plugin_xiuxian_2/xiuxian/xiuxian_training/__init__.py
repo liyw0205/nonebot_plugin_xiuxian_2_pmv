@@ -130,12 +130,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         next_time_str = "现在"
     
     msg = (
-        f"\n═══  历练状态  ═════\n"
+        f"【历练状态】\n"
         f"当前状态：{status_msg}\n"
         f"下次可历练时间：{next_time_str}\n"
         f"当前进度：{training_info['progress']}/12\n"
         f"累计完成次数：{training_info['completed']}\n"
-        f"═════════════\n"
     )
     
     if training_info.get("last_event"):
@@ -184,7 +183,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     title = f"道友目前拥有的历练成就点：{training_info['points']}点"
     msg_list = []
-    msg_list.append(f"════════════\n【历练商店】第{page}/{total_pages}页")
+    msg_list.append(f"【历练商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
         # 动态获取物品信息
@@ -198,8 +197,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"名称：{item_info['name']}\n"
             f"描述：{item_info.get('desc', '暂无描述')}\n"
             f"价格：{item_data['cost']}成就点\n"
-            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个\n"
-            f"════════════"
+            f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
         )
     
     msg_list.append(f"提示：发送 历练商店+页码 查看其他页（共{total_pages}页）")
@@ -289,8 +287,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
     # 生成排行榜
-    rank_msg = "✨【历练排行榜】✨\n"
-    rank_msg += "-----------------------------------\n"
+    rank_msg = "【历练排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
@@ -314,8 +311,7 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
     
     # 生成排行榜
-    rank_msg = "✨【历练积分排行榜】✨\n"
-    rank_msg += "-----------------------------------\n"
+    rank_msg = "【历练积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
         user_info = sql_message.get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"

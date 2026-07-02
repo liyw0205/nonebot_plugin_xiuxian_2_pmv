@@ -38,10 +38,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             try:
                 w, h, m = int(parts[1]), int(parts[2]), int(parts[3])
             except Exception:
-                await handle_send(bot, event, "格式错误：开始扫雷 自定义 宽 高 雷数")
+                await handle_send(bot, event, "格式错误。\n示例：开始扫雷 自定义 宽 高 雷数")
                 return
         else:
-            await handle_send(bot, event, "格式错误：开始扫雷 [初级|中级|高级|自定义 宽 高 雷数]")
+            await handle_send(bot, event, "格式错误。\n用法：开始扫雷 [初级|中级|高级|自定义 宽 高 雷数]")
             return
 
     g, err = ms_manager.create(str(event.get_user_id()), _name(event), w, h, m)
@@ -51,19 +51,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     await start_ms_timeout(bot, event, g.game_id, handle_send)
     img = render_game(g)
-    await handle_pic_msg_send(bot, event, img, f"扫雷开始：{w}x{h} 雷数{m}\n使用：翻开 A1 / 标记 B2")
+    await handle_pic_msg_send(
+        bot,
+        event,
+        img,
+        f"【扫雷开始】\n"
+        f"棋盘：{w}x{h}\n"
+        f"雷数：{m}\n"
+        f"操作：翻开 A1 / 标记 B2\n"
+        f"> 首次翻开有保护。"
+    )
 
 
 @ms_open.handle(parameterless=[Cooldown(cd_time=0.8)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     g = ms_manager.get_user_game(str(event.get_user_id()))
     if not g:
-        await handle_send(bot, event, "你当前没有扫雷局，发送【开始扫雷】创建。")
+        await handle_send(bot, event, "你当前没有扫雷局。\n发送：开始扫雷")
         return
 
     p = parse_coord(args.extract_plain_text().strip())
     if not p:
-        await handle_send(bot, event, "坐标格式错误，例如：翻开 A1")
+        await handle_send(bot, event, "坐标格式错误。\n示例：翻开 A1")
         return
 
     x, y = p
@@ -87,7 +96,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         g.status = "lose"
         ms_manager.save(g.game_id)
         img = render_game(g, reveal_all=True)
-        await handle_pic_msg_send(bot, event, img, "💥 踩雷了，游戏失败！")
+        await handle_pic_msg_send(bot, event, img, "【扫雷结束】\n结果：踩雷失败\n可发送：开始扫雷")
         ms_manager.delete(g.game_id)
         return
 
@@ -98,7 +107,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         g.status = "win"
         ms_manager.save(g.game_id)
         img = render_game(g, reveal_all=True)
-        await handle_pic_msg_send(bot, event, img, "🎉 恭喜通关扫雷！")
+        await handle_pic_msg_send(bot, event, img, "【扫雷结束】\n结果：通关成功")
         ms_manager.delete(g.game_id)
         return
 
@@ -116,7 +125,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     p = parse_coord(args.extract_plain_text().strip())
     if not p:
-        await handle_send(bot, event, "坐标格式错误，例如：标记 B2")
+        await handle_send(bot, event, "坐标格式错误。\n示例：标记 B2")
         return
 
     x, y = p
@@ -145,7 +154,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(
         bot,
         event,
-        f"扫雷信息\n"
+        f"【扫雷信息】\n"
         f"棋盘：{g.width}x{g.height}\n"
         f"雷数：{g.mines}\n"
         f"已翻开：{opened}\n"
@@ -164,7 +173,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         minesweeper_timeout_tasks[g.game_id].cancel()
         minesweeper_timeout_tasks.pop(g.game_id, None)
     ms_manager.delete(g.game_id)
-    await handle_send(bot, event, "已结束当前扫雷局。")
+    await handle_send(bot, event, "【扫雷结束】\n已结束当前扫雷局。")
 
 
 @ms_help.handle(parameterless=[Cooldown(cd_time=1.0)])
@@ -173,13 +182,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event,
         "**扫雷帮助**\n\n"
         "**开局**\n"
-        "- 开始扫雷 [初级|中级|高级]\n"
-        "- 开始扫雷 自定义 宽 高 雷数\n\n"
+        "- `开始扫雷 [初级|中级|高级]`\n"
+        "- `开始扫雷 自定义 宽 高 雷数`\n\n"
         "**操作**\n"
-        "- 翻开 A1\n"
-        "- 标记 B2\n"
-        "- 扫雷信息\n"
-        "- 结束扫雷",
+        "- `翻开 A1`\n"
+        "- `标记 B2`\n"
+        "- `扫雷信息`\n"
+        "- `结束扫雷`",
         k1="开始", v1="开始扫雷",
         k2="信息", v2="扫雷信息",
         k3="游戏", v3="小游戏帮助"
@@ -294,9 +303,9 @@ class MinesweeperManager:
 
     def create(self, user_id: str, user_name: str, w: int, h: int, mines: int):
         if str(user_id) in user_minesweeper_status:
-            return None, "你已有进行中的扫雷局，请先结束。"
+            return None, "你已有进行中的扫雷局，请先结束当前局。"
         if mines <= 0 or mines >= w * h:
-            return None, "雷数不合法。"
+            return None, "雷数不合法：雷数必须大于 0 且小于格子总数。"
         game_id = f"ms_{random.randint(100000, 999999)}"
         while game_id in self.games:
             game_id = f"ms_{random.randint(100000, 999999)}"
@@ -478,7 +487,7 @@ async def start_ms_timeout(bot, event, game_id: str, handle_send):
             return
         g.status = "closed"
         ms_manager.save(game_id)
-        await handle_send(bot, event, f"扫雷超时（{GAME_TIMEOUT}秒无操作），本局已关闭。")
+        await handle_send(bot, event, f"【扫雷超时】\n{GAME_TIMEOUT} 秒无操作，本局已关闭。")
         ms_manager.delete(game_id)
 
     t = asyncio.create_task(_timeout())

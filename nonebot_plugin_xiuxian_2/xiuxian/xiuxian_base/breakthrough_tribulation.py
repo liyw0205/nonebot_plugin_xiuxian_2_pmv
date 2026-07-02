@@ -208,7 +208,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 f"下一境界：{next_level}\n"
                 f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
                 f"渡劫成功率：{tribulation_data['current_rate']}%\n"
-                f"════════════\n"
                 f"【开始渡劫】尝试渡劫\n"
                 f"【天命渡劫】使用天命渡劫丹\n"
                 f"【渡心魔劫】挑战心魔\n"
@@ -224,7 +223,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                     f"下一境界：{next_level}\n"
                     f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
                     f"还需修为：{number_to(remaining_exp)}\n"
-                    f"════════════\n"
                     f"请继续修炼，待修为足够后再来渡劫！"
                 )
     
@@ -420,7 +418,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"下一境界：{next_level}\n"
             f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
             f"还需修为：{number_to(remaining_exp)}\n"
-            f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
@@ -570,7 +567,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"下一境界：{next_level}\n"
             f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
             f"还需修为：{number_to(remaining_exp)}\n"
-            f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
@@ -665,7 +661,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             f"下一境界：{next_level}\n"
             f"当前修为：{number_to(current_exp)}/{number_to(required_exp)}\n"
             f"还需修为：{number_to(remaining_exp)}\n"
-            f"════════════\n"
             f"请继续修炼，待修为足够后再来渡劫！"
         )
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")

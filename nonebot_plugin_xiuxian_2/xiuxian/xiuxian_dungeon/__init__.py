@@ -600,13 +600,13 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     members_str_formatted = "\n".join(members_info_str)
 
     msg = (
-        f"══════ 队伍信息 ════\n"
-        f"🏷️ 队伍名：{team_info['team_name']}\n"
-        f"🆔 队伍ID：{team_info['team_id']}\n"
-        f"📅 创建时间：{team_info['create_time']}\n"
-        f"👥 成员 ({len(team_info['members'])}/{team_info['max_members']})：\n"
+        f"【队伍信息】\n"
+        f"队伍名：{team_info['team_name']}\n"
+        f"队伍ID：{team_info['team_id']}\n"
+        f"创建时间：{team_info['create_time']}\n"
+        f"成员：{len(team_info['members'])}/{team_info['max_members']}\n"
         f"{members_str_formatted}\n"
-        f"═════════════"
+        f"操作：探索副本 / 离开队伍"
     )
 
     await handle_send(bot, event, msg, md_type="team", k1="探索副本", v1="探索副本", k2="离开队伍", v2="离开队伍", k3="队伍帮助", v3="队伍帮助")
@@ -891,14 +891,13 @@ async def handle_dungeon_info(bot: Bot, event: GroupMessageEvent | PrivateMessag
     dungeon_data = dungeon_manager.get_dungeon_progress()
 
     msg = (
-        "═══  ✨ 今日副本 ✨  ═══\n"
-        f"{dungeon_data['name']}\n"
-        f"\n副本简介：{dungeon_data['description']}\n\n"
+        "【今日副本】\n"
+        f"名称：{dungeon_data['name']}\n"
+        f"简介：{dungeon_data['description']}\n"
         f"副本类型：{dungeon_data.get('type', 'explore')}\n"
         f"总层数：{dungeon_data['total_layers']}层\n"
         f"副本日期：{dungeon_data['date']}\n"
-        "═════════════\n"
-        "🎮 使用「探索副本」指令开始冒险！"
+        "操作：使用「探索副本」开始冒险。"
     )
 
     await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本状态", v2="我的副本状态", k3="副本帮助", v3="副本帮助")
@@ -1092,12 +1091,11 @@ async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMess
     current = player_status.get('current_layer', 0)
 
     msg = (
-        f"═══  副本信息  ════\n"
+        f"【副本信息】\n"
         f"副本：{name}\n"
         f"状态：{status_text}\n"
         f"层数：{current}/{total}层\n"
-        f"进度：{(current / total * 100) if total > 0 else 0:.1f}%\n"
-        f"═════════════"
+        f"进度：{(current / total * 100) if total > 0 else 0:.1f}%"
     )
 
     await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本信息", v2="副本信息", k3="副本帮助", v3="副本帮助")

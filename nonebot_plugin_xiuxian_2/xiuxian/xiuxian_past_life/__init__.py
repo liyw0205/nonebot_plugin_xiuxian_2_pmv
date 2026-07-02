@@ -199,7 +199,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         total_runs = len(endings_log)
     fallback_start = max(total_runs - len(endings_log) + 1, 1)
 
-    msg = "═══  前尘回忆录  ═════\n"
+    msg = "【前尘回忆录】\n"
     for i, log in enumerate(endings_log):
         try:
             run_number = int(log.get("run_number", 0))
@@ -209,12 +209,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             run_number = fallback_start + i
         msg += f"\n第{run_number}世 | {log.get('time', '未知')}\n"
         msg += f"结局：【{log.get('name', '未知')}】 评分：{log.get('score', 0)}分\n"
-        msg += f"─────────────\n"
 
     msg += (
         f"\n累计前世：{total_runs}次\n"
-        f"最佳结局：{state.get('best_ending', '无')}（{state.get('best_score', 0)}分）\n"
-        f"═════════════"
+        f"最佳结局：{state.get('best_ending', '无')}（{state.get('best_score', 0)}分）"
     )
 
     await handle_send(bot, event, msg, md_type="前尘", k1="再来", v1="前尘往事", k2="排行", v2="前尘排行", k3="帮助", v3="前尘帮助")
@@ -243,9 +241,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await past_rank_cmd.finish()
 
-    rank_msg = "═══  前尘排行榜  ═════\n"
+    rank_msg = "【前尘排行榜】\n"
     rank_msg += "排名 | 道号 | 前世评分 | 最佳结局\n"
-    rank_msg += "─────────────\n"
 
     for i, (uid, score) in enumerate(sorted_scores[:30], 1):
         u_info = sql_message.get_user_info_with_id(uid)
@@ -254,8 +251,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         u_state = past_life_limit.get_user_state(uid)
         best_ending = u_state.get("best_ending", "未知")
         rank_msg += f"第{i}位 | {u_info['user_name']} | {score}分 | {best_ending}\n"
-
-    rank_msg += "═════════════"
 
     await handle_send(bot, event, rank_msg)
     await past_rank_cmd.finish()

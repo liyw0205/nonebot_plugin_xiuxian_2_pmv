@@ -139,9 +139,10 @@ def _format_list_message(qq_id: str) -> str:
     if not accounts:
         return (
             "【NewAPI 绑定列表】\n"
-            "（暂无）\n\n"
-            "绑定：newapi绑定 站点用户ID#令牌#接口地址\n"
-            "Cookie：newapi绑定 cookie 站点用户ID#session或Cookie#接口地址"
+            "暂无绑定\n\n"
+            "绑定格式：newapi绑定 站点用户ID#令牌#接口地址\n"
+            "Cookie 格式：newapi绑定 cookie 站点用户ID#session或Cookie#接口地址\n"
+            "说明：# 用于分隔字段。"
         )
     lines = ["【NewAPI 绑定列表】", ""]
     for i, acc in enumerate(accounts, start=1):
@@ -209,18 +210,18 @@ newapi_auto_cmd = on_command("newapi自动签到", priority=5, block=True)
 __NEWAPI_HELP__ = """NewAPI 帮助
 
 【绑定】
-- newapi绑定 站点用户ID#令牌#接口地址
-- newapi绑定 cookie 站点用户ID#session或完整Cookie#接口地址
+1. newapi绑定 站点用户ID#令牌#接口地址
+2. newapi绑定 cookie 站点用户ID#session或完整Cookie#接口地址
 
 【查询与管理】
-- newapi查看 — 本 QQ 已绑定的全部账号（带序号）
-- newapi签到 [序号] — 默认全部；序号示例 1 或 1,3 或 2-4（会记入签到历史，保留最近 3 次）
-- newapi签到历史 — 查看最近签到记录
-- newapi自动签到 序号 — 切换该账号每日 12:30 自动签到（开/关）
-- newapi信息 [序号] — 拉取站点用户信息，默认同上
-- newapi删除 序号|全部 — 须写序号（如 1、1,3）或写 全部
+1. newapi查看：本 QQ 已绑定的全部账号（带序号）
+2. newapi签到 [序号]：默认全部；序号可写 1、1,3 或 2-4（会记入签到历史，保留最近 3 次）
+3. newapi签到历史：查看最近签到记录
+4. newapi自动签到 序号：切换该账号每日 12:30 自动签到（开/关）
+5. newapi信息 [序号]：拉取站点用户信息，默认同上
+6. newapi删除 序号|全部：须写序号（如 1、1,3）或写 全部
 
-说明：字段顺序为 站点用户ID#令牌或Cookie#接口地址。密钥中可含 #，接口须为最后一段。"""
+说明：# 用于分隔字段。字段顺序为 站点用户ID#令牌或Cookie#接口地址。密钥中可含 #，接口须为最后一段。"""
 
 
 @newapi_help_cmd.handle(parameterless=[Cooldown(cd_time=2)])
@@ -236,9 +237,10 @@ async def newapi_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(
             bot,
             event,
-            "用法：newapi绑定 站点用户ID#令牌#接口地址\n"
+            "【NewAPI 绑定】\n"
+            "格式：newapi绑定 站点用户ID#令牌#接口地址\n"
             "或：newapi绑定 cookie 站点用户ID#Cookie#接口地址\n"
-            "有接口地址时格式为 站点用户ID#密钥#接口\n"
+            "说明：# 用于分隔字段；接口地址放在最后一段。\n"
             "详见：newapi帮助",
             **_NEWAPI_FUN_KW,
         )
@@ -318,7 +320,9 @@ async def newapi_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(
             bot,
             event,
-            "删除用法：newapi删除 序号（如 1、1,3、2-4）或 newapi删除 全部",
+            "【NewAPI 删除】\n"
+            "用法：newapi删除 序号（如 1、1,3、2-4）\n"
+            "或：newapi删除 全部",
             **_NEWAPI_FUN_KW,
         )
         await newapi_del_cmd.finish()

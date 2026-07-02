@@ -59,11 +59,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         question = DEFAULT_QUESTIONS[illusion_info["question_index"]]["question"]
         choice = illusion_info["today_choice"]
         msg = (
-            f"\n═══  幻境寻心  ════\n"
+            f"【幻境寻心】\n"
             f"今日问题：{question}\n"
             f"你的选择：{choice}\n"
-            f"════════════\n"
-            f"每日8点重置，请明日再来！"
+            f"提示：每日 8 点重置，请明日再来。"
         )
         await handle_send(bot, event, msg, md_type="幻境寻心", k1="寻心", v1="幻境寻心", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await illusion_start.finish()
@@ -74,13 +73,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     options = question_data["options"]
     
     # 显示问题和选项
-    msg = "\n═══  幻境寻心  ════\n"
+    msg = "【幻境寻心】\n"
     msg += f"今日问题：{question}\n"
     msg += "请选择："
     for i, option in enumerate(options, 1):
         msg += f"\n{i}. {option}"
-    msg += "\n════════════\n"
-    msg += "使用【心境试炼+数字】进行选择"
+    msg += "\n操作：心境试炼 数字"
     
     await handle_send(bot, event, msg, md_type="幻境寻心", k1="试炼壹", v1="心境试炼 1", k2="试炼贰", v2="心境试炼 2", k3="试炼叁", v3="心境试炼 3")
     await illusion_start.finish()
@@ -194,15 +192,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         reward_msg = f"你的选择是平均派的选择(第{choice_count}位道友)，获得：{item_msg}"
 
     msg = (
-        f"\n═══  幻境寻心  ════\n"
+        f"【幻境寻心】\n"
         f"今日问题：{question_data['question']}\n"
         f"你的选择：{selected_option}\n"
-        f"════════════\n"
-        f"【解析】\n{selected_explanation}\n"
-        f"════════════\n"
-        f"{reward_msg}\n"
-        f"════════════\n"
-        f"每日8点重置，请明日再来！"
+        f"\n【解析】\n{selected_explanation}\n"
+        f"\n【奖励】\n{reward_msg}\n"
+        f"\n提示：每日 8 点重置，请明日再来。"
     )
     update_statistics_value(user_id, "寻心次数")
     await handle_send(bot, event, msg)

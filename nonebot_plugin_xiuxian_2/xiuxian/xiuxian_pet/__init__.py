@@ -196,7 +196,7 @@ def _format_travel_status(travel: dict | None):
     remaining = max(0, int(travel.get("end_at", 0)) - int(time.time()))
     state = "可领取" if remaining <= 0 else f"剩余{format_pet_travel_time(remaining)}"
     return (
-        "☆------宠物游历状态------☆\n"
+        "【宠物游历状态】\n"
         f"宠物：{travel.get('pet_name', '未知宠物')}（{travel.get('pet_rarity', '常见')}·{format_stars(travel.get('pet_stars', 1))}）\n"
         f"地点：{travel.get('scene_name', '灵草谷')}\n"
         f"时长：{travel.get('duration_hours', 1)}小时\n"
@@ -369,7 +369,7 @@ def _pop_skill_offer(user_id: str):
 
 
 def _format_my_pet(data: dict):
-    lines = ["☆------我的宠物------☆"]
+    lines = ["【我的宠物】"]
     active = data.get("active")
 
     if active:
@@ -393,7 +393,7 @@ def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
     start = (page - 1) * per_page
     end = start + per_page
 
-    lines = ["☆------宠物背包------☆", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}"]
+    lines = ["【宠物背包】", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}"]
     for pet in rows[start:end]:
         active_flag = "【出战中】" if pet.get("is_active") else ""
         lines.append(
@@ -424,7 +424,7 @@ def _build_pet_bag_md_text(
     start = (current_page - 1) * per_page
     end = start + per_page
 
-    lines = [f"☆------{title}------☆", "", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}", ""]
+    lines = [f"【{title}】", "", f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}", ""]
 
     for pet in rows[start:end]:
         name = pet.get("form_name", pet.get("name", "未知宠物"))
@@ -468,7 +468,7 @@ def _build_pet_bag_plain_text(
     end = start + per_page
 
     lines = [
-        f"☆------{title}------☆",
+        f"【{title}】",
         f"容量：{get_pet_total_count(data)}/{PET_BAG_LIMIT}",
         "",
     ]
@@ -1056,7 +1056,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     if count > 1:
         page = ["宠物", "我的宠物", "宠物背包", "宠物背包", "帮助", "宠物帮助"]
-        await send_msg_handler(bot, event, "砸蛋", bot.self_id, [msg], title="☆------砸蛋结果------☆\n", page=page)
+        await send_msg_handler(bot, event, "砸蛋", bot.self_id, [msg], title="【砸蛋结果】\n", page=page)
         return
 
     await handle_send(

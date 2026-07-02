@@ -898,7 +898,7 @@ def _build_accessory_md_text(
     next_cmd: str = "",
     capacity_text: str = "",
 ) -> str:
-    lines = [f"☆------{title}------☆", ""]
+    lines = [f"【{title}】", ""]
     if capacity_text:
         lines.extend([capacity_text, ""])
 
@@ -951,7 +951,7 @@ def _build_accessory_plain_text(
     next_cmd: str = "",
     capacity_text: str = "",
 ) -> str:
-    lines = [f"☆------{title}------☆"]
+    lines = [f"【{title}】"]
     if capacity_text:
         lines.append(capacity_text)
 
@@ -1145,7 +1145,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     data = _get_data(user_id)
     eq = data["equipped"]
 
-    lines = ["☆------我的饰品------☆"]
+    lines = ["【我的饰品】"]
 
     # 已装备饰品
     for s in SLOTS:
@@ -1302,7 +1302,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     end = start + per_page
     page_flat = flat_rows[start:end]
 
-    title = [f"☆------{user_info.get('user_name', '道友')}的饰品背包------☆"]
+    title = [f"【{user_info.get('user_name', '道友')}的饰品背包】"]
     lines = [capacity_text]
     last_sec = None
     for sec_title, r in page_flat:
@@ -1357,7 +1357,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         equipped_total = int(detail.get("equipped_total", 0))
         active_lines = _format_active_set_bonus_lines(set_filter, equipped_total)
 
-        lines = [f"☆------{set_filter}套装图鉴------☆"]
+        lines = [f"【{set_filter}套装图鉴】"]
         lines.append("套装效果：")
         lines.extend([f" - {line}" for line in _format_set_bonus_lines(set_filter)])
         lines.append("")
@@ -1394,7 +1394,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         total_complete = sum(len(info["complete_qualities"]) for info in summary.values())
         total_sets = len(ACCESSORY_SETS) * len(QUALITY_RANGE)
         lines = [
-            "☆------饰品套装图鉴------☆",
+            "【饰品套装图鉴】",
             f"完整套装：{total_complete}/{total_sets}",
             f"当前持有：{total_owned}件",
             "",
@@ -1508,7 +1508,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         set_lines = ["暂无套装效果配置"]
 
     msg = (
-        f"☆------饰品详情------☆\n"
+        f"【饰品详情】\n"
         f"名称：{name}\n"
         f"UID：{uid}\n"
         f"品阶：{quality_to_cn(quality)}\n"
@@ -2107,7 +2107,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 不带参数：显示全部预设
     if not arg:
         msg = "\n\n".join([
-            "☆------饰品预设------☆",
+            "【饰品预设】",
             _format_accessory_preset(user_id, 1),
             _format_accessory_preset(user_id, 2),
             _format_accessory_preset(user_id, 3),
@@ -2243,7 +2243,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         default_factory=_default_accessory_doc
     )
 
-    msg_lines = [f"☆------快速装备饰品{preset_idx}------☆"]
+    msg_lines = [f"【快速装备饰品{preset_idx}】"]
 
     if result["equipped"]:
         msg_lines.append("【成功装备】")

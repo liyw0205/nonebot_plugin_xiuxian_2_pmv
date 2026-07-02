@@ -149,16 +149,16 @@ unseal_message = on_command("鉴石信息", priority=10, block=True)
 # 鉴石帮助
 @unseal_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    help_msg = """※※ 鉴石系统帮助 ※※
-【鉴石】- 消耗灵石解封尘封之物
-【鉴石共享开启】- 开启鉴石结果共享
-【鉴石共享关闭】- 关闭鉴石结果共享
-【鉴石信息】- 查看鉴石统计数据
+    help_msg = """**鉴石系统帮助**
 
-◆ 基础消耗500灵石
-◆ 可传入灵石作为额外消耗(最多当前灵石的10%)
-◆ 共享开启后，你的鉴石结果可能会影响其他共享开启的道友
-◆ 共享事件可能带来连锁反应，福祸难料"""
+**指令**
+- `鉴石`：消耗灵石解封尘封之物
+- `鉴石共享开启`：开启鉴石结果共享
+- `鉴石共享关闭`：关闭鉴石结果共享
+- `鉴石信息`：查看鉴石统计数据
+
+> 基础消耗 100万灵石；可传入灵石作为额外消耗，最多为当前灵石的 10%。
+> 共享开启后，你的鉴石结果可能影响其他共享开启的道友。"""
     await send_help_message(bot, event, help_msg, k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 # 共享开启
@@ -286,10 +286,10 @@ async def handle_shared_event(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     # 构建消息
     msg = [
-        f"\n※※ {event_data['title']} ※※",
+        f"【{event_data['title']}】",
         event_data['desc'],
-        f"\n共享倍率: +{int(cost_bonus*100)}%",
-        f"\n受影响道友: {', '.join(affected_users)}"
+        f"共享倍率：+{int(cost_bonus*100)}%",
+        f"受影响道友：{', '.join(affected_users)}"
     ]
     
     return "\n".join(msg), amount
@@ -306,17 +306,17 @@ async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     data = get_unseal_data(user_id)
     
     msg = (
-        "※※ 鉴石统计信息 ※※\n"
-        f"【鉴石次数】: {data['unseal_info']['count']}次\n"
-        f"【总消耗】: {number_to(data['unseal_info'].get('total_cost', 0))}灵石\n"
-        f"【总收益】: {number_to(data['unseal_info']['profit'])}灵石\n"
-        f"【总损失】: {number_to(data['unseal_info']['loss'])}灵石\n\n"
-        "※※ 共享统计信息 ※※\n"
-        f"【共享福泽】: {number_to(data['sharing_info']['shared_profit'])}灵石\n"
-        f"【共享损失】: {number_to(data['sharing_info']['shared_loss'])}灵石\n"
-        f"【获得福泽】: {number_to(data['sharing_info']['received_profit'])}灵石\n"
-        f"【承受损失】: {number_to(data['sharing_info']['received_loss'])}灵石\n\n"
-        f"最后更新: {data['last_update']}"
+        "【鉴石统计】\n"
+        f"鉴石次数：{data['unseal_info']['count']}次\n"
+        f"总消耗：{number_to(data['unseal_info'].get('total_cost', 0))}灵石\n"
+        f"总收益：{number_to(data['unseal_info']['profit'])}灵石\n"
+        f"总损失：{number_to(data['unseal_info']['loss'])}灵石\n\n"
+        "【共享统计】\n"
+        f"共享福泽：{number_to(data['sharing_info']['shared_profit'])}灵石\n"
+        f"共享损失：{number_to(data['sharing_info']['shared_loss'])}灵石\n"
+        f"获得福泽：{number_to(data['sharing_info']['received_profit'])}灵石\n"
+        f"承受损失：{number_to(data['sharing_info']['received_loss'])}灵石\n\n"
+        f"最后更新：{data['last_update']}"
     )
     
     await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
@@ -375,7 +375,8 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 随机选择封印物
     entity = random.choice(SEALED_ENTITIES)
     base_msg = [
-        f"\n※※ 发现{entity['name']} ※※",
+        f"【发现尘封之物】",
+        f"名称：{entity['name']}",
         f"{entity['desc']}",
         "你开始谨慎地解封这个尘封已久的..."
     ]
@@ -417,11 +418,11 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 构建完整消息
     full_msg = [
         "\n".join(base_msg),
-        f"\n\n※※ {events['title']} ※※",
+        f"\n【{events['title']}】",
         events['desc'],
-        f"\n{events['outcome']}，{effect_text}",
-        f"\n\n消耗：{number_to(cost)}灵石",
-        f"\n当前灵石：{current_stone}({number_to(current_stone)})"
+        f"{events['outcome']}，{effect_text}",
+        f"\n消耗：{number_to(cost)}灵石",
+        f"当前灵石：{current_stone}({number_to(current_stone)})"
     ]
     
     final_msg = "\n".join(full_msg)

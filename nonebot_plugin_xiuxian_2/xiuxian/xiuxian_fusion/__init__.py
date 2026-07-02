@@ -301,7 +301,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         current_categories = sorted_categories[start_idx:end_idx]
         
         # 构建消息
-        msg_parts = [f"☆------(第{page_num}/{total_pages}页)------☆"]
+        msg_parts = [f"【可合成物品】第{page_num}/{total_pages}页"]
         
         for category in current_categories:
             msg_parts.append(f"\n【{category}】")
@@ -334,7 +334,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
            for item in matched_items):
         # 构建类型筛选结果消息
         type_name = args_str
-        msg_parts = [f"☆------【{type_name}】------☆"]
+        msg_parts = [f"【{type_name}】"]
         
         for item in matched_items:
             fusion_info = item['info']['fusion']            
@@ -347,7 +347,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 如果匹配多个物品名，显示列表
     if len(matched_items) > 1:
-        msg_parts = [f"☆------找到多个匹配【{args_str}】的物品------☆"]
+        msg_parts = [f"【找到多个匹配】{args_str}"]
         for item in matched_items:
             msg_parts.append(f"• {item['name']}")
         msg_parts.append("\n请使用更精确的名称查看详细信息")
@@ -361,7 +361,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     fusion_info = item['info']['fusion']
     
     # 构建详细信息
-    msg_parts = [f"☆------{item['name']} 合成信息------☆"]
+    msg_parts = [f"【{item['name']} 合成信息】"]
     msg_parts.append(f"物品ID: {item_id}")
     msg_parts.append(f"类型: {item['type']}")
     if item.get('item_type') and item['item_type'] != '未知':

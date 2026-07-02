@@ -502,7 +502,7 @@ async def sect_position_help_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     """宗门职位帮助信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    msg = "☆------宗门职位系统------☆\n"
+    msg = "【宗门职位系统】\n"
     msg += "职位编号 | 职位名称 | 职位加成 | 人数限制\n"
     msg += "─────────────\n"
     
@@ -866,7 +866,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     # 构建消息
     msg_list = []
-    title = "☆------宗门功法------☆"
+    title = "【宗门功法】"
     
     for mainbuff_id in sorted_mainbuff_list:
         if not mainbuff_id:  # 跳过空ID
@@ -913,7 +913,7 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     # 构建消息
     msg_list = []
-    title = "☆------宗门神通------☆"
+    title = "【宗门神通】"
     
     for secbuff_id in sorted_secbuff_list:
         if not secbuff_id:  # 跳过空ID
@@ -3082,7 +3082,7 @@ async def sect_power_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     top_list = sql_message.combat_power_top()
     
-    msg_list = ["☆------宗门战力排行------☆"]
+    msg_list = ["【宗门战力排行】"]
     for i, (sect_id, sect_name, power) in enumerate(top_list, 1):
         msg_list.append(f"{i}. {sect_name} - 战力：{number_to(power)}")
     
@@ -3148,8 +3148,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"名称：{item_info['name']}\n"
             f"描述：{item_info.get('desc', '暂无描述')}\n"
             f"价格：{number_to(item_data['cost'])}贡献度\n"
-            f"每周限购：{item_data['weekly_limit']}个\n"
-            f"════════════"
+            f"每周限购：{item_data['weekly_limit']}个"
         )
     
     msg_list.append(f"提示：发送 宗门商店+页码 查看其他页（共{total_pages}页）")

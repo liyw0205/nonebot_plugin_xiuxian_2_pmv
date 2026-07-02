@@ -59,27 +59,31 @@ async def parse_text(text: str) -> list[dict[str, Any]]:
 
 
 def _format_meta_line(meta: dict[str, Any]) -> str:
-    parts: list[str] = []
     platform = meta.get("platform") or meta.get("parser_name") or "未知"
     title = (meta.get("title") or "").strip()
     author = (meta.get("author") or "").strip()
     desc = (meta.get("desc") or "").strip()
-    if title:
-        parts.append(title)
-    if author:
-        parts.append(f"作者：{author}")
-    if desc and desc != title:
-        d = desc if len(desc) <= 400 else desc[:400] + "…"
-        parts.append(d)
     url = meta.get("url") or meta.get("source_url") or ""
-    if url:
-        parts.append(f"链接：{url}")
-    head = f"【{platform}】"
-    body = "\n".join(parts) if parts else "(无标题信息)"
+    lines: list[str] = [f"【媒体解析】{platform}"]
     err = meta.get("error")
     if err:
-        return f"{head}\n解析失败：{err}\n{url}"
-    return f"{head}\n{body}"
+        lines.append("状态：解析失败")
+        lines.append(f"原因：{err}")
+        if url:
+            lines.append(f"原始链接：{url}")
+        return "\n".join(lines)
+    if title:
+        lines.append(f"标题：{title}")
+    if author:
+        lines.append(f"作者：{author}")
+    if desc and desc != title:
+        d = desc if len(desc) <= 400 else desc[:400] + "…"
+        lines.append(f"简介：{d}")
+    if url:
+        lines.append(f"原始链接：{url}")
+    if len(lines) == 1:
+        lines.append("提示：无标题信息")
+    return "\n".join(lines)
 
 
 def collect_media_urls(meta: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -132,7 +136,7 @@ async def run_parse_and_build_messages(
     解析文本，返回 (text_chunks, image_urls, video_urls)。
     """
     if not text or not text.strip():
-        return (["请在消息中附带可解析的链接。"], [], [])
+        return (["【媒体解析】\n请在消息中附带可解析的链接。"], [], [])
 
     try:
         metas = await parse_text(text)
@@ -140,10 +144,10 @@ async def run_parse_and_build_messages(
         hint = ""
         if not vendor_core_ready():
             hint = "（首次使用需联网下载解析核心，或查看日志）"
-        return ([f"媒体解析不可用：{e}{hint}"], [], [])
+        return ([f"【媒体解析】\n状态：不可用\n原因：{e}{hint}"], [], [])
 
     if not metas:
-        return (["未识别到支持的流媒体链接。"], [], [])
+        return (["【媒体解析】\n未识别到支持的流媒体链接。"], [], [])
 
     texts: list[str] = []
     all_images: list[str] = []

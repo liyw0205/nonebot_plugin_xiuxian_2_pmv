@@ -281,7 +281,7 @@ class HalfTenRoomManager:
         # 房间没人了 -> 删除房间
         if not g.players:
             self.delete_room(rid)
-            return True, "你已退出，房间无人，已关闭。"
+            return True, f"【十点半房间关闭】\n房间：{rid}\n原因：房间无人"
 
         # 仍有玩家，保存房间
         self.save_room(rid)
@@ -289,9 +289,9 @@ class HalfTenRoomManager:
         # 房主变更提示
         if old_creator != g.creator_id:
             new_owner = g.player_names.get(g.creator_id, g.creator_id)
-            return True, f"你已退出房间 {rid}，新房主：{new_owner}"
+            return True, f"【十点半】\n已退出房间：{rid}\n新房主：{new_owner}"
 
-        return True, f"你已退出房间 {rid}。"
+        return True, f"【十点半】\n已退出房间：{rid}"
 
     def manual_settle(self, room_id: str, operator_id: str):
         g = self.rooms.get(room_id)
@@ -320,25 +320,25 @@ half_manager = HalfTenRoomManager()
 # =========================
 def _pt_text(pt):
     if abs(pt - 10.5) < 1e-9:
-        return "10.5点 ✨"
+        return "10.5点"
     if abs(pt - int(pt)) < 1e-9:
         return f"{int(pt)}点"
     return f"{pt}点"
 
 
 def build_result_text(g: HalfTenGame):
-    lines = [f"🎮 十点半结算（房间 {g.room_id}）", ""]
+    lines = ["【十点半结算】", f"房间：{g.room_id}", ""]
     for i, uid in enumerate(g.rankings, start=1):
         name = g.player_names.get(uid, uid)
         hand = " ".join(g.cards.get(uid, []))
         pt = _pt_text(g.points.get(uid, 0))
 
         if i == 1:
-            rank = "🥇 冠军"
+            rank = "第1名（冠军）"
         elif i == 2:
-            rank = "🥈 亚军"
+            rank = "第2名"
         elif i == 3:
-            rank = "🥉 季军"
+            rank = "第3名"
         else:
             rank = f"第{i}名"
 
@@ -366,7 +366,13 @@ async def start_half_timeout(bot, event, room_id: str):
             g.close(f"超时且人数不足{MIN_PLAYERS}人")
             half_manager.save_room(room_id)
             half_manager.delete_room(room_id)
-            await handle_send(bot, event, f"房间 {room_id} 超时，人数不足，已关闭。")
+            await handle_send(
+                bot,
+                event,
+                f"【十点半房间关闭】\n"
+                f"房间：{room_id}\n"
+                f"原因：超时且人数不足 {MIN_PLAYERS} 人",
+            )
             return
 
         g.start_and_settle()
@@ -374,7 +380,7 @@ async def start_half_timeout(bot, event, room_id: str):
 
         winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
         result = build_result_text(g)
-        await handle_send(bot, event, f"房间 {room_id} 超时自动结算。\n🎉 冠军：{winner}\n\n{result}")
+        await handle_send(bot, event, f"【十点半自动结算】\n冠军：{winner}\n\n{result}")
 
         half_manager.delete_room(room_id)
 
@@ -399,7 +405,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     arg = args.extract_plain_text().strip()
 
     if half_manager.get_user_room(user_id):
-        await handle_send(bot, event, "你已在其它十点半房间中，请先退出。")
+        await handle_send(bot, event, "你已在其它十点半房间中，请先退出后再开新局。")
         return
 
     room_id = arg if arg else _random_room_id()
@@ -408,16 +414,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     g = half_manager.create_room(room_id, user_id, user_name)
     if not g:
-        await handle_send(bot, event, "创建失败（房间号重复或你已在其它房间）。")
+        await handle_send(bot, event, "创建十点半房间失败：房间号重复，或你已在其它房间中。")
         return
 
     user_half_status[user_id] = room_id
     await handle_send(
         bot, event,
-        f"十点半房间 {room_id} 创建成功！\n"
+        f"【十点半房间】\n"
+        f"房间：{room_id}\n"
         f"房主：{user_name}\n"
         f"人数：1/{MAX_PLAYERS}（最少{MIN_PLAYERS}人）\n"
-        f"命令：加入十点半 {room_id}\n"
+        f"加入：加入十点半 {room_id}\n"
         f"房主可用【结算十点半】提前开局。"
     )
     await start_half_timeout(bot, event, room_id)
@@ -430,16 +437,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     room_id = args.extract_plain_text().strip()
 
     if not room_id:
-        await handle_send(bot, event, "请带房间号：加入十点半 1234")
+        await handle_send(bot, event, "请带房间号。\n示例：加入十点半 1234")
         return
 
     if half_manager.get_user_room(user_id):
-        await handle_send(bot, event, "你已在其它十点半房间中，请先退出。")
+        await handle_send(bot, event, "你已在其它十点半房间中，请先退出后再加入。")
         return
 
     ok = half_manager.join_room(room_id, user_id, user_name)
     if not ok:
-        await handle_send(bot, event, "加入失败（房间不存在/已结算/已满）。")
+        await handle_send(bot, event, "加入十点半失败：房间不存在、已结算或已满。")
         return
 
     user_half_status[user_id] = room_id
@@ -456,13 +463,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
         winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
         result = build_result_text(g)
-        await handle_send(bot, event, f"房间 {room_id} 人数已满，自动开局结算。\n🎉 冠军：{winner}\n\n{result}")
+        await handle_send(bot, event, f"【十点半满员结算】\n冠军：{winner}\n\n{result}")
         half_manager.delete_room(room_id)
         return
 
     await handle_send(
         bot, event,
-        f"加入成功：房间 {room_id}\n"
+        f"【十点半加入成功】\n"
+        f"房间：{room_id}\n"
         f"当前人数：{len(g.players)}/{MAX_PLAYERS}\n"
         f"还需 {max(0, MIN_PLAYERS - len(g.players))} 人可开局。"
     )
@@ -487,7 +495,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     if res == "close":
         half_manager.delete_room(room_id)
-        await handle_send(bot, event, f"人数不足{MIN_PLAYERS}人，房间已关闭。")
+        await handle_send(bot, event, f"【十点半房间关闭】\n原因：人数不足 {MIN_PLAYERS} 人")
         return
 
     g = half_manager.get_room(room_id)
@@ -497,7 +505,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
     result = build_result_text(g)
-    await handle_send(bot, event, f"手动结算完成。\n🎉 冠军：{winner}\n\n{result}")
+    await handle_send(bot, event, f"【十点半手动结算】\n冠军：{winner}\n\n{result}")
     half_manager.delete_room(room_id)
 
 
@@ -527,6 +535,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     players = "、".join([g.player_names.get(uid, uid) for uid in g.players])
 
     msg = (
+        "【十点半信息】\n"
         f"房间：{g.room_id}\n"
         f"状态：{status_map.get(g.status, g.status)}\n"
         f"房主：{g.player_names.get(g.creator_id, g.creator_id)}\n"
@@ -550,11 +559,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event,
         "**十点半帮助**\n\n"
         "**房间指令**\n"
-        "- 开始十点半 [房间号]\n"
-        "- 加入十点半 <房间号>\n"
-        "- 结算十点半（仅房主）\n"
-        "- 退出十点半\n"
-        "- 十点半信息 [房间号]\n\n"
+        "- `开始十点半 [房间号]`\n"
+        "- `加入十点半 <房间号>`\n"
+        "- `结算十点半`（仅房主）\n"
+        "- `退出十点半`\n"
+        "- `十点半信息 [房间号]`\n\n"
         "> 规则：每人 3 张牌，A=1，2-10 按点，J/Q/K=0.5；10.5 最大，其次点数大者胜；同分按入场顺序。",
         k1="开始", v1="开始十点半",
         k2="信息", v2="十点半信息",

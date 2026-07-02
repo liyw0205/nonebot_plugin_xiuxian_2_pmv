@@ -13,7 +13,7 @@ async def brainteasers_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     except Exception as e:
         await handle_send(
             bot, event,
-            f"获取脑筋急转弯失败：{e}",
+            f"【脑筋急转弯】\n获取失败：{e}",
             md_type="娱乐",
             k1="重试", v1="脑筋急转弯",
             k2="弱智吧问答", v2="弱智吧问答",
@@ -33,7 +33,7 @@ async def brainteasers_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if str(code) not in {"200", "0"} and not question:
         await handle_send(
             bot, event,
-            f"获取脑筋急转弯失败：{msg}",
+            f"【脑筋急转弯】\n获取失败：{msg}",
             md_type="娱乐",
             k1="重试", v1="脑筋急转弯",
             k2="弱智吧问答", v2="弱智吧问答",
@@ -42,6 +42,7 @@ async def brainteasers_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await brainteasers_cmd.finish()
 
     text_msg = (
+        f"【脑筋急转弯】\n"
         f"题目：{question or '暂无题目'}\n"
         f"答案：{answer or '暂无答案'}"
     )

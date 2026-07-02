@@ -81,20 +81,20 @@ view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", 
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
-**灵根体系**
----
-**至高道果**
+【灵根体系】
+
+至高道果
 - 命运道果
 - 永恒道果
 - 轮回道果
 - 异界道果
 
-**特殊灵根**
+特殊灵根
 - 机械灵根
 - 混沌灵根
 - 融合灵根
 
-**普通灵根**
+普通灵根
 - 超品灵根
 - 龙灵根
 - 天灵根
@@ -107,9 +107,9 @@ __level_help__ = """
 
 
 __level1_help__ = """
-**功法与法器品阶**
----
-**功法品阶体系**
+【功法与法器品阶】
+
+功法品阶体系
 - 至高：无上
 - 仙阶：极品 / 上品 / 下品
 - 天阶：上品 / 下品
@@ -118,7 +118,7 @@ __level1_help__ = """
 - 黄阶：上品 / 下品
 - 人阶：上品 / 下品
 
-**法器品阶体系**
+法器品阶体系
 - 至高：无上
 - 仙器：极品 / 上品 / 下品
 - 通天：上品 / 下品
@@ -131,8 +131,8 @@ __level1_help__ = """
 """.strip()
 
 __level2_help__ = f"""
-**境界帮助**
----
+【境界帮助】
+
 江湖人
 ↓
 感气境 → 练气境 → 筑基境
@@ -628,13 +628,13 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看中奖记录和当前奖池"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     # 构建消息
-    msg = "✨【鸿运当头】奖池信息✨\n"
+    msg = "【鸿运当头】\n"
     msg += f"当前奖池累计：{number_to(lottery_pool.get_pool())}灵石\n"
     msg += f"本期参与人数：{lottery_pool.get_participants()}位道友\n\n"
     
     last_winner = lottery_pool.get_last_winner()
     if last_winner:
-        msg += "🎉上期中奖记录🎉\n"
+        msg += "上期中奖记录\n"
         msg += f"中奖道友：{last_winner['name']}\n"
         msg += f"中奖时间：{last_winner['time']}\n"
         msg += f"中奖金额：{number_to(last_winner['amount'])}灵石\n"
@@ -872,55 +872,55 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
         p_rank = sql_message.realm_top()
-        msg = f"\n✨位面境界排行榜 前五十✨\n"
+        msg = "【位面境界排行榜 前五十】\n"
         num = 0
         for i in p_rank:
             num += 1
-            msg += f"第{num}位 {i[0]} {i[1]},修为{number_to(i[2])}\n"
+            msg += f"第{num}位：{i[0]} {i[1]}，修为{number_to(i[2])}\n"
             if num == 50:
                 break
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "灵石排行榜":
         a_rank = sql_message.stone_top()
-        msg = f"\n✨位面灵石排行榜 前五十✨\n"
+        msg = "【位面灵石排行榜 前五十】\n"
         num = 0
         for i in a_rank:
             num += 1
-            msg += f"第{num}位  {i[0]}  灵石：{number_to(i[1])}枚\n"
+            msg += f"第{num}位：{i[0]}，灵石{number_to(i[1])}枚\n"
             if num == 50:
                 break
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "战力排行榜":
         c_rank = sql_message.power_top()
-        msg = f"\n✨位面战力排行榜 前五十✨\n"
+        msg = "【位面战力排行榜 前五十】\n"
         num = 0
         for i in c_rank:
             num += 1
-            msg += f"第{num}位  {i[0]}  战力：{number_to(i[1])}\n"
+            msg += f"第{num}位：{i[0]}，战力{number_to(i[1])}\n"
             if num == 50:
                 break
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
         s_rank = sql_message.scale_top()
-        msg = f"\n✨位面宗门建设排行榜 前五十✨\n"
+        msg = "【位面宗门建设排行榜 前五十】\n"
         num = 0
         for i in s_rank:
             num += 1
-            msg += f"第{num}位  {i[1]}  建设度：{number_to(i[2])}\n"
+            msg += f"第{num}位：{i[1]}，建设度{number_to(i[2])}\n"
             if num == 50:
                 break
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "轮回排行榜":
         r_rank = sql_message.root_top()
-        msg = f"\n✨轮回排行榜 前五十✨\n"
+        msg = "【轮回排行榜 前五十】\n"
         num = 0
         for i in r_rank:
             num += 1
-            msg += f"第{num}位  {i[0]}  轮回：{number_to(i[1])}次\n"
+            msg += f"第{num}位：{i[0]}，轮回{number_to(i[1])}次\n"
             if num == 50:
                 break
         await handle_send(bot, event, msg)
@@ -1458,27 +1458,25 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     total_pages = logs_data['total_pages']
     
     # 添加提示信息
-    header = f"✨修仙日志 - {date_display}✨\n第{current_page}页/共{total_pages}页\n"
+    header = f"【修仙日志】\n日期：{date_display}\n页码：{current_page}/{total_pages}\n"
     if logs_data.get('page_adjusted'):
-        header += f"📝{logs_data['page_adjusted']}\n"
+        header += f"{logs_data['page_adjusted']}\n"
     if logs_data.get('date_auto_selected'):
-        header += f"📅{logs_data['date_auto_selected']}\n"
-    
-    header += "═════════════"
+        header += f"{logs_data['date_auto_selected']}\n"
     
     msg_parts = [header]
     
     for log in logs_data["logs"]:
         timestamp = log.get('timestamp', '未知时间')
         message = log.get('message', '')
-        msg_parts.append(f"⏰{timestamp}\n{message}\n═════════════")
+        msg_parts.append(f"[{timestamp}]\n{message}")
     
     # 添加翻页提示
     if total_pages > 1:
-        page_hint = f"📖发送【修仙日志 {date_display} 页码】查看其他页"
+        page_hint = f"发送【修仙日志 {date_display} 页码】查看其他页"
         if logs_data.get('available_dates'):
             recent_dates = "、".join(logs_data['available_dates'][:3])
-            page_hint += f"\n🗓️其他可用日期：{recent_dates}"
+            page_hint += f"\n其他可用日期：{recent_dates}"
         msg_parts.append(page_hint)
     
     await send_msg_handler(bot, event, '修仙日志', bot.self_id, msg_parts)
@@ -1496,12 +1494,12 @@ async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await view_data.finish()
     
     sorted_keys = sorted(stats_data.keys())
-    title = "═══ 修仙统计数据 ════\n"
+    title = "【修仙统计数据】\n"
     stats_message = ""
     for key in sorted_keys:
         value = stats_data[key]
         formatted_value = str(value)
-        stats_message += f"◈ {key}: {number_to(formatted_value)}\n"
+        stats_message += f"- {key}：{number_to(formatted_value)}\n"
     
     msg_list = []
     msg_list.append(stats_message)
@@ -1699,12 +1697,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     total_users = sum(realm_count.values())
 
     lines = []
-    lines_title = f"┌─── 修仙界概况 ───┐"
-    lines_title += f"    当前共有道友 {total_users} 人"
-    lines_title += f"└───────────┘"
+    lines_title = f"【修仙界概况】\n当前共有道友 {total_users} 人"
     for rank in all_ranks:
         cnt = realm_count.get(rank, 0)
         if cnt > 0:
-            lines.append(f"  {rank.ljust(8)} : {number_to(cnt)} 人")
+            lines.append(f"- {rank}：{number_to(cnt)} 人")
                 
     await send_msg_handler(bot, event, '修仙界信息', bot.self_id, lines, title=lines_title)

@@ -254,7 +254,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         while current_loss_count < max_loss_count and user_data["pk_num"] > 0:
             total_battles += 1
             msg, win = await impart_pk_uitls.impart_pk_now_msg_to_bot(user_info['user_name'], NICKNAME)
-            battle_msg = f"☆--------第{total_battles}场对决--------☆\n{msg}"
+            battle_msg = f"【第{total_battles}场对决】\n{msg}"
             
             if win == 1:  # 玩家胜利
                 battle_msg += f"战报：道友{user_info['user_name']}获胜，获得思恋结晶20颗\n"
@@ -285,7 +285,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     xu_world.del_xu_world(user_id)
                 break
 
-        msg = f"☆--------对决结束--------☆\n"
+        msg = f"【对决结束】\n"
         msg += f"共进行{total_battles}场对决，获胜{total_wins}场，失败{total_losses}场\n"
         msg += f"总计获得思恋结晶{player_1_stones}颗\n"
         
@@ -348,7 +348,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         total_battles += 1
         msg_list, win = await impart_pk_uitls.impart_pk_now_msg(player_1, player_1_name, player_2, player_2_name)
         
-        battle_combined_msg = f"☆--------第{total_battles}场对决--------☆\n"
+        battle_combined_msg = f"【第{total_battles}场对决】\n"
         
         if win is None:
             battle_combined_msg += f"对决异常，不计结果\n"
@@ -406,7 +406,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         
         combined_msg += battle_combined_msg + "\n"
 
-    msg = f"☆--------对决结束--------☆\n"
+    msg = f"【对决结束】\n"
     msg += f"共进行{total_battles}场对决\n"
     msg += f"{player_1_name}获胜{player_1_wins}场，{player_2_name}获胜{player_2_wins}场\n"
     msg += f"道友失败{current_loss_count}次（设定上限：{max_loss_count}次）\n"

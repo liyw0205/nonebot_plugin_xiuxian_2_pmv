@@ -228,13 +228,12 @@ class PastLifeEngine:
             talent_prefix = "⚡ "
 
         msg = (
-            f"═══  前尘往事  ═════\n"
+            f"【前尘往事】\n"
             f"{talent_prefix}天赋觉醒：【{talent_info['name']}】\n"
             f"{talent_info['desc']}\n"
             f"天赋效果：{effects_str}\n"
             f"先天资质：{base_attrs_str}\n"
             f"当前属性：{current_attrs_str}\n"
-            f"═════════════\n"
             f"【第一幕·{stage_0['name']}】({stage_0['age']})\n"
             f"{birth_desc}\n\n"
             f"{event['text']}\n"
@@ -322,18 +321,17 @@ class PastLifeEngine:
                 reward_msg = rewards["msg"]
             else:
                 rewards = {"msg": "无"}
-                reward_msg = "本世过早夭折，未能留下可继承的前世馈赠。\n═════════════"
+                reward_msg = "本世过早夭折，未能留下可继承的前世馈赠。"
 
             ending_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
-                f"═════════════\n"
                 f"{early_death['message']}\n\n"
                 f"📜 前世评分：{state['total_score']}分\n"
                 f"{self._format_score_breakdown(score_breakdown)}\n\n"
                 f"🏆 结局：【{ending['name']}】\n"
                 f"{ending['desc']}\n\n"
-                f"═══  前世奖励  ═════\n"
+                f"【前世奖励】\n"
                 f"{reward_msg}"
             )
             past_life_limit.save_run_result(user_id, ending["name"], state["total_score"])
@@ -353,12 +351,11 @@ class PastLifeEngine:
             ending_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
-                f"═════════════\n"
                 f"📜 前世评分：{state['total_score']}分\n"
                 f"{self._format_score_breakdown(score_breakdown)}\n\n"
                 f"🏆 结局：【{ending['name']}】\n"
                 f"{ending['desc']}\n\n"
-                f"═══  前世奖励  ═════\n"
+                f"【前世奖励】\n"
                 f"{rewards['msg']}"
             )
 
@@ -376,7 +373,6 @@ class PastLifeEngine:
             next_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
-                f"═════════════\n"
                 f"【第{next_stage + 1}幕·{stage_info['name']}】({stage_info['age']})\n\n"
                 f"{next_event['text']}\n"
             )
@@ -462,8 +458,7 @@ class PastLifeEngine:
             f"修为 +{number_to(exp_amount)}\n"
             f"灵石 +{number_to(stone_amount)}\n"
             f"前世成就点 +{points}"
-            f"{item_msg}\n"
-            f"═════════════"
+            f"{item_msg}"
         )
 
         return {
@@ -496,11 +491,10 @@ class PastLifeEngine:
                 best_score = state.get("best_score", 0)
                 return {
                     "message": (
-                        f"═══  前尘往事  ═════\n"
+                        f"【前尘往事】\n"
                         f"道友可开启一段前尘往事的回忆。\n"
                         f"累计前世：{runs}次\n"
                         f"最佳结局：{best}（{best_score}分）\n"
-                        f"═════════════\n"
                         f"发送【投胎】开始\n"
                         f"投胎后先天资质即刻定下\n"
                         f"初始资质总和15~20随机，单项不低于3，也可能偏科极高"

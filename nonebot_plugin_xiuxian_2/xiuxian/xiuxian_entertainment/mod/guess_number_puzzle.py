@@ -128,10 +128,11 @@ async def _start_timeout(bot: Bot, event, user_id: str) -> None:
         await handle_send(
             bot,
             event,
-            f"猜数谜超时，本局已结束。\n"
-            f"答案是：{answer}\n"
-            f"你共尝试：{tries} 次\n"
-            f"差一点，下局可以先固定几位做排除。",
+            f"【猜数谜超时】\n"
+            f"本局已结束。\n"
+            f"答案：{answer}\n"
+            f"尝试次数：{tries} 次\n"
+            f"提示：下局可以先固定几位做排除。",
             md_type="娱乐",
             k1="再来一局",
             v1=f"开始猜数谜 {difficulty}",
@@ -150,10 +151,10 @@ async def _send_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -
         event,
         "**猜数谜帮助**\n\n"
         "**指令**\n"
-        "- 开始猜数谜 [简单|普通|困难]\n"
-        "- 猜数谜 2223\n"
-        "- 猜数谜 状态\n"
-        "- 猜数谜 答案 / 猜数谜 结束\n\n"
+        "- `开始猜数谜 [简单|普通|困难]`\n"
+        "- `猜数谜 2223`\n"
+        "- `猜数谜 状态`\n"
+        "- `猜数谜 答案` / `猜数谜 结束`\n\n"
         f"**难度**\n{_difficulty_hint()}。\n\n"
         "> 规则：系统生成对应位数的随机数。每次猜测后，只告诉你猜对了几位；"
         "不会告诉具体位置，也不会告诉具体数字。全部猜对后自动结束。",
@@ -180,7 +181,7 @@ async def _start_game(
         await handle_send(
             bot,
             event,
-            f"你已经有一局猜数谜在进行中。\n"
+            f"【猜数谜进行中】\n"
             f"难度：{old['difficulty']}（{digits}位）\n"
             f"已尝试：{old['tries']} 次\n"
             f"继续发送：猜数谜 {_example_guess(digits)}\n"
@@ -200,7 +201,7 @@ async def _start_game(
         await handle_send(
             bot,
             event,
-            f"难度格式不对。\n可选难度：{_difficulty_hint()}。",
+            f"【猜数谜】\n难度格式不对。\n可选：{_difficulty_hint()}。",
             md_type="娱乐",
             k1="简单",
             v1="开始猜数谜 简单",
@@ -229,10 +230,10 @@ async def _start_game(
     await handle_send(
         bot,
         event,
-        f"猜数谜开始。\n"
+        f"【猜数谜开始】\n"
         f"难度：{difficulty}（{digits}位）\n"
-        f"请输入：猜数谜 {_example_guess(digits)}\n"
-        f"我只会告诉你猜对了几位，不会告诉具体位置和数字。",
+        f"操作：猜数谜 {_example_guess(digits)}\n"
+        f"> 只提示猜对几位，不提示具体位置和数字。",
         md_type="娱乐",
         k1="试一手",
         v1=f"猜数谜 {_example_guess(digits)}",
@@ -265,7 +266,7 @@ async def _show_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await handle_send(
         bot,
         event,
-        f"猜数谜状态\n"
+        f"【猜数谜状态】\n"
         f"玩家：{game['user_name']}\n"
         f"难度：{game['difficulty']}（{digits}位）\n"
         f"已尝试：{game['tries']} 次\n"
@@ -288,7 +289,7 @@ async def _reveal_answer(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(
             bot,
             event,
-            "你当前没有进行中的猜数谜。",
+            "你当前没有进行中的猜数谜。\n发送：开始猜数谜 简单",
             md_type="娱乐",
             k1="开始简单",
             v1="开始猜数谜 简单",
@@ -307,10 +308,10 @@ async def _reveal_answer(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(
         bot,
         event,
-        f"本局猜数谜已结束。\n"
-        f"答案是：{answer}\n"
-        f"你共尝试：{tries} 次\n"
-        f"这局的信息藏得比较深，下局换个开局数继续试。",
+        f"【猜数谜结束】\n"
+        f"答案：{answer}\n"
+        f"尝试次数：{tries} 次\n"
+        f"提示：下局可以换个开局数继续试。",
         md_type="娱乐",
         k1="再来一局",
         v1=f"开始猜数谜 {difficulty}",
@@ -349,7 +350,7 @@ async def _handle_guess(
         await handle_send(
             bot,
             event,
-            f"格式不对，请发送 {digits} 位数字。\n例如：猜数谜 {_example_guess(digits)}",
+            f"【猜数谜】\n格式不对，请发送 {digits} 位数字。\n示例：猜数谜 {_example_guess(digits)}",
             md_type="娱乐",
             k1="示例",
             v1=f"猜数谜 {_example_guess(digits)}",
@@ -364,8 +365,9 @@ async def _handle_guess(
         await handle_send(
             bot,
             event,
+            f"【猜数谜】\n"
             f"本局是 {digits} 位数，请输入正好 {digits} 位。\n"
-            f"例如：猜数谜 {_example_guess(digits)}",
+            f"示例：猜数谜 {_example_guess(digits)}",
             md_type="娱乐",
             k1="示例",
             v1=f"猜数谜 {_example_guess(digits)}",
@@ -389,10 +391,11 @@ async def _handle_guess(
         await handle_send(
             bot,
             event,
-            f"全对，猜数谜已破局！\n"
-            f"答案就是：{answer}\n"
+            f"【猜数谜结束】\n"
+            f"结果：全部猜对\n"
+            f"答案：{answer}\n"
             f"总尝试次数：{tries} 次\n"
-            f"这局推得很稳，下一局可以直接上更高难度。",
+            f"提示：下一局可以挑战更高难度。",
             md_type="娱乐",
             k1="再来一局",
             v1=f"开始猜数谜 {difficulty}",
@@ -406,7 +409,8 @@ async def _handle_guess(
     await handle_send(
         bot,
         event,
-        f"本次猜测：对了 {correct} 位。\n"
+        f"【猜数谜提示】\n"
+        f"本次猜测：对了 {correct} 位\n"
         f"已尝试：{tries} 次\n"
         f"{_encourage(correct, digits)}",
         md_type="娱乐",

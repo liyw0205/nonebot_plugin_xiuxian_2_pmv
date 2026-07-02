@@ -36,12 +36,16 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     data = result.get("data", {})
     avatar_url = data.get("avatar_url")
     nickname = data.get("nickname", "未知用户")
-    lyrics = data.get("lyrics", "暂无歌词").replace('\n', '\r')
+    lyrics = str(data.get("lyrics") or "暂无歌词").replace('\n', '\r')
+    lyric_lines = [line.strip() for line in lyrics.split('\r') if line.strip()]
+    plain_lyrics = "\n".join(lyric_lines) or "暂无歌词"
+    quoted_lyrics = "\r".join(f"> {line}" for line in lyric_lines) or "> 暂无歌词"
     audiosrc = data.get("audiosrc")
 
     text_msg = (
+        "【随机点歌】\n"
         f"演唱者：{nickname}\n"
-        f"歌词：\n{lyrics}"
+        f"歌词：\n{plain_lyrics}"
     )
 
     if config.markdown_status:
@@ -52,8 +56,8 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         "key": "t1",
                         "values": [
                             "](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r![",
-                            f"img #300px #300px]({avatar_url})\r",
-                            f"歌词：\r> {lyrics}\r\r[",
+                            f"img]({avatar_url})\r",
+                            f"【随机点歌】\r演唱者：{nickname}\r歌词：\r{quoted_lyrics}\r\r[",
                             f"随机点歌](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r",
                             f"[{nickname}",
                         ]
@@ -63,7 +67,7 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         "key": "t1",
                         "values": [
                             f"](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r"
-                            f"歌词：\r> {lyrics}\r\r[",
+                            f"【随机点歌】\r演唱者：{nickname}\r歌词：\r{quoted_lyrics}\r\r[",
                             f"随机点歌](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r",
                             f"> [{nickname}",
                         ]
@@ -99,15 +103,17 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                 try:
                     if avatar_url:
                         md_msg = (
-                            f"![img #300px #300px]({avatar_url})\r"
+                            f"![img]({avatar_url})\r"
+                            f"【随机点歌】\r"
                             f"演唱者：{nickname}\r\r"
-                            f"歌词：\r> {lyrics}\r\r"
+                            f"歌词：\r{quoted_lyrics}\r\r"
                             f"[再来一首](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)"
                         )
                     else:
                         md_msg = (
+                            f"【随机点歌】\r"
                             f"演唱者：{nickname}\r\r"
-                            f"歌词：\r> {lyrics}\r\r"
+                            f"歌词：\r{quoted_lyrics}\r\r"
                             f"[再来一首](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)"
                         )
 
