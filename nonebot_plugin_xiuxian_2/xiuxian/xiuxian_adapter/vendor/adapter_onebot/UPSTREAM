@@ -1,0 +1,9 @@
+upstream repository: https://github.com/nonebot/adapter-onebot
+upstream branch: master
+upstream commit: 6fe01137868375afdb73a1c31e0c72dee1249703
+upstream version: 2.4.6
+license: MIT
+vendored date: 2026-07-03
+local changes: none
+source scope: nonebot/adapters/onebot runtime package and LICENSE
+update command: curl -L -o adapter-onebot.zip https://codeload.github.com/nonebot/adapter-onebot/zip/refs/heads/master

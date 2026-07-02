@@ -32,12 +32,12 @@ from .adapter_message_records import (
 # 可选导入：onebot v11
 # =========================
 try:
-    from nonebot.adapters.onebot.v11 import (
+    from .xiuxian_adapter.onebot import (
         Bot as OB11Bot,
         Message as OB11Message,
         MessageSegment as OB11MessageSegment,
     )
-    from nonebot.adapters.onebot.v11.event import (
+    from .xiuxian_adapter.onebot import (
         GroupMessageEvent as OB11GroupMessageEvent,
         PrivateMessageEvent as OB11PrivateMessageEvent,
     )
@@ -55,29 +55,20 @@ except Exception:
 # 可选导入：qq
 # =========================
 try:
-    from nonebot.adapters.qq import (
+    from .xiuxian_adapter.qq import (
         Bot as QQBot,
         Message as QQMessage,
         MessageSegment as QQMessageSegment,
     )
-    from nonebot.adapters.qq.event import (
+    from .xiuxian_adapter.qq import (
         C2CMessageCreateEvent as QQPrivateMessageEvent,
         AtMessageCreateEvent as QQAtChannelMessageEvent,
         DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
     )
-    try:
-        from nonebot.adapters.qq.event import (
-            GroupMessageCreateEvent as QQGroupMessageCreateEvent,
-        )
-    except Exception:
-        QQGroupMessageCreateEvent = None  # type: ignore
-
-    try:
-        from nonebot.adapters.qq.event import (
-            GroupAtMessageCreateEvent as QQGroupAtMessageEvent,
-        )
-    except Exception:
-        QQGroupAtMessageEvent = None  # type: ignore
+    from .xiuxian_adapter.qq import (
+        GroupAtMessageCreateEvent as QQGroupAtMessageEvent,
+        GroupMessageCreateEvent as QQGroupMessageCreateEvent,
+    )
 
     if QQGroupMessageCreateEvent is None and QQGroupAtMessageEvent is None:
         raise ImportError("QQ adapter has no group message event class")
@@ -87,7 +78,7 @@ try:
         QQGroupAtMessageEvent = QQGroupMessageCreateEvent  # type: ignore
 
     QQGroupMessageEvent = QQGroupMessageCreateEvent
-    from nonebot.adapters.qq.models import (
+    from .xiuxian_adapter.qq import (
         Action as QQKeyboardAction,
         Button as QQKeyboardButton,
         InlineKeyboard as QQInlineKeyboard,

@@ -1,0 +1,9 @@
+upstream repository: https://github.com/nonebot/adapter-qq
+upstream branch: master
+upstream commit: d8db0a7f5ab195c1415fa01fed70bd0cb89c6ec1
+upstream version: 1.7.1
+license: MIT
+vendored date: 2026-07-03
+local changes: none
+source scope: nonebot/adapters/qq runtime package and LICENSE
+update command: curl -L -o adapter-qq.zip https://codeload.github.com/nonebot/adapter-qq/zip/refs/heads/master

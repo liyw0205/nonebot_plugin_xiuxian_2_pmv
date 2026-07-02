@@ -241,28 +241,32 @@ async def _(bot, event):
 
 ## 内置上游适配器源码策略
 
-如果后续需要把上游适配器源码内置到项目中，使用独立 vendored 命名空间，不直接改写 `adapter_compat.py`：
+上游适配器源码内置在独立 vendored 命名空间中，不直接改写上游文件：
 
 - 上游来源固定为 `https://github.com/nonebot/adapter-qq` 与 `https://github.com/nonebot/adapter-onebot`。
 - 两个上游仓库均为 MIT 许可证，内置时必须保留对应 `LICENSE`、上游仓库地址、锁定的 tag 或 commit。
-- vendored 代码应放在独立目录，例如 `nonebot_plugin_xiuxian_2/xiuxian/adapters_vendor/`，避免与用户环境中的 `nonebot.adapters.qq`、`nonebot.adapters.onebot` 包名冲突。
-- `adapter_compat.py` 继续作为业务侧唯一入口；它只选择“环境已安装适配器”或“项目内置适配器”的加载结果，不承载上游实现细节。
-- 首轮内置只迁移本项目实际依赖的最小类型和消息段构造能力；需要完整上游包时再单独提交，避免一次性引入大量未使用代码。
+- vendored 代码放在 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_adapter/`，避免把上游实现散落到兼容层。
+- `adapter_compat.py` 继续作为业务侧唯一入口；它通过 `xiuxian_adapter.qq` 和 `xiuxian_adapter.onebot` 取得适配器类型，不承载上游实现细节。
+- 当前内置范围是上游运行时源码、`LICENSE` 和 `UPSTREAM` 记录；不提交 tests、website、CI 等开发文件。
 - 更新流程必须是“记录上游版本 -> 更新 vendored 目录 -> 跑编译和消息发送回归 -> 更新本节版本记录”，不能手工零散复制文件。
 
-建议的目录边界：
+当前目录边界：
 
 ```text
-nonebot_plugin_xiuxian_2/xiuxian/adapters_vendor/
+nonebot_plugin_xiuxian_2/xiuxian/xiuxian_adapter/
   README.md
-  adapter_qq/
-    UPSTREAM
-    LICENSE
-    ...
-  adapter_onebot/
-    UPSTREAM
-    LICENSE
-    ...
+  __init__.py
+  onebot.py
+  qq.py
+  vendor/
+    adapter_qq/
+      UPSTREAM
+      LICENSE
+      nonebot/adapters/qq/
+    adapter_onebot/
+      UPSTREAM
+      LICENSE
+      nonebot/adapters/onebot/
 ```
 
 `UPSTREAM` 文件至少记录：
@@ -273,7 +277,7 @@ nonebot_plugin_xiuxian_2/xiuxian/adapters_vendor/
 - local changes
 - update command
 
-当前状态：尚未内置上游源码，运行时仍优先引用用户环境中安装的 NoneBot 适配器。
+当前状态：已内置 `adapter-qq 1.7.1` 与 `adapter-onebot 2.4.6` 的运行时源码。`xiuxian_adapter.ensure_vendored_adapters()` 会扩展 `nonebot.adapters.__path__`，使上游原始包路径 `nonebot.adapters.qq` 与 `nonebot.adapters.onebot` 可以解析到内置源码。
 
 ## 注意事项
 
