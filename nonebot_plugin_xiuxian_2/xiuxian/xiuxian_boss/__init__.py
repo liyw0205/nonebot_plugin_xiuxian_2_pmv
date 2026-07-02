@@ -205,7 +205,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     bosss = None
     try:
         bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except:
+    except Exception:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
         await boss_delete.finish()
@@ -238,7 +238,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bosss = None
     try:
         bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except:
+    except Exception:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
         await boss_delete_all.finish()
@@ -868,7 +868,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     bosss = None
     try:
         bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except:
+    except Exception:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
         await boss_info.finish()
@@ -930,7 +930,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bosss = None
     try:
         bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except:
+    except Exception:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
         await handle_send(bot, event, msg)
         await boss_info2.finish()
@@ -980,10 +980,7 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    try:
-        group_boss[GLOBAL_BOSS_KEY]
-    except:
-        group_boss[GLOBAL_BOSS_KEY] = []
+    group_boss.setdefault(GLOBAL_BOSS_KEY, [])
 
     boss_jj = createboss()
     for boss in group_boss[GLOBAL_BOSS_KEY][:]:
@@ -1004,10 +1001,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    try:
-        group_boss[GLOBAL_BOSS_KEY]
-    except:
-        group_boss[GLOBAL_BOSS_KEY] = []
+    group_boss.setdefault(GLOBAL_BOSS_KEY, [])
 
     # 解析参数
     arg_list = args.extract_plain_text().split()
@@ -1073,7 +1067,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     l_msg = []
     l_msg.append(f"【世界积分商店】第{page}/{total_pages}页")
     
-    if boss_integral_shop != {}:
+    if boss_integral_shop:
         # 计算当前页的商品范围
         start_index = (page - 1) * per_page
         end_index = min(start_index + per_page, total_items)
@@ -1254,7 +1248,7 @@ class BossDrops:
             with open(BOSSDROPSPATH, "r", encoding="UTF-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"加载BOSS掉落物数据失败: {e}")
+            logger.warning(f"加载BOSS掉落物数据失败: {e}")
             return {}
     
     def get_drop_by_id(self, drop_id):

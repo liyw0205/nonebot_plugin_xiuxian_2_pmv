@@ -1,9 +1,10 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
+import json
 from pathlib import Path
 import os
+
+from nonebot.log import logger
+
+from ..xiuxian_utils.json_store import save_json_file
 
 
 GLOBAL_BOSS_KEY = "global"
@@ -23,18 +24,17 @@ class OLD_BOSS_INFO(object):
                     data = json.load(f)
                     return data if data is not None else {}
             except Exception as e:
-                print(f"警告: 读取 {self.data_path} 失败: {e}")
+                logger.warning(f"读取 {self.data_path} 失败: {e}")
                 return {}
         return {}
 
     def __save(self):
         """保存数据"""
         try:
-            with open(self.data_path, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=4)
+            save_json_file(self.data_path, self.data)
             return True
         except Exception as e:
-            print(f"错误: 保存 {self.data_path} 失败: {e}")
+            logger.warning(f"保存 {self.data_path} 失败: {e}")
             return False
 
     def save_boss(self, boss_data):

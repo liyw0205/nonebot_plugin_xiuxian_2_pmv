@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 import random
 from datetime import datetime
 from typing import Any
 
+from ..xiuxian_utils.json_store import safe_json_dumps as _json_dumps
+from ..xiuxian_utils.json_store import safe_json_loads
 from ..xiuxian_utils.periods import get_daily_key
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
@@ -13,18 +14,8 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _json_dumps(data: dict[str, Any]) -> str:
-    return json.dumps(data, ensure_ascii=False)
-
-
 def _json_loads(text: str | None) -> dict[str, Any]:
-    if not text:
-        return {}
-    try:
-        data = json.loads(text)
-        return data if isinstance(data, dict) else {}
-    except (TypeError, ValueError):
-        return {}
+    return safe_json_loads(text, {}, dict)
 
 
 class SectTaskStateManager:

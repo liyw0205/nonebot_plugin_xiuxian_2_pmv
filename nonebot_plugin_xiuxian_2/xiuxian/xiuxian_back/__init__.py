@@ -29,6 +29,7 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     Txt2Img, number_to, handle_send, send_help_message
 )
+from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, PlayerDataManager, get_weapon_info_msg, get_armor_info_msg,
     get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate, OtherSet, calc_accessory_effects
@@ -201,18 +202,6 @@ def get_alchemy_reserved_num(back_item):
     """返回炼金时需要保留的已装备/使用数量。"""
     return max(0, int(back_item.get("state", 0) or 0))
 
-
-def _get_user_sect_fairyland_level(user_info: dict) -> int:
-    sect_id = user_info.get("sect_id")
-    if not sect_id:
-        return 0
-    sect_info = sql_message.get_sect_info(sect_id)
-    if not sect_info:
-        return 0
-    try:
-        return int(sect_info.get("sect_fairyland", 0) or 0)
-    except Exception:
-        return 0
 
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=0)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

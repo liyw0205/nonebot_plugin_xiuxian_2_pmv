@@ -1,11 +1,11 @@
 import random
 import asyncio
-from datetime import datetime
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..command import *
+from .game_utils import event_display_name, now_text
 
 
 # =========================
@@ -22,17 +22,6 @@ GUESS_TIMEOUT = 300  # 秒，无操作自动结束（5分钟）
 # =========================
 guess_number_sessions: dict[str, dict] = {}
 guess_number_timeout_tasks: dict[str, asyncio.Task] = {}
-
-
-def _now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _name_from_event(event):
-    sender = getattr(event, "sender", None)
-    if sender:
-        return sender.card or sender.nickname or str(event.get_user_id())
-    return str(event.get_user_id())
 
 
 def _build_range_text(low: int, high: int) -> str:
@@ -91,7 +80,7 @@ guess_number_help_cmd = on_command("猜数字帮助", priority=5, block=True)
 @guess_number_start_cmd.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event)
+    user_name = event_display_name(event)
 
     # 若已有进行中，直接提示
     old = guess_number_sessions.get(user_id)
@@ -118,8 +107,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "high": GUESS_MAX,
         "tries": 0,
         "status": "playing",
-        "create_time": _now_str(),
-        "last_action_time": _now_str(),
+        "create_time": now_text(),
+        "last_action_time": now_text(),
     }
 
     await _start_guess_timeout(bot, event, user_id)
@@ -194,7 +183,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await _start_guess_timeout(bot, event, user_id)
 
     game["tries"] += 1
-    game["last_action_time"] = _now_str()
+    game["last_action_time"] = now_text()
 
     ans = game["answer"]
     if num == ans:

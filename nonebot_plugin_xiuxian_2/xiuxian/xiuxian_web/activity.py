@@ -2,6 +2,8 @@ from copy import deepcopy
 from datetime import datetime
 
 from .core import *  # noqa: F401,F403
+from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
+from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from ..xiuxian_activity.service import (
     ACTIVITY_EVENT_CHOICES,
     ACTIVITY_EVENT_LABELS,
@@ -1013,19 +1015,6 @@ def _clean_text(value, default: str = "") -> str:
     return text or default
 
 
-def _as_bool(value, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in ("true", "1", "yes", "on", "开启"):
-        return True
-    if text in ("false", "0", "no", "off", "关闭"):
-        return False
-    return default
-
-
 def _validate_time_text(value: str, field_name: str):
     text = _clean_text(value)
     if text in ("", "0", "无限"):
@@ -1528,16 +1517,6 @@ def _normalize_gameplay_activities(value) -> list[dict]:
             "phrases": phrases,
         })
     return normalized
-
-
-def _default_stage_features(stage_type: str) -> list[str]:
-    if stage_type == "warmup":
-        return ["sign", "claim"]
-    if stage_type == "settlement":
-        return ["shop", "claim", "exchange"]
-    if stage_type == "closed":
-        return []
-    return ["sign", "task", "pass", "points", "collect", "boss", "shop", "claim", "exchange"]
 
 
 def _normalize_stage_features(value, stage_type: str, stage_label: str) -> list[str]:

@@ -11,7 +11,6 @@ daily_60s_image_cmd = on_command(
 @daily_60s_image_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """每日60S 图片版"""
-    config = XiuConfig()
     api_url = "https://api.pearapi.ai/api/60s/image/"
 
     try:
@@ -27,44 +26,15 @@ async def daily_60s_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         await daily_60s_image_cmd.finish()
 
-    title = ""
-
-    if config.markdown_status:
-        if config.markdown_id:
-            try:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "[点击刷新](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)\r![",
-                        f"img #1080px #1920px]({image_url})\r",
-                        "[每日60S图片"
-                    ]
-                }
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-            except Exception as e:
-                logger.warning(f"每日60S图片 模板MD发送失败：{e}")
-            await daily_60s_image_cmd.finish()
-
-        elif not is_channel_event(event):
-            try:
-                md_msg = (
-                    f"![img #1080px #1920px]({image_url})\r"
-                    f"[刷新](mqqapi://aio/inlinecmd?command=每日60S图片&enter=false&reply=false)"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-            except Exception as e:
-                logger.warning(f"每日60S图片 原生MD发送失败：{e}")
-            await daily_60s_image_cmd.finish()
-
     try:
-        await handle_pic_msg_send(bot, event, image_url, title)
+        await send_entertainment_image_result(
+            bot,
+            event,
+            image_url,
+            "每日60S图片",
+            title="每日60S图片",
+            buttons=[("刷新", "每日60S图片"), ("60S读世界", "60S读世界")],
+        )
     except Exception as e:
         await handle_send(
             bot, event,

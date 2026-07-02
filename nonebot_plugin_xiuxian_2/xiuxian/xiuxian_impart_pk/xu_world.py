@@ -1,54 +1,36 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
 from pathlib import Path
 import os
+
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
+
+XU_WORLD_MAX_USERS = 40
 
 
 class XU_WORLD(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent
         self.data_path = os.path.join(self.dir_path, "x_world.json")
-        try:
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-        except:
-            self.info = {}
-            data = json.dumps(self.info, ensure_ascii=False, indent=4)
-            with open(self.data_path, mode="x", encoding="UTF-8") as f:
-                f.write(data)
-                f.close()
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
+        self.data = load_json_file(self.data_path, {})
 
     def __save(self):
         """
         :return:保存
         """
-        with open(self.data_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        save_json_file(self.data_path, self.data)
 
     def check_xu_world_num(self):
         """
         查看人数
         """
         num = len(self.data.keys())
-        if num > 40:
-            return False
-        else:
-            return True
+        return num < XU_WORLD_MAX_USERS
 
     def check_xu_world_user_id(self, user_id):
         """
         检查是否加入
         """
         user_id = str(user_id)
-        try:
-            if self.data[user_id]:
-                return True
-        except:
-            return False
+        return bool(self.data.get(user_id))
 
     def add_xu_world(self, user_id):
         """
@@ -58,7 +40,7 @@ class XU_WORLD(object):
         if self.check_xu_world_user_id(user_id):
             return "你已经在虚神界中了！"
 
-        if self.check_xu_world_num:
+        if self.check_xu_world_num():
             self.data[user_id] = True
             self.__save()
             return "加入虚神界成功！"

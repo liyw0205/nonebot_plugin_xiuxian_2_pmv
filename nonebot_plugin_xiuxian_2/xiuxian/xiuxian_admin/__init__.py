@@ -300,8 +300,8 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     await bot.send_group_msg(group_id=int(gid), message=MessageSegment.image(pic))
                 else:
                     await bot.send_group_msg(group_id=int(gid), message=msg)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"全服灵石广播到群 {gid} 失败：{e}")
     else:  # 单人
         key = 1 if amount > 0 else 2
         sql_message.update_ls(
@@ -526,7 +526,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         root_id = int(parts[0])
         if root_id < 1 or root_id > 9:
             raise ValueError
-    except:
+    except (TypeError, ValueError):
         await handle_send(bot, event, "第一个参数必须是1~9的整数（灵根编号）")
         return
 
@@ -1588,7 +1588,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 value = " "
             params.append({"key": key, "values": [value]})
 
-    print(f"传入：\n{args_str}\n\n解析：\n{params}")
+    logger.debug(f"dm markdown模板参数：传入={args_str!r}，解析={params!r}")
     try:
         msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
         await bot.send(event, msg)

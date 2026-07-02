@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from ..xiuxian_utils.json_store import safe_json_dumps as _json_dumps
+from ..xiuxian_utils.json_store import safe_json_loads
 from ..xiuxian_utils.periods import get_weekly_key
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
@@ -75,17 +76,7 @@ def _now_text() -> str:
 
 
 def _json_loads(text: str | None, default: Any):
-    if not text:
-        return default
-    try:
-        data = json.loads(text)
-    except (TypeError, ValueError):
-        return default
-    return data if isinstance(data, type(default)) else default
-
-
-def _json_dumps(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False)
+    return safe_json_loads(text, default, type(default))
 
 
 class SectWeeklyGoalManager:

@@ -17,15 +17,14 @@ from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to,
     update_statistics_value, log_message
 )
+from ..xiuxian_utils.spirit_vein import apply_spirit_vein_exp_bonus as _apply_spirit_vein_exp_bonus
 from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
-from ..xiuxian_world_events import get_spirit_vein_exp_bonus_msg, get_spirit_vein_exp_multiplier
 from .. import NICKNAME
-from nonebot.log import logger
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
 
@@ -44,17 +43,6 @@ XU_SOUL_LOAD_PER_USE = 5
 XU_SOUL_LOAD_TIME_STEP = 150
 XU_SOUL_LOAD_PER_TIME_STEP = 5
 XU_SOUL_LOAD_CAP_EXP = 1
-
-
-def _apply_spirit_vein_exp_bonus(exp: int, cap: int | None = None) -> tuple[int, str]:
-    multiplier = get_spirit_vein_exp_multiplier()
-    exp = max(0, int(exp))
-    if multiplier <= 1:
-        return exp, ""
-    exp = int(exp * multiplier)
-    if cap is not None:
-        exp = min(exp, max(0, int(cap)))
-    return exp, get_spirit_vein_exp_bonus_msg()
 
 
 async def impart_re():
@@ -218,13 +206,9 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         parts = args_text.split()
         for part in parts:
             if part.endswith('次'):
-                try:
-                    # 提取次数部分
-                    count_str = part.replace('次', '')
-                    if count_str.isdigit():
-                        max_loss_count = int(count_str)
-                except:
-                    pass
+                count_str = part.replace('次', '')
+                if count_str.isdigit():
+                    max_loss_count = int(count_str)
             elif part.isdigit():
                 # 纯数字，可能是目标编号
                 target_num = part
@@ -312,7 +296,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 有目标编号的情况（与其他玩家对决）
     try:
         num = int(target_num) - 1
-    except:
+    except (TypeError, ValueError):
         msg = f"编号解析异常，应全为数字!"
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_now.finish()

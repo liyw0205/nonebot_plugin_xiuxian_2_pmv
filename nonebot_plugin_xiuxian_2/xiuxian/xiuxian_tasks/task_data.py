@@ -4,10 +4,10 @@ from typing import Any
 
 from nonebot.log import logger
 
-from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.reward_service import grant_reward
 from ..xiuxian_utils.utils import number_to
-from ..xiuxian_utils.xiuxian2_handle import OtherSet, PlayerDataManager, XiuxianDateManage
+from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 
 @dataclass(frozen=True)
@@ -180,7 +180,6 @@ class XiuxianTaskManager:
 
     def __init__(self):
         self.player_data_manager = PlayerDataManager()
-        self.sql_message = XiuxianDateManage()
         self.items = Items()
 
     @staticmethod
@@ -317,51 +316,17 @@ class XiuxianTaskManager:
         msg_lines.append("\n发送【领取任务奖励】领取已完成奖励。")
         return "\n".join(msg_lines)
 
-    def _grant_exp(self, user_id: str, exp: int) -> int:
-        user_info = self.sql_message.get_user_info_with_id(user_id)
-        if not user_info:
-            return 0
-
-        exp = max(0, int(exp))
-        current_exp = int(user_info.get("exp", 0) or 0)
-        max_exp = int(OtherSet().set_closing_type(user_info["level"])) * XiuConfig().closing_exp_upper_limit
-        grant_exp = min(exp, max(max_exp - current_exp, 0))
-        if grant_exp <= 0:
-            return 0
-
-        self.sql_message.update_exp(user_id, grant_exp)
-        self.sql_message.update_power2(user_id)
-        return grant_exp
-
-    def _grant_rewards(self, user_id: str, rewards: dict[str, Any]) -> dict[str, Any]:
-        granted = {"stone": 0, "exp": 0, "items": []}
-        stone = int(rewards.get("stone", 0) or 0)
-        exp = int(rewards.get("exp", 0) or 0)
-
-        if stone > 0:
-            self.sql_message.update_ls(user_id, stone, 1)
-            granted["stone"] = stone
-        if exp > 0:
-            granted["exp"] = self._grant_exp(user_id, exp)
-
-        for reward in rewards.get("items", []) or []:
-            item_id = reward.get("id")
-            amount = max(1, int(reward.get("amount", 1) or 1))
-            item_info = self.items.get_data_by_item_id(item_id)
-            if not item_info:
-                logger.warning(f"任务奖励物品不存在：{item_id}")
-                continue
-            self.sql_message.send_back(
-                user_id,
-                int(item_id),
-                item_info["name"],
-                item_info["type"],
-                amount,
-                1,
-            )
-            granted["items"].append({"name": item_info["name"], "amount": amount})
-
-        return granted
+    def _grant_task_rewards(self, user_id: str, task: TaskDefinition) -> dict[str, Any]:
+        result = grant_reward(
+            user_id,
+            task.rewards,
+            "xiuxian_task",
+            meta={
+                "action": "claim_task_reward",
+                "detail": {"task_key": task.key, "cycle": task.cycle},
+            },
+        )
+        return result["granted"]
 
     def claim_rewards(self, user_id: str, cycle: str | None = None) -> str:
         user_id = str(user_id)
@@ -376,7 +341,7 @@ class XiuxianTaskManager:
                 for task in TASKS_BY_CYCLE[item_cycle]:
                     current = int(progress.get(task.key, 0) or 0)
                     if current >= task.target and task.key not in claimed_set:
-                        granted = self._grant_rewards(user_id, task.rewards)
+                        granted = self._grant_task_rewards(user_id, task)
                         claimed_tasks.append((task, granted))
                         newly_claimed.append(task.key)
 

@@ -11,12 +11,11 @@ hot_rank_image_cmd = on_command(
 @hot_rank_image_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """热榜60S 图片版"""
-    config = XiuConfig()
     api_url = "https://api.pearapi.ai/api/60s/image/hot/"
 
     raw_msg = str(event.message)
     rank_type = "baidu"
-    title = ""
+    title = "微博热榜图片" if "微博热榜图片" in raw_msg else "百度热榜图片"
 
     if "微博热榜图片" in raw_msg:
         rank_type = "weibo"
@@ -34,49 +33,23 @@ async def hot_rank_image_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         )
         await hot_rank_image_cmd.finish()
 
-    if config.markdown_status:
-        if config.markdown_id:
-            try:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "[点击刷新](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false)\r![",
-                        f"img #1080px #1920px]({image_url})\r",
-                        "[热榜图片"
-                    ]
-                }
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-            except Exception as e:
-                logger.warning(f"热榜图片 模板MD发送失败：{e}")
-            await hot_rank_image_cmd.finish()
-        elif not is_channel_event(event):
-            try:
-                md_msg = (
-                    f"![img #1080px #1920px]({image_url})\r"
-                    f"[刷新](mqqapi://aio/inlinecmd?command=热榜图片&enter=false&reply=false)"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-            except Exception as e:
-                logger.warning(f"热榜图片 原生MD发送失败：{e}")
-                await hot_rank_image_cmd.finish()
-    else:
-        try:
-            await handle_pic_msg_send(bot, event, image_url, title)
-        except Exception as e:
-            await handle_send(
-                bot, event,
-                f"热榜图片发送失败：{e}",
-                md_type="娱乐",
-                k1="百度图", v1="百度热榜图片",
-                k2="微博图", v2="微博热榜图片",
-                k3="帮助", v3="娱乐帮助"
-            )
+    try:
+        await send_entertainment_image_result(
+            bot,
+            event,
+            image_url,
+            title,
+            title=title,
+            buttons=[("百度图", "百度热榜图片"), ("微博图", "微博热榜图片"), ("娱乐帮助", "娱乐帮助")],
+        )
+    except Exception as e:
+        await handle_send(
+            bot, event,
+            f"热榜图片发送失败：{e}",
+            md_type="娱乐",
+            k1="百度图", v1="百度热榜图片",
+            k2="微博图", v2="微博热榜图片",
+            k3="帮助", v3="娱乐帮助"
+        )
 
-        await hot_rank_image_cmd.finish()
+    await hot_rank_image_cmd.finish()

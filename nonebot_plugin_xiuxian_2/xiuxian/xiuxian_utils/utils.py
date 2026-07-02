@@ -78,6 +78,14 @@ class MyEncoder(json.JSONEncoder):
             return super(MyEncoder, self).default(obj)
 
 
+def _draw_rectangle_border(draw, rect, width: int, outline):
+    for i in range(width):
+        draw.rectangle(
+            (rect[0] + i, rect[1] + i, rect[2] - i, rect[3] - i),
+            outline=outline,
+        )
+
+
 def check_user_type(user_id, need_type):
     """
     :说明: `check_user_type`
@@ -320,14 +328,7 @@ class Txt2Img:
             out_img.paste(mi_img, (0, x * 100))
 
         # 添加边框
-        def draw_rectangle(draw, rect, width):
-            for i in range(width):
-                draw.rectangle(
-                    (rect[0] + i, rect[1] + i, rect[2] - i, rect[3] - i),
-                    outline=border_color,
-                )
-
-        draw_rectangle(
+        _draw_rectangle_border(
             draw,
             (
                 out_padding,
@@ -336,6 +337,7 @@ class Txt2Img:
                 img_hight - out_padding,
             ),
             2,
+            border_color,
         )
 
         # 添加banner
@@ -455,15 +457,8 @@ class Txt2Img:
             out_img.paste(mi_img, (0, x * 100))
 
         # add border
-        def draw_rectangle(draw, rect, width):
-            for i in range(width):
-                draw.rectangle(
-                    (rect[0] + i, rect[1] + i, rect[2] - i, rect[3] - i),
-                    outline=border_color,
-                )
-
-        draw_rectangle(
-            draw, (out_padding, out_padding, w - out_padding, h - out_padding), 2
+        _draw_rectangle_border(
+            draw, (out_padding, out_padding, w - out_padding, h - out_padding), 2, border_color
         )
 
         # add banner
@@ -547,7 +542,7 @@ class Txt2Img:
                 out_img.save(img_byte_arr, format="JPEG", quality=compression_quality)
             else:
                 out_img.save(img_byte_arr, format="WebP", quality=compression_quality)
-        except:
+        except Exception:
             # 尝试降级为 JPEG
             out_img.save(img_byte_arr, format="JPEG", quality=compression_quality)
 
@@ -828,6 +823,22 @@ def build_md_command_link(text, command=None):
     command = str(command if command is not None else text)
     command = quote(command, safe="")
     return f"[{display}](mqqapi://aio/inlinecmd?command={command}&enter=false&reply=false)"
+
+
+def escape_markdown_text(value: Any) -> str:
+    """转义原生 Markdown 文本字段，避免用户内容破坏展示结构。"""
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+        .replace("`", "\\`")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .replace("#", "\\#")
+    )
 
 
 def strip_md_command_links(msg: str) -> str:
@@ -2194,7 +2205,7 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             # 获取所有日志文件并按日期排序（最新的在前）
             log_files = sorted(logs_dir.glob("*.log"), key=lambda x: x.stem, reverse=True)
             return log_files[0].stem if log_files else None
-        except:
+        except Exception:
             return None
     
     try:

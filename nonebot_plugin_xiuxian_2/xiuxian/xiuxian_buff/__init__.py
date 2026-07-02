@@ -31,6 +31,7 @@ from ..xiuxian_utils.utils import (
     check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value,
     send_help_message
 )
+from ..xiuxian_utils.spirit_vein import apply_spirit_vein_exp_bonus as _apply_spirit_vein_exp_bonus
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_work import count
@@ -45,7 +46,6 @@ from ..xiuxian_rift.jsondata import read_rift_data
 from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon import dungeon_manager
-from ..xiuxian_world_events import get_spirit_vein_exp_bonus_msg, get_spirit_vein_exp_multiplier
 from .two_exp_cd import two_exp_cd
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
@@ -83,17 +83,6 @@ blessed_spot_rename = on_command("洞天福地改名", priority=7, block=True)
 ling_tian_up = on_command("灵田开垦", priority=5, block=True)
 del_exp_decimal = on_command("抑制黑暗动乱", priority=9, block=True)
 daily_info = on_command("日常", priority=9, block=True)
-
-
-def _apply_spirit_vein_exp_bonus(exp: int, cap: int | None = None) -> tuple[int, str]:
-    multiplier = get_spirit_vein_exp_multiplier()
-    exp = max(0, int(exp))
-    if multiplier <= 1:
-        return exp, ""
-    exp = int(exp * multiplier)
-    if cap is not None:
-        exp = min(exp, max(0, int(cap)))
-    return exp, get_spirit_vein_exp_bonus_msg()
 
 
 __buff_help__ = f"""

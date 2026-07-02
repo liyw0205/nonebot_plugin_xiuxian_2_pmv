@@ -196,8 +196,15 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             )
 
             md_msg = "\r".join(md_lines)
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-            await steam_plus_one_cmd.finish()
+            await handle_send(
+                bot,
+                event,
+                md_msg,
+                native_markdown=True,
+                fallback_msg=text_msg,
+                at_msg=False,
+            )
+            return
         except Exception as e:
             logger.warning(f"Steam喜加一 原生MD发送失败：{e}")
 

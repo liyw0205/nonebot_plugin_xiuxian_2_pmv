@@ -73,42 +73,25 @@ async def _fetch_random_girl_video() -> tuple[str, str]:
 
 async def _send_random_girl_video(bot: Bot, event, video_url: str):
     config = XiuConfig()
-    text_msg = ""
+    text_msg = "随机小姐姐"
 
     if config.markdown_status:
-        if config.markdown_id:
-            try:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\r",
-                        "[",
-                        "再来一个](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)\r",
-                    ],
-                }
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None,
-                )
-                await bot.send(event=event, message=MessageSegment.video(bot, video_url))
-            except Exception as e:
-                logger.warning(f"随机小姐姐 模板MD发送失败：{e}")
+        try:
+            await handle_send(
+                bot,
+                event,
+                "**随机小姐姐**",
+                native_markdown=True,
+                fallback_msg=text_msg,
+                keyboard_rows=[
+                    [("再来一个", "随机小姐姐"), ("娱乐帮助", "娱乐帮助")]
+                ],
+                at_msg=False,
+            )
+            await bot.send(event=event, message=MessageSegment.video(bot, video_url))
             return
-
-        if not is_channel_event(event):
-            try:
-                md_msg = (
-                    "[再来一个](mqqapi://aio/inlinecmd?command=随机小姐姐&enter=false&reply=false)"
-                )
-                await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-                await bot.send(event=event, message=MessageSegment.video(bot, video_url))
-            except Exception as e:
-                logger.warning(f"随机小姐姐 原生MD发送失败：{e}")
-            return
+        except Exception as e:
+            logger.warning(f"随机小姐姐 Markdown发送失败：{e}")
 
     await handle_send(
         bot,

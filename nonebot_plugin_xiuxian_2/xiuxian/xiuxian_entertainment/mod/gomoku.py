@@ -10,6 +10,7 @@ from ...on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..command import *
+from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
 
 # =========================
 # 数据目录（娱乐独立）
@@ -41,17 +42,6 @@ room_timeout_tasks: dict[str, asyncio.Task] = {}
 move_timeout_tasks: dict[str, asyncio.Task] = {}
 
 
-def _now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _name_from_event(event, user_id: str):
-    sender = getattr(event, "sender", None)
-    if sender:
-        return sender.card or sender.nickname or str(user_id)
-    return str(user_id)
-
-
 # =========================
 # 房间模型
 # =========================
@@ -71,7 +61,7 @@ class GomokuGame:
         self.status = "waiting"  # waiting/playing/finished
         self.winner = None
 
-        self.create_time = _now_str()
+        self.create_time = now_text()
         self.last_move_time = None
 
     def to_dict(self):
@@ -160,7 +150,7 @@ class GomokuRoomManager:
         game.player_names[user_id] = user_name
         game.status = "playing"
         game.current_player = game.player_black
-        game.last_move_time = _now_str()
+        game.last_move_time = now_text()
         self.save_room(room_id)
         return True
 
@@ -207,44 +197,6 @@ class GomokuRoomManager:
 
 
 room_manager = GomokuRoomManager()
-
-
-# =========================
-# 坐标转换
-# =========================
-def coordinate_to_position(coord: str):
-    coord = coord.strip().upper()
-    if len(coord) < 2:
-        return None
-    col_str = ""
-    row_str = ""
-    for ch in coord:
-        if ch.isalpha():
-            col_str += ch
-        elif ch.isdigit():
-            row_str += ch
-    if not col_str or not row_str:
-        return None
-
-    col = 0
-    for i, c in enumerate(reversed(col_str)):
-        col += (ord(c) - ord("A") + 1) * (26 ** i)
-    col -= 1
-    row = int(row_str) - 1
-
-    if 0 <= col < BOARD_SIZE and 0 <= row < BOARD_SIZE:
-        return col, row
-    return None
-
-
-def position_to_coordinate(x: int, y: int):
-    n = x + 1
-    letters = ""
-    while n > 0:
-        n -= 1
-        letters = chr(ord("A") + n % 26) + letters
-        n //= 26
-    return f"{letters}{y+1}"
 
 
 # =========================
@@ -299,7 +251,7 @@ def create_board_image(game: GomokuGame) -> BytesIO:
 
     # 坐标
     for i in range(BOARD_SIZE):
-        letter = position_to_coordinate(i, 0).rstrip("1")
+        letter = format_board_coord(i, 0).rstrip("1")
         draw.text((MARGIN + i*CELL_SIZE - 6, MARGIN - 26), letter, fill=COORD_COLOR, font=font)
         draw.text((MARGIN + i*CELL_SIZE - 6, img_h - MARGIN + 8), letter, fill=COORD_COLOR, font=font)
 
@@ -509,7 +461,7 @@ def _random_room_id():
 @gomoku_start.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event, user_id)
+    user_name = event_display_name(event, user_id)
     arg = args.extract_plain_text().strip()
 
     if room_manager.get_user_room(user_id):
@@ -541,7 +493,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @gomoku_single.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event, user_id)
+    user_name = event_display_name(event, user_id)
     arg = args.extract_plain_text().strip()
 
     if room_manager.get_user_room(user_id):
@@ -560,7 +512,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     g.player_white = "__AI__"
     g.status = "playing"
     g.current_player = g.player_black
-    g.last_move_time = _now_str()
+    g.last_move_time = now_text()
     room_manager.save_room(room_id)
 
     user_room_status[user_id] = room_id
@@ -578,7 +530,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @gomoku_join.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event, user_id)
+    user_name = event_display_name(event, user_id)
     room_id = args.extract_plain_text().strip()
 
     if not room_id:
@@ -629,7 +581,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "当前棋局不可落子。")
         return
 
-    pos = coordinate_to_position(ptxt)
+    pos = parse_board_coord(ptxt, BOARD_SIZE, BOARD_SIZE)
     if not pos:
         await handle_send(bot, event, "坐标格式错误。\n示例：落子 A1")
         return
@@ -647,7 +599,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     stone = 1 if user_id == g.player_black else 2
     g.board[y][x] = stone
     g.moves.append((x, y))
-    g.last_move_time = _now_str()
+    g.last_move_time = now_text()
 
     # 胜负
     if check_win(g.board, x, y, stone):
@@ -672,7 +624,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if g.board[ay][ax] == 0:
             g.board[ay][ax] = 2
             g.moves.append((ax, ay))
-            g.last_move_time = _now_str()
+            g.last_move_time = now_text()
 
             if check_win(g.board, ax, ay, 2):
                 g.status = "finished"
@@ -682,7 +634,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                     bot,
                     event,
                     create_board_image(g),
-                    f"【五子棋结束】\nAI落子：{position_to_coordinate(ax, ay)}\n胜者：AI",
+                    f"【五子棋结束】\nAI落子：{format_board_coord(ax, ay)}\n胜者：AI",
                 )
                 room_manager.delete_room(room_id)
                 return
@@ -692,8 +644,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_pic_msg_send(
                 bot, event, create_board_image(g),
                 f"【五子棋】\n"
-                f"你落子：{position_to_coordinate(x, y)}\n"
-                f"AI落子：{position_to_coordinate(ax, ay)}\n"
+                f"你落子：{format_board_coord(x, y)}\n"
+                f"AI落子：{format_board_coord(ax, ay)}\n"
                 f"当前回合：轮到你"
             )
         else:
@@ -711,7 +663,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         bot,
         event,
         create_board_image(g),
-        f"【五子棋】\n落子：{position_to_coordinate(x, y)}\n当前回合：{next_name}",
+        f"【五子棋】\n落子：{format_board_coord(x, y)}\n当前回合：{next_name}",
     )
     await start_move_timeout(bot, event, room_id)
 

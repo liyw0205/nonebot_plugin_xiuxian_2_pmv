@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -9,6 +8,8 @@ try:
 except Exception:  # pragma: no cover
     logger = None
 
+from .json_store import safe_json_dumps as _json_dumps
+from .json_store import safe_json_loads as _json_loads
 from .periods import get_season_key
 from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
@@ -54,24 +55,6 @@ def _to_int(value: Any, default: int = 0) -> int:
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _json_dumps(value: Any, default: Any) -> str:
-    if value is None:
-        value = default
-    try:
-        return json.dumps(value, ensure_ascii=False)
-    except (TypeError, ValueError):
-        return json.dumps(str(value), ensure_ascii=False)
-
-
-def _json_loads(value: Any, default: Any) -> Any:
-    if value in (None, ""):
-        return default
-    try:
-        return json.loads(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _normalize_modes(raw_modes: Any = None) -> tuple[str, ...]:

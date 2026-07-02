@@ -12,8 +12,6 @@ def _safe_int(value, default: int) -> int:
 @today_wife_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """今日老婆"""
-    config = XiuConfig()
-
     api_url = "https://api.pearapi.ai/api/today_wife"
 
     try:
@@ -63,63 +61,15 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         f"尺寸：{width} × {height}"
     )
 
-    if config.markdown_status:
-        if config.markdown_id:
-            try:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "](mqqapi://aio/inlinecmd?command=今日老婆&enter=false&reply=false)\r![",
-                        f"img #{width}px #{height}px]({image_url})\r",
-                        f"名字：{role_name}"
-                    ]
-                }
-
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-            except Exception as e:
-                logger.warning(f"今日老婆 模板MD发送失败：{e}")
-                await handle_send(
-                    bot, event,
-                    "今日老婆发送失败：模板 Markdown 发送异常",
-                    md_type="娱乐",
-                    k1="再试一次", v1="今日老婆",
-                    k2="超能力", v2="今日超能力",
-                    k3="帮助", v3="娱乐帮助"
-                )
-            await today_wife_cmd.finish()
-
-        else:
-            if not is_channel_event(event):
-                try:
-                    md_msg = (
-                        f"![img #{width}px #{height}px]({image_url})\r"
-                        f"名字：{role_name}\r"
-                        f"尺寸：{width} × {height}\r\r"
-                        f"[再来一张](mqqapi://aio/inlinecmd?command=今日老婆&enter=false&reply=false) | "
-                        f"[查看原图](mqqapi://aio/inlinecmd?command={image_url}&enter=false&reply=false)"
-                    )
-                    await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-                except Exception as e:
-                    logger.warning(f"今日老婆 原生MD发送失败：{e}")
-                    await handle_send(
-                        bot, event,
-                        "今日老婆发送失败：原生 Markdown 发送异常",
-                        md_type="娱乐",
-                        k1="再试一次", v1="今日老婆",
-                        k2="超能力", v2="今日超能力",
-                        k3="帮助", v3="娱乐帮助"
-                    )
-                await today_wife_cmd.finish()
-
     try:
-        await handle_pic_msg_send(bot, event, image_url, text_msg)
+        await send_entertainment_image_result(
+            bot,
+            event,
+            image_url,
+            text_msg,
+            title="今日老婆",
+            buttons=[("再来一张", "今日老婆"), ("今日超能力", "今日超能力"), ("娱乐帮助", "娱乐帮助")],
+        )
     except Exception as e:
         logger.warning(f"今日老婆 普通图文发送失败：{e}")
         await handle_send(

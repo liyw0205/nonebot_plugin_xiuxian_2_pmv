@@ -1,6 +1,7 @@
 import random
 from datetime import datetime
 from nonebot import require
+from nonebot.log import logger
 from ..on_compat import on_command
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 
@@ -77,7 +78,7 @@ async def auto_harvest_scheduled():
             await check_and_harvest(user_id)
 
     except Exception as e:
-        print(f"自动收取任务出错: {e}")
+        logger.warning(f"自动收取任务出错: {e}")
 
 
 async def check_and_harvest(user_id):

@@ -5,8 +5,6 @@ today_superpower_cmd = on_command("今日超能力", priority=5, block=True)
 @today_superpower_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """今日超能力"""
-    config = XiuConfig()
-
     api_url = "https://api.pearapi.ai/api/superpower"
 
     try:
@@ -44,79 +42,16 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
         f"但是：{disadvantage}"
     )
 
-    if config.markdown_status:
-        if config.markdown_id:
-            try:
-                if image_url:
-                    msg_param = {
-                        "key": "t1",
-                        "values": [
-                            "](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)\r![",
-                            "img #800px #800px](" + image_url + ")\r",
-                            f"超能力：{superpower}\r但是：{disadvantage}"
-                        ]
-                    }
-                else:
-                    msg_param = {
-                        "key": "t1",
-                        "values": [
-                            f"超能力：{superpower}\r但是：{disadvantage}"
-                        ]
-                    }
-
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-            except Exception as e:
-                logger.warning(f"今日超能力 模板MD发送失败：{e}")
-                await handle_send(
-                    bot, event,
-                    "今日超能力发送失败：模板 Markdown 发送异常",
-                    md_type="娱乐",
-                    k1="再试一次", v1="今日超能力",
-                    k2="今日老婆", v2="今日老婆",
-                    k3="帮助", v3="娱乐帮助"
-                )
-            await today_superpower_cmd.finish()
-
-        else:
-            if not is_channel_event(event):
-                try:
-                    if image_url:
-                        md_msg = (
-                            f"![img #800px #800px]({image_url})\r"
-                            f"超能力：{superpower}\r"
-                            f"但是：{disadvantage}\r\r"
-                            f"[再来一次](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)"
-                        )
-                    else:
-                        md_msg = (
-                            f"超能力：{superpower}\r"
-                            f"但是：{disadvantage}\r\r"
-                            f"[再来一次](mqqapi://aio/inlinecmd?command=今日超能力&enter=false&reply=false)"
-                        )
-
-                    await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-                except Exception as e:
-                    logger.warning(f"今日超能力 原生MD发送失败：{e}")
-                    await handle_send(
-                        bot, event,
-                        "今日超能力发送失败：原生 Markdown 发送异常",
-                        md_type="娱乐",
-                        k1="再试一次", v1="今日超能力",
-                        k2="今日老婆", v2="今日老婆",
-                        k3="帮助", v3="娱乐帮助"
-                    )
-                await today_superpower_cmd.finish()
-
     try:
         if image_url:
-            await handle_pic_msg_send(bot, event, image_url, text_msg)
+            await send_entertainment_image_result(
+                bot,
+                event,
+                image_url,
+                text_msg,
+                title="今日超能力",
+                buttons=[("再试一次", "今日超能力"), ("今日老婆", "今日老婆"), ("娱乐帮助", "娱乐帮助")],
+            )
         else:
             await handle_send(
                 bot, event,

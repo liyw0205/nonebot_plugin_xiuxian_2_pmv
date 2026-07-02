@@ -3,12 +3,12 @@ import json
 import asyncio
 from pathlib import Path
 from io import BytesIO
-from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
 from ..command import *
+from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
 
 ms_start = on_command("开始扫雷", priority=5, block=True)
 ms_open = on_command("翻开", priority=5, block=True)
@@ -16,13 +16,6 @@ ms_flag = on_command("标记", priority=5, block=True)
 ms_info = on_command("扫雷信息", priority=5, block=True)
 ms_end = on_command("结束扫雷", priority=5, block=True)
 ms_help = on_command("扫雷帮助", priority=5, block=True)
-
-
-def _name(event):
-    sender = getattr(event, "sender", None)
-    if sender:
-        return sender.card or sender.nickname or str(event.get_user_id())
-    return str(event.get_user_id())
 
 
 @ms_start.handle(parameterless=[Cooldown(cd_time=1.2)])
@@ -44,7 +37,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, "格式错误。\n用法：开始扫雷 [初级|中级|高级|自定义 宽 高 雷数]")
             return
 
-    g, err = ms_manager.create(str(event.get_user_id()), _name(event), w, h, m)
+    g, err = ms_manager.create(str(event.get_user_id()), event_display_name(event), w, h, m)
     if not g:
         await handle_send(bot, event, err)
         return
@@ -101,7 +94,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     flood_reveal(g, x, y)
-    g.last_action_time = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    g.last_action_time = now_text()
 
     if check_win(g):
         g.status = "win"
@@ -215,20 +208,6 @@ DIFFICULTY = {
 }
 
 
-def _now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _safe_name(event, user_id: str):
-    try:
-        sender = getattr(event, "sender", None)
-        if sender:
-            return sender.card or sender.nickname or str(user_id)
-    except Exception:
-        pass
-    return str(user_id)
-
-
 class MinesweeperGame:
     def __init__(self, game_id: str, user_id: str, user_name: str, w: int, h: int, mines: int):
         self.game_id = game_id
@@ -239,8 +218,8 @@ class MinesweeperGame:
         self.mines = mines
 
         self.status = "playing"  # playing/win/lose/closed
-        self.create_time = _now_str()
-        self.last_action_time = _now_str()
+        self.create_time = now_text()
+        self.last_action_time = now_text()
 
         self.first_click_done = False
 
@@ -326,34 +305,7 @@ ms_manager = MinesweeperManager()
 
 
 def parse_coord(s: str):
-    s = s.strip().upper()
-    if len(s) < 2:
-        return None
-    letters = ""
-    nums = ""
-    for ch in s:
-        if ch.isalpha():
-            letters += ch
-        elif ch.isdigit():
-            nums += ch
-    if not letters or not nums:
-        return None
-    col = 0
-    for i, c in enumerate(reversed(letters)):
-        col += (ord(c) - ord("A") + 1) * (26 ** i)
-    col -= 1
-    row = int(nums) - 1
-    return col, row
-
-
-def pos_to_coord(x: int, y: int):
-    n = x + 1
-    letters = ""
-    while n > 0:
-        n -= 1
-        letters = chr(ord("A") + (n % 26)) + letters
-        n //= 26
-    return f"{letters}{y+1}"
+    return parse_board_coord(s)
 
 
 def in_board(g: MinesweeperGame, x, y):
@@ -466,7 +418,7 @@ def render_game(g: MinesweeperGame, reveal_all=False) -> BytesIO:
 
     # 坐标
     for x in range(g.width):
-        d.text((margin + x*cell + 10, margin - 28), pos_to_coord(x, 0).rstrip("1"), fill=(0, 0, 0), font=font)
+        d.text((margin + x*cell + 10, margin - 28), format_board_coord(x, 0).rstrip("1"), fill=(0, 0, 0), font=font)
     for y in range(g.height):
         d.text((margin - 30, margin + y*cell + 8), str(y+1), fill=(0, 0, 0), font=font)
 

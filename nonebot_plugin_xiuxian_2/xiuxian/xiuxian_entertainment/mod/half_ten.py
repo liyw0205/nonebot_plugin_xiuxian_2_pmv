@@ -2,12 +2,12 @@ import random
 import json
 import asyncio
 from pathlib import Path
-from datetime import datetime
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
 
 from ..command import *
+from .game_utils import event_display_name, now_text
 
 # =========================
 # 数据目录（娱乐独立）
@@ -35,17 +35,6 @@ user_half_status: dict[str, str] = {}       # user_id -> room_id
 half_timeout_tasks: dict[str, asyncio.Task] = {}  # room_id -> task
 
 
-def _now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _name_from_event(event, user_id: str):
-    sender = getattr(event, "sender", None)
-    if sender:
-        return sender.card or sender.nickname or str(user_id)
-    return str(user_id)
-
-
 def _random_room_id():
     return str(random.randint(1000, 9999))
 
@@ -61,7 +50,7 @@ class HalfTenGame:
         self.player_names = {creator_id: creator_name}
 
         self.status = "waiting"  # waiting/finished/closed
-        self.create_time = _now_str()
+        self.create_time = now_text()
         self.start_time = None
         self.close_reason = None
 
@@ -133,7 +122,7 @@ class HalfTenGame:
     def start_and_settle(self):
         """十点半：发牌后立即结算。"""
         self.status = "finished"
-        self.start_time = _now_str()
+        self.start_time = now_text()
 
         # 组牌并洗牌
         deck = [f"{s}{v}" for s in CARD_SUITS for v in CARD_VALUES]
@@ -401,7 +390,7 @@ half_ten_help = on_command("十点半帮助", priority=5, block=True)
 @half_ten_start.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event, user_id)
+    user_name = event_display_name(event, user_id)
     arg = args.extract_plain_text().strip()
 
     if half_manager.get_user_room(user_id):
@@ -433,7 +422,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @half_ten_join.handle(parameterless=[Cooldown(cd_time=1.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     user_id = str(event.get_user_id())
-    user_name = _name_from_event(event, user_id)
+    user_name = event_display_name(event, user_id)
     room_id = args.extract_plain_text().strip()
 
     if not room_id:

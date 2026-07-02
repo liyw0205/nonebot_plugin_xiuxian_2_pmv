@@ -1,33 +1,20 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
 from pathlib import Path
 import os
+
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 
 
 class TWO_EXP_CD(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent
         self.data_path = os.path.join(self.dir_path, "two_exp_cd.json")
-        try:
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-        except:
-            self.info = {"two_exp_cd": {}}
-            data = json.dumps(self.info, ensure_ascii=False, indent=4)
-            with open(self.data_path, mode="x", encoding="UTF-8") as f:
-                f.write(data)
-                f.close()
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
+        self.data = load_json_file(self.data_path, {"two_exp_cd": {}})
 
     def __save(self):
         """
         :return:保存
         """
-        with open(self.data_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        save_json_file(self.data_path, self.data)
 
     def find_user(self, user_id):
         """
@@ -35,13 +22,10 @@ class TWO_EXP_CD(object):
         :param user_id:
         """
         user_id = str(user_id)
-        try:
-            if self.data["two_exp_cd"][user_id] >= 0:
-                return self.data["two_exp_cd"][user_id]
-        except:
+        if user_id not in self.data["two_exp_cd"]:
             self.data["two_exp_cd"][user_id] = 0
             self.__save()
-            return self.data["two_exp_cd"][user_id]
+        return self.data["two_exp_cd"][user_id]
 
     def add_user(self, user_id) -> bool:
         """

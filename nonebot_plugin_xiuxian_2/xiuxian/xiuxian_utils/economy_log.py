@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
@@ -9,16 +8,8 @@ try:
 except Exception:  # pragma: no cover
     logger = None
 
+from .json_store import safe_json_dumps as _json_dumps
 from .xiuxian2_handle import XiuxianDateManage
-
-
-def _json_dumps(value: Any, default: Any) -> str:
-    if value is None:
-        value = default
-    try:
-        return json.dumps(value, ensure_ascii=False)
-    except (TypeError, ValueError):
-        return json.dumps(str(value), ensure_ascii=False)
 
 
 def _to_int(value: Any, default: int = 0) -> int:

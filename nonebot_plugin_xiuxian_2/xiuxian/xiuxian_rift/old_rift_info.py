@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import datetime
 from .riftmake import Rift
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 
 
 GLOBAL_RIFT_KEY = "global"
@@ -12,24 +13,13 @@ class OLD_RIFT_INFO(object):
     def __init__(self):
         self.dir_path = Path(__file__).parent
         self.data_path = os.path.join(self.dir_path, "rift_info.json")
-        try:
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-        except:
-            self.info = {}
-            data = json.dumps(self.info, ensure_ascii=False, indent=4)
-            with open(self.data_path, mode="x", encoding="UTF-8") as f:
-                f.write(data)
-                f.close()
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
+        self.data = load_json_file(self.data_path, {})
 
     def __save(self):
         """
         :return:保存
         """
-        with open(self.data_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, cls=MyEncoder, ensure_ascii=False, indent=4)
+        save_json_file(self.data_path, self.data, cls=MyEncoder)
 
     def save_rift(self, group_rift):
         """

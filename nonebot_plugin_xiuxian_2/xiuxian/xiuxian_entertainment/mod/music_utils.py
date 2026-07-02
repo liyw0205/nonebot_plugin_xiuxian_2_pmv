@@ -5,9 +5,9 @@ from typing import Any, Optional
 import requests
 from nonebot.log import logger
 
-from ...adapter_compat import Bot, MessageSegment, is_channel_event
+from ...adapter_compat import Bot, MessageSegment
 from ...xiuxian_config import XiuConfig
-from ...xiuxian_utils.utils import build_md_command_link
+from ...xiuxian_utils.utils import build_md_command_link, escape_markdown_text
 
 
 # =========================
@@ -234,97 +234,87 @@ def build_song_list_page_text(
     return "\n".join(lines), total_pages
 
 
+def _clean_song_field(value: Any, default: str) -> str:
+    text = str(value if value not in (None, "") else default).strip()
+    text = text.replace("\r", " ").replace("\n", " ")
+    return text or default
+
+
+def build_song_plain_text(song_name: str, artists: str) -> str:
+    return f"【点歌】\n歌名：{song_name}\n歌手：{artists}"
+
+
+def build_song_markdown_text(song_name: str, artists: str) -> str:
+    retry_link = build_md_command_link("再搜此歌", f"点歌 {song_name}")
+    help_link = build_md_command_link("点歌帮助", "点歌帮助")
+    return "\n".join(
+        [
+            "**点歌**",
+            "",
+            f"> **歌名**：{escape_markdown_text(song_name)}",
+            f"> **歌手**：{escape_markdown_text(artists)}",
+            "",
+            f"{retry_link} / {help_link}",
+        ]
+    )
+
+
 # =========================
-# 发送（模板MD / 原生MD / 普通图文）
+# 发送（原生MD / 普通图文）
 # =========================
 async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     """
     发送顺序：
-    1) 模板MD（若开启且配置了markdown_id）
-    2) 原生MD（若开启且非频道）
+    1) 原生MD文字（若开启，频道会自动降级普通文本）
+    2) 封面图片独立发送，避免QQ Markdown图片语法误解析
     3) 普通图文
     每条文本后补发音频（若有）
     """
     from ..command import handle_audio_send
-    from ...xiuxian_utils.utils import handle_pic_msg_send, handle_send_md
+    from ...xiuxian_utils.utils import handle_pic_msg_send, handle_send
 
     config = XiuConfig()
-    song_name = song.get("name", "未知歌曲")
-    artists = song.get("artists", "未知歌手")
+    song_name = _clean_song_field(song.get("name"), "未知歌曲")
+    artists = _clean_song_field(song.get("artists"), "未知歌手")
     cover_url = song.get("cover_url")
     audio_url = song.get("audio_url")
 
-    text_msg = f"【点歌】\n歌名：{song_name}\n歌手：{artists}"
+    text_msg = build_song_plain_text(song_name, artists)
 
-    # ===== 1) 模板Markdown =====
-    if config.markdown_status and config.markdown_id:
+    # ===== 1) Markdown文字 + 独立封面 =====
+    if config.markdown_status:
         try:
-            if cover_url:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        "](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r![",
-                        f"img]({cover_url})\r",
-                        f"【点歌】\r歌名：{song_name}\r歌手：{artists}\r\r[",
-                        "点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)\r",
-                        "[再点一首"
-                    ]
-                }
-            else:
-                msg_param = {
-                    "key": "t1",
-                    "values": [
-                        f"【点歌】\r歌名：{song_name}\r歌手：{artists}\r\r[点歌帮助](mqqapi://aio/inlinecmd?command=点歌帮助&enter=false&reply=false)"
-                    ]
-                }
-
-            await handle_send_md(
+            await handle_send(
                 bot,
                 event,
-                " ",
-                markdown_id=config.markdown_id,
-                msg_param=msg_param,
-                at_msg=None
+                build_song_markdown_text(song_name, artists),
+                native_markdown=True,
+                fallback_msg=text_msg,
+                keyboard_rows=[
+                    [("再搜此歌", f"点歌 {song_name}"), ("点歌帮助", "点歌帮助")]
+                ],
+                at_msg=False,
             )
 
-            if audio_url:
-                await handle_audio_send(bot, event, audio_url)
-                return True, "发送成功"
-            return False, f"【{song_name} - {artists}】无可用音频链接"
-
-        except Exception as e:
-            logger.warning(f"点歌 模板MD发送失败：{e}")
-
-    # ===== 2) 原生Markdown（频道不支持）=====
-    if config.markdown_status and not is_channel_event(event):
-        try:
             if cover_url:
-                md_msg = (
-                    f"![img]({cover_url})\r"
-                    "【点歌】\r"
-                    f"歌名：{song_name}\r"
-                    f"歌手：{artists}\r\r"
-                    f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"
-                )
-            else:
-                md_msg = (
-                    "【点歌】\r"
-                    f"歌名：{song_name}\r"
-                    f"歌手：{artists}\r\r"
-                    f"[点歌](mqqapi://aio/inlinecmd?command=点歌&enter=false&reply=false)"
-                )
-
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
+                try:
+                    await bot.send(event=event, message=MessageSegment.image(bot, cover_url))
+                except Exception as e:
+                    logger.warning(f"点歌封面发送失败：{e}")
 
             if audio_url:
-                await handle_audio_send(bot, event, audio_url)
-                return True, "发送成功"
+                try:
+                    await handle_audio_send(bot, event, audio_url)
+                    return True, "发送成功"
+                except Exception as e:
+                    logger.warning(f"点歌音频发送失败：{e}")
+                    return False, f"【{song_name} - {artists}】音频发送失败：{e}"
             return False, f"【{song_name} - {artists}】无可用音频链接"
 
         except Exception as e:
-            logger.warning(f"点歌 原生MD发送失败：{e}")
+            logger.warning(f"点歌 Markdown发送失败：{e}")
 
-    # ===== 3) 普通图文 =====
+    # ===== 2) 普通图文 =====
     try:
         if cover_url:
             await handle_pic_msg_send(bot, event, cover_url, text_msg)

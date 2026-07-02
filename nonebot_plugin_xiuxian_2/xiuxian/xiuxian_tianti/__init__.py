@@ -6,6 +6,7 @@ from nonebot.params import CommandArg
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, send_help_message
+from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_world_events import get_spirit_vein_tianti_bonus_msg
@@ -135,19 +136,6 @@ def _format_medicine_bath_plan(plan, limit: int = 6):
 
 def _format_medicine_bath_percent(effect: float):
     return f"{effect * 100:.2f}".rstrip("0").rstrip(".")
-
-
-def _get_user_sect_fairyland_level(user_info: dict) -> int:
-    sect_id = user_info.get("sect_id")
-    if not sect_id:
-        return 0
-    sect_info = sql_message.get_sect_info(sect_id)
-    if not sect_info:
-        return 0
-    try:
-        return int(sect_info.get("sect_fairyland", 0) or 0)
-    except Exception:
-        return 0
 
 
 def _settle_tianti_gain(data: dict, now_t: datetime, sect_fairyland_level: int = 0):

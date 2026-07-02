@@ -1,5 +1,19 @@
 from ..command import *
+from ...xiuxian_utils.utils import escape_markdown_text
+
 click_music_cmd = on_command("随机点歌", priority=5, block=True)
+
+
+def _build_click_music_markdown(nickname: str, lyric_lines: list[str]) -> str:
+    lyric_block = "\r".join(f"> {escape_markdown_text(line)}" for line in lyric_lines) or "> 暂无歌词"
+    return (
+        "**随机点歌**\r\r"
+        f"> **演唱者**：{escape_markdown_text(nickname)}\r\r"
+        "**歌词**\r"
+        f"{lyric_block}\r\r"
+        "[再来一首](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)"
+    )
+
 
 @click_music_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -39,7 +53,6 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     lyrics = str(data.get("lyrics") or "暂无歌词").replace('\n', '\r')
     lyric_lines = [line.strip() for line in lyrics.split('\r') if line.strip()]
     plain_lyrics = "\n".join(lyric_lines) or "暂无歌词"
-    quoted_lyrics = "\r".join(f"> {line}" for line in lyric_lines) or "> 暂无歌词"
     audiosrc = data.get("audiosrc")
 
     text_msg = (
@@ -49,91 +62,43 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     )
 
     if config.markdown_status:
-        if config.markdown_id:
-            try:
-                if avatar_url:
-                    msg_param = {
-                        "key": "t1",
-                        "values": [
-                            "](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r![",
-                            f"img]({avatar_url})\r",
-                            f"【随机点歌】\r演唱者：{nickname}\r歌词：\r{quoted_lyrics}\r\r[",
-                            f"随机点歌](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r",
-                            f"[{nickname}",
-                        ]
-                }
-                else:
-                    msg_param = {
-                        "key": "t1",
-                        "values": [
-                            f"](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r"
-                            f"【随机点歌】\r演唱者：{nickname}\r歌词：\r{quoted_lyrics}\r\r[",
-                            f"随机点歌](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)\r",
-                            f"> [{nickname}",
-                        ]
-                }
+        try:
+            await handle_send(
+                bot,
+                event,
+                _build_click_music_markdown(nickname, lyric_lines),
+                native_markdown=True,
+                fallback_msg=text_msg,
+                keyboard_rows=[
+                    [("再来一首", "随机点歌"), ("娱乐帮助", "娱乐帮助")]
+                ],
+                at_msg=False,
+            )
 
-                await handle_send_md(
-                    bot,
-                    event,
-                    " ",
-                    markdown_id=config.markdown_id,
-                    msg_param=msg_param,
-                    at_msg=None
-                )
-
-                # 模板MD发完后，补发音频
-                if audiosrc:
-                    await handle_audio_send(bot, event, audiosrc)
-
-            except Exception as e:
-                logger.warning(f"随机点歌 模板MD发送失败：{e}")
-                await handle_send(
-                    bot, event,
-                    "随机点歌发送失败：模板 Markdown 发送异常",
-                    md_type="娱乐",
-                    k1="再试一次", v1="随机点歌",
-                    k2="今日老婆", v2="今日老婆",
-                    k3="帮助", v3="娱乐帮助"
-                )
-            await click_music_cmd.finish()
-
-        else:
-            if not is_channel_event(event):
+            if avatar_url:
                 try:
-                    if avatar_url:
-                        md_msg = (
-                            f"![img]({avatar_url})\r"
-                            f"【随机点歌】\r"
-                            f"演唱者：{nickname}\r\r"
-                            f"歌词：\r{quoted_lyrics}\r\r"
-                            f"[再来一首](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)"
-                        )
-                    else:
-                        md_msg = (
-                            f"【随机点歌】\r"
-                            f"演唱者：{nickname}\r\r"
-                            f"歌词：\r{quoted_lyrics}\r\r"
-                            f"[再来一首](mqqapi://aio/inlinecmd?command=随机点歌&enter=false&reply=false)"
-                        )
-
-                    await bot.send(event=event, message=MessageSegment.markdown(bot, md_msg))
-
-                    # 原生MD发完后，补发音频
-                    if audiosrc:
-                        await handle_audio_send(bot, event, audiosrc)
-
+                    await bot.send(event=event, message=MessageSegment.image(bot, avatar_url))
                 except Exception as e:
-                    logger.warning(f"随机点歌 原生MD发送失败：{e}")
+                    logger.warning(f"随机点歌头像发送失败：{e}")
+
+            if audiosrc:
+                try:
+                    await handle_audio_send(bot, event, audiosrc)
+                except Exception as e:
+                    logger.warning(f"随机点歌音频发送失败：{e}")
                     await handle_send(
-                        bot, event,
-                        "随机点歌发送失败：原生 Markdown 发送异常",
+                        bot,
+                        event,
+                        f"随机点歌音频发送失败：{e}",
                         md_type="娱乐",
                         k1="再试一次", v1="随机点歌",
-                        k2="今日超能力", v2="今日超能力",
-                        k3="帮助", v3="娱乐帮助"
+                        k2="娱乐帮助", v2="娱乐帮助",
                     )
-                await click_music_cmd.finish()
+
+            return
+
+        except Exception as e:
+            logger.warning(f"随机点歌 Markdown发送失败：{e}")
 
     try:
         if avatar_url:

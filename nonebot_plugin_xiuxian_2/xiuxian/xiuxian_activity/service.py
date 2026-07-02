@@ -10,6 +10,8 @@ from nonebot.log import logger
 
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
+from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
 _sql_message = XiuxianDateManage()
@@ -495,16 +497,6 @@ def _normalize_stage_features(value, default: list[str] | None = None) -> list[s
     return features
 
 
-def _default_stage_features(stage_type: str) -> list[str]:
-    if stage_type == "warmup":
-        return ["sign", "claim"]
-    if stage_type == "settlement":
-        return ["shop", "claim", "exchange"]
-    if stage_type == "closed":
-        return []
-    return ["sign", "task", "pass", "points", "collect", "boss", "shop", "claim", "exchange"]
-
-
 def _activity_stages_config(config: dict | None = None) -> list[dict]:
     cfg = config if config is not None else load_config()
     raw = _get_extensions(cfg).get("stages")
@@ -830,19 +822,6 @@ def _format_activity_task(task: dict) -> str:
 def _clean_text(value, default: str = "") -> str:
     text = str(value if value is not None else "").strip()
     return text or default
-
-
-def _as_bool(value, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in ("true", "1", "yes", "on", "开启"):
-        return True
-    if text in ("false", "0", "no", "off", "关闭"):
-        return False
-    return default
 
 
 def _normalize_activity_key(value, fallback: str) -> str:

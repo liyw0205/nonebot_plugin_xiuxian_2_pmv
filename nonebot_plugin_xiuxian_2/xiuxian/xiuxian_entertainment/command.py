@@ -29,6 +29,7 @@ from ..xiuxian_utils.utils import (
     handle_pic_msg_send,
     generate_command,
     send_help_message,
+    escape_markdown_text,
 )
 
 from ..xiuxian_config import XiuConfig
@@ -293,3 +294,43 @@ async def handle_audio_send(bot: Bot, event, audio_url: str):
         return
     seg = MessageSegment.audio(bot, audio_url)
     await bot.send(event=event, message=seg)
+
+
+async def send_entertainment_image_result(
+    bot: Bot,
+    event,
+    image_url: str,
+    text_msg: str = "",
+    *,
+    title: str = "娱乐图片",
+    buttons: list[tuple[str, str]] | None = None,
+):
+    """发送娱乐图片结果，Markdown 文案和图片分开发送，避免 QQ 图片语法误解析。"""
+    config = XiuConfig()
+    body_text = str(text_msg or "").strip()
+    title_text = str(title or "娱乐图片").strip()
+    markdown_body = "" if body_text == title_text else body_text
+    plain_text = body_text or f"【{title_text}】"
+    buttons = buttons or []
+
+    if config.markdown_status:
+        md_lines = [f"**{escape_markdown_text(title_text)}**"]
+        if markdown_body:
+            md_lines.append("")
+            for line in markdown_body.splitlines():
+                line = line.strip()
+                if line:
+                    md_lines.append(f"> {escape_markdown_text(line)}")
+        await handle_send(
+            bot,
+            event,
+            "\n".join(md_lines),
+            native_markdown=True,
+            fallback_msg=plain_text or f"【{title}】",
+            keyboard_rows=[buttons] if buttons else None,
+            at_msg=False,
+        )
+        await bot.send(event=event, message=MessageSegment.image(bot, image_url))
+        return
+
+    await handle_pic_msg_send(bot, event, image_url, body_text or title_text or None)

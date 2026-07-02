@@ -1,10 +1,10 @@
 import asyncio
 import random
-from datetime import datetime
 
 from nonebot.params import CommandArg
 
 from ..command import *
+from .game_utils import event_display_name, now_text
 
 
 PUZZLE_TIMEOUT = 900
@@ -37,17 +37,6 @@ FULLWIDTH_DIGIT_TABLE = str.maketrans("０１２３４５６７８９", "0123456
 
 guess_puzzle_sessions: dict[str, dict] = {}
 guess_puzzle_timeout_tasks: dict[str, asyncio.Task] = {}
-
-
-def _now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _name_from_event(event) -> str:
-    sender = getattr(event, "sender", None)
-    if sender:
-        return sender.card or sender.nickname or str(event.get_user_id())
-    return str(event.get_user_id())
 
 
 def _normalize_digits(text: str) -> str:
@@ -216,14 +205,14 @@ async def _start_game(
     answer = _make_answer(digits)
     guess_puzzle_sessions[user_id] = {
         "user_id": user_id,
-        "user_name": _name_from_event(event),
+        "user_name": event_display_name(event),
         "answer": answer,
         "difficulty": difficulty,
         "digits": digits,
         "tries": 0,
         "status": "playing",
-        "create_time": _now_str(),
-        "last_action_time": _now_str(),
+        "create_time": now_text(),
+        "last_action_time": now_text(),
     }
     await _start_timeout(bot, event, user_id)
 
@@ -380,7 +369,7 @@ async def _handle_guess(
 
     await _start_timeout(bot, event, user_id)
     game["tries"] += 1
-    game["last_action_time"] = _now_str()
+    game["last_action_time"] = now_text()
 
     answer = game["answer"]
     correct = _correct_count(answer, guess)
