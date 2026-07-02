@@ -13,6 +13,13 @@ from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
 from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from .activity_utils import (
+    _as_float,
+    _as_int,
+    _clean_text,
+    _drop_rate,
+    _normalize_activity_key,
+)
 
 _sql_message = XiuxianDateManage()
 
@@ -620,20 +627,6 @@ def _runtime_allows(config: dict, feature: str) -> bool:
     return runtime.get("ok", False) and feature in set(runtime.get("features") or [])
 
 
-def _as_int(value, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _as_float(value, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
 def _get_extensions(config: dict) -> dict:
     extensions = config.get("extensions")
     return extensions if isinstance(extensions, dict) else {}
@@ -817,26 +810,6 @@ def _format_activity_task(task: dict) -> str:
     if desc:
         return f"- {name}：{desc}，目标 {target}{suffix}，奖励：{reward}"
     return f"- {name}：目标 {target}{suffix}，奖励：{reward}"
-
-
-def _clean_text(value, default: str = "") -> str:
-    text = str(value if value is not None else "").strip()
-    return text or default
-
-
-def _normalize_activity_key(value, fallback: str) -> str:
-    text = _clean_text(value)
-    if not text:
-        text = fallback
-    cleaned = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in text)
-    return cleaned.strip("_") or fallback
-
-
-def _drop_rate(value, default: float = 0.35) -> float:
-    rate = _as_float(value, default)
-    if rate > 1:
-        rate = rate / 100
-    return min(max(rate, 0.0), 1.0)
 
 
 def _normalize_event_list(value, default: list[str] | None = None) -> list[str]:

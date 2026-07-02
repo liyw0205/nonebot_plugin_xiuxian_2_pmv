@@ -28,7 +28,6 @@ from ..xiuxian_utils.utils import (
     check_user, get_msg_pic,
     send_msg_handler,
     Txt2Img, number_to, handle_send,
-    log_message, update_statistics_value
 )
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, TradeDataManager, get_weapon_info_msg, get_armor_info_msg,
@@ -40,6 +39,12 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from . import auction_config
 from .auction_config import * # 显式导入模块，避免冲突和混乱
 from .trade_help import trade_help
+from .trade_utils import (
+    _trade_economy_context,
+    get_item_trade_rank,
+    get_trade_forbid_reason,
+    record_trade_event,
+)
 from urllib.parse import quote
 
 # 初始化全局组件
@@ -48,15 +53,6 @@ sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
-
-
-def _trade_economy_context(action: str, trace_id: str | None = None, **detail):
-    return {
-        "source": "trade",
-        "action": action,
-        "trace_id": trace_id or f"trade:{action}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}:{random.randint(1000, 9999)}",
-        "detail": detail,
-    }
 
 
 # === 全局常量配置 ===
@@ -71,35 +67,6 @@ GUISHI_AUTO_HOUR = 2           # 鬼市自动交易频率（每2小时）
 GUISHI_MAX_QUANTITY = 10       # 鬼市单次最大交易数量（求购/摆摊）
 MAX_QIUGOU_ORDERS = 10         # 每个用户最大求购订单数
 MAX_BAITAN_ORDERS = 10         # 每个用户最大摆摊订单数
-
-
-def record_trade_event(user_id: str, title: str, detail: str, stats: Optional[Dict[str, int]] = None):
-    """记录交易相关日志和核心统计。"""
-    if str(user_id) == "0":
-        return
-    log_message(str(user_id), f"[{title}] {detail}")
-    if not stats:
-        return
-    for key, increment in stats.items():
-        if increment:
-            update_statistics_value(str(user_id), key, increment=increment)
-
-
-def get_item_trade_rank(item_info: Optional[Dict[str, Any]]) -> Optional[int]:
-    if not item_info or "rank" not in item_info:
-        return None
-    try:
-        return int(item_info["rank"])
-    except (TypeError, ValueError):
-        return None
-
-
-def get_trade_forbid_reason(goods_id: Any, item_info: Optional[Dict[str, Any]], action: str = "交易") -> Optional[str]:
-    item_name = item_info.get("name", f"ID:{goods_id}") if item_info else f"ID:{goods_id}"
-    trade_rank = get_item_trade_rank(item_info)
-    if trade_rank is not None and trade_rank <= 0:
-        return f"{item_name}是不可交易的珍贵物品！"
-    return None
 
 
 # === 仙肆命令 ===
