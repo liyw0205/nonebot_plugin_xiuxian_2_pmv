@@ -49,6 +49,12 @@ from .message_markdown import (
     _link_help_command_part,
     build_help_native_markdown,
 )
+from .external_api import (
+    call_upload_api,
+    call_upload_api_async,
+    get_real_id,
+    get_real_id_async,
+)
 from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
 from urllib.parse import quote, unquote
@@ -57,9 +63,6 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
 PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
-_REAL_ID_CACHE_TTL = 600
-_REAL_ID_NEGATIVE_CACHE_TTL = 30
-_real_id_cache: dict[str, tuple[float, str | None]] = {}
 
 
 def _is_onebot_v11_bot(bot: Any) -> bool:
@@ -2174,96 +2177,3 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
 
     except Exception as e:
         logger.error(f"更新统计数据失败: {e}")
-
-def get_real_id(id_str, timeout: float = 1.5):
-    """
-    调用API接口获取真实ID
-
-    :param id_str: 要查询的ID字符串
-    :return: 真实ID (str) 或 None
-    """
-
-    base_url = str(getattr(XiuConfig(), "gsk_link", "") or "").strip().rstrip("/")
-    if not base_url or not id_str:
-        return None
-
-    cache_key = f"{base_url}:{id_str}"
-    now = time.monotonic()
-    cached = _real_id_cache.get(cache_key)
-    if cached:
-        expires_at, cached_id = cached
-        if now < expires_at:
-            return cached_id
-
-    url = f"{base_url}/getid"
-    try:
-        response = requests.get(url, params={"type": 2, "id": id_str}, timeout=timeout)
-        response.raise_for_status()
-        data = response.json()
-        real_id = data.get("id")
-        real_id = str(real_id) if real_id else None
-        ttl = _REAL_ID_CACHE_TTL if real_id else _REAL_ID_NEGATIVE_CACHE_TTL
-        _real_id_cache[cache_key] = (now + ttl, real_id)
-        return real_id
-    except Exception:
-        _real_id_cache[cache_key] = (now + _REAL_ID_NEGATIVE_CACHE_TTL, None)
-        return None
-
-
-async def get_real_id_async(id_str, timeout: float = 1.5):
-    return await asyncio.to_thread(get_real_id, id_str, timeout)
-
-def call_upload_api(image_data):
-    """
-    调用接口上传图片
-    :param image_data: 可以是文件路径(str/Path)、BytesIO对象或bytes数据
-    :return: 成功返回图片URL(str)，失败返回False
-    """
-    url = XiuConfig().update_image_web
-    files = None
-    file_obj = None
-
-    try:
-        # 1. 根据输入类型准备文件对象
-        if isinstance(image_data, (str, Path)):
-            # 如果是路径，打开文件
-            file_obj = open(image_data, 'rb')
-            files = {'image': (os.path.basename(str(image_data)), file_obj, 'image/png')}
-        elif isinstance(image_data, BytesIO):
-            # 如果是 BytesIO 对象
-            image_data.seek(0)
-            files = {'image': ('image.png', image_data, 'image/png')}
-        elif isinstance(image_data, bytes):
-            # 如果是纯 bytes 数据
-            files = {'image': ('image.png', BytesIO(image_data), 'image/png')}
-        else:
-            logger.error(f"call_upload_api: 不支持的数据类型 {type(image_data)}")
-            return False
-
-        # 2. 构造表单数据并发送请求
-        data = {'channel_id': XiuConfig().channel_id}
-        response = requests.post(url, files=files, data=data, timeout=10)
-        
-        # 3. 结果处理
-        if response.status_code == 200:
-            res_json = response.json()
-            if res_json.get("success"):
-                return res_json.get("url") # 成功直接返回 URL
-            else:
-                logger.error(f"图片上传接口返回失败: {res_json.get('error')}")
-                return False
-        else:
-            logger.error(f"图片上传请求失败，状态码: {response.status_code}")
-            return False
-
-    except Exception as e:
-        logger.error(f"调用图片上传接口异常: {e}")
-        return False
-    finally:
-        # 确保打开的文件被关闭
-        if file_obj:
-            file_obj.close()
-
-
-async def call_upload_api_async(image_data):
-    return await asyncio.to_thread(call_upload_api, image_data)
