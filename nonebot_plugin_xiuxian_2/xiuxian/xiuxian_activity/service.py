@@ -5,8 +5,12 @@ from nonebot.log import logger
 
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
 from .activity_config import (
+    CONFIG_PATH,
     DEFAULT_ACTIVITY_PASS,
+    DEFAULT_ACTIVITY_STAGES,
+    STAGE_TYPE_LABELS,
     _activity_config_key,
     _activity_info_mode,
     _get_extensions,
@@ -16,6 +20,17 @@ from .activity_config import (
     load_config,
     save_config,
 )
+from .activity_rules import get_gameplay_activities
+from .activity_storage import (
+    DB_PATH,
+    DEFAULT_COLLECT_DROP_EVENTS,
+    DEFAULT_POINT_EVENT_RULES,
+    _sql_message,
+    ensure_activity_files,
+    now_str,
+    resolve_daohao,
+    today_str,
+)
 from .activity_utils import (
     _as_float,
     _as_int,
@@ -23,7 +38,9 @@ from .activity_utils import (
     _drop_rate,
 )
 from .activity_views import (
+    ACTIVITY_EVENT_CHOICES,
     ACTIVITY_EVENT_LABELS,
+    STAGE_FEATURES,
     _activity_event_text,
     _format_activity_task,
     _format_reward_result,

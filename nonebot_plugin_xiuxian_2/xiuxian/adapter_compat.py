@@ -15,32 +15,214 @@ from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
 from nonebot.permission import Permission
 
-from .adapter_message_actions import delete_message_compat, schedule_delete_message
-from .adapter_message_records import (
-    extract_result_message_id as _extract_result_message_id,
-    extract_text_from_message_obj as _extract_text_from_message_obj,
-    get_bot_id as _get_bot_id,
-    get_message_db_path as _get_message_db_path,
-    increase_recv_reply_used_count as _increase_recv_reply_used_count,
-    init_message_db as _init_message_db,
-    record_recv_message as _record_recv_message,
-    record_send_message as _record_send_message,
-    record_web_send_message as _record_web_send_message,
-)
+try:
+    from .adapter_message_records import (
+        extract_result_message_id as _extract_result_message_id,
+        extract_text_from_message_obj as _extract_text_from_message_obj,
+        get_bot_id as _get_bot_id,
+        get_message_db_path as _get_message_db_path,
+        increase_recv_reply_used_count as _increase_recv_reply_used_count,
+        init_message_db as _init_message_db,
+        record_recv_message as _record_recv_message,
+        record_send_message as _record_send_message,
+        record_web_send_message as _record_web_send_message,
+    )
+
+    HAS_MESSAGE_RECORDS = True
+except Exception:
+    HAS_MESSAGE_RECORDS = False
+
+    def _extract_text_from_message_obj(message: Any) -> str:
+        try:
+            if message is None:
+                return ""
+            if isinstance(message, str):
+                return message
+            if hasattr(message, "extract_plain_text"):
+                text = message.extract_plain_text()
+                if text:
+                    return str(text)
+            if hasattr(message, "extract_content"):
+                text = message.extract_content()
+                if text:
+                    return str(text)
+            return str(message)
+        except Exception:
+            return ""
+
+    def _extract_result_message_id(result: Any) -> str:
+        try:
+            if result is None:
+                return ""
+            if isinstance(result, dict):
+                return str(
+                    result.get("message_id")
+                    or result.get("msg_id")
+                    or result.get("id")
+                    or ""
+                )
+            return str(
+                getattr(result, "message_id", "")
+                or getattr(result, "msg_id", "")
+                or getattr(result, "id", "")
+                or ""
+            )
+        except Exception:
+            return ""
+
+    def _get_bot_id(bot: Any) -> str:
+        try:
+            return str(bot.self_id)
+        except Exception:
+            return ""
+
+    def _get_message_db_path() -> Path:
+        return Path("message.db")
+
+    def _init_message_db():
+        return None
+
+    def _record_recv_message(bot: Any, event: BaseEvent):
+        return None
+
+    def _record_send_message(bot: Any, **kwargs):
+        return None
+
+    def _record_web_send_message(bot: Any, **kwargs):
+        return _record_send_message(bot, **kwargs)
+
+    def _increase_recv_reply_used_count(**kwargs):
+        return None
+
+try:
+    from .adapter_message_actions import delete_message_compat, schedule_delete_message
+
+    HAS_MESSAGE_ACTIONS = True
+except Exception:
+    HAS_MESSAGE_ACTIONS = False
+
+    async def delete_message_compat(
+        bot: Any,
+        *,
+        scene: str,
+        message_id: str,
+        group_id: str = "",
+        user_id: str = "",
+    ):
+        if not message_id:
+            raise ValueError("message_id 不能为空")
+
+        if hasattr(bot, "delete_msg"):
+            mid: str | int = (
+                int(message_id) if str(message_id).isdigit() else str(message_id)
+            )
+            return await bot.delete_msg(message_id=mid)
+
+        if hasattr(bot, "call_api"):
+            mid = int(message_id) if str(message_id).isdigit() else str(message_id)
+            return await bot.call_api("delete_msg", message_id=mid)
+
+        if scene == "group" and hasattr(bot, "delete_group_message"):
+            if not group_id:
+                raise ValueError("群聊撤回需要 group_id")
+            return await bot.delete_group_message(
+                group_openid=str(group_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "private" and hasattr(bot, "delete_c2c_message"):
+            if not user_id:
+                raise ValueError("私聊撤回需要 user_id")
+            return await bot.delete_c2c_message(
+                openid=str(user_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "channel_group" and hasattr(bot, "delete_message"):
+            if not group_id:
+                raise ValueError("频道群聊撤回需要 channel_id")
+            return await bot.delete_message(
+                channel_id=str(group_id),
+                message_id=str(message_id),
+            )
+
+        if scene == "channel_private" and hasattr(bot, "delete_dms_message"):
+            guild_id = group_id or user_id
+            if not guild_id:
+                raise ValueError("频道私信撤回需要 guild_id")
+            return await bot.delete_dms_message(
+                guild_id=str(guild_id),
+                message_id=str(message_id),
+            )
+
+        raise RuntimeError(f"当前 bot 不支持通用撤回: {type(bot)!r}")
+
+    def schedule_delete_message(
+        bot: Any,
+        *,
+        scene: str,
+        message_id: str,
+        group_id: str = "",
+        user_id: str = "",
+        revoke_time: int | float = 0,
+    ):
+        try:
+            delay = float(revoke_time or 0)
+        except Exception:
+            delay = 0
+
+        if delay <= 0 or not message_id:
+            return None
+
+        async def _job():
+            try:
+                await asyncio.sleep(delay)
+                await delete_message_compat(
+                    bot,
+                    scene=scene,
+                    message_id=message_id,
+                    group_id=group_id,
+                    user_id=user_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[自动撤回] 撤回失败 scene={scene}, message_id={message_id}, "
+                    f"group_id={group_id}, user_id={user_id}: {e}"
+                )
+
+        try:
+            return asyncio.create_task(_job())
+        except RuntimeError:
+            try:
+                return asyncio.get_event_loop().create_task(_job())
+            except Exception as e:
+                logger.warning(f"[自动撤回] 创建撤回任务失败: {e}")
+                return None
 
 # =========================
 # 可选导入：onebot v11
 # =========================
 try:
-    from .xiuxian_adapter.onebot import (
-        Bot as OB11Bot,
-        Message as OB11Message,
-        MessageSegment as OB11MessageSegment,
-    )
-    from .xiuxian_adapter.onebot import (
-        GroupMessageEvent as OB11GroupMessageEvent,
-        PrivateMessageEvent as OB11PrivateMessageEvent,
-    )
+    try:
+        # 本项目环境优先使用封装入口，以保留内置 vendored adapter 的行为。
+        from .xiuxian_adapter.onebot import (
+            Bot as OB11Bot,
+            Message as OB11Message,
+            MessageSegment as OB11MessageSegment,
+        )
+        from .xiuxian_adapter.onebot import (
+            GroupMessageEvent as OB11GroupMessageEvent,
+            PrivateMessageEvent as OB11PrivateMessageEvent,
+        )
+    except Exception:
+        # 独立复用时不要求携带 xiuxian_adapter，直接使用 NoneBot 标准适配器路径。
+        from nonebot.adapters.onebot.v11 import (
+            Bot as OB11Bot,
+            GroupMessageEvent as OB11GroupMessageEvent,
+            Message as OB11Message,
+            MessageSegment as OB11MessageSegment,
+            PrivateMessageEvent as OB11PrivateMessageEvent,
+        )
 
     HAS_OB11 = True
 except Exception:
@@ -55,20 +237,55 @@ except Exception:
 # 可选导入：qq
 # =========================
 try:
-    from .xiuxian_adapter.qq import (
-        Bot as QQBot,
-        Message as QQMessage,
-        MessageSegment as QQMessageSegment,
-    )
-    from .xiuxian_adapter.qq import (
-        C2CMessageCreateEvent as QQPrivateMessageEvent,
-        AtMessageCreateEvent as QQAtChannelMessageEvent,
-        DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
-    )
-    from .xiuxian_adapter.qq import (
-        GroupAtMessageCreateEvent as QQGroupAtMessageEvent,
-        GroupMessageCreateEvent as QQGroupMessageCreateEvent,
-    )
+    try:
+        # 同 OneBot：优先本项目封装入口，脱离本插件时回退标准路径。
+        from .xiuxian_adapter.qq import (
+            Bot as QQBot,
+            Message as QQMessage,
+            MessageSegment as QQMessageSegment,
+        )
+        from .xiuxian_adapter.qq import (
+            C2CMessageCreateEvent as QQPrivateMessageEvent,
+            AtMessageCreateEvent as QQAtChannelMessageEvent,
+            DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
+        )
+        from .xiuxian_adapter.qq import (
+            GroupAtMessageCreateEvent as QQGroupAtMessageEvent,
+            GroupMessageCreateEvent as QQGroupMessageCreateEvent,
+        )
+        from .xiuxian_adapter.qq import (
+            Action as QQKeyboardAction,
+            Button as QQKeyboardButton,
+            InlineKeyboard as QQInlineKeyboard,
+            InlineKeyboardRow as QQInlineKeyboardRow,
+            MessageMarkdown,
+            MessageKeyboard,
+            Permission as QQKeyboardPermission,
+            RenderData as QQKeyboardRenderData,
+        )
+    except Exception:
+        from nonebot.adapters.qq import Bot as QQBot
+        from nonebot.adapters.qq import Message as QQMessage
+        from nonebot.adapters.qq import MessageSegment as QQMessageSegment
+        from nonebot.adapters.qq import event as qq_event
+        from nonebot.adapters.qq.event import (
+            AtMessageCreateEvent as QQAtChannelMessageEvent,
+            C2CMessageCreateEvent as QQPrivateMessageEvent,
+            DirectMessageCreateEvent as QQChannelPrivateMessageEvent,
+        )
+        from nonebot.adapters.qq.models import (
+            Action as QQKeyboardAction,
+            Button as QQKeyboardButton,
+            InlineKeyboard as QQInlineKeyboard,
+            InlineKeyboardRow as QQInlineKeyboardRow,
+            MessageKeyboard,
+            MessageMarkdown,
+            Permission as QQKeyboardPermission,
+            RenderData as QQKeyboardRenderData,
+        )
+
+        QQGroupAtMessageEvent = getattr(qq_event, "GroupAtMessageCreateEvent", None)
+        QQGroupMessageCreateEvent = getattr(qq_event, "GroupMessageCreateEvent", None)
 
     if QQGroupMessageCreateEvent is None and QQGroupAtMessageEvent is None:
         raise ImportError("QQ adapter has no group message event class")
@@ -78,16 +295,6 @@ try:
         QQGroupAtMessageEvent = QQGroupMessageCreateEvent  # type: ignore
 
     QQGroupMessageEvent = QQGroupMessageCreateEvent
-    from .xiuxian_adapter.qq import (
-        Action as QQKeyboardAction,
-        Button as QQKeyboardButton,
-        InlineKeyboard as QQInlineKeyboard,
-        InlineKeyboardRow as QQInlineKeyboardRow,
-        MessageMarkdown,
-        MessageKeyboard,
-        Permission as QQKeyboardPermission,
-        RenderData as QQKeyboardRenderData,
-    )
 
     HAS_QQ = True
 except Exception:

@@ -42,7 +42,8 @@ from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
 from .back_util import *
-from .accessory import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
+from . import accessory as _accessory  # noqa: F401
+from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 from .backpack_render import (
     _build_backpack_md_with_sections,
     _build_backpack_fallback_with_sections,

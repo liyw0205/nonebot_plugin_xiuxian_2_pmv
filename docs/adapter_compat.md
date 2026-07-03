@@ -246,7 +246,7 @@ async def _(bot, event):
 - 上游来源固定为 `https://github.com/nonebot/adapter-qq` 与 `https://github.com/nonebot/adapter-onebot`。
 - 两个上游仓库均为 MIT 许可证，内置时必须保留对应 `LICENSE`、上游仓库地址、锁定的 tag 或 commit。
 - vendored 代码放在 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_adapter/`，避免把上游实现散落到兼容层。
-- `adapter_compat.py` 继续作为业务侧唯一入口；它通过 `xiuxian_adapter.qq` 和 `xiuxian_adapter.onebot` 取得适配器类型，不承载上游实现细节。
+- `adapter_compat.py` 继续作为业务侧唯一入口；本项目内优先通过 `xiuxian_adapter.qq` 和 `xiuxian_adapter.onebot` 保留 vendored 行为，独立复用时可回退到 `nonebot.adapters.qq` 与 `nonebot.adapters.onebot.v11` 标准路径。
 - 当前内置范围是上游运行时源码、`LICENSE` 和 `UPSTREAM` 记录；不提交 tests、website、CI 等开发文件。
 - 更新流程必须是“记录上游版本 -> 更新 vendored 目录 -> 跑编译和消息发送回归 -> 更新本节版本记录”，不能手工零散复制文件。
 
