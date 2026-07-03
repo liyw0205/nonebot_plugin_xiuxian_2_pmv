@@ -80,6 +80,16 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
     return rows
 
 
+def _run_qq_send_with_optional_msg_ref(send_func, **kwargs):
+    try:
+        return run_async(send_func(**kwargs))
+    except TypeError as e:
+        if "msg_ref_id" not in str(e):
+            raise
+        kwargs.pop("msg_ref_id", None)
+        return run_async(send_func(**kwargs))
+
+
 @app.route('/messages')
 def messages_page():
     if 'admin_id' not in session:
@@ -987,26 +997,24 @@ def api_messages_send():
                     qq_message_obj = build_qq_message_obj(reference_id)
 
                     if scene == "group":
-                        result = run_async(
-                            bot.send_to_group(
-                                group_openid=target_id,
-                                message=qq_message_obj,
-                                msg_seq=random.randint(1, 900000),
-                                msg_ref_id=reference_id or None,
-                            )
+                        result = _run_qq_send_with_optional_msg_ref(
+                            bot.send_to_group,
+                            group_openid=target_id,
+                            message=qq_message_obj,
+                            msg_seq=random.randint(1, 900000),
+                            msg_ref_id=reference_id or None,
                         )
 
                         group_id = target_id
                         user_id = ""
 
                     elif scene == "private":
-                        result = run_async(
-                            bot.send_to_c2c(
-                                openid=target_id,
-                                message=qq_message_obj,
-                                msg_seq=random.randint(1, 900000),
-                                msg_ref_id=reference_id or None,
-                            )
+                        result = _run_qq_send_with_optional_msg_ref(
+                            bot.send_to_c2c,
+                            openid=target_id,
+                            message=qq_message_obj,
+                            msg_seq=random.randint(1, 900000),
+                            msg_ref_id=reference_id or None,
                         )
 
                         group_id = ""
@@ -1116,28 +1124,26 @@ def api_messages_send():
                     qq_message_obj = build_qq_message_obj(message_reference_id)
 
                     if scene == "group":
-                        result = run_async(
-                            bot.send_to_group(
-                                group_openid=target_id,
-                                message=qq_message_obj,
-                                msg_id=source_message_id,
-                                msg_seq=random.randint(1, 900000),
-                                msg_ref_id=source_reference_id or None,
-                            )
+                        result = _run_qq_send_with_optional_msg_ref(
+                            bot.send_to_group,
+                            group_openid=target_id,
+                            message=qq_message_obj,
+                            msg_id=source_message_id,
+                            msg_seq=random.randint(1, 900000),
+                            msg_ref_id=source_reference_id or None,
                         )
 
                         group_id = target_id
                         user_id = ""
 
                     elif scene == "private":
-                        result = run_async(
-                            bot.send_to_c2c(
-                                openid=target_id,
-                                message=qq_message_obj,
-                                msg_id=source_message_id,
-                                msg_seq=random.randint(1, 900000),
-                                msg_ref_id=source_reference_id or None,
-                            )
+                        result = _run_qq_send_with_optional_msg_ref(
+                            bot.send_to_c2c,
+                            openid=target_id,
+                            message=qq_message_obj,
+                            msg_id=source_message_id,
+                            msg_seq=random.randint(1, 900000),
+                            msg_ref_id=source_reference_id or None,
                         )
 
                         group_id = ""

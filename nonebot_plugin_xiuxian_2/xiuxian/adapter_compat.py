@@ -1734,6 +1734,40 @@ def _message_has_reference_segment(message: Any) -> bool:
     return False
 
 
+_QQ_RICH_REFERENCE_SAFE_SEGMENTS = {
+    "markdown",
+    "keyboard",
+    "embed",
+    "ark",
+    "stream",
+    "prompt_keyboard",
+    "action_button",
+    "image",
+    "audio",
+    "video",
+    "file",
+    "file_image",
+    "file_audio",
+    "file_video",
+    "file_file",
+}
+
+
+def _message_has_qq_rich_segment(message: Any) -> bool:
+    try:
+        for seg in _iter_message_segments(message):
+            if isinstance(seg, dict):
+                seg_type = str(seg.get("type", "") or "")
+            else:
+                seg_type = str(getattr(seg, "type", "") or "")
+            if seg_type in _QQ_RICH_REFERENCE_SAFE_SEGMENTS:
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
 def _prepend_qq_reference(
     bot: BaseBot,
     message: Any,
@@ -1776,12 +1810,13 @@ def _prepare_qq_reference_message(
 
     if ref_id:
         msg_ref_id = msg_ref_id or ref_id
-        message = _prepend_qq_reference(
-            bot,
-            message,
-            ref_id,
-            ignore_error=ignore_error,
-        )
+        if not _message_has_qq_rich_segment(message):
+            message = _prepend_qq_reference(
+                bot,
+                message,
+                ref_id,
+                ignore_error=ignore_error,
+            )
 
     return message, msg_ref_id
 
@@ -2525,13 +2560,23 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             )
 
             async def _do_send(msg_seq: int):
-                return await bot.send_to_c2c(
-                    openid=openid,
-                    message=message,
-                    msg_seq=int(msg_seq),
-                    msg_ref_id=msg_ref_id,
-                    **kwargs,
-                )
+                try:
+                    return await bot.send_to_c2c(
+                        openid=openid,
+                        message=message,
+                        msg_seq=int(msg_seq),
+                        msg_ref_id=msg_ref_id,
+                        **kwargs,
+                    )
+                except TypeError as e:
+                    if "msg_ref_id" not in str(e):
+                        raise
+                    return await bot.send_to_c2c(
+                        openid=openid,
+                        message=message,
+                        msg_seq=int(msg_seq),
+                        **kwargs,
+                    )
 
             if "msg_seq" in kwargs:
                 msg_seq = int(kwargs.pop("msg_seq"))
@@ -2577,14 +2622,25 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             )
 
             async def _do_send(msg_seq: int):
-                return await bot.send_to_group(
-                    group_openid=group_openid,
-                    message=message,
-                    msg_id=msg_id,
-                    msg_seq=int(msg_seq),
-                    event_id=event_id,
-                    msg_ref_id=msg_ref_id,
-                )
+                try:
+                    return await bot.send_to_group(
+                        group_openid=group_openid,
+                        message=message,
+                        msg_id=msg_id,
+                        msg_seq=int(msg_seq),
+                        event_id=event_id,
+                        msg_ref_id=msg_ref_id,
+                    )
+                except TypeError as e:
+                    if "msg_ref_id" not in str(e):
+                        raise
+                    return await bot.send_to_group(
+                        group_openid=group_openid,
+                        message=message,
+                        msg_id=msg_id,
+                        msg_seq=int(msg_seq),
+                        event_id=event_id,
+                    )
 
             if "msg_seq" in kwargs:
                 msg_seq = int(kwargs.pop("msg_seq"))

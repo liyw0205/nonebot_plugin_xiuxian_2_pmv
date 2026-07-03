@@ -873,6 +873,8 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     merge_forward_send = XiuConfig().merge_forward_send
     if _should_reference_reply(bot, event):
         merge_forward_send = 1
+    elif merge_forward_send in (2, 4) and not _is_onebot_v11_bot(bot):
+        merge_forward_send = 1
 
     # markdown 开启时，优先文本聚合发送（避免 forward 与 markdown 逻辑冲突）
     if markdown_status:

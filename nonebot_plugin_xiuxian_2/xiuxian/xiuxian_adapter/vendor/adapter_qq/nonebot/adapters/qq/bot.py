@@ -415,6 +415,11 @@ class Bot(BaseBot):
                     message_id=msg_ref_id,
                     ignore_get_message_error=message_reference.ignore_get_message_error,
                 )
+        elif msg_ref_id:
+            kwargs["message_reference"] = MessageReference(
+                message_id=msg_ref_id,
+                ignore_get_message_error=True,
+            )
         if keyboard := (message["keyboard"] or None):
             kwargs["keyboard"] = keyboard[-1].data["keyboard"]
         if stream := (message["stream"] or None):
