@@ -2785,6 +2785,11 @@ let currentJumpIndex = -1;
 let currentDate = '';
 let selectedReplyMessageId = '';
 let selectedReplyRowId = '';
+let selectedReplySummary = '';
+let selectedQuoteReferenceId = '';
+let selectedQuoteMessageId = '';
+let selectedQuoteRowId = '';
+let selectedQuoteSummary = '';
 let composerExpanded = false;
 let mediaPanelOpen = false;
 let mediaFabVisible = false;
@@ -3723,9 +3728,15 @@ function renderMessageRow(row, idx = 0) {
     const copyText = buildMessageCopyText(content);
     const previewText = copyText || String(content || '').slice(0, 60);
     const messageId = row.message_id || '';
+    const referenceId = row.reference_id || '';
+    const quoteKey = referenceId || ((row.scene === 'channel_group' || row.scene === 'channel_private') ? messageId : '');
     const replyUsed = Number(row.reply_used_count || 0);
-    const canReply = !!row.can_reply;
+    const canReplyMsgId = !!row.can_reply_msg_id;
+    const canQuoteReference = !!row.can_quote_reference;
+    const canQuote = !!row.can_quote || !!row.can_reply;
+    const canReply = canQuote;
     const replyExpired = !!row.reply_expired;
+    const replyCountLimited = !!row.reply_count_limited;
     const createdDate = (row.created_at || '').slice(0, 10);
 
     const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
@@ -3736,7 +3747,8 @@ function renderMessageRow(row, idx = 0) {
         'msg-row',
         isSend ? 'send' : 'recv',
         canReply ? 'can-reply' : '',
-        selectedReplyMessageId && selectedReplyMessageId === messageId ? 'reply-selected' : ''
+        selectedReplyMessageId && selectedReplyMessageId === messageId ? 'reply-selected' : '',
+        selectedQuoteReferenceId && selectedQuoteReferenceId === quoteKey ? 'reply-selected' : ''
     ].filter(Boolean).join(' ');
 
     return `
@@ -3746,8 +3758,12 @@ function renderMessageRow(row, idx = 0) {
             data-row-id="${escapeHtml(row.id || '')}"
             data-created-date="${escapeHtml(createdDate)}"
             data-message-id="${escapeHtml(messageId)}"
+            data-reference-id="${escapeHtml(referenceId)}"
             data-is-send="${isSend ? '1' : '0'}"
             data-can-reply="${canReply ? '1' : '0'}"
+            data-can-reply-msg-id="${canReplyMsgId ? '1' : '0'}"
+            data-can-quote-reference="${canQuoteReference ? '1' : '0'}"
+            data-can-quote="${canQuote ? '1' : '0'}"
             data-name="${escapeHtml(name)}"
             data-preview="${escapeHtml(previewText.slice(0, 60))}"
             data-copy-text="${escapeHtml(copyText)}"
@@ -3770,8 +3786,11 @@ function renderMessageRow(row, idx = 0) {
                 </div>
                 <div class="msg-extra">
                     ${!isSend && row.adapter === 'QQ' ? `已回复次数: ${replyUsed}/5` : ''}
-                    ${!isSend && row.adapter === 'QQ' && replyExpired ? ` ｜ 已过期` : ''}
-                    ${!isSend && row.adapter === 'QQ' && canReply ? ` ｜ 长按可复制/引用` : ''}
+                    ${!isSend && row.adapter === 'QQ' && canReplyMsgId ? ` ｜ 可用 msg_id` : ''}
+                    ${!isSend && row.adapter === 'QQ' && !canReplyMsgId && replyExpired ? ` ｜ msg_id 已过期` : ''}
+                    ${!isSend && row.adapter === 'QQ' && !canReplyMsgId && !replyExpired && replyCountLimited ? ` ｜ msg_id 次数已满` : ''}
+                    ${!isSend && row.adapter === 'QQ' && canQuoteReference ? ` ｜ 可引用` : ''}
+                    ${!isSend && row.adapter === 'QQ' && canQuote ? ` ｜ 长按可操作` : ''}
                     ${isSend && row.message_id ? `
                         <button
                             class="msg-revoke-btn"
@@ -3883,7 +3902,7 @@ function setActiveSend(enabled) {
     }
 
     if (activeSend && selectedReplyMessageId) {
-        clearReplyTarget();
+        clearReplyMsgIdTarget();
     }
 
     updateSendHint();
@@ -4183,6 +4202,13 @@ function selectSession(index) {
 
     selectedReplyMessageId = '';
     selectedReplyRowId = '';
+    selectedReplySummary = '';
+    selectedQuoteReferenceId = '';
+    selectedQuoteMessageId = '';
+    selectedQuoteRowId = '';
+    selectedQuoteSummary = '';
+    syncReplySelectionClasses();
+    updateReplyBar();
 
     setChatAvatar(currentSession.avatar_text || '?', currentSession.avatar);
     document.getElementById('chatTitle').innerText = currentSession.title || '未知会话';
@@ -4548,10 +4574,13 @@ function openMessageActionMenu(event, el) {
     messageActionTarget = el;
     closeMessageActionMenu();
 
-    const canReply = el.dataset.canReply === '1';
+    const canReplyMsgId = el.dataset.canReplyMsgId === '1';
+    const canQuoteReference = el.dataset.canQuoteReference === '1';
     const isSend = el.dataset.isSend === '1';
     const msgId = el.dataset.messageId || '';
-    const canQuote = !isSend && canReply && !!msgId;
+    const quoteRefId = getRowQuoteReferenceId(el);
+    const canUseMsgId = !isSend && !activeSend && canReplyMsgId && !!msgId;
+    const canQuote = !isSend && canQuoteReference && !!quoteRefId;
 
     const menu = document.createElement('div');
     menu.id = 'messageActionMenu';
@@ -4561,6 +4590,12 @@ function openMessageActionMenu(event, el) {
             <i class="fas fa-copy"></i>
             <span>复制</span>
         </button>
+        ${canUseMsgId ? `
+            <button type="button" onclick="useMsgIdActionMenuMessage()">
+                <i class="fas fa-link"></i>
+                <span>使用 msg_id</span>
+            </button>
+        ` : ''}
         ${canQuote ? `
             <button type="button" onclick="quoteActionMenuMessage()">
                 <i class="fas fa-reply"></i>
@@ -4616,10 +4651,17 @@ async function copyActionMenuMessage() {
     }
 }
 
+function useMsgIdActionMenuMessage() {
+    if (!messageActionTarget) return;
+
+    selectReplyMsgIdTarget(messageActionTarget);
+    closeMessageActionMenu();
+}
+
 function quoteActionMenuMessage() {
     if (!messageActionTarget) return;
 
-    selectReplyTarget(messageActionTarget);
+    selectQuoteTarget(messageActionTarget);
     closeMessageActionMenu();
 }
 
@@ -4640,13 +4682,75 @@ function showMessageToast(text) {
 }
 
 function selectReplyTarget(el) {
+    selectQuoteTarget(el);
+}
+
+function getRowQuoteReferenceId(el) {
+    if (!el) return '';
+
+    const refId = el.dataset.referenceId || '';
+    if (refId) return refId;
+
+    const scene = currentSession ? (currentSession.scene || '') : '';
+    if (scene === 'channel_group' || scene === 'channel_private') {
+        return el.dataset.messageId || '';
+    }
+
+    return '';
+}
+
+function getReplyTargetSummary(el) {
+    const name = el.dataset.name || '对方';
+    const preview = el.dataset.preview || '[消息]';
+    return `${name}: ${preview}`;
+}
+
+function syncReplySelectionClasses() {
+    document.querySelectorAll('.msg-row').forEach(row => {
+        const msgId = row.dataset.messageId || '';
+        const quoteRefId = getRowQuoteReferenceId(row);
+        const selectedByMsgId = !!selectedReplyMessageId && selectedReplyMessageId === msgId;
+        const selectedByQuote = !!selectedQuoteReferenceId && selectedQuoteReferenceId === quoteRefId;
+        row.classList.toggle('reply-selected', selectedByMsgId || selectedByQuote);
+    });
+}
+
+function updateReplyBar() {
+    const parts = [];
+
+    if (selectedReplyMessageId) {
+        parts.push(`msg_id ${selectedReplySummary || selectedReplyMessageId}`);
+    }
+    if (selectedQuoteReferenceId) {
+        parts.push(`引用 ${selectedQuoteSummary || selectedQuoteReferenceId}`);
+    }
+
+    const bar = document.getElementById('replyBar');
+    const text = document.getElementById('replyText');
+    if (!bar || !text) return;
+
+    if (!parts.length) {
+        bar.classList.add('hidden');
+        text.innerText = '正在回复指定消息';
+        return;
+    }
+
+    text.innerText = parts.join(' ｜ ');
+    bar.classList.remove('hidden');
+}
+
+function selectReplyMsgIdTarget(el) {
     if (!currentSession) return;
 
     const isSend = el.dataset.isSend === '1';
-    const canReply = el.dataset.canReply === '1';
+    const canReplyMsgId = el.dataset.canReplyMsgId === '1';
 
     if (isSend) return;
-    if (!canReply) return;
+    if (!canReplyMsgId) return;
+    if (activeSend) {
+        showMessageToast('主动发送不需要 msg_id');
+        return;
+    }
 
     const msgId = el.dataset.messageId || '';
     const rowId = el.dataset.rowId || '';
@@ -4654,29 +4758,83 @@ function selectReplyTarget(el) {
     if (!msgId) return;
 
     if (selectedReplyMessageId === msgId) {
-        clearReplyTarget();
+        clearReplyMsgIdTarget();
         return;
     }
 
     selectedReplyMessageId = msgId;
     selectedReplyRowId = rowId;
+    selectedReplySummary = getReplyTargetSummary(el);
 
-    document.querySelectorAll('.msg-row').forEach(x => x.classList.remove('reply-selected'));
-    el.classList.add('reply-selected');
+    syncReplySelectionClasses();
+    updateReplyBar();
+}
 
-    const name = el.dataset.name || '对方';
-    const preview = el.dataset.preview || '[消息]';
+function selectQuoteTarget(el) {
+    if (!currentSession) return;
 
-    document.getElementById('replyText').innerText = `引用 ${name}: ${preview}`;
-    document.getElementById('replyBar').classList.remove('hidden');
+    const isSend = el.dataset.isSend === '1';
+    const canQuoteReference = el.dataset.canQuoteReference === '1';
+
+    if (isSend) return;
+    if (!canQuoteReference) return;
+
+    const quoteRefId = getRowQuoteReferenceId(el);
+    const msgId = el.dataset.messageId || '';
+    const rowId = el.dataset.rowId || '';
+
+    if (!quoteRefId) return;
+
+    if (selectedQuoteReferenceId === quoteRefId) {
+        clearQuoteTarget();
+        return;
+    }
+
+    selectedQuoteReferenceId = quoteRefId;
+    selectedQuoteMessageId = msgId;
+    selectedQuoteRowId = rowId;
+    selectedQuoteSummary = getReplyTargetSummary(el);
+
+    if (!activeSend && !selectedReplyMessageId && el.dataset.canReplyMsgId === '1' && msgId) {
+        selectedReplyMessageId = msgId;
+        selectedReplyRowId = rowId;
+        selectedReplySummary = getReplyTargetSummary(el);
+    }
+
+    syncReplySelectionClasses();
+    updateReplyBar();
+}
+
+function clearReplyMsgIdTarget() {
+    selectedReplyMessageId = '';
+    selectedReplyRowId = '';
+    selectedReplySummary = '';
+
+    syncReplySelectionClasses();
+    updateReplyBar();
+}
+
+function clearQuoteTarget() {
+    selectedQuoteReferenceId = '';
+    selectedQuoteMessageId = '';
+    selectedQuoteRowId = '';
+    selectedQuoteSummary = '';
+
+    syncReplySelectionClasses();
+    updateReplyBar();
 }
 
 function clearReplyTarget() {
     selectedReplyMessageId = '';
     selectedReplyRowId = '';
+    selectedReplySummary = '';
+    selectedQuoteReferenceId = '';
+    selectedQuoteMessageId = '';
+    selectedQuoteRowId = '';
+    selectedQuoteSummary = '';
 
-    document.querySelectorAll('.msg-row').forEach(x => x.classList.remove('reply-selected'));
-    document.getElementById('replyBar').classList.add('hidden');
+    syncReplySelectionClasses();
+    updateReplyBar();
 }
 
 function getMessageRows() {
@@ -4929,7 +5087,8 @@ async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaF
     fd.append('media_type', mediaType || '');
     fd.append('media_url', mediaUrl || '');
     fd.append('reply_message_id', selectedReplyMessageId || '');
-    fd.append('quote_message_id', selectedReplyMessageId || '');
+    fd.append('quote_message_id', selectedQuoteMessageId || '');
+    fd.append('quote_reference_id', selectedQuoteReferenceId || '');
     if (mediaFile) {
         fd.append('file', mediaFile);
     }

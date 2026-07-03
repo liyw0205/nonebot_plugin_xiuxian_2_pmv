@@ -29,17 +29,30 @@ def _prepare_message_rows(rows: list[dict]) -> list[dict]:
             and r.get("message_id")
         )
 
-        # 前端不需要展示 msg_id，但需要用来点击回复
+        # msg_id 回复窗口和 reference_id 引用回复是两种能力，前端分别展示。
         r["can_reply"] = False
+        r["can_reply_msg_id"] = False
+        r["can_quote_reference"] = False
+        r["can_quote"] = False
         r["reply_expired"] = True
+        r["reply_count_limited"] = False
 
-        if r.get("adapter") == "QQ" and r.get("direction") == "recv" and r.get("message_id"):
+        if r.get("adapter") == "QQ" and r.get("direction") == "recv":
+            scene = r.get("scene", "")
+            message_id = str(r.get("message_id") or "")
+            reference_id = str(r.get("reference_id") or "")
             valid_seconds = get_qq_reply_valid_seconds(r.get("scene", ""))
             can_time = is_message_within_seconds(r.get("created_at", ""), valid_seconds)
             can_count = int(r.get("reply_used_count") or 0) < 5
+            can_reply_msg_id = bool(message_id and can_time and can_count)
+            can_quote_reference = bool(reference_id or (scene in ("channel_group", "channel_private") and message_id))
 
-            r["can_reply"] = bool(can_time and can_count)
+            r["can_reply_msg_id"] = can_reply_msg_id
+            r["can_quote_reference"] = can_quote_reference
+            r["can_quote"] = bool(can_reply_msg_id or can_quote_reference)
+            r["can_reply"] = r["can_quote"]
             r["reply_expired"] = not can_time
+            r["reply_count_limited"] = not can_count
 
     for r in rows:
         group_title = r.get("group_name") or r.get("group_id") or ""
@@ -753,9 +766,10 @@ def api_messages_send():
         media_url = str(data.get("media_url", "") or "").strip()
         reply_message_id = str(data.get("reply_message_id", "") or "").strip()
         quote_message_id = str(data.get("quote_message_id", "") or "").strip()
+        quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
         active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
-        if quote_message_id and not reply_message_id:
+        if quote_message_id and not reply_message_id and not quote_reference_id:
             reply_message_id = quote_message_id
 
         if send_mode not in ("plain", "markdown"):
@@ -978,66 +992,108 @@ def api_messages_send():
                     quote_message_id=reference_id,
                 )
 
+            def resolve_qq_quote_reference_id() -> str:
+                if quote_reference_id:
+                    ref_candidate = get_specific_reference_candidate_for_qq(
+                        scene=scene,
+                        target_id=target_id,
+                        reference_id=quote_reference_id,
+                    )
+                    if ref_candidate:
+                        return str(ref_candidate.get("reference_id") or quote_reference_id)
+                    return quote_reference_id
+
+                if not quote_message_id:
+                    return ""
+
+                if quote_message_id.startswith("REFIDX"):
+                    return quote_message_id
+
+                ref_candidate = get_specific_reference_candidate_for_qq(
+                    scene=scene,
+                    target_id=target_id,
+                    message_id=quote_message_id,
+                )
+                if ref_candidate:
+                    ref_id = str(ref_candidate.get("reference_id") or "")
+                    if ref_id:
+                        return ref_id
+                    if scene in ("channel_group", "channel_private"):
+                        return str(ref_candidate.get("message_id") or "")
+
+                if scene in ("channel_group", "channel_private"):
+                    return quote_message_id
+
+                return ""
+
+            message_reference_id = resolve_qq_quote_reference_id()
+
             if active_send:
                 try:
-                    reference_id = ""
-                    if quote_message_id:
-                        ref_candidate = get_specific_reply_candidate_for_qq(
+                    source_message_id = ""
+                    if reply_message_id:
+                        candidate = get_specific_reply_candidate_for_qq(
                             scene=scene,
                             target_id=target_id,
-                            message_id=quote_message_id,
+                            message_id=reply_message_id,
                         )
-                        if ref_candidate:
-                            reference_id = str(ref_candidate.get("reference_id") or "")
-                        elif quote_message_id.startswith("REFIDX"):
-                            reference_id = quote_message_id
-                        elif scene in ("channel_group", "channel_private"):
-                            reference_id = quote_message_id
+                        if not candidate:
+                            return jsonify({
+                                "success": False,
+                                "error": "指定 msg_id 不可用：可能已过期、超过回复次数，或不属于当前会话",
+                            })
+                        source_message_id = str(candidate.get("message_id") or "")
 
-                    qq_message_obj = build_qq_message_obj(reference_id)
+                    qq_message_obj = build_qq_message_obj(message_reference_id)
 
                     if scene == "group":
-                        result = _run_qq_send_with_optional_msg_ref(
-                            bot.send_to_group,
-                            group_openid=target_id,
-                            message=qq_message_obj,
-                            msg_seq=random.randint(1, 900000),
-                            msg_ref_id=reference_id or None,
-                        )
+                        send_kwargs = {
+                            "group_openid": target_id,
+                            "message": qq_message_obj,
+                            "msg_seq": random.randint(1, 900000),
+                            "msg_ref_id": message_reference_id or None,
+                        }
+                        if source_message_id:
+                            send_kwargs["msg_id"] = source_message_id
+                        result = _run_qq_send_with_optional_msg_ref(bot.send_to_group, **send_kwargs)
 
                         group_id = target_id
                         user_id = ""
 
                     elif scene == "private":
-                        result = _run_qq_send_with_optional_msg_ref(
-                            bot.send_to_c2c,
-                            openid=target_id,
-                            message=qq_message_obj,
-                            msg_seq=random.randint(1, 900000),
-                            msg_ref_id=reference_id or None,
-                        )
+                        send_kwargs = {
+                            "openid": target_id,
+                            "message": qq_message_obj,
+                            "msg_seq": random.randint(1, 900000),
+                            "msg_ref_id": message_reference_id or None,
+                        }
+                        if source_message_id:
+                            send_kwargs["msg_id"] = source_message_id
+                        result = _run_qq_send_with_optional_msg_ref(bot.send_to_c2c, **send_kwargs)
 
                         group_id = ""
                         user_id = target_id
 
                     elif scene == "channel_group":
-                        result = run_async(
-                            bot.send_to_channel(
-                                channel_id=target_id,
-                                message=qq_message_obj,
-                            )
-                        )
+                        send_kwargs = {
+                            "channel_id": target_id,
+                            "message": qq_message_obj,
+                        }
+                        if source_message_id:
+                            send_kwargs["msg_id"] = source_message_id
+                        result = run_async(bot.send_to_channel(**send_kwargs))
 
                         group_id = target_id
                         user_id = ""
 
                     elif scene == "channel_private":
-                        result = run_async(
-                            bot.send_to_dms(
-                                guild_id=target_id,
-                                message=qq_message_obj,
-                            )
-                        )
+                        send_kwargs = {
+                            "guild_id": target_id,
+                            "message": qq_message_obj,
+                        }
+                        if source_message_id:
+                            send_kwargs["msg_id"] = source_message_id
+                        result = run_async(bot.send_to_dms(**send_kwargs))
 
                         group_id = ""
                         user_id = target_id
@@ -1056,7 +1112,7 @@ def api_messages_send():
                         scene=scene,
                         message_id=message_id,
                         reference_id=result_reference_id,
-                        source_message_id="",
+                        source_message_id=source_message_id,
                         group_id=group_id,
                         user_id=user_id,
                         message=content or f"[{media_type}]",
@@ -1068,6 +1124,8 @@ def api_messages_send():
                         "message": "QQ 主动发送成功",
                         "message_id": message_id,
                         "reference_id": result_reference_id,
+                        "source_message_id": source_message_id,
+                        "quote_reference_id": message_reference_id,
                     })
 
                 except Exception as e:
@@ -1105,7 +1163,7 @@ def api_messages_send():
             if not candidates:
                 return jsonify({
                     "success": False,
-                    "error": "QQ 适配器无法主动发送：未找到 4 分钟内可回复且未达回复次数上限的消息",
+                    "error": "QQ 适配器无法发送：非主动发送需要 4 分钟内可用 msg_id，请选择“使用 msg_id”或开启主动发送",
                 })
 
             last_error = ""
@@ -1117,10 +1175,6 @@ def api_messages_send():
 
                 try:
                     source_reference_id = str(candidate.get("reference_id") or "")
-                    if scene in ("group", "private"):
-                        message_reference_id = source_reference_id
-                    else:
-                        message_reference_id = source_reference_id or source_message_id
                     qq_message_obj = build_qq_message_obj(message_reference_id)
 
                     if scene == "group":
@@ -1130,7 +1184,7 @@ def api_messages_send():
                             message=qq_message_obj,
                             msg_id=source_message_id,
                             msg_seq=random.randint(1, 900000),
-                            msg_ref_id=source_reference_id or None,
+                            msg_ref_id=message_reference_id or None,
                         )
 
                         group_id = target_id
@@ -1143,7 +1197,7 @@ def api_messages_send():
                             message=qq_message_obj,
                             msg_id=source_message_id,
                             msg_seq=random.randint(1, 900000),
-                            msg_ref_id=source_reference_id or None,
+                            msg_ref_id=message_reference_id or None,
                         )
 
                         group_id = ""
@@ -1201,6 +1255,7 @@ def api_messages_send():
                         "reference_id": result_reference_id,
                         "source_message_id": source_message_id,
                         "source_reference_id": source_reference_id,
+                        "quote_reference_id": message_reference_id,
                     })
 
                 except Exception as e:

@@ -827,6 +827,73 @@ def get_specific_reply_candidate_for_qq(
     finally:
         conn.close()
 
+def get_specific_reference_candidate_for_qq(
+    *,
+    scene: str,
+    target_id: str,
+    message_id: str = "",
+    reference_id: str = "",
+):
+    """
+    查找 QQ 引用回复目标。
+
+    这里不校验 msg_id 的 5 分钟回复窗口，只用于确认 reference_id
+    是否属于当前会话，并从 message_id 反查 reference_id。
+    """
+    message_id = str(message_id or "").strip()
+    reference_id = str(reference_id or "").strip()
+
+    if not message_id and not reference_id:
+        return None
+
+    conn = get_message_db_connection()
+    try:
+        cur = conn.cursor()
+
+        match_sql = []
+        match_params = []
+        if message_id:
+            match_sql.append("message_id = %s")
+            match_params.append(message_id)
+        if reference_id:
+            match_sql.append("reference_id = %s")
+            match_params.append(reference_id)
+
+        if scene in ("group", "channel_group"):
+            cur.execute(f"""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = %s
+                  AND group_id = %s
+                  AND ({' OR '.join(match_sql)})
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            """, [scene, str(target_id)] + match_params)
+
+        elif scene in ("private", "channel_private"):
+            cur.execute(f"""
+                SELECT *
+                FROM messages
+                WHERE adapter = 'QQ'
+                  AND direction = 'recv'
+                  AND scene = %s
+                  AND user_id = %s
+                  AND ({' OR '.join(match_sql)})
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            """, [scene, str(target_id)] + match_params)
+
+        else:
+            return None
+
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    finally:
+        conn.close()
+
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
     """获取表数据（分页和搜索）"""
     offset = (page - 1) * per_page
