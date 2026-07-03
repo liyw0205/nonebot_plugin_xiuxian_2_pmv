@@ -2228,7 +2228,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     message,
                     kwargs,
                     event=event,
-                    default_auto=True,
+                    default_auto=False,
                 )
 
                 async def _do_send(msg_seq: int):
@@ -2301,7 +2301,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     message,
                     kwargs,
                     event=event,
-                    default_auto=True,
+                    default_auto=False,
                 )
 
                 async def _do_send(msg_seq: int):

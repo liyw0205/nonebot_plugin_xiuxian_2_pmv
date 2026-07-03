@@ -142,7 +142,7 @@ OneBot v11：
 QQ 官方适配器：
 
 - `bot.send(event, message, **kwargs)` 会按事件类型分发到 `send_to_group`、`send_to_c2c`、`send_to_channel`、`send_to_dms`。
-- 普通 QQ 群与 C2C 的 `bot.send(event, message)` 默认使用当前事件的 `REFIDX` 做引用回复；传 `auto_reference=False` 可关闭。
+- 普通 QQ 群与 C2C 可传 `auto_reference=True`，或使用 `send_reference_reply(...)`，以当前事件的 `REFIDX` 做引用回复。
 - 显式引用可传 `reference_id`、`message_reference_id`、`reference_message_id`、`quote_message_id`、`message_reference` 或 `msg_ref_id`。
 - `bot.send_group_msg(group_id=..., message=...)` 映射到 QQ 群主动发送。
 - `bot.send_private_msg(user_id=..., message=...)` 映射到 QQ C2C 主动发送。
@@ -151,7 +151,7 @@ QQ 官方适配器：
 
 ## 引用回复
 
-QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`，并在 `patch_bot_inplace()` 后的 `bot.send(event, message)` 中默认引用当前事件。
+QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。
 
 常用接口：
 

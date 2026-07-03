@@ -41,6 +41,8 @@ class XiuConfig:
         # 艾特响应命令（官机可能需要关闭）
         self.at_sender = True
         # 消息是否艾特
+        self.reference_reply = False
+        # QQ官方普通群/C2C通用发送是否引用回复
         self.empty_fallback = True
         # 是否开启默认回复
         self.empty_msg = "> 未识别到指令。可用功能：修仙帮助"

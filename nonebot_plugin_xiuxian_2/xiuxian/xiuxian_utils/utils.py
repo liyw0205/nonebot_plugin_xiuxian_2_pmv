@@ -26,7 +26,8 @@ from ..adapter_compat import (
     is_channel_event,
     is_group_event,
     get_chat_scene,
-    MessageSegment
+    MessageSegment,
+    send_reference_reply,
 )
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
@@ -870,6 +871,8 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
     allow_md_template = True  # 频道和频道私信支持模板MD
 
     merge_forward_send = XiuConfig().merge_forward_send
+    if _should_reference_reply(bot, event):
+        merge_forward_send = 1
 
     # markdown 开启时，优先文本聚合发送（避免 forward 与 markdown 逻辑冲突）
     if markdown_status:
@@ -955,7 +958,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         else:
             img_data = img.sync_draw_to(merged)
 
-        await bot.send(event=event, message=MessageSegment.image(bot, img_data))
+        await _send_event_message(event=event, bot=bot, message=MessageSegment.image(bot, img_data))
         return
 
     # ========== 4) 长文本转单节点合并 ==========
@@ -994,6 +997,24 @@ def _allow_native_markdown(event) -> bool:
 
 def _markdown_buttons_enabled() -> bool:
     return bool(getattr(XiuConfig(), "markdown_button_status", False))
+
+def _reference_reply_enabled() -> bool:
+    return bool(getattr(XiuConfig(), "reference_reply", False))
+
+def _should_reference_reply(bot, event) -> bool:
+    if not _reference_reply_enabled() or _is_onebot_v11_bot(bot):
+        return False
+
+    return get_chat_scene(event) in ("group", "private")
+
+async def _send_event_message(bot, event, message, **kwargs):
+    if _should_reference_reply(bot, event):
+        try:
+            return await send_reference_reply(bot, event, message, **kwargs)
+        except Exception as e:
+            logger.warning(f"引用回复发送失败，降级普通发送: {e}")
+
+    return await bot.send(event=event, message=message, **kwargs)
 
 def _has_button_id(button_id) -> bool:
     return bool(str(button_id or "").strip())
@@ -1175,23 +1196,21 @@ async def handle_send2(bot, event, msg: str):
         sender_name = event.sender.card if event.sender.card else event.sender.nickname
         pic_msg = f"@{sender_name}\n{msg}" if sender_name else msg
         pic = await get_msg_pic(pic_msg)
-        await bot.send(
-            event=event, message=MessageSegment.image(bot, pic)
+        await _send_event_message(
+            bot=bot, event=event, message=MessageSegment.image(bot, pic)
         )
     else:
         if is_group:
             if XiuConfig().at_sender:
-                await bot.send(
-                    event=event, message=MessageSegment.at(bot, event.get_user_id()) + msg
+                await _send_event_message(
+                    bot=bot,
+                    event=event,
+                    message=MessageSegment.at(bot, event.get_user_id()) + msg,
                 )
             else:
-                await bot.send(
-                    event=event, message=msg
-                )
+                await _send_event_message(bot=bot, event=event, message=msg)
         else:
-            await bot.send(
-                event=event, message=msg
-            )
+            await _send_event_message(bot=bot, event=event, message=msg)
 
 def generate_page_param(page_list: list) -> dict:
     values = []
@@ -1326,14 +1345,14 @@ async def _send_markdown_or_keyboard(
     if rows:
         try:
             md_seg = MessageSegment.markdown_keyboard(bot, md_text or " ", rows)
-            await bot.send(event=event, message=md_seg)
+            await _send_event_message(bot=bot, event=event, message=md_seg)
             return
         except Exception as e:
             logger.warning(f"{log_prefix}发送失败，降级原生Markdown: {e}")
             md_text = fallback_md_text if fallback_md_text is not None else md_text
 
     md_seg = MessageSegment.markdown(bot, md_text or " ", button_id)
-    await bot.send(event=event, message=md_seg)
+    await _send_event_message(bot=bot, event=event, message=md_seg)
 
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息（频道可用），失败降级普通消息"""
@@ -1391,7 +1410,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
     
     try:
         md_msg = MessageSegment.markdown_template(bot, markdown_id, param, button_id)
-        await bot.send(event=event, message=md_msg)
+        await _send_event_message(bot=bot, event=event, message=md_msg)
     except Exception as e:
         logger.warning(f"md模板发送失败，降级普通消息: {e}\n\n内容：{param}")
         await handle_send2(bot, event, raw_plain)
@@ -1708,7 +1727,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
 
     try:
         md_msg = MessageSegment.markdown_template(bot, XiuConfig().markdown_id2, param, button_id)
-        await bot.send(event=event, message=md_msg)
+        await _send_event_message(bot=bot, event=event, message=md_msg)
     except Exception as e:
         logger.warning(f"md模板(type)发送失败，降级普通消息: {e}")
         await handle_send2(bot, event, raw_plain)
@@ -1793,11 +1812,11 @@ async def handle_pic_send(bot, event, imgpath: Union[str, Path, BytesIO, Image.I
     """
     try:
         seg = MessageSegment.image(bot, imgpath)
-        await bot.send(event=event, message=seg)
+        await _send_event_message(bot=bot, event=event, message=seg)
 
     except Exception as e:
         logger.error(f"发送图片失败: {e}")
-        await bot.send(event, f"发送图片失败: {e}")
+        await _send_event_message(bot=bot, event=event, message=f"发送图片失败: {e}")
 
 
 async def handle_pic_msg_send(
@@ -1864,21 +1883,19 @@ async def handle_pic_msg_send(
             msg = msg + part
         if is_group:
             if XiuConfig().at_sender:
-                await bot.send(
-                    event=event, message=MessageSegment.at(bot, event.get_user_id()) + msg
+                await _send_event_message(
+                    bot=bot,
+                    event=event,
+                    message=MessageSegment.at(bot, event.get_user_id()) + msg,
                 )
             else:
-                await bot.send(
-                    event=event, message=msg
-                )
+                await _send_event_message(bot=bot, event=event, message=msg)
         else:
-            await bot.send(
-                event=event, message=msg
-            )
+            await _send_event_message(bot=bot, event=event, message=msg)
 
     except Exception as e:
         logger.error(f"发送图文消息失败: {e}")
-        await bot.send(event, f"发送消息失败: {e}")
+        await _send_event_message(bot=bot, event=event, message=f"发送消息失败: {e}")
 
 def log_message(user_id: str, msg: str):
     """

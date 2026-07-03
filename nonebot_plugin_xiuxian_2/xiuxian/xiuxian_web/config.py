@@ -61,6 +61,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "reference_reply": {
+        "name": "消息是否引用回复",
+        "description": "开启后 QQ 官方普通群/C2C 的通用发送接口优先使用引用回复",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "empty_fallback": {
         "name": "空指令是否回复",
         "description": "空指令回复",
