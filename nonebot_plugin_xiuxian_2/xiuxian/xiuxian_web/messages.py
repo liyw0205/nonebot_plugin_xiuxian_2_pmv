@@ -769,7 +769,12 @@ def api_messages_send():
         quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
         active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
-        if quote_message_id and not reply_message_id and not quote_reference_id:
+        if (
+            quote_message_id
+            and not quote_message_id.startswith("REFIDX")
+            and not reply_message_id
+            and not quote_reference_id
+        ):
             reply_message_id = quote_message_id
 
         if send_mode not in ("plain", "markdown"):
@@ -992,7 +997,7 @@ def api_messages_send():
                     quote_message_id=reference_id,
                 )
 
-            def resolve_qq_quote_reference_id() -> str:
+            def resolve_qq_quote_reference_id() -> tuple[str, str]:
                 if quote_reference_id:
                     ref_candidate = get_specific_reference_candidate_for_qq(
                         scene=scene,
@@ -1000,14 +1005,14 @@ def api_messages_send():
                         reference_id=quote_reference_id,
                     )
                     if ref_candidate:
-                        return str(ref_candidate.get("reference_id") or quote_reference_id)
-                    return quote_reference_id
+                        return str(ref_candidate.get("reference_id") or quote_reference_id), ""
+                    return "", "指定引用消息不可用：可能不属于当前会话，或消息记录已不存在"
 
                 if not quote_message_id:
-                    return ""
+                    return "", ""
 
                 if quote_message_id.startswith("REFIDX"):
-                    return quote_message_id
+                    return quote_message_id, ""
 
                 ref_candidate = get_specific_reference_candidate_for_qq(
                     scene=scene,
@@ -1017,16 +1022,21 @@ def api_messages_send():
                 if ref_candidate:
                     ref_id = str(ref_candidate.get("reference_id") or "")
                     if ref_id:
-                        return ref_id
+                        return ref_id, ""
                     if scene in ("channel_group", "channel_private"):
-                        return str(ref_candidate.get("message_id") or "")
+                        return str(ref_candidate.get("message_id") or ""), ""
 
                 if scene in ("channel_group", "channel_private"):
-                    return quote_message_id
+                    return quote_message_id, ""
 
-                return ""
+                return "", ""
 
-            message_reference_id = resolve_qq_quote_reference_id()
+            message_reference_id, reference_error = resolve_qq_quote_reference_id()
+            if reference_error:
+                return jsonify({
+                    "success": False,
+                    "error": reference_error,
+                })
 
             if active_send:
                 try:
