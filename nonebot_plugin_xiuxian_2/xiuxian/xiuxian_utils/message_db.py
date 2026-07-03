@@ -163,6 +163,7 @@ def _messages_table_sql() -> str:
             scene TEXT NOT NULL,
 
             message_id TEXT,
+            reference_id TEXT,
             source_message_id TEXT,
 
             group_id TEXT,
@@ -186,6 +187,9 @@ def _ensure_message_db_schema(conn):
     cur = conn.cursor()
 
     cur.execute(_messages_table_sql())
+
+    if hasattr(conn, "column_exists") and not conn.column_exists("messages", "reference_id"):
+        cur.execute("ALTER TABLE messages ADD COLUMN reference_id TEXT")
 
     cur.execute(
         """
@@ -211,6 +215,7 @@ def _ensure_message_db_schema(conn):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_scene ON messages(scene)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_reference_id ON messages(reference_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_source_message_id ON messages(source_message_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_id ON messages(group_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
@@ -409,13 +414,13 @@ def _execute_insert_message_record(cur, payload: dict[str, Any]):
         INSERT INTO messages (
             adapter, bot_id,
             direction, scene,
-            message_id, source_message_id,
+            message_id, reference_id, source_message_id,
             group_id, group_name,
             user_id, username, nickname, avatar,
             content,
             created_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             str(payload.get("adapter") or ""),
@@ -423,6 +428,7 @@ def _execute_insert_message_record(cur, payload: dict[str, Any]):
             str(payload.get("direction") or ""),
             str(payload.get("scene") or "unknown"),
             str(payload.get("message_id") or ""),
+            str(payload.get("reference_id") or ""),
             str(payload.get("source_message_id") or ""),
             str(payload.get("group_id") or ""),
             str(payload.get("group_name") or ""),
@@ -583,6 +589,7 @@ def insert_message_record(
     direction: str,
     scene: str,
     message_id: str = "",
+    reference_id: str = "",
     source_message_id: str = "",
     group_id: str = "",
     group_name: str = "",
@@ -600,6 +607,7 @@ def insert_message_record(
             "direction": direction,
             "scene": scene,
             "message_id": message_id,
+            "reference_id": reference_id,
             "source_message_id": source_message_id,
             "group_id": group_id,
             "group_name": group_name,

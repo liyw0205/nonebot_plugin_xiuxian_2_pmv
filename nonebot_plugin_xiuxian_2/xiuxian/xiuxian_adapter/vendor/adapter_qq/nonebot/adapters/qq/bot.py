@@ -4,6 +4,7 @@ from contextlib import nullcontext, suppress
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import re
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -13,6 +14,7 @@ from typing import (
     cast,
     overload,
 )
+from urllib.parse import unquote
 from typing_extensions import Never, override
 
 from nonebot.compat import type_validate_python
@@ -105,6 +107,55 @@ if TYPE_CHECKING:
 
 
 DEFAULT_FILENAME = "default"
+_MSG_IDX_RE = re.compile(r"(?:^|[?&])msg_idx=([^&\s]+)")
+_REFIDX_RE = re.compile(r"(REFIDX[0-9A-Za-z_\-:.]+)")
+
+
+def _extract_qq_msg_ref_id(value: Any) -> str | None:
+    """Extract official QQ REFIDX from message_scene, event, or raw ext item."""
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        candidates = [value]
+    else:
+        try:
+            ext = getattr(value, "ext", None)
+            if ext is None and isinstance(value, dict):
+                ext = value.get("ext")
+            if isinstance(ext, str):
+                candidates = [ext]
+            elif ext:
+                candidates = [str(item) for item in ext]
+            else:
+                candidates = []
+        except Exception:
+            candidates = []
+
+        for attr in ("msg_idx", "message_reference_id", "reference_id"):
+            try:
+                attr_value = getattr(value, attr, None)
+            except Exception:
+                attr_value = None
+            if attr_value:
+                candidates.append(str(attr_value))
+
+    for item in candidates:
+        text = str(item or "").strip()
+        if not text:
+            continue
+
+        match = _MSG_IDX_RE.search(text)
+        if match:
+            ref_id = unquote(match.group(1)).strip()
+            if ref_id:
+                return ref_id
+
+        match = _REFIDX_RE.search(text)
+        if match:
+            return match.group(1)
+
+    return None
 
 
 async def _check_reply(
@@ -357,11 +408,13 @@ class Bot(BaseBot):
         if markdown := (message["markdown"] or None):
             kwargs["markdown"] = markdown[-1].data["markdown"]
         if reference := (message["reference"] or None):
-            kwargs["message_reference"] = reference[-1].data["reference"]
-            if msg_ref_id and not reference[-1].data["reference"].message_id.startswith(
-                "REFIDX"
-            ):
-                kwargs["message_reference"] = MessageReference(message_id=msg_ref_id)
+            message_reference = reference[-1].data["reference"]
+            kwargs["message_reference"] = message_reference
+            if msg_ref_id and not message_reference.message_id.startswith("REFIDX"):
+                kwargs["message_reference"] = MessageReference(
+                    message_id=msg_ref_id,
+                    ignore_get_message_error=message_reference.ignore_get_message_error,
+                )
         if keyboard := (message["keyboard"] or None):
             kwargs["keyboard"] = keyboard[-1].data["keyboard"]
         if stream := (message["stream"] or None):
@@ -472,6 +525,7 @@ class Bot(BaseBot):
         elif (
             kwargs.get("markdown")
             or kwargs.get("keyboard")
+            or kwargs.get("stream")
             or kwargs.get("prompt_keyboard")
             or kwargs.get("action_button")
         ):
@@ -533,6 +587,12 @@ class Bot(BaseBot):
         elif kwargs.get("ark"):
             msg_type = 3
         elif kwargs.get("markdown") or kwargs.get("keyboard"):
+            msg_type = 2
+        elif (
+            kwargs.get("stream")
+            or kwargs.get("prompt_keyboard")
+            or kwargs.get("action_button")
+        ):
             msg_type = 2
         elif (
             message["image"]
@@ -598,14 +658,7 @@ class Bot(BaseBot):
             event._reply_seq += 1
             ref_idx = None
             if event.message_scene:
-                ref_idx = next(
-                    (
-                        ext.partition("=")[-1]
-                        for ext in event.message_scene.ext
-                        if ext.startswith("msg_idx=")
-                    ),
-                    "",
-                )
+                ref_idx = _extract_qq_msg_ref_id(event.message_scene)
             return await self.send_to_c2c(
                 openid=event.author.id,
                 message=message,
@@ -617,14 +670,7 @@ class Bot(BaseBot):
             event._reply_seq += 1
             ref_idx = None
             if event.message_scene:
-                ref_idx = next(
-                    (
-                        ext.partition("=")[-1]
-                        for ext in event.message_scene.ext
-                        if ext.startswith("msg_idx=")
-                    ),
-                    "",
-                )
+                ref_idx = _extract_qq_msg_ref_id(event.message_scene)
             return await self.send_to_group(
                 group_openid=event.group_openid,
                 message=message,
@@ -2029,6 +2075,9 @@ class Bot(BaseBot):
         embed: MessageEmbed | None = None,
         image: None = None,
         message_reference: MessageReference | None = None,
+        stream: MessageStream | None = None,
+        prompt_keyboard: MessagePromptKeyboard | None = None,
+        action_button: MessageActionButton | None = None,
         event_id: str | None = None,
         msg_id: str | None = None,
         msg_seq: int | None = None,
@@ -2073,6 +2122,21 @@ class Bot(BaseBot):
                     "message_reference": (
                         message_reference.dict(exclude_none=True)
                         if message_reference is not None
+                        else None
+                    ),
+                    "stream": (
+                        stream.dict(exclude_none=True, exclude_unset=True)
+                        if stream is not None
+                        else None
+                    ),
+                    "prompt_keyboard": (
+                        prompt_keyboard.dict(exclude_none=True, exclude_unset=True)
+                        if prompt_keyboard is not None
+                        else None
+                    ),
+                    "action_button": (
+                        action_button.dict(exclude_none=True)
+                        if action_button is not None
                         else None
                     ),
                     "event_id": event_id,

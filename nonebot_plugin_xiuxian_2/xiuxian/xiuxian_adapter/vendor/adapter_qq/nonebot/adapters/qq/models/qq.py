@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
 from urllib.parse import urlparse
 
 from nonebot.compat import field_validator
@@ -8,33 +8,36 @@ from pydantic import BaseModel
 
 class FriendAuthor(BaseModel):
     id: str
-    user_openid: str
+    user_openid: str | None = None
     union_openid: str | None = None
     username: str | None = None
+    avatar: str | None = None
 
 
 class GroupMemberAuthor(BaseModel):
     id: str
-    bot: bool
-    member_openid: str
-    member_role: Literal["member", "admin", "owner"]
+    bot: bool = False
+    member_openid: str = ""
+    member_role: Literal["member", "admin", "owner"] = "member"
     union_openid: str | None = None
     username: str | None = None
+    avatar: str | None = None
 
 
 class GroupMentionUser(BaseModel):
     scope: Literal["single"]
-    bot: bool
+    bot: bool = False
     id: str
-    is_you: bool
-    member_openid: str
-    username: str
+    is_you: bool = False
+    member_openid: str | None = None
+    username: str = ""
+    member_role: str | None = None
 
 
 class GroupMentionEveryone(BaseModel):
     scope: Literal["all"]
     is_you: Literal[True]
-    username: str
+    username: str = ""
 
 
 GroupMention: TypeAlias = GroupMentionUser | GroupMentionEveryone
@@ -60,33 +63,46 @@ class Media(BaseModel):
 
 
 class _QQMessageScene(BaseModel):
-    ext: list[str]
-    source: str
+    ext: list[str] = []
+    source: str | None = None
+
+    @field_validator("ext", mode="before")
+    def ensure_ext_list(cls, v: Any):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class _ReplyAuthor(BaseModel):
-    bot: bool
-    username: str
+    bot: bool = False
+    username: str | None = None
+    id: str | None = None
 
 
 class QQReplyMessage(BaseModel):
-    content: str
+    id: str | None = None
+    content: str = ""
     attachments: list[Attachment] | None = None
-    message_type: int
-    msg_idx: str
+    message_type: int | None = None
+    msg_idx: str | None = None
     author: _ReplyAuthor | None = None
+    timestamp: str | None = None
 
 
 class QQMessage(BaseModel):
     id: str
-    content: str
-    timestamp: str
+    content: str = ""
+    timestamp: str | None = None
     mentions: list[GroupMention] | None = None
     attachments: list[Attachment] | None = None
     message_scene: _QQMessageScene | None = None
     message_type: int | None = None
     msg_idx: str | None = None
     msg_elements: list[QQReplyMessage] | None = None
+    event_id: str | None = None
+    message_reference: dict[str, Any] | None = None
 
 
 class UserQQMessage(QQMessage):
@@ -97,14 +113,27 @@ class GroupQQMessage(QQMessage):
     author: GroupMemberAuthor
 
 
+class PostMessagesExtInfo(BaseModel):
+    ref_idx: str | None = None
+    msg_idx: str | None = None
+    message_reference_id: str | None = None
+    reference_id: str | None = None
+
+
 class PostC2CMessagesReturn(BaseModel):
     id: str | None = None
     timestamp: datetime | None = None
+    msg_id: str | None = None
+    msg_seq: int | None = None
+    ext_info: PostMessagesExtInfo | dict[str, Any] | None = None
 
 
 class PostGroupMessagesReturn(BaseModel):
     id: str | None = None
     timestamp: datetime | None = None
+    msg_id: str | None = None
+    msg_seq: int | None = None
+    ext_info: PostMessagesExtInfo | dict[str, Any] | None = None
 
 
 class PostC2CFilesReturn(BaseModel):
@@ -217,6 +246,7 @@ __all__ = [
     "MessageActionButton",
     "MessagePromptKeyboard",
     "MessageStream",
+    "PostMessagesExtInfo",
     "PostC2CFilesPrepareReturn",
     "PostC2CFilesReturn",
     "PostC2CMessagesReturn",

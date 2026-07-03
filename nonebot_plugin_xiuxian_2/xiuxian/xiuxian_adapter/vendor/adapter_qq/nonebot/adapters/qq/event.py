@@ -392,11 +392,11 @@ class C2CMessageCreateEvent(QQMessageEvent):
 
     @override
     def get_user_id(self) -> str:
-        return self.author.user_openid
+        return self.author.user_openid or self.author.id
 
     @override
     def get_session_id(self) -> str:
-        return f"friend_{self.author.user_openid}"
+        return f"friend_{self.get_user_id()}"
 
     @override
     def get_event_description(self) -> str:
@@ -425,11 +425,11 @@ class GroupMessageCreateEvent(QQMessageEvent):
 
     @override
     def get_user_id(self) -> str:
-        return self.author.member_openid
+        return self.author.member_openid or self.author.id
 
     @override
     def get_session_id(self) -> str:
-        return f"group_{self.group_openid}_{self.author.member_openid}"
+        return f"group_{self.group_openid}_{self.get_user_id()}"
 
     @override
     def get_event_description(self) -> str:

@@ -951,21 +951,48 @@ def api_messages_send():
             send_mode=send_mode,
             media_type=media_type,
             media_input=media_input,
-            quote_message_id=quote_message_id if adapter == "QQ" else "",
+            quote_message_id="" if adapter == "QQ" else quote_message_id,
         )
 
         # =========================================================
         # QQ：主动发送 / 回复式发送
         # =========================================================
         if adapter == "QQ":
+            def build_qq_message_obj(reference_id: str = ""):
+                return build_web_message_segment(
+                    bot,
+                    content=content,
+                    send_mode=send_mode,
+                    media_type=media_type,
+                    media_input=media_input,
+                    quote_message_id=reference_id,
+                )
+
             if active_send:
                 try:
+                    reference_id = ""
+                    if quote_message_id:
+                        ref_candidate = get_specific_reply_candidate_for_qq(
+                            scene=scene,
+                            target_id=target_id,
+                            message_id=quote_message_id,
+                        )
+                        if ref_candidate:
+                            reference_id = str(ref_candidate.get("reference_id") or "")
+                        elif quote_message_id.startswith("REFIDX"):
+                            reference_id = quote_message_id
+                        elif scene in ("channel_group", "channel_private"):
+                            reference_id = quote_message_id
+
+                    qq_message_obj = build_qq_message_obj(reference_id)
+
                     if scene == "group":
                         result = run_async(
                             bot.send_to_group(
                                 group_openid=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_seq=random.randint(1, 900000),
+                                msg_ref_id=reference_id or None,
                             )
                         )
 
@@ -976,8 +1003,9 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_c2c(
                                 openid=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_seq=random.randint(1, 900000),
+                                msg_ref_id=reference_id or None,
                             )
                         )
 
@@ -988,7 +1016,7 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_channel(
                                 channel_id=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                             )
                         )
 
@@ -999,7 +1027,7 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_dms(
                                 guild_id=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                             )
                         )
 
@@ -1013,21 +1041,25 @@ def api_messages_send():
                         })
 
                     message_id = extract_result_message_id(result)
+                    result_reference_id = extract_result_reference_id(result)
 
                     record_web_send_message(
                         bot,
                         scene=scene,
                         message_id=message_id,
+                        reference_id=result_reference_id,
                         source_message_id="",
                         group_id=group_id,
                         user_id=user_id,
                         message=content or f"[{media_type}]",
+                        raw_result=result,
                     )
 
                     return jsonify({
                         "success": True,
                         "message": "QQ 主动发送成功",
                         "message_id": message_id,
+                        "reference_id": result_reference_id,
                     })
 
                 except Exception as e:
@@ -1076,13 +1108,21 @@ def api_messages_send():
                     continue
 
                 try:
+                    source_reference_id = str(candidate.get("reference_id") or "")
+                    if scene in ("group", "private"):
+                        message_reference_id = source_reference_id
+                    else:
+                        message_reference_id = source_reference_id or source_message_id
+                    qq_message_obj = build_qq_message_obj(message_reference_id)
+
                     if scene == "group":
                         result = run_async(
                             bot.send_to_group(
                                 group_openid=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_id=source_message_id,
                                 msg_seq=random.randint(1, 900000),
+                                msg_ref_id=source_reference_id or None,
                             )
                         )
 
@@ -1093,9 +1133,10 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_c2c(
                                 openid=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_id=source_message_id,
                                 msg_seq=random.randint(1, 900000),
+                                msg_ref_id=source_reference_id or None,
                             )
                         )
 
@@ -1106,7 +1147,7 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_channel(
                                 channel_id=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_id=source_message_id,
                             )
                         )
@@ -1118,7 +1159,7 @@ def api_messages_send():
                         result = run_async(
                             bot.send_to_dms(
                                 guild_id=target_id,
-                                message=message_obj,
+                                message=qq_message_obj,
                                 msg_id=source_message_id,
                             )
                         )
@@ -1133,22 +1174,27 @@ def api_messages_send():
                         })
 
                     message_id = extract_result_message_id(result)
+                    result_reference_id = extract_result_reference_id(result)
 
                     record_web_send_message(
                         bot,
                         scene=scene,
                         message_id=message_id,
+                        reference_id=result_reference_id,
                         source_message_id=source_message_id,
                         group_id=group_id,
                         user_id=user_id,
                         message=content or f"[{media_type}]",
+                        raw_result=result,
                     )
 
                     return jsonify({
                         "success": True,
                         "message": "发送成功",
                         "message_id": message_id,
+                        "reference_id": result_reference_id,
                         "source_message_id": source_message_id,
+                        "source_reference_id": source_reference_id,
                     })
 
                 except Exception as e:

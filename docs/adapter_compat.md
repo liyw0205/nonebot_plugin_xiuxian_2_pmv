@@ -31,6 +31,9 @@ from .adapter_compat import (
     get_chat_scene,
     get_user_id,
     get_group_id,
+    get_message_reference_id,
+    build_reference_reply,
+    send_reference_reply,
     patch_bot_inplace,
     patch_event_inplace,
     patch_context,
@@ -58,6 +61,7 @@ async def handle(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - `markdown_template(bot, md_id, msg_body, button_id="")`：Markdown 模板。
 - `markdown_param(key, value)`：模板参数构造器。
 - `markdown_keyboard(bot, content, keyboard)`：QQ Markdown + 自定义键盘。
+- `reference(bot, message_id, ignore_error=True)`：QQ 引用回复段。
 - `upload_image_and_get_url(...)`：QQ 图片上传并返回可用于 Markdown 的 URL。
 
 示例：
@@ -121,6 +125,7 @@ bot, event = patch_context(bot, event)
 - `raw_message` / `plaintext`：纯文本缓存。
 - `sender`：统一的 `CompatSender`，支持属性访问、`dict()`、`model_dump()`。
 - `to_me`：QQ 群消息会结合 at、reply、mention 数据判断是否指向当前 bot。
+- `message_reference_id` / `reference_id`：QQ 普通群与 C2C 会从 `message_scene.ext` 提取可引用的 `REFIDX`。
 
 补丁会设置 `__compat_patched__ = True`，重复调用不会重复处理。
 
@@ -137,10 +142,44 @@ OneBot v11：
 QQ 官方适配器：
 
 - `bot.send(event, message, **kwargs)` 会按事件类型分发到 `send_to_group`、`send_to_c2c`、`send_to_channel`、`send_to_dms`。
+- 普通 QQ 群与 C2C 的 `bot.send(event, message)` 默认使用当前事件的 `REFIDX` 做引用回复；传 `auto_reference=False` 可关闭。
+- 显式引用可传 `reference_id`、`message_reference_id`、`reference_message_id`、`quote_message_id`、`message_reference` 或 `msg_ref_id`。
 - `bot.send_group_msg(group_id=..., message=...)` 映射到 QQ 群主动发送。
 - `bot.send_private_msg(user_id=..., message=...)` 映射到 QQ C2C 主动发送。
 - `bot.delete_msg(...)` 提供统一撤回入口。
 - 内置 `msg_seq` 分配与 `40054005` 去重冲突重试。
+
+## 引用回复
+
+QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`，并在 `patch_bot_inplace()` 后的 `bot.send(event, message)` 中默认引用当前事件。
+
+常用接口：
+
+```python
+from .adapter_compat import (
+    build_reference_reply,
+    get_message_reference_id,
+    send_reference_reply,
+)
+
+ref_id = get_message_reference_id(event)
+msg = build_reference_reply(bot, "已处理", ref_id)
+await bot.send(event=event, message=msg, msg_ref_id=ref_id)
+
+await send_reference_reply(bot, event, "已处理")
+```
+
+主动发送或 Web 面板发送时，应优先使用已记录的 `reference_id`：
+
+```python
+await bot.send_group_msg(
+    group_id=group_openid,
+    message="已处理",
+    reference_id=source_reference_id,
+)
+```
+
+如果消息本身已经带 `MessageSegment.reference(...)`，兼容层不会重复插入引用段；`msg_ref_id` 仍会传给底层适配器，用于把非 `REFIDX` 的引用段修正为官方可用的 `REFIDX`。
 
 ## 模块边界
 
@@ -168,6 +207,7 @@ QQ 官方适配器：
 ```python
 from .adapter_message_records import (
     extract_result_message_id,
+    extract_result_reference_id,
     get_bot_id,
     get_message_db_path,
     increase_recv_reply_used_count,
@@ -182,6 +222,7 @@ from .adapter_message_records import (
 init_message_db()
 get_message_db_path()
 extract_result_message_id(result)
+extract_result_reference_id(result)
 get_bot_id(bot)
 record_web_send_message(...)
 increase_recv_reply_used_count(...)

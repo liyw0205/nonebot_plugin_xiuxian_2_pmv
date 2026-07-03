@@ -183,6 +183,69 @@ def extract_result_message_id(result: Any) -> str:
         return ""
 
 
+def _extract_field_from_any(value: Any, keys: tuple[str, ...]) -> str:
+    if value is None:
+        return ""
+
+    if isinstance(value, dict):
+        for key in keys:
+            item = value.get(key)
+            if item:
+                return str(item)
+        return ""
+
+    for key in keys:
+        try:
+            item = getattr(value, key, None)
+        except Exception:
+            item = None
+        if item:
+            return str(item)
+
+    try:
+        data = value.dict(exclude_none=True)
+        if isinstance(data, dict):
+            return _extract_field_from_any(data, keys)
+    except Exception:
+        pass
+
+    return ""
+
+
+def extract_result_reference_id(result: Any) -> str:
+    try:
+        if result is None:
+            return ""
+
+        keys = ("reference_id", "message_reference_id", "ref_idx", "msg_idx")
+        ext_info = None
+        if isinstance(result, dict):
+            ext_info = result.get("ext_info")
+        else:
+            ext_info = getattr(result, "ext_info", None)
+
+        ref_id = _extract_field_from_any(ext_info, keys)
+        if ref_id:
+            return ref_id
+
+        return _extract_field_from_any(result, keys)
+
+    except Exception:
+        return ""
+
+
+def _extract_event_reference_id(event: BaseEvent) -> str:
+    for attr in ("message_reference_id", "reference_id", "msg_idx"):
+        try:
+            value = getattr(event, attr, None)
+        except Exception:
+            value = None
+        if value:
+            return str(value)
+
+    return ""
+
+
 def _get_author_username_avatar(event: BaseEvent) -> tuple[str, str]:
     username = ""
     avatar = ""
@@ -214,6 +277,7 @@ def record_recv_message(bot: Any, event: BaseEvent):
         bot_id = get_bot_id(bot) if bot is not None else ""
 
         message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "")
+        reference_id = _extract_event_reference_id(event)
         user_id = str(getattr(event, "user_id", "") or get_user_id(event) or "")
         group_id = str(getattr(event, "group_id", "") or get_group_id(event) or "")
 
@@ -251,6 +315,7 @@ def record_recv_message(bot: Any, event: BaseEvent):
             direction="recv",
             scene=scene,
             message_id=message_id,
+            reference_id=reference_id,
             group_id=group_id,
             group_name=group_name,
             user_id=user_id,
@@ -280,6 +345,7 @@ def record_send_message(
     scene: str,
     message: Any,
     message_id: str = "",
+    reference_id: str = "",
     source_message_id: str = "",
     group_id: str = "",
     user_id: str = "",
@@ -294,6 +360,7 @@ def record_send_message(
         adapter = get_adapter_name(bot)
         bot_id = get_bot_id(bot)
         content = extract_text_from_message_obj(message)
+        reference_id = str(reference_id or extract_result_reference_id(raw_result) or "")
 
         _insert_message_record(
             adapter=adapter,
@@ -301,6 +368,7 @@ def record_send_message(
             direction="send",
             scene=scene,
             message_id=str(message_id or ""),
+            reference_id=reference_id,
             source_message_id=str(source_message_id or ""),
             group_id=str(group_id or ""),
             user_id=str(user_id or ""),
@@ -339,6 +407,7 @@ def record_web_send_message(
     scene: str,
     message: Any,
     message_id: str = "",
+    reference_id: str = "",
     source_message_id: str = "",
     group_id: str = "",
     user_id: str = "",
@@ -350,6 +419,7 @@ def record_web_send_message(
         scene=scene,
         message=message,
         message_id=message_id,
+        reference_id=reference_id,
         source_message_id=source_message_id,
         group_id=group_id,
         user_id=user_id,
@@ -379,6 +449,7 @@ def increase_recv_reply_used_count(
 
 __all__ = [
     "extract_result_message_id",
+    "extract_result_reference_id",
     "extract_text_from_message_obj",
     "get_adapter_name",
     "get_bot_id",

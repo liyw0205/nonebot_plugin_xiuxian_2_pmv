@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import random
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterator, Literal, Optional, Union
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from nonebot.adapters import Bot as BaseBot
 from nonebot.adapters import Event as BaseEvent
@@ -18,6 +19,7 @@ from nonebot.permission import Permission
 try:
     from .adapter_message_records import (
         extract_result_message_id as _extract_result_message_id,
+        extract_result_reference_id as _extract_result_reference_id,
         extract_text_from_message_obj as _extract_text_from_message_obj,
         get_bot_id as _get_bot_id,
         get_message_db_path as _get_message_db_path,
@@ -67,6 +69,34 @@ except Exception:
                 or getattr(result, "id", "")
                 or ""
             )
+        except Exception:
+            return ""
+
+    def _extract_result_reference_id(result: Any) -> str:
+        try:
+            if result is None:
+                return ""
+
+            keys = ("reference_id", "message_reference_id", "ref_idx", "msg_idx")
+
+            def pick(value: Any) -> str:
+                if value is None:
+                    return ""
+                if isinstance(value, dict):
+                    for key in keys:
+                        if value.get(key):
+                            return str(value[key])
+                    return ""
+                for key in keys:
+                    item = getattr(value, key, None)
+                    if item:
+                        return str(item)
+                return ""
+
+            if isinstance(result, dict):
+                return pick(result.get("ext_info")) or pick(result)
+
+            return pick(getattr(result, "ext_info", None)) or pick(result)
         except Exception:
             return ""
 
@@ -465,18 +495,76 @@ def _ensure_message_common_fields(
         setattr(event, "anonymous", None)
 
 
+_QQ_MSG_IDX_RE = re.compile(r"(?:^|[?&])msg_idx=([^&\s]+)")
+_QQ_REFIDX_RE = re.compile(r"(REFIDX[0-9A-Za-z_\-:.]+)")
+
+
+def _extract_qq_ref_id_from_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+
+    candidates: list[str] = []
+    if isinstance(value, str):
+        candidates.append(value)
+    elif isinstance(value, dict):
+        ext = value.get("ext")
+        if isinstance(ext, str):
+            candidates.append(ext)
+        elif isinstance(ext, list):
+            candidates.extend(str(item) for item in ext)
+        for key in ("msg_idx", "message_reference_id", "reference_id"):
+            if value.get(key):
+                candidates.append(str(value[key]))
+    else:
+        ext = getattr(value, "ext", None)
+        if isinstance(ext, str):
+            candidates.append(ext)
+        elif ext:
+            try:
+                candidates.extend(str(item) for item in ext)
+            except Exception:
+                pass
+        for attr in ("msg_idx", "message_reference_id", "reference_id"):
+            try:
+                item = getattr(value, attr, None)
+            except Exception:
+                item = None
+            if item:
+                candidates.append(str(item))
+
+    for item in candidates:
+        text = str(item or "").strip()
+        if not text:
+            continue
+
+        match = _QQ_MSG_IDX_RE.search(text)
+        if match:
+            ref_id = unquote(match.group(1)).strip()
+            if ref_id:
+                return ref_id
+
+        match = _QQ_REFIDX_RE.search(text)
+        if match:
+            return match.group(1)
+
+    return None
+
+
 def _get_qq_message_ref_id(event: BaseEvent) -> Optional[str]:
     try:
         message_scene = getattr(event, "message_scene", None)
-        for ext in getattr(message_scene, "ext", None) or []:
-            ext_text = str(ext)
-            if ext_text.startswith("msg_idx="):
-                value = ext_text.partition("=")[-1]
-                return value or None
+        ref_id = _extract_qq_ref_id_from_value(message_scene)
+        if ref_id:
+            return ref_id
     except Exception:
         pass
 
-    return _to_nonempty_str(getattr(event, "msg_idx", None))
+    for attr in ("msg_idx", "message_reference_id", "reference_id"):
+        ref_id = _extract_qq_ref_id_from_value(getattr(event, attr, None))
+        if ref_id:
+            return ref_id
+
+    return None
 
 
 # =========================
@@ -1497,6 +1585,248 @@ def _build_compat_sender(
     )
 
 
+def _patch_qq_reference_fields(event: BaseEvent) -> None:
+    ref_id = _get_qq_message_ref_id(event)
+    if not ref_id:
+        return
+
+    for attr in ("message_reference_id", "reference_id"):
+        try:
+            setattr(event, attr, ref_id)
+        except Exception:
+            pass
+
+
+def _message_reference_arg_to_id(value: Any) -> Optional[str]:
+    if not value:
+        return None
+
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, dict):
+        return _to_nonempty_str(value.get("message_id"))
+
+    return _to_nonempty_str(getattr(value, "message_id", None))
+
+
+def get_message_reference_id(source: Any) -> Optional[str]:
+    """提取可用于引用回复的消息引用 ID。QQ 官方群/C2C 优先返回 REFIDX。"""
+    if source is None:
+        return None
+
+    try:
+        ref_id = _get_qq_message_ref_id(source)
+        if ref_id:
+            return ref_id
+    except Exception:
+        pass
+
+    if isinstance(source, dict):
+        for key in (
+            "message_reference_id",
+            "reference_id",
+            "reference_message_id",
+            "quote_message_id",
+            "msg_idx",
+        ):
+            ref_id = _to_nonempty_str(source.get(key))
+            if ref_id:
+                return _extract_qq_ref_id_from_value(ref_id) or ref_id
+        ref_id = _message_reference_arg_to_id(source.get("message_reference"))
+        if ref_id:
+            return _extract_qq_ref_id_from_value(ref_id) or ref_id
+
+    for attr in (
+        "message_reference_id",
+        "reference_id",
+        "reference_message_id",
+        "quote_message_id",
+        "msg_idx",
+    ):
+        ref_id = _to_nonempty_str(getattr(source, attr, None))
+        if ref_id:
+            return _extract_qq_ref_id_from_value(ref_id) or ref_id
+
+    ref_id = _message_reference_arg_to_id(getattr(source, "message_reference", None))
+    if ref_id:
+        return _extract_qq_ref_id_from_value(ref_id) or ref_id
+
+    for seg in _iter_message_segments(source):
+        if isinstance(seg, dict):
+            seg_type = str(seg.get("type", "") or "")
+            data = seg.get("data", {}) or {}
+        else:
+            seg_type = str(getattr(seg, "type", "") or "")
+            data = getattr(seg, "data", {}) or {}
+
+        if seg_type != "reference":
+            continue
+
+        if isinstance(data, dict):
+            ref_id = _message_reference_arg_to_id(data.get("reference"))
+        else:
+            ref_id = _message_reference_arg_to_id(getattr(data, "reference", None))
+
+        if ref_id:
+            return _extract_qq_ref_id_from_value(ref_id) or ref_id
+
+    return None
+
+
+def _pop_explicit_reference_id(kwargs: dict[str, Any]) -> Optional[str]:
+    for key in ("message_reference_id", "reference_id", "reference_message_id", "quote_message_id"):
+        ref_id = _to_nonempty_str(kwargs.pop(key, None))
+        if ref_id:
+            return ref_id
+
+    return _message_reference_arg_to_id(kwargs.pop("message_reference", None))
+
+
+def _pop_auto_reference(kwargs: dict[str, Any], default: bool = True) -> bool:
+    value = default
+    for key in ("auto_reference", "reference_reply", "quote_reply"):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            break
+
+    if isinstance(value, bool):
+        return value
+
+    text = str(value).strip().lower()
+    if text in {"0", "false", "no", "off", "none"}:
+        return False
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    return bool(value)
+
+
+def _pop_reference_ignore_error(kwargs: dict[str, Any]) -> bool:
+    value = True
+    for key in ("ignore_get_message_error", "reference_ignore_error"):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            break
+
+    if isinstance(value, bool):
+        return value
+
+    text = str(value).strip().lower()
+    if text in {"0", "false", "no", "off"}:
+        return False
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    return bool(value)
+
+
+def _message_has_reference_segment(message: Any) -> bool:
+    try:
+        for seg in _iter_message_segments(message):
+            if isinstance(seg, dict):
+                seg_type = str(seg.get("type", "") or "")
+            else:
+                seg_type = str(getattr(seg, "type", "") or "")
+            if seg_type == "reference":
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _prepend_qq_reference(
+    bot: BaseBot,
+    message: Any,
+    ref_id: Optional[str],
+    *,
+    ignore_error: bool = True,
+) -> Any:
+    if not ref_id:
+        return message
+
+    if _message_has_reference_segment(message):
+        return message
+
+    try:
+        ref = CompatMessageSegment.reference(bot, ref_id, ignore_error=ignore_error)
+        if ref:
+            return ref + message
+    except Exception:
+        pass
+
+    return message
+
+
+def _prepare_qq_reference_message(
+    bot: BaseBot,
+    message: Any,
+    kwargs: dict[str, Any],
+    *,
+    event: Optional[BaseEvent] = None,
+    default_auto: bool = True,
+) -> tuple[Any, Optional[str]]:
+    msg_ref_id = _to_nonempty_str(kwargs.pop("msg_ref_id", None))
+    explicit_ref_id = _pop_explicit_reference_id(kwargs)
+    auto_reference = _pop_auto_reference(kwargs, default=default_auto)
+    ignore_error = _pop_reference_ignore_error(kwargs)
+
+    ref_id = explicit_ref_id or msg_ref_id
+    if ref_id is None and auto_reference and event is not None:
+        ref_id = get_message_reference_id(event)
+
+    if ref_id:
+        msg_ref_id = msg_ref_id or ref_id
+        message = _prepend_qq_reference(
+            bot,
+            message,
+            ref_id,
+            ignore_error=ignore_error,
+        )
+
+    return message, msg_ref_id
+
+
+def build_reference_reply(
+    bot: BaseBot,
+    message: Any,
+    reference_id: Optional[str] = None,
+    *,
+    event: Optional[BaseEvent] = None,
+    ignore_error: bool = True,
+) -> Any:
+    """为消息追加引用回复段；没有可用引用 ID 时原样返回 message。"""
+    ref_id = _to_nonempty_str(reference_id)
+    if ref_id is None and event is not None:
+        ref_id = get_message_reference_id(event)
+
+    if CompatMessageSegment._is_qq_bot(bot):
+        return _prepend_qq_reference(
+            bot,
+            message,
+            ref_id,
+            ignore_error=ignore_error,
+        )
+
+    return message
+
+
+async def send_reference_reply(
+    bot: BaseBot,
+    event: BaseEvent,
+    message: Any,
+    reference_id: Optional[str] = None,
+    **kwargs: Any,
+) -> Any:
+    """通过兼容层发送引用回复。QQ 官方群/C2C 会使用 REFIDX。"""
+    ref_id = _to_nonempty_str(reference_id) or get_message_reference_id(event)
+    if ref_id and CompatMessageSegment._is_qq_bot(bot):
+        kwargs.setdefault("reference_id", ref_id)
+        kwargs.setdefault("msg_ref_id", ref_id)
+
+    patched_bot = patch_bot_inplace(bot)
+    return await patched_bot.send(event=event, message=message, **kwargs)
+
+
 def patch_event_inplace(
     event: BaseEvent,
     bot: Optional[BaseBot] = None,
@@ -1544,6 +1874,7 @@ def patch_event_inplace(
                 role="member",
             ),
         )
+        _patch_qq_reference_fields(event)
 
     elif HAS_QQ and isinstance(event, QQChannelPrivateMessageEvent):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
@@ -1612,6 +1943,7 @@ def patch_event_inplace(
                 role="member",
             ),
         )
+        _patch_qq_reference_fields(event)
 
     elif HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
         raw = _get_event_plaintext(event, getattr(event, "content", "") or "")
@@ -1891,7 +2223,13 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             if HAS_QQ and isinstance(event, _QQ_GROUP_MESSAGE_EVENT_TYPES):
                 group_openid = str(get_group_id(event) or getattr(event, "group_openid", "") or "")
                 event_id = kwargs.pop("event_id", None)
-                msg_ref_id = _get_qq_message_ref_id(event)
+                message, msg_ref_id = _prepare_qq_reference_message(
+                    bot,
+                    message,
+                    kwargs,
+                    event=event,
+                    default_auto=True,
+                )
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -1958,7 +2296,13 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     or user_id
                 )
                 event_id = kwargs.pop("event_id", None)
-                msg_ref_id = _get_qq_message_ref_id(event)
+                message, msg_ref_id = _prepare_qq_reference_message(
+                    bot,
+                    message,
+                    kwargs,
+                    event=event,
+                    default_auto=True,
+                )
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -2015,6 +2359,13 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             if HAS_QQ and isinstance(event, QQAtChannelMessageEvent):
                 channel_id = str(event.channel_id)
                 event_id = kwargs.pop("event_id", None)
+                message, _ = _prepare_qq_reference_message(
+                    bot,
+                    message,
+                    kwargs,
+                    event=event,
+                    default_auto=False,
+                )
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -2071,6 +2422,13 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                 uid = str(getattr(getattr(event, "author", None), "id", "") or "")
                 seq_key = f"{guild_id}:{uid}" if uid else guild_id
                 event_id = kwargs.pop("event_id", None)
+                message, _ = _prepare_qq_reference_message(
+                    bot,
+                    message,
+                    kwargs,
+                    event=event,
+                    default_auto=False,
+                )
 
                 async def _do_send(msg_seq: int):
                     try:
@@ -2159,12 +2517,19 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
         async def send_private_msg(*, user_id, message, **kwargs):
             revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
             openid = str(user_id)
+            message, msg_ref_id = _prepare_qq_reference_message(
+                bot,
+                message,
+                kwargs,
+                default_auto=False,
+            )
 
             async def _do_send(msg_seq: int):
                 return await bot.send_to_c2c(
                     openid=openid,
                     message=message,
                     msg_seq=int(msg_seq),
+                    msg_ref_id=msg_ref_id,
                     **kwargs,
                 )
 
@@ -2204,6 +2569,12 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
             group_openid = str(group_id)
             msg_id = kwargs.pop("msg_id", None)
             event_id = kwargs.pop("event_id", None)
+            message, msg_ref_id = _prepare_qq_reference_message(
+                bot,
+                message,
+                kwargs,
+                default_auto=False,
+            )
 
             async def _do_send(msg_seq: int):
                 return await bot.send_to_group(
@@ -2212,6 +2583,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     msg_id=msg_id,
                     msg_seq=int(msg_seq),
                     event_id=event_id,
+                    msg_ref_id=msg_ref_id,
                 )
 
             if "msg_seq" in kwargs:
@@ -2307,6 +2679,11 @@ def extract_result_message_id(result: Any) -> str:
     return _extract_result_message_id(result)
 
 
+def extract_result_reference_id(result: Any) -> str:
+    """从 QQ 官方适配器发送结果中提取可引用的 reference_id/ref_idx"""
+    return _extract_result_reference_id(result)
+
+
 def get_bot_id(bot: Any) -> str:
     """安全获取 bot_id/self_id"""
     return _get_bot_id(bot)
@@ -2318,6 +2695,7 @@ def record_web_send_message(
     scene: str,
     message: Any,
     message_id: str = "",
+    reference_id: str = "",
     source_message_id: str = "",
     group_id: str = "",
     user_id: str = "",
@@ -2335,6 +2713,7 @@ def record_web_send_message(
         scene=scene,
         message=message,
         message_id=message_id,
+        reference_id=reference_id,
         source_message_id=source_message_id,
         group_id=group_id,
         user_id=user_id,
@@ -2379,6 +2758,9 @@ __all__ = [
     "get_at_user_ids",
     "has_at_user",
     "get_group_id",
+    "get_message_reference_id",
+    "build_reference_reply",
+    "send_reference_reply",
     "patch_bot_inplace",
     "patch_event_inplace",
     "patch_context",
@@ -2387,6 +2769,7 @@ __all__ = [
     "init_message_db",
     "get_message_db_path",
     "extract_result_message_id",
+    "extract_result_reference_id",
     "get_bot_id",
     "record_web_send_message",
     "increase_recv_reply_used_count",

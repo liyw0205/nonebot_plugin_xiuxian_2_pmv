@@ -41,6 +41,7 @@ from ..adapter_compat import MessageSegment
 from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import (
     extract_result_message_id,
+    extract_result_reference_id,
     get_bot_id,
     record_web_send_message,
 )
