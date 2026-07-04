@@ -340,9 +340,9 @@
                 if (token !== pageLoadToken) return;
 
                 document.title = cached.title;
-                main.innerHTML = cached.content;
                 applyBodyClass(cached.bodyClass);
                 setBodyLayoutForUrl(absoluteUrl);
+                main.innerHTML = cached.content;
                 executePageScripts(main, absoluteUrl);
                 updateActiveNav(absoluteUrl);
                 if (pushState && absoluteUrl !== window.location.href) {
