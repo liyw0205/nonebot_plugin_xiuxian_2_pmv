@@ -215,18 +215,22 @@ def build_song_list_page_text(
     lines = [f"【搜索结果】{platform_name}（第 {page}/{total_pages} 页）", ""]
     for i, song in enumerate(page_songs, start=1):
         global_index = start + i
-        index_text = (
-            build_md_command_link(str(global_index), f"选歌 {global_index}")
-            if markdown
-            else str(global_index)
+        item_text = (
+            f"{global_index}. "
+            f"{song.get('name', '未知')} - {song.get('artists', '未知')}"
         )
-        lines.append(f"{index_text}. {song.get('name', '未知')} - {song.get('artists', '未知')}")
+        line_text = (
+            build_md_command_link(item_text, f"选歌 {global_index}")
+            if markdown
+            else item_text
+        )
+        lines.append(line_text)
 
     lines.append("")
     if markdown:
         prev_page = build_md_command_link("点歌上一页", "点歌上一页")
         next_page = build_md_command_link("点歌下一页", "点歌下一页")
-        lines.append("> 点击蓝色序号或发送 `选歌 序号` 进行选择。")
+        lines.append("> 点击蓝色歌曲条目或发送 `选歌 序号` 进行选择。")
         lines.append(f"翻页：{prev_page} / {next_page} / `点歌翻页 第N页`")
     else:
         lines.append("操作：发送【选歌 序号】进行选择。")
