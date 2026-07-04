@@ -13,9 +13,11 @@ def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int
         raise ValueError(f"{key} 必须是 {minimum} 到 {maximum} 的整数")
 
 
-def _prepare_message_rows(rows: list[dict]) -> list[dict]:
+def _prepare_message_rows(rows: list[dict], conn=None) -> list[dict]:
     rows = fill_private_username_from_group(rows)
     rows = fill_message_display_profiles(rows)
+
+    mention_ids = set()
 
     for r in rows:
         raw_content = r.get("content") or ""
@@ -24,6 +26,7 @@ def _prepare_message_rows(rows: list[dict]) -> list[dict]:
 
         r["display_content"] = display_content
         r["content_format"] = content_format
+        mention_ids.update(extract_mention_user_ids_from_text(display_content))
         r["can_revoke"] = bool(
             r.get("direction") == "send"
             and r.get("message_id")
@@ -61,6 +64,15 @@ def _prepare_message_rows(rows: list[dict]) -> list[dict]:
         r["group_avatar_text"] = group_title[:1] if group_title else "群"
         r["user_avatar_text"] = user_title[:1] if user_title else "人"
 
+    mention_name_map = get_latest_human_names_by_user_ids(conn, mention_ids)
+    for r in rows:
+        ids = extract_mention_user_ids_from_text(r.get("display_content") or "")
+        r["mention_names"] = {
+            user_id: mention_name_map[user_id]
+            for user_id in ids
+            if mention_name_map.get(user_id)
+        }
+
     return rows
 
 
@@ -85,7 +97,7 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
             "nickname": r.get("nickname"),
             "user_id": r.get("user_id"),
         }
-        r["last_preview"] = build_session_preview(preview_source)
+        r["last_preview"] = build_session_preview(preview_source, conn=conn)
 
         title = r.get("title") or r.get("target_id") or ""
         r["avatar_text"] = str(title)[:1] if title else "?"
@@ -243,7 +255,7 @@ def api_messages_list():
         elif include_total:
             has_more = offset + len(fetched_rows) < int(total or 0)
 
-        rows = _prepare_message_rows(fetched_rows)
+        rows = _prepare_message_rows(fetched_rows, conn=conn)
 
         return jsonify({
             "success": True,
@@ -639,7 +651,7 @@ def api_messages_list_since():
             LIMIT 200
         """, params)
 
-        rows = _prepare_message_rows([dict(r) for r in cur.fetchall()])
+        rows = _prepare_message_rows([dict(r) for r in cur.fetchall()], conn=conn)
 
         return jsonify({
             "success": True,
@@ -728,7 +740,7 @@ def api_messages_list_before():
 
         fetched_rows = [dict(r) for r in cur.fetchall()]
         has_more = len(fetched_rows) > page_size
-        rows = _prepare_message_rows(fetched_rows[:page_size])
+        rows = _prepare_message_rows(fetched_rows[:page_size], conn=conn)
 
         return jsonify({
             "success": True,
@@ -1751,6 +1763,50 @@ def normalize_message_display_content(text: str) -> str:
     return display
 
 
+def extract_mention_user_ids_from_text(text: str) -> set[str]:
+    return {
+        m.group("user_id").strip()
+        for m in re.finditer(r"<@(?P<user_id>[^>\s]+)>", str(text or ""))
+        if m.group("user_id").strip()
+    }
+
+
+def get_latest_human_names_by_user_ids(conn, user_ids) -> dict[str, str]:
+    ids = [str(user_id or "").strip() for user_id in (user_ids or [])]
+    ids = sorted({user_id for user_id in ids if user_id})
+    if not ids:
+        return {}
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_message_db_connection()
+
+    try:
+        result = {}
+        for user_id in ids:
+            name = get_latest_human_name_by_user_id(conn, user_id)
+            if name:
+                result[user_id] = name
+        return result
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
+
+
+def replace_mention_tokens_for_preview(text: str, conn=None) -> str:
+    user_ids = extract_mention_user_ids_from_text(text)
+    if not user_ids:
+        return str(text or "")
+
+    name_map = get_latest_human_names_by_user_ids(conn, user_ids)
+
+    def replace_mention(match):
+        user_id = match.group("user_id").strip()
+        return "@" + (name_map.get(user_id) or user_id)
+
+    return re.sub(r"<@(?P<user_id>[^>\s]+)>", replace_mention, str(text or ""))
+
+
 def attachment_tokens_to_preview(text: str) -> str:
     return re.sub(
         r"<attachment\[([^\]]+)\]:https?://[^>]+>",
@@ -2309,11 +2365,12 @@ def get_latest_human_name_by_user_id(conn, user_id: str) -> str:
     return ""
 
 
-def build_session_preview(row: dict) -> str:
+def build_session_preview(row: dict, conn=None) -> str:
     raw = row.get("content") or ""
     display_content, _ = extract_markdown_content_from_repr(raw)
 
     text = normalize_message_display_content(display_content)
+    text = replace_mention_tokens_for_preview(text, conn=conn)
     text = attachment_tokens_to_preview(text).replace("\r", " ").replace("\n", " ").strip()
     if not text:
         text = "[空消息]"

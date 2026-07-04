@@ -777,6 +777,13 @@
     flex: 0 0 100%;
 }
 
+.msg-avatar.mentionable-avatar {
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
 .msg-main {
     max-width: min(72%, 760px);
 }
@@ -897,6 +904,18 @@
     background: rgba(0,0,0,.12);
     padding: 1px 4px;
     border-radius: 4px;
+}
+
+.msg-mention {
+    display: inline-flex;
+    max-width: 100%;
+    vertical-align: baseline;
+    border-radius: 999px;
+    padding: 0 6px;
+    background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+    color: var(--accent-color);
+    font-weight: 700;
+    overflow-wrap: anywhere;
 }
 
 .msg-raw {
@@ -2812,6 +2831,9 @@ let messagePressTimer = null;
 let messagePressTarget = null;
 let messagePressStart = null;
 let messageActionTarget = null;
+let avatarPressTimer = null;
+let avatarPressTarget = null;
+let avatarPressStart = null;
 
 let lastRenderedMessageKeys = [];
 let lastRenderedSessionKeys = [];
@@ -2886,6 +2908,51 @@ function isHttpUrl(url) {
 
 function renderAvatarImage(url) {
     return `<img class="avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy">`;
+}
+
+function getMentionName(userId, mentionMap = {}) {
+    const key = String(userId || '');
+    const value = mentionMap && Object.prototype.hasOwnProperty.call(mentionMap, key)
+        ? String(mentionMap[key] || '').trim()
+        : '';
+    return value || key;
+}
+
+function renderMentionChip(userId, mentionMap = {}) {
+    userId = String(userId || '').trim();
+    if (!userId) return '';
+
+    const name = getMentionName(userId, mentionMap);
+    return `<span class="msg-mention" title="${escapeHtml(`<@${userId}>`)}">@${escapeHtml(name)}</span>`;
+}
+
+function renderTextWithMentions(text, mentionMap = {}) {
+    text = String(text || '');
+    const re = /<@([^>\s]+)>/g;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = re.exec(text)) !== null) {
+        html += escapeHtml(text.slice(lastIndex, match.index));
+        html += renderMentionChip(match[1], mentionMap) || escapeHtml(match[0]);
+        lastIndex = re.lastIndex;
+    }
+
+    html += escapeHtml(text.slice(lastIndex));
+    return html;
+}
+
+function replaceMentionsForMarkdown(text, mentionMap = {}) {
+    text = String(text || '');
+    const fenceRe = /(```[\s\S]*?```|~~~[\s\S]*?~~~)/g;
+
+    return text.split(fenceRe).map((part, index) => {
+        if (index % 2 === 1) return part;
+        return part.replace(/<@([^>\s]+)>/g, (full, userId) => {
+            return renderMentionChip(userId, mentionMap) || full;
+        });
+    }).join('');
 }
 
 function setChatAvatar(text, avatar) {
@@ -3295,10 +3362,10 @@ function buildSessionPreview(s) {
     return raw;
 }
 
-function renderMarkdown(text) {
+function renderMarkdown(text, mentionMap = {}) {
     try {
         if (!window.marked) {
-            return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+            return `<div class="msg-raw">${renderTextWithMentions(text, mentionMap)}</div>`;
         }
 
         const renderer = new marked.Renderer();
@@ -3325,12 +3392,13 @@ function renderMarkdown(text) {
             `;
         };
 
-        const raw = marked.parse(String(text || ''), { renderer });
+        const source = replaceMentionsForMarkdown(text, mentionMap);
+        const raw = marked.parse(source, { renderer });
         const clean = window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
 
         return `<div class="msg-md">${clean}</div>`;
     } catch (e) {
-        return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+        return `<div class="msg-raw">${renderTextWithMentions(text, mentionMap)}</div>`;
     }
 }
 
@@ -3613,7 +3681,7 @@ function renderAttachmentHtml(type, url) {
     `;
 }
 
-function renderPlainWithAttachments(text) {
+function renderPlainWithAttachments(text, mentionMap = {}) {
     text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
 
     const re = /<attachment\[([^\]]+)\]:(https?:\/\/[^>]+)>/g;
@@ -3632,9 +3700,9 @@ function renderPlainWithAttachments(text) {
          */
         if (before) {
             if (looksLikeMarkdown(before)) {
-                html += renderMarkdown(before);
+                html += renderMarkdown(before, mentionMap);
             } else {
-                html += `<div class="msg-raw">${escapeHtml(before)}</div>`;
+                html += `<div class="msg-raw">${renderTextWithMentions(before, mentionMap)}</div>`;
             }
         }
 
@@ -3646,43 +3714,43 @@ function renderPlainWithAttachments(text) {
     const rest = text.slice(lastIndex);
     if (rest) {
         if (looksLikeMarkdown(rest)) {
-            html += renderMarkdown(rest);
+            html += renderMarkdown(rest, mentionMap);
         } else {
-            html += `<div class="msg-raw">${escapeHtml(rest)}</div>`;
+            html += `<div class="msg-raw">${renderTextWithMentions(rest, mentionMap)}</div>`;
         }
     }
 
     return `<div class="msg-attachment-wrap">${html}</div>`;
 }
 
-function renderMessageContent(text) {
+function renderMessageContent(text, mentionMap = {}) {
     text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
 
     /**
      * 只要包含附件标记，就统一走附件渲染。
      */
     if (/<attachment\[[^\]]+\]:https?:\/\/[^>]+>/.test(text)) {
-        return renderPlainWithAttachments(text);
+        return renderPlainWithAttachments(text, mentionMap);
     }
 
     /**
      * 兼容 Attachment(...) 还没被正常转成 attachment token 的情况。
      */
     if (/Attachment\(type=['"][^'"]+['"],\s*data=\{[\s\S]*?['"]url['"]\s*:\s*['"]https?:\/\/[^'"]+['"][\s\S]*?\}\)/.test(text)) {
-        return renderPlainWithAttachments(text);
+        return renderPlainWithAttachments(text, mentionMap);
     }
 
     /**
      * 原有 Markdown 正常渲染。
      */
     if (looksLikeMarkdown(text)) {
-        return renderMarkdown(text);
+        return renderMarkdown(text, mentionMap);
     }
 
     /**
      * 普通文本安全显示。
      */
-    return `<div class="msg-raw">${escapeHtml(text)}</div>`;
+    return `<div class="msg-raw">${renderTextWithMentions(text, mentionMap)}</div>`;
 }
 
 function hasRenderableAttachment(text) {
@@ -3707,16 +3775,30 @@ function rerenderCurrentMessagesAfterAttachmentPatch() {
 function renderAvatar(row, isSend = false) {
     const avatar = row.avatar || '';
     const name = row.username || row.nickname || row.user_id || (isSend ? 'Bot' : '人');
+    const mentionUserId = !isSend ? String(row.user_id || '').trim() : '';
+    const mentionTokenTitle = escapeHtml(`<@${mentionUserId}>`);
+    const mentionAttrs = mentionUserId
+        ? ` data-user-id="${escapeHtml(mentionUserId)}"
+             data-name="${escapeHtml(name)}"
+             class="msg-avatar mentionable-avatar"
+             title="长按添加 ${mentionTokenTitle}"
+             oncontextmenu="insertMentionFromAvatar(event, this); return false;"
+             onpointerdown="startAvatarMentionPress(event, this)"
+             onpointermove="moveAvatarMentionPress(event)"
+             onpointerup="cancelAvatarMentionPress()"
+             onpointercancel="cancelAvatarMentionPress()"
+             onpointerleave="cancelAvatarMentionPress()"`
+        : ` class="msg-avatar"`;
 
     if (avatar && isHttpUrl(avatar)) {
-        return `<div class="msg-avatar">${renderAvatarImage(avatar)}</div>`;
+        return `<div${mentionAttrs}>${renderAvatarImage(avatar)}</div>`;
     }
 
     if (isSend) {
-        return `<div class="msg-avatar" style="background:var(--success-color);">${escapeHtml(getInitial(name, '机'))}</div>`;
+        return `<div${mentionAttrs} style="background:var(--success-color);">${escapeHtml(getInitial(name, '机'))}</div>`;
     }
 
-    return `<div class="msg-avatar">${escapeHtml(getInitial(name, '人'))}</div>`;
+    return `<div${mentionAttrs}>${escapeHtml(getInitial(name, '人'))}</div>`;
 }
 
 function renderMessageRow(row, idx = 0) {
@@ -3725,6 +3807,7 @@ function renderMessageRow(row, idx = 0) {
         ? (row.username || row.nickname || 'Bot')
         : (row.username || row.nickname || row.user_id || '未知用户');
     const content = row.display_content || row.content || row.raw_message || '';
+    const mentionMap = row.mention_names || {};
     const copyText = buildMessageCopyText(content);
     const previewText = copyText || String(content || '').slice(0, 60);
     const messageId = row.message_id || '';
@@ -3740,8 +3823,8 @@ function renderMessageRow(row, idx = 0) {
     const createdDate = (row.created_at || '').slice(0, 10);
 
     const contentHtml = row.content_format === 'markdown' && !hasRenderableAttachment(content)
-        ? renderMarkdown(content)
-        : renderMessageContent(content);
+        ? renderMarkdown(content, mentionMap)
+        : renderMessageContent(content, mentionMap);
 
     const rowClasses = [
         'msg-row',
@@ -4526,6 +4609,87 @@ function onMessageListScroll() {
         clearTimeout(historyScrollTimer);
     }
     historyScrollTimer = setTimeout(maybePrefetchHistoryOnScroll, 80);
+}
+
+function insertTextAtCursor(input, text) {
+    if (!input) return;
+
+    const value = input.value || '';
+    const start = Number.isInteger(input.selectionStart) ? input.selectionStart : value.length;
+    const end = Number.isInteger(input.selectionEnd) ? input.selectionEnd : start;
+
+    input.value = value.slice(0, start) + text + value.slice(end);
+    const nextPos = start + text.length;
+    input.selectionStart = nextPos;
+    input.selectionEnd = nextPos;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function addMentionToInput(userId) {
+    userId = String(userId || '').trim();
+    if (!userId) return;
+
+    if (mdPreviewing) toggleMarkdownPreview(true);
+    if (!composerExpanded) expandComposer();
+
+    const token = `<@${userId}>`;
+    setTimeout(() => {
+        const input = document.getElementById('messageInput');
+        insertTextAtCursor(input, token);
+        input?.focus();
+        showMessageToast(`已添加 ${token}`);
+    }, 0);
+}
+
+function startAvatarMentionPress(event, el) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    cancelAvatarMentionPress();
+    avatarPressTarget = el;
+    avatarPressStart = {
+        x: event.clientX,
+        y: event.clientY
+    };
+
+    avatarPressTimer = setTimeout(() => {
+        insertMentionFromAvatar(event, el);
+        avatarPressTimer = null;
+    }, 520);
+}
+
+function moveAvatarMentionPress(event) {
+    event.stopPropagation();
+
+    if (!avatarPressTimer || !avatarPressStart) return;
+
+    const dx = Math.abs(event.clientX - avatarPressStart.x);
+    const dy = Math.abs(event.clientY - avatarPressStart.y);
+
+    if (dx > 12 || dy > 12) {
+        cancelAvatarMentionPress();
+    }
+}
+
+function cancelAvatarMentionPress() {
+    if (avatarPressTimer) {
+        clearTimeout(avatarPressTimer);
+        avatarPressTimer = null;
+    }
+    avatarPressTarget = null;
+    avatarPressStart = null;
+}
+
+function insertMentionFromAvatar(event, el) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    const target = el || avatarPressTarget;
+    const userId = target?.dataset?.userId || '';
+    cancelAvatarMentionPress();
+    addMentionToInput(userId);
 }
 
 function startMessagePress(event, el) {
