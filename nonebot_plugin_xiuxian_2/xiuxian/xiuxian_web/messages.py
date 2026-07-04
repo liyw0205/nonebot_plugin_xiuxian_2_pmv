@@ -769,6 +769,7 @@ def api_messages_send():
         quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
         active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
+        reply_from_quote_message_id = False
         if (
             quote_message_id
             and not quote_message_id.startswith("REFIDX")
@@ -776,9 +777,16 @@ def api_messages_send():
             and not quote_reference_id
         ):
             reply_message_id = quote_message_id
+            reply_from_quote_message_id = True
 
         if send_mode not in ("plain", "markdown"):
             send_mode = "plain"
+
+        if send_mode == "markdown":
+            quote_message_id = ""
+            quote_reference_id = ""
+            if reply_from_quote_message_id:
+                reply_message_id = ""
 
         if media_type and media_type not in ALLOWED_MEDIA_TYPES:
             return jsonify({"success": False, "error": "无效 media_type"})

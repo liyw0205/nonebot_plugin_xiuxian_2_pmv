@@ -167,12 +167,7 @@ def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
 
     # 原生 Markdown：只发文本 Markdown，不混媒体
     if send_mode == "markdown":
-        msg = MessageSegment.markdown(bot, content or " ")
-        if quote_message_id and is_qq_bot_for_web_message(bot):
-            ref = MessageSegment.reference(bot, quote_message_id)
-            if ref:
-                msg = ref + msg
-        return msg
+        return MessageSegment.markdown(bot, content or " ")
 
     msg = None
 

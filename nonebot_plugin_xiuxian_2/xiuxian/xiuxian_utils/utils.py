@@ -1001,6 +1001,8 @@ def _markdown_buttons_enabled() -> bool:
     return bool(getattr(XiuConfig(), "markdown_button_status", False))
 
 def _reference_reply_enabled() -> bool:
+    if bool(getattr(XiuConfig(), "markdown_status", False)):
+        return False
     return bool(getattr(XiuConfig(), "reference_reply", False))
 
 def _should_reference_reply(bot, event) -> bool:
