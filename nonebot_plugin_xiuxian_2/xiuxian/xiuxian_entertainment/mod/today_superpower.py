@@ -20,8 +20,8 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
         )
         await today_superpower_cmd.finish()
 
-    if not isinstance(result, dict) or result.get("code") != 200:
-        msg = result.get("msg", "接口异常") if isinstance(result, dict) else "接口异常"
+    if not api_code_success(result):
+        msg = extract_api_message(result)
         await handle_send(
             bot, event,
             f"获取今日超能力失败：{msg}",
@@ -33,8 +33,10 @@ async def today_superpower_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await today_superpower_cmd.finish()
 
     data = result.get("data", {})
-    superpower = data.get("superpower", "未知超能力")
-    disadvantage = data.get("disadvantage", "暂无副作用说明")
+    if not isinstance(data, dict):
+        data = {}
+    superpower = normalize_api_text(data.get("superpower")) or "未知超能力"
+    disadvantage = normalize_api_text(data.get("disadvantage")) or "暂无副作用说明"
     image_url = data.get("image_url")
 
     text_msg = (

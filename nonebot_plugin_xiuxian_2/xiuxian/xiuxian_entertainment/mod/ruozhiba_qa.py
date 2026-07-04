@@ -25,15 +25,25 @@ async def ruozhiba_qa_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     if not isinstance(data, dict):
         data = {}
 
-    instruction = data.get("instruction") or result.get("instruction")
-    output = data.get("output") or result.get("output")
-    msg = result.get("msg", "接口异常")
-    code = result.get("code")
+    instruction = normalize_api_text(data.get("instruction") or result.get("instruction"))
+    output = normalize_api_text(data.get("output") or result.get("output"))
+    msg = extract_api_message(result)
 
-    if str(code) not in {"200", "0"} and not instruction:
+    if not api_code_success(result) and not instruction:
         await handle_send(
             bot, event,
             f"获取弱智吧问答失败：{msg}",
+            md_type="娱乐",
+            k1="重试", v1="弱智吧问答",
+            k2="脑筋急转弯", v2="脑筋急转弯",
+            k3="帮助", v3="娱乐帮助"
+        )
+        await ruozhiba_qa_cmd.finish()
+
+    if not instruction:
+        await handle_send(
+            bot, event,
+            "获取弱智吧问答失败：接口未返回问题",
             md_type="娱乐",
             k1="重试", v1="弱智吧问答",
             k2="脑筋急转弯", v2="脑筋急转弯",

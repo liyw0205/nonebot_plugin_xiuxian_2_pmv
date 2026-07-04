@@ -21,11 +21,10 @@ async def random_duanzi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await random_duanzi_cmd.finish()
 
-    duanzi = result.get("duanzi")
-    msg = result.get("msg", "接口异常")
-    code = result.get("code")
+    duanzi = extract_api_text(result, "duanzi", "text", "content")
+    msg = extract_api_message(result)
 
-    if str(code) not in {"200", "0"} and not duanzi:
+    if not api_code_success(result) and not duanzi:
         await handle_send(
             bot, event,
             f"获取搞笑段子失败：{msg}",
@@ -36,7 +35,18 @@ async def random_duanzi_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await random_duanzi_cmd.finish()
 
-    text_msg = duanzi or msg
+    if not duanzi:
+        await handle_send(
+            bot, event,
+            "获取搞笑段子失败：接口未返回段子内容",
+            md_type="娱乐",
+            k1="重试", v1="搞笑段子",
+            k2="肯德基文案", v2="肯德基文案",
+            k3="帮助", v3="娱乐帮助"
+        )
+        await random_duanzi_cmd.finish()
+
+    text_msg = duanzi
 
     await handle_send(
         bot, event,

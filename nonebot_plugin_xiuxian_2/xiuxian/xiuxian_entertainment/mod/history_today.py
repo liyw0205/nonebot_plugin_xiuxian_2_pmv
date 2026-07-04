@@ -21,14 +21,18 @@ async def history_today_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await history_today_cmd.finish()
 
-    code = result.get("code")
-    msg = result.get("msg", "接口异常")
-    time_text = result.get("time", "未知时间")
+    msg = extract_api_message(result)
+    time_text = normalize_api_text(result.get("time")) or "未知时间"
     data = result.get("data", [])
+    if isinstance(data, str):
+        data = [data]
+    elif not isinstance(data, list):
+        data = []
 
-    content = "\n".join(f"{idx + 1}. {item}" for idx, item in enumerate(data) if item)
+    items = [normalize_api_text(item) for item in data]
+    content = "\n".join(f"{idx + 1}. {item}" for idx, item in enumerate(items) if item)
 
-    if str(code) not in {"200", "0"} and not content:
+    if not api_code_success(result) and not content:
         await handle_send(
             bot, event,
             f"获取历史上的今天失败：{msg}",

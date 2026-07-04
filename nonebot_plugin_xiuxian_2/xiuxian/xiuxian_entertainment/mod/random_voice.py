@@ -34,10 +34,10 @@ async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         )
         await random_voice_cmd.finish()
 
-    audiopath = result.get("audiopath")
-    msg = result.get("msg", "接口异常")
+    audiopath = normalize_api_text(result.get("audiopath"))
+    msg = extract_api_message(result)
 
-    if not audiopath:
+    if not api_code_success(result) or not audiopath:
         await handle_send(
             bot, event,
             f"获取随机语音失败：{msg}",

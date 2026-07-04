@@ -25,15 +25,25 @@ async def brainteasers_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if not isinstance(data, dict):
         data = {}
 
-    question = data.get("question") or result.get("question")
-    answer = data.get("answer") or result.get("answer")
-    msg = result.get("msg", "接口异常")
-    code = result.get("code")
+    question = normalize_api_text(data.get("question") or result.get("question"))
+    answer = normalize_api_text(data.get("answer") or result.get("answer"))
+    msg = extract_api_message(result)
 
-    if str(code) not in {"200", "0"} and not question:
+    if not api_code_success(result) and not question:
         await handle_send(
             bot, event,
             f"【脑筋急转弯】\n获取失败：{msg}",
+            md_type="娱乐",
+            k1="重试", v1="脑筋急转弯",
+            k2="弱智吧问答", v2="弱智吧问答",
+            k3="帮助", v3="娱乐帮助"
+        )
+        await brainteasers_cmd.finish()
+
+    if not question:
+        await handle_send(
+            bot, event,
+            "【脑筋急转弯】\n获取失败：接口未返回题目",
             md_type="娱乐",
             k1="重试", v1="脑筋急转弯",
             k2="弱智吧问答", v2="弱智吧问答",

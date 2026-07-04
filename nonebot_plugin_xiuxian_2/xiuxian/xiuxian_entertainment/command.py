@@ -251,6 +251,100 @@ async def get_text_api(api_url: str, params: dict | None = None, timeout: int = 
     return await asyncio.to_thread(_get_text_api_sync, api_url, params, timeout)
 
 
+_API_SUCCESS_CODES = {"0", "1", "200", "ok", "success", "true"}
+_API_TEXT_KEYS = (
+    "text",
+    "content",
+    "data",
+    "result",
+    "answer",
+    "output",
+    "duanzi",
+    "sentence",
+    "hitokoto",
+)
+_API_MESSAGE_KEYS = ("msg", "message", "error", "tips", "detail", "reason")
+
+
+def normalize_api_text(value: Any) -> str:
+    """把接口常见的文本返回规整成可直接发送的内容。"""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    return (
+        text.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    ).strip()
+
+
+def _api_text_from_value(value: Any, keys: tuple[str, ...], depth: int = 0) -> str:
+    if value is None or depth > 3:
+        return ""
+
+    if isinstance(value, (str, int, float, bool)):
+        return normalize_api_text(value)
+
+    if isinstance(value, list):
+        parts = [
+            part
+            for item in value
+            if (part := _api_text_from_value(item, keys, depth + 1))
+        ]
+        return "\n".join(parts).strip()
+
+    if isinstance(value, dict):
+        for key in keys:
+            if key in value:
+                text = _api_text_from_value(value.get(key), keys, depth + 1)
+                if text:
+                    return text
+        return ""
+
+    return normalize_api_text(value)
+
+
+def extract_api_text(result: Any, *fields: str) -> str:
+    """从 API 返回中按字段优先级提取正文，不把 msg/message 当正文兜底。"""
+    keys = tuple(dict.fromkeys((*fields, *_API_TEXT_KEYS)))
+    return _api_text_from_value(result, keys)
+
+
+def extract_api_message(result: Any, default: str = "接口异常") -> str:
+    if isinstance(result, dict):
+        for key in _API_MESSAGE_KEYS:
+            msg = normalize_api_text(result.get(key))
+            if msg:
+                return msg
+    return default
+
+
+def api_code_success(result: Any) -> bool:
+    if not isinstance(result, dict):
+        return False
+
+    for key in ("success", "ok"):
+        if key in result:
+            value = result.get(key)
+            if isinstance(value, bool):
+                return value
+            if value is not None:
+                return str(value).strip().lower() in _API_SUCCESS_CODES
+
+    for key in ("code", "status", "status_code"):
+        if key in result:
+            value = result.get(key)
+            if value is None:
+                continue
+            return str(value).strip().lower() in _API_SUCCESS_CODES
+
+    return True
+
+
 def _get_media_url_api_sync(api_url: str, params: dict | None = None, timeout: int = 20) -> str:
     """
     通用媒体接口请求

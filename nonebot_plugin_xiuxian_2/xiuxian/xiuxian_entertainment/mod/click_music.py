@@ -35,8 +35,8 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         )
         await click_music_cmd.finish()
 
-    if not isinstance(result, dict) or result.get("code") != 200:
-        msg = result.get("msg", "接口异常") if isinstance(result, dict) else "接口异常"
+    if not api_code_success(result):
+        msg = extract_api_message(result)
         await handle_send(
             bot, event,
             f"获取随机点歌失败：{msg}",
@@ -48,9 +48,11 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await click_music_cmd.finish()
 
     data = result.get("data", {})
+    if not isinstance(data, dict):
+        data = {}
     avatar_url = data.get("avatar_url")
-    nickname = data.get("nickname", "未知用户")
-    lyrics = str(data.get("lyrics") or "暂无歌词").replace('\n', '\r')
+    nickname = normalize_api_text(data.get("nickname")) or "未知用户"
+    lyrics = (normalize_api_text(data.get("lyrics")) or "暂无歌词").replace('\n', '\r')
     lyric_lines = [line.strip() for line in lyrics.split('\r') if line.strip()]
     plain_lyrics = "\n".join(lyric_lines) or "暂无歌词"
     audiosrc = data.get("audiosrc")

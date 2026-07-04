@@ -26,12 +26,11 @@ async def world_60s_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
         await world_60s_cmd.finish()
 
-    code = result.get("code")
-    msg = result.get("msg", "接口异常")
+    msg = extract_api_message(result)
     data = result.get("data", [])
-    api_source = result.get("api_source", "")
+    api_source = normalize_api_text(result.get("api_source"))
 
-    if str(code) not in {"200", "0"} and not data:
+    if not api_code_success(result) and not data:
         await handle_send(
             bot, event,
             f"获取60S读世界失败：{msg}",
@@ -43,11 +42,23 @@ async def world_60s_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await world_60s_cmd.finish()
 
     if isinstance(data, list):
-        content = "\n".join([f"{idx + 1}. {item}" for idx, item in enumerate(data)])
+        items = [normalize_api_text(item) for item in data]
+        content = "\n".join(f"{idx + 1}. {item}" for idx, item in enumerate(items) if item)
     elif isinstance(data, str):
-        content = data
+        content = normalize_api_text(data)
     else:
-        content = str(data)
+        content = normalize_api_text(data)
+
+    if not content:
+        await handle_send(
+            bot, event,
+            "获取60S读世界失败：接口未返回新闻内容",
+            md_type="娱乐",
+            k1="重试", v1="60S读世界",
+            k2="每日60S图片", v2="每日60S图片",
+            k3="帮助", v3="娱乐帮助"
+        )
+        await world_60s_cmd.finish()
 
     text_msg = content
     if api_source:

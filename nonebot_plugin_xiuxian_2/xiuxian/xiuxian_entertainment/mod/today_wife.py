@@ -27,8 +27,8 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
         await today_wife_cmd.finish()
 
-    if not isinstance(result, dict) or result.get("code") != 200:
-        msg = result.get("msg", "接口异常") if isinstance(result, dict) else "接口异常"
+    if not api_code_success(result):
+        msg = extract_api_message(result)
         await handle_send(
             bot, event,
             f"获取今日老婆失败：{msg}",
@@ -40,8 +40,10 @@ async def today_wife_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await today_wife_cmd.finish()
 
     data = result.get("data", {})
+    if not isinstance(data, dict):
+        data = {}
     image_url = data.get("image_url")
-    role_name = data.get("role_name", "未知角色")
+    role_name = normalize_api_text(data.get("role_name")) or "未知角色"
     width = _safe_int(data.get("width"), 800)
     height = _safe_int(data.get("height"), 1200)
 

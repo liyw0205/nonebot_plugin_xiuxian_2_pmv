@@ -22,10 +22,10 @@ DWO_VIDEO_APIS: dict[str, str] = {
 
 async def _fetch_video_from_yujn() -> str:
     result = await get_json_api(YUJN_API, timeout=20)
-    if not isinstance(result, dict) or result.get("code") != 200:
-        msg = result.get("tips", "接口异常") if isinstance(result, dict) else "接口异常"
+    if not api_code_success(result):
+        msg = extract_api_message(result)
         raise ValueError(msg)
-    video_url = str(result.get("data", "")).strip()
+    video_url = normalize_api_text(result.get("data"))
     if not video_url:
         raise ValueError("接口未返回视频地址")
     return video_url
