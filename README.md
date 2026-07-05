@@ -13,7 +13,7 @@
 |:-----|:-----|
 | [🧾 物品 ID 速查表](docs/items.md) | 所有物品类型、ID 范围、品阶总览 |
 | [🔮 物品系统详解](docs/buff.md) | 功法 / 神通 / 装备 / 丹药 / 药材等完整说明 |
-| [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器统一接口文档 |
+| [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送接口文档 |
 | [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由说明 |
 | **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认 `http://IP:5888`，超管 QQ 登录） |
 

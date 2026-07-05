@@ -19,6 +19,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
+from ..adapter_message_sender import send_group_message
 from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
@@ -157,7 +158,7 @@ async def generate_all_bosses_task():
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
         bot = get_bot()
-        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
+        await send_group_message(bot, group_id=notify_group_id, message=msg)
 
 @DRIVER.on_shutdown
 async def save_boss_():

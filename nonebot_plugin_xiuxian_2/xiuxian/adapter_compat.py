@@ -19,15 +19,9 @@ from nonebot.permission import Permission
 try:
     from .adapter_message_records import (
         extract_result_message_id as _extract_result_message_id,
-        extract_result_reference_id as _extract_result_reference_id,
         extract_text_from_message_obj as _extract_text_from_message_obj,
-        get_bot_id as _get_bot_id,
-        get_message_db_path as _get_message_db_path,
-        increase_recv_reply_used_count as _increase_recv_reply_used_count,
-        init_message_db as _init_message_db,
         record_recv_message as _record_recv_message,
         record_send_message as _record_send_message,
-        record_web_send_message as _record_web_send_message,
     )
 
     HAS_MESSAGE_RECORDS = True
@@ -72,66 +66,23 @@ except Exception:
         except Exception:
             return ""
 
-    def _extract_result_reference_id(result: Any) -> str:
-        try:
-            if result is None:
-                return ""
-
-            keys = ("reference_id", "message_reference_id", "ref_idx", "msg_idx")
-
-            def pick(value: Any) -> str:
-                if value is None:
-                    return ""
-                if isinstance(value, dict):
-                    for key in keys:
-                        if value.get(key):
-                            return str(value[key])
-                    return ""
-                for key in keys:
-                    item = getattr(value, key, None)
-                    if item:
-                        return str(item)
-                return ""
-
-            if isinstance(result, dict):
-                return pick(result.get("ext_info")) or pick(result)
-
-            return pick(getattr(result, "ext_info", None)) or pick(result)
-        except Exception:
-            return ""
-
-    def _get_bot_id(bot: Any) -> str:
-        try:
-            return str(bot.self_id)
-        except Exception:
-            return ""
-
-    def _get_message_db_path() -> Path:
-        return Path("message.db")
-
-    def _init_message_db():
-        return None
-
     def _record_recv_message(bot: Any, event: BaseEvent):
         return None
 
     def _record_send_message(bot: Any, **kwargs):
         return None
 
-    def _record_web_send_message(bot: Any, **kwargs):
-        return _record_send_message(bot, **kwargs)
-
-    def _increase_recv_reply_used_count(**kwargs):
-        return None
-
 try:
-    from .adapter_message_actions import delete_message_compat, schedule_delete_message
+    from .adapter_message_actions import (
+        delete_message_compat as _delete_message_compat,
+        schedule_delete_message as _schedule_delete_message,
+    )
 
     HAS_MESSAGE_ACTIONS = True
 except Exception:
     HAS_MESSAGE_ACTIONS = False
 
-    async def delete_message_compat(
+    async def _delete_message_compat(
         bot: Any,
         *,
         scene: str,
@@ -187,7 +138,7 @@ except Exception:
 
         raise RuntimeError(f"当前 bot 不支持通用撤回: {type(bot)!r}")
 
-    def schedule_delete_message(
+    def _schedule_delete_message(
         bot: Any,
         *,
         scene: str,
@@ -207,7 +158,7 @@ except Exception:
         async def _job():
             try:
                 await asyncio.sleep(delay)
-                await delete_message_compat(
+                await _delete_message_compat(
                     bot,
                     scene=scene,
                     message_id=message_id,
@@ -2067,7 +2018,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="group",
                     message_id=message_id,
@@ -2105,7 +2056,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="private",
                     message_id=message_id,
@@ -2152,7 +2103,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                         raw_result=result,
                     )
 
-                    schedule_delete_message(
+                    _schedule_delete_message(
                         bot,
                         scene=scene,
                         message_id=message_id,
@@ -2197,7 +2148,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                             raw_result=result,
                         )
 
-                        schedule_delete_message(
+                        _schedule_delete_message(
                             bot,
                             scene="group",
                             message_id=message_id,
@@ -2219,7 +2170,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                             raw_result=result,
                         )
 
-                        schedule_delete_message(
+                        _schedule_delete_message(
                             bot,
                             scene="private",
                             message_id=message_id,
@@ -2307,7 +2258,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="group",
                     message_id=message_id,
@@ -2380,7 +2331,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="private",
                     message_id=message_id,
@@ -2441,7 +2392,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="channel_group",
                     message_id=message_id,
@@ -2505,7 +2456,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                     raw_result=result,
                 )
 
-                schedule_delete_message(
+                _schedule_delete_message(
                     bot,
                     scene="channel_private",
                     message_id=message_id,
@@ -2538,7 +2489,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                 raw_result=result,
             )
 
-            schedule_delete_message(
+            _schedule_delete_message(
                 bot,
                 scene=scene,
                 message_id=message_id,
@@ -2549,159 +2500,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
             return result
 
-        async def send_private_msg(*, user_id, message, **kwargs):
-            revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
-            openid = str(user_id)
-            message, msg_ref_id = _prepare_qq_reference_message(
-                bot,
-                message,
-                kwargs,
-                default_auto=False,
-            )
-
-            async def _do_send(msg_seq: int):
-                try:
-                    return await bot.send_to_c2c(
-                        openid=openid,
-                        message=message,
-                        msg_seq=int(msg_seq),
-                        msg_ref_id=msg_ref_id,
-                        **kwargs,
-                    )
-                except TypeError as e:
-                    if "msg_ref_id" not in str(e):
-                        raise
-                    return await bot.send_to_c2c(
-                        openid=openid,
-                        message=message,
-                        msg_seq=int(msg_seq),
-                        **kwargs,
-                    )
-
-            if "msg_seq" in kwargs:
-                msg_seq = int(kwargs.pop("msg_seq"))
-                result = await _do_send(msg_seq)
-            else:
-                result = await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_c2c_seq(openid),
-                    max_retry=3,
-                )
-
-            message_id = _extract_result_message_id(result)
-
-            _record_send_message(
-                bot,
-                scene="private",
-                message=message,
-                message_id=message_id,
-                user_id=openid,
-                raw_result=result,
-            )
-
-            schedule_delete_message(
-                bot,
-                scene="private",
-                message_id=message_id,
-                user_id=openid,
-                revoke_time=revoke_time,
-            )
-
-            return result
-
-        async def send_group_msg(*, group_id, message, **kwargs):
-            revoke_time = kwargs.pop("revoke_time", kwargs.pop("revoke_after", 0))
-            group_openid = str(group_id)
-            msg_id = kwargs.pop("msg_id", None)
-            event_id = kwargs.pop("event_id", None)
-            message, msg_ref_id = _prepare_qq_reference_message(
-                bot,
-                message,
-                kwargs,
-                default_auto=False,
-            )
-
-            async def _do_send(msg_seq: int):
-                try:
-                    return await bot.send_to_group(
-                        group_openid=group_openid,
-                        message=message,
-                        msg_id=msg_id,
-                        msg_seq=int(msg_seq),
-                        event_id=event_id,
-                        msg_ref_id=msg_ref_id,
-                    )
-                except TypeError as e:
-                    if "msg_ref_id" not in str(e):
-                        raise
-                    return await bot.send_to_group(
-                        group_openid=group_openid,
-                        message=message,
-                        msg_id=msg_id,
-                        msg_seq=int(msg_seq),
-                        event_id=event_id,
-                    )
-
-            if "msg_seq" in kwargs:
-                msg_seq = int(kwargs.pop("msg_seq"))
-                result = await _do_send(msg_seq)
-            else:
-                result = await _send_with_retry(
-                    _do_send,
-                    get_new_seq=lambda: _next_group_seq(group_openid),
-                    max_retry=3,
-                )
-
-            message_id = _extract_result_message_id(result)
-
-            _record_send_message(
-                bot,
-                scene="group",
-                message=message,
-                message_id=message_id,
-                group_id=group_openid,
-                raw_result=result,
-            )
-
-            schedule_delete_message(
-                bot,
-                scene="group",
-                message_id=message_id,
-                group_id=group_openid,
-                revoke_time=revoke_time,
-            )
-
-            return result
-
-        async def delete_msg(*, message_id, group_id=None, user_id=None, scene: str = ""):
-            """
-            兼容 delete_msg。
-
-            OB11:
-            - delete_msg(message_id=xxx)
-
-            QQ:
-            - 群聊需要 group_id
-            - 私聊需要 user_id
-            """
-            if not scene:
-                if group_id is not None:
-                    scene = "group"
-                elif user_id is not None:
-                    scene = "private"
-
-            return await delete_message_compat(
-                bot,
-                scene=scene,
-                message_id=str(message_id),
-                group_id=str(group_id or ""),
-                user_id=str(user_id or ""),
-            )
-
         setattr(bot, "send", send)
-        setattr(bot, "send_private_msg", send_private_msg)
-        setattr(bot, "send_group_msg", send_group_msg)
-        setattr(bot, "delete_msg", delete_msg)
 
     setattr(bot, "__compat_patched__", True)
     return bot
@@ -2715,86 +2514,6 @@ def patch_context(bot: BaseBot, event: BaseEvent) -> tuple[BaseBot, BaseEvent]:
     _record_recv_message(bot, event)
 
     return bot, event
-
-# =========================
-# 历史兼容导出：新增代码优先从 adapter_message_records/actions 导入。
-# =========================
-
-def init_message_db():
-    """初始化 message.db，供 Web 面板调用"""
-    return _init_message_db()
-
-
-def get_message_db_path() -> Path:
-    """获取消息数据库路径"""
-    return _get_message_db_path()
-
-
-def extract_result_message_id(result: Any) -> str:
-    """从不同适配器发送结果中提取 message_id"""
-    return _extract_result_message_id(result)
-
-
-def extract_result_reference_id(result: Any) -> str:
-    """从 QQ 官方适配器发送结果中提取可引用的 reference_id/ref_idx"""
-    return _extract_result_reference_id(result)
-
-
-def get_bot_id(bot: Any) -> str:
-    """安全获取 bot_id/self_id"""
-    return _get_bot_id(bot)
-
-
-def record_web_send_message(
-    bot: Any,
-    *,
-    scene: str,
-    message: Any,
-    message_id: str = "",
-    reference_id: str = "",
-    source_message_id: str = "",
-    group_id: str = "",
-    user_id: str = "",
-    raw_result: Any = None,
-):
-    """
-    Web 面板主动发送消息后记录发送消息。
-
-    会自动：
-    - 写入 messages 表 direction='send'
-    - 如果 source_message_id 存在，增加对应 recv.reply_used_count
-    """
-    return _record_web_send_message(
-        bot,
-        scene=scene,
-        message=message,
-        message_id=message_id,
-        reference_id=reference_id,
-        source_message_id=source_message_id,
-        group_id=group_id,
-        user_id=user_id,
-        raw_result=raw_result,
-    )
-
-
-def increase_recv_reply_used_count(
-    *,
-    source_message_id: str,
-    adapter: str = "",
-    bot_id: str = "",
-    scene: str = "",
-    group_id: str = "",
-    user_id: str = "",
-):
-    """增加被回复 recv 消息的 reply_used_count"""
-    return _increase_recv_reply_used_count(
-        source_message_id=source_message_id,
-        adapter=adapter,
-        bot_id=bot_id,
-        scene=scene,
-        group_id=group_id,
-        user_id=user_id,
-    )
 
 __all__ = [
     "Bot",
@@ -2820,17 +2539,4 @@ __all__ = [
     "patch_bot_inplace",
     "patch_event_inplace",
     "patch_context",
-
-    # Web 公共接口
-    "init_message_db",
-    "get_message_db_path",
-    "extract_result_message_id",
-    "extract_result_reference_id",
-    "get_bot_id",
-    "record_web_send_message",
-    "increase_recv_reply_used_count",
-
-    # 通用撤回
-    "delete_message_compat",
-    "schedule_delete_message",
 ]

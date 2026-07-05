@@ -269,13 +269,15 @@ async def _send_ob11_broadcast(bot: Bot, task: dict, scene: str, target_id: str)
 
     else:
         if _is_group_scene(scene):
-            await bot.send_group_msg(
+            await bot.call_api(
+                "send_group_msg",
                 group_id=maybe_int(target_id),
                 message=content,
             )
 
         elif _is_private_scene(scene):
-            await bot.send_private_msg(
+            await bot.call_api(
+                "send_private_msg",
                 user_id=maybe_int(target_id),
                 message=content,
             )

@@ -17,6 +17,7 @@ from ..adapter_compat import (
     MessageSegment,
     get_at_user_id,
 )
+from ..adapter_message_sender import send_group_message, send_private_message
 
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users, send_help_message
@@ -314,7 +315,8 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     try:
         if isinstance(event, GroupMessageEvent):
-            await bot.send_private_msg(
+            await send_private_message(
+                bot,
                 user_id=str(target_user_id),
                 message=f"你在群{event.group_id}收到了来自{user_info['user_name']}的组队邀请，请在1分钟内回复【同意组队】或【拒绝组队】。"
             )
@@ -384,7 +386,11 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
         try:
             if team_info['group_id'] and team_info['group_id'] != str(getattr(event, "group_id", "")):
-                await bot.send_group_msg(group_id=str(team_info['group_id']), message=f"你的队伍【{team_info['team_name']}】加入了新成员：{user_info['user_name']}！")
+                await send_group_message(
+                    bot,
+                    group_id=str(team_info['group_id']),
+                    message=f"你的队伍【{team_info['team_name']}】加入了新成员：{user_info['user_name']}！",
+                )
         except Exception as e:
             logger.warning(f"通知队长失败: {e}")
     else:

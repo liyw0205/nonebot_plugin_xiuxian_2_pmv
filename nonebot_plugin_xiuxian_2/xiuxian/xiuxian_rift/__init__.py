@@ -11,6 +11,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
+from ..adapter_message_sender import send_group_message
 from .old_rift_info import GLOBAL_RIFT_KEY, old_rift_info
 from .. import DRIVER
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
@@ -127,7 +128,7 @@ async def generate_rift_for_group():
     old_rift_info.save_rift(group_rift)
     for notify_group_id in groups:
         bot = get_bot()
-        await bot.send_group_msg(group_id=int(notify_group_id), message=msg)
+        await send_group_message(bot, group_id=notify_group_id, message=msg)
 
 
 def _normalise_rift_target_node(node_info: dict) -> dict:

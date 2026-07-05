@@ -1,15 +1,15 @@
-# NoneBot 跨适配器兼容层
+# NoneBot 跨适配器兼容层与消息模块
 
-本文档对应 `nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py`，说明本项目在 OneBot v11 与 QQ 官方适配器之间使用的统一接口。
+本文档对应 `nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py` 及其配套消息模块，说明本项目在 OneBot v11 与 QQ 官方适配器之间使用的统一接口。
 
-兼容层只负责适配器差异：类型别名、消息段构造、事件字段补齐、会话语义和统一发送入口。消息记录、撤回调度、Web 面板消息接口、广播等功能放在独立模块中，避免后续新增适配器时继续扩大 `adapter_compat.py`。
+兼容层只负责适配器差异：类型别名、消息段构造、事件字段补齐、会话语义和事件上下文发送。主动群聊/私聊发送、消息记录、撤回调度、Web 面板消息接口、广播等功能放在独立模块中，避免后续新增适配器时继续扩大 `adapter_compat.py`。
 
 项目内大量模块直接依赖该兼容层：业务代码主要使用统一导出的 `Bot`、`Message`、`MessageSegment`、`GroupMessageEvent`、`PrivateMessageEvent`、`MessageEvent`，避免在每个功能模块里重复判断适配器类型。
 
 ## 支持范围
 
-- OneBot v11：普通群聊、普通私聊、主动发送、统一撤回入口、消息记录钩子。
-- QQ 官方适配器：普通群、C2C 私聊、频道公域消息、频道私信、Markdown、自定义键盘、媒体上传、消息序列重试。
+- OneBot v11：普通群聊、普通私聊、事件回复发送、主动群聊/私聊发送、消息记录钩子。
+- QQ 官方适配器：普通群、C2C 私聊、频道公域消息、频道私信、事件回复发送、主动群聊/C2C 发送、Markdown、自定义键盘、媒体上传、消息序列重试。
 - 频道公域消息在业务语义中归入“群聊”，频道私信归入“私聊”。
 - 未安装某个适配器时，兼容层会回退到可用类型，不阻塞插件加载。
 
@@ -131,11 +131,11 @@ bot, event = patch_context(bot, event)
 
 ## patch_bot_inplace
 
-对 bot 注入或包装统一发送能力。
+对 bot 包装事件上下文发送能力。
 
 OneBot v11：
 
-- 包装 `send`、`send_group_msg`、`send_private_msg`、`call_api`。
+- 包装适配器已有的 `send`、`send_group_msg`、`send_private_msg`、`call_api`。
 - 记录发送消息到本地 SQLite 文件 `message.db`。
 - 支持 `revoke_time` / `revoke_after` 自动撤回。
 
@@ -144,10 +144,27 @@ QQ 官方适配器：
 - `bot.send(event, message, **kwargs)` 会按事件类型分发到 `send_to_group`、`send_to_c2c`、`send_to_channel`、`send_to_dms`。
 - 普通 QQ 群与 C2C 可传 `auto_reference=True`，或使用 `send_reference_reply(...)`，以当前事件的 `REFIDX` 做引用回复。
 - 显式引用可传 `reference_id`、`message_reference_id`、`reference_message_id`、`quote_message_id`、`message_reference` 或 `msg_ref_id`。
-- `bot.send_group_msg(group_id=..., message=...)` 映射到 QQ 群主动发送。
-- `bot.send_private_msg(user_id=..., message=...)` 映射到 QQ C2C 主动发送。
-- `bot.delete_msg(...)` 提供统一撤回入口。
 - 内置 `msg_seq` 分配与 `40054005` 去重冲突重试。
+- 不再向 QQ bot 注入 `send_group_msg`、`send_private_msg`、`delete_msg` 这类 OneBot 风格主动接口；主动发送和撤回应使用专职模块。
+
+## 主动发送
+
+主动群聊/私聊发送位于 `adapter_message_sender.py`：
+
+```python
+from .adapter_message_sender import send_group_message, send_private_message
+
+await send_group_message(bot, group_id=group_id, message="通知内容")
+await send_private_message(bot, user_id=user_id, message="私聊内容")
+```
+
+行为约定：
+
+- OneBot v11：调用 `bot.call_api("send_group_msg" / "send_private_msg", ...)`。
+- QQ 官方适配器：调用 `send_to_group` / `send_to_c2c`。
+- 会写入发送消息记录，并支持 `revoke_time` / `revoke_after`。
+- QQ 普通群/C2C 支持 `reference_id`、`msg_ref_id` 等引用参数。
+- 新业务代码不要再直接依赖 `bot.send_group_msg(...)` / `bot.send_private_msg(...)` 作为跨适配器接口。
 
 ## 引用回复
 
@@ -169,10 +186,13 @@ await bot.send(event=event, message=msg, msg_ref_id=ref_id)
 await send_reference_reply(bot, event, "已处理")
 ```
 
-主动发送或 Web 面板发送时，应优先使用已记录的 `reference_id`：
+主动发送或 Web 面板发送时，应优先使用专职发送模块或对应适配器的实际接口，并传入已记录的 `reference_id`：
 
 ```python
-await bot.send_group_msg(
+from .adapter_message_sender import send_group_message
+
+await send_group_message(
+    bot,
     group_id=group_openid,
     message="已处理",
     reference_id=source_reference_id,
@@ -188,9 +208,10 @@ await bot.send_group_msg(
 - `adapter_compat.py`：跨适配器核心兼容层，业务 handler 优先从这里导入 `Bot`、`MessageSegment`、事件类型、`patch_context` 等。
 - `adapter_message_records.py`：消息展示文本抽取、`message.db` 收发记录、Web 主动发送记录、回复计数、`bot_id` 和发送结果消息 ID 提取。
 - `adapter_message_actions.py`：通用撤回和定时撤回调度。
+- `adapter_message_sender.py`：主动群聊和私聊发送入口，按适配器调用 OneBot `call_api` 或 QQ 官方 `send_to_*`。
 - `broadcast_manager.py`：广播任务生命周期、广播目标记忆、不同适配器的广播发送策略。
 
-`adapter_compat.py` 仍 re-export 部分旧接口，兼容历史 import；新增代码应直接依赖对应专职模块。
+记录、撤回、主动发送、广播等专职能力不再通过 `adapter_compat.py` 兼容导出，业务代码应直接依赖对应模块。
 
 ## 消息记录
 
@@ -198,7 +219,7 @@ await bot.send_group_msg(
 
 - 默认逻辑库：本地 SQLite 文件 `message.db`。
 - 接收消息：`patch_event_inplace` 后会记录 recv。
-- 发送消息：包装后的发送接口会记录 send。
+- 发送消息：包装后的事件发送和 `adapter_message_sender.py` 会记录 send。
 - Web 主动发送：使用 `record_web_send_message(...)`。
 - 回复计数：使用 `increase_recv_reply_used_count(...)`。
 
@@ -214,18 +235,6 @@ from .adapter_message_records import (
     init_message_db,
     record_web_send_message,
 )
-```
-
-历史兼容导出仍可从 `adapter_compat.py` 访问：
-
-```python
-init_message_db()
-get_message_db_path()
-extract_result_message_id(result)
-extract_result_reference_id(result)
-get_bot_id(bot)
-record_web_send_message(...)
-increase_recv_reply_used_count(...)
 ```
 
 消息清理配置来自 NoneBot 配置或修仙配置对象：
@@ -244,18 +253,20 @@ from .adapter_message_actions import delete_message_compat, schedule_delete_mess
 
 `delete_message_compat(...)` 根据 `scene` 调用 OneBot v11 或 QQ 官方适配器对应的撤回接口；`schedule_delete_message(...)` 只负责按 `revoke_time` 延迟调用撤回。
 
+新代码直接从 `adapter_message_actions.py` 导入，不要从 `adapter_compat.py` 导入撤回接口。
+
 ## Web 与广播
 
-`xiuxian_web/messages.py`、`adapter_message_records.py`、`adapter_message_actions.py` 和 `broadcast_manager.py` 会复用兼容层的适配器语义：
+`xiuxian_web/messages.py`、`adapter_message_records.py`、`adapter_message_actions.py`、`adapter_message_sender.py` 和 `broadcast_manager.py` 会复用兼容层的适配器语义：
 
 - Web 消息列表按 `adapter`、`bot_id`、`scene`、`group_id`、`user_id` 记录会话。
-- OneBot v11 广播可直接主动发送。
+- OneBot v11 广播通过 `call_api` 主动发送。
 - QQ 官方适配器广播默认通过会话事件补发，避免依赖主动消息授权。
 - Web 主动发送会按 `scene` 选择 QQ 群、C2C、频道、公域私信的实际接口。
 
 ## 与 on_compat.py 的关系
 
-`adapter_compat.py` 解决“事件和发送接口跨适配器统一”的问题；`on_compat.py` 解决“本项目大量空前缀 `on_command` matcher 的路由压力”的问题。
+`adapter_compat.py` 解决“事件语义、消息段和事件上下文发送跨适配器统一”的问题；`on_compat.py` 解决“本项目大量空前缀 `on_command` matcher 的路由压力”的问题。
 
 当前项目约有 500 个 `on_command` matcher，且默认配置示例使用：
 
@@ -269,6 +280,7 @@ COMMAND_START = [""]
 
 ```python
 from .adapter_compat import MessageSegment, get_chat_scene, patch_context
+from .adapter_message_sender import send_group_message
 from .on_compat import on_command
 
 help_cmd = on_command("修仙帮助", priority=12, block=True)
@@ -278,6 +290,9 @@ async def _(bot, event):
     bot, event = patch_context(bot, event)
     scene = get_chat_scene(event)
     await bot.send(event, MessageSegment.text(bot, f"当前会话: {scene}"))
+
+async def notify_group(bot, group_id: str):
+    await send_group_message(bot, group_id=group_id, message="主动通知")
 ```
 
 ## 内置上游适配器源码策略
@@ -287,7 +302,7 @@ async def _(bot, event):
 - 上游来源固定为 `https://github.com/nonebot/adapter-qq` 与 `https://github.com/nonebot/adapter-onebot`。
 - 两个上游仓库均为 MIT 许可证，内置时必须保留对应 `LICENSE`、上游仓库地址、锁定的 tag 或 commit。
 - vendored 代码放在 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_adapter/`，避免把上游实现散落到兼容层。
-- `adapter_compat.py` 继续作为业务侧唯一入口；本项目内优先通过 `xiuxian_adapter.qq` 和 `xiuxian_adapter.onebot` 保留 vendored 行为，独立复用时可回退到 `nonebot.adapters.qq` 与 `nonebot.adapters.onebot.v11` 标准路径。
+- `adapter_compat.py` 继续作为事件、消息段与会话语义的统一入口；本项目内优先通过 `xiuxian_adapter.qq` 和 `xiuxian_adapter.onebot` 保留 vendored 行为，独立复用时可回退到 `nonebot.adapters.qq` 与 `nonebot.adapters.onebot.v11` 标准路径。
 - 当前内置范围是上游运行时源码、`LICENSE` 和 `UPSTREAM` 记录；不提交 tests、website、CI 等开发文件。
 - 更新流程必须是“记录上游版本 -> 更新 vendored 目录 -> 跑编译和消息发送回归 -> 更新本节版本记录”，不能手工零散复制文件。
 
@@ -325,6 +340,6 @@ nonebot_plugin_xiuxian_2/xiuxian/xiuxian_adapter/
 1. QQ 官方适配器的 at、Markdown、键盘、主动消息授权与 OneBot v11 行为不同，业务代码应优先通过 `MessageSegment` 和 `patch_context` 访问。
 2. `MessageSegment.file()` 在 OneBot v11 下可能按图片兼容处理，具体能力取决于协议端。
 3. QQ `msg_seq` 冲突会自动重试，但业务侧仍应避免短时间大量重复发送。
-4. `patch_bot_inplace` 会替换或包装 bot 的发送方法；如果外部也包装发送接口，需要注意加载顺序。
+4. `patch_bot_inplace` 会替换或包装 bot 的事件发送方法；如果外部也包装发送接口，需要注意加载顺序。
 5. `adapter_compat.py` 属于运行时代码，本文档只记录项目约定，实际行为以源码为准。
 6. 新增 Web、广播、统计、审计类功能时优先新增独立模块，不要把业务功能继续塞入 `adapter_compat.py`。

@@ -27,6 +27,7 @@ from ..adapter_compat import (
     get_at_user_ids,
     has_at_user,
 )
+from ..adapter_message_sender import send_group_message
 
 from ..broadcast_manager import (
     start_broadcast,
@@ -280,9 +281,9 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             try:
                 if XiuConfig().img:
                     pic = await get_msg_pic(msg)
-                    await bot.send_group_msg(group_id=int(gid), message=MessageSegment.image(pic))
+                    await send_group_message(bot, group_id=gid, message=MessageSegment.image(pic))
                 else:
-                    await bot.send_group_msg(group_id=int(gid), message=msg)
+                    await send_group_message(bot, group_id=gid, message=msg)
             except Exception as e:
                 logger.debug(f"全服灵石广播到群 {gid} 失败：{e}")
     else:  # 单人
