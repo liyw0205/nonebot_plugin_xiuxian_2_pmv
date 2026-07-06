@@ -4,8 +4,8 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     XIUXIAN_IMPART_BUFF,
-    backup_db_files
 )
+from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_arena import reset_arena_daily_challenges, reduce_arena_rank
 from ..xiuxian_base import (
     reset_lottery_participants,
@@ -450,7 +450,7 @@ async def backup_database_files():
     """定时备份数据库"""
     try:
         logger.opt(colors=True).info("<cyan>[定时任务开始]</cyan> <green>数据库备份</green>")
-        success, message = backup_db_files()
+        success, message = UpdateManager().backup_db_files()
         if success:
             logger.opt(colors=True).info(f"<green>{message}</green>")
             logger.opt(colors=True).success("<cyan>[定时任务完成]</cyan> <green>数据库备份</green>")

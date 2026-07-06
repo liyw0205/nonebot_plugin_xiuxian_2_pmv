@@ -541,22 +541,6 @@ class UpdateManager:
             "config_url": self._webdav_join_url(base_url, config_rel),
         }
 
-    def _get_webdav_config(self):
-        """
-        兼容旧调用，内部统一走 _get_webdav_paths
-        """
-        ok, msg, paths = self._get_webdav_paths()
-        if not ok:
-            return False, msg, None
-
-        return True, "ok", {
-            "base_url": paths["base_url"],
-            "user": paths["auth"][0],
-            "passwd": paths["auth"][1],
-            "plugin_backup_dir": paths["plugin_url"],
-            "config_backup_dir": paths["config_url"]
-        }
-
     # =========================
     # 插件备份云端
     # =========================

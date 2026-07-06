@@ -42,7 +42,6 @@ from .id_migration import (
     _id_table_targets,
     _update_ids,
     _update_ids_in_table,
-    backup_db_files,
     migrate_single_user_id,
     migrate_user_id_to_openid,
     swap_two_user_ids,

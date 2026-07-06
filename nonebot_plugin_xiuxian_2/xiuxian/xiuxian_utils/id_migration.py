@@ -2,16 +2,8 @@ import time
 from pathlib import Path
 
 from . import db_backend
-from .download_xiuxian_data import UpdateManager
 
 DATABASE = Path() / "data" / "xiuxian"
-
-
-def backup_db_files():
-    """
-    兼容旧调用：转发到 UpdateManager.backup_db_files
-    """
-    return UpdateManager().backup_db_files()
 
 
 _ID_DB_PATHS = {
