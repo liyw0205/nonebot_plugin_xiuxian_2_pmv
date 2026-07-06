@@ -57,8 +57,14 @@ def table_view(table_name):
     if not db_path:
         return "表不存在", 404
     
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 20))
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except Exception:
+        page = 1
+    try:
+        per_page = min(200, max(1, int(request.args.get('per_page', 20))))
+    except Exception:
+        per_page = 20
     search_field = request.args.get('search_field')
     search_value = request.args.get('search_value')
     search_condition = request.args.get('search_condition', '=')  # 默认搜索条件是=
@@ -168,9 +174,9 @@ def row_edit(table_name, row_id):
                         update_data[field] = value
             
             if update_data:
-                set_clause = ", ".join([f"{field} = %s" for field in update_data.keys()])
-                where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
-                sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_conditions}"
+                set_clause = ", ".join([f"{sql_ident(field)} = %s" for field in update_data.keys()])
+                where_conditions = " AND ".join([f"{sql_ident(key)} = %s" for key in primary_conditions.keys()])
+                sql = f"UPDATE {sql_ident(table_name)} SET {set_clause} WHERE {where_conditions}"
                 params = list(update_data.values()) + list(primary_conditions.values())
                 result = execute_sql(db_path, sql, params)
                 
@@ -180,8 +186,8 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "更新成功"})
         
         elif action == 'delete':
-            where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
-            sql = f"DELETE FROM {table_name} WHERE {where_conditions}"
+            where_conditions = " AND ".join([f"{sql_ident(key)} = %s" for key in primary_conditions.keys()])
+            sql = f"DELETE FROM {sql_ident(table_name)} WHERE {where_conditions}"
             result = execute_sql(db_path, sql, list(primary_conditions.values()))
             
             if 'error' in result:
@@ -190,8 +196,8 @@ def row_edit(table_name, row_id):
             return jsonify({"success": True, "message": "删除成功"})
     
     # GET 请求，获取行数据
-    where_conditions = " AND ".join([f"{key} = %s" for key in primary_conditions.keys()])
-    sql = f"SELECT * FROM {table_name} WHERE {where_conditions}"
+    where_conditions = " AND ".join([f"{sql_ident(key)} = %s" for key in primary_conditions.keys()])
+    sql = f"SELECT * FROM {sql_ident(table_name)} WHERE {where_conditions}"
     row_data = execute_sql(db_path, sql, list(primary_conditions.values()))
     
     if not row_data or (isinstance(row_data, list) and len(row_data) == 0) or (isinstance(row_data, dict) and not row_data):
@@ -270,6 +276,12 @@ def batch_edit(table_name):
     # 验证参数
     if not all([batch_field, operation, value]):
         return jsonify({"success": False, "error": "参数不完整"})
+
+    fields = table_info.get('fields', [])
+    if batch_field not in fields:
+        return jsonify({"success": False, "error": "批量修改字段不存在"})
+    if search_field and search_field not in fields:
+        return jsonify({"success": False, "error": "搜索字段不存在"})
     
     # 如果是全字段搜索但未选择批量修改字段
     if (not search_field or search_field == '') and not batch_field:
@@ -325,9 +337,9 @@ def batch_edit(table_name):
                             return jsonify({"success": False, "error": "第一个搜索值必须是数值"})
                         if not values[1]:
                             return jsonify({"success": False, "error": "第二个搜索值不能为空"})
-                        fields = table_info.get('fields', [])
                         primary_key = table_info.get('primary_key', 'user_id')
-                        searchable_fields = [f for f in fields if f != primary_key]
+                        primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
+                        searchable_fields = [f for f in fields if f not in primary_keys]
                         if searchable_fields:
                             sql += f" WHERE {sql_ident(search_field)} {search_condition} %s AND ({' OR '.join([sql_like_text(field) for field in searchable_fields])})"
                             params.extend([float(values[0])] + [f"%{values[1]}%" for field in searchable_fields])
@@ -338,9 +350,9 @@ def batch_edit(table_name):
                     return jsonify({"success": False, "error": "无效的搜索条件"})
             elif search_value:
                 # 全字段搜索
-                fields = table_info.get('fields', [])
                 primary_key = table_info.get('primary_key', 'user_id')
-                searchable_fields = [f for f in fields if f != primary_key]
+                primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
+                searchable_fields = [f for f in fields if f not in primary_keys]
                 
                 if searchable_fields:
                     conditions = []

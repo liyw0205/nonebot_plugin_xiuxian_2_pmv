@@ -11,10 +11,81 @@ from urllib.parse import quote
 import tempfile
 import shutil
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from nonebot.log import logger
 from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
+
+
+def _safe_leaf_name(filename) -> str:
+    name = Path(str(filename or "")).name
+    if not name or name in {".", ".."} or "\x00" in name:
+        raise ValueError("无效文件名")
+    return name
+
+
+def _path_under(base_dir, *parts) -> Path:
+    base = Path(base_dir).resolve()
+    candidate = base.joinpath(*[str(part) for part in parts]).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("路径不在允许目录内") from exc
+    return candidate
+
+
+def _safe_archive_member_name(member_name) -> str:
+    name = str(member_name or "").replace("\\", "/")
+    while name.startswith("./"):
+        name = name[2:]
+    if not name or name in {".", "/"}:
+        return ""
+    if name.startswith("/") or re.match(r"^[A-Za-z]:", name) or "\x00" in name:
+        raise ValueError(f"压缩包成员路径非法: {member_name}")
+    parts = PurePosixPath(name).parts
+    if any(part == ".." for part in parts):
+        raise ValueError(f"压缩包成员路径非法: {member_name}")
+    return PurePosixPath(*parts).as_posix()
+
+
+def _safe_extract_zip(zip_ref: zipfile.ZipFile, target_dir):
+    target = Path(target_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    for info in zip_ref.infolist():
+        safe_name = _safe_archive_member_name(info.filename)
+        if not safe_name:
+            continue
+        output_path = _path_under(target, safe_name)
+        if info.is_dir():
+            output_path.mkdir(parents=True, exist_ok=True)
+            continue
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with zip_ref.open(info) as src, open(output_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+
+def _safe_extract_tar(tar_ref: tarfile.TarFile, target_dir):
+    target = Path(target_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    for member in tar_ref.getmembers():
+        safe_name = _safe_archive_member_name(member.name)
+        if not safe_name:
+            continue
+        if member.issym() or member.islnk() or member.isdev():
+            raise ValueError(f"压缩包包含不允许的链接或设备文件: {member.name}")
+        output_path = _path_under(target, safe_name)
+        if member.isdir():
+            output_path.mkdir(parents=True, exist_ok=True)
+            continue
+        if not member.isfile():
+            continue
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        src = tar_ref.extractfile(member)
+        if src is None:
+            continue
+        with src, open(output_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
 
 def download_xiuxian_data():
     """
@@ -94,7 +165,7 @@ def download_xiuxian_data():
 
         logger.opt(colors=True).info(f"<green>开始解压到：{path_xiuxian}</green>")
         with zipfile.ZipFile(XIUXIAN_TEMP_ZIP_PATH, 'r') as zip_ref:
-            zip_ref.extractall(path_xiuxian)
+            _safe_extract_zip(zip_ref, path_xiuxian)
 
         logger.opt(colors=True).info(f"<green>修仙插件资源更新完成！</green>")
 
@@ -397,7 +468,7 @@ class UpdateManager:
             extract_temp = Path(tempfile.mkdtemp())
             logger.info(f"开始解压文件: {archive_path}")
             with tarfile.open(archive_path, 'r:gz') as tar:
-                tar.extractall(extract_temp)
+                _safe_extract_tar(tar, extract_temp)
 
             target_data_dir = Path() / "data"
             target_plugin_dir = Xiu_Plugin
@@ -726,6 +797,7 @@ class UpdateManager:
     def download_from_webdav(self, cloud_filename):
         """下载云端插件备份到本地 backups"""
         try:
+            cloud_filename = _safe_leaf_name(cloud_filename)
             ok, msg, paths = self._get_webdav_paths()
             if not ok:
                 return False, msg
@@ -859,6 +931,7 @@ class UpdateManager:
     def download_config_backup_from_webdav(self, filename, overwrite=False):
         """从云端下载配置备份到本地 config_backups（统一路径）"""
         try:
+            filename = _safe_leaf_name(filename)
             ok, msg, paths = self._get_webdav_paths()
             if not ok:
                 return False, msg
@@ -898,7 +971,8 @@ class UpdateManager:
         3) 返回配置 dict
         """
         try:
-            local_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / filename
+            filename = _safe_leaf_name(filename)
+            local_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "config_backups", filename)
             if not local_path.exists():
                 ok, result = self.download_config_backup_from_webdav(filename, overwrite=False)
                 if not ok and result != "FILE_EXISTS":
@@ -1243,22 +1317,31 @@ class UpdateManager:
 
     def restore_backup(self, backup_filename):
         """从插件备份恢复"""
+        temp_dir = None
         try:
+            backup_filename = _safe_leaf_name(backup_filename)
             backup_dir = Path() / "data" / "xiuxian" / "backups"
-            backup_path = backup_dir / backup_filename
+            backup_path = _path_under(backup_dir, backup_filename)
 
             if not backup_path.exists():
                 return False, f"备份文件不存在: {backup_filename}"
+            if not backup_path.is_file():
+                return False, f"无效备份文件: {backup_filename}"
 
             logger.info(f"开始从备份恢复: {backup_filename}")
 
             temp_dir = Path(tempfile.mkdtemp())
             with zipfile.ZipFile(backup_path, 'r') as zipf:
-                names = set(zipf.namelist())
-                zipf.extractall(temp_dir)
+                names = {
+                    _safe_archive_member_name(info.filename)
+                    for info in zipf.infolist()
+                    if _safe_archive_member_name(info.filename)
+                }
+                _safe_extract_zip(zipf, temp_dir)
 
             self._restore_files_from_backup(temp_dir)
             shutil.rmtree(temp_dir)
+            temp_dir = None
 
             restored_dbs = [
                 name
@@ -1283,6 +1366,9 @@ class UpdateManager:
         except Exception as e:
             logger.error(f"恢复备份失败: {str(e)}")
             return False, f"恢复备份失败: {str(e)}"
+        finally:
+            if temp_dir is not None and temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     # =========================
     # 数据库备份/恢复 + 云端
@@ -1781,14 +1867,16 @@ class UpdateManager:
         """从本地 db_backup zip 恢复指定数据库"""
         temp_dir = None
         try:
-            backup_filename = Path(str(backup_filename)).name
+            backup_filename = _safe_leaf_name(backup_filename)
             selected_dbs = self._normalize_selected_db_names(selected_dbs)
             if not selected_dbs:
                 return False, "至少选择一个数据库进行恢复"
 
-            backup_path = Path() / "data" / "xiuxian" / "backups" / "db_backup" / backup_filename
+            backup_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "db_backup", backup_filename)
             if not backup_path.exists():
                 return False, f"备份文件不存在: {backup_filename}"
+            if not backup_path.is_file():
+                return False, f"无效备份文件: {backup_filename}"
 
             temp_dir = Path(tempfile.mkdtemp())
             staged = {}
@@ -1900,13 +1988,14 @@ class UpdateManager:
     def download_db_backup_from_webdav(self, filename, overwrite=False):
         """从云端 db_backup 下载到本地"""
         try:
+            filename = _safe_leaf_name(filename)
             ok, msg, paths = self._get_webdav_paths()
             if not ok:
                 return False, "未配置 WebDAV 信息"
 
             local_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
             local_dir.mkdir(parents=True, exist_ok=True)
-            local_path = local_dir / filename
+            local_path = _path_under(local_dir, filename)
 
             if local_path.exists() and not overwrite:
                 return False, "FILE_EXISTS"
@@ -1938,8 +2027,8 @@ class UpdateManager:
     def cloud_restore_db_files(self, filename: str, selected_dbs: list):
         """云端数据库恢复：本地无则先下，再恢复"""
         try:
-            filename = Path(str(filename)).name
-            local_path = Path() / "data" / "xiuxian" / "backups" / "db_backup" / filename
+            filename = _safe_leaf_name(filename)
+            local_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "db_backup", filename)
             ok, msg = self.download_db_backup_from_webdav(filename, overwrite=True)
             if not ok:
                 if not local_path.exists():
@@ -1955,6 +2044,7 @@ class UpdateManager:
     def delete_webdav_backup(self, filename: str):
         """删除云端插件备份"""
         try:
+            filename = _safe_leaf_name(filename)
             ok, msg, paths = self._get_webdav_paths()
             if not ok:
                 return False, "未配置 WebDAV 信息"
@@ -1972,6 +2062,7 @@ class UpdateManager:
     def delete_webdav_db_backup(self, filename: str):
         """删除云端数据库备份"""
         try:
+            filename = _safe_leaf_name(filename)
             ok, msg, paths = self._get_webdav_paths()
             if not ok:
                 return False, "未配置 WebDAV 信息"

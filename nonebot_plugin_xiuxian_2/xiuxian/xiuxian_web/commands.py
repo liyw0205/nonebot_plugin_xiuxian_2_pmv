@@ -3,6 +3,14 @@ from .core import *  # noqa: F401,F403
 from .config import get_root_rate
 from ..xiuxian_utils import db_backend
 
+
+def _execute_many_in_transaction(db_path, statements):
+    with db_backend.transaction(db_path) as conn:
+        cur = conn.cursor()
+        for sql, params in statements:
+            cur.execute(sql, params)
+
+
 @app.route('/commands')
 def commands():
     if 'admin_id' not in session:
@@ -42,7 +50,6 @@ def execute_command():
                 bag TEXT DEFAULT NULL
             )
         """)
-        conn.commit()
 
         cur.execute("SELECT equipped, bag FROM player_accessory WHERE user_id = %s", (str(user_id),))
         row = cur.fetchone()
@@ -53,7 +60,6 @@ def execute_command():
                 "INSERT INTO player_accessory (user_id, equipped, bag) VALUES (%s, %s, %s)",
                 (str(user_id), _safe_json_dump(equipped), _safe_json_dump(bag))
             )
-            conn.commit()
             return equipped, bag
         else:
             equipped = _safe_json_load(row[0], {"手镯": None, "戒指": None, "手环": None, "项链": None})
@@ -90,67 +96,61 @@ def execute_command():
         if not item_info:
             return False, 0, "饰品配置不存在"
 
-        conn = db_backend.connect(PLAYER_DB)
         try:
-            equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
+            with db_backend.transaction(PLAYER_DB) as conn:
+                equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
 
-            for _ in range(amount):
-                uid = f"acc_{int(time.time() * 1000)}_{random.randint(1000,9999)}_{uuid.uuid4().hex[:4]}"
-                ins = {
-                    "uid": uid,
-                    "item_id": int(item_id),
-                    "name": item_info.get("name", "未知饰品"),
-                    "part": item_info.get("part", item_info.get("item_type", "未知部位")),
-                    "set_type": item_info.get("set_type", "未知套装"),
-                    "quality": quality,
-                    "affixes": _roll_affixes_for_quality(quality)
-                }
-                bag.append(ins)
+                for _ in range(amount):
+                    uid = f"acc_{int(time.time() * 1000)}_{random.randint(1000,9999)}_{uuid.uuid4().hex[:4]}"
+                    ins = {
+                        "uid": uid,
+                        "item_id": int(item_id),
+                        "name": item_info.get("name", "未知饰品"),
+                        "part": item_info.get("part", item_info.get("item_type", "未知部位")),
+                        "set_type": item_info.get("set_type", "未知套装"),
+                        "quality": quality,
+                        "affixes": _roll_affixes_for_quality(quality)
+                    }
+                    bag.append(ins)
 
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
-                (_safe_json_dump(equipped), _safe_json_dump(bag), str(user_id))
-            )
-            conn.commit()
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
+                    (_safe_json_dump(equipped), _safe_json_dump(bag), str(user_id))
+                )
             return True, amount, ""
         except Exception as e:
             return False, 0, str(e)
-        finally:
-            conn.close()
 
     def _remove_accessory_sql(user_id: str, item_id: int, amount: int):
         # 只从bag扣除，不动equipped
         amount = max(1, int(amount))
-        conn = db_backend.connect(PLAYER_DB)
         try:
-            equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
+            with db_backend.transaction(PLAYER_DB) as conn:
+                equipped, bag = _ensure_player_accessory_row(conn, str(user_id))
 
-            kept = []
-            removed = 0
-            need = amount
+                kept = []
+                removed = 0
+                need = amount
 
-            for acc in bag:
-                if need > 0 and int(acc.get("item_id", 0)) == int(item_id):
-                    removed += 1
-                    need -= 1
-                else:
-                    kept.append(acc)
+                for acc in bag:
+                    if need > 0 and int(acc.get("item_id", 0)) == int(item_id):
+                        removed += 1
+                        need -= 1
+                    else:
+                        kept.append(acc)
 
-            if removed <= 0:
-                return False, 0, "背包中无可扣除饰品（已装备不参与扣除）"
+                if removed <= 0:
+                    return False, 0, "背包中无可扣除饰品（已装备不参与扣除）"
 
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
-                (_safe_json_dump(equipped), _safe_json_dump(kept), str(user_id))
-            )
-            conn.commit()
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE player_accessory SET equipped = %s, bag = %s WHERE user_id = %s",
+                    (_safe_json_dump(equipped), _safe_json_dump(kept), str(user_id))
+                )
             return True, removed, ""
         except Exception as e:
             return False, 0, str(e)
-        finally:
-            conn.close()
 
     try:
         if command_name == "gm_command":
@@ -227,12 +227,20 @@ def execute_command():
             root_name = root_names.get(root_type, "未知灵根")
             root_type_name = ROOTS.get(root_type, "混沌灵根")
             
-            sql = "UPDATE user_xiuxian SET root = %s, root_type = %s WHERE user_id = %s"
-            execute_sql(DATABASE, sql, (root_name, root_type_name, user_info['user_id']))
-            
-            sql_power = "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = user_xiuxian.level), 0) WHERE user_id = %s"
             root_rate = get_root_rate(root_type_name, user_info['user_id'])
-            execute_sql(DATABASE, sql_power, (root_rate, user_info['user_id']))
+            _execute_many_in_transaction(
+                DATABASE,
+                [
+                    (
+                        "UPDATE user_xiuxian SET root = %s, root_type = %s WHERE user_id = %s",
+                        (root_name, root_type_name, user_info['user_id']),
+                    ),
+                    (
+                        "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = user_xiuxian.level), 0) WHERE user_id = %s",
+                        (root_rate, user_info['user_id']),
+                    ),
+                ],
+            )
             
             return jsonify({"success": True, "message": f"成功将 {username} 的灵根修改为 {root_name}"})
         
@@ -256,15 +264,24 @@ def execute_command():
                 return jsonify({"success": False, "error": f"无法获取境界 {level} 的数据"})
             
             max_exp = int(level_data[level]['power'])
-            sql = "UPDATE user_xiuxian SET exp = %s, level = %s WHERE user_id = %s"
-            execute_sql(DATABASE, sql, (max_exp, level, user_info['user_id']))
-            
-            sql_hp = "UPDATE user_xiuxian SET hp = exp / 2, mp = exp, atk = exp / 10 WHERE user_id = %s"
-            execute_sql(DATABASE, sql_hp, (user_info['user_id'],))
-            
-            sql_power = "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = %s), 0) WHERE user_id = %s"
             root_rate = get_root_rate(user_info['root_type'], user_info['user_id'])
-            execute_sql(DATABASE, sql_power, (root_rate, level, user_info['user_id']))
+            _execute_many_in_transaction(
+                DATABASE,
+                [
+                    (
+                        "UPDATE user_xiuxian SET exp = %s, level = %s WHERE user_id = %s",
+                        (max_exp, level, user_info['user_id']),
+                    ),
+                    (
+                        "UPDATE user_xiuxian SET hp = exp / 2, mp = exp, atk = exp / 10 WHERE user_id = %s",
+                        (user_info['user_id'],),
+                    ),
+                    (
+                        "UPDATE user_xiuxian SET power = round(exp * %s * (SELECT spend FROM level_data WHERE level = %s), 0) WHERE user_id = %s",
+                        (root_rate, level, user_info['user_id']),
+                    ),
+                ],
+            )
             
             return jsonify({"success": True, "message": f"成功将 {username} 的境界修改为 {level}"})
         

@@ -9,9 +9,12 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        admin_id = request.form.get('admin_id')
+        admin_id = str(request.form.get('admin_id') or '').strip()
         if admin_id in ADMIN_IDS:
+            session.clear()
             session['admin_id'] = admin_id
+            session['_csrf_token'] = secrets.token_urlsafe(32)
+            session.permanent = True
             return redirect(url_for('home'))
         else:
             return render_template('login.html', error="无效的管理员ID")
@@ -19,7 +22,7 @@ def login():
 
 @app.route('/logout')
 def logout():
-    session.pop('admin_id', None)
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/update')

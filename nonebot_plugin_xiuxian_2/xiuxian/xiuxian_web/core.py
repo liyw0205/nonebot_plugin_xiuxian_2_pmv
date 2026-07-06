@@ -4,6 +4,7 @@ import json
 import re
 import ast
 import platform
+import secrets
 import time
 import signal
 import subprocess
@@ -62,21 +63,6 @@ def format_time(seconds: float) -> str:
     minutes, seconds = divmod(remainder, 60)
     return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
 
-def execute_sql(db_path, sql, params=None):
-    conn = db_backend.connect(db_path)
-    conn.row_factory = db_backend.Row
-    cursor = conn.cursor()
-    try:
-        if params: cursor.execute(sql, params)
-        else: cursor.execute(sql)
-        if sql.strip().lower().startswith('select'):
-            return [dict(row) for row in cursor.fetchall()]
-        conn.commit()
-        return {"affected_rows": cursor.rowcount}
-    except Exception as e: return {"error": str(e)}
-    finally: conn.close()
-
-
 def sql_ident(name):
     return db_backend.quote_ident(str(name))
 
@@ -95,8 +81,79 @@ except ImportError:
 
 items = Items()
 update_manager = UpdateManager()
+WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # 用于会话加密
+
+
+def _config_value(name: str, default=None):
+    try:
+        value = getattr(get_driver().config, name, None)
+        if value is not None:
+            return value
+    except Exception:
+        pass
+    try:
+        value = getattr(WEB_CONFIG, name, None)
+        if value is not None:
+            return value
+    except Exception:
+        pass
+    return default
+
+
+def _config_bool(name: str, default: bool = False) -> bool:
+    value = _config_value(name, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _config_int(name: str, default: int, minimum: int = 0) -> int:
+    try:
+        return max(minimum, int(float(_config_value(name, default))))
+    except Exception:
+        return default
+
+
+def _load_or_create_web_secret_key() -> str:
+    configured = (
+        os.getenv("XIUXIAN_WEB_SECRET_KEY")
+        or str(_config_value("xiuxian_web_secret_key", "") or "")
+        or str(_config_value("web_secret_key", "") or "")
+    ).strip()
+    if configured:
+        return configured
+
+    secret_file = Path() / "data" / "xiuxian" / "web_secret_key"
+    try:
+        if secret_file.exists():
+            secret = secret_file.read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        secret = secrets.token_urlsafe(48)
+        secret_file.write_text(secret + "\n", encoding="utf-8")
+        try:
+            os.chmod(secret_file, 0o600)
+        except Exception:
+            pass
+        return secret
+    except Exception as e:
+        logger.warning(f"Web 面板密钥持久化失败，将使用本次进程临时密钥：{e}")
+        return secrets.token_urlsafe(48)
+
+
+app.secret_key = _load_or_create_web_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=_config_bool("web_session_cookie_secure", False),
+    PERMANENT_SESSION_LIFETIME=timedelta(
+        minutes=_config_int("web_session_lifetime_minutes", 720, 1)
+    ),
+)
 
 
 def api_success(**payload):
@@ -114,6 +171,192 @@ def api_error(error, status=None, **payload):
     return response
 
 
+def _json_request_expected() -> bool:
+    accept = request.headers.get("Accept", "")
+    requested_with = request.headers.get("X-Requested-With", "")
+    return (
+        request.path.startswith("/api/")
+        or "application/json" in accept
+        or requested_with.lower() == "fetch"
+        or request.is_json
+    )
+
+
+def web_error(message: str, status: int = 403):
+    if _json_request_expected():
+        return api_error(message, status=status)
+    return message, status
+
+
+def is_admin_logged_in() -> bool:
+    admin_id = session.get("admin_id")
+    return bool(admin_id and admin_id in ADMIN_IDS)
+
+
+def _is_local_request() -> bool:
+    remote_addr = request.remote_addr or ""
+    return remote_addr in {"127.0.0.1", "::1", "localhost"}
+
+
+def is_local_web_request() -> bool:
+    return _is_local_request()
+
+
+_WEB_FEATURE_DEFAULTS = {
+    "web_enable_terminal": False,
+    "web_enable_update": False,
+    "web_enable_database_write": True,
+    "web_enable_backup_restore": True,
+    "web_enable_message_send": True,
+    "web_allow_local_upload": False,
+}
+
+
+def web_feature_enabled(feature: str) -> bool:
+    return _config_bool(feature, _WEB_FEATURE_DEFAULTS.get(feature, False))
+
+
+def safe_path_under(base_dir, *parts) -> Path:
+    base = Path(base_dir).resolve()
+    candidate = base.joinpath(*[str(part) for part in parts]).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("路径不在允许目录内") from exc
+    return candidate
+
+
+def _blocked_feature_message() -> str:
+    endpoint = request.endpoint or ""
+    method = request.method.upper()
+
+    if endpoint in {"terminal", "terminal_output", "terminal_write", "terminal_pwd"}:
+        if not web_feature_enabled("web_enable_terminal"):
+            return "Web 终端未启用"
+
+    if endpoint in {"update", "check_update", "get_releases", "perform_update"}:
+        if not web_feature_enabled("web_enable_update"):
+            return "在线更新功能未启用"
+
+    if endpoint in {
+        "row_edit",
+        "batch_edit",
+        "execute_command",
+        "api_activity_config",
+        "api_activity_data_reset",
+        "api_activity_data_adjust",
+        "api_save_reward_record",
+        "api_delete_reward_record",
+        "api_clear_reward_records",
+    } and method != "GET":
+        if not web_feature_enabled("web_enable_database_write"):
+            return "数据库写入功能未启用"
+
+    if endpoint in {
+        "manual_backup",
+        "manual_db_backup",
+        "backup_config",
+        "cloud_backup_config",
+        "sync_cloud_backup",
+        "sync_cloud_db_backup",
+        "sync_cloud_config_backup",
+        "batch_sync_cloud_backups",
+        "batch_sync_cloud_db_backups",
+        "restore_backup",
+        "cloud_restore_backup",
+        "restore_db_backup",
+        "cloud_restore_db_backup",
+        "restore_config_backup",
+        "cloud_restore_config_backup",
+        "delete_backup",
+        "delete_config_backup",
+        "batch_delete_backups",
+        "batch_delete_db_backups",
+        "batch_delete_cloud_backups",
+        "batch_delete_cloud_db_backups",
+        "download_backup",
+    }:
+        if not web_feature_enabled("web_enable_backup_restore"):
+            return "备份恢复/删除功能未启用"
+
+    if endpoint in {"api_messages_send", "api_messages_broadcast", "api_messages_revoke"}:
+        if not web_feature_enabled("web_enable_message_send"):
+            return "Web 消息发送功能未启用"
+
+    return ""
+
+
+def get_csrf_token() -> str:
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def _csrf_exempt_for_request() -> bool:
+    if request.endpoint == "static":
+        return True
+    if request.endpoint == "upload_api_image" and _is_local_request():
+        return _config_bool("web_allow_local_upload", False)
+    return False
+
+
+def _validate_csrf_token():
+    if not _config_bool("web_require_csrf", True):
+        return None
+    if request.method.upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    if _csrf_exempt_for_request():
+        return None
+
+    expected = session.get("_csrf_token")
+    provided = (
+        request.headers.get("X-CSRF-Token")
+        or request.form.get("_csrf_token")
+        or request.args.get("_csrf_token")
+    )
+    if expected and provided and secrets.compare_digest(str(expected), str(provided)):
+        return None
+    return web_error("CSRF 校验失败，请刷新页面后重试", 403)
+
+
+def _validate_host_header():
+    allowed_hosts = _config_value("web_allowed_hosts", [])
+    if isinstance(allowed_hosts, str):
+        allowed = {item.strip().lower() for item in allowed_hosts.split(",") if item.strip()}
+    else:
+        try:
+            allowed = {str(item).strip().lower() for item in allowed_hosts if str(item).strip()}
+        except Exception:
+            allowed = set()
+    if not allowed:
+        return None
+
+    host = (request.host or "").split(":", 1)[0].lower()
+    if host in allowed:
+        return None
+    return web_error("Host 不在 Web 面板允许列表中", 403)
+
+
+@app.before_request
+def enforce_web_panel_security():
+    host_error = _validate_host_header()
+    if host_error:
+        return host_error
+
+    blocked_message = _blocked_feature_message()
+    if blocked_message:
+        return web_error(blocked_message, 403)
+
+    csrf_error = _validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+
+    if is_admin_logged_in():
+        session.permanent = True
+
+
 # 配置
 XIUXIANDATA = Path() / "data"
 DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
@@ -122,8 +365,8 @@ PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db"
 TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db"
 ACTIVITY_DB = XIUXIANDATA / "xiuxian" / "activity" / "activity.db"
 ADMIN_IDS = get_driver().config.superusers
-PORT = XiuConfig().web_port
-HOST = XiuConfig().web_host
+PORT = WEB_CONFIG.web_port
+HOST = WEB_CONFIG.web_host
 
 WEB_UPLOAD_CACHE = Path() / "data" / "xiuxian" / "cache" / "web_uploads"
 WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
@@ -354,41 +597,36 @@ def get_dynamic_player_tables():
     if not db_backend.database_exists(player_db_path):
         return {}
 
-    conn = None
     try:
-        conn = db_backend.connect(player_db_path)
-        table_names = conn.list_tables()
+        with db_backend.connection(player_db_path) as conn:
+            table_names = conn.list_tables()
 
-        result = {}
-        for table_name in table_names:
-            # 获取字段列表
-            fields_info = conn.table_info(table_name)
-            fields = [row[1] for row in fields_info]
+            result = {}
+            for table_name in table_names:
+                # 获取字段列表
+                fields_info = conn.table_info(table_name)
+                fields = [row[1] for row in fields_info]
 
-            # 尝试找出主键
-            primary_key = "user_id" if "user_id" in fields else None
-            if not primary_key:
-                # 如果没有 user_id，找第一个 INTEGER PRIMARY KEY
-                for row in fields_info:
-                    if row[5] == 1:  # pk=1 表示主键
-                        primary_key = row[1]
-                        break
+                pk_columns = conn.get_primary_key_columns(table_name)
+                if len(pk_columns) == 1:
+                    primary_key = pk_columns[0]
+                elif pk_columns:
+                    primary_key = pk_columns
+                else:
+                    primary_key = "user_id" if "user_id" in fields else None
 
-            result[table_name] = {
-                "name": table_name,
-                "fields": fields,
-                "primary_key": primary_key,
-                "is_dynamic": True    
-            }
+                result[table_name] = {
+                    "name": table_name,
+                    "fields": fields,
+                    "primary_key": primary_key,
+                    "is_dynamic": True
+                }
 
         return result
 
     except Exception as e:
         logger.error(f"获取 player.db 表结构失败: {e}")
         return {}
-    finally:
-        if conn:
-            conn.close()
 
 def get_dynamic_trade_tables():
     """动态获取 trade.db 中所有存在的表及其字段信息"""
@@ -397,45 +635,37 @@ def get_dynamic_trade_tables():
     if not db_backend.database_exists(trade_db_path):
         return {}
 
-    conn = None
     try:
-        conn = db_backend.connect(trade_db_path)
-        table_names = conn.list_tables()
+        with db_backend.connection(trade_db_path) as conn:
+            table_names = conn.list_tables()
 
-        result = {}
-        for table_name in table_names:
-            # 获取字段列表
-            fields_info = conn.table_info(table_name)
-            fields = [row[1] for row in fields_info]
+            result = {}
+            for table_name in table_names:
+                # 获取字段列表
+                fields_info = conn.table_info(table_name)
+                fields = [row[1] for row in fields_info]
 
-            # 尝试找出主键
-            primary_key = None
-            for row in fields_info:
-                if row[5] == 1: # pk=1 表示主键
-                    primary_key = row[1]
-                    break
-            # 特殊处理，如果表有id字段且没有其他明确的主键，且id是Text类型，作为主键
-            if not primary_key and 'id' in fields:
-                for row in fields_info:
-                    if row[1] == 'id' and row[2].upper() == 'TEXT':
-                        primary_key = 'id'
-                        break
+                pk_columns = conn.get_primary_key_columns(table_name)
+                primary_key = pk_columns[0] if len(pk_columns) == 1 else pk_columns or None
+                # 特殊处理，如果表有id字段且没有其他明确的主键，且id是Text类型，作为主键
+                if not primary_key and 'id' in fields:
+                    for row in fields_info:
+                        if row[1] == 'id' and row[2].upper() == 'TEXT':
+                            primary_key = 'id'
+                            break
 
-            result[table_name] = {
-                "name": table_name,
-                "fields": fields,
-                "primary_key": primary_key,
-                "is_dynamic": True    
-            }
+                result[table_name] = {
+                    "name": table_name,
+                    "fields": fields,
+                    "primary_key": primary_key,
+                    "is_dynamic": True
+                }
 
         return result
 
     except Exception as e:
         logger.error(f"获取 trade.db 表结构失败: {e}")
         return {}
-    finally:
-        if conn:
-            conn.close()
 
 
 def get_dynamic_activity_tables():
@@ -443,38 +673,31 @@ def get_dynamic_activity_tables():
     if not db_backend.database_exists(ACTIVITY_DB):
         return {}
 
-    conn = None
     try:
-        conn = db_backend.connect(ACTIVITY_DB)
-        table_names = conn.list_tables()
+        with db_backend.connection(ACTIVITY_DB) as conn:
+            table_names = conn.list_tables()
 
-        result = {}
-        for table_name in table_names:
-            fields_info = conn.table_info(table_name)
-            fields = [row[1] for row in fields_info]
-            primary_key = None
-            for row in fields_info:
-                if row[5] == 1:
-                    primary_key = row[1]
-                    break
-            if not primary_key and "id" in fields:
-                primary_key = "id"
+            result = {}
+            for table_name in table_names:
+                fields_info = conn.table_info(table_name)
+                fields = [row[1] for row in fields_info]
+                pk_columns = conn.get_primary_key_columns(table_name)
+                primary_key = pk_columns[0] if len(pk_columns) == 1 else pk_columns or None
+                if not primary_key and "id" in fields:
+                    primary_key = "id"
 
-            result[table_name] = {
-                "name": table_name,
-                "fields": fields,
-                "primary_key": primary_key,
-                "is_dynamic": True
-            }
+                result[table_name] = {
+                    "name": table_name,
+                    "fields": fields,
+                    "primary_key": primary_key,
+                    "is_dynamic": True
+                }
 
         return result
 
     except Exception as e:
         logger.error(f"获取 activity.db 表结构失败: {e}")
         return {}
-    finally:
-        if conn:
-            conn.close()
 
 def get_config_table_structure(config):
     """从XiuConfig获取表结构"""
@@ -548,29 +771,28 @@ def get_database_tables(db_path):
     tables = {}
     if not db_backend.database_exists(db_path): # 添加文件存在性检查
         return {}
-    conn = db_backend.connect(db_path)
-    conn.row_factory = db_backend.Row # 使用行工厂，使结果可按列名访问
-    table_names = conn.list_tables()
-    
-    for table_name in table_names:
-        # 获取表的字段信息
-        fields_info = conn.table_info(table_name)
-        fields = [row[1] for row in fields_info]
-        
-        # 查找主键字段
-        primary_key = None
-        for row in fields_info:
-            if row[5] == 1:
-                primary_key = row[1]
-                break
-        
-        tables[table_name] = {
-            "name": table_name,
-            "fields": fields,
-            "primary_key": primary_key
-        }
-    
-    conn.close()
+    with db_backend.connection(db_path) as conn:
+        table_names = conn.list_tables()
+
+        for table_name in table_names:
+            fields_info = conn.table_info(table_name)
+            fields = [row[1] for row in fields_info]
+
+            pk_columns = [
+                (int(row[5]), row[1])
+                for row in fields_info
+                if row[5]
+            ]
+            pk_columns.sort(key=lambda item: item[0])
+            primary_key_values = [name for _, name in pk_columns]
+            primary_key = primary_key_values[0] if len(primary_key_values) == 1 else primary_key_values or None
+
+            tables[table_name] = {
+                "name": table_name,
+                "fields": fields,
+                "primary_key": primary_key
+            }
+
     return tables
 
 def get_db_connection(db_path):
@@ -581,27 +803,7 @@ def get_db_connection(db_path):
 
 def execute_sql(db_path, sql, params=None):
     """执行SQL语句"""
-    conn = get_db_connection(db_path)
-    cursor = conn.cursor()
-    
-    try:
-        if params:
-            cursor.execute(sql, params)
-        else:
-            cursor.execute(sql)
-        
-        # 判断是否是查询语句
-        if sql.strip().lower().startswith('select'):
-            result = cursor.fetchall()
-            return [dict(row) for row in result]
-        else:
-            conn.commit()
-            return {"affected_rows": cursor.rowcount}
-    except Exception as e:
-        return {"error": str(e)}
-    finally:
-        if conn:
-            conn.close()
+    return db_backend.execute_sql_safely(db_path, sql, params)
 
 def get_message_db_connection():
     """获取 message.db 连接"""
@@ -891,6 +1093,14 @@ def get_specific_reference_candidate_for_qq(
 
 def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, search_value=None, search_condition='='):
     """获取表数据（分页和搜索）"""
+    try:
+        page = max(1, int(page))
+    except Exception:
+        page = 1
+    try:
+        per_page = min(200, max(1, int(per_page)))
+    except Exception:
+        per_page = 10
     offset = (page - 1) * per_page
 
     # 获取表信息以确定主键和字段
@@ -900,9 +1110,12 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         return {"error": "表不存在", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
 
     primary_key = table_info.get('primary_key', 'id')
+    primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
     fields = table_info.get('fields', [])
     if not fields:
         return {"error": "表中没有字段", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
+    if search_field and search_field not in fields:
+        return {"error": "搜索字段不存在", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
 
     # 构建基础 SELECT 语句，包含所有字段和 COUNT(*) OVER() 作为总数
     table_sql = sql_ident(table_name)
@@ -941,14 +1154,15 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
                 if not values[1]:
                     return {"error": "第二个搜索值不能为空", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
                 where_clauses.append(f"{sql_ident(search_field)} {search_condition} %s")
-                where_clauses.append(f"({' OR '.join([sql_like_text(field) for field in fields if field != primary_key])})")
-                params.extend([float(values[0])] + [f"%{values[1]}%" for field in fields if field != primary_key])
+                searchable_fields = [field for field in fields if field not in primary_keys]
+                where_clauses.append(f"({' OR '.join([sql_like_text(field) for field in searchable_fields])})")
+                params.extend([float(values[0])] + [f"%{values[1]}%" for field in searchable_fields])
         else:
             return {"error": "无效的搜索条件", "data": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
     elif search_value and not search_field:
         # 全字段搜索逻辑
         # 排除主键字段
-        searchable_fields = [field for field in fields if field != primary_key]
+        searchable_fields = [field for field in fields if field not in primary_keys]
         if searchable_fields:
             conditions = []
             for field in searchable_fields:

@@ -187,6 +187,66 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "Web设置"
     },
+    "web_require_csrf": {
+        "name": "CSRF校验",
+        "description": "开启后 Web 写请求必须携带页面生成的 CSRF Token",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_session_cookie_secure": {
+        "name": "HTTPS Cookie",
+        "description": "HTTPS 部署时开启；纯 HTTP/局域网访问保持关闭",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_session_lifetime_minutes": {
+        "name": "会话有效期",
+        "description": "管理面板登录会话有效期（分钟）",
+        "type": "int",
+        "category": "Web安全"
+    },
+    "web_allowed_hosts": {
+        "name": "Host白名单",
+        "description": "允许访问面板的 Host，留空不限制，多个用逗号分隔",
+        "type": "list[str]",
+        "category": "Web安全"
+    },
+    "web_enable_terminal": {
+        "name": "Web终端",
+        "description": "是否启用 Web 终端入口",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_enable_update": {
+        "name": "在线更新",
+        "description": "是否启用在线检测更新和执行更新",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_enable_database_write": {
+        "name": "数据库写入",
+        "description": "是否允许 Web 数据库编辑、指令中心、活动数据和发放记录写入",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_enable_backup_restore": {
+        "name": "备份恢复删除",
+        "description": "是否允许 Web 执行备份、同步、恢复、下载和删除操作",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_enable_message_send": {
+        "name": "消息主动发送",
+        "description": "是否允许 Web 消息面板主动发送、广播和撤回消息",
+        "type": "bool",
+        "category": "Web安全"
+    },
+    "web_allow_local_upload": {
+        "name": "本机免登上传",
+        "description": "是否允许本机免登录调用 /upload_image",
+        "type": "bool",
+        "category": "Web安全"
+    },
     "level_up_cd": {
         "name": "突破CD",
         "description": "突破CD（分钟）",
@@ -744,7 +804,9 @@ def inject_navigation():
     return dict(
         get_command_icon=get_command_icon,
         get_config_category_icon=get_config_category_icon,
-        is_active=is_active
+        is_active=is_active,
+        csrf_token=get_csrf_token,
+        web_feature_enabled=web_feature_enabled
     )
 
 def get_root_rate(root_type, user_id):
@@ -805,6 +867,7 @@ def get_config_category_icon(category):
         "体力设置": "fas fa-heart",
         "轮回设置": "fas fa-infinity",
         "限流设置": "fas fa-tachometer-alt",
-        "云备份设置": "fas fa-cloud-upload-alt"
+        "云备份设置": "fas fa-cloud-upload-alt",
+        "Web安全": "fas fa-shield-halved"
     }
     return icon_map.get(category, "fas fa-cog")

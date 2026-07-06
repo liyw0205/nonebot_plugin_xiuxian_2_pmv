@@ -33,6 +33,17 @@ def db_path_for_selection(db_name):
     return Path() / "data" / "xiuxian" / safe_name
 
 
+def safe_request_filename(value) -> str:
+    name = Path(str(value or "")).name
+    if not name or name in {".", ".."} or "\x00" in name:
+        return ""
+    return name
+
+
+def backup_path_under(*parts) -> Path:
+    return safe_path_under(Path() / "data" / "xiuxian" / "backups", *parts)
+
+
 @app.route('/get_cloud_backups')
 def get_cloud_backups():
     """获取云端备份列表"""
@@ -51,13 +62,13 @@ def sync_cloud_backup():
         return jsonify({"success": False, "error": "未登录"})
     
     data = request.get_json()
-    filename = data.get('filename')
+    filename = safe_request_filename(data.get('filename'))
     overwrite = data.get('overwrite', False) # 是否允许覆盖
     
     if not filename:
         return jsonify({"success": False, "error": "文件名不能为空"})
     
-    local_path = Path() / "data" / "xiuxian" / "backups" / filename
+    local_path = backup_path_under(filename)
     
     # 检测本地是否存在
     if local_path.exists() and not overwrite:
@@ -80,11 +91,11 @@ def cloud_restore_backup():
         return jsonify({"success": False, "error": "未登录"})
     
     data = request.get_json()
-    filename = data.get('filename')
+    filename = safe_request_filename(data.get('filename'))
     if not filename:
         return jsonify({"success": False, "error": "无效文件名"})
     
-    local_path = Path() / "data" / "xiuxian" / "backups" / filename
+    local_path = backup_path_under(filename)
     
     # 步骤1：检查本地，没有就同步
     if not local_path.exists():
@@ -153,13 +164,13 @@ def sync_cloud_config_backup():
 
     try:
         data = request.get_json()
-        filename = data.get('filename')
+        filename = safe_request_filename(data.get('filename'))
         overwrite = data.get('overwrite', False)
 
         if not filename:
             return jsonify({"success": False, "error": "文件名不能为空"})
 
-        local_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / filename
+        local_path = backup_path_under("config_backups", filename)
         if local_path.exists() and not overwrite:
             return jsonify({
                 "success": False,
@@ -190,7 +201,7 @@ def cloud_restore_config_backup():
 
     try:
         data = request.get_json()
-        filename = data.get('filename')
+        filename = safe_request_filename(data.get('filename'))
         if not filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
 
@@ -215,7 +226,7 @@ def restore_backup():
     
     try:
         data = request.get_json()
-        backup_filename = data.get('backup_filename')
+        backup_filename = safe_request_filename(data.get('backup_filename'))
         
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
@@ -261,7 +272,7 @@ def restore_db_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     data = request.get_json() or {}
-    backup_filename = data.get("backup_filename")
+    backup_filename = safe_request_filename(data.get("backup_filename"))
     selected_dbs = normalize_db_selection(data.get("selected_dbs", []))
     if not backup_filename:
         return jsonify({"success": False, "error": "未指定备份文件"})
@@ -286,7 +297,7 @@ def sync_cloud_db_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     data = request.get_json() or {}
-    filename = data.get("filename")
+    filename = safe_request_filename(data.get("filename"))
     overwrite = data.get("overwrite", False)
     if not filename:
         return jsonify({"success": False, "error": "文件名不能为空"})
@@ -304,7 +315,7 @@ def cloud_restore_db_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     data = request.get_json() or {}
-    filename = data.get("filename")
+    filename = safe_request_filename(data.get("filename"))
     selected_dbs = normalize_db_selection(data.get("selected_dbs", []))
     if not filename:
         return jsonify({"success": False, "error": "未指定云端备份文件"})
@@ -325,14 +336,15 @@ def batch_delete_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        backup_dir = Path() / "data" / "xiuxian" / "backups"
         deleted, failed = [], []
 
         for name in filenames:
+            safe_name = safe_request_filename(name)
+            if not safe_name:
+                failed.append({"filename": str(name), "reason": "无效文件名"})
+                continue
             try:
-                # 防止路径穿越
-                safe_name = Path(name).name
-                f = backup_dir / safe_name
+                f = backup_path_under(safe_name)
                 if f.exists() and f.is_file():
                     f.unlink()
                     deleted.append(safe_name)
@@ -367,8 +379,11 @@ def batch_sync_cloud_backups():
 
         success_list, failed_list, exists_list = [], [], []
         for filename in filenames:
-            safe_name = Path(filename).name
-            local_path = Path() / "data" / "xiuxian" / "backups" / safe_name
+            safe_name = safe_request_filename(filename)
+            if not safe_name:
+                failed_list.append({"filename": str(filename), "reason": "无效文件名"})
+                continue
+            local_path = backup_path_under(safe_name)
 
             # 覆盖检测
             if local_path.exists() and not overwrite:
@@ -405,12 +420,14 @@ def batch_delete_db_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
         deleted, failed = [], []
 
         for name in filenames:
-            safe_name = Path(name).name
-            f = backup_dir / safe_name
+            safe_name = safe_request_filename(name)
+            if not safe_name:
+                failed.append({"filename": str(name), "reason": "无效文件名"})
+                continue
+            f = backup_path_under("db_backup", safe_name)
             try:
                 if f.exists() and f.is_file():
                     f.unlink()
@@ -446,8 +463,11 @@ def batch_sync_cloud_db_backups():
         synced, exists, failed = [], [], []
 
         for filename in filenames:
-            safe_name = Path(filename).name
-            local_path = Path() / "data" / "xiuxian" / "backups" / "db_backup" / safe_name
+            safe_name = safe_request_filename(filename)
+            if not safe_name:
+                failed.append({"filename": str(filename), "reason": "无效文件名"})
+                continue
+            local_path = backup_path_under("db_backup", safe_name)
 
             if local_path.exists() and not overwrite:
                 exists.append(safe_name)
@@ -485,7 +505,10 @@ def batch_delete_cloud_backups():
 
         deleted, failed = [], []
         for name in filenames:
-            safe_name = Path(name).name
+            safe_name = safe_request_filename(name)
+            if not safe_name:
+                failed.append({"filename": str(name), "reason": "无效文件名"})
+                continue
             ok, msg = update_manager.delete_webdav_backup(safe_name)
             if ok:
                 deleted.append(safe_name)
@@ -515,7 +538,10 @@ def batch_delete_cloud_db_backups():
 
         deleted, failed = [], []
         for name in filenames:
-            safe_name = Path(name).name
+            safe_name = safe_request_filename(name)
+            if not safe_name:
+                failed.append({"filename": str(name), "reason": "无效文件名"})
+                continue
             ok, msg = update_manager.delete_webdav_db_backup(safe_name)
             if ok:
                 deleted.append(safe_name)
@@ -692,15 +718,17 @@ def restore_config_backup():
     
     try:
         data = request.get_json()
-        backup_filename = data.get('backup_filename')
+        backup_filename = safe_request_filename(data.get('backup_filename'))
         
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / backup_filename
+        backup_path = backup_path_under("config_backups", backup_filename)
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
+        if not backup_path.is_file():
+            return jsonify({"success": False, "error": f"无效备份文件: {backup_filename}"})
         
         # 读取备份文件
         with open(backup_path, 'r', encoding='utf-8') as f:
@@ -761,16 +789,24 @@ def manual_backup():
 def download_backup(filename):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
-    
-    backup_path = Path() / "data" / "xiuxian" / "backups" / filename
+
+    safe_name = safe_request_filename(filename)
+    if not safe_name:
+        return "无效文件名", 400
+    try:
+        backup_path = backup_path_under(safe_name)
+    except ValueError:
+        return "无效文件名", 400
     
     if not backup_path.exists():
         return "备份文件不存在", 404
+    if not backup_path.is_file():
+        return "无效备份文件", 400
     
     return send_file(
         str(backup_path.absolute()),
         as_attachment=True,
-        download_name=filename,
+        download_name=safe_name,
         mimetype='application/zip'
     )
 
@@ -781,15 +817,17 @@ def delete_backup():
     
     try:
         data = request.get_json()
-        backup_filename = data.get('backup_filename')
+        backup_filename = safe_request_filename(data.get('backup_filename'))
         
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = Path() / "data" / "xiuxian" / "backups" / backup_filename
+        backup_path = backup_path_under(backup_filename)
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
+        if not backup_path.is_file():
+            return jsonify({"success": False, "error": f"无效备份文件: {backup_filename}"})
         
         # 删除备份文件
         backup_path.unlink()
@@ -809,12 +847,12 @@ def delete_config_backup():
     
     try:
         data = request.get_json()
-        backup_filename = data.get('backup_filename')
+        backup_filename = safe_request_filename(data.get('backup_filename'))
         
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
 
-        backup_path = Path() / "data" / "xiuxian" / "backups" / "config_backups" / backup_filename
+        backup_path = backup_path_under("config_backups", backup_filename)
         
         if not backup_path.exists():
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})

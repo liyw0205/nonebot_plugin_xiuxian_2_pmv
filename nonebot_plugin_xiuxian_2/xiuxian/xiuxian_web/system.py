@@ -233,18 +233,17 @@ def search_users():
 
 @app.route('/download/<path:filepath>')
 def download_file(filepath):
-    # 构建文件的完整路径
-    full_path = Path() / "data" / "xiuxian" / "cache" / filepath
-    full_path = full_path.absolute()
-    # 检查文件是否存在
+    cache_dir = Path() / "data" / "xiuxian" / "cache"
+    try:
+        full_path = safe_path_under(cache_dir, filepath)
+    except ValueError:
+        abort(403)
+
     if not full_path.exists():
-        abort(404)  # 文件不存在，返回404错误
-    
-    # 检查文件是否在允许的目录下，防止目录遍历攻击
-    if not full_path.is_relative_to(Path().absolute()):
-        abort(403)  # 文件不在允许的目录下，返回403错误
-    
-    # 发送文件
+        abort(404)
+    if not full_path.is_file():
+        abort(403)
+
     return send_file(str(full_path))
 
 # 全局存储终端会话：admin_id -> {'fd': master_fd, 'pid': child_pid}
@@ -384,8 +383,9 @@ def upload_api_image():
     """
     供外部/其他插件调用的图片上传接口
     """
-    # 安全检查：仅允许本地调用或已登录管理员
-    if 'admin_id' not in session and request.remote_addr != '127.0.0.1':
+    # 安全检查：默认要求管理员登录；如需本机免登录调用，可显式开启 web_allow_local_upload。
+    local_upload_allowed = web_feature_enabled("web_allow_local_upload") and is_local_web_request()
+    if 'admin_id' not in session and not local_upload_allowed:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     channel_id = request.form.get('channel_id')

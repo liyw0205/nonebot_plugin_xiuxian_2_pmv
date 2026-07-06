@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}修仙管理面板{% endblock %}</title>
+    <meta name="xiuxian-csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script>
@@ -14,6 +15,26 @@
             } catch (e) {
                 document.documentElement.setAttribute('data-theme', 'dark');
             }
+        })();
+        (function() {
+            const nativeFetch = window.fetch.bind(window);
+            window.xiuxianCsrfToken = function() {
+                const meta = document.querySelector('meta[name="xiuxian-csrf-token"]');
+                return meta ? meta.getAttribute('content') || '' : '';
+            };
+            window.fetch = function(input, init = {}) {
+                const requestUrl = input instanceof Request ? input.url : input;
+                const url = new URL(requestUrl, window.location.href);
+                const method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+                if (url.origin === window.location.origin && !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+                    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+                    if (!headers.has('X-CSRF-Token')) {
+                        headers.set('X-CSRF-Token', window.xiuxianCsrfToken());
+                    }
+                    init = {...init, headers};
+                }
+                return nativeFetch(input, init);
+            };
         })();
     </script>
 </head>
@@ -54,8 +75,12 @@
                 <ul>
                     <li><a href="{{ url_for('logs') }}" data-refresh-page="true" {% if is_active('logs') %}class="active"{% endif %}><i class="fas fa-file-lines"></i><span>日志查看</span></a></li>
                     <li><a href="{{ url_for('backups') }}" data-refresh-page="true" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-box-archive"></i><span>备份管理</span></a></li>
+                    {% if web_feature_enabled('web_enable_update') %}
                     <li><a href="{{ url_for('update') }}" data-refresh-page="true" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-rotate"></i><span>检测更新</span></a></li>
+                    {% endif %}
+                    {% if web_feature_enabled('web_enable_terminal') %}
                     <li><a href="{{ url_for('terminal') }}" data-refresh-page="true" {% if is_active('terminal') %}class="active"{% endif %}><i class="fas fa-terminal"></i><span>Web 终端</span></a></li>
+                    {% endif %}
                 </ul>
             </nav>
 

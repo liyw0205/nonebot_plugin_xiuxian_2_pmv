@@ -15,6 +15,7 @@
 | [🔮 物品系统详解](docs/buff.md) | 功法 / 神通 / 装备 / 丹药 / 药材等完整说明 |
 | [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送接口文档 |
 | [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由说明 |
+| [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 安全开关与路径约束 |
 | **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认 `http://IP:5888`，超管 QQ 登录） |
 
 ---
@@ -568,6 +569,22 @@ screen -S xiu2 -X quit
 
 > NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。本机调试可访问 `http://127.0.0.1:5888`；外网访问请自行做好防火墙与 HTTPS 反代。
 
+### 安全开关
+
+Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读取配置项，未配置时自动生成到 `data/xiuxian/web_secret_key`。写请求默认开启 CSRF 校验；普通页面发起的同源 `fetch` 会自动携带 Token。
+
+| 配置项 | 默认值 | 说明 |
+|:------|:------:|:-----|
+| `web_require_csrf` | `True` | Web 写请求 CSRF 校验 |
+| `web_allowed_hosts` | `[]` | Host 白名单，留空不限制 |
+| `web_session_cookie_secure` | `False` | HTTPS 反代时建议开启 |
+| `web_enable_terminal` | `False` | Web 终端入口 |
+| `web_enable_update` | `False` | 在线检测更新与执行更新 |
+| `web_enable_database_write` | `True` | 数据库编辑、指令中心、活动数据和发放记录写入 |
+| `web_enable_backup_restore` | `True` | 备份、同步、恢复、下载和删除 |
+| `web_enable_message_send` | `True` | Web 消息主动发送、广播和撤回 |
+| `web_allow_local_upload` | `False` | 本机免登录调用 `/upload_image` |
+
 ### 功能一览
 
 | 模块 | 路径 | 能力简述 |
@@ -600,6 +617,8 @@ screen -S xiu2 -X quit
 - `message.db` 会在运行期自动创建，用于消息记录。
 
 **Web 修仙管理面板 → 备份管理** 会直接打包上述库；恢复时可按库选择覆盖。详见上一节。
+
+新增数据库访问代码请优先走 `xiuxian_utils/db_backend.py`，需要结构变更时放入 `xiuxian_utils/db_migrations.py` 并保持幂等。详细约定见 [数据层与 Web 面板治理](docs/database_web_governance.md)。
 
 ---
 

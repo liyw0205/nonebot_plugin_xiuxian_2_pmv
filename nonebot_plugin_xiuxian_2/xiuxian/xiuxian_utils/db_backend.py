@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import re
 import sqlite3
 from pathlib import Path
@@ -233,6 +234,108 @@ def connect(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     raw.create_function("LEAST", -1, _least)
     raw.create_function("GREATEST", -1, _greatest)
     return SQLiteConnection(raw, db_path)
+
+
+@contextmanager
+def connection(database: str | Path, *args, row_factory: Any = Row, **kwargs):
+    """统一的短连接入口，供 Web/API 查询和脚本任务复用。"""
+    conn = connect(database, *args, **kwargs)
+    if row_factory is not None:
+        conn.row_factory = row_factory
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def transaction(database: str | Path, *args, row_factory: Any = Row, **kwargs):
+    """事务入口：异常回滚，正常提交。"""
+    conn = connect(database, *args, **kwargs)
+    if row_factory is not None:
+        conn.row_factory = row_factory
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _row_to_dict(row: Any) -> Any:
+    if row is None:
+        return None
+    if isinstance(row, sqlite3.Row):
+        return dict(row)
+    try:
+        return dict(row)
+    except Exception:
+        return row
+
+
+def query_all(database: str | Path, sql: str, params: Any = None) -> list[Any]:
+    """执行查询并返回 dict 列表。"""
+    with connection(database) as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        return [_row_to_dict(row) for row in cur.fetchall()]
+
+
+def query_one(database: str | Path, sql: str, params: Any = None) -> Any:
+    """执行查询并返回单行 dict；无记录返回 None。"""
+    with connection(database) as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        return _row_to_dict(cur.fetchone())
+
+
+def execute_write(database: str | Path, sql: str, params: Any = None) -> int:
+    """执行写 SQL 并返回影响行数。"""
+    with transaction(database) as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        return cur.rowcount
+
+
+def execute_sql(database: str | Path, sql: str, params: Any = None) -> Any:
+    """
+    兼容旧 Web 层的统一 SQL 执行入口。
+
+    查询语句返回 dict 列表，写语句返回 {"affected_rows": n}。
+    """
+    with connection(database) as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        if cur.description:
+            return [_row_to_dict(row) for row in cur.fetchall()]
+        conn.commit()
+        return {"affected_rows": cur.rowcount}
+
+
+def execute_sql_safely(database: str | Path, sql: str, params: Any = None) -> Any:
+    try:
+        return execute_sql(database, sql, params)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def ensure_columns(database: str | Path, table_name: str, columns: dict[str, str]) -> list[str]:
+    """按需为表补列，返回本次新增列名。"""
+    added: list[str] = []
+    with transaction(database) as conn:
+        existing = {name.lower() for name in conn.column_names(table_name)}
+        cur = conn.cursor()
+        for column_name, definition in columns.items():
+            if str(column_name).lower() in existing:
+                continue
+            cur.execute(
+                f"ALTER TABLE {quote_ident(table_name)} "
+                f"ADD COLUMN {quote_ident(column_name)} {definition}"
+            )
+            added.append(str(column_name))
+    return added
 
 
 def list_tables(database: str | Path) -> list[str]:

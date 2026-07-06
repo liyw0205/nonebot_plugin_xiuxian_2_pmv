@@ -117,6 +117,7 @@ class XiuxianDateManage:
             self._read_cache_ttl = max(0.0, float(os.getenv("XIUXIAN_READ_CACHE_TTL", "2")))
             logger.opt(colors=True).info(f"<green>修仙数据库已连接！</green>")
             self._check_data()
+            self._run_core_migrations()
 
     def close(self):
         with self._conn_lock:
@@ -164,7 +165,16 @@ class XiuxianDateManage:
 
             self.conn = db_backend.connect(self.database_path, check_same_thread=False)
             self._check_data()
+            self._run_core_migrations()
             logger.opt(colors=True).info(f"<green>修仙数据库已重连！</green>")
+
+    def _run_core_migrations(self):
+        try:
+            from .db_migrations import run_core_migrations
+
+            run_core_migrations(self.database_path)
+        except Exception as e:
+            logger.warning(f"修仙数据库迁移检查失败：{e}")
 
     def _check_data(self):
         """检查数据完整性"""
