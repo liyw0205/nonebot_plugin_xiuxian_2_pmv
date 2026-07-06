@@ -145,8 +145,8 @@
                     </div>
                 </div>
 
-                <button id="autoRefreshBtn" class="icon-btn" onclick="toggleAutoRefresh()" title="自动刷新" type="button">
-                    <i class="fas fa-bolt"></i>
+                <button id="autoRefreshBtn" class="icon-btn auto-refresh-on" onclick="refreshAll()" title="刷新一次" type="button">
+                    <i class="fas fa-sync"></i>
                 </button>
             </div>
 
@@ -189,7 +189,7 @@
                 <div class="composer-expanded hidden" id="composerExpanded">
                     <div class="composer-toolbar">
                         <div class="composer-mode-row">
-                            <button id="sendModeToggleBtn" class="mode-toggle-card" onclick="toggleSendMode()" type="button">
+                            <button id="sendModeToggleBtn" class="mode-toggle-card" onclick="toggleSendMode(event)" onpointerdown="handleSendModePointer(event)" type="button">
                                 <i id="sendModeIcon" class="fas fa-comment-dots"></i>
                                 <span id="sendModeText">普通消息</span>
                             </button>
@@ -557,6 +557,27 @@
     border-radius: inherit;
 }
 
+.session-avatar,
+.qq-chat-avatar,
+.msg-avatar,
+.qq-window-avatar,
+.session-avatar img,
+.qq-chat-avatar img,
+.msg-avatar img,
+.avatar-img {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+}
+
+.session-avatar img,
+.qq-chat-avatar img,
+.msg-avatar img,
+.avatar-img {
+    pointer-events: none;
+}
+
 .session-info {
     flex: 1;
     min-width: 0;
@@ -875,8 +896,12 @@
     transform: translateX(-50%);
     padding: 7px 12px;
     border-radius: 999px;
-    background: rgba(0, 0, 0, .76);
-    color: #fff;
+    background: rgba(12, 22, 34, 0.88) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     font-size: 0.78rem;
     pointer-events: none;
 }
@@ -911,11 +936,18 @@
     max-width: 100%;
     vertical-align: baseline;
     border-radius: 999px;
-    padding: 0 6px;
-    background: color-mix(in srgb, var(--accent-color) 14%, transparent);
-    color: var(--accent-color);
+    padding: 0 7px;
+    background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, var(--accent-color) 36%, transparent);
+    color: color-mix(in srgb, var(--accent-color) 72%, #0d3348);
     font-weight: 700;
     overflow-wrap: anywhere;
+}
+
+[data-theme='dark'] .msg-mention {
+    background: color-mix(in srgb, var(--accent-color) 24%, #0d1a27);
+    border-color: color-mix(in srgb, var(--accent-color) 46%, transparent);
+    color: #b9efff;
 }
 
 .msg-raw {
@@ -1159,6 +1191,8 @@
     font-weight: 600;
     box-shadow: 0 2px 8px var(--shadow-color);
     transition: all .18s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .mode-toggle-card:hover {
@@ -2398,6 +2432,18 @@ body.messages-layout[data-theme='dark'],
     background: #f1fbff;
 }
 
+@media (hover: none) and (pointer: coarse) {
+    .mode-toggle-card:hover {
+        color: var(--text-primary) !important;
+        background: var(--surface-glass-strong) !important;
+    }
+
+    .mode-toggle-card.markdown:hover {
+        color: #fff !important;
+        background: linear-gradient(135deg, var(--accent-color), color-mix(in srgb, var(--accent-color) 68%, var(--info-color))) !important;
+    }
+}
+
 #messageInput,
 #mediaUrl {
     border-radius: 6px;
@@ -2783,6 +2829,10 @@ body.messages-layout[data-theme='dark'] header {
     .message-action-menu {
         min-width: 128px;
     }
+
+    [data-theme='dark'] .mobile-back {
+        color: #edf6ff;
+    }
 }
 </style>
 
@@ -2826,6 +2876,8 @@ let currentLastRowId = 0;
 let currentOldestRowId = 0;
 let hasMoreHistory = false;
 let lastSessionRowId = 0;
+let messageLoadToken = 0;
+let messageProgressDepth = 0;
 let historyScrollTimer = null;
 let messagePressTimer = null;
 let messagePressTarget = null;
@@ -2834,6 +2886,10 @@ let messageActionTarget = null;
 let avatarPressTimer = null;
 let avatarPressTarget = null;
 let avatarPressStart = null;
+let lastAvatarMentionAt = 0;
+let lastAvatarMentionUserId = '';
+let sendModePointerHandledAt = 0;
+let pendingComposerFocusTimer = null;
 
 let lastRenderedMessageKeys = [];
 let lastRenderedSessionKeys = [];
@@ -2865,13 +2921,50 @@ function getQqShell() {
     return document.getElementById('qqShell') || document.querySelector('.qq-shell');
 }
 
-function syncMobileViewportHeight() {
+function startMessageProgress() {
+    messageProgressDepth += 1;
+    if (messageProgressDepth === 1) {
+        window.XiuxianWeb?.startProgress?.();
+    }
+}
+
+function finishMessageProgress() {
+    if (messageProgressDepth <= 0) return;
+    messageProgressDepth -= 1;
+    if (messageProgressDepth === 0) {
+        window.XiuxianWeb?.finishProgress?.();
+    }
+}
+
+async function withMessageProgress(task) {
+    startMessageProgress();
+    try {
+        return await task();
+    } finally {
+        finishMessageProgress();
+    }
+}
+
+function isEditingTextInput() {
+    const el = document.activeElement;
+    if (!el) return false;
+
+    const tagName = String(el.tagName || '').toUpperCase();
+    return tagName === 'INPUT'
+        || tagName === 'TEXTAREA'
+        || el.isContentEditable;
+}
+
+function syncMobileViewportHeight(force = false) {
+    if (!force && isMobileChatLayout() && isEditingTextInput()) {
+        return;
+    }
     document.documentElement.style.setProperty('--xiuxian-vvh', `${window.innerHeight}px`);
 }
 
-window.addEventListener('resize', syncMobileViewportHeight, { passive: true });
+window.addEventListener('resize', () => syncMobileViewportHeight(), { passive: true });
 window.addEventListener('orientationchange', () => {
-    setTimeout(syncMobileViewportHeight, 120);
+    setTimeout(() => syncMobileViewportHeight(true), 120);
 }, { passive: true });
 
 function escapeHtml(s) {
@@ -2907,7 +3000,7 @@ function isHttpUrl(url) {
 }
 
 function renderAvatarImage(url) {
-    return `<img class="avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy">`;
+    return `<img class="avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy" draggable="false">`;
 }
 
 function getMentionName(userId, mentionMap = {}) {
@@ -2969,6 +3062,23 @@ function setChatAvatar(text, avatar) {
 function sceneTargetKey(scene) {
     if (scene === 'group' || scene === 'channel_group') return 'group_id';
     return 'user_id';
+}
+
+function getCurrentConversationContext() {
+    if (!currentSession) return null;
+    return {
+        adapter: currentSession.adapter || '',
+        scene: currentSession.scene,
+        targetId: currentSession.target_id
+    };
+}
+
+function isCurrentConversationContext(context) {
+    return !!context
+        && !!currentSession
+        && (currentSession.adapter || '') === context.adapter
+        && currentSession.scene === context.scene
+        && currentSession.target_id === context.targetId;
 }
 
 function shouldStickToBottom(el, threshold = 120) {
@@ -3966,7 +4076,24 @@ function getFirstVisibleMessageIndex(box) {
     return rows.length - 1;
 }
 
-function toggleSendMode() {
+function toggleSendMode(event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    if (sendModePointerHandledAt && Date.now() - sendModePointerHandledAt < 450) {
+        return;
+    }
+
+    setSendMode(sendMode === 'markdown' ? 'plain' : 'markdown');
+}
+
+function handleSendModePointer(event) {
+    if (event.pointerType === 'mouse') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelPendingComposerFocus();
+    sendModePointerHandledAt = Date.now();
     setSendMode(sendMode === 'markdown' ? 'plain' : 'markdown');
 }
 
@@ -4052,17 +4179,31 @@ function expandComposer() {
     document.getElementById('composerCollapsed').classList.add('hidden');
     document.getElementById('composerExpanded').classList.remove('hidden');
 
-    setTimeout(() => {
-        document.getElementById('messageInput').focus();
+    cancelPendingComposerFocus();
+    pendingComposerFocusTimer = setTimeout(() => {
+        pendingComposerFocusTimer = null;
+        const input = document.getElementById('messageInput');
+        try {
+            input?.focus({ preventScroll: true });
+        } catch (e) {
+            input?.focus();
+        }
     }, 50);
 }
 
 function collapseComposer() {
     composerExpanded = false;
+    cancelPendingComposerFocus();
     document.getElementById('composerExpanded').classList.add('hidden');
     document.getElementById('composerCollapsed').classList.remove('hidden');
 
     if (mdPreviewing) toggleMarkdownPreview(true);
+}
+
+function cancelPendingComposerFocus() {
+    if (!pendingComposerFocusTimer) return;
+    clearTimeout(pendingComposerFocusTimer);
+    pendingComposerFocusTimer = null;
 }
 
 function chooseMediaType(type) {
@@ -4261,7 +4402,7 @@ async function loadSessionUpdates() {
     }
 }
 
-function selectSession(index) {
+async function selectSession(index) {
     const s = sessionsCache[index];
     if (!s) return;
 
@@ -4305,9 +4446,13 @@ function selectSession(index) {
     const shell = getQqShell();
     if (shell) shell.classList.add('mobile-chat-open');
 
-    loadSessions(true);
-    loadMessages(true, false);
-    loadMessageDates();
+    await withMessageProgress(async () => {
+        await Promise.all([
+            loadSessions(true),
+            loadMessages(true, false),
+            loadMessageDates()
+        ]);
+    });
 }
 
 function backToSessions() {
@@ -4318,6 +4463,7 @@ function backToSessions() {
 
 async function loadMessageDates() {
     const sel = document.getElementById('dateSelect');
+    const context = getCurrentConversationContext();
 
     if (!currentSession) {
         sel.disabled = true;
@@ -4338,6 +4484,10 @@ async function loadMessageDates() {
 
         const res = await fetch('/api/messages/dates?' + qs.toString());
         const data = await res.json();
+
+        if (!isCurrentConversationContext(context)) {
+            return;
+        }
 
         if (!data.success) {
             currentDate = '';
@@ -4370,6 +4520,9 @@ async function loadMessageDates() {
         sel.disabled = false;
 
     } catch (e) {
+        if (!isCurrentConversationContext(context)) {
+            return;
+        }
         currentDate = '';
         sel.innerHTML = `<option value="">全部历史</option>`;
         sel.value = '';
@@ -4386,7 +4539,7 @@ function onDateChange() {
     hasMoreHistory = false;
     isLoadingHistory = false;
     hideUnreadHint();
-    loadMessages(true, false);
+    withMessageProgress(() => loadMessages(true, false));
 }
 
 async function loadMessagesSince() {
@@ -4441,10 +4594,23 @@ function appendMessages(rows) {
 }
 
 
-async function loadMessages(forceBottom = false, silent = false) {
-    if (!currentSession || isLoadingMessages) return;
+function isCurrentMessageRequest(loadToken, context) {
+    if (loadToken !== messageLoadToken || !currentSession || !context) return false;
 
+    const keyword = document.getElementById('keywordInput')?.value.trim() || '';
+    return (currentSession.adapter || '') === context.adapter
+        && currentSession.scene === context.scene
+        && currentSession.target_id === context.targetId
+        && currentDate === context.date
+        && keyword === context.keyword;
+}
+
+async function loadMessages(forceBottom = false, silent = false) {
+    if (!currentSession) return;
+
+    const loadToken = ++messageLoadToken;
     isLoadingMessages = true;
+    let requestContext = null;
 
     const box = document.getElementById('messageList');
     const wasBottom = shouldStickToBottom(box, 120);
@@ -4453,6 +4619,13 @@ async function loadMessages(forceBottom = false, silent = false) {
 
     try {
         const keyword = document.getElementById('keywordInput').value.trim();
+        requestContext = {
+            adapter: currentSession.adapter || '',
+            scene: currentSession.scene,
+            targetId: currentSession.target_id,
+            date: currentDate,
+            keyword
+        };
 
         const qs = new URLSearchParams({
             scene: currentSession.scene,
@@ -4470,6 +4643,10 @@ async function loadMessages(forceBottom = false, silent = false) {
 
         const res = await fetch('/api/messages/list?' + qs.toString());
         const data = await res.json();
+
+        if (!isCurrentMessageRequest(loadToken, requestContext)) {
+            return;
+        }
 
         if (!data.success) {
             if (!silent) {
@@ -4525,11 +4702,13 @@ async function loadMessages(forceBottom = false, silent = false) {
         }
 
     } catch (e) {
-        if (!silent) {
+        if (!silent && isCurrentMessageRequest(loadToken, requestContext)) {
             box.innerHTML = `<div class="error">请求异常：${escapeHtml(e)}</div>`;
         }
     } finally {
-        isLoadingMessages = false;
+        if (loadToken === messageLoadToken) {
+            isLoadingMessages = false;
+        }
     }
 }
 
@@ -4641,6 +4820,34 @@ function addMentionToInput(userId) {
     }, 0);
 }
 
+function getAvatarGestureTarget(event) {
+    const target = event?.target;
+    if (!target || typeof target.closest !== 'function') return null;
+    return target.closest('.msg-avatar, .session-avatar, .qq-chat-avatar, .qq-window-avatar');
+}
+
+function suppressNativeAvatarContextMenu(event) {
+    const avatar = getAvatarGestureTarget(event);
+    if (!avatar) return;
+
+    if (event.cancelable) event.preventDefault();
+    if (!avatar.classList.contains('mentionable-avatar')) {
+        event.stopPropagation();
+    }
+}
+
+function suppressNativeAvatarDrag(event) {
+    if (!getAvatarGestureTarget(event)) return;
+    if (event.cancelable) event.preventDefault();
+    event.stopPropagation();
+}
+
+function suppressNonMentionableAvatarPointer(event) {
+    const avatar = getAvatarGestureTarget(event);
+    if (!avatar || avatar.classList.contains('mentionable-avatar')) return;
+    event.stopPropagation();
+}
+
 function startAvatarMentionPress(event, el) {
     event.preventDefault();
     event.stopPropagation();
@@ -4688,7 +4895,15 @@ function insertMentionFromAvatar(event, el) {
 
     const target = el || avatarPressTarget;
     const userId = target?.dataset?.userId || '';
+    const now = Date.now();
     cancelAvatarMentionPress();
+
+    if (userId && userId === lastAvatarMentionUserId && now - lastAvatarMentionAt < 700) {
+        return;
+    }
+
+    lastAvatarMentionAt = now;
+    lastAvatarMentionUserId = userId;
     addMentionToInput(userId);
 }
 
@@ -5038,9 +5253,9 @@ function reloadCurrentConversation() {
         clearReplyTarget();
         lastRenderedMessageKeys = [];
         hideUnreadHint();
-        loadMessages(true, false);
+        withMessageProgress(() => loadMessages(true, false));
     } else {
-        loadSessions(false);
+        withMessageProgress(() => loadSessions(false));
     }
 }
 
@@ -5053,7 +5268,7 @@ function onSceneChange() {
     lastSessionRowId = 0;
     hideUnreadHint();
     resetChatPanel();
-    loadSessions(false);
+    withMessageProgress(() => loadSessions(false));
 }
 
 function onAdapterChange() {
@@ -5065,7 +5280,7 @@ function onAdapterChange() {
     lastSessionRowId = 0;
     hideUnreadHint();
     resetChatPanel();
-    loadSessions(false);
+    withMessageProgress(() => loadSessions(false));
 }
 
 function resetChatPanel() {
@@ -5407,41 +5622,40 @@ async function revokeMessage(btn) {
     }
 }
 
-function toggleAutoRefresh(force = null) {
-    autoRefresh = (force === null) ? !autoRefresh : !!force;
+function ensureAutoRefresh() {
+    autoRefresh = true;
     const btn = document.getElementById('autoRefreshBtn');
-
-    if (autoRefresh) {
-        btn?.classList.add('auto-refresh-on');
-
-        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-
-        autoRefreshTimer = setInterval(async () => {
-            await loadSessionUpdates();
-            if (currentSession) {
-                await loadMessagesSince();
-            }
-        }, 1500);
-    } else {
-        btn?.classList.remove('auto-refresh-on');
-
-        if (autoRefreshTimer) {
-            clearInterval(autoRefreshTimer);
-            autoRefreshTimer = null;
-        }
+    btn?.classList.add('auto-refresh-on');
+    if (btn) {
+        btn.title = '自动刷新中，点击刷新一次';
     }
+
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+
+    autoRefreshTimer = setInterval(async () => {
+        await loadSessionUpdates();
+        if (currentSession) {
+            await loadMessagesSince();
+        }
+    }, 1500);
 }
 
-function refreshAll() {
-    loadSessions(false);
-    if (currentSession) {
-        lastRenderedMessageKeys = [];
-        currentOldestRowId = 0;
-        currentLastRowId = 0;
-        hasMoreHistory = false;
-        loadMessages(false, false);
-        loadMessageDates();
-    }
+function toggleAutoRefresh() {
+    ensureAutoRefresh();
+}
+
+async function refreshAll() {
+    await withMessageProgress(async () => {
+        const tasks = [loadSessions(sessionsCache.length > 0)];
+        if (currentSession) {
+            lastRenderedMessageKeys = [];
+            currentOldestRowId = 0;
+            currentLastRowId = 0;
+            hasMoreHistory = false;
+            tasks.push(loadMessages(false, false), loadMessageDates());
+        }
+        await Promise.all(tasks);
+    });
 }
 
 function setMessageConfigStatus(text, isError = false) {
@@ -5544,7 +5758,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
-    syncMobileViewportHeight();
+    syncMobileViewportHeight(true);
     applyChatHeaderCollapsedFromStorage();
     setSendMode(sendMode);
     setActiveSend(activeSend);
@@ -5559,7 +5773,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         updateMediaBadge();
     });
+    document.addEventListener('focusout', (event) => {
+        const target = event.target;
+        const tagName = String(target?.tagName || '').toUpperCase();
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable) {
+            setTimeout(() => syncMobileViewportHeight(true), 120);
+        }
+    });
     document.getElementById('messageList')?.addEventListener('scroll', onMessageListScroll, { passive: true });
+    document.addEventListener('pointerdown', suppressNonMentionableAvatarPointer, true);
+    document.addEventListener('contextmenu', suppressNativeAvatarContextMenu, true);
+    document.addEventListener('dragstart', suppressNativeAvatarDrag, true);
     document.addEventListener('click', (event) => {
         const menu = document.getElementById('messageActionMenu');
         if (menu && !menu.contains(event.target)) {
@@ -5587,7 +5811,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     await loadBots();
     await loadSessions(false);
-    toggleAutoRefresh(true); // 默认开启自动刷新
+    ensureAutoRefresh();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
