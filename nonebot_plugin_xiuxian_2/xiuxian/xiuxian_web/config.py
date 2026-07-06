@@ -187,6 +187,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "Web设置"
     },
+    "web_secret_key": {
+        "name": "Web会话密钥",
+        "description": "Flask 会话密钥；留空时使用 data/xiuxian/web_secret_key 或自动生成",
+        "type": "str",
+        "category": "Web安全"
+    },
     "web_require_csrf": {
         "name": "CSRF校验",
         "description": "开启后 Web 写请求必须携带页面生成的 CSRF Token",
