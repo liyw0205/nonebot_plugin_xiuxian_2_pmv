@@ -2890,6 +2890,8 @@ let lastAvatarMentionAt = 0;
 let lastAvatarMentionUserId = '';
 let sendModePointerHandledAt = 0;
 let pendingComposerFocusTimer = null;
+let mobileViewportBaseHeight = window.innerHeight;
+let mobileViewportRaf = 0;
 
 let lastRenderedMessageKeys = [];
 let lastRenderedSessionKeys = [];
@@ -2955,17 +2957,89 @@ function isEditingTextInput() {
         || el.isContentEditable;
 }
 
-function syncMobileViewportHeight(force = false) {
-    if (!force && isMobileChatLayout() && isEditingTextInput()) {
-        return;
-    }
-    document.documentElement.style.setProperty('--xiuxian-vvh', `${window.innerHeight}px`);
+function isComposerEditingTarget(el = document.activeElement) {
+    if (!el || !isMobileChatLayout()) return false;
+
+    const tagName = String(el.tagName || '').toUpperCase();
+    const isEditable = tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable;
+    if (!isEditable) return false;
+
+    const composer = document.getElementById('composerBox');
+    const mediaPanel = document.getElementById('mediaPanel');
+    return !!(composer?.contains(el) || mediaPanel?.contains(el));
 }
 
-window.addEventListener('resize', () => syncMobileViewportHeight(), { passive: true });
+function getCurrentMobileViewportHeight() {
+    const viewport = window.visualViewport;
+    const height = viewport ? viewport.height : window.innerHeight;
+    return Math.max(320, Math.round(height));
+}
+
+function isMobileKeyboardOpen() {
+    if (!isComposerEditingTarget()) return false;
+
+    const shell = getQqShell();
+    if (!shell?.classList.contains('mobile-chat-open')) return false;
+
+    return mobileViewportBaseHeight - getCurrentMobileViewportHeight() > 80;
+}
+
+function applyMobileKeyboardViewport() {
+    if (!isMobileChatLayout()) return;
+
+    const keyboardOpen = isMobileKeyboardOpen();
+    const height = keyboardOpen ? getCurrentMobileViewportHeight() : mobileViewportBaseHeight;
+    document.documentElement.style.setProperty('--xiuxian-vvh', `${height}px`);
+    document.body?.classList.toggle('keyboard-open', keyboardOpen);
+}
+
+function scheduleMobileKeyboardViewportSync() {
+    if (mobileViewportRaf) cancelAnimationFrame(mobileViewportRaf);
+    mobileViewportRaf = requestAnimationFrame(() => {
+        mobileViewportRaf = 0;
+        applyMobileKeyboardViewport();
+    });
+}
+
+function resetMobileKeyboardViewport() {
+    if (mobileViewportRaf) {
+        cancelAnimationFrame(mobileViewportRaf);
+        mobileViewportRaf = 0;
+    }
+    mobileViewportBaseHeight = window.innerHeight;
+    document.documentElement.style.setProperty('--xiuxian-vvh', `${window.innerHeight}px`);
+    document.body?.classList.remove('keyboard-open');
+}
+
+function syncKeyboardAfterFocus() {
+    scheduleMobileKeyboardViewportSync();
+    setTimeout(scheduleMobileKeyboardViewportSync, 90);
+    setTimeout(scheduleMobileKeyboardViewportSync, 260);
+}
+
+function syncMobileViewportHeight(force = false) {
+    if (!force && isMobileChatLayout() && isEditingTextInput()) {
+        scheduleMobileKeyboardViewportSync();
+        return;
+    }
+    mobileViewportBaseHeight = window.innerHeight;
+    document.documentElement.style.setProperty('--xiuxian-vvh', `${window.innerHeight}px`);
+    document.body?.classList.remove('keyboard-open');
+}
+
+window.addEventListener('resize', () => {
+    syncMobileViewportHeight();
+    scheduleMobileKeyboardViewportSync();
+}, { passive: true });
 window.addEventListener('orientationchange', () => {
+    resetMobileKeyboardViewport();
     setTimeout(() => syncMobileViewportHeight(true), 120);
 }, { passive: true });
+
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleMobileKeyboardViewportSync, { passive: true });
+    window.visualViewport.addEventListener('scroll', scheduleMobileKeyboardViewportSync, { passive: true });
+}
 
 function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, m => ({
@@ -3355,7 +3429,10 @@ function openMediaPanel() {
     updateMediaBadge();
     setTimeout(() => {
         const mediaUrl = document.getElementById('mediaUrl');
-        if (mediaSendType && mediaUrl) mediaUrl.focus();
+        if (mediaSendType && mediaUrl) {
+            mediaUrl.focus();
+            syncKeyboardAfterFocus();
+        }
     }, 30);
 }
 
@@ -4188,6 +4265,7 @@ function expandComposer() {
         } catch (e) {
             input?.focus();
         }
+        syncKeyboardAfterFocus();
     }, 50);
 }
 
@@ -4196,6 +4274,7 @@ function collapseComposer() {
     cancelPendingComposerFocus();
     document.getElementById('composerExpanded').classList.add('hidden');
     document.getElementById('composerCollapsed').classList.remove('hidden');
+    resetMobileKeyboardViewport();
 
     if (mdPreviewing) toggleMarkdownPreview(true);
 }
@@ -4458,6 +4537,7 @@ async function selectSession(index) {
 function backToSessions() {
     const shell = getQqShell();
     if (shell) shell.classList.remove('mobile-chat-open');
+    resetMobileKeyboardViewport();
     closeMessageActionMenu();
 }
 
@@ -5286,6 +5366,7 @@ function onAdapterChange() {
 function resetChatPanel() {
     const shell = getQqShell();
     if (shell) shell.classList.remove('mobile-chat-open');
+    resetMobileKeyboardViewport();
 
     currentOldestRowId = 0;
     currentLastRowId = 0;
@@ -5772,12 +5853,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             minimizeMediaPanel();
         }
         updateMediaBadge();
+        syncKeyboardAfterFocus();
     });
+    document.getElementById('mediaUrl')?.addEventListener('focus', syncKeyboardAfterFocus);
     document.addEventListener('focusout', (event) => {
         const target = event.target;
         const tagName = String(target?.tagName || '').toUpperCase();
         if (tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable) {
-            setTimeout(() => syncMobileViewportHeight(true), 120);
+            setTimeout(() => {
+                syncMobileViewportHeight(true);
+                scheduleMobileKeyboardViewportSync();
+            }, 120);
         }
     });
     document.getElementById('messageList')?.addEventListener('scroll', onMessageListScroll, { passive: true });
