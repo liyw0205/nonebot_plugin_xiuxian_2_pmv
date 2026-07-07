@@ -215,15 +215,13 @@ def build_song_list_page_text(
     lines = [f"【搜索结果】{platform_name}（第 {page}/{total_pages} 页）", ""]
     for i, song in enumerate(page_songs, start=1):
         global_index = start + i
-        item_text = (
-            f"{global_index}. "
-            f"{song.get('name', '未知')} - {song.get('artists', '未知')}"
-        )
-        line_text = (
-            build_md_command_link(item_text, f"选歌 {global_index}")
-            if markdown
-            else item_text
-        )
+        song_name = _clean_song_field(song.get("name"), "未知歌曲")
+        artists = _clean_song_field(song.get("artists"), "未知歌手")
+        if markdown:
+            song_link = build_md_command_link(song_name, f"选歌 {global_index}")
+            line_text = f"{global_index}. {song_link} - {escape_markdown_text(artists)}"
+        else:
+            line_text = f"{global_index}. {song_name} - {artists}"
         lines.append(line_text)
 
     lines.append("")
