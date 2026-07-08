@@ -387,28 +387,182 @@ def api_logs_user_messages():
             conn.close()
 
 
-def _get_log_candidates():
+def _resolve_existing_path(path) -> Path | None:
+    try:
+        p = Path(path).expanduser()
+        if not p.exists():
+            return None
+        if p.is_file():
+            p = p.parent
+        return p.resolve()
+    except Exception:
+        return None
+
+
+def _looks_like_xiuxian_project(path: Path) -> bool:
+    indicators = (
+        ".env",
+        ".env.dev",
+        "bot.py",
+        "pyproject.toml",
+        "requirements.txt",
+    )
+    if any((path / name).exists() for name in indicators):
+        return True
+    if (path / "data" / "xiuxian").exists():
+        return True
+    if any((path / name).exists() for name in ("bot", "server", "xiuxianbot", "xiuxianserver")):
+        return True
+    return False
+
+
+def _add_log_root(roots: list[Path], seen: set[str], path) -> None:
+    p = _resolve_existing_path(path)
+    if not p:
+        return
+    key = str(p)
+    if key not in seen:
+        seen.add(key)
+        roots.append(p)
+
+
+def _get_log_roots() -> list[Path]:
+    """
+    日志根目录候选。
+    一键脚本会把 screen 日志写在项目根目录的 <项目名>.log，xiuxian3 脚本写在项目根 logs/。
+    这里只扫描明确的项目目录和常见安装目录，不递归扫整个 HOME。
+    """
+    roots: list[Path] = []
+    seen: set[str] = set()
+
+    for env_name in (
+        "XIUXIAN_LOG_DIR",
+        "XIUXIAN_PROJECT_DIR",
+        "XIUXIAN_BOT_DIR",
+        "XIUXIAN_ROOT",
+        "PROJECT_DIR",
+    ):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            _add_log_root(roots, seen, env_value)
+
+    cwd = Path().resolve()
+    _add_log_root(roots, seen, cwd)
+    if cwd.name.lower() in {"bot", "server", "xiuxianbot", "xiuxianserver"}:
+        _add_log_root(roots, seen, cwd.parent)
+
+    try:
+        db_root = DATABASE.resolve().parents[2]
+        _add_log_root(roots, seen, db_root)
+    except Exception:
+        pass
+
+    try:
+        for parent in Path(__file__).resolve().parents:
+            if _looks_like_xiuxian_project(parent):
+                _add_log_root(roots, seen, parent)
+    except Exception:
+        pass
+
+    try:
+        home = Path.home().resolve()
+        for name in ("xiu2", "xiuxian", "xiuxian3", "nonebot_plugin_xiuxian_2_pmv"):
+            _add_log_root(roots, seen, home / name)
+
+        for child in home.iterdir():
+            if not child.is_dir():
+                continue
+            lower_name = child.name.lower()
+            if "xiu" in lower_name or "nonebot" in lower_name:
+                _add_log_root(roots, seen, child)
+    except Exception:
+        pass
+
+    expanded = list(roots)
+    for root in roots:
+        for child_name in ("bot", "server", "xiuxianbot", "xiuxianserver"):
+            child = root / child_name
+            if child.exists() and child.is_dir():
+                _add_log_root(expanded, seen, child)
+
+    return expanded
+
+
+def _is_supported_log_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if path.suffix.lower() in {".gz", ".zip", ".xz", ".bz2", ".7z"}:
+        return False
+    name = path.name.lower()
+    return ".log" in name or path.parent.name == "logs"
+
+
+def _get_log_candidates(roots: list[Path] | None = None) -> list[Path]:
     """
     日志候选：
-    1) 根目录下 *.log
-    2) logs/ 目录下所有文件
+    1) 项目根目录下 *.log / *.log.*
+    2) 项目根 logs/ 目录下所有普通文本日志
     """
-    root = Path()
-    files = []
+    roots = roots or _get_log_roots()
+    files: list[Path] = []
 
-    # 根目录 *.log
-    files.extend([p for p in root.glob("*.log") if p.is_file()])
+    for root in roots:
+        try:
+            for pattern in ("*.log", "*.log.*"):
+                files.extend([p for p in root.glob(pattern) if _is_supported_log_file(p)])
 
-    # logs 目录
-    logs_dir = root / "logs"
-    if logs_dir.exists() and logs_dir.is_dir():
-        files.extend([p for p in logs_dir.glob("*") if p.is_file()])
+            logs_dir = root / "logs"
+            if logs_dir.exists() and logs_dir.is_dir():
+                files.extend([p for p in logs_dir.glob("*") if _is_supported_log_file(p)])
+        except Exception:
+            continue
 
-    # 去重 + 按修改时间倒序
-    uniq = {str(p.resolve()): p for p in files}
+    uniq: dict[str, Path] = {}
+    for p in files:
+        try:
+            uniq[str(p.resolve())] = p
+        except Exception:
+            continue
+
     result = list(uniq.values())
-    result.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+
+    def _mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except Exception:
+            return 0
+
+    result.sort(key=_mtime, reverse=True)
     return result
+
+
+def _log_display_name(path: Path, roots: list[Path] | None = None) -> str:
+    roots = roots or _get_log_roots()
+    resolved = path.resolve()
+    best = str(resolved)
+    for root in roots:
+        try:
+            rel = resolved.relative_to(root.resolve())
+        except Exception:
+            continue
+        label = f"{root.name}/{rel.as_posix()}" if root.name else rel.as_posix()
+        if len(label) < len(best):
+            best = label
+    return best
+
+
+def _get_log_file_map() -> dict[str, Path]:
+    file_map: dict[str, Path] = {}
+    roots = _get_log_roots()
+    for p in _get_log_candidates(roots):
+        try:
+            resolved = str(p.resolve())
+        except Exception:
+            continue
+        file_map[resolved] = p
+        file_map.setdefault(p.name, p)
+        file_map.setdefault(_log_display_name(p, roots), p)
+    return file_map
 
 
 @app.route('/api/logs/files')
@@ -417,17 +571,28 @@ def api_logs_files():
         return jsonify({"success": False, "error": "未登录"})
 
     try:
-        files = _get_log_candidates()
+        roots = _get_log_roots()
+        files = _get_log_candidates(roots)
         data = []
         for p in files:
-            st = p.stat()
+            try:
+                st = p.stat()
+                resolved = str(p.resolve())
+            except Exception:
+                continue
             data.append({
+                "id": resolved,
                 "name": p.name,
-                "path": str(p.resolve()),
+                "display_name": _log_display_name(p, roots),
+                "path": resolved,
                 "size": st.st_size,
                 "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             })
-        return jsonify({"success": True, "files": data})
+        return jsonify({
+            "success": True,
+            "files": data,
+            "searched_roots": [str(p) for p in roots],
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -532,12 +697,12 @@ def api_logs_read():
 
     try:
         # 仅允许候选日志
-        candidates = _get_log_candidates()
-        file_map = {p.name: p for p in candidates}
+        file_map = _get_log_file_map()
         if file_name not in file_map:
             return jsonify({"success": False, "error": "日志文件不存在或不允许访问"})
 
         target = file_map[file_name]
+        roots = _get_log_roots()
 
         # 宽松解析起止时间（修复你报错的核心）
         start_obj = _parse_dt_flexible(start_dt) if start_dt else None
@@ -581,7 +746,9 @@ def api_logs_read():
 
         return jsonify({
             "success": True,
-            "file": file_name,
+            "file": str(target.resolve()),
+            "name": target.name,
+            "display_name": _log_display_name(target, roots),
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -630,12 +797,12 @@ def api_logs_tail():
     ignore_keywords = [x.strip() for x in ignore_keywords_raw.split("|") if x.strip()]
 
     try:
-        candidates = _get_log_candidates()
-        file_map = {p.name: p for p in candidates}
+        file_map = _get_log_file_map()
         if file_name not in file_map:
             return jsonify({"success": False, "error": "日志文件不存在或不允许访问"})
 
         target = file_map[file_name]
+        roots = _get_log_roots()
         file_size = target.stat().st_size
 
         # 日志轮转/截断处理：offset 越界则回到 0
@@ -698,7 +865,9 @@ def api_logs_tail():
 
         return jsonify({
             "success": True,
-            "file": file_name,
+            "file": str(target.resolve()),
+            "name": target.name,
+            "display_name": _log_display_name(target, roots),
             "offset": offset,
             "next_offset": next_offset,
             "lines": lines

@@ -2840,64 +2840,86 @@ body.messages-layout[data-theme='dark'] header {
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
 <script>
-let currentSession = null;
-let sessionsCache = [];
-let autoRefresh = true; // 默认开启
-let autoRefreshTimer = null;
-let isLoadingMessages = false;
-let isLoadingHistory = false;
-let sendMode = getStoredValue('webMessageSendMode', 'plain') || 'plain';
-let activeSend = getStoredValue('webMessageActiveSend', '') === '1';
-let mdPreviewing = false;
-let currentJumpIndex = -1;
+window.__xiuxianMessagesPageCleanup?.();
 
-let currentDate = '';
-let selectedReplyMessageId = '';
-let selectedReplyRowId = '';
-let selectedReplySummary = '';
-let selectedQuoteReferenceId = '';
-let selectedQuoteMessageId = '';
-let selectedQuoteRowId = '';
-let selectedQuoteSummary = '';
-let composerExpanded = false;
-let mediaPanelOpen = false;
-let mediaFabVisible = false;
-let mediaSendType = '';
-let mediaQueue = [];
-let mediaQueueIdSeq = 0;
+var messagePageAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+var messagePageInitialized = false;
 
-const MEDIA_TYPE_LABELS = {
+function addMessagePageListener(target, type, handler, options = {}) {
+    if (!target?.addEventListener) return;
+
+    const opts = typeof options === 'boolean' ? { capture: options } : { ...options };
+    if (messagePageAbort) {
+        opts.signal = messagePageAbort.signal;
+    }
+
+    target.addEventListener(type, handler, opts);
+}
+
+var currentSession = null;
+var sessionsCache = [];
+var autoRefresh = true; // 默认开启
+var autoRefreshTimer = null;
+var isLoadingMessages = false;
+var isLoadingHistory = false;
+var sendMode = getStoredValue('webMessageSendMode', 'plain') || 'plain';
+var activeSend = getStoredValue('webMessageActiveSend', '') === '1';
+var mdPreviewing = false;
+var currentJumpIndex = -1;
+
+var currentDate = '';
+var selectedReplyMessageId = '';
+var selectedReplyRowId = '';
+var selectedReplySummary = '';
+var selectedQuoteReferenceId = '';
+var selectedQuoteMessageId = '';
+var selectedQuoteRowId = '';
+var selectedQuoteSummary = '';
+var composerExpanded = false;
+var mediaPanelOpen = false;
+var mediaFabVisible = false;
+var mediaSendType = '';
+var mediaQueue = [];
+var mediaQueueIdSeq = 0;
+
+var MEDIA_TYPE_LABELS = {
     image: '图片',
     audio: '语音',
     video: '视频',
     file: '文件'
 };
-let currentLastRowId = 0;
-let currentOldestRowId = 0;
-let hasMoreHistory = false;
-let lastSessionRowId = 0;
-let messageLoadToken = 0;
-let messageProgressDepth = 0;
-let historyScrollTimer = null;
-let messagePressTimer = null;
-let messagePressTarget = null;
-let messagePressStart = null;
-let messageActionTarget = null;
-let avatarPressTimer = null;
-let avatarPressTarget = null;
-let avatarPressStart = null;
-let lastAvatarMentionAt = 0;
-let lastAvatarMentionUserId = '';
-let sendModePointerHandledAt = 0;
-let pendingComposerFocusTimer = null;
-let mobileViewportBaseHeight = window.innerHeight;
-let mobileViewportRaf = 0;
+var MESSAGE_PAGE_SIZE = 120;
+var HISTORY_PREFETCH_VISIBLE_INDEX = 40;
+var currentLastRowId = 0;
+var currentOldestRowId = 0;
+var hasMoreHistory = false;
+var lastSessionRowId = 0;
+var messageLoadToken = 0;
+var messageProgressDepth = 0;
+var historyScrollTimer = null;
+var messagePressTimer = null;
+var messagePressTarget = null;
+var messagePressStart = null;
+var messageActionTarget = null;
+var avatarPressTimer = null;
+var avatarPressTarget = null;
+var avatarPressStart = null;
+var lastAvatarMentionAt = 0;
+var lastAvatarMentionUserId = '';
+var sendModePointerHandledAt = 0;
+var pendingComposerFocusTimer = null;
+var mobileViewportBaseHeight = window.innerHeight;
+var mobileViewportRaf = 0;
+var pendingBottomScrollTimer = null;
+var pendingBottomScrollRaf = 0;
+var bottomScrollTimers = new Set();
 
-let lastRenderedMessageKeys = [];
-let lastRenderedSessionKeys = [];
-let hasUnreadWhileReadingHistory = false;
+var lastRenderedMessageKeys = [];
+var lastRenderedSessionKeys = [];
+var renderedMessageRowIds = new Set();
+var hasUnreadWhileReadingHistory = false;
 
-const SCENE_LABELS = {
+var SCENE_LABELS = {
     group: "群消息",
     private: "私聊消息",
     channel_group: "频道消息",
@@ -3027,18 +3049,18 @@ function syncMobileViewportHeight(force = false) {
     document.body?.classList.remove('keyboard-open');
 }
 
-window.addEventListener('resize', () => {
+addMessagePageListener(window, 'resize', () => {
     syncMobileViewportHeight();
     scheduleMobileKeyboardViewportSync();
 }, { passive: true });
-window.addEventListener('orientationchange', () => {
+addMessagePageListener(window, 'orientationchange', () => {
     resetMobileKeyboardViewport();
     setTimeout(() => syncMobileViewportHeight(true), 120);
 }, { passive: true });
 
 if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', scheduleMobileKeyboardViewportSync, { passive: true });
-    window.visualViewport.addEventListener('scroll', scheduleMobileKeyboardViewportSync, { passive: true });
+    addMessagePageListener(window.visualViewport, 'resize', scheduleMobileKeyboardViewportSync, { passive: true });
+    addMessagePageListener(window.visualViewport, 'scroll', scheduleMobileKeyboardViewportSync, { passive: true });
 }
 
 function escapeHtml(s) {
@@ -3156,11 +3178,13 @@ function isCurrentConversationContext(context) {
 }
 
 function shouldStickToBottom(el, threshold = 120) {
+    if (!el) return true;
     return (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
 }
 
 function scrollMessagesToBottom() {
     const box = document.getElementById('messageList');
+    if (!box) return;
     box.scrollTop = box.scrollHeight;
     hasUnreadWhileReadingHistory = false;
     hideUnreadHint();
@@ -3168,6 +3192,7 @@ function scrollMessagesToBottom() {
 
 function scrollMessagesToTop() {
     const box = document.getElementById('messageList');
+    if (!box) return;
     box.scrollTop = 0;
 }
 
@@ -3176,7 +3201,17 @@ function getSessionKey(s) {
 }
 
 function getMessageKey(row) {
-    return String(row.message_id || row.id || `${row.created_at}_${row.user_id}_${row.content || ''}`);
+    const content = row.display_content || row.content || row.raw_message || '';
+    return [
+        row.id || '',
+        row.message_id || '',
+        row.reference_id || '',
+        row.direction || '',
+        row.created_at || '',
+        row.reply_used_count || '',
+        row.content_format || '',
+        content
+    ].map(x => String(x ?? '')).join('__');
 }
 
 function arraysEqual(a, b) {
@@ -3192,6 +3227,72 @@ function preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight) {
     const newScrollHeight = box.scrollHeight;
     const delta = newScrollHeight - oldScrollHeight;
     box.scrollTop = oldScrollTop + delta;
+}
+
+function clearPendingBottomScrolls() {
+    if (pendingBottomScrollRaf) {
+        cancelAnimationFrame(pendingBottomScrollRaf);
+        pendingBottomScrollRaf = 0;
+    }
+    if (pendingBottomScrollTimer) {
+        clearTimeout(pendingBottomScrollTimer);
+        pendingBottomScrollTimer = null;
+    }
+    bottomScrollTimers.forEach(timer => clearTimeout(timer));
+    bottomScrollTimers.clear();
+}
+
+function scheduleBottomScrollFollowUp(delay) {
+    const timer = setTimeout(() => {
+        bottomScrollTimers.delete(timer);
+        scrollMessagesToBottom();
+    }, delay);
+    bottomScrollTimers.add(timer);
+}
+
+function scheduleScrollMessagesToBottom() {
+    clearPendingBottomScrolls();
+
+    pendingBottomScrollRaf = requestAnimationFrame(() => {
+        pendingBottomScrollRaf = requestAnimationFrame(() => {
+            pendingBottomScrollRaf = 0;
+            scrollMessagesToBottom();
+        });
+    });
+
+    pendingBottomScrollTimer = setTimeout(() => {
+        pendingBottomScrollTimer = null;
+        scrollMessagesToBottom();
+    }, 30);
+
+    scheduleBottomScrollFollowUp(160);
+    scheduleBottomScrollFollowUp(420);
+}
+
+function setRenderedMessageState(rows, keys = null) {
+    lastRenderedMessageKeys = keys || (rows || []).map(getMessageKey);
+    renderedMessageRowIds = new Set(
+        (rows || [])
+            .map(row => String(row.id || ''))
+            .filter(Boolean)
+    );
+}
+
+function addRenderedMessageState(rows, atStart = false) {
+    const ids = (rows || [])
+        .map(row => String(row.id || ''))
+        .filter(Boolean);
+    ids.forEach(id => renderedMessageRowIds.add(id));
+
+    const keys = (rows || []).map(getMessageKey);
+    lastRenderedMessageKeys = atStart
+        ? keys.concat(lastRenderedMessageKeys)
+        : lastRenderedMessageKeys.concat(keys);
+}
+
+function resetRenderedMessageState() {
+    lastRenderedMessageKeys = [];
+    renderedMessageRowIds.clear();
 }
 
 function getSelectedMediaCount() {
@@ -3945,20 +4046,6 @@ function hasRenderableAttachment(text) {
     return /<attachment\[[^\]]+\]:https?:\/\/[^>]+>/.test(text);
 }
 
-/**
- * 刷新当前会话，让旧消息立即用新渲染逻辑显示。
- */
-function rerenderCurrentMessagesAfterAttachmentPatch() {
-    try {
-        if (typeof currentSession !== 'undefined' && currentSession) {
-            lastRenderedMessageKeys = [];
-            loadMessages(false, false);
-        }
-    } catch (e) {
-        console.warn('附件渲染补丁刷新失败:', e);
-    }
-}
-
 function renderAvatar(row, isSend = false) {
     const avatar = row.avatar || '';
     const name = row.username || row.nickname || row.user_id || (isSend ? 'Bot' : '人');
@@ -4100,11 +4187,12 @@ function renderMessageRows(rows, startIndex = 0, carryDate = '') {
 
 function renderedRowExists(rowId) {
     if (!rowId) return false;
-    return getMessageRows().some(row => row.dataset.rowId === String(rowId));
+    return renderedMessageRowIds.has(String(rowId));
 }
 
 function normalizeDateDividers() {
     const box = document.getElementById('messageList');
+    if (!box) return;
     let activeDate = '';
 
     Array.from(box.children).forEach(child => {
@@ -4485,7 +4573,7 @@ async function selectSession(index) {
     const s = sessionsCache[index];
     if (!s) return;
 
-    lastRenderedMessageKeys = [];
+    resetRenderedMessageState();
     hideUnreadHint();
     hasUnreadWhileReadingHistory = false;
     currentDate = '';
@@ -4613,7 +4701,7 @@ async function loadMessageDates() {
 function onDateChange() {
     currentDate = document.getElementById('dateSelect').value;
     clearReplyTarget();
-    lastRenderedMessageKeys = [];
+    resetRenderedMessageState();
     currentLastRowId = 0;
     currentOldestRowId = 0;
     hasMoreHistory = false;
@@ -4626,7 +4714,16 @@ async function loadMessagesSince() {
     if (!currentSession || isLoadingMessages) return;
 
     const box = document.getElementById('messageList');
+    if (!box) return;
     const wasBottom = shouldStickToBottom(box, 120);
+    const context = {
+        adapter: currentSession.adapter || '',
+        scene: currentSession.scene,
+        targetId: currentSession.target_id,
+        date: currentDate,
+        keyword: document.getElementById('keywordInput')?.value.trim() || ''
+    };
+    if (context.keyword) return;
 
     try {
         const qs = new URLSearchParams({
@@ -4640,6 +4737,10 @@ async function loadMessagesSince() {
 
         const res = await fetch('/api/messages/list_since?' + qs.toString());
         const data = await res.json();
+
+        if (!isCurrentMessageContext(context)) {
+            return;
+        }
 
         if (!data.success || !data.rows || !data.rows.length) return;
 
@@ -4663,19 +4764,28 @@ async function loadMessagesSince() {
 
 function appendMessages(rows) {
     const box = document.getElementById('messageList');
+    if (!box) return;
     rows = (rows || []).filter(row => !renderedRowExists(row.id));
     if (!rows.length) return;
+
+    if (!getMessageRows().length && box.querySelector('.empty-state, .error, .loading')) {
+        box.innerHTML = '';
+    }
 
     const startIndex = getMessageRows().length;
     box.insertAdjacentHTML('beforeend', renderMessageRows(rows, startIndex, getLastRenderedMessageDate()));
     normalizeDateDividers();
     reindexRenderedMessages();
-    lastRenderedMessageKeys = lastRenderedMessageKeys.concat(rows.map(getMessageKey));
+    addRenderedMessageState(rows, false);
 }
 
 
 function isCurrentMessageRequest(loadToken, context) {
-    if (loadToken !== messageLoadToken || !currentSession || !context) return false;
+    return loadToken === messageLoadToken && isCurrentMessageContext(context);
+}
+
+function isCurrentMessageContext(context) {
+    if (!currentSession || !context) return false;
 
     const keyword = document.getElementById('keywordInput')?.value.trim() || '';
     return (currentSession.adapter || '') === context.adapter
@@ -4683,6 +4793,20 @@ function isCurrentMessageRequest(loadToken, context) {
         && currentSession.target_id === context.targetId
         && currentDate === context.date
         && keyword === context.keyword;
+}
+
+function updateMessageWindowState(rows, hasMore) {
+    rows = rows || [];
+    if (rows.length) {
+        currentOldestRowId = Number(rows[0].id || 0);
+        currentLastRowId = Number(rows[rows.length - 1].id || 0);
+        currentJumpIndex = Math.min(Math.max(currentJumpIndex, 0), rows.length - 1);
+    } else {
+        currentOldestRowId = 0;
+        currentLastRowId = 0;
+        currentJumpIndex = -1;
+    }
+    hasMoreHistory = !!hasMore;
 }
 
 async function loadMessages(forceBottom = false, silent = false) {
@@ -4693,6 +4817,10 @@ async function loadMessages(forceBottom = false, silent = false) {
     let requestContext = null;
 
     const box = document.getElementById('messageList');
+    if (!box) {
+        isLoadingMessages = false;
+        return;
+    }
     const wasBottom = shouldStickToBottom(box, 120);
     const oldScrollTop = box.scrollTop;
     const oldScrollHeight = box.scrollHeight;
@@ -4711,7 +4839,7 @@ async function loadMessages(forceBottom = false, silent = false) {
             scene: currentSession.scene,
             direction: 'ALL',
             page: '1',
-            page_size: '300',
+            page_size: String(MESSAGE_PAGE_SIZE),
             include_total: '0'
         });
 
@@ -4732,6 +4860,7 @@ async function loadMessages(forceBottom = false, silent = false) {
             if (!silent) {
                 box.innerHTML = `<div class="error">加载失败：${escapeHtml(data.error || '未知错误')}</div>`;
             }
+            resetRenderedMessageState();
             return;
         }
 
@@ -4740,41 +4869,33 @@ async function loadMessages(forceBottom = false, silent = false) {
 
         const newKeys = rows.map(getMessageKey);
         const hasChanged = !arraysEqual(lastRenderedMessageKeys, newKeys);
+        updateMessageWindowState(rows, data.has_more);
 
         if (!hasChanged) {
+            if (forceBottom) {
+                scheduleScrollMessagesToBottom();
+                hasUnreadWhileReadingHistory = false;
+                hideUnreadHint();
+            }
             return;
         }
 
         if (!rows.length) {
             box.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>暂无消息</p></div>`;
-            lastRenderedMessageKeys = [];
-            currentOldestRowId = 0;
-            currentLastRowId = 0;
-            hasMoreHistory = false;
+            resetRenderedMessageState();
             return;
         }
 
         box.innerHTML = renderMessageRows(rows, 0);
         normalizeDateDividers();
         reindexRenderedMessages();
-        lastRenderedMessageKeys = newKeys;
+        setRenderedMessageState(rows, newKeys);
         currentJumpIndex = rows.length - 1;
-        
-        if (rows.length) {
-            currentOldestRowId = Number(rows[0].id || 0);
-            currentLastRowId = Number(rows[rows.length - 1].id || 0);
-        } else {
-            currentOldestRowId = 0;
-            currentLastRowId = 0;
-        }
-        hasMoreHistory = !!data.has_more;
 
         if (forceBottom || wasBottom) {
-            setTimeout(() => {
-                scrollMessagesToBottom();
-                hasUnreadWhileReadingHistory = false;
-                hideUnreadHint();
-            }, 30);
+            scheduleScrollMessagesToBottom();
+            hasUnreadWhileReadingHistory = false;
+            hideUnreadHint();
         } else {
             preserveScrollAfterRender(box, oldScrollTop, oldScrollHeight);
             hasUnreadWhileReadingHistory = true;
@@ -4784,6 +4905,7 @@ async function loadMessages(forceBottom = false, silent = false) {
     } catch (e) {
         if (!silent && isCurrentMessageRequest(loadToken, requestContext)) {
             box.innerHTML = `<div class="error">请求异常：${escapeHtml(e)}</div>`;
+            resetRenderedMessageState();
         }
     } finally {
         if (loadToken === messageLoadToken) {
@@ -4798,16 +4920,27 @@ async function loadOlderMessages() {
     isLoadingHistory = true;
 
     const box = document.getElementById('messageList');
+    if (!box) {
+        isLoadingHistory = false;
+        return;
+    }
     const oldScrollTop = box.scrollTop;
     const oldScrollHeight = box.scrollHeight;
 
     try {
         const keyword = document.getElementById('keywordInput').value.trim();
+        const context = {
+            adapter: currentSession.adapter || '',
+            scene: currentSession.scene,
+            targetId: currentSession.target_id,
+            date: currentDate,
+            keyword
+        };
         const qs = new URLSearchParams({
             scene: currentSession.scene,
             target_id: currentSession.target_id,
             before_row_id: String(currentOldestRowId),
-            page_size: '300'
+            page_size: String(MESSAGE_PAGE_SIZE)
         });
 
         if (keyword) qs.set('keyword', keyword);
@@ -4816,6 +4949,10 @@ async function loadOlderMessages() {
 
         const res = await fetch('/api/messages/list_before?' + qs.toString());
         const data = await res.json();
+
+        if (!isCurrentMessageContext(context)) {
+            return;
+        }
 
         if (!data.success) {
             console.error('历史消息加载失败', data.error || '未知错误');
@@ -4835,7 +4972,7 @@ async function loadOlderMessages() {
         box.insertAdjacentHTML('afterbegin', renderMessageRows(rows, 0));
         normalizeDateDividers();
         reindexRenderedMessages();
-        lastRenderedMessageKeys = rows.map(getMessageKey).concat(lastRenderedMessageKeys);
+        addRenderedMessageState(rows, true);
         currentOldestRowId = Number(rows[0].id || currentOldestRowId);
 
         const delta = box.scrollHeight - oldScrollHeight;
@@ -4853,7 +4990,7 @@ function maybePrefetchHistoryOnScroll() {
     const box = document.getElementById('messageList');
     const firstVisibleIndex = getFirstVisibleMessageIndex(box);
 
-    if (firstVisibleIndex >= 0 && firstVisibleIndex <= 150) {
+    if (firstVisibleIndex >= 0 && firstVisibleIndex <= HISTORY_PREFETCH_VISIBLE_INDEX) {
         loadOlderMessages();
     }
 }
@@ -5297,7 +5434,8 @@ function clearReplyTarget() {
 }
 
 function getMessageRows() {
-    return Array.from(document.querySelectorAll('.msg-row'));
+    const box = document.getElementById('messageList');
+    return Array.from(box?.querySelectorAll('.msg-row') || []);
 }
 
 function jumpToMessage(index) {
@@ -5331,7 +5469,7 @@ function jumpNextMessage() {
 function reloadCurrentConversation() {
     if (currentSession) {
         clearReplyTarget();
-        lastRenderedMessageKeys = [];
+        resetRenderedMessageState();
         hideUnreadHint();
         withMessageProgress(() => loadMessages(true, false));
     } else {
@@ -5343,7 +5481,7 @@ function onSceneChange() {
     currentSession = null;
     currentDate = '';
     clearReplyTarget();
-    lastRenderedMessageKeys = [];
+    resetRenderedMessageState();
     lastRenderedSessionKeys = [];
     lastSessionRowId = 0;
     hideUnreadHint();
@@ -5355,7 +5493,7 @@ function onAdapterChange() {
     currentSession = null;
     currentDate = '';
     clearReplyTarget();
-    lastRenderedMessageKeys = [];
+    resetRenderedMessageState();
     lastRenderedSessionKeys = [];
     lastSessionRowId = 0;
     hideUnreadHint();
@@ -5390,6 +5528,7 @@ function resetChatPanel() {
             <p>请选择左侧会话</p>
         </div>
     `;
+    resetRenderedMessageState();
 }
 
 function clearInput() {
@@ -5623,19 +5762,25 @@ async function sendMessage() {
         }
 
         if (allOk) {
+            const previousLastRowId = currentLastRowId;
             clearInput();
             clearReplyTarget();
-            lastRenderedMessageKeys = [];
 
-            setTimeout(async () => {
-                try {
-                    await loadMessages(true, false);
-                    await loadSessions(true);
-                    await loadMessageDates();
-                } catch (e) {
-                    console.error('发送后刷新失败:', e);
+            try {
+                if (previousLastRowId > 0) {
+                    await loadMessagesSince();
                 }
-            }, 100);
+                if (!previousLastRowId || currentLastRowId === previousLastRowId) {
+                    await loadMessages(true, false);
+                }
+                scheduleScrollMessagesToBottom();
+                await Promise.all([
+                    loadSessions(true),
+                    loadMessageDates()
+                ]);
+            } catch (e) {
+                console.error('发送后刷新失败:', e);
+            }
         } else {
             alert('发送失败：' + lastError);
         }
@@ -5647,6 +5792,30 @@ async function sendMessage() {
         updateMediaBadge();
         if (mediaBtn) mediaBtn.innerHTML = oldMedia;
     }
+}
+
+function markMessageRowRevoked(rowId, messageId) {
+    const row = getMessageRows().find(item => {
+        return (rowId && item.dataset.rowId === String(rowId))
+            || (messageId && item.dataset.messageId === String(messageId));
+    });
+
+    if (!row) return false;
+
+    const bubble = row.querySelector('.msg-bubble');
+    if (bubble) {
+        bubble.innerHTML = renderMessageContent('[该消息已撤回]');
+    }
+
+    row.dataset.copyText = '[该消息已撤回]';
+    row.dataset.preview = '[该消息已撤回]';
+    row.classList.remove('can-reply', 'reply-selected');
+    row.querySelectorAll('.msg-revoke-btn').forEach(el => {
+        el.textContent = '已撤回';
+        el.disabled = true;
+    });
+
+    return true;
 }
 
 async function revokeMessage(btn) {
@@ -5688,8 +5857,9 @@ async function revokeMessage(btn) {
             btn.innerText = '已撤回';
             btn.disabled = true;
 
-            lastRenderedMessageKeys = [];
-            await loadMessages(false, false);
+            if (!markMessageRowRevoked(rowId, messageId)) {
+                await loadMessages(false, false);
+            }
             await loadSessions(true);
         } else {
             alert('撤回失败：' + (data.error || '未知错误'));
@@ -5729,10 +5899,6 @@ async function refreshAll() {
     await withMessageProgress(async () => {
         const tasks = [loadSessions(sessionsCache.length > 0)];
         if (currentSession) {
-            lastRenderedMessageKeys = [];
-            currentOldestRowId = 0;
-            currentLastRowId = 0;
-            hasMoreHistory = false;
             tasks.push(loadMessages(false, false), loadMessageDates());
         }
         await Promise.all(tasks);
@@ -5833,30 +5999,74 @@ async function saveMessageConfig() {
     }
 }
 
-window.addEventListener('beforeunload', () => {
-    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    if (historyScrollTimer) clearTimeout(historyScrollTimer);
-});
+function cleanupMessagesPage() {
+    messagePageInitialized = false;
 
-document.addEventListener('DOMContentLoaded', async () => {
+    if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+    if (historyScrollTimer) {
+        clearTimeout(historyScrollTimer);
+        historyScrollTimer = null;
+    }
+    if (messagePressTimer) {
+        clearTimeout(messagePressTimer);
+        messagePressTimer = null;
+    }
+    if (avatarPressTimer) {
+        clearTimeout(avatarPressTimer);
+        avatarPressTimer = null;
+    }
+    if (pendingComposerFocusTimer) {
+        clearTimeout(pendingComposerFocusTimer);
+        pendingComposerFocusTimer = null;
+    }
+    if (mobileViewportRaf) {
+        cancelAnimationFrame(mobileViewportRaf);
+        mobileViewportRaf = 0;
+    }
+
+    clearPendingBottomScrolls();
+    closeMessageActionMenu();
+    hideUnreadHint();
+
+    const toast = document.getElementById('messageToast');
+    if (toast?._timer) {
+        clearTimeout(toast._timer);
+    }
+    toast?.remove();
+
+    if (messagePageAbort) {
+        messagePageAbort.abort();
+        messagePageAbort = null;
+    }
+}
+
+async function initMessagesPage() {
+    if (messagePageInitialized) return;
+    if (!document.getElementById('messageList')) return;
+
+    messagePageInitialized = true;
     syncMobileViewportHeight(true);
     applyChatHeaderCollapsedFromStorage();
     setSendMode(sendMode);
     setActiveSend(activeSend);
     updateMediaBadge();
     applyMediaFileInputAttrs();
-    document.getElementById('mediaOverlay')?.addEventListener('click', () => {
+
+    addMessagePageListener(document.getElementById('mediaOverlay'), 'click', () => {
         minimizeMediaPanel();
     });
-    document.getElementById('messageInput')?.addEventListener('focus', () => {
+    addMessagePageListener(document.getElementById('messageInput'), 'focus', () => {
         if (mediaPanelOpen) {
             minimizeMediaPanel();
         }
         updateMediaBadge();
         syncKeyboardAfterFocus();
     });
-    document.getElementById('mediaUrl')?.addEventListener('focus', syncKeyboardAfterFocus);
-    document.addEventListener('focusout', (event) => {
+    addMessagePageListener(document.getElementById('mediaUrl'), 'focus', syncKeyboardAfterFocus);
+    addMessagePageListener(document, 'focusout', (event) => {
         const target = event.target;
         const tagName = String(target?.tagName || '').toUpperCase();
         if (tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable) {
@@ -5866,11 +6076,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, 120);
         }
     });
-    document.getElementById('messageList')?.addEventListener('scroll', onMessageListScroll, { passive: true });
-    document.addEventListener('pointerdown', suppressNonMentionableAvatarPointer, true);
-    document.addEventListener('contextmenu', suppressNativeAvatarContextMenu, true);
-    document.addEventListener('dragstart', suppressNativeAvatarDrag, true);
-    document.addEventListener('click', (event) => {
+    addMessagePageListener(document.getElementById('messageList'), 'scroll', onMessageListScroll, { passive: true });
+    addMessagePageListener(document, 'pointerdown', suppressNonMentionableAvatarPointer, true);
+    addMessagePageListener(document, 'contextmenu', suppressNativeAvatarContextMenu, true);
+    addMessagePageListener(document, 'dragstart', suppressNativeAvatarDrag, true);
+    addMessagePageListener(document, 'click', (event) => {
         const menu = document.getElementById('messageActionMenu');
         if (menu && !menu.contains(event.target)) {
             closeMessageActionMenu();
@@ -5878,15 +6088,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (mediaPanelOpen) {
             const panel = document.getElementById('mediaPanel');
             const inPanel = panel && panel.contains(event.target);
-            const isMediaTrigger = event.target.closest(
-                '#mediaOpenBtn, #mediaOpenBtnExpanded, #mediaToggleBtn, #mediaFab, .media-fab, .composer-media-btn'
-            );
+            const isMediaTrigger = typeof event.target?.closest === 'function'
+                && event.target.closest(
+                    '#mediaOpenBtn, #mediaOpenBtnExpanded, #mediaToggleBtn, #mediaFab, .media-fab, .composer-media-btn'
+                );
             if (!inPanel && !isMediaTrigger) {
                 minimizeMediaPanel();
             }
         }
     });
-    document.addEventListener('keydown', (event) => {
+    addMessagePageListener(document, 'keydown', (event) => {
         if (event.key === 'Escape') {
             if (mediaPanelOpen) {
                 minimizeMediaPanel();
@@ -5895,15 +6106,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeMessageConfigPanel();
         }
     });
+    addMessagePageListener(window, 'beforeunload', cleanupMessagesPage);
+
     await loadBots();
     await loadSessions(false);
     ensureAutoRefresh();
-});
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        rerenderCurrentMessagesAfterAttachmentPatch();
-    }, 300);
-});
+window.__xiuxianMessagesPageCleanup = cleanupMessagesPage;
+window.__xiuxianPageCleanup = cleanupMessagesPage;
+
+if (document.readyState === 'loading') {
+    addMessagePageListener(document, 'DOMContentLoaded', initMessagesPage, { once: true });
+} else {
+    initMessagesPage();
+}
 </script>
 {% endblock %}

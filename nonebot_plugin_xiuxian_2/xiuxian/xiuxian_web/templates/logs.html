@@ -713,13 +713,22 @@
 </style>
 
 <script>
-const ansiUp = new AnsiUp();
-ansiUp.use_classes = true;
+window.__xiuxianLogsPageCleanup?.();
+
+(function () {
+const ansiUp = window.AnsiUp ? new window.AnsiUp() : null;
+if (ansiUp) {
+    ansiUp.use_classes = true;
+}
+
+let logsPageAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+let logsPageInitialized = false;
 
 let currentPage = 1;
 let currentTotal = 0;
 const pageSize = 200;
 let currentFile = '';
+let logFileLabels = {};
 
 let realtimeEnabled = false;
 let realtimeTimer = null;
@@ -739,6 +748,35 @@ const LOG_USER_SCENE_LABELS = {
     channel_group: '频道消息',
     channel_private: '频道私信'
 };
+
+function addLogsPageListener(target, type, handler, options = {}) {
+    if (!target?.addEventListener) return;
+
+    const opts = typeof options === 'boolean' ? { capture: options } : { ...options };
+    if (logsPageAbort) {
+        opts.signal = logsPageAbort.signal;
+    }
+
+    target.addEventListener(type, handler, opts);
+}
+
+function cleanupLogsPage() {
+    realtimeEnabled = false;
+    if (realtimeTimer) {
+        clearInterval(realtimeTimer);
+        realtimeTimer = null;
+    }
+    if (logsPageAbort) {
+        logsPageAbort.abort();
+        logsPageAbort = null;
+    }
+    if (window.__xiuxianLogsPageCleanup === cleanupLogsPage) {
+        window.__xiuxianLogsPageCleanup = null;
+    }
+    if (window.__xiuxianPageCleanup === cleanupLogsPage) {
+        window.__xiuxianPageCleanup = null;
+    }
+}
 
 function fmtDateTimeLocalToBackend(val) {
     if (!val) return '';
@@ -1225,7 +1263,7 @@ function normalizeAnsi(s) {
 
 function ansiToHtmlSafe(text) {
     const fixed = normalizeAnsi(text || '');
-    return ansiUp.ansi_to_html(fixed);
+    return ansiUp ? ansiUp.ansi_to_html(fixed) : escapeHtml(fixed);
 }
 
 function levelClass(level) {
@@ -1342,30 +1380,38 @@ function renderPager() {
 
 async function loadLogFiles() {
     const sel = document.getElementById('log-file');
-    sel.innerHTML = `<option>加载中...</option>`;
+    sel.innerHTML = `<option value="">加载中...</option>`;
+    logFileLabels = {};
 
     try {
         const res = await fetch('/api/logs/files');
         const data = await res.json();
 
         if (!data.success) {
-            sel.innerHTML = `<option>加载失败</option>`;
+            sel.innerHTML = `<option value="">加载失败</option>`;
             return;
         }
 
         if (!data.files || data.files.length === 0) {
-            sel.innerHTML = `<option>未找到日志文件</option>`;
+            sel.innerHTML = `<option value="">未找到日志文件</option>`;
             return;
         }
 
-        sel.innerHTML = data.files.map(f =>
-            `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)} (${escapeHtml(f.mtime)})</option>`
-        ).join('');
+        sel.innerHTML = data.files.map(f => {
+            const id = f.id || f.path || f.name;
+            const label = f.display_name || f.name || id;
+            logFileLabels[id] = label;
+            return `<option value="${escapeHtml(id)}">${escapeHtml(label)} (${escapeHtml(f.mtime)})</option>`;
+        }).join('');
 
-        currentFile = data.files[0].name;
+        currentFile = data.files[0].id || data.files[0].path || data.files[0].name;
     } catch (e) {
-        sel.innerHTML = `<option>加载异常</option>`;
+        sel.innerHTML = `<option value="">加载异常</option>`;
     }
+}
+
+function getLogFileLabel(file) {
+    return logFileLabels[file] || file || '';
 }
 
 async function loadLogs(page = 1, fromRealtime = false) {
@@ -1381,7 +1427,7 @@ async function loadLogs(page = 1, fromRealtime = false) {
     const start = fmtDateTimeLocalToBackend(document.getElementById('start').value);
     const end = fmtDateTimeLocalToBackend(document.getElementById('end').value);
 
-    if (!file || file === '未找到日志文件') return;
+    if (!file) return;
 
     const qs = new URLSearchParams({
         file, keyword, level, start, end,
@@ -1406,7 +1452,7 @@ async function loadLogs(page = 1, fromRealtime = false) {
         currentTotal = data.total || 0;
         currentFile = data.file || file;
 
-        meta.innerText = `文件：${currentFile} ｜ 共 ${currentTotal} 条 ｜ 第 ${data.page} 页`;
+        meta.innerText = `文件：${data.display_name || getLogFileLabel(file)} ｜ 共 ${currentTotal} 条 ｜ 第 ${data.page} 页`;
         box.innerHTML = renderRows(data.rows || []);
         renderPager();
     } catch (e) {
@@ -1422,7 +1468,7 @@ async function getLastPageNumber() {
     const start = fmtDateTimeLocalToBackend(document.getElementById('start').value);
     const end = fmtDateTimeLocalToBackend(document.getElementById('end').value);
 
-    if (!file || file === '未找到日志文件') return 1;
+    if (!file) return 1;
 
     const qs = new URLSearchParams({
         file, keyword, level, start, end,
@@ -1448,7 +1494,7 @@ async function getCurrentFileSize(fileName) {
     const res = await fetch('/api/logs/files');
     const data = await res.json();
     if (!data.success || !data.files) return 0;
-    const hit = data.files.find(f => f.name === fileName);
+    const hit = data.files.find(f => (f.id || f.path || f.name) === fileName || f.name === fileName);
     return hit ? (hit.size || 0) : 0;
 }
 
@@ -1489,14 +1535,14 @@ async function pullRealtimeIncrement() {
     appendRows(data.lines || []);
 
     const meta = document.getElementById('log-meta');
-    meta.innerText = `文件：${file} ｜ 实时模式（增量） ｜ offset: ${realtimeOffset}`;
+    meta.innerText = `文件：${data.display_name || getLogFileLabel(file)} ｜ 实时模式（增量） ｜ offset: ${realtimeOffset}`;
 }
 
 async function toggleRealtime() {
     const btn = document.getElementById('realtime-btn');
     const file = document.getElementById('log-file').value;
 
-    if (!file || file === '未找到日志文件') {
+    if (!file) {
         alert('请先选择日志文件');
         return;
     }
@@ -1553,16 +1599,32 @@ function scrollToBottom() {
     box.scrollTop = box.scrollHeight;
 }
 
-window.addEventListener('beforeunload', () => {
-    if (realtimeTimer) {
-        clearInterval(realtimeTimer);
-        realtimeTimer = null;
-    }
-});
-
-document.addEventListener('DOMContentLoaded', async () => {
+async function initLogsPage() {
+    if (logsPageInitialized) return;
+    logsPageInitialized = true;
+    addLogsPageListener(window, 'beforeunload', cleanupLogsPage);
     await loadLogFiles();
     loadLogs(1);
-});
+}
+
+window.switchLogMode = switchLogMode;
+window.searchLogUsers = searchLogUsers;
+window.selectLogUser = selectLogUser;
+window.loadLogUserMessages = loadLogUserMessages;
+window.resetLogUserFilters = resetLogUserFilters;
+window.scrollLogUserMessagesToBottom = scrollLogUserMessagesToBottom;
+window.loadLogs = loadLogs;
+window.resetFilters = resetFilters;
+window.scrollToBottom = scrollToBottom;
+window.toggleRealtime = toggleRealtime;
+window.__xiuxianLogsPageCleanup = cleanupLogsPage;
+window.__xiuxianPageCleanup = cleanupLogsPage;
+
+if (document.readyState === 'loading') {
+    addLogsPageListener(document, 'DOMContentLoaded', initLogsPage, { once: true });
+} else {
+    initLogsPage();
+}
+})();
 </script>
 {% endblock %}
