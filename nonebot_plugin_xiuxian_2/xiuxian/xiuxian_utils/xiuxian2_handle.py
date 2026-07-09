@@ -10,6 +10,7 @@ import string
 import time
 import queue
 import copy
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 import threading
@@ -24,6 +25,7 @@ from nonebot import get_driver
 from .item_json import Items
 from .xn_xiuxian_impart_config import config_impart
 from .player_data_manager import PlayerDataManager
+from .repositories import EconomyRepository, UserRepository
 from .xiuxian_json_config import OtherSet, XiuxianJsonDate
 from .item_info_messages import (
     get_armor_info_msg,
@@ -117,6 +119,16 @@ class XiuxianDateManage:
             self._read_cache = {}
             self._read_cache_lock = threading.RLock()
             self._read_cache_ttl = max(0.0, float(os.getenv("XIUXIAN_READ_CACHE_TTL", "2")))
+            self.users = UserRepository(
+                read_query=self._read_query,
+                connection=self._repository_read_connection,
+                build_real_user=final_user_data,
+            )
+            self.economy = EconomyRepository(
+                connection=self._repository_connection,
+                normalize_amount=number_count,
+                log_change=self._safe_log_economy_context,
+            )
             logger.opt(colors=True).info(f"<green>修仙数据库已连接！</green>")
             self._check_data()
             self._run_core_migrations()
@@ -611,6 +623,31 @@ class XiuxianDateManage:
         (conn or self.conn).commit()
         self._clear_read_cache()
 
+    @contextmanager
+    def _repository_connection(self):
+        with self._conn_lock:
+            try:
+                yield self.conn
+            except Exception:
+                self.conn.rollback()
+                raise
+            finally:
+                self._clear_read_cache()
+
+    @contextmanager
+    def _repository_read_connection(self):
+        conn = None
+        reusable = True
+        try:
+            conn = self._borrow_fast_conn()
+            yield conn
+        except Exception:
+            reusable = False
+            raise
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
+
     def _clear_read_cache(self):
         with self._read_cache_lock:
             self._read_cache.clear()
@@ -765,21 +802,11 @@ class XiuxianDateManage:
 
     def get_user_info_with_id(self, user_id):
         """根据USER_ID获取用户信息,不获取功法加成"""
-        return self._read_query(
-            "select * from user_xiuxian WHERE user_id=%s",
-            (user_id,),
-            one=True,
-            dict_row=True,
-        )
+        return self.users.get_by_id(user_id)
 
     def get_user_info_with_name(self, user_id):
         """根据user_name获取用户信息"""
-        return self._read_query(
-            "select * from user_xiuxian WHERE user_name=%s",
-            (user_id,),
-            one=True,
-            dict_row=True,
-        )
+        return self.users.get_by_name(user_id)
 
     def update_all_users_stamina(self, max_stamina, stamina):
         """体力未满用户更新体力值。"""
@@ -842,22 +869,7 @@ class XiuxianDateManage:
 
     def get_user_real_info(self, user_id):
         """根据USER_ID获取用户信息,获取功法加成"""
-        conn = None
-        reusable = True
-        try:
-            conn = self._borrow_fast_conn()
-            cur = conn.cursor()
-            cur.execute("select * from user_xiuxian WHERE user_id=%s", (user_id,))
-            result = cur.fetchone()
-            if result:
-                return final_user_data(result, cur.description)
-            return None
-        except Exception:
-            reusable = False
-            raise
-        finally:
-            if conn is not None:
-                self._return_fast_conn(conn, reusable=reusable)
+        return self.users.get_with_attributes(user_id)
 
     def get_player_data(self, user_id, boss=False):
         """根据USER_ID获取用户信息,获取属性"""
@@ -1192,90 +1204,19 @@ class XiuxianDateManage:
 
     def update_ls(self, user_id, price, key, log_context=None):
         """更新灵石 1增加 2减少"""
-        with self._conn_lock:
-            cur = self.conn.cursor()
-            price = abs(int(price))
-            current_stone = None
-            stone_delta = 0
-            if log_context:
-                cur.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (user_id,))
-                row = cur.fetchone()
-                if row:
-                    current_stone = int(row[0] or 0)
-            if key == 1:
-                sql = "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s"
-                cur.execute(sql, (price, user_id))
-                if cur.rowcount > 0:
-                    stone_delta = price
-            elif key == 2:
-                sql = "UPDATE user_xiuxian SET stone=GREATEST(stone-%s, 0) WHERE user_id=%s"
-                cur.execute(sql, (price, user_id))
-                if cur.rowcount > 0:
-                    stone_delta = -min(current_stone if current_stone is not None else price, price)
-            self._commit_write()
-            if log_context and stone_delta:
-                self._safe_log_economy_context(
-                    log_context,
-                    user_id=user_id,
-                    default_action="stone_add" if key == 1 else "stone_cost",
-                    stone_delta=stone_delta,
-                    detail={
-                        "asset": "stone",
-                        "method": "update_ls",
-                        "key": key,
-                        "requested_amount": price,
-                    },
-                )
+        self.economy.update_stones(user_id, price, key, log_context)
 
     def try_update_ls(self, user_id, price, key, log_context=None):
         """更新灵石并返回是否成功；扣减时要求余额足够。"""
-        with self._conn_lock:
-            cur = self.conn.cursor()
-            price = abs(int(price))
-            if price <= 0:
-                return True
-            if key == 1:
-                sql = "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s"
-                cur.execute(sql, (price, user_id))
-            elif key == 2:
-                sql = "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND COALESCE(stone, 0) >= %s"
-                cur.execute(sql, (price, user_id, price))
-            else:
-                return False
-            success = cur.rowcount > 0
-            self._commit_write()
-            if log_context and success:
-                self._safe_log_economy_context(
-                    log_context,
-                    user_id=user_id,
-                    default_action="stone_add" if key == 1 else "stone_cost",
-                    stone_delta=price if key == 1 else -price,
-                    detail={
-                        "asset": "stone",
-                        "method": "try_update_ls",
-                        "key": key,
-                        "requested_amount": price,
-                    },
-                )
-            return success
+        return self.economy.try_update_stones(user_id, price, key, log_context)
 
     def update_exp(self, user_id, exp):
         """增加修为"""
-        with self._conn_lock:
-            exp = number_count(exp)
-            sql = "UPDATE user_xiuxian SET exp=exp+%s WHERE user_id=%s"
-            cur = self.conn.cursor()
-            cur.execute(sql, (exp, user_id))
-            self._commit_write()
+        self.economy.add_experience(user_id, exp)
 
     def update_j_exp(self, user_id, exp):
         """减少修为"""
-        with self._conn_lock:
-            exp = number_count(exp)
-            sql = "UPDATE user_xiuxian SET exp=GREATEST(exp-%s, 0) WHERE user_id=%s"
-            cur = self.conn.cursor()
-            cur.execute(sql, (exp, user_id))
-            self._commit_write()
+        self.economy.subtract_experience(user_id, exp)
 
     def update_root(self, user_id, key):
         """更新灵根"""
