@@ -5,7 +5,7 @@ from nonebot import get_driver
 from nonebot.log import logger
 from werkzeug.serving import BaseWSGIServer, make_server
 
-from .core import *  # noqa: F401,F403
+from .core import HOST, PORT, XiuConfig, app, initialize_web_storage
 from .config import (  # noqa: F401
     CONFIG_EDITABLE_FIELDS,
     EXCLUDED_CONFIG_FIELDS,

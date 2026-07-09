@@ -78,6 +78,25 @@ class SourceQualityTests(unittest.TestCase):
             f"Web server starts during import at lines: {module_level_starts}",
         )
 
+    def test_web_modules_do_not_use_core_star_imports(self) -> None:
+        web_root = SOURCE_ROOT / "xiuxian" / "xiuxian_web"
+        violations = []
+        for path in web_root.glob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            if any(
+                isinstance(node, ast.ImportFrom)
+                and node.module == "core"
+                and any(alias.name == "*" for alias in node.names)
+                for node in tree.body
+            ):
+                violations.append(path.name)
+
+        self.assertEqual(
+            violations,
+            [],
+            "Web modules importing core with *: " + ", ".join(violations),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
