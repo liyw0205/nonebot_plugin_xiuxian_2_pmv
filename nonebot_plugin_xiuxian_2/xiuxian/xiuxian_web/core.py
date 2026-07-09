@@ -146,7 +146,13 @@ def _load_or_create_web_secret_key() -> str:
         return secrets.token_urlsafe(48)
 
 
-app.secret_key = _load_or_create_web_secret_key()
+def initialize_web_storage() -> None:
+    """Prepare persistent Web state during the NoneBot startup phase."""
+    app.secret_key = _load_or_create_web_secret_key()
+    WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
+
+
+app.secret_key = secrets.token_urlsafe(48)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -370,7 +376,6 @@ PORT = WEB_CONFIG.web_port
 HOST = WEB_CONFIG.web_host
 
 WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
-WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
 

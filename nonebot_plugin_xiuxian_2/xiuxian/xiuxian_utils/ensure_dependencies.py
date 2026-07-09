@@ -1,12 +1,14 @@
 """
-启动时检测修仙插件 requirements.txt，缺失则对当前 Python 解释器执行 pip install。
+按显式配置检测修仙插件 requirements.txt，缺失时对当前 Python 解释器执行 pip install。
 
 与 nonebot_plugin_xiuxian_2_pmv_file 安装脚本对齐：
 - Termux：跳过已由 pkg 提供的 numpy / Pillow / psutil / pathlib / asyncio
 - 始终使用 sys.executable -m pip（nb run / venv 激活后即为虚拟环境）
 - 默认清华 PyPI 镜像（可通过环境变量 XIUXIAN_PIP_INDEX 覆盖）
 
-设 XIUXIAN_SKIP_AUTO_PIP=1 可关闭自动安装。
+默认不会在插件启动时修改 Python 环境。设置
+XIUXIAN_AUTO_INSTALL_DEPENDENCIES=1 后才会在 NoneBot startup 阶段执行；
+XIUXIAN_SKIP_AUTO_PIP=1 仍可强制跳过。
 """
 from __future__ import annotations
 
