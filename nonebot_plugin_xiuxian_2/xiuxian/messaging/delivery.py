@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from typing import Any
+
+from ..adapter_compat import (
+    get_chat_scene,
+    get_group_id,
+    get_message_reference_id,
+    get_user_id,
+)
+from ..adapter_message_actions import delete_message_compat
+from ..adapter_message_sender import send_group_message, send_private_message
+from .models import SendRequest, SendResult
+
+
+class MessageDeliveryService:
+    """收敛主动发送与回复入口，底层继续复用现有 Adapter 兼容实现。"""
+
+    async def send(self, bot: Any, request: SendRequest, **kwargs: Any) -> SendResult:
+        if request.reference_id:
+            kwargs.setdefault("message_reference_id", request.reference_id)
+        if request.revoke_after:
+            kwargs.setdefault("revoke_after", request.revoke_after)
+
+        if request.scene == "group":
+            raw = await send_group_message(
+                bot,
+                group_id=request.target_id,
+                message=request.message,
+                **kwargs,
+            )
+        elif request.scene == "private":
+            raw = await send_private_message(
+                bot,
+                user_id=request.target_id,
+                message=request.message,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"不支持的消息场景: {request.scene}")
+        return SendResult.from_raw(raw)
+
+    async def send_to_group(
+        self,
+        bot: Any,
+        group_id: Any,
+        message: Any,
+        **kwargs: Any,
+    ) -> SendResult:
+        return await self.send(
+            bot,
+            SendRequest("group", str(group_id), message),
+            **kwargs,
+        )
+
+    async def send_to_user(
+        self,
+        bot: Any,
+        user_id: Any,
+        message: Any,
+        **kwargs: Any,
+    ) -> SendResult:
+        return await self.send(
+            bot,
+            SendRequest("private", str(user_id), message),
+            **kwargs,
+        )
+
+    async def reply(
+        self,
+        bot: Any,
+        event: Any,
+        message: Any,
+        **kwargs: Any,
+    ) -> SendResult:
+        scene = get_chat_scene(event)
+        if scene in {"group", "channel_group"}:
+            request = SendRequest(
+                "group",
+                str(get_group_id(event)),
+                message,
+                reference_id=get_message_reference_id(event),
+            )
+        elif scene in {"private", "channel_private"}:
+            request = SendRequest(
+                "private",
+                str(get_user_id(event)),
+                message,
+                reference_id=get_message_reference_id(event),
+            )
+        else:
+            raw = await bot.send(event=event, message=message, **kwargs)
+            return SendResult.from_raw(raw)
+        return await self.send(bot, request, **kwargs)
+
+    async def recall(
+        self,
+        bot: Any,
+        *,
+        scene: str,
+        message_id: str,
+        group_id: str = "",
+        user_id: str = "",
+    ) -> Any:
+        return await delete_message_compat(
+            bot,
+            scene=scene,
+            message_id=message_id,
+            group_id=group_id,
+            user_id=user_id,
+        )
+
+
+delivery_service = MessageDeliveryService()
+
+
+__all__ = ["MessageDeliveryService", "delivery_service"]

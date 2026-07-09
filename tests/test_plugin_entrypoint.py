@@ -24,6 +24,22 @@ class PluginEntrypointTests(unittest.TestCase):
             "Directory-based loading breaks when the bot cwd differs from the plugin source directory.",
         )
 
+    def test_internal_packages_are_not_loaded_as_plugins(self) -> None:
+        source = ENTRYPOINT.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(ENTRYPOINT))
+        internal_packages = next(
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "_INTERNAL_PACKAGES"
+                for target in node.targets
+            )
+        )
+        values = {element.value for element in internal_packages.elts}
+        self.assertEqual(values, {"infrastructure", "messaging", "qq_compat"})
+        self.assertIn("module.name not in _INTERNAL_PACKAGES", source)
+
 
 if __name__ == "__main__":
     unittest.main()

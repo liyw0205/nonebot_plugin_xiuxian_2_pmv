@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
@@ -161,37 +162,54 @@ def get_bot_id(bot: Any) -> str:
 
 
 def extract_result_message_id(result: Any) -> str:
-    try:
-        if result is None:
-            return ""
+    return _extract_field_from_any(result, ("message_id", "msg_id", "id"))
 
-        if isinstance(result, dict):
-            return str(
-                result.get("message_id")
-                or result.get("msg_id")
-                or result.get("id")
-                or ""
-            )
 
-        return str(
-            getattr(result, "message_id", "")
-            or getattr(result, "msg_id", "")
-            or getattr(result, "id", "")
-            or ""
-        )
-    except Exception:
+def _extract_field_from_any(
+    value: Any,
+    keys: tuple[str, ...],
+    *,
+    _depth: int = 0,
+    _seen: set[int] | None = None,
+) -> str:
+    if value is None or _depth > 6:
         return ""
 
+    if _seen is None:
+        _seen = set()
+    if not isinstance(value, (str, bytes, int, float, bool)):
+        value_id = id(value)
+        if value_id in _seen:
+            return ""
+        _seen.add(value_id)
 
-def _extract_field_from_any(value: Any, keys: tuple[str, ...]) -> str:
-    if value is None:
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            result = _extract_field_from_any(
+                item,
+                keys,
+                _depth=_depth + 1,
+                _seen=_seen,
+            )
+            if result:
+                return result
         return ""
 
     if isinstance(value, dict):
         for key in keys:
             item = value.get(key)
-            if item:
+            if item is not None and item != "":
                 return str(item)
+        for nested_key in ("data", "result", "response", "ext_info"):
+            if nested_key in value:
+                result = _extract_field_from_any(
+                    value[nested_key],
+                    keys,
+                    _depth=_depth + 1,
+                    _seen=_seen,
+                )
+                if result:
+                    return result
         return ""
 
     for key in keys:
@@ -199,17 +217,53 @@ def _extract_field_from_any(value: Any, keys: tuple[str, ...]) -> str:
             item = getattr(value, key, None)
         except Exception:
             item = None
-        if item:
+        if item is not None and item != "":
             return str(item)
 
-    try:
-        data = value.dict(exclude_none=True)
-        if isinstance(data, dict):
-            return _extract_field_from_any(data, keys)
-    except Exception:
-        pass
+    for method_name in ("model_dump", "dict"):
+        try:
+            method = getattr(value, method_name)
+            data = method(exclude_none=True)
+        except Exception:
+            continue
+        result = _extract_field_from_any(
+            data,
+            keys,
+            _depth=_depth + 1,
+            _seen=_seen,
+        )
+        if result:
+            return result
 
     return ""
+
+
+_MSG_IDX_RE = re.compile(r"(?:^|[?&])msg_idx=([^&\s]+)")
+
+
+def _extract_reference_from_ext(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            result = _extract_reference_from_ext(item)
+            if result:
+                return result
+        return ""
+    if isinstance(value, dict):
+        for nested in value.values():
+            result = _extract_reference_from_ext(nested)
+            if result:
+                return result
+        return ""
+    if not isinstance(value, str):
+        for attr in ("ext", "message_scene", "ext_info", "data", "result", "response"):
+            result = _extract_reference_from_ext(getattr(value, attr, None))
+            if result:
+                return result
+        return ""
+    match = _MSG_IDX_RE.search(value)
+    return unquote(match.group(1)) if match else ""
 
 
 def extract_result_reference_id(result: Any) -> str:
@@ -228,7 +282,10 @@ def extract_result_reference_id(result: Any) -> str:
         if ref_id:
             return ref_id
 
-        return _extract_field_from_any(result, keys)
+        ref_id = _extract_field_from_any(result, keys)
+        if ref_id:
+            return ref_id
+        return _extract_reference_from_ext(result)
 
     except Exception:
         return ""

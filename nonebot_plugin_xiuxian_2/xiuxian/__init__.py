@@ -23,8 +23,11 @@ from nonebot import require, load_all_plugins, get_plugin_by_module_name
 from .xiuxian_utils.config import config as _config
 from .broadcast_manager import auto_patch_broadcast_for_event
 from . import runtime as _runtime  # noqa: F401
+from .infrastructure import QQEventDeduplicator
+from .qq_compat import is_qq_event
 
 DRIVER = get_driver()
+_INTERNAL_PACKAGES = {"infrastructure", "messaging", "qq_compat"}
 
 try:
     NICKNAME: str = list(DRIVER.config.nickname)[0]
@@ -51,6 +54,7 @@ if get_plugin_by_module_name("xiuxian"):
             f"xiuxian.{module.name}"
             for module in iter_modules([str(Path(__file__).parent)])
             if module.ispkg
+            and module.name not in _INTERNAL_PACKAGES
             and (
                 (name := module.name[11:]) == "meta"
                 or name not in _config.disabled_plugins
@@ -120,6 +124,13 @@ GLOBAL_COMMAND_OVERLOAD_NOTICE = _get_config_str("xiuxian_global_command_overloa
 GLOBAL_COMMAND_OVERLOAD_NOTICE_INTERVAL_SECONDS = _get_config_int("xiuxian_global_command_overload_notice_interval", 30)
 GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_WINDOW_SECONDS = _get_config_int("xiuxian_global_command_overload_notice_rate_window", 1)
 GLOBAL_COMMAND_OVERLOAD_NOTICE_RATE_LIMIT = _get_config_int("xiuxian_global_command_overload_notice_rate_limit", 5)
+QQ_EVENT_DEDUP_ENABLED = bool(_get_config_raw("xiuxian_qq_event_dedup_enabled", True))
+QQ_EVENT_DEDUP_TTL_SECONDS = _get_config_int("xiuxian_qq_event_dedup_ttl", 300)
+QQ_EVENT_DEDUP_MAX_SIZE = _get_config_int("xiuxian_qq_event_dedup_max_size", 5000)
+_qq_event_deduplicator = QQEventDeduplicator(
+    ttl=max(1, QQ_EVENT_DEDUP_TTL_SECONDS),
+    max_size=max(1, QQ_EVENT_DEDUP_MAX_SIZE),
+)
 _user_command_rate_hits: dict[str, deque[float]] = {}
 _user_command_rate_last_log: dict[str, float] = {}
 _user_command_rate_last_cleanup = 0.0
@@ -540,6 +551,17 @@ def _normalize_qq_group_at_message(bot, event):
             pass
         _refresh_event_text_cache(event, message)
     return removed
+
+
+@event_preprocessor
+async def deduplicate_qq_event(bot, event):
+    if QQ_EVENT_DEDUP_ENABLED and is_qq_event(event):
+        if await _qq_event_deduplicator.is_duplicate(bot, event):
+            logger.debug(
+                f"[QQ事件去重] 已忽略重复事件: bot={getattr(bot, 'self_id', '')} "
+                f"event={getattr(event, 'event_id', None) or getattr(event, 'id', None)}"
+            )
+            raise IgnoredException("QQ 官方事件重复投递")
 
 
 @event_preprocessor

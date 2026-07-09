@@ -7,10 +7,11 @@ from .paths import configure_paths_from_nonebot
 
 package_dir = Path(__file__).parent
 configure_paths_from_nonebot(get_driver().config)
+_INTERNAL_PACKAGES = {"infrastructure", "messaging", "qq_compat"}
 plugin_modules = [
     f"{__name__}.xiuxian.{module.name}"
     for module in iter_modules([str(package_dir / "xiuxian")])
-    if not module.name.startswith("_")
+    if not module.name.startswith("_") and module.name not in _INTERNAL_PACKAGES
 ]
 
 require("nonebot_plugin_apscheduler")
