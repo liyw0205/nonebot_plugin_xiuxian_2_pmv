@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import Callable
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from . import db_backend
 
 
-CORE_DB = Path() / "data" / "xiuxian" / "xiuxian.db"
+CORE_DB = get_paths().game_db
 MIGRATION_TABLE = "xiuxian_schema_migrations"
 Migration = Callable[[db_backend.SQLiteConnection], None]
 

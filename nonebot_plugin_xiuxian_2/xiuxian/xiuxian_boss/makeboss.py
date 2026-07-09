@@ -1,6 +1,7 @@
 import random
 import json
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.data_source import jsondata
 from .bossconfig import get_boss_config
@@ -37,7 +38,7 @@ jinjie_list = [
 sql_message = XiuxianDateManage()  # sql类
 
 def get_boss_jinjie_dict():
-    CONFIGJSONPATH = Path() / "data" / "xiuxian" / "境界.json"
+    CONFIGJSONPATH = get_paths().data / "境界.json"
     with open(CONFIGJSONPATH, "r", encoding="UTF-8") as f:
         data = f.read()
     temp_dict = {}

@@ -517,7 +517,7 @@ class IllusionData:
             # 检查是否是新的天数且过了8点
             return (now.day > last_participate.day and now.hour >= cls.DAILY_RESET_HOUR) or \
                    (now.day == last_participate.day and now.hour >= cls.DAILY_RESET_HOUR and last_participate.hour < cls.DAILY_RESET_HOUR)
-        except:
+        except Exception:
             return False
     
     @classmethod
@@ -527,7 +527,7 @@ class IllusionData:
             try:
                 # 直接删除玩家数据文件，下次访问时会自动创建
                 file.unlink()
-            except:
+            except Exception:
                 continue
     
     @classmethod

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
@@ -195,7 +196,7 @@ class DungeonManager:
             self.__class__._has_init = True
 
             self.plugin_path = Path(__file__).parent.absolute()
-            self.dungeon_data_path = Path() / "data" / "xiuxian" / "副本"
+            self.dungeon_data_path = get_paths().data / "副本"
             self.config_file = self.dungeon_data_path / "副本.json"
             self.legacy_config_file = self.plugin_path / "data" / "副本.json"
 

@@ -7,6 +7,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -30,7 +31,7 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 
-MAP_FILE = Path() / "data" / "xiuxian" / "地图.json"
+MAP_FILE = get_paths().data / "地图.json"
 MAP_TABLE = "map_status"
 MAP_MISSION_TABLE = "map_mission"
 DONGFU_TABLE = "dongfu_status"

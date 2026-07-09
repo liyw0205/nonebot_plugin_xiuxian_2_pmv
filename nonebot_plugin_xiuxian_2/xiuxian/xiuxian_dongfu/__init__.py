@@ -6,6 +6,7 @@ except ImportError:
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -22,7 +23,7 @@ items = Items()
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
-MAP_FILE = Path() / "data" / "xiuxian" / "地图.json"
+MAP_FILE = get_paths().data / "地图.json"
 
 SEED_CONFIG = {
     21001: {"name": "青灵草种", "price": 500000, "pool": "herb_low", "minutes": 60},

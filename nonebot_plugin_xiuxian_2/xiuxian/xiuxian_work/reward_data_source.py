@@ -1,11 +1,13 @@
 import json
 import os
-from pathlib import Path
 from datetime import datetime
+
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
 from ..xiuxian_utils.data_source import JsonDate
 
-WORKDATA = Path() / "data" / "xiuxian" / "work"
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+WORKDATA = get_paths().work
+PLAYERSDATA = get_paths().players
 
 class reward(JsonDate):
     def __init__(self):

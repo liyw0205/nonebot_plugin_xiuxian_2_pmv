@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import threading
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
 from . import db_backend
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -47,8 +49,8 @@ from .id_migration import (
     swap_two_user_ids,
 )
 
-WORKDATA = Path() / "data" / "xiuxian" / "work"
-DATABASE = Path() / "data" / "xiuxian"
+WORKDATA = get_paths().work
+DATABASE = get_paths().data
 SKILLPATHH = DATABASE / "功法"
 WEAPONPATH = DATABASE / "装备"
 xiuxian_num = "578043031" # 这里其实是修仙1作者的QQ号

@@ -4,11 +4,11 @@ except ImportError:
     import json
 import re
 import os
-from pathlib import Path
 import random
 import asyncio
 from datetime import datetime
 from nonebot.typing import T_State
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import get_bot
 from ..on_compat import on_command
@@ -53,7 +53,7 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 qqq = XiuConfig().qqq
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)

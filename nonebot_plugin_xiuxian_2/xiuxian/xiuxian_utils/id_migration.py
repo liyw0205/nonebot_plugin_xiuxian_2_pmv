@@ -1,9 +1,10 @@
 import time
-from pathlib import Path
+
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from . import db_backend
 
-DATABASE = Path() / "data" / "xiuxian"
+DATABASE = get_paths().data
 
 
 _ID_DB_PATHS = {

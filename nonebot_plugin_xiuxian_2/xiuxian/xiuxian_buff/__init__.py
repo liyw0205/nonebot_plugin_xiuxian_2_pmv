@@ -3,8 +3,8 @@ import asyncio
 import re
 import json
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from datetime import datetime, timedelta
-from pathlib import Path
 from ..on_compat import on_command
 from ..adapter_compat import (
     Bot,
@@ -65,7 +65,7 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 
 buffinfo = on_command("我的功法", priority=25, block=True)
 out_closing = on_command("出关", aliases={"灵石出关"}, priority=5, block=True)
@@ -1188,7 +1188,6 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await daily_info.finish()
 
 
-from nonebot.log import logger
 # 获取所有用户的 ID
 def get_all_user_ids():
     user_ids = []
@@ -1323,7 +1322,7 @@ migrate_bank_data = on_command("同步灵庄", permission=SUPERUSER, priority=25
 async def migrate_bank_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    players_dir = Path() / "data" / "xiuxian" / "players"
+    players_dir = get_paths().players
     if not players_dir.exists():
         await handle_send(bot, event, "未找到 players 数据目录，无需同步。")
         return

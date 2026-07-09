@@ -6,6 +6,7 @@ import os
 from PIL import Image
 import io
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..xiuxian_config import XiuConfig
 
 async def download_url(url: str) -> bytes:
@@ -32,9 +33,9 @@ async def download_avatar(user_id: str) -> bytes:
 
 async def get_avatar_by_user_id_and_save(user_id):
     user_id = str(user_id)
-    PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+    PLAYERSDATA = get_paths().players
     USER_AVATAR_PATH = PLAYERSDATA / user_id / 'AVATAR.png'
-    INIT_PATH = Path() / "data" / "xiuxian" / "info_img" / "init.png"
+    INIT_PATH = get_paths().data / "info_img" / "init.png"
     if not XiuConfig().use_network_avatar:
         # 直接返回默认头像不下载
         im = Image.open(INIT_PATH).resize((280, 280)).convert("RGBA")
@@ -56,5 +57,4 @@ async def get_avatar_by_user_id_and_save(user_id):
         im = Image.open(INIT_PATH).resize((280, 280)).convert("RGBA")
 
     return im
-
 

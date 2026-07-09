@@ -2,11 +2,9 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Any, Optional
 import json
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
-try:
-    from ..xiuxian_config import DATABASE as XIUXIAN_DATABASE
-except ImportError:
-    XIUXIAN_DATABASE = Path() / "data" / "xiuxian"
+XIUXIAN_DATABASE = get_paths().data
 
 AUCTION_SESSION_FILE = XIUXIAN_DATABASE / "auction_session.json"
 

@@ -233,7 +233,7 @@ def search_users():
 
 @app.route('/download/<path:filepath>')
 def download_file(filepath):
-    cache_dir = Path() / "data" / "xiuxian" / "cache"
+    cache_dir = get_paths().cache
     try:
         full_path = safe_path_under(cache_dir, filepath)
     except ValueError:
@@ -264,7 +264,7 @@ def get_terminal_session(admin_id):
             # 进程已死，清理
             try:
                 os.close(terminal_sessions[admin_id]['fd'])
-            except:
+            except Exception:
                 pass
             del terminal_sessions[admin_id]
 
@@ -374,7 +374,7 @@ def terminal_pwd():
         try:
             cwd = os.readlink(f"/proc/{pid}/cwd")
             return jsonify({"cwd": cwd})
-        except:
+        except Exception:
             pass
     return jsonify({"cwd": "~"})
 

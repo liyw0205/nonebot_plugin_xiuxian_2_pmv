@@ -35,6 +35,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 
 from nonebot.log import logger
 from nonebot import get_driver, get_bots, __version__ as nb_version
+from nonebot_plugin_xiuxian_2.paths import get_paths
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
@@ -126,7 +127,7 @@ def _load_or_create_web_secret_key() -> str:
     if configured:
         return configured
 
-    secret_file = Path() / "data" / "xiuxian" / "web_secret_key"
+    secret_file = get_paths().data / "web_secret_key"
     try:
         if secret_file.exists():
             secret = secret_file.read_text(encoding="utf-8").strip()
@@ -358,17 +359,17 @@ def enforce_web_panel_security():
 
 
 # 配置
-XIUXIANDATA = Path() / "data"
-DATABASE =  XIUXIANDATA / "xiuxian" / "xiuxian.db"
-IMPART_DB = XIUXIANDATA / "xiuxian" / "xiuxian_impart.db"
-PLAYER_DB = XIUXIANDATA / "xiuxian" / "player.db"
-TRADE_DB = XIUXIANDATA / "xiuxian" / "trade.db"
-ACTIVITY_DB = XIUXIANDATA / "xiuxian" / "activity" / "activity.db"
+XIUXIANDATA = get_paths().data_root
+DATABASE = get_paths().game_db
+IMPART_DB = get_paths().impart_db
+PLAYER_DB = get_paths().player_db
+TRADE_DB = get_paths().trade_db
+ACTIVITY_DB = get_paths().data / "activity" / "activity.db"
 ADMIN_IDS = get_driver().config.superusers
 PORT = WEB_CONFIG.web_port
 HOST = WEB_CONFIG.web_host
 
-WEB_UPLOAD_CACHE = Path() / "data" / "xiuxian" / "cache" / "web_uploads"
+WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
 WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}

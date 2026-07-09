@@ -5,9 +5,11 @@ except ImportError:
 import threading
 from pathlib import Path
 from typing import List
-from nonebot.log import logger
 
-READPATH = Path() / "data" / "xiuxian"
+from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
+READPATH = get_paths().data
 SKILLPATH = READPATH / "功法"
 WEAPONPATH = READPATH / "装备"
 ELIXIRPATH = READPATH / "丹药"

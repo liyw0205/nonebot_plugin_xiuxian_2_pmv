@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from datetime import datetime, timedelta
 
 API_URL = "https://api.github.com/repos/liyw0205/nonebot_plugin_xiuxian_2_pmv/commits"
@@ -11,7 +12,7 @@ API_URL = "https://api.github.com/repos/liyw0205/nonebot_plugin_xiuxian_2_pmv/co
 # 建议别太多，commit message 一长图片会非常高
 ITEMS_PER_PAGE = 15
 
-FONT_PATH = Path() / "data" / "xiuxian" / "font" / "SourceHanSerifCN-Heavy.otf"
+FONT_PATH = get_paths().data / "font" / "SourceHanSerifCN-Heavy.otf"
 
 
 def get_commits(page: int, per_page: int = ITEMS_PER_PAGE):

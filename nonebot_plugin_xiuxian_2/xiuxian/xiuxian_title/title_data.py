@@ -12,10 +12,11 @@ import re
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Set
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_config import XiuConfig, convert_rank
 
-READPATH = Path() / "data" / "xiuxian"
+READPATH = get_paths().data
 TITLE_JSONPATH = READPATH / "修炼物品" / "称号.json"
 
 # 全局缓存
@@ -414,7 +415,7 @@ def check_and_unlock_titles(user_id: str) -> List[dict]:
         if isinstance(unlocked_str, str):
             try:
                 unlocked_ids = set(json.loads(unlocked_str))
-            except:
+            except Exception:
                 unlocked_ids = set()
         elif isinstance(unlocked_str, list):
             unlocked_ids = set(unlocked_str)
@@ -451,7 +452,7 @@ def get_user_unlocked_titles(user_id: str) -> List[str]:
     if isinstance(unlocked_str, str):
         try:
             return json.loads(unlocked_str)
-        except:
+        except Exception:
             return []
     elif isinstance(unlocked_str, list):
         return unlocked_str

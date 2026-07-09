@@ -30,7 +30,7 @@ def normalize_db_selection(selected_dbs):
 
 def db_path_for_selection(db_name):
     safe_name = Path(str(db_name)).name
-    return Path() / "data" / "xiuxian" / safe_name
+    return get_paths().data / safe_name
 
 
 def safe_request_filename(value) -> str:
@@ -41,7 +41,7 @@ def safe_request_filename(value) -> str:
 
 
 def backup_path_under(*parts) -> Path:
-    return safe_path_under(Path() / "data" / "xiuxian" / "backups", *parts)
+    return safe_path_under(get_paths().backups, *parts)
 
 
 @app.route('/get_cloud_backups')
@@ -648,7 +648,7 @@ def backup_config():
             backup_data = {field: config_values[field] for field in selected_fields if field in config_values}
         
         # 创建备份目录
-        backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
+        backup_dir = get_paths().backups / "config_backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         
         # 生成备份文件名
@@ -682,7 +682,7 @@ def get_config_backups():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
+        backup_dir = get_paths().backups / "config_backups"
         backups = []
         
         if backup_dir.exists():
@@ -699,7 +699,7 @@ def get_config_backups():
                         'size': file.stat().st_size,
                         'created_at': datetime.fromtimestamp(file.stat().st_ctime).isoformat()
                     })
-                except:
+                except Exception:
                     continue
         
         # 按创建时间倒序排列

@@ -762,7 +762,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         try:
                             give_dict[id] += 1
                             i += 1
-                        except:
+                        except Exception:
                             give_dict[id] = 1
                             i += 1
                 msg = f"道友成功领取到丹药:渡厄丹 1 枚!\n"
@@ -1460,7 +1460,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     # 获取页码，默认为1
     try:
         current_page = int(args.extract_plain_text().strip())
-    except:
+    except Exception:
         current_page = 1
 
     if user_info:

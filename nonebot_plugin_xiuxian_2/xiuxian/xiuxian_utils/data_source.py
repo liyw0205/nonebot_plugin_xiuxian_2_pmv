@@ -2,9 +2,10 @@ try:
     import ujson as json
 except ImportError:
     import json
-from pathlib import Path
 
-DATABASE = Path() / "data" / "xiuxian"
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
+DATABASE = get_paths().data
 
 
 class JsonDate:

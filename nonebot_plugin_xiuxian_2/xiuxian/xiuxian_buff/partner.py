@@ -4,6 +4,7 @@ import re
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..on_compat import on_command
 from nonebot.log import logger
@@ -90,7 +91,7 @@ MENTOR_TITLE_IDS = {
     "transmission_100": "30120",
     "receive_transmission_50": "30121",
 }
-TITLE_JSONPATH = Path() / "data" / "xiuxian" / "修炼物品" / "称号.json"
+TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
 _mentor_title_cache = None
 bind_partner_storage(
     player_data_manager,

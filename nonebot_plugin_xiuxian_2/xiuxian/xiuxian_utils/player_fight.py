@@ -1,7 +1,7 @@
 import json
 import random
-from pathlib import Path
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from .xiuxian2_handle import (
     XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,
@@ -587,7 +587,7 @@ def generate_boss_buff(boss):
 
 
 def load_json_file(filename="data.json"):
-    filepath = Path() / "data" / "xiuxian" / "功法" / filename
+    filepath = get_paths().data / "功法" / filename
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 

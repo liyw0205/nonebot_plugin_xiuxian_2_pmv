@@ -473,7 +473,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
                         msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
                     mix_elixir_info['炼丹记录'][id]['num'] += num
-                except:
+                except Exception:
                     mix_elixir_info['炼丹记录'][id] = {}
                     mix_elixir_info['炼丹记录'][id]['name'] = goods_info['name']
                     mix_elixir_info['炼丹记录'][id]['num'] = num

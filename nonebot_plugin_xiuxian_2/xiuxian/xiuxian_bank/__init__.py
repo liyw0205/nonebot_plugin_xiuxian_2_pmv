@@ -3,8 +3,9 @@ try:
 except ImportError:
     import json
 import os
-from pathlib import Path
 from typing import Any, Tuple
+
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..on_compat import on_regex
 from nonebot.log import logger
 from nonebot.params import RegexGroup
@@ -26,7 +27,7 @@ config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 
 bank = on_regex(
     r'^灵庄(存灵石|取灵石|升级会员|信息|结算)?(.*)?',
@@ -81,7 +82,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     user_id = user_info['user_id']
     try:
         bankinfo = readf(user_id)
-    except:
+    except Exception:
         bankinfo = {
             'savestone': 0,
             'savetime': str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
@@ -202,7 +203,7 @@ def readf(user_id):
 
     try:
         savestone = int(savestone)
-    except:
+    except Exception:
         savestone = 0
 
     return {

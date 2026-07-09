@@ -46,7 +46,7 @@ def get_xiangyuan_data(group_id):
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return data
-    except:
+    except Exception:
         pass
     return {"gifts": {}, "last_id": 1}
 
@@ -115,7 +115,7 @@ def parse_xiangyuan_content(content_str: str, user_id: int):
                     return 0, [], "出现了多个纯数字灵石段，请明确写'灵石x数量'"
                 stone_amount = num
                 continue
-            except:
+            except Exception:
                 pass
 
         # ------------------- 尝试 数量x物品 / 物品x数量 -------------------
@@ -137,7 +137,7 @@ def parse_xiangyuan_content(content_str: str, user_id: int):
                 qty = int(qty_str)
                 if qty < 1 or qty > 10:
                     return 0, [], f"物品数量需在1~10之间：{part}"
-            except:
+            except Exception:
                 continue
 
             name = name.strip()

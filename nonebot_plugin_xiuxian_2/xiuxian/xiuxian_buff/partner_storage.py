@@ -1,4 +1,4 @@
-from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .relation_utils import (
@@ -10,7 +10,7 @@ from .relation_utils import (
 )
 
 
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 MENTOR_HISTORY_LIMIT = 50
 MENTOR_BREAKTHROUGH_REWARD_LIMIT = 27
 

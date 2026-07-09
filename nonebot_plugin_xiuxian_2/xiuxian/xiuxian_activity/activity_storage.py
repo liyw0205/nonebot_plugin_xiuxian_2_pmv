@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -12,7 +13,7 @@ from .activity_utils import _clean_text
 _sql_message = XiuxianDateManage()
 
 
-BASE_DIR = Path() / "data" / "xiuxian" / "activity"
+BASE_DIR = get_paths().data / "activity"
 CONFIG_PATH = BASE_DIR / "activity_config.json"
 DB_PATH = BASE_DIR / "activity.db"
 

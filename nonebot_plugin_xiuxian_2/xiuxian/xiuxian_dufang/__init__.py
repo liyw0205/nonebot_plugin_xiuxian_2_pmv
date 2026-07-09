@@ -18,10 +18,11 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message, send_help_message
 from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
 
@@ -34,7 +35,7 @@ def load_sharing_users():
         return users
     try:
         return json.loads(users)
-    except:
+    except Exception:
         return []
 
 def save_sharing_users(users):
@@ -99,7 +100,7 @@ def get_unseal_data(user_id):
     def to_int(v, d=0):
         try:
             return int(v)
-        except:
+        except Exception:
             return d
 
     data = {
@@ -701,7 +702,7 @@ unseal_migrate = on_command("同步鉴石", permission=SUPERUSER, priority=25, b
 async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    players_dir = Path() / "data" / "xiuxian" / "players"
+    players_dir = get_paths().players
     if not players_dir.exists():
         await handle_send(bot, event, "未找到players目录，无需同步。")
         return

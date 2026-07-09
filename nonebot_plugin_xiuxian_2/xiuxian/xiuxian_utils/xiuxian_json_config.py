@@ -4,12 +4,13 @@ except ImportError:
     import json
 import random
 from datetime import datetime
-from pathlib import Path
+
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_config import XiuConfig
 from .data_source import jsondata
 
-DATABASE = Path() / "data" / "xiuxian"
+DATABASE = get_paths().data
 
 
 class XiuxianJsonDate:

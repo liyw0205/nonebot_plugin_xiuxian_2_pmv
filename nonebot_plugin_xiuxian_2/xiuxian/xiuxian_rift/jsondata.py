@@ -5,9 +5,10 @@ except ImportError:
 import os
 from pathlib import Path
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
-SKILLPATH = Path() / "data" / "xiuxian" / "功法" / "功法概率设置.json"
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+SKILLPATH = get_paths().data / "功法" / "功法概率设置.json"
+PLAYERSDATA = get_paths().players
 
 
 def read_f():

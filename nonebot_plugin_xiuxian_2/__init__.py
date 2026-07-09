@@ -1,6 +1,17 @@
 from pathlib import Path
-from nonebot import require, load_plugins
+from pkgutil import iter_modules
 
-dir_ = Path(__file__).parent
-require('nonebot_plugin_apscheduler')
-load_plugins(str(dir_ / "xiuxian"))
+from nonebot import get_driver, load_all_plugins, require
+
+from .paths import configure_paths_from_nonebot
+
+package_dir = Path(__file__).parent
+configure_paths_from_nonebot(get_driver().config)
+plugin_modules = [
+    f"{__name__}.xiuxian.{module.name}"
+    for module in iter_modules([str(package_dir / "xiuxian")])
+    if not module.name.startswith("_")
+]
+
+require("nonebot_plugin_apscheduler")
+load_all_plugins(plugin_modules, [])

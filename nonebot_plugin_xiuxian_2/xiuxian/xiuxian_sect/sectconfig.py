@@ -2,10 +2,11 @@ try:
     import ujson as json
 except ImportError:
     import json
-from pathlib import Path
 from datetime import datetime
 
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
+PLAYERSDATA = get_paths().players
 
 configkey = [
     "LEVLECOST",
@@ -376,7 +377,7 @@ def get_sect_weekly_purchases(user_id, item_id):
                 return 0
 
             return data.get(str(item_id), 0)
-        except:
+        except Exception:
             # 文件损坏则重新初始化
             init_sect_purchase_file(user_id)
             return 0
@@ -411,7 +412,7 @@ def update_sect_weekly_purchase(user_id, item_id, quantity):
         with open(file_path, "r", encoding="utf-8") as f:
             try:
                 data = json.load(f)
-            except:
+            except Exception:
                 pass
 
     # 确保有重置日期

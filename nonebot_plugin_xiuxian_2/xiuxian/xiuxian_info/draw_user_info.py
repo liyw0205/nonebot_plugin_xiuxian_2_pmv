@@ -10,13 +10,14 @@ from pathlib import Path
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from .download import get_avatar_by_user_id_and_save
 from .send_image_tool import convert_img
 
-TEXT_PATH = Path() / "data" / "xiuxian" / "info_img"
-CACHE_PATH = Path() / "data" / "xiuxian" / "cache"
+TEXT_PATH = get_paths().data / "info_img"
+CACHE_PATH = get_paths().cache
 RANDOM_BG_CACHE = CACHE_PATH / "user_info_random_background.png"
 
 BASE_SIZE = (1100, 2680)
@@ -26,7 +27,7 @@ BACKGROUND_TIMEOUT = ClientTimeout(total=6)
 first_color = (242, 250, 242)
 second_color = (57, 57, 57)
 
-FONT_ORIGIN_PATH = Path() / "data" / "xiuxian" / "font" / "SourceHanSerifCN-Heavy.otf"
+FONT_ORIGIN_PATH = get_paths().data / "font" / "SourceHanSerifCN-Heavy.otf"
 FONT_FALLBACK_PATHS = (
     Path("/system/fonts/NotoSansCJK-Regular.ttc"),
     Path("/system/fonts/NotoSerifCJK-Regular.ttc"),

@@ -11,6 +11,7 @@ import time
 import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -62,8 +63,8 @@ from urllib.parse import quote, unquote
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
-boss_img_path = Path() / "data" / "xiuxian" / "boss_img"
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+boss_img_path = get_paths().data / "boss_img"
+PLAYERSDATA = get_paths().players
 
 
 def _is_onebot_v11_bot(bot: Any) -> bool:

@@ -65,7 +65,7 @@ def limit_all_run(user_id: str):
     try:
         num = limit_all_data[user_id]["num"]
         tip = limit_all_data[user_id]["tip"]
-    except:
+    except Exception:
         limit_all_data[user_id] = {"num": 0,
                                    "tip" : False}
         num = 0
@@ -320,7 +320,7 @@ async def assign_bot(bot=None, event=None):  # 按字典分配对应qq发送消�
             bot = get_bots()[random.choice(bot_id)]
         else:
             bot = bot
-    except:
+    except Exception:
         bot = bot
     return bot, group_id
 

@@ -1,6 +1,6 @@
-from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
-DATABASE = Path() / "data" / "xiuxian"
+DATABASE = get_paths().data
 
 
 class IMPART_BUFF_CONFIG:

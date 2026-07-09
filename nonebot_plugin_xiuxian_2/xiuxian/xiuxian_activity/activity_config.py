@@ -2,12 +2,13 @@ import json
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from .activity_utils import _as_float, _as_int, _clean_text, _normalize_activity_key
 from .activity_views import STAGE_FEATURES
 
-BASE_DIR = Path() / "data" / "xiuxian" / "activity"
+BASE_DIR = get_paths().data / "activity"
 CONFIG_PATH = BASE_DIR / "activity_config.json"
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "activity_config.json"
 

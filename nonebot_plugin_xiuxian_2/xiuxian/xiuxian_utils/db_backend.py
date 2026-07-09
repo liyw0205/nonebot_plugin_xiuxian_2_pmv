@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import re
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 try:
     from nonebot.log import logger
@@ -19,7 +19,14 @@ Row = sqlite3.Row
 Connection = sqlite3.Connection
 
 _backend_initialized = False
-_PLACEHOLDER_RE = re.compile(r"%s")
+_BTRIM_RE = re.compile(r"\bbtrim\s*\(", flags=re.IGNORECASE)
+_ILIKE_RE = re.compile(r"\bILIKE\b", flags=re.IGNORECASE)
+_NULLS_LAST_RE = re.compile(r"\s+NULLS\s+LAST\b", flags=re.IGNORECASE)
+_SKIP_LOCKED_RE = re.compile(
+    r"\s+FOR\s+UPDATE\s+SKIP\s+LOCKED\b",
+    flags=re.IGNORECASE,
+)
+_SET_LOCAL_RE = re.compile(r"^\s*SET\s+LOCAL\b.*$", flags=re.IGNORECASE | re.DOTALL)
 
 
 def _log_info(message: str):
@@ -70,14 +77,67 @@ def date_expression(value_sql: str) -> str:
     return f"substr(CAST({value_sql} AS TEXT), 1, 10)"
 
 
+def _sql_segments(sql: str) -> Iterator[tuple[bool, str]]:
+    """Yield ``(is_code, text)`` segments without parsing protected SQL text."""
+    start = 0
+    index = 0
+    length = len(sql)
+
+    while index < length:
+        char = sql[index]
+        next_char = sql[index + 1] if index + 1 < length else ""
+        if char not in {"'", '"'} and not (char == "-" and next_char == "-") and not (
+            char == "/" and next_char == "*"
+        ):
+            index += 1
+            continue
+
+        if start < index:
+            yield True, sql[start:index]
+
+        protected_start = index
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            while index < length:
+                if sql[index] != quote:
+                    index += 1
+                    continue
+                if index + 1 < length and sql[index + 1] == quote:
+                    index += 2
+                    continue
+                index += 1
+                break
+        elif char == "-":
+            newline = sql.find("\n", index + 2)
+            index = length if newline < 0 else newline
+        else:
+            comment_end = sql.find("*/", index + 2)
+            index = length if comment_end < 0 else comment_end + 2
+
+        yield False, sql[protected_start:index]
+        start = index
+
+    if start < length:
+        yield True, sql[start:]
+
+
+def _convert_sql_code(sql: str) -> str:
+    sql = _BTRIM_RE.sub("trim(", sql)
+    sql = _ILIKE_RE.sub("LIKE", sql)
+    sql = _NULLS_LAST_RE.sub("", sql)
+    sql = _SKIP_LOCKED_RE.sub("", sql)
+    return sql.replace("%s", "?")
+
+
 def _convert_sql(sql: str) -> str:
     sql = str(sql or "")
-    sql = sql.replace("btrim(", "trim(")
-    sql = re.sub(r"\bILIKE\b", "LIKE", sql, flags=re.IGNORECASE)
-    sql = re.sub(r"\s+NULLS\s+LAST\b", "", sql, flags=re.IGNORECASE)
-    sql = re.sub(r"\s+FOR\s+UPDATE\s+SKIP\s+LOCKED\b", "", sql, flags=re.IGNORECASE)
-    sql = re.sub(r"^\s*SET\s+LOCAL\b.*$", "SELECT 1", sql, flags=re.IGNORECASE | re.DOTALL)
-    return _PLACEHOLDER_RE.sub("?", sql)
+    if _SET_LOCAL_RE.fullmatch(sql):
+        return "SELECT 1"
+    return "".join(
+        _convert_sql_code(text) if is_code else text
+        for is_code, text in _sql_segments(sql)
+    )
 
 
 def _adapt_param(value: Any) -> Any:
@@ -129,18 +189,15 @@ class SQLiteCursor:
         self.close()
 
     def execute(self, sql: str, params: Any = None):
-        try:
-            self._cursor.execute(_convert_sql(sql), _adapt_params(params))
-            return self
-        except sqlite3.Error as exc:
-            raise exc
+        self._cursor.execute(_convert_sql(sql), _adapt_params(params))
+        return self
 
     def executemany(self, sql: str, seq_of_params: Iterable[Any]):
-        try:
-            self._cursor.executemany(_convert_sql(sql), [_adapt_params(params) for params in seq_of_params])
-            return self
-        except sqlite3.Error as exc:
-            raise exc
+        self._cursor.executemany(
+            _convert_sql(sql),
+            (_adapt_params(params) for params in seq_of_params),
+        )
+        return self
 
     def fetchone(self):
         return self._cursor.fetchone()
@@ -278,25 +335,25 @@ def _row_to_dict(row: Any) -> Any:
 def query_all(database: str | Path, sql: str, params: Any = None) -> list[Any]:
     """执行查询并返回 dict 列表。"""
     with connection(database) as conn:
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        return [_row_to_dict(row) for row in cur.fetchall()]
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return [_row_to_dict(row) for row in cur.fetchall()]
 
 
 def query_one(database: str | Path, sql: str, params: Any = None) -> Any:
     """执行查询并返回单行 dict；无记录返回 None。"""
     with connection(database) as conn:
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        return _row_to_dict(cur.fetchone())
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return _row_to_dict(cur.fetchone())
 
 
 def execute_write(database: str | Path, sql: str, params: Any = None) -> int:
     """执行写 SQL 并返回影响行数。"""
     with transaction(database) as conn:
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        return cur.rowcount
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.rowcount
 
 
 def execute_sql(database: str | Path, sql: str, params: Any = None) -> Any:
@@ -306,12 +363,12 @@ def execute_sql(database: str | Path, sql: str, params: Any = None) -> Any:
     查询语句返回 dict 列表，写语句返回 {"affected_rows": n}。
     """
     with connection(database) as conn:
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        if cur.description:
-            return [_row_to_dict(row) for row in cur.fetchall()]
-        conn.commit()
-        return {"affected_rows": cur.rowcount}
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            if cur.description:
+                return [_row_to_dict(row) for row in cur.fetchall()]
+            conn.commit()
+            return {"affected_rows": cur.rowcount}
 
 
 def execute_sql_safely(database: str | Path, sql: str, params: Any = None) -> Any:

@@ -3,9 +3,9 @@ try:
 except ImportError:
     import json
 import random
-from pathlib import Path
 from datetime import datetime
 
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -23,7 +23,7 @@ from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateM
 from ..xiuxian_title.title_data import check_and_unlock_titles
 
 sql_message = XiuxianDateManage()
-PLAYERSDATA = Path() / "data" / "xiuxian" / "players"
+PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
 level_up = on_command("突破", priority=6, block=True)

@@ -3,14 +3,14 @@ try:
 except ImportError:
     import json
 import threading
-from pathlib import Path
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from . import db_backend
 
 
-DATABASE = Path() / "data" / "xiuxian"
+DATABASE = get_paths().data
 player_num = "123451234"
 
 

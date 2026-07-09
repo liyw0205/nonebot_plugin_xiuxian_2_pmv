@@ -3,11 +3,13 @@ try:
 except ImportError:
     import json
 import random
-from pathlib import Path
+
 from nonebot.log import logger
 
-DATABASE = Path() / "data" / "xiuxian"
-Xiu_Plugin = Path(__file__).parent.parent
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
+DATABASE = get_paths().data
+Xiu_Plugin = get_paths().package_root
 
 
 class XiuConfig:

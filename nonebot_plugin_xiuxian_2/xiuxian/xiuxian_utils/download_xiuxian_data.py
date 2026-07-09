@@ -13,6 +13,8 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
+
 from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
 
@@ -92,10 +94,10 @@ def download_xiuxian_data():
     检测修仙插件必要文件是否存在（如字体文件），
     如不存在则自动下载最新的 xiuxian.zip
     """
-    FONT_FILE = Path() / "data" / "xiuxian" / "font" / "SarasaMonoSC-Bold.ttf"
+    FONT_FILE = get_paths().data / "font" / "SarasaMonoSC-Bold.ttf"
     XIUXIAN_ZIP_URL = "https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0/xiuxian.zip"
-    XIUXIAN_TEMP_ZIP_PATH = Path() / "data" / "xiuxian_data_temp.zip"
-    path_xiuxian = Path() / "data" / "xiuxian"
+    XIUXIAN_TEMP_ZIP_PATH = get_paths().data_root / "xiuxian_data_temp.zip"
+    path_xiuxian = get_paths().data
 
     if FONT_FILE.exists():
         return True
@@ -191,7 +193,7 @@ class UpdateManager:
     # =========================
     def get_current_version(self):
         """获取当前版本"""
-        version_file = Path() / "data" / "xiuxian" / "version.txt"
+        version_file = get_paths().data / "version.txt"
         if version_file.exists():
             try:
                 with open(version_file, 'r', encoding='utf-8') as f:
@@ -470,7 +472,7 @@ class UpdateManager:
             with tarfile.open(archive_path, 'r:gz') as tar:
                 _safe_extract_tar(tar, extract_temp)
 
-            target_data_dir = Path() / "data"
+            target_data_dir = get_paths().data_root
             target_plugin_dir = Xiu_Plugin
 
             target_data_dir.mkdir(parents=True, exist_ok=True)
@@ -511,7 +513,7 @@ class UpdateManager:
             releases = self.get_latest_releases(1)
             if releases:
                 latest_version = releases[0]['tag_name']
-                version_file = Path() / "data" / "xiuxian" / "version.txt"
+                version_file = get_paths().data / "version.txt"
                 version_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(version_file, 'w', encoding='utf-8') as f:
                     f.write(latest_version)
@@ -631,7 +633,7 @@ class UpdateManager:
 
             auth = paths["auth"]
 
-            backup_root = Path() / "data" / "xiuxian" / "backups"
+            backup_root = get_paths().backups
             try:
                 rel = local_file.relative_to(backup_root).as_posix()
             except Exception:
@@ -806,7 +808,7 @@ class UpdateManager:
             remote_rel = "/".join(x for x in [paths["plugin_rel"], cloud_filename] if x)
             remote_url = self._webdav_join_url(paths["base_url"], remote_rel)
 
-            local_path = Path() / "data" / "xiuxian" / "backups" / cloud_filename
+            local_path = get_paths().backups / cloud_filename
             local_path.parent.mkdir(parents=True, exist_ok=True)
 
             r = requests.get(remote_url, auth=auth, timeout=300, stream=True)
@@ -938,7 +940,7 @@ class UpdateManager:
 
             auth = paths["auth"]
 
-            local_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
+            local_dir = get_paths().backups / "config_backups"
             local_dir.mkdir(parents=True, exist_ok=True)
             local_path = local_dir / filename
 
@@ -972,7 +974,7 @@ class UpdateManager:
         """
         try:
             filename = _safe_leaf_name(filename)
-            local_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "config_backups", filename)
+            local_path = _path_under(get_paths().backups / "config_backups", filename)
             if not local_path.exists():
                 ok, result = self.download_config_backup_from_webdav(filename, overwrite=False)
                 if not ok and result != "FILE_EXISTS":
@@ -1002,7 +1004,7 @@ class UpdateManager:
     def enhanced_backup_current_version(self):
         """备份当前版本"""
         try:
-            backup_dir = Path() / "data" / "xiuxian" / "backups"
+            backup_dir = get_paths().backups
             backup_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1011,7 +1013,7 @@ class UpdateManager:
             skip_dirs = {"backups", "config_backups", "db_backup", "cache", "boss_img", "font", "卡图", "__pycache__"}
 
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                data_dir = Path() / "data" / "xiuxian"
+                data_dir = get_paths().data
                 if data_dir.exists():
                     for root, dirs, files in os.walk(data_dir):
                         root_path = Path(root)
@@ -1073,7 +1075,7 @@ class UpdateManager:
                 if hasattr(config, field_name):
                     config_values[field_name] = getattr(config, field_name)
 
-            backup_dir = Path() / "data" / "xiuxian" / "backups" / "config_backups"
+            backup_dir = get_paths().backups / "config_backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1293,7 +1295,7 @@ class UpdateManager:
 
     def get_backups(self):
         """获取所有插件备份"""
-        backup_dir = Path() / "data" / "xiuxian" / "backups"
+        backup_dir = get_paths().backups
         backups = []
 
         if backup_dir.exists():
@@ -1320,7 +1322,7 @@ class UpdateManager:
         temp_dir = None
         try:
             backup_filename = _safe_leaf_name(backup_filename)
-            backup_dir = Path() / "data" / "xiuxian" / "backups"
+            backup_dir = get_paths().backups
             backup_path = _path_under(backup_dir, backup_filename)
 
             if not backup_path.exists():
@@ -1355,7 +1357,7 @@ class UpdateManager:
             version_match = re.search(r'backup_.*_(v?[\d.]+)\.zip', backup_filename)
             if version_match:
                 version = version_match.group(1)
-                version_file = Path() / "data" / "xiuxian" / "version.txt"
+                version_file = get_paths().data / "version.txt"
                 version_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(version_file, 'w', encoding='utf-8') as f:
                     f.write(version)
@@ -1707,7 +1709,7 @@ class UpdateManager:
     def _backup_current_db_before_restore(self, dst_path: Path, db_name: str):
         if not dst_path.exists():
             return
-        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_restore_before"
+        backup_dir = get_paths().backups / "db_restore_before"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = backup_dir / f"{timestamp}_{db_name}"
         ok, msg = self._snapshot_sqlite_db(dst_path, backup_path)
@@ -1751,7 +1753,7 @@ class UpdateManager:
     def backup_db_files(self):
         """备份本地 SQLite 数据库到 data/xiuxian/backups/db_backup/"""
         try:
-            backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
+            backup_dir = get_paths().backups / "db_backup"
             backup_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1763,7 +1765,7 @@ class UpdateManager:
             try:
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     for db_name in self._sqlite_db_names():
-                        db_path = Path() / "data" / "xiuxian" / db_name
+                        db_path = get_paths().data / db_name
                         if not db_path.exists():
                             continue
                         snapshot_path = temp_dir / db_name
@@ -1822,7 +1824,7 @@ class UpdateManager:
 
     def get_db_backups(self):
         """获取本地数据库备份列表"""
-        backup_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
+        backup_dir = get_paths().backups / "db_backup"
         backups = []
         if backup_dir.exists():
             for f in backup_dir.glob("db_backup_*.zip"):
@@ -1861,7 +1863,7 @@ class UpdateManager:
 
     def _db_path_for_name(self, db_name: str):
         safe_name = Path(str(db_name)).name
-        return Path() / "data" / "xiuxian" / safe_name
+        return get_paths().data / safe_name
 
     def restore_db_files(self, backup_filename: str, selected_dbs: list):
         """从本地 db_backup zip 恢复指定数据库"""
@@ -1872,7 +1874,7 @@ class UpdateManager:
             if not selected_dbs:
                 return False, "至少选择一个数据库进行恢复"
 
-            backup_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "db_backup", backup_filename)
+            backup_path = _path_under(get_paths().backups / "db_backup", backup_filename)
             if not backup_path.exists():
                 return False, f"备份文件不存在: {backup_filename}"
             if not backup_path.is_file():
@@ -1993,7 +1995,7 @@ class UpdateManager:
             if not ok:
                 return False, "未配置 WebDAV 信息"
 
-            local_dir = Path() / "data" / "xiuxian" / "backups" / "db_backup"
+            local_dir = get_paths().backups / "db_backup"
             local_dir.mkdir(parents=True, exist_ok=True)
             local_path = _path_under(local_dir, filename)
 
@@ -2028,7 +2030,7 @@ class UpdateManager:
         """云端数据库恢复：本地无则先下，再恢复"""
         try:
             filename = _safe_leaf_name(filename)
-            local_path = _path_under(Path() / "data" / "xiuxian" / "backups" / "db_backup", filename)
+            local_path = _path_under(get_paths().backups / "db_backup", filename)
             ok, msg = self.download_db_backup_from_webdav(filename, overwrite=True)
             if not ok:
                 if not local_path.exists():

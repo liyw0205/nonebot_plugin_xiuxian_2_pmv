@@ -376,7 +376,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         try:
             current_rift = group_rift[GLOBAL_RIFT_KEY]
-        except:
+        except Exception:
             msg = '野外秘境尚未生成，请道友耐心等待!'
             await handle_send(bot, event, msg)
             await explore_rift.finish()

@@ -3,15 +3,16 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import os
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..xiuxian_utils import db_backend
 from .impart_all import impart_all
 
 # 数据库路径
-DATABASE_IMPART = Path() / "data" / "xiuxian" / "xiuxian_impart.db"
+DATABASE_IMPART = get_paths().impart_db
 
 class IMPART_DATA(object):
     def __init__(self):
-        self.dir_path_person = Path() / "data" / "xiuxian" / "impart"
+        self.dir_path_person = get_paths().data / "impart"
         if not os.path.exists(self.dir_path_person):
             logger.opt(colors=True).info(f"<green>创建目录{self.dir_path_person}</green>")
             os.makedirs(self.dir_path_person)
@@ -237,7 +238,7 @@ class IMPART_DATA(object):
         try:
             if hasattr(self, 'conn'):
                 self.conn.close()
-        except:
+        except Exception:
             pass
 
 # 创建全局实例

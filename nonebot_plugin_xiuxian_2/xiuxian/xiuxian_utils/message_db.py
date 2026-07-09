@@ -9,12 +9,13 @@ import threading
 from typing import Any
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from . import db_backend
 
 
 MESSAGE_DB = Path() / "message.db"
-MESSAGE_DB_CONFIG_FILE = Path() / "data" / "xiuxian" / "message_db_config.json"
+MESSAGE_DB_CONFIG_FILE = get_paths().data / "message_db_config.json"
 _last_message_db_cleanup_ts = 0.0
 _message_db_initialized = False
 _message_db_init_lock = threading.RLock()

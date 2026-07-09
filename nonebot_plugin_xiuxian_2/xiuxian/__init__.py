@@ -78,7 +78,7 @@ response_group = XiuConfig().response_group
 shield_private = XiuConfig().shield_private
 try:
     put_bot_ = put_bot[0]
-except:
+except Exception:
     logger.opt(colors=True).info(f"<green>修仙插件没有配置put_bot,如果有多个qq和nb链接,请务必配置put_bot,具体介绍参考【风控帮助】！</green>")
 
 require('nonebot_plugin_apscheduler')

@@ -3,7 +3,6 @@ try:
 except ImportError:
     import json
 import re
-from pathlib import Path
 from datetime import datetime
 import random
 import os
@@ -24,6 +23,7 @@ from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldo
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage ,UserBuffDate, OtherSet, leave_harm_time
 )
@@ -53,7 +53,7 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
-BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物"
+BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
 generate_all = on_command("世界BOSS全部生成", aliases={"世界boss全部生成", "世界Boss全部生成", "生成全部世界BOSS", "生成全部世界boss", "生成全部世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -1237,7 +1237,7 @@ def save_user_boss_fight_info(user_id, data):
     user_id = str(user_id)
     player_data_manager.update_or_write_data(user_id, "boss_limit", "integral", data["boss_integral"])
 
-BOSSDROPSPATH = Path() / "data" / "xiuxian" / "boss掉落物" / "boss掉落物.json"
+BOSSDROPSPATH = get_paths().data / "boss掉落物" / "boss掉落物.json"
 
 class BossDrops:
     def __init__(self):

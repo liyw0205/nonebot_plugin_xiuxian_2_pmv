@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from nonebot.log import logger
+from nonebot_plugin_xiuxian_2.paths import get_paths
 
 from ...xiuxian_utils.download_xiuxian_data import UpdateManager
 
@@ -130,7 +131,7 @@ def ensure_vendor_core(*, force: bool = False) -> Path:
         ) from e
 
     zf = zipfile.ZipFile(io.BytesIO(data))
-    cache_dir = str((Path() / "data" / "xiuxian" / "media_parser_cache").resolve())
+    cache_dir = str((get_paths().data / "media_parser_cache").resolve())
     for name in zf.namelist():
         if not name.startswith(f"{_ZIP_PREFIX}core/"):
             continue
