@@ -154,20 +154,20 @@ ws://127.0.0.1:8080/onebot/v11/ws
 
 ```bash
 # 默认目录
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash
 
 # 自定义目录（如 /root/xiuxian）
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- install /root/xiuxian
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- install /root/xiuxian
 ```
 
 **更新：**
 
 ```bash
 # 默认目录
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- update
 
 # 自定义目录
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install.sh | bash -s -- update /root/xiuxian
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- update /root/xiuxian
 ```
 
 **xiu2 命令：**
@@ -191,25 +191,25 @@ curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/ref
 **安装：**
 
 ```bash
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash
 ```
 
 **自定义目录：**
 
 ```bash
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- install "$HOME/xiuxian"
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- install "$HOME/xiuxian"
 ```
 
 **更新：**
 
 ```bash
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- update
 ```
 
 **单独更新依赖：**
 
 ```bash
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash -s -- update-deps
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- update-deps
 ```
 
 **xiu2 命令：**
@@ -243,7 +243,7 @@ ws://127.0.0.1:8080/onebot/v11/ws
 <details>
 <summary>🪟 Windows 一键安装</summary>
 
-[📥 点我下载 install.bat](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/download/v0.1/install.bat)
+[📥 点我下载 install.bat](https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.bat)
 
 下载后双击运行即可。
 
@@ -437,7 +437,7 @@ nb run --reload
 如果你不使用 proot 容器，直接在 Termux 原生环境安装修仙2，执行：
 
 ```bash
-curl -fsSL https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/raw/refs/heads/main/install_termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash
 ```
 
 安装完成后使用：
