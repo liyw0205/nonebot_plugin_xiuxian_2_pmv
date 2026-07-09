@@ -19,6 +19,39 @@ from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
 
 
+CORE_SQLITE_DATABASES = (
+    "xiuxian.db",
+    "xiuxian_impart.db",
+    "player.db",
+    "trade.db",
+)
+TRANSIENT_BACKUP_RELATIVE_PATHS = {
+    PurePosixPath("message.db"),
+    PurePosixPath("activity/activity.db"),
+}
+
+
+def _normalized_relative_path(path: Path, root: Path) -> PurePosixPath | None:
+    try:
+        return PurePosixPath(path.relative_to(root).as_posix())
+    except ValueError:
+        return None
+
+
+def _is_transient_backup_file(file_path: Path, data_dir: Path) -> bool:
+    relative_path = _normalized_relative_path(file_path, data_dir)
+    if relative_path is None:
+        return file_path.name in {"message.db", "message.db-wal", "message.db-shm"}
+    relative_text = relative_path.as_posix()
+    for suffix in ("-wal", "-shm"):
+        if relative_text.endswith(suffix):
+            relative_path = PurePosixPath(relative_text[: -len(suffix)])
+            break
+    if relative_path in TRANSIENT_BACKUP_RELATIVE_PATHS:
+        return True
+    return relative_path.name == "message.db"
+
+
 def _safe_leaf_name(filename) -> str:
     name = Path(str(filename or "")).name
     if not name or name in {".", ".."} or "\x00" in name:
@@ -1021,6 +1054,8 @@ class UpdateManager:
                             continue
                         for file in files:
                             file_path = Path(root) / file
+                            if _is_transient_backup_file(file_path, data_dir):
+                                continue
                             try:
                                 arcname = file_path.relative_to(data_dir.parent.parent)
                                 zipf.write(file_path, arcname)
@@ -1387,7 +1422,7 @@ class UpdateManager:
             logger.warning(f"数据库恢复后整理宠物旧表失败: {e}")
 
     def _sqlite_db_names(self):
-        return ["xiuxian.db", "xiuxian_impart.db", "player.db", "trade.db"]
+        return list(CORE_SQLITE_DATABASES)
 
     def _validate_sqlite_file(self, db_path: Path):
         """校验 SQLite 文件可读，避免把损坏库恢复到线上。"""
