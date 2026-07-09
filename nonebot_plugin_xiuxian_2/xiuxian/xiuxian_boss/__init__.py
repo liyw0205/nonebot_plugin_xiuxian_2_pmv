@@ -23,7 +23,7 @@ from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldo
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage ,UserBuffDate, OtherSet, leave_harm_time
 )

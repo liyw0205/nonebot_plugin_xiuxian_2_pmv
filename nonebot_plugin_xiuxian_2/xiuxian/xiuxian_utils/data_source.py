@@ -3,7 +3,7 @@ try:
 except ImportError:
     import json
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 DATABASE = get_paths().data
 

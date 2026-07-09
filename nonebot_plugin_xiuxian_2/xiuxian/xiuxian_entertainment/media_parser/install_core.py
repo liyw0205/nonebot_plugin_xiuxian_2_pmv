@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ....paths import get_paths
 
 from ...xiuxian_utils.download_xiuxian_data import UpdateManager
 

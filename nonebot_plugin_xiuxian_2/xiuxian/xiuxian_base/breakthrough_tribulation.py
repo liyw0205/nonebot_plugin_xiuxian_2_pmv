@@ -5,7 +5,7 @@ except ImportError:
 import random
 from datetime import datetime
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 

@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Set
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from ..xiuxian_config import XiuConfig, convert_rank
 

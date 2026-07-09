@@ -1,7 +1,7 @@
 import json
 import random
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from .xiuxian2_handle import (
     XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,

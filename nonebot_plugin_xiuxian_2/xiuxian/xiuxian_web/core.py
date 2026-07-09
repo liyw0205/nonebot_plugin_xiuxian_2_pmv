@@ -35,7 +35,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 
 from nonebot.log import logger
 from nonebot import get_driver, get_bots, __version__ as nb_version
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event

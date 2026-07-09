@@ -8,7 +8,7 @@ import random
 import asyncio
 from datetime import datetime
 from nonebot.typing import T_State
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import get_bot
 from ..on_compat import on_command

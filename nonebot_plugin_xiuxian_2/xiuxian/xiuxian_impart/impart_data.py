@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import os
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..xiuxian_utils import db_backend
 from .impart_all import impart_all
 

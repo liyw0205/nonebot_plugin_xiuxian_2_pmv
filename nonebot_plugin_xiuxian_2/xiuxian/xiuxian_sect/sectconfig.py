@@ -4,7 +4,7 @@ except ImportError:
     import json
 from datetime import datetime
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 PLAYERSDATA = get_paths().players
 

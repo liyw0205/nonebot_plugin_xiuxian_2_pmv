@@ -3,7 +3,7 @@ import asyncio
 import re
 import json
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from datetime import datetime, timedelta
 from ..on_compat import on_command
 from ..adapter_compat import (

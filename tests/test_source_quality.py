@@ -40,6 +40,31 @@ class SourceQualityTests(unittest.TestCase):
             "Direct data/xiuxian path construction found: " + ", ".join(violations),
         )
 
+    def test_internal_imports_do_not_assume_top_level_package_name(self) -> None:
+        violations: list[str] = []
+        for path in SOURCE_ROOT.rglob("*.py"):
+            if "vendor" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and str(node.module or "").startswith(
+                    "nonebot_plugin_xiuxian_2"
+                ):
+                    violations.append(f"{path.relative_to(SOURCE_ROOT)}:{node.lineno}")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.startswith("nonebot_plugin_xiuxian_2"):
+                            violations.append(
+                                f"{path.relative_to(SOURCE_ROOT)}:{node.lineno}"
+                            )
+
+        self.assertEqual(
+            violations,
+            [],
+            "Absolute package imports break src.plugins namespace loading: "
+            + ", ".join(violations),
+        )
+
     def test_plugin_import_does_not_run_startup_maintenance(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

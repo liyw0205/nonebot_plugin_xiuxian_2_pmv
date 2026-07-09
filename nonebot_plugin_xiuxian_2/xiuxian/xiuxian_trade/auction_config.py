@@ -2,7 +2,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Any, Optional
 import json
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 XIUXIAN_DATABASE = get_paths().data
 

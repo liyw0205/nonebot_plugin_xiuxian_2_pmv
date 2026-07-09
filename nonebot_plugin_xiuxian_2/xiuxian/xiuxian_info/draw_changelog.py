@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from datetime import datetime, timedelta
 
 API_URL = "https://api.github.com/repos/liyw0205/nonebot_plugin_xiuxian_2_pmv/commits"

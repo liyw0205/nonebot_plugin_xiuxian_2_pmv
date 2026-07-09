@@ -8,7 +8,7 @@ except ImportError:
     import json
 
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ..paths import get_paths
 
 XIUXIAN_DATABASE = get_paths().data
 

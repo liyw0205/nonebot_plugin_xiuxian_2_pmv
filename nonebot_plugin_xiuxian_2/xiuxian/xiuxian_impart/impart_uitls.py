@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import numpy
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
 from .impart_data import impart_data_json

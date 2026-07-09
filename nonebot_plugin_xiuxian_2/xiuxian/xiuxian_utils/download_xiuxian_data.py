@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin

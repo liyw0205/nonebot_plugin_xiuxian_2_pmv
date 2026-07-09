@@ -11,7 +11,7 @@ import time
 import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path

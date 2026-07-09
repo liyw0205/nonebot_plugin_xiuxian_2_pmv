@@ -1,4 +1,4 @@
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 DATABASE = get_paths().data
 PET_CONFIG_PATH = DATABASE / "宠物" / "宠物.json"

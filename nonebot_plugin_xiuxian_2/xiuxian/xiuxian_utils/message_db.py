@@ -9,7 +9,7 @@ import threading
 from typing import Any
 
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from . import db_backend
 

@@ -6,7 +6,7 @@ import random
 
 from nonebot.log import logger
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ..paths import get_paths
 
 DATABASE = get_paths().data
 Xiu_Plugin = get_paths().package_root

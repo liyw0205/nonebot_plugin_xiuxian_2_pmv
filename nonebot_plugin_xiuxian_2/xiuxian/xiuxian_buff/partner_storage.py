@@ -1,4 +1,4 @@
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .relation_utils import (

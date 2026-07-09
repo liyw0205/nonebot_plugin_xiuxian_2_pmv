@@ -5,7 +5,7 @@ except ImportError:
 import os
 from typing import Any, Tuple
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..on_compat import on_regex
 from nonebot.log import logger
 from nonebot.params import RegexGroup

@@ -18,7 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message, send_help_message
 from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()

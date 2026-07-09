@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items

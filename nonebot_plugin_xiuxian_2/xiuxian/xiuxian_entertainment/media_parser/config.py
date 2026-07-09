@@ -1,6 +1,6 @@
 """娱乐模块 — 流媒体解析（复刻 astrbot_plugin_media_parser 行为开关）。"""
 from pathlib import Path
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ....paths import get_paths
 
 # 与上游 PARSER_OUTPUT_KEYS 一致，默认全部发送
 _DEFAULT_OUTPUT = "全部发送"

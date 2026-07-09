@@ -7,7 +7,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 

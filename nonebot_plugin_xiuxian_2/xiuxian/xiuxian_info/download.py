@@ -6,7 +6,7 @@ import os
 from PIL import Image
 import io
 from pathlib import Path
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 
 async def download_url(url: str) -> bytes:

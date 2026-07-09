@@ -5,7 +5,7 @@ except ImportError:
 import random
 from datetime import datetime
 
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from ..xiuxian_config import XiuConfig
 from .data_source import jsondata

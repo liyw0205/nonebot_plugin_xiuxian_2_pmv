@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 from nonebot.log import logger
-from nonebot_plugin_xiuxian_2.paths import get_paths
+from ...paths import get_paths
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from .download import get_avatar_by_user_id_and_save
