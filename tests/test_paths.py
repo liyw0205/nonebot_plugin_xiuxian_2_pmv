@@ -47,6 +47,7 @@ class XiuxianPathsTests(unittest.TestCase):
 
         self.assertEqual(paths.data, Path(directory).resolve())
         self.assertEqual(paths.game_db, Path(directory).resolve() / "xiuxian.db")
+        self.assertEqual(paths.message_db, Path(directory).resolve() / "message.db")
 
     def test_explicit_configuration_wins_over_environment(self) -> None:
         with tempfile.TemporaryDirectory() as explicit, tempfile.TemporaryDirectory() as environment:

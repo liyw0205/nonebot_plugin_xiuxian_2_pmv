@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import queue
+import sqlite3
 import threading
 from typing import Any
+from uuid import uuid4
 
 from nonebot.log import logger
 from ...paths import get_paths
@@ -14,14 +17,131 @@ from ...paths import get_paths
 from . import db_backend
 
 
-MESSAGE_DB = Path() / "message.db"
-MESSAGE_DB_CONFIG_FILE = get_paths().data / "message_db_config.json"
 _last_message_db_cleanup_ts = 0.0
 _message_db_initialized = False
 _message_db_init_lock = threading.RLock()
 _message_db_writer_started = False
 _message_db_writer_lock = threading.RLock()
 _message_db_config_lock = threading.RLock()
+
+
+class MessageDatabaseMigrationConflict(RuntimeError):
+    pass
+
+
+def _message_db_path() -> Path:
+    return get_paths().message_db
+
+
+def _message_db_config_path() -> Path:
+    return get_paths().data / "message_db_config.json"
+
+
+@contextmanager
+def _migration_file_lock(target: Path):
+    lock_path = target.with_name(f".{target.name}.migration.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+
+def _sqlite_integrity_check(path: Path) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        result = connection.execute("PRAGMA integrity_check").fetchone()
+    finally:
+        connection.close()
+    if not result or str(result[0]).lower() != "ok":
+        raise RuntimeError(f"SQLite integrity check failed for {path}: {result!r}")
+
+
+def migrate_legacy_message_db(
+    legacy_path: str | Path | None = None,
+    target_path: str | Path | None = None,
+) -> Path | None:
+    """将 cwd 下的旧 message.db 一次性迁入统一数据目录。"""
+    legacy = Path(legacy_path) if legacy_path is not None else Path.cwd() / "message.db"
+    target = Path(target_path) if target_path is not None else _message_db_path()
+    legacy = legacy.resolve(strict=False)
+    target = target.resolve(strict=False)
+    if legacy == target or not legacy.exists():
+        return None
+
+    with _migration_file_lock(target):
+        if not legacy.exists():
+            return None
+        if target.exists():
+            raise MessageDatabaseMigrationConflict(
+                f"旧消息数据库与目标数据库同时存在，拒绝覆盖: {legacy} -> {target}"
+            )
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.migrating")
+        backup = legacy.with_name(
+            f"{legacy.name}.migrated.{datetime.now().strftime('%Y%m%d%H%M%S')}.bak"
+        )
+        installed = False
+        try:
+            source = sqlite3.connect(legacy)
+            destination = sqlite3.connect(temporary)
+            try:
+                source.backup(destination)
+                destination.commit()
+            finally:
+                destination.close()
+                source.close()
+
+            _sqlite_integrity_check(temporary)
+            os.replace(temporary, target)
+            installed = True
+            os.replace(legacy, backup)
+            for suffix in ("-wal", "-shm"):
+                sidecar = Path(f"{legacy}{suffix}")
+                if sidecar.exists():
+                    try:
+                        os.replace(sidecar, Path(f"{backup}{suffix}"))
+                    except OSError as exc:
+                        logger.warning(
+                            f"[message.db] 旧数据库旁路文件保留在原位置: {sidecar}: {exc}"
+                        )
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            if installed and legacy.exists():
+                target.unlink(missing_ok=True)
+            elif installed and backup.exists() and not legacy.exists():
+                os.replace(backup, legacy)
+                target.unlink(missing_ok=True)
+            raise
+
+        logger.info(f"[message.db] 旧数据库已迁移到统一数据目录，原文件备份为 {backup}")
+        return backup
 
 
 def _env_int(name: str, default: int, minimum: int) -> int:
@@ -60,9 +180,10 @@ def load_message_db_config() -> dict[str, int]:
     global message_db_max_size_mb, message_group_keep_days, message_private_keep_days
 
     with _message_db_config_lock:
-        if MESSAGE_DB_CONFIG_FILE.exists():
+        config_path = _message_db_config_path()
+        if config_path.exists():
             try:
-                with MESSAGE_DB_CONFIG_FILE.open("r", encoding="utf-8") as f:
+                with config_path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
             except Exception as e:
                 logger.warning(f"[message.db] 读取配置失败: {e}")
@@ -104,8 +225,9 @@ def get_message_db_config(*, load_from_disk: bool = True) -> dict[str, int]:
 
 
 def save_message_db_config(config: dict[str, int]) -> dict[str, int]:
-    MESSAGE_DB_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with MESSAGE_DB_CONFIG_FILE.open("w", encoding="utf-8") as f:
+    config_path = _message_db_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
         f.write("\n")
     return config
@@ -229,7 +351,7 @@ def _ensure_message_db_schema(conn):
 
 def connect_message_db(row_factory: bool = False):
     init_message_db()
-    conn = db_backend.connect(MESSAGE_DB)
+    conn = db_backend.connect(_message_db_path())
     if row_factory:
         conn.row_factory = db_backend.Row
     try:
@@ -272,9 +394,11 @@ def init_message_db():
             _start_message_db_writer()
             return
 
-        MESSAGE_DB.parent.mkdir(parents=True, exist_ok=True)
+        migrate_legacy_message_db()
+        message_db = _message_db_path()
+        message_db.parent.mkdir(parents=True, exist_ok=True)
 
-        conn = db_backend.connect(MESSAGE_DB)
+        conn = db_backend.connect(message_db)
         try:
             _ensure_message_db_schema(conn)
             conn.commit()
@@ -286,7 +410,7 @@ def init_message_db():
 
 
 def get_message_db_path() -> Path:
-    return MESSAGE_DB
+    return _message_db_path()
 
 
 def _get_message_cleanup_config() -> tuple[int, int, int]:
@@ -299,9 +423,10 @@ def _get_message_cleanup_config() -> tuple[int, int, int]:
 
 def _message_db_size_mb() -> float:
     try:
-        if not MESSAGE_DB.exists():
+        message_db = _message_db_path()
+        if not message_db.exists():
             return 0.0
-        return MESSAGE_DB.stat().st_size / 1024 / 1024
+        return message_db.stat().st_size / 1024 / 1024
     except Exception:
         return 0.0
 
@@ -380,7 +505,7 @@ def maybe_cleanup_message_db(conn=None):
             _cleanup_message_db_with_conn(conn)
             return
 
-        conn = db_backend.connect(MESSAGE_DB)
+        conn = db_backend.connect(_message_db_path())
         try:
             _cleanup_message_db_with_conn(conn)
         finally:
@@ -555,7 +680,7 @@ def _message_db_writer_loop():
                 continue
 
             if conn is None:
-                conn = db_backend.connect(MESSAGE_DB)
+                conn = db_backend.connect(_message_db_path())
                 _ensure_message_db_schema(conn)
                 conn.commit()
 

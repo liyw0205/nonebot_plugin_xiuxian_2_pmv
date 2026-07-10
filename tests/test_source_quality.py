@@ -40,6 +40,13 @@ class SourceQualityTests(unittest.TestCase):
             "Direct data/xiuxian path construction found: " + ", ".join(violations),
         )
 
+    def test_message_database_uses_centralized_path(self) -> None:
+        path = SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "message_db.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertNotIn('MESSAGE_DB = Path() / "message.db"', source)
+        self.assertIn("get_paths().message_db", source)
+        self.assertIn("migrate_legacy_message_db()", source)
+
     def test_newapi_runtime_state_uses_central_json_store(self) -> None:
         source = (
             SOURCE_ROOT

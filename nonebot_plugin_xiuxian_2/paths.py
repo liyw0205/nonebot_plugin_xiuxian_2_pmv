@@ -38,6 +38,10 @@ class XiuxianPaths:
         return self.data / "xiuxian_impart.db"
 
     @property
+    def message_db(self) -> Path:
+        return self.data / "message.db"
+
+    @property
     def backups(self) -> Path:
         return self.data / "backups"
 
