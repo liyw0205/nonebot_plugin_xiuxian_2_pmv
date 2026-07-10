@@ -848,7 +848,15 @@ def check_user_state(user_info):
 # =========================
 # 副本定时任务
 # =========================
-@scheduler.scheduled_job("cron", hour=0, minute=1)
+@scheduler.scheduled_job(
+    "cron",
+    hour=0,
+    minute=1,
+    id="daily_dungeon_reset",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def daily_dungeon_reset():
     """每日自动重置副本和玩家状态"""
     try:
