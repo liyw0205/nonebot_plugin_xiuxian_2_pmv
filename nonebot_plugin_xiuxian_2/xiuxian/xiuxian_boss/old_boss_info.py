@@ -13,6 +13,8 @@ class OLD_BOSS_INFO(object):
 
     def _load_data(self):
         """加载 Boss 状态；格式损坏时由中央 Store 备份并重置。"""
+        if not self.data_path.exists():
+            return {}
         return load_json_file(self.data_path, {}, dict)
 
     def save_boss(self, boss_data):

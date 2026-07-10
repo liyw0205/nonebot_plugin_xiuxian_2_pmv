@@ -25,6 +25,7 @@ class BossStateStoreTests(unittest.TestCase):
     def test_missing_state_is_initialized_and_round_trips(self) -> None:
         store = OLD_BOSS_INFO(self.path)
         self.assertEqual(store.read_boss_info(), {})
+        self.assertFalse(self.path.exists())
         self.assertTrue(store.save_boss({"global": [{"name": "测试Boss"}]}))
         self.assertEqual(
             OLD_BOSS_INFO(self.path).read_boss_info()["global"][0]["name"],
