@@ -2231,7 +2231,15 @@ async def process_guishi_transactions(user_id: str = None) -> str:
     return transaction_log if user_id else ""
 
 
-@scheduler.scheduled_job("cron", hour=GUISHI_AUTO_HOUR, minute=0, id="auto_guishi_transactions")
+@scheduler.scheduled_job(
+    "cron",
+    hour=GUISHI_AUTO_HOUR,
+    minute=0,
+    id="auto_guishi_transactions",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def auto_guishi_transactions_job():
     """定时鬼市自动交易匹配"""
     logger.info("执行鬼市自动交易匹配任务...")
