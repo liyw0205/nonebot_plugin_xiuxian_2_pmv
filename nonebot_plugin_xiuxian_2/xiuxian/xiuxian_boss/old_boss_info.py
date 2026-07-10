@@ -1,51 +1,40 @@
-import json
 from pathlib import Path
-import os
 
-from nonebot.log import logger
-
-from ..xiuxian_utils.json_store import save_json_file
+from ..xiuxian_utils.json_store import load_json_file, update_json_file
 
 
 GLOBAL_BOSS_KEY = "global"
 
 
 class OLD_BOSS_INFO(object):
-    def __init__(self):
-        self.dir_path = Path(__file__).parent
-        self.data_path = self.dir_path / "boss_info.json"
+    def __init__(self, data_path=None):
+        self.data_path = Path(data_path) if data_path else Path(__file__).parent / "boss_info.json"
         self.data = self._load_data()
 
     def _load_data(self):
-        """加载数据，失败时返回空字典但不覆盖文件"""
-        if os.path.exists(self.data_path):
-            try:
-                with open(self.data_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return data if data is not None else {}
-            except Exception as e:
-                logger.warning(f"读取 {self.data_path} 失败: {e}")
-                return {}
-        return {}
-
-    def __save(self):
-        """保存数据"""
-        try:
-            save_json_file(self.data_path, self.data)
-            return True
-        except Exception as e:
-            logger.warning(f"保存 {self.data_path} 失败: {e}")
-            return False
+        """加载 Boss 状态；格式损坏时由中央 Store 备份并重置。"""
+        return load_json_file(self.data_path, {}, dict)
 
     def save_boss(self, boss_data):
-        """保存boss数据，不清空已有数据"""
-        if boss_data is not None:
-            self.data.update(boss_data)  # 仅更新，不清空
-            return self.__save()
-        return False
+        """串行合并并原子保存 Boss 状态。"""
+        if boss_data is None:
+            return False
+
+        def merge(current):
+            current.update(boss_data)
+            return current
+
+        self.data = update_json_file(
+            self.data_path,
+            {},
+            merge,
+            expected_type=dict,
+        )
+        return True
 
     def read_boss_info(self):
         """读取boss信息"""
+        self.data = self._load_data()
         return self.data
 
 old_boss_info = OLD_BOSS_INFO()

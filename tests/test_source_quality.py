@@ -487,6 +487,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("trade_manager.get_current_auction", command_source)
         self.assertNotIn("trade_manager.get_auction_history", command_source)
 
+    def test_world_boss_state_uses_central_json_store(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_boss" / "old_boss_info.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("load_json_file(", source)
+        self.assertIn("update_json_file(", source)
+        self.assertNotIn("json.load(", source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
