@@ -6,6 +6,9 @@ __pycache__/
 .venv/
 venv/
 myenv/
+*.bak
+*.orig
+*~
 
 # 本地运行数据，不应进入源码提交。
 data/xiuxian/*.db
