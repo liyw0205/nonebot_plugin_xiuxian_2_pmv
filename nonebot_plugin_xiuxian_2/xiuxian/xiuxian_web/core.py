@@ -13,6 +13,7 @@ import struct
 import threading
 import random
 import uuid
+from enum import Enum
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from PIL import Image
@@ -224,6 +225,148 @@ def is_local_web_request() -> bool:
     return _is_local_request()
 
 
+class WebPermission(str, Enum):
+    PUBLIC = "public"
+    READ = "read"
+    DATABASE_WRITE = "database_write"
+    MESSAGE = "message"
+    BACKUP = "backup"
+    UPDATE = "update"
+    TERMINAL_CONFIRM = "terminal_confirm"
+    TERMINAL = "terminal"
+    LOCAL_UPLOAD = "local_upload"
+
+
+WEB_ENDPOINT_PERMISSIONS = {
+    "static": WebPermission.PUBLIC,
+    "login": WebPermission.PUBLIC,
+    "home": WebPermission.READ,
+    "logout": WebPermission.READ,
+    "activity_management": WebPermission.READ,
+    "api_activity_config": {"GET": WebPermission.READ, "POST": WebPermission.DATABASE_WRITE},
+    "api_activity_template": WebPermission.READ,
+    "api_activity_gameplay_template": WebPermission.READ,
+    "api_activity_data": WebPermission.READ,
+    "api_activity_data_reset": WebPermission.DATABASE_WRITE,
+    "api_activity_data_adjust": WebPermission.DATABASE_WRITE,
+    "get_cloud_backups": WebPermission.READ,
+    "sync_cloud_backup": WebPermission.BACKUP,
+    "cloud_restore_backup": WebPermission.BACKUP,
+    "cloud_backup_config": WebPermission.BACKUP,
+    "get_cloud_config_backups": WebPermission.READ,
+    "sync_cloud_config_backup": WebPermission.BACKUP,
+    "cloud_restore_config_backup": WebPermission.BACKUP,
+    "restore_backup": WebPermission.BACKUP,
+    "backups": WebPermission.READ,
+    "manual_db_backup": WebPermission.BACKUP,
+    "get_db_backups": WebPermission.READ,
+    "restore_db_backup": WebPermission.BACKUP,
+    "get_cloud_db_backups": WebPermission.READ,
+    "sync_cloud_db_backup": WebPermission.BACKUP,
+    "cloud_restore_db_backup": WebPermission.BACKUP,
+    "batch_delete_backups": WebPermission.BACKUP,
+    "batch_sync_cloud_backups": WebPermission.BACKUP,
+    "batch_delete_db_backups": WebPermission.BACKUP,
+    "batch_sync_cloud_db_backups": WebPermission.BACKUP,
+    "batch_delete_cloud_backups": WebPermission.BACKUP,
+    "batch_delete_cloud_db_backups": WebPermission.BACKUP,
+    "export_config": WebPermission.READ,
+    "import_config": WebPermission.BACKUP,
+    "backup_config": WebPermission.BACKUP,
+    "get_config_backups": WebPermission.READ,
+    "restore_config_backup": WebPermission.BACKUP,
+    "manual_backup": WebPermission.BACKUP,
+    "download_backup": WebPermission.READ,
+    "delete_backup": WebPermission.BACKUP,
+    "delete_config_backup": WebPermission.BACKUP,
+    "command_registry": WebPermission.READ,
+    "api_command_registry_toggle": WebPermission.DATABASE_WRITE,
+    "api_command_registry_bulk_toggle": WebPermission.DATABASE_WRITE,
+    "commands": WebPermission.READ,
+    "execute_command": WebPermission.DATABASE_WRITE,
+    "config_management": WebPermission.READ,
+    "save_config": WebPermission.DATABASE_WRITE,
+    "database": WebPermission.READ,
+    "table_view": WebPermission.READ,
+    "row_edit": {"GET": WebPermission.READ, "POST": WebPermission.DATABASE_WRITE},
+    "batch_edit": WebPermission.DATABASE_WRITE,
+    "economy_logs": WebPermission.READ,
+    "economy_logs_export": WebPermission.READ,
+    "logs": WebPermission.READ,
+    "api_logs_users": WebPermission.READ,
+    "api_logs_user_messages": WebPermission.READ,
+    "api_logs_files": WebPermission.READ,
+    "api_logs_read": WebPermission.READ,
+    "api_logs_tail": WebPermission.READ,
+    "messages_page": WebPermission.READ,
+    "api_messages_config": WebPermission.READ,
+    "api_messages_config_save": WebPermission.DATABASE_WRITE,
+    "api_messages_list": WebPermission.READ,
+    "api_messages_dates": WebPermission.READ,
+    "api_messages_sessions": WebPermission.READ,
+    "api_messages_sessions_since": WebPermission.READ,
+    "api_messages_list_since": WebPermission.READ,
+    "api_messages_list_before": WebPermission.READ,
+    "api_messages_send": WebPermission.MESSAGE,
+    "api_messages_broadcast": WebPermission.MESSAGE,
+    "api_messages_broadcast_status": WebPermission.READ,
+    "api_messages_revoke": WebPermission.MESSAGE,
+    "api_messages_bots": WebPermission.READ,
+    "api_messages_media_proxy": WebPermission.READ,
+    "api_messages_markdown_preview": WebPermission.READ,
+    "update": WebPermission.UPDATE,
+    "check_update": WebPermission.UPDATE,
+    "get_releases": WebPermission.UPDATE,
+    "perform_update": WebPermission.UPDATE,
+    "get_backups": WebPermission.READ,
+    "reward_center": WebPermission.READ,
+    "api_reward_records": WebPermission.READ,
+    "api_save_reward_record": WebPermission.DATABASE_WRITE,
+    "api_delete_reward_record": WebPermission.DATABASE_WRITE,
+    "api_clear_reward_records": WebPermission.DATABASE_WRITE,
+    "get_stats": WebPermission.READ,
+    "get_system_info_extended": WebPermission.READ,
+    "get_process_info": WebPermission.READ,
+    "api_dashboard_summary": WebPermission.READ,
+    "search_users": WebPermission.READ,
+    "download_file": WebPermission.READ,
+    "terminal_confirm": WebPermission.TERMINAL_CONFIRM,
+    "terminal": WebPermission.TERMINAL,
+    "terminal_output": WebPermission.TERMINAL,
+    "terminal_write": WebPermission.TERMINAL,
+    "terminal_pwd": WebPermission.TERMINAL,
+    "upload_api_image": WebPermission.LOCAL_UPLOAD,
+}
+
+
+def get_endpoint_permission(endpoint: str | None = None, method: str | None = None):
+    configured = WEB_ENDPOINT_PERMISSIONS.get(
+        request.endpoint if endpoint is None else endpoint
+    )
+    if isinstance(configured, dict):
+        request_method = (method or request.method).upper()
+        if request_method == "HEAD":
+            request_method = "GET"
+        if request_method == "OPTIONS":
+            return configured.get("GET") or next(iter(configured.values()), None)
+        return configured.get(request_method)
+    return configured
+
+
+def undeclared_web_endpoints() -> set[str]:
+    return {
+        rule.endpoint for rule in app.url_map.iter_rules()
+        if rule.endpoint not in WEB_ENDPOINT_PERMISSIONS
+    }
+
+
+def terminal_authorization_is_valid() -> bool:
+    try:
+        return float(session.get("terminal_authorized_until", 0)) > time.time()
+    except (TypeError, ValueError):
+        return False
+
+
 _WEB_FEATURE_DEFAULTS = {
     "web_enable_terminal": False,
     "web_enable_update": False,
@@ -248,64 +391,38 @@ def safe_path_under(base_dir, *parts) -> Path:
     return candidate
 
 
-def _blocked_feature_message() -> str:
-    endpoint = request.endpoint or ""
-    method = request.method.upper()
+_PERMISSION_FEATURES = {
+    WebPermission.DATABASE_WRITE: ("web_enable_database_write", "数据库写入功能未启用"),
+    WebPermission.MESSAGE: ("web_enable_message_send", "Web 消息发送功能未启用"),
+    WebPermission.BACKUP: ("web_enable_backup_restore", "备份恢复/删除功能未启用"),
+    WebPermission.UPDATE: ("web_enable_update", "在线更新功能未启用"),
+    WebPermission.TERMINAL_CONFIRM: ("web_enable_terminal", "Web 终端未启用"),
+    WebPermission.TERMINAL: ("web_enable_terminal", "Web 终端未启用"),
+}
 
-    if endpoint in {"terminal", "terminal_output", "terminal_write", "terminal_pwd"}:
-        if not web_feature_enabled("web_enable_terminal"):
-            return "Web 终端未启用"
 
-    if endpoint in {"update", "check_update", "get_releases", "perform_update"}:
-        if not web_feature_enabled("web_enable_update"):
-            return "在线更新功能未启用"
-
-    if endpoint in {
-        "row_edit",
-        "batch_edit",
-        "execute_command",
-        "api_activity_config",
-        "api_activity_data_reset",
-        "api_activity_data_adjust",
-        "api_save_reward_record",
-        "api_delete_reward_record",
-        "api_clear_reward_records",
-    } and method != "GET":
-        if not web_feature_enabled("web_enable_database_write"):
-            return "数据库写入功能未启用"
-
-    if endpoint in {
-        "manual_backup",
-        "manual_db_backup",
-        "backup_config",
-        "cloud_backup_config",
-        "sync_cloud_backup",
-        "sync_cloud_db_backup",
-        "sync_cloud_config_backup",
-        "batch_sync_cloud_backups",
-        "batch_sync_cloud_db_backups",
-        "restore_backup",
-        "cloud_restore_backup",
-        "restore_db_backup",
-        "cloud_restore_db_backup",
-        "restore_config_backup",
-        "cloud_restore_config_backup",
-        "delete_backup",
-        "delete_config_backup",
-        "batch_delete_backups",
-        "batch_delete_db_backups",
-        "batch_delete_cloud_backups",
-        "batch_delete_cloud_db_backups",
-        "download_backup",
-    }:
-        if not web_feature_enabled("web_enable_backup_restore"):
-            return "备份恢复/删除功能未启用"
-
-    if endpoint in {"api_messages_send", "api_messages_broadcast", "api_messages_revoke"}:
-        if not web_feature_enabled("web_enable_message_send"):
-            return "Web 消息发送功能未启用"
-
-    return ""
+def _authorization_error():
+    permission = get_endpoint_permission()
+    if permission is None:
+        logger.error(f"拒绝访问未声明 Web 权限的端点：{request.endpoint}")
+        return web_error("Web 端点未声明访问权限", 403)
+    if permission == WebPermission.PUBLIC:
+        return None
+    if permission == WebPermission.LOCAL_UPLOAD:
+        if web_feature_enabled("web_allow_local_upload") and _is_local_request():
+            return None
+    if not is_admin_logged_in():
+        if request.endpoint in {"home", "logout", "update", "backups", "database", "commands", "logs", "messages_page", "activity_management", "reward_center", "command_registry", "config_management", "economy_logs", "terminal", "terminal_confirm"}:
+            return redirect(url_for("login"))
+        return api_error("未登录", status=401)
+    feature = _PERMISSION_FEATURES.get(permission)
+    if feature and not web_feature_enabled(feature[0]):
+        return web_error(feature[1], 403)
+    if permission == WebPermission.TERMINAL and not terminal_authorization_is_valid():
+        if request.endpoint == "terminal":
+            return redirect(url_for("terminal_confirm"))
+        return api_error("Web 终端需要重新确认密码", status=403)
+    return None
 
 
 def get_csrf_token() -> str:
@@ -367,9 +484,9 @@ def enforce_web_panel_security():
     if host_error:
         return host_error
 
-    blocked_message = _blocked_feature_message()
-    if blocked_message:
-        return web_error(blocked_message, 403)
+    authorization_error = _authorization_error()
+    if authorization_error:
+        return authorization_error
 
     csrf_error = _validate_csrf_token()
     if csrf_error:
@@ -377,6 +494,27 @@ def enforce_web_panel_security():
 
     if is_admin_logged_in():
         session.permanent = True
+
+
+@app.after_request
+def audit_sensitive_web_operation(response):
+    permission = get_endpoint_permission()
+    if permission in {
+        WebPermission.DATABASE_WRITE,
+        WebPermission.MESSAGE,
+        WebPermission.BACKUP,
+        WebPermission.UPDATE,
+        WebPermission.TERMINAL,
+    }:
+        target = ",".join(
+            f"{key}={value}" for key, value in sorted((request.view_args or {}).items())
+        ) or "-"
+        logger.info(
+            f"Web 敏感操作：admin={session.get('admin_id', 'anonymous')} "
+            f"endpoint={request.endpoint} method={request.method} "
+            f"target={target} status={response.status_code}"
+        )
+    return response
 
 
 # 配置

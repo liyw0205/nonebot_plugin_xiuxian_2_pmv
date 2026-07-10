@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import pages
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import core, pages, system
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web.auth import (
     LoginAttemptLimiter,
     is_supported_password_hash,
@@ -124,6 +124,78 @@ class WebLoginRouteTests(unittest.TestCase):
                 self._post_login("admin-1", "wrong-password").status_code,
                 429,
             )
+
+
+class WebAuthorizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        app.config.update(TESTING=True, SECRET_KEY="test-secret")
+        self.client = app.test_client()
+
+    def _login_session(self) -> None:
+        with self.client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+            session["_csrf_token"] = "csrf-token"
+
+    def test_every_web_endpoint_declares_permission(self) -> None:
+        self.assertEqual(core.undeclared_web_endpoints(), set())
+
+    def test_api_read_requires_login(self) -> None:
+        response = self.client.get("/api/dashboard/summary")
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.get_json()["success"])
+
+    def test_database_write_requires_feature_flag(self) -> None:
+        self._login_session()
+        with (
+            patch.object(core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(core, "web_feature_enabled", return_value=False),
+        ):
+            response = self.client.post(
+                "/execute_command",
+                json={"command": "status"},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+        self.assertEqual(response.status_code, 403)
+
+    def test_terminal_requires_password_confirmation_and_expires(self) -> None:
+        self._login_session()
+        with (
+            patch.object(core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(core, "web_feature_enabled", return_value=True),
+        ):
+            response = self.client.get("/terminal")
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/terminal/confirm"))
+
+            with patch.object(system, "verify_web_password", return_value=False):
+                response = self.client.post(
+                    "/terminal/confirm",
+                    data={"password": "wrong", "_csrf_token": "csrf-token"},
+                )
+            self.assertEqual(response.status_code, 401)
+
+            with patch.object(system, "verify_web_password", return_value=True):
+                response = self.client.post(
+                    "/terminal/confirm",
+                    data={"password": "correct", "_csrf_token": "csrf-token"},
+                )
+            self.assertEqual(response.status_code, 302)
+
+            with self.client.session_transaction() as session:
+                self.assertGreater(session["terminal_authorized_until"], core.time.time())
+                session["terminal_authorized_until"] = core.time.time() - 1
+
+            response = self.client.get("/terminal/pwd")
+            self.assertEqual(response.status_code, 403)
+
+    def test_local_upload_uses_direct_peer_address(self) -> None:
+        with patch.object(core, "web_feature_enabled", return_value=True):
+            response = self.client.post(
+                "/upload_image",
+                headers={"X-Forwarded-For": "127.0.0.1"},
+                environ_base={"REMOTE_ADDR": "203.0.113.5"},
+            )
+        self.assertEqual(response.status_code, 401)
 
 
 if __name__ == "__main__":

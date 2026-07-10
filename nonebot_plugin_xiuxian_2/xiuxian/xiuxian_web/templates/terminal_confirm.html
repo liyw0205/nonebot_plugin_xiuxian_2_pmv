@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="login-shell">
+    <section class="card login-card">
+        <div class="login-brand">
+            <span class="brand-mark"><i class="fas fa-terminal"></i></span>
+            <div>
+                <h1 class="page-title">确认终端访问</h1>
+                <p class="page-subtitle">Web 终端具有系统命令权限，请重新输入面板密码。</p>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('terminal_confirm') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="password">面板密码</label>
+                <input type="password" id="password" name="password" required autofocus autocomplete="current-password">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-unlock-keyhole"></i> 确认
+                </button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}
