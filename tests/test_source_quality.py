@@ -6,9 +6,15 @@ from pathlib import Path
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
+PROJECT_ROOT = SOURCE_ROOT.parent
 
 
 class SourceQualityTests(unittest.TestCase):
+    def test_runtime_sqlite_sidecars_are_ignored(self) -> None:
+        source = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("data/xiuxian/*.db-*", source)
+        self.assertIn("data/xiuxian/activity/*.db-*", source)
+
     def test_python_sources_do_not_use_bare_except(self) -> None:
         violations: list[str] = []
         for path in SOURCE_ROOT.rglob("*.py"):

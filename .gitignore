@@ -12,7 +12,9 @@ myenv/
 
 # 本地运行数据，不应进入源码提交。
 data/xiuxian/*.db
+data/xiuxian/*.db-*
 data/xiuxian/activity/*.db
+data/xiuxian/activity/*.db-*
 data/xiuxian/activity/activity_config.json
 data/xiuxian/config.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/lottery_pool.json
