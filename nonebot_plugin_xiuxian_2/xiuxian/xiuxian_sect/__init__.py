@@ -274,17 +274,22 @@ async def materialsupdate_():
 async def resetusertask():
     sql_message.sect_task_reset()
     sql_message.sect_elixir_get_num_reset()
+    maintenance_key = f"sect-elixir-maintenance:{datetime.now().date().isoformat()}"
+    maintenance_costs = {
+        int(level): room_config["level_up_cost"]["建设度"]
+        for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
+    }
     all_sects = sql_message.get_all_sects_id_scale()
     for s in all_sects:
-        sect_info = sql_message.get_sect_info(s[0])
-        if int(sect_info['elixir_room_level']) != 0:
-            elixir_room_cost = config['宗门丹房参数']['elixir_room_level'][str(sect_info['elixir_room_level'])]['level_up_cost'][
-                '建设度']
-            if sect_info['sect_materials'] < elixir_room_cost:
-                logger.opt(colors=True).info(f"<red>宗门：{sect_info['sect_name']}的资材无法维持丹房</red>")
-                continue
-            else:
-                sql_message.update_sect_materials(sect_id=sect_info['sect_id'], sect_materials=elixir_room_cost, key=2)
+        result = sect_membership_service.charge_elixir_room_maintenance(
+            maintenance_key,
+            s[0],
+            maintenance_costs,
+        )
+        if result.status == "insufficient" and not result.duplicate:
+            logger.opt(colors=True).info(
+                f"<red>宗门：{result.sect_name}的资材无法维持丹房</red>"
+            )
     logger.opt(colors=True).info(f"<green>已重置所有宗门任务次数、宗门丹药领取次数，已扣除丹房维护费</green>")
 
 # 定时任务自动检测并处理宗门状态

@@ -98,6 +98,21 @@ class SectScheduledMaterialGrant:
         return self.status == "granted"
 
 
+@dataclass(frozen=True)
+class SectElixirRoomMaintenance:
+    status: str
+    maintenance_key: str
+    sect_id: int
+    sect_name: str = ""
+    room_level: int = 0
+    materials_cost: int = 0
+    duplicate: bool = False
+
+    @property
+    def charged(self) -> bool:
+        return self.status == "charged" and not self.duplicate
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -202,6 +217,130 @@ class SectMembershipService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_elixir_room_maintenance(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_elixir_room_maintenance (
+                maintenance_key TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                sect_name TEXT NOT NULL,
+                room_level INTEGER NOT NULL,
+                materials_cost INTEGER NOT NULL,
+                outcome TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (maintenance_key, sect_id)
+            )
+            """
+        )
+
+    def charge_elixir_room_maintenance(
+        self,
+        maintenance_key,
+        sect_id,
+        costs_by_level,
+    ) -> SectElixirRoomMaintenance:
+        maintenance_key = str(maintenance_key).strip()
+        if not maintenance_key:
+            raise ValueError("maintenance_key must not be empty")
+        sect_id = int(sect_id)
+        normalized_costs = {
+            int(level): max(int(cost), 0) for level, cost in costs_by_level.items()
+        }
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self._ensure_elixir_room_maintenance(conn)
+                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    """
+                    SELECT sect_name, room_level, materials_cost, outcome
+                    FROM sect_elixir_room_maintenance
+                    WHERE maintenance_key=%s AND sect_id=%s
+                    """,
+                    (maintenance_key, sect_id),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectElixirRoomMaintenance(
+                        str(previous[3]),
+                        maintenance_key,
+                        sect_id,
+                        str(previous[0]),
+                        int(previous[1]),
+                        int(previous[2]),
+                        True,
+                    )
+
+                sect = conn.execute(
+                    """
+                    SELECT sect_name, sect_owner, elixir_room_level,
+                           COALESCE(sect_materials, 0)
+                    FROM sects WHERE sect_id=%s
+                    """,
+                    (sect_id,),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectElixirRoomMaintenance(
+                        "sect_missing", maintenance_key, sect_id
+                    )
+                if sect[1] is None:
+                    conn.rollback()
+                    return SectElixirRoomMaintenance(
+                        "sect_inactive", maintenance_key, sect_id, str(sect[0] or "")
+                    )
+
+                sect_name = str(sect[0] or "")
+                room_level = int(sect[2] or 0)
+                materials_cost = normalized_costs.get(room_level, 0)
+                if room_level <= 0:
+                    outcome = "no_room"
+                elif room_level not in normalized_costs:
+                    outcome = "level_unsupported"
+                elif int(sect[3]) < materials_cost:
+                    outcome = "insufficient"
+                else:
+                    outcome = "charged"
+                    conn.execute(
+                        """
+                        UPDATE sects
+                        SET sect_materials=sect_materials-%s
+                        WHERE sect_id=%s
+                        """,
+                        (materials_cost, sect_id),
+                    )
+
+                conn.execute(
+                    """
+                    INSERT INTO sect_elixir_room_maintenance (
+                        maintenance_key, sect_id, sect_name, room_level,
+                        materials_cost, outcome
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        maintenance_key,
+                        sect_id,
+                        sect_name,
+                        room_level,
+                        materials_cost,
+                        outcome,
+                    ),
+                )
+                conn.commit()
+                return SectElixirRoomMaintenance(
+                    outcome,
+                    maintenance_key,
+                    sect_id,
+                    sect_name,
+                    room_level,
+                    materials_cost,
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     def grant_scheduled_materials(
         self,
@@ -963,6 +1102,7 @@ class SectMembershipService:
 
 __all__ = [
     "SectBuffSearch",
+    "SectElixirRoomMaintenance",
     "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",
     "SectMembershipService",
