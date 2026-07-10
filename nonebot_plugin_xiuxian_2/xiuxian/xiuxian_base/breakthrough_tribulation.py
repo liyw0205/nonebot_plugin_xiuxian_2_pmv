@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 import random
+import time
 from datetime import datetime
 
 from ...paths import get_paths
@@ -21,8 +22,10 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
 from ..xiuxian_title.title_data import check_and_unlock_titles
+from .breakthrough_service import BreakthroughService
 
 sql_message = XiuxianDateManage()
+breakthrough_service = BreakthroughService(get_paths().game_db)
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
@@ -40,6 +43,15 @@ destiny_tribulation = on_command("天命渡劫", priority=6, block=True)
 heart_devil_tribulation = on_command("渡心魔劫", priority=6, block=True)
 fusion_destiny_tribulation_pill = on_command("融合天命渡劫丹", aliases={"合成天命渡劫丹"}, priority=5, block=True)
 fusion_destiny_pill = on_command("融合天命丹", aliases={"合成天命丹"}, priority=5, block=True)
+
+
+def _breakthrough_operation_id(event, action, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"breakthrough:{event_id}:{action}:{user_id}"
+    return f"breakthrough:{action}:{user_id}:{time.time_ns()}"
 
 
 def get_user_tribulation_info(user_id):
@@ -937,19 +949,31 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     le = OtherSet().get_type(exp, level_rate + leveluprate + number, level_name)
     if le == "失败":
         # 突破失败
-        sql_message.updata_level_cd(user_id)  # 更新突破CD
         # 失败惩罚，随机扣减修为
         percentage = random.randint(
             XiuConfig().level_punishment_floor, XiuConfig().level_punishment_limit
         )
         now_exp = int(int(exp) * ((percentage / 100) * (1 - exp_buff))) #功法突破扣修为减少
-        sql_message.update_j_exp(user_id, now_exp)  # 更新用户修为
         nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
         nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
-        sql_message.update_user_hp_mp(user_id, nowhp, nowmp)  # 修为掉了，血量、真元也要掉
         update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        sql_message.update_levelrate(user_id, leveluprate + update_rate)
+        result = breakthrough_service.apply_failure(
+            _breakthrough_operation_id(event, "direct", user_id),
+            user_id,
+            level_name,
+            exp,
+            user_msg["hp"],
+            user_msg["mp"],
+            leveluprate,
+            now_exp,
+            nowhp,
+            nowmp,
+            leveluprate + update_rate,
+        )
+        if not result.applied:
+            await handle_send(bot, event, "本次突破已经处理或角色状态已经变化，请刷新后重试。")
+            await level_up_zj.finish()
         msg = f"道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
         record_level_up_result(user_id, "直接突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
@@ -957,12 +981,24 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     elif type(le) == list:
         # 突破成功
-        sql_message.updata_level(user_id, le[0])  # 更新境界
+        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        level_spend = jsondata.level_data()[le[0]]["spend"]
+        result = breakthrough_service.apply_success(
+            _breakthrough_operation_id(event, "direct", user_id),
+            user_id,
+            level_name,
+            le[0],
+            exp,
+            user_msg["hp"],
+            user_msg["mp"],
+            leveluprate,
+            root_rate,
+            level_spend,
+        )
+        if not result.applied:
+            await handle_send(bot, event, "本次突破已经处理或角色状态已经变化，请刷新后重试。")
+            await level_up_zj.finish()
         share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-        sql_message.update_power2(user_id)  # 更新战力
-        sql_message.updata_level_cd(user_id)  # 更新CD
-        sql_message.update_levelrate(user_id, 0)
-        sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         msg = f"恭喜道友突破{le[0]}成功！{share_msg}"
         record_level_up_result(user_id, "直接突破", success=True, target_level=le[0])
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
