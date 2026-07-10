@@ -11,6 +11,7 @@ class WebPermission(str, Enum):
     MESSAGE = "message"
     BACKUP = "backup"
     UPDATE = "update"
+    SCHEDULER = "scheduler"
     TERMINAL_CONFIRM = "terminal_confirm"
     TERMINAL = "terminal"
     LOCAL_UPLOAD = "local_upload"
@@ -61,6 +62,11 @@ WEB_ENDPOINT_PERMISSIONS = {
     "command_registry": WebPermission.READ,
     "api_command_registry_toggle": WebPermission.DATABASE_WRITE,
     "api_command_registry_bulk_toggle": WebPermission.DATABASE_WRITE,
+    "scheduler_management": WebPermission.SCHEDULER,
+    "api_scheduler_jobs": WebPermission.SCHEDULER,
+    "api_scheduler_job_enabled": WebPermission.SCHEDULER,
+    "api_scheduler_job_schedule": WebPermission.SCHEDULER,
+    "api_scheduler_job_run": WebPermission.SCHEDULER,
     "commands": WebPermission.READ,
     "execute_command": WebPermission.DATABASE_WRITE,
     "config_management": WebPermission.READ,

@@ -252,6 +252,7 @@ _WEB_FEATURE_DEFAULTS = {
     "web_enable_database_write": False,
     "web_enable_backup_restore": False,
     "web_enable_message_send": False,
+    "web_enable_scheduler_manage": False,
     "web_allow_local_upload": False,
 }
 
@@ -275,6 +276,7 @@ _PERMISSION_FEATURES = {
     WebPermission.MESSAGE: ("web_enable_message_send", "Web 消息发送功能未启用"),
     WebPermission.BACKUP: ("web_enable_backup_restore", "备份恢复/删除功能未启用"),
     WebPermission.UPDATE: ("web_enable_update", "在线更新功能未启用"),
+    WebPermission.SCHEDULER: ("web_enable_scheduler_manage", "定时任务管理未启用"),
     WebPermission.TERMINAL_CONFIRM: ("web_enable_terminal", "Web 终端未启用"),
     WebPermission.TERMINAL: ("web_enable_terminal", "Web 终端未启用"),
 }
@@ -383,6 +385,7 @@ def audit_sensitive_web_operation(response):
         WebPermission.MESSAGE,
         WebPermission.BACKUP,
         WebPermission.UPDATE,
+        WebPermission.SCHEDULER,
         WebPermission.TERMINAL,
     }:
         target = ",".join(

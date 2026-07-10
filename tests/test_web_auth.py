@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import core, pages, system
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import core, pages, scheduler, system
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web.auth import (
     LoginAttemptLimiter,
     is_supported_password_hash,
@@ -196,6 +196,72 @@ class WebAuthorizationTests(unittest.TestCase):
                 environ_base={"REMOTE_ADDR": "203.0.113.5"},
             )
         self.assertEqual(response.status_code, 401)
+
+    def test_scheduler_management_requires_its_feature_flag(self) -> None:
+        self._login_session()
+        with (
+            patch.object(core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(core, "web_feature_enabled", return_value=False),
+        ):
+            response = self.client.get("/scheduler")
+        self.assertEqual(response.status_code, 403)
+
+    def test_scheduler_api_can_toggle_and_queue_registered_job(self) -> None:
+        class FakeJobManager:
+            def list_jobs(self):
+                return [{"id": "daily-reset", "enabled": True}]
+
+            def set_enabled(self, job_id, enabled):
+                return {"id": job_id, "enabled": enabled}
+
+            def queue_manual_run(self, job_id):
+                return {"id": job_id, "queued": True}
+
+            def reschedule(self, job_id, trigger):
+                return {"id": job_id, "trigger": trigger}
+
+        self._login_session()
+        with (
+            patch.object(core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(core, "web_feature_enabled", return_value=True),
+            patch.object(scheduler, "job_manager", FakeJobManager()),
+        ):
+            response = self.client.get("/api/scheduler/jobs")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["jobs"][0]["id"], "daily-reset")
+
+            response = self.client.post(
+                "/api/scheduler/jobs/daily-reset/enabled",
+                json={"enabled": False},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+            self.assertFalse(response.get_json()["job"]["enabled"])
+
+            response = self.client.post(
+                "/api/scheduler/jobs/daily-reset/run",
+                json={},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+            self.assertTrue(response.get_json()["queued"])
+
+            response = self.client.post(
+                "/api/scheduler/jobs/daily-reset/schedule",
+                json={"trigger": {"type": "interval", "seconds": 60}},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+            self.assertEqual(response.get_json()["job"]["trigger"]["seconds"], 60)
+
+    def test_scheduler_write_requires_csrf_token(self) -> None:
+        self._login_session()
+        with (
+            patch.object(core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(core, "web_feature_enabled", return_value=True),
+        ):
+            response = self.client.post(
+                "/api/scheduler/jobs/daily-reset/enabled",
+                json={"enabled": False},
+            )
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

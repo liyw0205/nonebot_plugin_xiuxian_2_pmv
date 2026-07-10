@@ -121,6 +121,8 @@ class XiuConfig:
         # 是否允许 Web 备份、同步、恢复、下载和删除
         self.web_enable_message_send = False
         # 是否允许 Web 消息面板主动发送/广播/撤回
+        self.web_enable_scheduler_manage = False
+        # 是否允许 Web 管理定时任务的启停、手动执行和计划调整
         self.web_allow_local_upload = False
         # 是否允许本机免登录调用 /upload_image
 

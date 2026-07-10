@@ -1,6 +1,6 @@
 import asyncio
 
-from nonebot import require
+from nonebot import get_driver, require
 from nonebot.log import logger
 
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -24,10 +24,18 @@ from ..xiuxian_sect import resetusertask, auto_handle_inactive_sect_owners
 from ..xiuxian_tower import reset_tower_floors
 from ..xiuxian_work import resetrefreshnum
 from ..xiuxian_compensation.common import clean_all_expired
+from .job_manager import SchedulerJobManager
 
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
+job_manager = SchedulerJobManager(scheduler)
+driver = get_driver()
+
+
+@driver.on_startup
+async def apply_scheduler_overrides_on_startup():
+    job_manager.apply_persisted_overrides()
 
 
 # =========================

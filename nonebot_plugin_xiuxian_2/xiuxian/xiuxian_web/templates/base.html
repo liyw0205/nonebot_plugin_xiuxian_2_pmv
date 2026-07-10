@@ -81,6 +81,9 @@
                     {% if web_feature_enabled('web_enable_terminal') %}
                     <li><a href="{{ url_for('terminal') }}" data-refresh-page="true" {% if is_active('terminal') %}class="active"{% endif %}><i class="fas fa-terminal"></i><span>Web 终端</span></a></li>
                     {% endif %}
+                    {% if web_feature_enabled('web_enable_scheduler_manage') %}
+                    <li><a href="{{ url_for('scheduler_management') }}" data-refresh-page="true" {% if is_active('scheduler_management') %}class="active"{% endif %}><i class="fas fa-clock"></i><span>定时任务</span></a></li>
+                    {% endif %}
                 </ul>
             </nav>
 

@@ -263,6 +263,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "Web安全"
     },
+    "web_enable_scheduler_manage": {
+        "name": "定时任务管理",
+        "description": "是否允许 Web 启停、手动执行和修改定时任务",
+        "type": "bool",
+        "category": "Web安全"
+    },
     "web_allow_local_upload": {
         "name": "本机免登上传",
         "description": "是否允许本机免登录调用 /upload_image",
