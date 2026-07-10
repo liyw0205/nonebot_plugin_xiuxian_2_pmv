@@ -202,6 +202,11 @@ QQ 普通群和 C2C 的 `msg_seq` 默认由投递门面按 Bot、场景和目标
 `SendResult.status` 为 `pending_audit`，可通过 `audit_id` 继续跟踪。需要同步等待审核
 结果时，在 `SendRequest.audit_timeout` 中设置正数超时。
 
+`delivery_service.reply_enhanced()` 统一执行 Markdown/keyboard capability 检测。
+Markdown 不可用时直接发送纯文本；keyboard 不可用时移除键盘并保留 Markdown；
+构造或投递增强消息失败时再次降级纯文本。旧直接发送路径及删除条件记录在
+`docs/message_delivery_migration.md`。
+
 ## 引用回复
 
 QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。

@@ -1,7 +1,6 @@
 # broadcast_manager.py
 # -*- coding: utf-8 -*-
 
-import random
 import uuid
 from datetime import datetime, timedelta
 
@@ -16,6 +15,7 @@ from .adapter_compat import (
     get_user_id,
 )
 from .xiuxian_utils.message_db import connect_message_db
+from .messaging import SendRequest, delivery_service
 
 BROADCAST_TASKS: dict[str, dict] = {}
 
@@ -301,38 +301,18 @@ async def _send_qq_broadcast_by_reply(
 
     message = _make_broadcast_message(bot, task)
 
-    if scene == "group":
-        await bot.send_to_group(
-            group_openid=str(target_id),
-            message=message,
-            msg_id=str(source_message_id),
-            msg_seq=random.randint(1, 900000),
-        )
-
-    elif scene == "private":
-        await bot.send_to_c2c(
-            openid=str(target_id),
-            message=message,
-            msg_id=str(source_message_id),
-            msg_seq=random.randint(1, 900000),
-        )
-
-    elif scene == "channel_group":
-        await bot.send_to_channel(
-            channel_id=str(target_id),
-            message=message,
-            msg_id=str(source_message_id),
-        )
-
-    elif scene == "channel_private":
-        await bot.send_to_dms(
-            guild_id=str(target_id),
-            message=message,
-            msg_id=str(source_message_id),
-        )
-
-    else:
+    if scene not in {"group", "private", "channel_group", "channel_private"}:
         raise RuntimeError(f"QQ 不支持 scene={scene}")
+
+    await delivery_service.send(
+        bot,
+        SendRequest(
+            scene,
+            str(target_id),
+            message,
+            source_message_id=str(source_message_id),
+        ),
+    )
 
 
 async def _send_broadcast_to_target(

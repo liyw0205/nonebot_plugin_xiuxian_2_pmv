@@ -1359,17 +1359,15 @@ async def _send_markdown_or_keyboard(
     log_prefix: str = "Markdown按钮",
 ):
     rows = [] if _has_button_id(button_id) else (rows or [])
-    if rows:
-        try:
-            md_seg = MessageSegment.markdown_keyboard(bot, md_text or " ", rows)
-            await _send_event_message(bot=bot, event=event, message=md_seg)
-            return
-        except Exception as e:
-            logger.warning(f"{log_prefix}发送失败，降级原生Markdown: {e}")
-            md_text = fallback_md_text if fallback_md_text is not None else md_text
-
-    md_seg = MessageSegment.markdown(bot, md_text or " ", button_id)
-    await _send_event_message(bot=bot, event=event, message=md_seg)
+    fallback = fallback_md_text if fallback_md_text is not None else md_text
+    await delivery_service.reply_enhanced(
+        bot,
+        event,
+        markdown=md_text or " ",
+        fallback_text=strip_md_command_links(fallback or " "),
+        keyboard_rows=rows,
+        button_id=str(button_id or ""),
+    )
 
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
     """发送md模板消息（频道可用），失败降级普通消息"""

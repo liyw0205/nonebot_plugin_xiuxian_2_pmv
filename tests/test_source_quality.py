@@ -155,6 +155,69 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("bot.send(", outlet_source)
         self.assertNotIn("send_reference_reply", outlet_source)
 
+    def test_direct_adapter_sends_are_limited_to_migration_allowlist(self) -> None:
+        allowed_prefixes = {
+            "adapter_compat.py",
+            "adapter_message_sender.py",
+            "messaging/delivery.py",
+            "xiuxian_utils/utils.py",
+            "broadcast_manager.py",
+            "xiuxian_admin",
+            "xiuxian_back/accessory.py",
+            "xiuxian_boss/__init__.py",
+            "xiuxian_entertainment",
+            "xiuxian_pet/__init__.py",
+            "xiuxian_sect/__init__.py",
+            "xiuxian_utils/lay_out.py",
+            "__init__.py",
+        }
+        direct_methods = {
+            "send",
+            "send_to_group",
+            "send_to_c2c",
+            "send_to_channel",
+            "send_to_dms",
+        }
+        violations = []
+        for path in (SOURCE_ROOT / "xiuxian").rglob("*.py"):
+            if "vendor" in path.parts:
+                continue
+            relative = path.relative_to(SOURCE_ROOT / "xiuxian").as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            has_direct_send = any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in direct_methods
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "bot"
+                for node in ast.walk(tree)
+            )
+            allowed = any(
+                relative == prefix or relative.startswith(prefix + "/")
+                for prefix in allowed_prefixes
+            )
+            if has_direct_send and not allowed:
+                violations.append(relative)
+
+        self.assertEqual(
+            violations,
+            [],
+            "Direct Adapter sends outside migration allowlist: "
+            + ", ".join(violations),
+        )
+
+    def test_web_and_broadcast_do_not_generate_qq_msg_seq(self) -> None:
+        paths = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "messages.py",
+            SOURCE_ROOT / "xiuxian" / "broadcast_manager.py",
+        )
+        violations = [
+            path.relative_to(SOURCE_ROOT).as_posix()
+            for path in paths
+            if "msg_seq=" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(violations, [])
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(

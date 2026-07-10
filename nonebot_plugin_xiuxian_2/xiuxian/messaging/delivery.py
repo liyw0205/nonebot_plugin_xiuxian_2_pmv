@@ -12,6 +12,7 @@ from ..adapter_compat import (
 from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import record_send_message
 from ..adapter_message_sender import is_qq_bot, send_group_message, send_private_message
+from ..qq_compat import QQCapabilityRegistry
 from .models import SendRequest, SendResult
 from .reliability import (
     DeliveryError,
@@ -24,9 +25,15 @@ from .reliability import (
 class MessageDeliveryService:
     """收敛主动发送与回复入口，底层继续复用现有 Adapter 兼容实现。"""
 
-    def __init__(self, *, max_msg_seq_retries: int = 3) -> None:
+    def __init__(
+        self,
+        *,
+        max_msg_seq_retries: int = 3,
+        capabilities: QQCapabilityRegistry | None = None,
+    ) -> None:
         self._sequences = MessageSequenceStrategy()
         self._max_msg_seq_retries = max(0, int(max_msg_seq_retries))
+        self._capabilities = capabilities or QQCapabilityRegistry()
 
     async def _send_with_policy(
         self,
@@ -241,6 +248,56 @@ class MessageDeliveryService:
             raw = await bot.send(event=event, message=message, **kwargs)
             return SendResult.from_raw(raw)
         return await self.send(bot, request, **kwargs)
+
+    async def reply_enhanced(
+        self,
+        bot: Any,
+        event: Any,
+        *,
+        markdown: str,
+        fallback_text: str,
+        keyboard_rows: list[list[tuple[str, str]]] | None = None,
+        button_id: str = "",
+        **kwargs: Any,
+    ) -> SendResult:
+        """按 Bot 能力发送 Markdown/keyboard，并保证纯文本降级。"""
+        capabilities = self._capabilities.get(bot)
+        if not is_qq_bot(bot) or not capabilities.markdown:
+            return await self.reply(
+                bot,
+                event,
+                fallback_text,
+                include_reference=False,
+                **kwargs,
+            )
+
+        try:
+            from ..adapter_compat import MessageSegment
+
+            rows = keyboard_rows or []
+            if rows and capabilities.keyboard:
+                message = MessageSegment.markdown_keyboard(bot, markdown or " ", rows)
+            else:
+                message = MessageSegment.markdown(
+                    bot,
+                    markdown or " ",
+                    button_id if capabilities.keyboard else "",
+                )
+            return await self.reply(
+                bot,
+                event,
+                message,
+                include_reference=False,
+                **kwargs,
+            )
+        except Exception:
+            return await self.reply(
+                bot,
+                event,
+                fallback_text,
+                include_reference=False,
+                **kwargs,
+            )
 
     async def recall(
         self,

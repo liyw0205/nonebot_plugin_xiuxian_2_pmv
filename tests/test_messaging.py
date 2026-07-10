@@ -234,6 +234,79 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.kind, "rate_limited")
         self.assertTrue(raised.exception.retryable)
 
+    async def test_enhanced_reply_falls_back_when_markdown_is_disabled(self) -> None:
+        registry = QQCapabilityRegistry({"bot-1": {"markdown": False}})
+        service = MessageDeliveryService(capabilities=registry)
+        bot = SimpleNamespace(self_id="bot-1")
+        event = object()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch.object(
+                service,
+                "reply",
+                new=AsyncMock(return_value=SendResult("message-6", None, {})),
+            ) as reply,
+        ):
+            await service.reply_enhanced(
+                bot,
+                event,
+                markdown="**状态**",
+                fallback_text="状态",
+                keyboard_rows=[[('查看', '/状态')]],
+            )
+
+        reply.assert_awaited_once_with(
+            bot,
+            event,
+            "状态",
+            include_reference=False,
+        )
+
+    async def test_enhanced_reply_drops_keyboard_when_capability_is_disabled(self) -> None:
+        registry = QQCapabilityRegistry({"bot-1": {"keyboard": False}})
+        service = MessageDeliveryService(capabilities=registry)
+        bot = SimpleNamespace(self_id="bot-1")
+        event = object()
+        markdown_message = object()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown",
+                return_value=markdown_message,
+            ) as markdown,
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown_keyboard"
+            ) as keyboard,
+            patch.object(
+                service,
+                "reply",
+                new=AsyncMock(return_value=SendResult("message-7", None, {})),
+            ) as reply,
+        ):
+            await service.reply_enhanced(
+                bot,
+                event,
+                markdown="**状态**",
+                fallback_text="状态",
+                keyboard_rows=[[('查看', '/状态')]],
+                button_id="keyboard-template",
+            )
+
+        keyboard.assert_not_called()
+        markdown.assert_called_once_with(bot, "**状态**", "")
+        reply.assert_awaited_once_with(
+            bot,
+            event,
+            markdown_message,
+            include_reference=False,
+        )
+
     async def test_reply_source_is_forwarded_for_recording(self) -> None:
         service = MessageDeliveryService()
         with patch(
