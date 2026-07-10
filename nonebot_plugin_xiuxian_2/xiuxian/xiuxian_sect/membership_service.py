@@ -23,6 +23,21 @@ class SectOwnerTransfer:
         return self.status in {"transferred", "duplicate"}
 
 
+@dataclass(frozen=True)
+class SectFairylandUpgrade:
+    status: str
+    actor_id: str
+    sect_id: int
+    from_level: int = 0
+    to_level: int = 0
+    stone_cost: int = 0
+    materials_cost: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "upgraded"
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -38,6 +53,23 @@ class SectMembershipService:
                 actor_id TEXT NOT NULL,
                 target_id TEXT NOT NULL,
                 sect_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_fairyland_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_fairyland_operations (
+                operation_id TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                from_level INTEGER NOT NULL,
+                to_level INTEGER NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                materials_cost INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -169,5 +201,152 @@ class SectMembershipService:
                 conn.rollback()
                 raise
 
+    def upgrade_fairyland(
+        self,
+        operation_id,
+        actor_id,
+        sect_id,
+        expected_level,
+        next_level,
+        stone_cost,
+        materials_cost,
+        *,
+        owner_position: int = 0,
+    ) -> SectFairylandUpgrade:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        actor_id = str(actor_id)
+        sect_id = int(sect_id)
+        expected_level = int(expected_level)
+        next_level = int(next_level)
+        stone_cost = max(int(stone_cost), 0)
+        materials_cost = max(int(materials_cost), 0)
 
-__all__ = ["SectMembershipService", "SectOwnerTransfer"]
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_fairyland_operations(conn)
+                previous = conn.execute(
+                    "SELECT from_level, to_level, stone_cost, materials_cost "
+                    "FROM sect_fairyland_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectFairylandUpgrade(
+                        "duplicate",
+                        actor_id,
+                        sect_id,
+                        int(previous[0]),
+                        int(previous[1]),
+                        int(previous[2]),
+                        int(previous[3]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position FROM user_xiuxian WHERE user_id=%s",
+                    (actor_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return SectFairylandUpgrade("actor_missing", actor_id, sect_id)
+                sect = conn.execute(
+                    "SELECT sect_owner, COALESCE(sect_fairyland, 0), "
+                    "COALESCE(sect_used_stone, 0), COALESCE(sect_materials, 0) "
+                    "FROM sects WHERE sect_id=%s",
+                    (sect_id,),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectFairylandUpgrade("sect_missing", actor_id, sect_id)
+                if (
+                    actor[0] != sect_id
+                    or int(actor[1]) != int(owner_position)
+                    or str(sect[0]) != actor_id
+                ):
+                    conn.rollback()
+                    return SectFairylandUpgrade("not_owner", actor_id, sect_id)
+                current_level = int(sect[1] or 0)
+                if current_level != expected_level or next_level != current_level + 1:
+                    conn.rollback()
+                    return SectFairylandUpgrade(
+                        "level_changed", actor_id, sect_id, current_level, next_level
+                    )
+                if int(sect[2] or 0) < stone_cost:
+                    conn.rollback()
+                    return SectFairylandUpgrade(
+                        "stone_insufficient",
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        materials_cost,
+                    )
+                if int(sect[3] or 0) < materials_cost:
+                    conn.rollback()
+                    return SectFairylandUpgrade(
+                        "materials_insufficient",
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        materials_cost,
+                    )
+
+                updated = conn.execute(
+                    "UPDATE sects SET sect_used_stone=sect_used_stone-%s, "
+                    "sect_materials=sect_materials-%s, sect_fairyland=%s "
+                    "WHERE sect_id=%s AND sect_owner=%s "
+                    "AND COALESCE(sect_fairyland, 0)=%s "
+                    "AND COALESCE(sect_used_stone, 0)>=%s "
+                    "AND COALESCE(sect_materials, 0)>=%s",
+                    (
+                        stone_cost,
+                        materials_cost,
+                        next_level,
+                        sect_id,
+                        actor_id,
+                        current_level,
+                        stone_cost,
+                        materials_cost,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect fairyland changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_fairyland_operations "
+                    "(operation_id, actor_id, sect_id, from_level, to_level, "
+                    "stone_cost, materials_cost) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        materials_cost,
+                    ),
+                )
+                conn.commit()
+                return SectFairylandUpgrade(
+                    "upgraded",
+                    actor_id,
+                    sect_id,
+                    current_level,
+                    next_level,
+                    stone_cost,
+                    materials_cost,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+
+__all__ = [
+    "SectFairylandUpgrade",
+    "SectMembershipService",
+    "SectOwnerTransfer",
+]

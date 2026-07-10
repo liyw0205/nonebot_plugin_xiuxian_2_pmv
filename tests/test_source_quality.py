@@ -459,6 +459,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("load_json_file(", source)
         self.assertIn("save_json_file(", source)
 
+    def test_sect_fairyland_upgrade_uses_transactional_service(self) -> None:
+        sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
+        command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (sect_root / "membership_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("sect_membership_service.upgrade_fairyland(", command_source)
+        self.assertIn("sect_fairyland_operations", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
