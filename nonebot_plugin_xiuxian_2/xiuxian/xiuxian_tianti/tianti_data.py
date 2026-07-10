@@ -1,12 +1,8 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-
 from pathlib import Path
 from ...paths import get_paths
 
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from ..xiuxian_utils.json_store import load_json_file, safe_json_loads
 from ..xiuxian_config import convert_rank
 
 DATABASE = get_paths().data
@@ -20,8 +16,7 @@ _TIANTI_QIAOXUE_CACHE = None
 
 
 def _read_json(path: Path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json_file(path, {}, dict)
 
 
 def get_tianti_level_all():
@@ -92,10 +87,7 @@ def _safe_json_loads(value, default):
         txt = value.strip()
         if txt.lower() in ("", "none", "null"):
             return default
-        try:
-            return json.loads(txt)
-        except Exception:
-            return default
+        return safe_json_loads(txt, default)
     return default
 
 

@@ -40,6 +40,18 @@ class SourceQualityTests(unittest.TestCase):
             "Direct data/xiuxian path construction found: " + ", ".join(violations),
         )
 
+    def test_newapi_runtime_state_uses_central_json_store(self) -> None:
+        source = (
+            SOURCE_ROOT
+            / "xiuxian"
+            / "xiuxian_entertainment"
+            / "mod"
+            / "newapi_store.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("json.load(", source)
+        self.assertNotIn("json.dump(", source)
+        self.assertIn("update_json_file(", source)
+
     def test_internal_imports_do_not_assume_top_level_package_name(self) -> None:
         violations: list[str] = []
         for path in SOURCE_ROOT.rglob("*.py"):

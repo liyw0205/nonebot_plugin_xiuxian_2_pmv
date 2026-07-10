@@ -1,12 +1,16 @@
 """NewAPI 账号绑定存储。"""
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from .newapi_client import normalize_base_url
+from ...xiuxian_utils.json_store import (
+    load_json_file,
+    save_json_file,
+    update_json_file,
+)
 
 AuthMode = Literal["token", "cookie"]
 
@@ -40,23 +44,12 @@ def _history_path(qq_id: str) -> Path:
 
 
 def load_accounts(qq_id: str) -> list[dict[str, Any]]:
-    p = _path_for_qq(qq_id)
-    if not p.exists():
-        return []
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)]
-    except Exception:
-        pass
-    return []
+    data = load_json_file(_path_for_qq(qq_id), [], list)
+    return [x for x in data if isinstance(x, dict)]
 
 
 def save_accounts(qq_id: str, accounts: list[dict[str, Any]]) -> None:
-    p = _path_for_qq(qq_id)
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(accounts, f, ensure_ascii=False, indent=2)
+    save_json_file(_path_for_qq(qq_id), accounts, indent=2)
 
 
 def append_account(
@@ -180,44 +173,25 @@ def append_checkin_history(
     summary: str,
     source: str = "manual",
 ) -> None:
-    p = _history_path(qq_id)
-    rows: list[dict[str, Any]] = []
-    if p.exists():
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, list):
-                rows = [x for x in data if isinstance(x, dict)]
-        except Exception:
-            rows = []
-    rows.insert(
-        0,
-        {
-            "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "index": account_index,
-            "api_user_id": str(api_user_id),
-            "base_url": _norm_stored_base(base_url_stored),
-            "summary": (summary or "")[:500],
-            "source": source,
-        },
-    )
-    rows = rows[:_CHECKIN_HISTORY_MAX]
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=2)
+    row = {
+        "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "index": account_index,
+        "api_user_id": str(api_user_id),
+        "base_url": _norm_stored_base(base_url_stored),
+        "summary": (summary or "")[:500],
+        "source": source,
+    }
+
+    def prepend(rows):
+        rows = [x for x in rows if isinstance(x, dict)]
+        return [row, *rows][:_CHECKIN_HISTORY_MAX]
+
+    update_json_file(_history_path(qq_id), [], prepend, expected_type=list, indent=2)
 
 
 def load_checkin_history(qq_id: str) -> list[dict[str, Any]]:
-    p = _history_path(qq_id)
-    if not p.exists():
-        return []
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)][: _CHECKIN_HISTORY_MAX]
-    except Exception:
-        pass
-    return []
+    data = load_json_file(_history_path(qq_id), [], list)
+    return [x for x in data if isinstance(x, dict)][: _CHECKIN_HISTORY_MAX]
 
 
 def toggle_auto_checkin(qq_id: str, index_text: str) -> tuple[bool, str]:
@@ -249,16 +223,10 @@ def iter_all_auto_checkin_bindings() -> list[tuple[str, int, dict[str, Any]]]:
     out: list[tuple[str, int, dict[str, Any]]] = []
     for p in _DATA_DIR.glob("*.json"):
         qq_key = p.stem
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, list):
-                continue
-            for i, acc in enumerate(data, start=1):
-                if isinstance(acc, dict) and acc.get("auto_checkin"):
-                    out.append((qq_key, i, acc))
-        except Exception:
-            continue
+        data = load_json_file(p, [], list)
+        for i, acc in enumerate(data, start=1):
+            if isinstance(acc, dict) and acc.get("auto_checkin"):
+                out.append((qq_key, i, acc))
     return out
 
 
