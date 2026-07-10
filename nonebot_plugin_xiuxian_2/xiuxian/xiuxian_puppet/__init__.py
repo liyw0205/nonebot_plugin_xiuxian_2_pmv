@@ -5,16 +5,28 @@ from nonebot.log import logger
 from ..on_compat import on_command
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 
-from ..xiuxian_config import convert_rank
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import assign_bot
 from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_help_message
-from ..xiuxian_utils.xiuxian2_handle import (get_player_info, save_player_info,
-                                             UserBuffDate, XiuxianDateManage, XIUXIAN_IMPART_BUFF)
+from ..xiuxian_utils.xiuxian2_handle import (
+    get_player_info,
+    save_player_info,
+    UserBuffDate,
+    XiuxianDateManage,
+    XIUXIAN_IMPART_BUFF,
+)
+from .harvest_service import PuppetHarvestReward, PuppetHarvestService
 
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
+puppet_harvest_service = PuppetHarvestService(
+    get_paths().game_db,
+    get_paths().player_db,
+    max_goods_num=XiuConfig().max_goods_num,
+)
 
 # 引入定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -90,84 +102,65 @@ async def auto_harvest_scheduled():
 
 async def check_and_harvest(user_id):
     """检查并执行收取"""
-
-    user_info = sql_message.get_user_info_with_id(user_id)
-
-    if int(user_info['blessed_spot_flag']) == 0:
-        msg = f"道友还没有洞天福地呢，请发送洞天福地购买吧~"
-        return msg
-
-    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     GETCONFIG = {
         "time_cost": 23,  # 单位小时
         "加速基数": 0.05
     }
-    last_time = mix_elixir_info['收取时间']
-    puppet_level = mix_elixir_info['灵田傀儡']
-    harvest_cost = PUPPET_CONFIG[puppet_level]['harvest_cost']
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
+    main_reap = UserBuffDate(user_id).get_user_main_buff_data()
+    reap_buff = main_reap['reap_buff'] if main_reap is not None else 0
 
-    if last_time != 0:
-        nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-        timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last_time,
-                                                                                              '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,
-                         2)
-        if timedeff >= round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2):
+    def create_rewards(level, quantity):
+        yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(
+            max(convert_rank(level)[0] - 22, 16), ['药材'])
+        if not yaocai_id_list:
+            return [PuppetHarvestReward(3001, '恒心草', '药材', quantity)]
+        give_dict = {}
+        for _ in range(quantity):
+            goods_id = random.choice(yaocai_id_list)
+            give_dict[goods_id] = give_dict.get(goods_id, 0) + 1
+        return [
+            PuppetHarvestReward(
+                goods_id,
+                items.get_data_by_item_id(goods_id)['name'],
+                '药材',
+                amount,
+            )
+            for goods_id, amount in give_dict.items()
+        ]
 
-            if user_info['stone'] < harvest_cost:
-                msg = f"道友灵石数量不足，无法驱动傀儡，灵田傀儡已关闭"
-                # 灵石不足，关闭自动收取
-                sql_message.set_puppet_status(user_id, 0)
-                log_message(user_id, msg)
-                return msg
-
-            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(
-                max(convert_rank(user_info['level'])[0] - 22, 16), ['药材'])
-            # 加入传承
-            impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-            impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
-            # 功法灵田收取加成
-            main_reap = UserBuffDate(user_id).get_user_main_buff_data()
-
-            if main_reap != None:  # 功法灵田收取加成
-                reap_buff = main_reap['reap_buff']
-            else:
-                reap_buff = 0
-            num = mix_elixir_info['灵田数量'] + mix_elixir_info['收取等级'] + impart_reap_per + reap_buff
-            msg = '傀儡收取\n'
-            if not yaocai_id_list:
-                sql_message.send_back(user_info['user_id'], 3001, '恒心草', '药材', num)  # 没有合适的，保底
-                msg += f"道友成功收获药材：恒心草 {num} 个！\n"
-            else:
-                i = 1
-                give_dict = {}
-                while i <= num:
-                    id = random.choice(yaocai_id_list)
-                    try:
-                        give_dict[id] += 1
-                        i += 1
-                    except LookupError:
-                        give_dict[id] = 1
-                        i += 1
-                for k, v in give_dict.items():
-                    goods_info = items.get_data_by_item_id(k)
-                    msg += f"道友成功收获药材：{goods_info['name']} {v} 个！\n"
-                    sql_message.send_back(user_info['user_id'], k, goods_info['name'], '药材', v)
-            mix_elixir_info['收取时间'] = nowtime
-            save_player_info(user_id, mix_elixir_info, "mix_elixir_info")
-            sql_message.update_ls(user_id, harvest_cost, 2) # 扣取驱动傀儡灵石
-            # await handle_send(bot, event, msg)
-            log_message(user_id, msg)
-            # await yaocai_get.finish()
-            return msg
-        else:
-            remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])),
-                                   2) - timedeff
-            hours = int(remaining_time)
-            minutes = int((remaining_time - hours) * 60)
-            msg = f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
-            # await handle_send(bot, event, msg)
-            # await yaocai_get.finish()
-            return msg
+    result = puppet_harvest_service.harvest(
+        user_id,
+        now=datetime.now(),
+        time_cost_hours=GETCONFIG['time_cost'],
+        speed_base=GETCONFIG['加速基数'],
+        harvest_costs={
+            level: data['harvest_cost'] for level, data in PUPPET_CONFIG.items()
+        },
+        harvest_bonus=impart_reap_per + reap_buff,
+        reward_factory=create_rewards,
+    )
+    if result.harvested:
+        msg = '傀儡收取\n' + ''.join(
+            f"道友成功收获药材：{reward.goods_name} {reward.quantity} 个！\n"
+            for reward in result.rewards
+        )
+        log_message(user_id, msg)
+        return msg
+    if result.status == "blessed_spot_missing":
+        return "道友还没有洞天福地呢，请发送洞天福地购买吧~"
+    if result.status == "stone_insufficient":
+        msg = "道友灵石数量不足，无法驱动傀儡，灵田傀儡已关闭"
+        log_message(user_id, msg)
+        return msg
+    if result.status == "not_ready":
+        hours = int(result.remaining_hours)
+        minutes = int((result.remaining_hours - hours) * 60)
+        return f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
+    if result.status == "inventory_full":
+        return "道友背包中对应药材已达上限，傀儡暂未收取"
+    return None
 
 
 @buy_puppet.handle()
