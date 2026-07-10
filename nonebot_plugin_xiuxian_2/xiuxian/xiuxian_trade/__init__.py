@@ -2274,26 +2274,24 @@ async def clear_expired_baitan_orders_job():
     refund_item_summary = {}
     
     for order in all_baitan_orders:
-        unfilled_quantity = order['quantity'] - order['filled_quantity']
-        
-        # 移除订单
-        trade_manager.remove_guishi_order(order['id'])
-        
-        if unfilled_quantity > 0: # 如果有未售出的物品，退还给卖家
-            goods_id, item_info = items.get_data_by_item_name(order['item_name'])
-            if goods_id:
-                sql_message.send_back(
-                    order['user_id'],
-                    goods_id,
-                    item_info['name'],
-                    item_info['type'],
-                    unfilled_quantity
-                )
-                user_info = sql_message.get_user_info_with_id(order['user_id'])
-                user_name = user_info['user_name'] if user_info else f"用户{order['user_id']}"
-                refund_item_summary[f"{user_name} ({order['user_id']})"] = refund_item_summary.get(f"{user_name} ({order['user_id']})", [])
-                refund_item_summary[f"{user_name} ({order['user_id']})"].append(f"{item_info['name']} x{unfilled_quantity}")
-        
+        result = xianshi_repository.clear_expired_guishi_order(
+            get_paths().trade_db,
+            order['id'],
+        )
+        if result.status == "inventory_full":
+            logger.warning(
+                f"鬼市摆摊订单 {result.order_id} 退货后将超过背包上限，已保留订单"
+            )
+            continue
+        if not result.cleared:
+            continue
+        if result.refunded_quantity > 0:
+            user_info = sql_message.get_user_info_with_id(result.user_id)
+            user_name = user_info['user_name'] if user_info else f"用户{result.user_id}"
+            user_key = f"{user_name} ({result.user_id})"
+            refund_item_summary.setdefault(user_key, []).append(
+                f"{result.item_name} x{result.refunded_quantity}"
+            )
         cleared_count += 1
     
     logger.info(f"共清理 {cleared_count} 条超时鬼市摆摊订单。")

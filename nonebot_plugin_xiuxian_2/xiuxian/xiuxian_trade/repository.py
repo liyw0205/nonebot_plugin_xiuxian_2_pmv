@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass, replace
+from datetime import datetime
 import json
 from pathlib import Path
 from threading import RLock
@@ -87,6 +88,21 @@ class AuctionSettlement:
             "start_time": self.start_time,
             "end_time": self.end_time,
         }
+
+
+@dataclass(frozen=True)
+class ExpiredGuishiOrderClear:
+    status: str
+    order_id: str
+    user_id: str = ""
+    goods_id: int = 0
+    item_name: str = ""
+    goods_type: str = ""
+    refunded_quantity: int = 0
+
+    @property
+    def cleared(self) -> bool:
+        return self.status == "cleared"
 
 
 class TradeRepository:
@@ -273,6 +289,98 @@ class TradeRepository:
             self.ensure_schema(conn)
             conn.execute("DELETE FROM xianshi_item WHERE id=%s", (str(listing_id),))
             conn.commit()
+
+    def clear_expired_guishi_order(
+        self,
+        trade_database: str | Path,
+        order_id,
+    ) -> ExpiredGuishiOrderClear:
+        order_id = str(order_id)
+        trade_database = Path(trade_database)
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(trade_database),))
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                order = conn.execute(
+                    """
+                    SELECT user_id, item_id, item_name, item_type,
+                           quantity, COALESCE(filled_quantity, 0)
+                    FROM guishi_trade.guishi_item WHERE id=%s
+                    """,
+                    (order_id,),
+                ).fetchone()
+                if order is None:
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("order_missing", order_id)
+                if str(order[3]) not in {"baitan", "摆摊"}:
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("not_baitan", order_id)
+
+                user_id = str(order[0])
+                goods_id = int(order[1])
+                item_name = str(order[2])
+                goods_type = str(order[3])
+                unfilled_quantity = max(int(order[4]) - int(order[5]), 0)
+                if unfilled_quantity:
+                    inventory = conn.execute(
+                        "SELECT COALESCE(goods_num, 0) FROM back "
+                        "WHERE user_id=%s AND goods_id=%s",
+                        (user_id, goods_id),
+                    ).fetchone()
+                    current_quantity = int(inventory[0]) if inventory else 0
+                    if current_quantity + unfilled_quantity > self._max_goods_num:
+                        conn.rollback()
+                        return ExpiredGuishiOrderClear(
+                            "inventory_full",
+                            order_id,
+                            user_id,
+                            goods_id,
+                            item_name,
+                            goods_type,
+                            unfilled_quantity,
+                        )
+
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    conn.execute(
+                        """
+                        INSERT INTO back (
+                            user_id, goods_id, goods_name, goods_type, goods_num,
+                            create_time, update_time, bind_num
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+                        ON CONFLICT (user_id, goods_id) DO UPDATE
+                        SET goods_name=EXCLUDED.goods_name,
+                            goods_type=EXCLUDED.goods_type,
+                            goods_num=back.goods_num+EXCLUDED.goods_num,
+                            update_time=EXCLUDED.update_time
+                        """,
+                        (
+                            user_id,
+                            goods_id,
+                            item_name,
+                            goods_type,
+                            unfilled_quantity,
+                            now,
+                            now,
+                        ),
+                    )
+                conn.execute(
+                    "DELETE FROM guishi_trade.guishi_item WHERE id=%s", (order_id,)
+                )
+                conn.commit()
+                return ExpiredGuishiOrderClear(
+                    "cleared",
+                    order_id,
+                    user_id,
+                    goods_id,
+                    item_name,
+                    goods_type,
+                    unfilled_quantity,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.execute("DETACH DATABASE guishi_trade")
 
     @staticmethod
     def ensure_schema(conn) -> None:
