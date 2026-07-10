@@ -38,6 +38,22 @@ class SectFairylandUpgrade:
         return self.status == "upgraded"
 
 
+@dataclass(frozen=True)
+class SectPracticeUpgrade:
+    status: str
+    user_id: str
+    sect_id: int
+    practice_type: str
+    from_level: int = 0
+    to_level: int = 0
+    stone_cost: int = 0
+    materials_cost: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "upgraded"
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -66,6 +82,24 @@ class SectMembershipService:
                 operation_id TEXT PRIMARY KEY,
                 actor_id TEXT NOT NULL,
                 sect_id INTEGER NOT NULL,
+                from_level INTEGER NOT NULL,
+                to_level INTEGER NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                materials_cost INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_practice_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_practice_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                practice_type TEXT NOT NULL,
                 from_level INTEGER NOT NULL,
                 to_level INTEGER NOT NULL,
                 stone_cost INTEGER NOT NULL,
@@ -344,9 +378,136 @@ class SectMembershipService:
                 conn.rollback()
                 raise
 
+    def upgrade_practice(
+        self,
+        operation_id,
+        user_id,
+        sect_id,
+        practice_type,
+        expected_level,
+        next_level,
+        stone_cost,
+        materials_cost,
+    ) -> SectPracticeUpgrade:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        sect_id = int(sect_id)
+        practice_type = str(practice_type)
+        column = {
+            "attack": "atkpractice",
+            "health": "hppractice",
+            "mana": "mppractice",
+        }.get(practice_type)
+        if column is None:
+            raise ValueError("unsupported practice_type")
+        expected_level = int(expected_level)
+        next_level = int(next_level)
+        stone_cost = max(int(stone_cost), 0)
+        materials_cost = max(int(materials_cost), 0)
+
+        def result(status, from_level=expected_level, to_level=next_level):
+            return SectPracticeUpgrade(
+                status,
+                user_id,
+                sect_id,
+                practice_type,
+                from_level,
+                to_level,
+                stone_cost,
+                materials_cost,
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_practice_operations(conn)
+                previous = conn.execute(
+                    """
+                    SELECT practice_type, from_level, to_level, stone_cost,
+                           materials_cost
+                    FROM sect_practice_operations WHERE operation_id=%s
+                    """,
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectPracticeUpgrade(
+                        "duplicate",
+                        user_id,
+                        sect_id,
+                        str(previous[0]),
+                        int(previous[1]),
+                        int(previous[2]),
+                        int(previous[3]),
+                        int(previous[4]),
+                    )
+
+                user = conn.execute(
+                    f"SELECT sect_id, stone, {column} FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return result("user_missing")
+                if user[0] is None or int(user[0]) != sect_id:
+                    conn.rollback()
+                    return result("sect_changed")
+                current_level = int(user[2] or 0)
+                if current_level != expected_level:
+                    conn.rollback()
+                    return result("level_changed", current_level, current_level)
+                if int(user[1] or 0) < stone_cost:
+                    conn.rollback()
+                    return result("stone_insufficient", current_level, next_level)
+
+                sect = conn.execute(
+                    "SELECT sect_materials FROM sects WHERE sect_id=%s", (sect_id,)
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return result("sect_missing", current_level, next_level)
+                if int(sect[0] or 0) < materials_cost:
+                    conn.rollback()
+                    return result("materials_insufficient", current_level, next_level)
+
+                conn.execute(
+                    f"UPDATE user_xiuxian SET stone=stone-%s, {column}=%s WHERE user_id=%s",
+                    (stone_cost, next_level, user_id),
+                )
+                conn.execute(
+                    "UPDATE sects SET sect_materials=sect_materials-%s WHERE sect_id=%s",
+                    (materials_cost, sect_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO sect_practice_operations (
+                        operation_id, user_id, sect_id, practice_type,
+                        from_level, to_level, stone_cost, materials_cost
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        operation_id,
+                        user_id,
+                        sect_id,
+                        practice_type,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        materials_cost,
+                    ),
+                )
+                conn.commit()
+                return result("upgraded", current_level, next_level)
+            except Exception:
+                conn.rollback()
+                raise
+
 
 __all__ = [
     "SectFairylandUpgrade",
     "SectMembershipService",
     "SectOwnerTransfer",
+    "SectPracticeUpgrade",
 ]
