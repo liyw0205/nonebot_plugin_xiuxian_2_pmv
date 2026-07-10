@@ -122,6 +122,30 @@ class SourceQualityTests(unittest.TestCase):
             "Web modules importing core with *: " + ", ".join(violations),
         )
 
+    def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
+        activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
+        tree = ast.parse(
+            activity_rules.read_text(encoding="utf-8"),
+            filename=str(activity_rules),
+        )
+        imported_names = {
+            alias.asname or alias.name
+            for node in tree.body
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+            for alias in node.names
+        }
+
+        self.assertIn("_get_extensions", imported_names)
+
+    def test_database_backup_scheduler_does_not_block_event_loop(self) -> None:
+        scheduler = SOURCE_ROOT / "xiuxian" / "xiuxian_scheduler" / "__init__.py"
+        source = scheduler.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "await asyncio.to_thread(UpdateManager().backup_db_files)",
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

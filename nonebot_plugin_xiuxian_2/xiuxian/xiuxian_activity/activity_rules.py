@@ -6,6 +6,7 @@ from .activity_config import (
     DEFAULT_ACTIVITY_STAGES,
     DEFAULT_PASS_EVENT_RULES,
     STAGE_TYPE_LABELS,
+    _get_extensions,
     _runtime_allows,
     activity_state,
     load_config,

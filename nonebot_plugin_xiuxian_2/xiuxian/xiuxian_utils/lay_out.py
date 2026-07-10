@@ -32,8 +32,15 @@ limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
 
 limit_all_data: Dict[str, Any] = {}
 limit_num = 99999
-    
-@limit_all_message.scheduled_job('interval', minutes=1)
+
+@limit_all_message.scheduled_job(
+    "interval",
+    minutes=1,
+    id="reset_message_rate_limits",
+    max_instances=1,
+    coalesce=True,
+    misfire_grace_time=30,
+)
 def limit_all_message_():
     # 重置消息字典
     global limit_all_data
