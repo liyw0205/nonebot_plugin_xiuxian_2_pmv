@@ -7,6 +7,9 @@ from .core import (
     request,
     secrets,
     session,
+    verify_web_password,
+    web_auth_is_configured,
+    web_login_limiter,
     update_manager,
     url_for,
 )
@@ -21,14 +24,30 @@ def home():
 def login():
     if request.method == 'POST':
         admin_id = str(request.form.get('admin_id') or '').strip()
-        if admin_id in ADMIN_IDS:
+        password = str(request.form.get('password') or '')
+        login_key = str(request.remote_addr or "unknown")
+        if web_login_limiter.is_blocked(login_key):
+            return render_template(
+                'login.html',
+                error="登录失败次数过多，请稍后重试",
+            ), 429
+        if not web_auth_is_configured():
+            return render_template(
+                'login.html',
+                error="管理面板尚未配置独立登录密码",
+            ), 503
+        if admin_id in ADMIN_IDS and verify_web_password(password):
+            web_login_limiter.record_success(login_key)
             session.clear()
             session['admin_id'] = admin_id
             session['_csrf_token'] = secrets.token_urlsafe(32)
             session.permanent = True
             return redirect(url_for('home'))
         else:
-            return render_template('login.html', error="无效的管理员ID")
+            blocked = web_login_limiter.record_failure(login_key)
+            status = 429 if blocked else 401
+            error = "登录失败次数过多，请稍后重试" if blocked else "管理员 ID 或密码错误"
+            return render_template('login.html', error=error), status
     return render_template('login.html')
 
 @app.route('/logout')

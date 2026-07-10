@@ -97,10 +97,12 @@ class XiuConfig:
         # 修仙管理面板是否开启
         self.web_port = 5888
         # 修仙管理面板端口
-        self.web_host = "0.0.0.0"
+        self.web_host = "127.0.0.1"
         # 修仙管理面板IP
         self.web_secret_key = ""
         # Flask 会话密钥；留空时自动生成到 data/xiuxian/web_secret_key，也可用 XIUXIAN_WEB_SECRET_KEY 环境变量覆盖
+        self.web_password_hash = ""
+        # Web 独立登录密码哈希；建议通过 XIUXIAN_WEB_PASSWORD_HASH 环境变量配置
         self.web_require_csrf = True
         # 是否对 Web 面板写请求启用 CSRF 校验
         self.web_session_cookie_secure = False
@@ -113,11 +115,11 @@ class XiuConfig:
         # 是否启用 Web 终端
         self.web_enable_update = False
         # 是否启用在线更新入口
-        self.web_enable_database_write = True
+        self.web_enable_database_write = False
         # 是否允许 Web 数据库编辑、指令中心、活动数据和发放记录写入
-        self.web_enable_backup_restore = True
+        self.web_enable_backup_restore = False
         # 是否允许 Web 备份、同步、恢复、下载和删除
-        self.web_enable_message_send = True
+        self.web_enable_message_send = False
         # 是否允许 Web 消息面板主动发送/广播/撤回
         self.web_allow_local_upload = False
         # 是否允许本机免登录调用 /upload_image

@@ -153,6 +153,19 @@ class SourceQualityTests(unittest.TestCase):
             f"Web server starts during import at lines: {module_level_starts}",
         )
 
+    def test_web_defaults_are_local_and_high_risk_features_are_disabled(self) -> None:
+        config_path = SOURCE_ROOT / "xiuxian" / "xiuxian_config.py"
+        source = config_path.read_text(encoding="utf-8")
+        self.assertIn('self.web_host = "127.0.0.1"', source)
+        self.assertIn("self.web_enable_database_write = False", source)
+        self.assertIn("self.web_enable_backup_restore = False", source)
+        self.assertIn("self.web_enable_message_send = False", source)
+
+        web_entrypoint = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "__init__.py"
+        entrypoint_source = web_entrypoint.read_text(encoding="utf-8")
+        self.assertIn("if not web_auth_is_configured():", entrypoint_source)
+        self.assertIn("XIUXIAN_WEB_PASSWORD_HASH", entrypoint_source)
+
     def test_web_modules_do_not_use_core_star_imports(self) -> None:
         web_root = SOURCE_ROOT / "xiuxian" / "xiuxian_web"
         violations = []

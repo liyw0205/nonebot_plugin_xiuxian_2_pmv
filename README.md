@@ -18,7 +18,7 @@
 | [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 安全开关与路径约束 |
 | [🧭 后续开发路线](docs/development_roadmap.md) | 当前完成基线、P0 必须项、迁移顺序与完成定义 |
 | [✅ 架构验收基线](docs/architecture_acceptance.md) | QQ 能力、共享基础设施和 Adapter 契约验收记录 |
-| **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认 `http://IP:5888`，超管 QQ 登录） |
+| **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认仅监听 `127.0.0.1:5888`） |
 
 ---
 
@@ -126,8 +126,8 @@ self.layout_bot_dict = {
 | `layout_bot_dict` | `{}` | QQ 负责的群聊映射，格式 `{群号: bot}`，bot 为字符串或列表 |
 | `reference_reply` | `False` | QQ 官方普通群/C2C 通用发送接口是否优先使用引用回复 |
 | `web_status` | `True` | 是否启动 **Web 修仙管理面板**（Flask，与 NoneBot 的 `HOST`/`PORT` 独立） |
-| `web_host` | `0.0.0.0` | 管理面板监听地址 |
-| `web_port` | `5888` | 管理面板端口，默认 `http://<服务器IP>:5888` |
+| `web_host` | `127.0.0.1` | 管理面板监听地址；需要远程访问时可显式改为 `0.0.0.0` 并配置认证、HTTPS 与防火墙 |
+| `web_port` | `5888` | 管理面板端口，默认 `http://127.0.0.1:5888` |
 | `custom_proxy_enabled` | `False` | 是否启用自定义代理（Bangumi 等境外 API） |
 | `custom_proxy` | `""` | 代理地址 |
 
@@ -565,11 +565,25 @@ screen -S xiu2 -X quit
 | 项目 | 说明 |
 |:-----|:-----|
 | 开关 | `xiuxian_config.py` 中 `web_status = True`（默认开启） |
-| 地址 | `http://<机器IP>:5888`（`web_host` / `web_port`，默认 `0.0.0.0:5888`） |
-| 登录 | 打开 `/login`，填写 **`.env` 里 `SUPERUSERS` 中的 QQ 号**（与 NoneBot 超管一致） |
+| 地址 | `http://127.0.0.1:5888`（可通过 `web_host` / `web_port` 修改） |
+| 登录 | 打开 `/login`，填写 `.env` 中的 `SUPERUSERS` ID 和独立面板密码 |
 | 日志 | 启动成功会输出：`修仙管理面板已启动：<host>:<port>` |
 
-> NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。本机调试可访问 `http://127.0.0.1:5888`；外网访问请自行做好防火墙与 HTTPS 反代。
+> NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。需要远程访问时可将 `web_host` 显式改为 `0.0.0.0`，但应通过 HTTPS 反向代理和防火墙限制来源。
+
+首次启用面板前生成独立密码哈希：
+
+```bash
+python -c 'from getpass import getpass; from werkzeug.security import generate_password_hash; print(generate_password_hash(getpass("Web password: ")))'
+```
+
+将输出值配置到环境变量，值本身不要提交到仓库：
+
+```dotenv
+XIUXIAN_WEB_PASSWORD_HASH='scrypt:...'
+```
+
+未配置有效的 `XIUXIAN_WEB_PASSWORD_HASH` 或 `web_password_hash` 时，管理面板拒绝启动。登录失败默认在 5 次后锁定来源地址 15 分钟。
 
 ### 安全开关
 
@@ -577,14 +591,16 @@ Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读
 
 | 配置项 | 默认值 | 说明 |
 |:------|:------:|:-----|
+| `web_host` | `127.0.0.1` | 默认仅本机监听；可显式配置为 `0.0.0.0` |
+| `web_password_hash` | `""` | 独立面板密码哈希；推荐使用环境变量 `XIUXIAN_WEB_PASSWORD_HASH` |
 | `web_require_csrf` | `True` | Web 写请求 CSRF 校验 |
 | `web_allowed_hosts` | `[]` | Host 白名单，留空不限制 |
 | `web_session_cookie_secure` | `False` | HTTPS 反代时建议开启 |
 | `web_enable_terminal` | `False` | Web 终端入口 |
 | `web_enable_update` | `False` | 在线检测更新与执行更新 |
-| `web_enable_database_write` | `True` | 数据库编辑、指令中心、活动数据和发放记录写入 |
-| `web_enable_backup_restore` | `True` | 备份、同步、恢复、下载和删除 |
-| `web_enable_message_send` | `True` | Web 消息主动发送、广播和撤回 |
+| `web_enable_database_write` | `False` | 数据库编辑、指令中心、活动数据和发放记录写入 |
+| `web_enable_backup_restore` | `False` | 备份、同步、恢复、下载和删除 |
+| `web_enable_message_send` | `False` | Web 消息主动发送、广播和撤回 |
 | `web_allow_local_upload` | `False` | 本机免登录调用 `/upload_image` |
 
 ### 功能一览

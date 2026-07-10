@@ -58,6 +58,11 @@ from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
 from ..xiuxian_utils.periods import format_duration_full
 from ..infrastructure import settings
+from .auth import (
+    LoginAttemptLimiter,
+    is_supported_password_hash,
+    verify_password_hash,
+)
 
 # --- 辅助函数 ---
 def format_time(seconds: float) -> str:
@@ -133,6 +138,29 @@ def _load_or_create_web_secret_key() -> str:
         return secrets.token_urlsafe(48)
 
 
+def get_web_password_hash() -> str:
+    return (
+        os.getenv("XIUXIAN_WEB_PASSWORD_HASH")
+        or str(_config_value("xiuxian_web_password_hash", "") or "")
+        or str(_config_value("web_password_hash", "") or "")
+    ).strip()
+
+
+def web_auth_is_configured() -> bool:
+    return is_supported_password_hash(get_web_password_hash())
+
+
+def verify_web_password(password: object) -> bool:
+    return verify_password_hash(get_web_password_hash(), password)
+
+
+web_login_limiter = LoginAttemptLimiter(
+    max_attempts=_config_int("web_login_max_attempts", 5, 1),
+    window_seconds=_config_int("web_login_window_seconds", 300, 1),
+    lock_seconds=_config_int("web_login_lock_seconds", 900, 1),
+)
+
+
 def initialize_web_storage() -> None:
     """Prepare persistent Web state during the NoneBot startup phase."""
     app.secret_key = _load_or_create_web_secret_key()
@@ -199,9 +227,9 @@ def is_local_web_request() -> bool:
 _WEB_FEATURE_DEFAULTS = {
     "web_enable_terminal": False,
     "web_enable_update": False,
-    "web_enable_database_write": True,
-    "web_enable_backup_restore": True,
-    "web_enable_message_send": True,
+    "web_enable_database_write": False,
+    "web_enable_backup_restore": False,
+    "web_enable_message_send": False,
     "web_allow_local_upload": False,
 }
 
