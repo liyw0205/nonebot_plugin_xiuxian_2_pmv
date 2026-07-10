@@ -40,8 +40,10 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 from ..xiuxian_tianti.tianti_data import TiantiDataManager
 from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
+from ...paths import get_paths
 from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
 from .back_util import *
+from .equipment_service import EquipmentService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -61,12 +63,22 @@ from .backpack_render import (
 # 初始化组件
 items = Items()
 sql_message = XiuxianDateManage()
+equipment_service = EquipmentService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
 # 技能学习确认缓存
 confirm_use_cache = {}
+
+
+def _equipment_operation_id(event, action, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"equipment:{event_id}:{action}:{goods_id}"
+    return f"equipment:{action}:{goods_id}:{time.time_ns()}"
 # 通用物品类型和炼金最低价格
 MIN_PRICE = 600000
 
@@ -592,14 +604,19 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
     if goods_type == "装备":
         if check_equipment_use_msg(user_id, goods_id): # 检查装备是否在使用中
-            sql_str, item_type = get_no_use_equipment_sql(user_id, goods_id)
-            for sql in sql_str:
-                sql_message.update_back_equipment(sql)
-            if item_type == "法器":
-                sql_message.updata_user_faqi_buff(user_id, 0)
-            if item_type == "防具":
-                sql_message.updata_user_armor_buff(user_id, 0)
-            msg = f"成功卸载装备{arg}！"
+            item_type = items.get_data_by_item_id(goods_id)["item_type"]
+            result = equipment_service.change(
+                _equipment_operation_id(event, "unequip", goods_id),
+                user_id,
+                goods_id,
+                item_type,
+                equip=False,
+            )
+            msg = (
+                f"成功卸载装备{arg}！"
+                if result.succeeded
+                else "装备状态发生变化，请刷新背包后重试！"
+            )
             await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await no_use_zb.finish()
         else:
@@ -798,14 +815,19 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         elif check_equipment_use_msg(user_id, goods_id):
             msg = "该装备已被装备，请勿重复装备！"
         else:
-            sql_str, item_type = get_use_equipment_sql(user_id, goods_id)
-            for sql in sql_str:
-                sql_message.update_back_equipment(sql)
-            if item_type == "法器":
-                sql_message.updata_user_faqi_buff(user_id, goods_id)
-            if item_type == "防具":
-                sql_message.updata_user_armor_buff(user_id, goods_id)
-            msg = f"成功装备 {item_name}！"
+            item_type = goods_info["item_type"]
+            result = equipment_service.change(
+                _equipment_operation_id(event, "equip", goods_id),
+                user_id,
+                goods_id,
+                item_type,
+                equip=True,
+            )
+            msg = (
+                f"成功装备 {item_name}！"
+                if result.succeeded
+                else "装备状态发生变化，请刷新背包后重试！"
+            )
 
     elif goods_type == "技能":
         user_buff_info = UserBuffDate(user_id).BuffInfo

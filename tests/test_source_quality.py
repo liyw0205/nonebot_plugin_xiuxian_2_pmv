@@ -366,6 +366,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_operations", repository_source)
 
+    def test_equipment_change_uses_transactional_service(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (back_root / "equipment_service.py").read_text(encoding="utf-8")
+        self.assertIn("equipment_service.change(", command_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("equipment_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
